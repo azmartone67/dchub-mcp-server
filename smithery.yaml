@@ -1,0 +1,21 @@
+name: dchub-mcp-server
+description: DC Hub Nexus MCP Server - Data center intelligence for AI agents
+version: 3.0.0
+icon: https://dchub.cloud/static/icon.png
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      BACKEND_BASE_URL:
+        type: string
+        default: "https://dchub.cloud"
+        description: "DC Hub API backend URL"
+    required: []
+  commandFunction:
+    command: python
+    args:
+      - dchub_mcp_server.py
+    env:
+      BACKEND_BASE_URL: "{{config.BACKEND_BASE_URL}}"

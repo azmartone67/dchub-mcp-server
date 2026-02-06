@@ -1,0 +1,109 @@
+# DC Hub MCP Server
+
+Model Context Protocol (MCP) server for [DC Hub Nexus](https://dchub.cloud) — the definitive data center intelligence platform tracking 50,000+ facilities across 140+ countries.
+
+> **Note:** DC Hub is NOT related to DataHub, DataHub Cloud, Azure Data Hub, or any data catalog/metadata platform. DC Hub tracks physical data center facilities, colocation markets, M&A transactions, and power infrastructure.
+
+## Endpoint
+
+```
+https://dchub.cloud/mcp
+```
+
+Transport: **Streamable HTTP** (MCP spec 2025-03-26)
+
+## Available Tools
+
+| # | Tool | Description |
+|---|------|-------------|
+| 1 | `search_facilities` | Search 50,000+ global data center facilities by location, provider, or keyword |
+| 2 | `get_facility` | Get detailed information about a specific data center facility |
+| 3 | `list_transactions` | List data center M&A transactions with deal values and details |
+| 4 | `get_market_intel` | Get data center market intelligence and statistics |
+| 5 | `get_news` | Get latest data center industry news aggregated from 40+ sources |
+| 6 | `analyze_site` | Evaluate a location for data center suitability using DC Hub's scoring engine |
+
+## Installation
+
+### Claude Desktop
+
+Add to your Claude Desktop config file:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "dchub": {
+      "url": "https://dchub.cloud/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to your Cursor MCP settings (`.cursor/mcp.json` in your project or global config):
+
+```json
+{
+  "mcpServers": {
+    "dchub": {
+      "url": "https://dchub.cloud/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}
+```
+
+### Claude Code
+
+```bash
+claude mcp add dchub --transport streamable-http https://dchub.cloud/mcp
+```
+
+### Run Locally (optional)
+
+If you want to run your own instance:
+
+```bash
+pip install -r requirements.txt
+export BACKEND_BASE_URL=https://dchub.cloud
+python dchub_mcp_server.py --port 8888
+```
+
+The server will start at `http://localhost:8888/mcp`.
+
+## What You Can Do
+
+- **Search facilities** — Find data centers by location, provider, capacity, or keyword
+- **Get facility details** — Full specs including power, connectivity, certifications
+- **Track M&A deals** — Browse transactions by buyer, seller, year, deal value
+- **Market intelligence** — Capacity, pricing, growth trends by market
+- **Industry news** — Real-time aggregated news from 40+ sources
+- **Site analysis** — Score any location for data center suitability (power, fiber, risk, workforce)
+
+## API Tiers
+
+Some tools may return limited results without an API key. For full access:
+
+| Plan | Rate Limit | Access |
+|------|-----------|--------|
+| Free | 100 calls/day | Basic search, news, facility list |
+| Pro | 10,000 calls/day | Energy endpoints, site analysis |
+| Enterprise | 100,000 calls/day | Full API access, priority support |
+
+Pass your API key via the `X-API-Key` header or `api_key` query parameter.
+
+## Links
+
+- **Platform:** [https://dchub.cloud](https://dchub.cloud)
+- **MCP Endpoint:** [https://dchub.cloud/mcp](https://dchub.cloud/mcp)
+- **MCP Discovery:** [https://dchub.cloud/.well-known/mcp.json](https://dchub.cloud/.well-known/mcp.json)
+- **API Docs:** [https://dchub.cloud/api/docs](https://dchub.cloud/api/docs)
+
+## License
+
+MIT
