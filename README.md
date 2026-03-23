@@ -1,37 +1,38 @@
-# DC Hub MCP Server
+# DC Hub – Data Center Intelligence MCP Server
 
-Model Context Protocol (MCP) server for [DC Hub Nexus](https://dchub.cloud) — the definitive data center intelligence platform tracking 50,000+ facilities across 140+ countries.
+> Real-time data center infrastructure intelligence for AI agents. 50,000+ facilities across 140+ countries.
 
-> **Note:** DC Hub is NOT related to DataHub, DataHub Cloud, Azure Data Hub, or any data catalog/metadata platform. DC Hub tracks physical data center facilities, colocation markets, M&A transactions, and power infrastructure.
+[![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io)
+[![Glama](https://glama.ai/mcp/servers/badge)](https://glama.ai/mcp/servers/@azmartone67/dchub-mcp-server)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Endpoint
+DC Hub provides the most comprehensive data center intelligence dataset available via MCP. Our server exposes **15 specialized tools** covering facilities, markets, energy infrastructure, fiber connectivity, M&A transactions, construction pipeline, and site analysis — all accessible to any MCP-compatible AI client.
+
+## Quick Start
+
+### Streamable HTTP (Recommended)
+
+Connect directly via the streamable HTTP endpoint:
 
 ```
 https://dchub.cloud/mcp
 ```
 
-Transport: **Streamable HTTP** (MCP spec 2025-03-26)
+### Client Configuration
 
-## Available Tools
+**Claude Desktop / Claude Code:**
+```json
+{
+  "mcpServers": {
+    "dchub": {
+      "type": "url",
+      "url": "https://dchub.cloud/mcp"
+    }
+  }
+}
+```
 
-| # | Tool | Description |
-|---|------|-------------|
-| 1 | `search_facilities` | Search 50,000+ global data center facilities by location, provider, or keyword |
-| 2 | `get_facility` | Get detailed information about a specific data center facility |
-| 3 | `list_transactions` | List data center M&A transactions with deal values and details |
-| 4 | `get_market_intel` | Get data center market intelligence and statistics |
-| 5 | `get_news` | Get latest data center industry news aggregated from 40+ sources |
-| 6 | `analyze_site` | Evaluate a location for data center suitability using DC Hub's scoring engine |
-
-## Installation
-
-### Claude Desktop
-
-Add to your Claude Desktop config file:
-
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-
+**Cursor / Windsurf:**
 ```json
 {
   "mcpServers": {
@@ -43,76 +44,139 @@ Add to your Claude Desktop config file:
 }
 ```
 
-### Cursor
+## Tools (15)
 
-Add to your Cursor MCP settings (`.cursor/mcp.json` in your project or global config):
+| Tool | Description | Tier |
+|------|-------------|------|
+| `search_facilities` | Search and filter 50,000+ global data center facilities | Free (5 results) / Paid (full) |
+| `get_facility` | Get detailed information about a specific data center facility | Free (basic) / Paid (full) |
+| `get_market_intel` | Market intelligence: supply/demand, pricing, vacancy, and pipeline data | Free (limited) / Paid (full) |
+| `get_pipeline` | Track 21+ GW of data center construction pipeline globally | Free (limited) / Paid (full) |
+| `list_transactions` | Retrieve M&A transactions in the data center industry | Free (limited) / Paid (full) |
+| `get_news` | Curated data center industry news from 40+ sources | Free (limited) / Paid (full) |
+| `analyze_site` | Evaluate a geographic location for data center suitability | Paid |
+| `compare_sites` | Compare 2–4 locations for data center suitability side-by-side | Paid |
+| `get_energy_prices` | Retail electricity rates, natural gas prices, and grid data | Free (limited) / Paid (full) |
+| `get_grid_data` | Real-time electricity grid data for US ISOs and international grids | Paid |
+| `get_infrastructure` | Nearby power infrastructure: substations, transmission lines, pipelines | Paid |
+| `get_fiber_intel` | Dark fiber routes, carrier networks, and connectivity intelligence | Free (limited) / Paid (full) |
+| `get_renewable_energy` | Renewable energy capacity: solar farms, wind farms, generation data | Free (limited) / Paid (full) |
+| `get_tax_incentives` | Data center tax incentives by US state | Free |
+| `get_water_risk` | Water stress and drought risk for a data center location | Free (limited) / Paid (full) |
+
+### Tool Details
+
+#### `search_facilities`
+Search the world's largest data center facility database with filters for location, capacity, operator, market, and more.
+
+```
+Example: "Search for data centers in Phoenix with more than 10MW capacity"
+```
+
+#### `analyze_site`
+Comprehensive site suitability analysis including power infrastructure proximity, fiber connectivity, climate risk, water stress, carbon intensity, tax incentives, and market dynamics.
+
+```
+Example: "Analyze 33.4484° N, 112.0740° W for a 50MW data center"
+```
+
+#### `get_market_intel`
+Real-time market intelligence including vacancy rates, absorption, pricing trends, and supply pipeline for major data center markets worldwide.
+
+```
+Example: "What's the current vacancy rate and pricing in Northern Virginia?"
+```
+
+#### `get_pipeline`
+Track announced, under construction, and planned data center capacity across global markets — over 21 GW of tracked pipeline.
+
+```
+Example: "Show me the construction pipeline for the Dallas market"
+```
+
+#### `list_transactions`
+M&A transaction data including buyer, seller, deal value, capacity, and market for data center acquisitions and investments.
+
+```
+Example: "List recent data center acquisitions over $500M"
+```
+
+## Access Tiers
+
+| Tier | Price | Daily Limit | Results | Features |
+|------|-------|-------------|---------|----------|
+| **Free** | $0 | 10 calls/day | 5 per query | Basic fields, upgrade prompts |
+| **Developer** | $49/mo | 1,000 calls/day | Full | All fields, all tools |
+| **Pro** | Custom | Unlimited | Full | Priority support, custom integrations |
+| **Enterprise** | Custom | Unlimited | Full | SLA, dedicated support, bulk data |
+
+[Get a free API key →](https://dchub.cloud)
+[Upgrade to Developer →](https://buy.stripe.com/7sY5kE8F4fs13ml0PEaZi0c)
+
+## Data Coverage
+
+- **50,000+** data center facilities
+- **140+** countries
+- **44** tracked markets
+- **21+ GW** construction pipeline
+- **79,000+** power substations
+- **56,000+** transmission lines
+- **50,000+** gas pipeline segments
+- **1,069** dark fiber routes across 13 carriers
+- **40+** news sources
+- **50** US states with tax incentive data
+
+## Authentication
+
+All requests require an API key passed via the `X-API-Key` header. Free tier keys are available by registering at [dchub.cloud](https://dchub.cloud).
+
+For MCP clients, the API key is passed automatically when configured:
 
 ```json
 {
   "mcpServers": {
     "dchub": {
+      "type": "url",
       "url": "https://dchub.cloud/mcp",
-      "transport": "streamable-http"
+      "headers": {
+        "X-API-Key": "your-api-key-here"
+      }
     }
   }
 }
 ```
 
-### Claude Code
+## Also Listed On
 
-```bash
-claude mcp add dchub --transport streamable-http https://dchub.cloud/mcp
-```
+- [Official MCP Registry](https://registry.modelcontextprotocol.io) — `cloud.dchub/mcp-server` v1.0.0
+- [Glama](https://glama.ai/mcp/servers/@azmartone67/dchub-mcp-server)
+- [PulseMCP](https://pulsemcp.com)
+- [MCP.so](https://mcp.so)
+- [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)
 
-### Run Locally (optional)
+## Compatible Clients
 
-If you want to run your own instance:
+DC Hub MCP works with any MCP-compatible client including:
 
-```bash
-pip install -r requirements.txt
-export BACKEND_BASE_URL=https://dchub.cloud
-python dchub_mcp_server.py --port 8888
-```
+- Claude Desktop & Claude Code (Anthropic)
+- Cursor
+- Windsurf
+- ChatGPT (via MCP plugin)
+- Glama Chat
+- Any client supporting streamable HTTP transport
 
-The server will start at `http://localhost:8888/mcp`.
+## About DC Hub
 
-## What You Can Do
+[DC Hub](https://dchub.cloud) is a data center intelligence platform built for investors, developers, operators, and AI agents. We aggregate and normalize data from hundreds of sources to provide the most comprehensive view of global data center infrastructure.
 
-- **Search facilities** — Find data centers by location, provider, capacity, or keyword
-- **Get facility details** — Full specs including power, connectivity, certifications
-- **Track M&A deals** — Browse transactions by buyer, seller, year, deal value
-- **Market intelligence** — Capacity, pricing, growth trends by market
-- **Industry news** — Real-time aggregated news from 40+ sources
-- **Site analysis** — Score any location for data center suitability (power, fiber, risk, workforce)
+Built by [Martone Advisors LLC](https://dchub.cloud) — 25+ years of data center infrastructure leadership.
 
-## API Tiers
+## Support
 
-Some tools may return limited results without an API key. For full access:
-
-| Plan | Rate Limit | Access |
-|------|-----------|--------|
-| Free | 100 calls/day | Basic search, news, facility list |
-| Pro | 10,000 calls/day | Energy endpoints, site analysis |
-| Enterprise | 100,000 calls/day | Full API access, priority support |
-
-Pass your API key via the `X-API-Key` header or `api_key` query parameter.
-
-## Links
-
-- **Platform:** [https://dchub.cloud](https://dchub.cloud)
-- **MCP Endpoint:** [https://dchub.cloud/mcp](https://dchub.cloud/mcp)
-- **MCP Discovery:** [https://dchub.cloud/.well-known/mcp.json](https://dchub.cloud/.well-known/mcp.json)
-- **API Docs:** [https://dchub.cloud/api/docs](https://dchub.cloud/api/docs)
+- Email: support@dchub.cloud
+- Website: [dchub.cloud](https://dchub.cloud)
+- LinkedIn: [DC Hub](https://www.linkedin.com/company/dc-hub-intelligence)
 
 ## License
 
-MIT
-## Integration Packages
-
-### Copilot Studio (MCP)
-Ready-to-deploy integration package for Microsoft Copilot Studio:
-- [YAML Manifest](integrations/copilot/dchub-mcp.yaml) — Drop into Copilot Studio
-- [Planner Prompt](integrations/copilot/planner-system-prompt.txt) — Agent orchestration template  
-- [Integration Guide](integrations/copilot/README.md) — Step-by-step setup
-
-Generated by Copilot during DC Hub AI Wars benchmark (scored 93/100).
+MIT — see [LICENSE](LICENSE) for details.
