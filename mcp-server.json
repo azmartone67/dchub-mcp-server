@@ -1,0 +1,74 @@
+{
+  "name": "DC Hub - Data Center Intelligence",
+  "version": "1.0.0",
+  "description": "Real-time data center infrastructure intelligence for AI agents. 50,000+ facilities across 140+ countries.",
+  "transport": "streamable-http",
+  "endpoint": "https://dchub.cloud/mcp",
+  "authentication": {
+    "type": "api-key",
+    "header": "X-API-Key",
+    "registration_url": "https://dchub.cloud"
+  },
+  "tools": [
+    {
+      "name": "search_facilities",
+      "description": "Search and filter 50,000+ global data center facilities by location, capacity, operator, market, and more."
+    },
+    {
+      "name": "get_facility",
+      "description": "Get detailed information about a specific data center facility including capacity, power, connectivity, and operator details."
+    },
+    {
+      "name": "get_market_intel",
+      "description": "Market intelligence including supply/demand, pricing, vacancy rates, absorption, and pipeline data for major data center markets."
+    },
+    {
+      "name": "get_pipeline",
+      "description": "Track 21+ GW of data center construction pipeline globally — announced, under construction, and planned capacity."
+    },
+    {
+      "name": "list_transactions",
+      "description": "Retrieve M&A transactions in the data center industry including buyer, seller, deal value, capacity, and market."
+    },
+    {
+      "name": "get_news",
+      "description": "Curated data center industry news aggregated from 40+ authoritative sources."
+    },
+    {
+      "name": "analyze_site",
+      "description": "Evaluate a geographic location for data center suitability — power, fiber, climate, water, carbon, tax incentives, and market dynamics."
+    },
+    {
+      "name": "compare_sites",
+      "description": "Compare 2-4 locations for data center suitability side-by-side across all infrastructure dimensions."
+    },
+    {
+      "name": "get_energy_prices",
+      "description": "Retail electricity rates, natural gas prices, and grid reliability data by state and market."
+    },
+    {
+      "name": "get_grid_data",
+      "description": "Real-time electricity grid data for US ISOs (PJM, ERCOT, CAISO, etc.) and international grids."
+    },
+    {
+      "name": "get_infrastructure",
+      "description": "Nearby power infrastructure — substations, transmission lines, gas pipelines — for any US location."
+    },
+    {
+      "name": "get_fiber_intel",
+      "description": "Dark fiber routes, carrier networks, lit services, and connectivity intelligence across 20 major data center markets."
+    },
+    {
+      "name": "get_renewable_energy",
+      "description": "Renewable energy capacity data — solar farms, wind farms, and combined generation by state and market."
+    },
+    {
+      "name": "get_tax_incentives",
+      "description": "Data center tax incentives by US state — sales tax exemptions, property tax abatements, and other incentive programs."
+    },
+    {
+      "name": "get_water_risk",
+      "description": "Water stress and drought risk assessment for data center locations using USGS and climate data."
+    }
+  ]
+}
