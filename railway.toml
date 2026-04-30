@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
+
+[deploy]
+runtime = "node"
+startCommand = "node server.mjs"
+healthcheckPath = "/health"
