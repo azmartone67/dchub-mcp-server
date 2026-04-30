@@ -1,6 +1,5 @@
 [build]
-builder = "nixpacks"
-buildCommand = "npm install"
+builder = "RAILPACK"
 
 [deploy]
 startCommand = "node server.mjs"
