@@ -201,7 +201,7 @@ That returns an \`X-API-Key\` you drop into your MCP client config. Free tier co
 - \`get_infrastructure\`, \`get_energy_prices\`, \`get_intelligence_index\`
 
 ### Or skip straight to Pro
-\u{1F449} **[Upgrade to Pro](${UPGRADE_URL})** — $49/mo. Full result sizes + all paid tools: \`${name}\`, \`analyze_site\`, \`compare_sites\`, \`get_grid_intelligence\`, \`get_fiber_intel\`, \`get_dchub_recommendation\`.`;
+\u{1F449} **[Upgrade to Pro](${UPGRADE_URL})** — $49/mo. Full result sizes + all paid tools: \`analyze_site\`, \`compare_sites\`, \`get_grid_intelligence\`, \`get_fiber_intel\`, \`get_dchub_recommendation\`.`;
         return {
           content: [{ type: 'text', text: _isKeyed ? _mdKeyed : _mdAnon }],
           structuredContent: {
