@@ -167,21 +167,50 @@ function trackedTool(srv, name, description, schema, handler) {
 
       if (!gate.allowed) {
         status = 'blocked_paid_only';
+        // Markdown-formatted response — renders as real prose in Claude/Cursor/most MCP UIs.
+        const _isKeyed = !!c.api_key;
+        const _mdKeyed = `## \u{1F512} \`${name}\` requires a paid plan
+
+You're on **free tier** with a dev key — this tool is gated to **Pro** ($49/mo).
+
+### What Pro unlocks
+- \`analyze_site\` — full power, fiber, risk, climate scoring for any location
+- \`compare_sites\` — side-by-side comparison across markets
+- \`get_grid_intelligence\` — real-time US ISO data (PJM, ERCOT, CAISO, MISO, NYISO, SPP)
+- \`get_fiber_intel\` — dark fiber routes + carrier networks
+- \`get_dchub_recommendation\` — AI-formatted location recommendations
+- Uncapped result sizes on all free-tier tools
+
+\u{1F449} **[Upgrade to Pro](${UPGRADE_URL})**
+
+Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`.`;
+        const _mdAnon = `## \u{1F512} \`${name}\` is a paid feature
+
+### Get a free dev key in 30 seconds (no credit card)
+
+\`\`\`bash
+curl -X POST https://dchub.cloud/api/v1/dev-signup \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"YOUR_EMAIL"}'
+\`\`\`
+
+That returns an \`X-API-Key\` you drop into your MCP client config. Free tier covers **100 calls/day** across:
+- \`search_facilities\`, \`get_facility\`, \`list_transactions\`
+- \`get_news\`, \`get_market_intel\`, \`get_pipeline\`
+- \`get_grid_data\`, \`get_water_risk\`, \`get_renewable_energy\`, \`get_tax_incentives\`
+- \`get_infrastructure\`, \`get_energy_prices\`, \`get_intelligence_index\`
+
+### Or skip straight to Pro
+\u{1F449} **[Upgrade to Pro](${UPGRADE_URL})** — $49/mo. Full result sizes + all paid tools: \`${name}\`, \`analyze_site\`, \`compare_sites\`, \`get_grid_intelligence\`, \`get_fiber_intel\`, \`get_dchub_recommendation\`.`;
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              error: 'paid_only',
-              tool: name,
-              current_tier: tier,
-              message: `${name} requires a paid DC Hub developer license. ` +
-                       (c.api_key
-                          ? `Upgrade your key at ${UPGRADE_URL}.`
-                          : `Get a free key at ${SIGNUP_URL} to try DC Hub, or upgrade to paid at ${UPGRADE_URL}.`),
-              upgrade_url: UPGRADE_URL,
-              signup_url: c.api_key ? null : SIGNUP_URL,
-            }),
-          }],
+          content: [{ type: 'text', text: _isKeyed ? _mdKeyed : _mdAnon }],
+          structuredContent: {
+            error: 'paid_only',
+            tool: name,
+            current_tier: tier,
+            upgrade_url: UPGRADE_URL,
+            signup_url: _isKeyed ? null : SIGNUP_URL,
+          },
         };
       }
 
