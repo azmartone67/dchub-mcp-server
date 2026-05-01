@@ -100,6 +100,29 @@ async function validateKey(api_key) {
     return { valid: false, tier: 'free' };
   }
 }
+
+
+// ── Trial mode: has this session already consumed its free preview for this tool? ──
+async function checkTrialEligibility(session_id, tool_name) {
+  if (!session_id || !tool_name) return { trial_used: true };
+  try {
+    const resp = await fetch(new URL('/api/v1/mcp/trial-check', API_BASE).toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Key': INTERNAL_KEY,
+      },
+      body: JSON.stringify({ session_id, tool: tool_name }),
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!resp.ok) return { trial_used: true };
+    return await resp.json();
+  } catch (err) {
+    console.error('[trial_check] failed:', err.message);
+    return { trial_used: true };
+  }
+}
+
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -166,6 +189,25 @@ function trackedTool(srv, name, description, schema, handler) {
       const gate = applyTierGate(name, args, tier);
 
       if (!gate.allowed) {
+        // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
+        if (tier === 'free' && PAID_ONLY_TOOLS.has(name)) {
+          const _trial = await checkTrialEligibility(c.session_id, name);
+          if (!_trial.trial_used) {
+            status = 'trial_used';
+            const _trialResult = await handler(args);
+            const _trialText = _trialResult?.content?.[0]?.text || '';
+            const _trialFooter = '\n\n---\n\n🎁 **Free trial preview** — that was your one free `' + name + '` call. To call it again or use other paid tools: [get a free dev key](' + SIGNUP_URL + ') (30 seconds, no credit card) or [upgrade to Pro ($49/mo)](' + UPGRADE_URL + ').';
+            return {
+              content: [{ type: 'text', text: _trialText + _trialFooter }],
+              structuredContent: {
+                trial_preview: true,
+                tool: name,
+                signup_url: SIGNUP_URL,
+                upgrade_url: UPGRADE_URL,
+              },
+            };
+          }
+        }
         status = 'blocked_paid_only';
         // Markdown-formatted response — renders as real prose in Claude/Cursor/most MCP UIs.
         const _isKeyed = !!c.api_key;
