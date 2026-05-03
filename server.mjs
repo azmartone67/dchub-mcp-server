@@ -375,7 +375,7 @@ function createServer() {
 
   trackedTool(srv, 'get_renewable_energy', 'Renewable energy: solar, wind, combined capacity.',
     { energy_type: S, state: S, lat: N, lon: N },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', a)) }] }));
 
   trackedTool(srv, 'get_tax_incentives', 'Data center tax incentives by US state.',
     { state: S },
