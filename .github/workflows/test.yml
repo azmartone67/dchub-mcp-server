@@ -1,0 +1,39 @@
+name: MCP smoke tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily at 13:00 UTC (after the dchub-backend doctor runs at 09:00 UTC)
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Run vitest smoke tests against live MCP
+        env:
+          MCP_URL: https://dchub.cloud/mcp
+        run: npm test
+
+      - name: Upload test output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-output-${{ github.run_id }}
+          path: |
+            test/
+          retention-days: 14

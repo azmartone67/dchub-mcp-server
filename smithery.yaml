@@ -1,21 +1,60 @@
-name: dchub-mcp-server
-description: DC Hub Nexus MCP Server - Data center intelligence for AI agents
-version: 3.0.0
-icon: https://dchub.cloud/static/icon.png
+# Smithery manifest for DC Hub MCP server.
+# Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
+# Smithery scans the repo root for this file.
 
-startCommand:
-  type: stdio
-  configSchema:
-    type: object
-    properties:
-      BACKEND_BASE_URL:
-        type: string
-        default: "https://dchub.cloud"
-        description: "DC Hub API backend URL"
-    required: []
-  commandFunction:
-    command: python
-    args:
-      - dchub_mcp_server.py
-    env:
-      BACKEND_BASE_URL: "{{config.BACKEND_BASE_URL}}"
+name: dchub
+displayName: "DC Hub"
+description: "North America data center site selection: facilities, grids, fiber, water, energy, incentives."
+homepage: "https://dchub.cloud"
+
+# DC Hub is a remote/hosted Streamable HTTP server, not an npm package.
+runtime: remote
+remote:
+  type: streamable-http
+  url: "https://dchub.cloud/mcp"
+
+# Tool surface for discovery (matches what /mcp listTools returns).
+tools:
+  - search_facilities
+  - get_facility
+  - compare_sites
+  - analyze_site
+  - get_dchub_recommendation
+  - get_pipeline
+  - get_market_intel
+  - get_grid_intelligence
+  - get_grid_data
+  - get_infrastructure
+  - get_fiber_intel
+  - get_water_risk
+  - get_energy_prices
+  - get_renewable_energy
+  - get_tax_incentives
+  - get_news
+  - get_agent_registry
+
+# Categories help Cursor/Cline users find the server.
+categories:
+  - data
+  - infrastructure
+  - real-estate
+  - energy
+  - research
+
+keywords:
+  - data-centers
+  - hyperscaler
+  - utility-grid
+  - fiber
+  - site-selection
+  - tax-incentives
+  - renewable-energy
+  - PPAs
+  - water-risk
+  - PJM
+  - ISO
+
+author:
+  name: "Jonathan Martone"
+  url: "https://github.com/azmartone67"
+license: "Proprietary — free trial available, paid tiers for full data"
