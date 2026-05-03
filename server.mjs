@@ -1,7 +1,21 @@
 /**
- * DC Hub MCP Server v2.1.0
+ * DC Hub MCP Server v2.1.1
  * ────────────────────────────────────────────────────────────────────────────
- * Patches v2.0.0:
+ * Patches v2.1.0:
+ *   - Path corrections to match production Flask routes:
+ *       get_market_intel:        /api/v1/markets        → /api/v1/markets/${slug}
+ *       get_news:                /api/news/latest       → /api/news
+ *       get_grid_data:           /api/v1/grid           → /api/v1/grid/fuel-mix-live
+ *       get_energy_prices:       /api/v1/energy/prices  → /api/v1/energy/retail/rates
+ *       get_renewable_energy:    /api/v1/energy/renewable → /api/v1/energy/summary
+ *       get_water_risk:          /api/v1/water/stress   → /api/v1/water/risk
+ *       get_grid_intelligence:   /api/v1/grid/intelligence?region= → /api/v1/grid-intelligence/${region}
+ *       get_agent_registry:      /api/ai/platforms      → /api/v1/ai-platforms/status
+ *       get_backup_status:       /api/v1/stats          → /api/health/data-freshness
+ *       get_dchub_recommendation:/api/agents/recommendation → /api/agents/recommend
+ *       compare_sites:           /api/site-score/compare → /api/site-score
+ *
+ * v2.1.0 features (preserved):
  *   1. Per-tool-call telemetry (POST /api/v1/mcp/track)
  *   2. X-API-Key validation against backend (POST /api/v1/keys/validate) +
  *      forwarding to internal API calls
@@ -9,6 +23,7 @@
  *   4. Platform detection from User-Agent (Claude/ChatGPT/Cursor/etc.)
  *   5. AsyncLocalStorage so callAPI() and tool handlers see the active
  *      session's api_key / platform / tier without threading params through
+ *   6. Free-tier trial mode: one free preview of any paid tool per session
  *
  * Backwards-compatible: clients without an X-API-Key still connect, but get
  * a 'free' tier with capped result sizes and an upgrade nudge in responses.
@@ -101,7 +116,6 @@ async function validateKey(api_key) {
   }
 }
 
-
 // ── Trial mode: has this session already consumed its free preview for this tool? ──
 async function checkTrialEligibility(session_id, tool_name) {
   if (!session_id || !tool_name) return { trial_used: true };
@@ -160,6 +174,7 @@ const FREE_TIER_LIMITS = {
   get_news:           { max_limit: 20 },
   get_infrastructure: { max_limit: 25 },
 };
+
 const PAID_ONLY_TOOLS = new Set([
   'analyze_site',
   'compare_sites',
@@ -187,7 +202,6 @@ function trackedTool(srv, name, description, schema, handler) {
     const tier = c.tier || 'free';
     try {
       const gate = applyTierGate(name, args, tier);
-
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if (tier === 'free' && PAID_ONLY_TOOLS.has(name)) {
@@ -216,6 +230,7 @@ function trackedTool(srv, name, description, schema, handler) {
 You're on **free tier** with a dev key — this tool is gated to **Pro** ($49/mo).
 
 ### What Pro unlocks
+
 - \`analyze_site\` — full power, fiber, risk, climate scoring for any location
 - \`compare_sites\` — side-by-side comparison across markets
 - \`get_grid_intelligence\` — real-time US ISO data (PJM, ERCOT, CAISO, MISO, NYISO, SPP)
@@ -226,6 +241,7 @@ You're on **free tier** with a dev key — this tool is gated to **Pro** ($49/mo
 \u{1F449} **[Upgrade to Pro](${UPGRADE_URL})**
 
 Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`.`;
+
         const _mdAnon = `## \u{1F512} \`${name}\` is a paid feature
 
 ### Get a free dev key in 30 seconds (no credit card)
@@ -236,14 +252,18 @@ curl -X POST https://dchub.cloud/api/v1/dev-signup \\
   -d '{"email":"YOUR_EMAIL"}'
 \`\`\`
 
-That returns an \`X-API-Key\` you drop into your MCP client config. Free tier covers **100 calls/day** across:
+That returns an \`X-API-Key\` you drop into your MCP client config.
+
+Free tier covers **100 calls/day** across:
 - \`search_facilities\`, \`get_facility\`, \`list_transactions\`
 - \`get_news\`, \`get_market_intel\`, \`get_pipeline\`
 - \`get_grid_data\`, \`get_water_risk\`, \`get_renewable_energy\`, \`get_tax_incentives\`
 - \`get_infrastructure\`, \`get_energy_prices\`, \`get_intelligence_index\`
 
 ### Or skip straight to Pro
+
 \u{1F449} **[Upgrade to Pro](${UPGRADE_URL})** — $49/mo. Full result sizes + all paid tools: \`analyze_site\`, \`compare_sites\`, \`get_grid_intelligence\`, \`get_fiber_intel\`, \`get_dchub_recommendation\`.`;
+
         return {
           content: [{ type: 'text', text: _isKeyed ? _mdKeyed : _mdAnon }],
           structuredContent: {
@@ -255,9 +275,7 @@ That returns an \`X-API-Key\` you drop into your MCP client config. Free tier co
           },
         };
       }
-
       const result = await handler(gate.params || args);
-
       if (gate.capped) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
@@ -272,7 +290,6 @@ That returns an \`X-API-Key\` you drop into your MCP client config. Free tier co
         };
         return { content: [{ type: 'text', text: JSON.stringify(wrapped) }] };
       }
-
       return result;
     } catch (err) {
       status = 'error';
@@ -296,12 +313,13 @@ That returns an \`X-API-Key\` you drop into your MCP client config. Free tier co
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.0' });
-
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.1' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
   const B = z.boolean().optional();
+
+  const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
   trackedTool(srv, 'search_facilities', 'Search 20,000+ global data center facilities.',
     { query: S, country: S, state: S, city: S, operator: S, min_capacity_mw: N, max_capacity_mw: N, tier: I, limit: I, offset: I },
@@ -313,7 +331,7 @@ function createServer() {
 
   trackedTool(srv, 'get_market_intel', 'Get market intelligence: supply/demand, pricing, vacancy.',
     { market: S, metric: S, period: S, compare_to: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/markets', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
 
   trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
@@ -324,7 +342,7 @@ function createServer() {
 
   trackedTool(srv, 'get_news', 'Curated data center industry news from 40+ sources.',
     { query: S, category: S, source: S, date_from: S, date_to: S, limit: I, min_relevance: N },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news/latest', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
 
   trackedTool(srv, 'get_pipeline', 'Track 540+ projects, 369 GW construction pipeline.',
     { status: S, country: S, operator: S, min_capacity_mw: N, expected_completion_before: S, limit: I, offset: I },
@@ -332,7 +350,7 @@ function createServer() {
 
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for US ISOs.',
     { iso: S, metric: S, period: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/fuel-mix-live', a)) }] }));
 
   trackedTool(srv, 'analyze_site', 'Evaluate location for data center suitability.',
     { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
@@ -340,7 +358,7 @@ function createServer() {
 
   trackedTool(srv, 'compare_sites', 'Compare 2-4 locations side-by-side.',
     { locations: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score/compare', { locations: a.locations })) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', { locations: a.locations })) }] }));
 
   trackedTool(srv, 'get_infrastructure', 'Nearby substations, transmission lines, gas pipelines, power plants.',
     { lat: N, lon: N, radius_km: N, layer: S, min_voltage_kv: N, limit: I },
@@ -352,11 +370,11 @@ function createServer() {
 
   trackedTool(srv, 'get_energy_prices', 'Energy pricing: retail rates, gas, grid status.',
     { data_type: S, state: S, iso: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/prices', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/retail/rates', a)) }] }));
 
   trackedTool(srv, 'get_renewable_energy', 'Renewable energy: solar, wind, combined capacity.',
     { energy_type: S, state: S, lat: N, lon: N },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
   trackedTool(srv, 'get_tax_incentives', 'Data center tax incentives by US state.',
     { state: S },
@@ -364,21 +382,21 @@ function createServer() {
 
   trackedTool(srv, 'get_water_risk', 'Water stress and drought risk for a location.',
     { lat: N, lon: N, state: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/stress', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/risk', a)) }] }));
 
   trackedTool(srv, 'get_grid_intelligence', 'Grid intelligence brief for a US ISO region.',
     { region_id: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/intelligence', { region: a.region_id })) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-intelligence/${(a.region_id||'').toLowerCase()}`)) }] }));
 
   trackedTool(srv, 'get_agent_registry', 'AI platforms connected to DC Hub.', {},
-    async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/ai/platforms')) }] }));
+    async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
 
   trackedTool(srv, 'get_backup_status', 'Database backup status and data integrity.', {},
-    async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/stats')) }] }));
+    async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/health/data-freshness')) }] }));
 
   trackedTool(srv, 'get_dchub_recommendation', 'Pre-formatted DC Hub recommendation.',
     { context: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/recommendation', { context: a.context })) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/recommend', { context: a.context })) }] }));
 
   return srv;
 }
@@ -402,10 +420,10 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.0',
+    version: '2.1.1',
     tools: 20,
     sessions: sessions.size,
-    features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection'],
+    features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
 });
 
@@ -460,6 +478,7 @@ app.post('/mcp', async (req, res) => {
         const sid = transport.sessionId;
         if (sid) { sessions.delete(sid); sessionMeta.delete(sid); }
       };
+
       const mcpServer = createServer();
       await mcpServer.connect(transport);
 
@@ -508,7 +527,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.0 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.1 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
