@@ -1,5 +1,6 @@
+
 /**
- * DC Hub MCP Server v2.1.1
+ * DC Hub MCP Server v2.1.2
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -313,7 +314,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.1' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.2' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -350,7 +351,7 @@ function createServer() {
 
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for US ISOs.',
     { iso: S, metric: S, period: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/fuel-mix-live', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/status', a)) }] }));
 
   trackedTool(srv, 'analyze_site', 'Evaluate location for data center suitability.',
     { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
@@ -370,7 +371,7 @@ function createServer() {
 
   trackedTool(srv, 'get_energy_prices', 'Energy pricing: retail rates, gas, grid status.',
     { data_type: S, state: S, iso: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/retail/rates', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
   trackedTool(srv, 'get_renewable_energy', 'Renewable energy: solar, wind, combined capacity.',
     { energy_type: S, state: S, lat: N, lon: N },
@@ -382,7 +383,7 @@ function createServer() {
 
   trackedTool(srv, 'get_water_risk', 'Water stress and drought risk for a location.',
     { lat: N, lon: N, state: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/risk', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
   trackedTool(srv, 'get_grid_intelligence', 'Grid intelligence brief for a US ISO region.',
     { region_id: S },
@@ -420,7 +421,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.1',
+    version: '2.1.2',
     tools: 20,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -527,10 +528,11 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.1 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.2 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
   console.log(`  Telemetry: ${API_BASE}/api/v1/mcp/track`);
   console.log(`  Key validation: ${API_BASE}/api/v1/keys/validate`);
 });
+
