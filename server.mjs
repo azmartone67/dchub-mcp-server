@@ -194,6 +194,24 @@ function applyTierGate(toolName, params, tier) {
   return { allowed: true, params };
 }
 
+// ── Phase 7: trim trial responses so the LLM sees what's gated ─────────────
+// Free-tier users calling a paid tool get exactly ONE array element from
+// each result list, plus a "[N more — Pro]" placeholder. That's evidence
+// of value (real shape, real fields) without giving away the dataset.
+function trimForTrial(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+  const out = {};
+  for (const [k, v] of Object.entries(parsed)) {
+    if (Array.isArray(v) && v.length > 1) {
+      out[k] = [v[0], { _gated: `[${v.length - 1} more results — Pro unlocks the full set]` }];
+      out[`_${k}_total_in_pro`] = v.length;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
   srv.tool(name, description, schema, async (args) => {
@@ -210,15 +228,22 @@ function trackedTool(srv, name, description, schema, handler) {
           if (!_trial.trial_used) {
             status = 'trial_used';
             const _trialResult = await handler(args);
-            const _trialText = _trialResult?.content?.[0]?.text || '';
-            const _trialFooter = '\n\n---\n\n🎁 **Free trial preview** — that was your one free `' + name + '` call. To call it again or use other paid tools: [get a free dev key](' + SIGNUP_URL + ') (30 seconds, no credit card) or [upgrade to Pro ($49/mo)](' + UPGRADE_URL + ').';
+            let _trialText = _trialResult?.content?.[0]?.text || '';
+            // Phase 7: trim arrays in the JSON payload so the LLM sees that
+            // there IS more, but not the actual data.
+            try {
+              const parsed = JSON.parse(_trialText);
+              _trialText = JSON.stringify(trimForTrial(parsed));
+            } catch { /* not JSON, leave as prose */ }
+            const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
+            const _upgradeHeader = '🔒 **Free trial preview** of `' + name + '` — first result only. Pro returns the full set + every paid tool.\n\n👉 **[Get Pro for $49/mo](' + _refUrl(UPGRADE_URL) + ')** · [Free dev key first](' + _refUrl(SIGNUP_URL) + ')\n\n---\n\n';
             return {
-              content: [{ type: 'text', text: _trialText + _trialFooter }],
+              content: [{ type: 'text', text: _upgradeHeader + _trialText }],
               structuredContent: {
                 trial_preview: true,
                 tool: name,
-                signup_url: SIGNUP_URL,
-                upgrade_url: UPGRADE_URL,
+                signup_url: _refUrl(SIGNUP_URL),
+                upgrade_url: _refUrl(UPGRADE_URL),
               },
             };
           }
