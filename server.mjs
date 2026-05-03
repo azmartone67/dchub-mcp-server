@@ -319,6 +319,7 @@ function createServer() {
   const N = z.number().optional();
   const I = z.number().int().optional();
   const B = z.boolean().optional();
+  const ID = z.union([z.string(), z.number()]).transform(v => String(v)).optional();  // accepts numeric or string ids; coerces to string for the API path
 
   const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
@@ -327,7 +328,7 @@ function createServer() {
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/facilities', a)) }] }));
 
   trackedTool(srv, 'get_facility', 'Get detailed info about a specific facility.',
-    { facility_id: S, include_nearby: B, include_power: B },
+    { facility_id: ID, include_nearby: B, include_power: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/facilities/${a.facility_id||''}`, { include_nearby: a.include_nearby, include_power: a.include_power })) }] }));
 
   trackedTool(srv, 'get_market_intel', 'Get market intelligence: supply/demand, pricing, vacancy.',
