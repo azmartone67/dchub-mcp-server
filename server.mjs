@@ -212,6 +212,20 @@ function trimForTrial(parsed) {
   return out;
 }
 
+// === phase 9: universal free-tier guard ===
+function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
+  if (hasApiKey) return (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
+  let trimmed = parsed;
+  try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed) : parsed; } catch(e) {}
+  const ref = '?ref=mcp-trial&tool=' + encodeURIComponent(toolName);
+  const nudge = '\u{1F512} **Free trial preview** of `' + toolName + '` — first result only. Pro returns the full set + every paid tool.\n' +
+                '\u{1F449} **[Get Pro for $49/mo](https://dchub.cloud/ai#pricing' + ref + ')** · [Free dev key first](https://dchub.cloud/api/v1/dev-signup-form' + ref + ')\n---\n';
+  const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
+  return nudge + body;
+}
+// === end phase 9 ===
+
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
   srv.tool(name, description, schema, async (args) => {
