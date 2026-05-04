@@ -177,9 +177,7 @@ const FREE_TIER_LIMITS = {
   get_infrastructure: { max_limit: 25 },
 };
 
-const PAID_ONLY_TOOLS = new Set([
-    'search_facilities', 'get_facility', 'get_market_intel', 'get_intelligence_index', 'list_transactions', 'get_news', 'get_pipeline', 'get_grid_data', 'analyze_site', 'compare_sites', 'get_infrastructure', 'get_fiber_intel', 'get_energy_prices', 'get_renewable_energy', 'get_tax_incentives', 'get_water_risk', 'get_grid_intelligence', 'get_agent_registry', 'get_backup_status', 'get_dchub_recommendation'
-  ]);
+const PAID_ONLY_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_grid_intelligence', 'get_fiber_intel', 'get_dchub_recommendation', 'get_facility', 'get_market_intel', 'get_intelligence_index', 'get_grid_data', 'get_infrastructure', 'get_energy_prices', 'get_renewable_energy', 'get_tax_incentives', 'get_water_risk', 'get_pipeline']);
 
 function applyTierGate(toolName, params, tier) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
