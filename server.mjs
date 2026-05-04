@@ -218,6 +218,18 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return nudge + body;
 }
+// phase9L_clean_preview: drop wrapped error text from trial responses
+function phase9L_clean_preview(header, body) {
+  try {
+    var s = String(body || '');
+    // If the body looks like a backend 4xx error blob, suppress it.
+    if (/\bAPI 40[1234]\b|\b40[1234] (Not Found|Forbidden|Unauthorized|Bad Request)\b|"success":\s*false/i.test(s)) {
+      return header;
+    }
+    return header + s;
+  } catch (e) { return header; }
+}
+
 // === end phase 9 ===
 
 
@@ -247,7 +259,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
             const _upgradeHeader = '🔒 **Free trial preview** of `' + name + '` — first result only. Pro returns the full set + every paid tool.\n\n👉 **[Get Pro for $49/mo](' + _refUrl(UPGRADE_URL) + ')** · [Free dev key first](' + _refUrl(SIGNUP_URL) + ')\n\n---\n\n';
             return {
-              content: [{ type: 'text', text: _upgradeHeader + _trialText }],
+              content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) }],
               structuredContent: {
                 trial_preview: true,
                 tool: name,
