@@ -10,7 +10,7 @@
  *       get_energy_prices:       /api/v1/energy/prices  → /api/v1/energy/retail/rates
  *       get_renewable_energy:    /api/v1/energy/renewable → /api/v1/energy/summary
  *       get_water_risk:          /api/v1/water/stress   → /api/v1/water/risk
- *       get_grid_intelligence:   /api/v1/grid/intelligence?region= → /api/v1/grid-intelligence/${region}
+ *       get_grid_intelligence:   /api/v1/grid/intelligence?region= → /api/v1/grid-headroom/${region}
  *       get_agent_registry:      /api/ai/platforms      → /api/v1/ai-platforms/status
  *       get_backup_status:       /api/v1/stats          → /api/health/data-freshness
  *       get_dchub_recommendation:/api/agents/recommendation → /api/agents/recommend
@@ -328,7 +328,7 @@ Free tier covers **100 calls/day** across:
             signup_url: c.api_key ? null : SIGNUP_URL,
           },
         };
-        return { content: [{ type: 'text', text: JSON.stringify(wrapped) }] };
+        return { content: [{ type: 'text', text: applyTrialGuardIfFree(name, wrapped, !!apiKey) }] };
       }
       return result;
     } catch (err) {
@@ -427,7 +427,7 @@ function createServer() {
 
   trackedTool(srv, 'get_grid_intelligence', 'Grid intelligence brief for a US ISO region.',
     { region_id: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-intelligence/${(a.region_id||'').toLowerCase()}`)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${(a.region_id||'').toLowerCase()}`)) }] }));
 
   trackedTool(srv, 'get_agent_registry', 'AI platforms connected to DC Hub.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
