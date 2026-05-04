@@ -75,6 +75,7 @@ async function trackToolCall(payload) {
   try {
     await fetch(new URL('/api/v1/mcp/track', API_BASE).toString(), {
       method: 'POST',
+      keepalive: true,
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Key': INTERNAL_KEY,
