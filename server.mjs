@@ -37,6 +37,31 @@ import { randomUUID } from 'crypto';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
 
+
+// phase39_human_message — paywall response enrichment for higher conversion
+// Adds a literal markdown string that AI clients (Claude/Cursor/Cline)
+// render verbatim instead of summarizing away. Plus attribution query
+// params on the upgrade URL so /api/v1/observability/conversion/track
+// can attribute clicks to the exact tool that triggered the upgrade.
+function buildPaywallExtras(toolName, currentTier) {
+  toolName = toolName || 'unknown';
+  currentTier = currentTier || 'free';
+  const params = new URLSearchParams({
+    from: 'mcp',
+    tool: toolName,
+    tier: currentTier,
+  }).toString();
+  const upgradeUrl = 'https://dchub.cloud/pricing?' + params;
+  const signupUrl = 'https://dchub.cloud/signup?' + params;
+  const lock = String.fromCodePoint(0x1F513); // unlock symbol
+  const human_message = (
+    lock + ' **You hit a Pro feature.** Get full ' + toolName + ' data + ' +
+    'all 7 ISO grid intel + fiber routes for **$49/mo**. ' +
+    '[Start 7-day free trial \u2192](' + upgradeUrl + ') — no credit card.\n\n' +
+    '_Free tier shows partial data. Upgrade for live, complete results._'
+  );
+  return { human_message: human_message, upgrade_url: upgradeUrl, signup_url: signupUrl };
+}
 // ── Config ──────────────────────────────────────────────────────────────────
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || 'dchub-internal-sync-2026';
@@ -265,6 +290,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 tool: name,
                 signup_url: _refUrl(SIGNUP_URL),
                 upgrade_url: _refUrl(UPGRADE_URL),
+    ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
               },
             };
           }
@@ -319,6 +345,7 @@ Free tier covers **100 calls/day** across:
             current_tier: tier,
             upgrade_url: UPGRADE_URL,
             signup_url: _isKeyed ? null : SIGNUP_URL,
+    ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
           },
         };
       }
