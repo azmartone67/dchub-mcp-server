@@ -1,3 +1,4 @@
+// phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
  * DC Hub MCP Server v2.1.2
@@ -239,7 +240,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed) : parsed; } catch(e) {}
   const ref = '?ref=mcp-trial&tool=' + encodeURIComponent(toolName);
   const nudge = '\u{1F512} **Free trial preview** of `' + toolName + '` — first result only. Pro returns the full set + every paid tool.\n' +
-                '\u{1F449} **[Get Pro for $49/mo](https://dchub.cloud/ai#pricing' + ref + ')** · [Free dev key first](https://dchub.cloud/api/v1/dev-signup-form' + ref + ')\n---\n';
+                '\u{1F449} **[Get Pro for $49/mo](https://dchub.cloud/ai#pricing' + ref + ')** · [Get your free dev key (60 sec, just your email)](https://dchub.cloud/api/v1/redeem/' + ((c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session') + ')\n---\n';
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return nudge + body;
 }
@@ -282,7 +283,7 @@ function trackedTool(srv, name, description, schema, handler) {
               _trialText = JSON.stringify(trimForTrial(parsed));
             } catch { /* not JSON, leave as prose */ }
             const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
-            const _upgradeHeader = '🔒 **Free trial preview** of `' + name + '` — first result only. Pro returns the full set + every paid tool.\n\n👉 **[Get Pro for $49/mo](' + _refUrl(UPGRADE_URL) + ')** · [Free dev key first](' + _refUrl(SIGNUP_URL) + ')\n\n---\n\n';
+            const _upgradeHeader = '🔒 **Free trial preview** of `' + name + '` — first result only. Pro returns the full set + every paid tool.\n\n👉 **[Get Pro for $49/mo](' + _refUrl(UPGRADE_URL) + ')** · [Get your free dev key (60 sec, just your email)](https://dchub.cloud/api/v1/redeem/' + ((c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session') + ')\n\n---\n\n';
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) }],
               structuredContent: {
