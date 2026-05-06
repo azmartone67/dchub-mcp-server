@@ -44,24 +44,40 @@ import { z } from 'zod';
 // render verbatim instead of summarizing away. Plus attribution query
 // params on the upgrade URL so /api/v1/observability/conversion/track
 // can attribute clicks to the exact tool that triggered the upgrade.
-function buildPaywallExtras(toolName, currentTier) {
-  toolName = toolName || 'unknown';
+function buildPaywallExtras(toolName, currentTier, sessionId) {
+  // phase65_redeem_in_human_message -- redeem URL is the primary CTA in
+  // human_message because AI clients render this field verbatim.
+  toolName    = toolName    || 'unknown';
   currentTier = currentTier || 'free';
+  // sessionId can be passed explicitly or pulled from AsyncLocalStorage
+  if (!sessionId) {
+    try { sessionId = (getCtx() && getCtx().session_id) || ''; } catch (_) {}
+  }
   const params = new URLSearchParams({
     from: 'mcp',
     tool: toolName,
     tier: currentTier,
   }).toString();
   const upgradeUrl = 'https://dchub.cloud/pricing?' + params;
-  const signupUrl = 'https://dchub.cloud/signup?' + params;
+  const signupUrl  = 'https://dchub.cloud/signup?'  + params;
+  const redeemUrl  = sessionId
+    ? ('https://dchub.cloud/api/v1/redeem/' + sessionId)
+    : signupUrl;
   const lock = String.fromCodePoint(0x1F513); // unlock symbol
+  // human_message: redeem-first (low friction), upgrade-second (high commit)
   const human_message = (
-    lock + ' **You hit a Pro feature.** Get full ' + toolName + ' data + ' +
-    'all 7 ISO grid intel + fiber routes for **$49/mo**. ' +
-    '[Start 7-day free trial \u2192](' + upgradeUrl + ') — no credit card.\n\n' +
-    '_Free tier shows partial data. Upgrade for live, complete results._'
+    lock + ' **' + toolName + ' is a paid tool.** Two ways to unlock:\n\n' +
+    '**1. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
+    '   25 calls/day across 14 paid tools, no credit card.\n\n' +
+    '**2. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
+    '   Full ' + toolName + ' data + all 7 ISO grid intel + fiber routes.'
   );
-  return { human_message: human_message, upgrade_url: upgradeUrl, signup_url: signupUrl };
+  return {
+    human_message: human_message,
+    redeem_url:    redeemUrl,
+    upgrade_url:   upgradeUrl,
+    signup_url:    signupUrl,
+  };
 }
 // ── Config ──────────────────────────────────────────────────────────────────
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
