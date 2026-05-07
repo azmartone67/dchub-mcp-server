@@ -1,7 +1,7 @@
 {
   "name": "DC Hub - Data Center Intelligence",
   "version": "1.0.0",
-  "description": "Real-time data center infrastructure intelligence for AI agents. 50,000+ facilities across 140+ countries.",
+  "description": "Real-time data center intelligence: 12,500+ facilities, 126,000 substations, live grid demand for all 7 US ISOs (PJM, MISO, ERCOT, CAISO, NYISO, SPP, ISONE), transmission lines, fiber routes, gas pipelines, NEPA filings, M&A pipeline, and AI infrastructure deals. The only MCP server combining facility, infrastructure, and live grid data into one queryable interface for AI agents doing site selection, energy analysis, or market research.",
   "transport": "streamable-http",
   "endpoint": "https://dchub.cloud/mcp",
   "authentication": {
@@ -12,19 +12,19 @@
   "tools": [
     {
       "name": "search_facilities",
-      "description": "Search and filter 50,000+ global data center facilities by location, capacity, operator, market, and more."
+      "description": "Search and filter 50,000+ global data center facilities by location, capacity, operator, market, and more. Try: search_facilities operator=Equinix country=US"
     },
     {
       "name": "get_facility",
-      "description": "Get detailed information about a specific data center facility including capacity, power, connectivity, and operator details."
+      "description": "Get detailed information about a specific data center facility including capacity, power, connectivity, and operator details. Try: get_facility id=1234"
     },
     {
       "name": "get_market_intel",
-      "description": "Market intelligence including supply/demand, pricing, vacancy rates, absorption, and pipeline data for major data center markets."
+      "description": "Market intelligence including supply/demand, pricing, vacancy rates, absorption, and pipeline data for major data center markets. Try: get_market_intel slug=northern-virginia"
     },
     {
       "name": "get_pipeline",
-      "description": "Track 21+ GW of data center construction pipeline globally — announced, under construction, and planned capacity."
+      "description": "Track 21+ GW of data center construction pipeline globally \u2014 announced, under construction, and planned capacity. Try: get_pipeline company=AWS state=OH"
     },
     {
       "name": "list_transactions",
@@ -32,43 +32,83 @@
     },
     {
       "name": "get_news",
-      "description": "Curated data center industry news aggregated from 40+ authoritative sources."
+      "description": "Curated data center industry news aggregated from 40+ authoritative sources. Try: get_news topic=hyperscale"
     },
     {
       "name": "analyze_site",
-      "description": "Evaluate a geographic location for data center suitability — power, fiber, climate, water, carbon, tax incentives, and market dynamics."
+      "description": "Evaluate a geographic location for data center suitability \u2014 power, fiber, climate, water, carbon, tax incentives, and market dynamics. Try: analyze_site lat=39.04 lon=-77.49"
     },
     {
       "name": "compare_sites",
-      "description": "Compare 2-4 locations for data center suitability side-by-side across all infrastructure dimensions."
+      "description": "Compare 2-4 locations for data center suitability side-by-side across all infrastructure dimensions. Try: compare_sites lat1=39.04 lon1=-77.49 lat2=33.07 lon2=-96.81"
     },
     {
       "name": "get_energy_prices",
-      "description": "Retail electricity rates, natural gas prices, and grid reliability data by state and market."
+      "description": "Retail electricity rates, natural gas prices, and grid reliability data by state and market. Try: get_energy_prices state=VA"
     },
     {
       "name": "get_grid_data",
-      "description": "Real-time electricity grid data for US ISOs (PJM, ERCOT, CAISO, etc.) and international grids."
+      "description": "Real-time electricity grid data for US ISOs (PJM, ERCOT, CAISO, etc.) and international grids. Try: get_grid_data iso=ERCOT"
     },
     {
       "name": "get_infrastructure",
-      "description": "Nearby power infrastructure — substations, transmission lines, gas pipelines — for any US location."
+      "description": "Nearby power infrastructure \u2014 substations, transmission lines, gas pipelines \u2014 for any US location. Try: get_infrastructure metro=columbus"
     },
     {
       "name": "get_fiber_intel",
-      "description": "Dark fiber routes, carrier networks, lit services, and connectivity intelligence across 20 major data center markets."
+      "description": "Dark fiber routes, carrier networks, lit services, and connectivity intelligence across 20 major data center markets. Try: get_fiber_intel format=geojson"
     },
     {
       "name": "get_renewable_energy",
-      "description": "Renewable energy capacity data — solar farms, wind farms, and combined generation by state and market."
+      "description": "Renewable energy capacity data \u2014 solar farms, wind farms, and combined generation by state and market. Try: get_renewable_energy fuel=solar state=TX"
     },
     {
       "name": "get_tax_incentives",
-      "description": "Data center tax incentives by US state — sales tax exemptions, property tax abatements, and other incentive programs."
+      "description": "Data center tax incentives by US state \u2014 sales tax exemptions, property tax abatements, and other incentive programs. Try: get_tax_incentives state=OH"
     },
     {
       "name": "get_water_risk",
-      "description": "Water stress and drought risk assessment for data center locations using USGS and climate data."
+      "description": "Water stress and drought risk assessment for data center locations using USGS and climate data. Try: get_water_risk state=TX"
     }
+  ],
+  "example_queries": [
+    "What's the current grid headroom in PJM?",
+    "Show me AWS data center construction pipeline in Ohio",
+    "Find data centers within 50km of Northern Virginia substations >230kV",
+    "Compare ERCOT vs PJM capacity prices over the last 30 days",
+    "What's the live demand and generation mix in CAISO right now?",
+    "Show me facilities operated by Equinix in Frankfurt",
+    "Get fiber routes between Ashburn and Atlanta",
+    "What gas pipelines feed power plants serving Loudoun County?"
+  ],
+  "categories": [
+    "data",
+    "infrastructure",
+    "energy",
+    "real-time",
+    "site-selection"
+  ],
+  "keywords": [
+    "ISONE",
+    "EIA",
+    "CAISO",
+    "grid",
+    "substation",
+    "data center",
+    "MISO",
+    "SPP",
+    "NYISO",
+    "hyperscale",
+    "energy",
+    "fiber",
+    "site selection",
+    "AI infrastructure",
+    "datacenter",
+    "ERCOT",
+    "M&A",
+    "ISO",
+    "infrastructure",
+    "PJM",
+    "transmission"
   ]
 }
