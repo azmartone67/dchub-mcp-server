@@ -1,6 +1,6 @@
 {
   "name": "DC Hub - Data Center Intelligence",
-  "version": "1.0.0",
+  "version": "2.1.3",
   "description": "Real-time data center intelligence: 12,500+ facilities, 126,000 substations, live grid demand for all 7 US ISOs (PJM, MISO, ERCOT, CAISO, NYISO, SPP, ISONE), transmission lines, fiber routes, gas pipelines, NEPA filings, M&A pipeline, and AI infrastructure deals. The only MCP server combining facility, infrastructure, and live grid data into one queryable interface for AI agents doing site selection, energy analysis, or market research.",
   "transport": "streamable-http",
   "endpoint": "https://dchub.cloud/mcp",
@@ -12,63 +12,63 @@
   "tools": [
     {
       "name": "search_facilities",
-      "description": "Search and filter 50,000+ global data center facilities by location, capacity, operator, market, and more. Try: search_facilities operator=Equinix country=US"
+      "description": "Search 12,500+ global data center facilities by location, capacity, operator, market, fiber connectivity, or status. Try: search_facilities operator=Equinix country=US"
     },
     {
       "name": "get_facility",
-      "description": "Get detailed information about a specific data center facility including capacity, power, connectivity, and operator details. Try: get_facility id=1234"
+      "description": "Get detailed info on a specific facility: capacity (MW), power topology, connectivity providers, operator, status, addresses. Try: get_facility id=1234"
     },
     {
       "name": "get_market_intel",
-      "description": "Market intelligence including supply/demand, pricing, vacancy rates, absorption, and pipeline data for major data center markets. Try: get_market_intel slug=northern-virginia"
+      "description": "Market intelligence for 32+ DC markets: capacity prices ($/MW-day), vacancy, absorption, dominant operators, growth rate. Try: get_market_intel slug=northern-virginia"
     },
     {
       "name": "get_pipeline",
-      "description": "Track 21+ GW of data center construction pipeline globally \u2014 announced, under construction, and planned capacity. Try: get_pipeline company=AWS state=OH"
+      "description": "Construction pipeline: 650+ GW of announced + planned + under-construction data center capacity globally. Filter by company, state, status, ETA. Try: get_pipeline company=AWS state=OH"
     },
     {
       "name": "list_transactions",
-      "description": "Retrieve M&A transactions in the data center industry including buyer, seller, deal value, capacity, and market."
+      "description": "M&A and capacity transactions in the data center industry: buyer, seller, MW, $ size, advisors, close date. Try: list_transactions year=2026"
     },
     {
       "name": "get_news",
-      "description": "Curated data center industry news aggregated from 40+ authoritative sources. Try: get_news topic=hyperscale"
+      "description": "Latest news from 50+ data center industry sources, deduped + categorized by topic and operator. Try: get_news topic=hyperscale"
     },
     {
       "name": "analyze_site",
-      "description": "Evaluate a geographic location for data center suitability \u2014 power, fiber, climate, water, carbon, tax incentives, and market dynamics. Try: analyze_site lat=39.04 lon=-77.49"
+      "description": "Score any lat/lon for data center suitability: power capacity, fiber proximity, gas access, climate risk, market conditions. Try: analyze_site lat=39.04 lon=-77.49"
     },
     {
       "name": "compare_sites",
-      "description": "Compare 2-4 locations for data center suitability side-by-side across all infrastructure dimensions. Try: compare_sites lat1=39.04 lon1=-77.49 lat2=33.07 lon2=-96.81"
+      "description": "Side-by-side comparison of two coordinates for site selection: infrastructure score, power, fiber, gas, water risk, climate. Try: compare_sites lat1=39.04 lon1=-77.49 lat2=33.07 lon2=-96.81"
     },
     {
       "name": "get_energy_prices",
-      "description": "Retail electricity rates, natural gas prices, and grid reliability data by state and market. Try: get_energy_prices state=VA"
+      "description": "Industrial electricity rates ($/kWh) by state, with year-over-year deltas. Try: get_energy_prices state=VA"
     },
     {
       "name": "get_grid_data",
-      "description": "Real-time electricity grid data for US ISOs (PJM, ERCOT, CAISO, etc.) and international grids. Try: get_grid_data iso=ERCOT"
+      "description": "Real-time grid demand + 24h load curve for any US ISO. Try: get_grid_data iso=ERCOT"
     },
     {
       "name": "get_infrastructure",
-      "description": "Nearby power infrastructure \u2014 substations, transmission lines, gas pipelines \u2014 for any US location. Try: get_infrastructure metro=columbus"
+      "description": "Aggregated infrastructure summary for any metro: substations, fiber, gas, transmission, facilities. Try: get_infrastructure metro=columbus"
     },
     {
       "name": "get_fiber_intel",
-      "description": "Dark fiber routes, carrier networks, lit services, and connectivity intelligence across 20 major data center markets. Try: get_fiber_intel format=geojson"
+      "description": "Long-haul fiber routes + carrier metro maps. Returns GeoJSON for direct mapping. Try: get_fiber_intel format=geojson"
     },
     {
       "name": "get_renewable_energy",
-      "description": "Renewable energy capacity data \u2014 solar farms, wind farms, and combined generation by state and market. Try: get_renewable_energy fuel=solar state=TX"
+      "description": "Renewable generation capacity (solar/wind/hydro) by state, with capacity factor. Try: get_renewable_energy fuel=solar state=TX"
     },
     {
       "name": "get_tax_incentives",
-      "description": "Data center tax incentives by US state \u2014 sales tax exemptions, property tax abatements, and other incentive programs. Try: get_tax_incentives state=OH"
+      "description": "State + local tax incentives for data centers: sales tax exemptions, abatements, special tariffs, eligibility. Try: get_tax_incentives state=OH"
     },
     {
       "name": "get_water_risk",
-      "description": "Water stress and drought risk assessment for data center locations using USGS and climate data. Try: get_water_risk state=TX"
+      "description": "Water stress index (USGS) by state, county, or coordinate for evaluating cooling sustainability. Try: get_water_risk state=TX"
     }
   ],
   "example_queries": [
