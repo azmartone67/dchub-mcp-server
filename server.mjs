@@ -49,20 +49,41 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // human_message because AI clients render this field verbatim.
   toolName    = toolName    || 'unknown';
   currentTier = currentTier || 'free';
-  // sessionId can be passed explicitly or pulled from AsyncLocalStorage
+  // Phase FF+7 (2026-05-19) — pull api_key from ctx so we can mint
+  // a per-signal pair-code via the new /upgrade entry-point. Backend
+  // L14 (Causal Reasoner) identified the bare /pricing URL as the
+  // conversion-leak root cause: paywall_hit=15,441 -> click=1 / 30d.
+  let apiKey = '';
   if (!sessionId) {
-    try { sessionId = (getCtx() && getCtx().session_id) || ''; } catch (_) {}
+    try {
+      const c = getCtx() || {};
+      sessionId = c.session_id || '';
+      apiKey    = c.api_key    || '';
+    } catch (_) {}
+  } else {
+    try { apiKey = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
   }
   const params = new URLSearchParams({
     from: 'mcp',
     tool: toolName,
     tier: currentTier,
-  }).toString();
-  const upgradeUrl = 'https://dchub.cloud/pricing?' + params;
-  const signupUrl  = 'https://dchub.cloud/signup?'  + params;
-  const redeemUrl  = sessionId
-    ? ('https://dchub.cloud/api/v1/redeem/' + sessionId)
-    : signupUrl;
+  });
+  if (apiKey) params.set('key', apiKey);
+  // /upgrade mints a fresh pair-code and 302s to /redeem/<code> — the
+  // 1-click upgrade path the funnel was missing. Falls back to bare
+  // /pricing only when no api_key (improbable; ctx always has one for
+  // tracked tool calls).
+  const upgradeUrl = (apiKey
+    ? 'https://dchub.cloud/upgrade?'
+    : 'https://dchub.cloud/pricing?') + params.toString();
+  const signupUrl  = 'https://dchub.cloud/signup?'  + params.toString();
+  // sessionId-based redeem path is the older flow; when we have an
+  // api_key, /upgrade IS the redeem URL (it mints + redirects).
+  const redeemUrl  = apiKey
+    ? upgradeUrl
+    : (sessionId
+        ? ('https://dchub.cloud/api/v1/redeem/' + sessionId)
+        : signupUrl);
   const lock = String.fromCodePoint(0x1F513); // unlock symbol
   // human_message: redeem-first (low friction), upgrade-second (high commit)
   const human_message = (
