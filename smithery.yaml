@@ -1,11 +1,18 @@
 # Smithery manifest for DC Hub MCP server.
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
 # Smithery scans the repo root for this file.
+#
+# Last refreshed 2026-05-24 (round 29 discovery unification). Matches the
+# canonical MCP_SERVER_INFO in the dchubapiproxy Cloudflare Worker:
+#   - Manifest:    https://dchub.cloud/mcp/manifest
+#   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
+# Tool list reflects live tools/list (20 backend + 1 worker-served = 21).
 
 name: dchub
-displayName: "DC Hub"
-description: "North America data center site selection: facilities, grids, fiber, water, energy, incentives."
+displayName: "DC Hub Intelligence"
+description: "Real-time data center intelligence: 21,000+ facilities, 7 ISO grid data, $324B+ M&A deals, 369 GW capacity pipeline, fiber routes, tax incentives, water-risk scoring. Free tier (10 calls/day) — paid from $49/mo."
 homepage: "https://dchub.cloud"
+version: "2.1.2"
 
 # DC Hub is a remote/hosted Streamable HTTP server, not an npm package.
 runtime: remote
@@ -13,27 +20,49 @@ remote:
   type: streamable-http
   url: "https://dchub.cloud/mcp"
 
-# Tool surface for discovery (matches what /mcp listTools returns).
+# Tool surface for discovery — matches `tools/list` on the live MCP server
+# (20 backend tools + semantic_search served by the Cloudflare Worker via
+# Vectorize embeddings).
 tools:
   - search_facilities
   - get_facility
-  - compare_sites
-  - analyze_site
-  - get_dchub_recommendation
-  - get_pipeline
   - get_market_intel
-  - get_grid_intelligence
+  - get_intelligence_index
+  - list_transactions
+  - get_news
+  - get_pipeline
   - get_grid_data
+  - analyze_site
+  - compare_sites
   - get_infrastructure
   - get_fiber_intel
-  - get_water_risk
   - get_energy_prices
   - get_renewable_energy
   - get_tax_incentives
-  - get_news
+  - get_water_risk
+  - get_grid_intelligence
   - get_agent_registry
+  - get_backup_status
+  - get_dchub_recommendation
+  - semantic_search
 
-# Categories help Cursor/Cline users find the server.
+# Free-tier vs paid-tier breakdown so Smithery users know what to expect.
+pricing:
+  free: "10 calls/day, 5 results per call, all 21 tools available"
+  developer: "$49/mo — 1,000 calls/day, full results"
+  pro: "$199/mo — 10,000 calls/day"
+  enterprise: "Custom — 100,000 calls/day"
+
+gated_tools:
+  - get_intelligence_index
+  - compare_sites
+  - analyze_site
+  - get_infrastructure
+  - get_fiber_intel
+  - get_grid_intelligence
+  - semantic_search
+
+# Categories help Cursor / Cline / Smithery users find the server.
 categories:
   - data
   - infrastructure
@@ -53,8 +82,12 @@ keywords:
   - water-risk
   - PJM
   - ISO
+  - M&A
+  - capacity-pipeline
 
 author:
   name: "Jonathan Martone"
   url: "https://github.com/azmartone67"
-license: "Proprietary — free trial available, paid tiers for full data"
+  email: "api@dchub.cloud"
+
+license: "MIT"
