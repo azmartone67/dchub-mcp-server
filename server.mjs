@@ -490,6 +490,69 @@ function createServer() {
     { context: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/recommend', { context: a.context })) }] }));
 
+  // ════════════════════════════════════════════════════════════════════
+  // Phase ZZZZZ-round33 (2026-05-24): Tier 1 MCP tools — drive paid signups
+  //
+  // rank_markets: replaces 5-10 separate tool calls with one ranked answer.
+  // find_alternatives: highest-intent moment — "what else looks like this?"
+  // score_facility: independent 7-dimension scoring vs $5-50k consultant work.
+  //
+  // Backends added in dchub-backend round-33 (commit 58e52792):
+  //   POST /api/v1/mcp/tools/rank_markets
+  //   POST /api/v1/mcp/tools/find_alternatives
+  //   POST /api/v1/mcp/tools/score_facility
+  // ════════════════════════════════════════════════════════════════════
+  trackedTool(srv, 'rank_markets',
+    'Rank data center markets by criteria (cheapest_power, most_capacity, most_operators, fastest_growing, best_overall). Returns top N markets sorted by score with attribution URLs. Region: global, us, canada, eu, apac, americas.',
+    { criteria: S, region: S, limit: I, min_capacity_mw: N },
+    async (a) => ({
+      content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/mcp/tools/rank_markets', {
+          criteria:        a.criteria        || 'best_overall',
+          region:          a.region          || 'us',
+          limit:           a.limit           || 10,
+          min_capacity_mw: a.min_capacity_mw || 0,
+        }))
+      }]
+    }));
+
+  trackedTool(srv, 'find_alternatives',
+    'Given a target facility, find similar nearby alternatives. Weighted match on capacity, tier, proximity. Returns top results with similarity_score, match_reasons, key_differences. Use when a user is interested in a specific facility and wants to compare.',
+    { facility_id: S, radius_km: N, match_on: S, exclude_operator: B, limit: I },
+    async (a) => {
+      if (!a.facility_id) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'facility_id is required' }) }], isError: true };
+      }
+      return {
+        content: [{ type: 'text',
+          text: JSON.stringify(await callAPI('/api/v1/mcp/tools/find_alternatives', {
+            facility_id:      a.facility_id,
+            radius_km:        a.radius_km        || 50,
+            match_on:         a.match_on         || 'all',
+            exclude_operator: a.exclude_operator || false,
+            limit:            a.limit            || 5,
+          }))
+        }]
+      };
+    });
+
+  trackedTool(srv, 'score_facility',
+    'Independent facility scoring across 7 dimensions: power, fiber, water, climate_risk, tax_environment, talent_pool, expansion. Returns composite 0-100 + tier_classification + peer comparison + per-dimension detail. Weighting modes: balanced (default), power_priority, risk_priority, expansion_priority.',
+    { facility_id: S, weighting: S },
+    async (a) => {
+      if (!a.facility_id) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'facility_id is required' }) }], isError: true };
+      }
+      return {
+        content: [{ type: 'text',
+          text: JSON.stringify(await callAPI('/api/v1/mcp/tools/score_facility', {
+            facility_id: a.facility_id,
+            weighting:   a.weighting || 'balanced',
+          }))
+        }]
+      };
+    });
+
   return srv;
 }
 
