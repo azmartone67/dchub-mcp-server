@@ -248,8 +248,29 @@ const FREE_TIER_LIMITS = {
 
 const PAID_ONLY_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_grid_intelligence', 'get_fiber_intel', 'get_dchub_recommendation', 'get_facility', 'get_market_intel', 'get_intelligence_index', 'get_grid_data', 'get_infrastructure', 'get_energy_prices', 'get_renewable_energy', 'get_tax_incentives', 'get_water_risk', 'get_pipeline']);
 
-function applyTierGate(toolName, params, tier) {
+// r46-conversion (2026-05-25): open the 5 highest-demand "paid" tools to
+// free-tier users WHO HAVE A DEV KEY. The visitor-intelligence dashboard
+// 7d snapshot showed 990 unique sessions hitting get_market_intel paywall
+// with 0 conversions — clearly the demand exists, but blind paywall on
+// every call kills it. "Free taste with a dev key" is the SaaS-standard
+// conversion pattern (Stripe, Vercel, Resend all do it). Anonymous callers
+// still get the paywall — we WANT to push them to register an email key.
+// All bonus calls still count against the keyed-free tier's daily quota
+// (10/day in MCP_TIERS.free, enforced at the CF worker layer), so this
+// isn't unlimited — it's a meaningful taste before the upgrade prompt.
+const KEYED_FREE_BONUS = new Set([
+  'get_market_intel',     // 990 sessions/7d (the strongest demand signal)
+  'get_grid_data',        // 726 sessions/7d
+  'get_water_risk',       // 651 sessions/7d
+  'get_energy_prices',    // 540 sessions/7d
+  'get_renewable_energy', // 425 sessions/7d
+]);
+
+function applyTierGate(toolName, params, tier, hasApiKey) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
+  // r46-conversion: keyed-free users get the 5 demand-tools through —
+  // daily cap still applies at the worker layer (10/day).
+  if (tier === 'free' && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true };
   if (PAID_ONLY_TOOLS.has(toolName)) return { allowed: false };
   const lim = FREE_TIER_LIMITS[toolName];
   if (lim && Number(params?.limit) > lim.max_limit) {
@@ -310,7 +331,7 @@ function trackedTool(srv, name, description, schema, handler) {
     let status = 'ok';
     const tier = c.tier || 'free';
     try {
-      const gate = applyTierGate(name, args, tier);
+      const gate = applyTierGate(name, args, tier, !!c.api_key);
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if (tier === 'free' && PAID_ONLY_TOOLS.has(name)) {
