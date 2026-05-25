@@ -424,6 +424,9 @@ Free tier covers **100 calls/day** across:
         session_id:  c.session_id || null,
         status,
         duration_ms: Date.now() - t0,
+        // r46: paywall-block attribution — see v_paywall_attribution view
+        referer:     c.referer || null,
+        user_agent:  c.user_agent || null,
       }).catch(() => {});
     }
   });
@@ -712,6 +715,12 @@ app.post('/mcp', async (req, res) => {
             tier,
             developer_id: validation.developer_id,
             email: validation.email,
+            // r46 (2026-05-25): attribution for paywall blocks. Forwarded
+            // into ctx so trackToolCall can stamp every call row with
+            // where the request came from (Claude / ChatGPT / Perplexity /
+            // Cursor / Cline / Browser — bucketed by Flask v_paywall_attribution view).
+            referer: req.headers.referer || req.headers.referrer || null,
+            user_agent: userAgent,
           });
           touchSession(sid);  // r41: track creation as activity
           console.log(`[MCP] init sid=${sid.slice(0,8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0,6) + '…' : 'none'} active=${sessions.size}`);
@@ -729,7 +738,12 @@ app.post('/mcp', async (req, res) => {
       const mcpServer = createServer();
       await mcpServer.connect(transport);
 
-      return ctx.run({ api_key: apiKey, platform, tier, session_id: null }, async () => {
+      return ctx.run({
+        api_key: apiKey, platform, tier, session_id: null,
+        // r46: see sessionMeta.set above for rationale
+        referer: req.headers.referer || req.headers.referrer || null,
+        user_agent: userAgent,
+      }, async () => {
         await transport.handleRequest(req, res, body);
       });
     }
