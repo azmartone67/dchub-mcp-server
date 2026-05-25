@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.2
+ * DC Hub MCP Server v2.1.3
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -131,6 +131,18 @@ async function trackToolCall(payload) {
 }
 
 // ── Key validation (cached) ────────────────────────────────────────────────
+//
+// r40-validator-unblock (2026-05-24): timeout reduced from 5000→1500ms to
+// stop Claude.ai's custom-connector validator from giving up on
+// "Couldn't reach the MCP server" when dchub-backend is slow. validateKey
+// is on the critical path of `initialize` (server.mjs ~L644), so any time
+// spent here delays the MCP handshake response. The validator appears to
+// have its own timeout under 5s.
+//
+// Worst case under this change: enterprise users get tier=free for a
+// single session when dchub-backend is unresponsive. Subsequent calls
+// re-validate via the 5-min keyCache (KEY_CACHE_TTL). When the backend
+// is healthy, requests still cache-hit in <50ms.
 const keyCache = new Map(); // api_key → { valid, tier, exp }
 async function validateKey(api_key) {
   if (!api_key) return { valid: false, tier: 'free' };
@@ -144,7 +156,7 @@ async function validateKey(api_key) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify({ api_key }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(1500),
     });
     if (!resp.ok) return cacheKey(api_key, { valid: false, tier: 'free' });
     const data = await resp.json();
@@ -404,7 +416,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.2' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.3' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -604,7 +616,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.2',
+    version: '2.1.3',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -711,7 +723,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.2 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.3 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
