@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.8
+ * DC Hub MCP Server v2.1.9
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -86,7 +86,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     human_message = (
       lock + ' **' + toolName + ' is a paid tool.**\n\n' +
       '**1. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
-      '   Full ' + toolName + ' data + all 7 ISO grid intel + fiber routes.\n\n' +
+      '   Full ' + toolName + ' data + all 10 ISO grid intel (7 US + Hydro-Quebec + AESO + Nord Pool) + fiber routes.\n\n' +
       '**2. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
       '   25 calls/day across 14 paid tools, no credit card.\n' +
       '   *Note: Claude.ai web custom connectors don\u2019t yet accept API keys. ' +
@@ -102,7 +102,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
       '**1. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
       '   25 calls/day across 14 paid tools, no credit card.\n\n' +
       '**2. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
-      '   Full ' + toolName + ' data + all 7 ISO grid intel + fiber routes.'
+      '   Full ' + toolName + ' data + all 10 ISO grid intel (7 US + Hydro-Quebec + AESO + Nord Pool) + fiber routes.'
     );
   }
   return {
@@ -563,7 +563,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.8' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.9' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -609,7 +609,7 @@ function createServer() {
       await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a)
     ) }] }));
 
-  trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for US ISOs.',
+  trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data across 10 ISOs: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Fuel mix, demand, prices.',
     { iso: S, metric: S, period: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/status', a)) }] }));
 
@@ -629,7 +629,7 @@ function createServer() {
     { carrier: S, route_type: S, include_sources: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', a)) }] }));
 
-  trackedTool(srv, 'get_energy_prices', 'Energy pricing: retail rates, gas, grid status.',
+  trackedTool(srv, 'get_energy_prices', 'Energy pricing across 10 ISOs (7 US + Hydro-Quebec + AESO + Nord Pool): retail rates, natural gas, real-time grid status.',
     { data_type: S, state: S, iso: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
@@ -645,7 +645,7 @@ function createServer() {
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
-  trackedTool(srv, 'get_grid_intelligence', 'Grid intelligence brief for a US ISO region.',
+  trackedTool(srv, 'get_grid_intelligence', 'Grid headroom + interconnection intelligence brief for any of 10 ISO regions: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec, AESO, Nord Pool. Returns excess power, constraints, queue depth, time-to-power estimates.',
     { region_id: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${(a.region_id||'').toLowerCase()}`)) }] }));
 
@@ -832,7 +832,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.8',
+    version: '2.1.9',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -958,7 +958,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.8 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.9 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
