@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.4
+ * DC Hub MCP Server v2.1.5
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -117,6 +117,11 @@ function detectPlatform(ua = '') {
 }
 
 // ── Telemetry: POST every tool invocation to the backend ───────────────────
+//
+// r41 (2026-05-25): timeout reduced 5000→1500ms to match validateKey
+// (see [[reference_dchub_mcp_connector]]). track is fire-and-forget —
+// it never blocks the response — but a long timeout kept connections
+// open and produced log spam when dchub-backend was slow.
 async function trackToolCall(payload) {
   try {
     await fetch(new URL('/api/v1/mcp/track', API_BASE).toString(), {
@@ -127,7 +132,7 @@ async function trackToolCall(payload) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(1500),
     });
   } catch (err) {
     console.error('[track] failed:', err.message);
@@ -177,6 +182,12 @@ async function validateKey(api_key) {
 }
 
 // ── Trial mode: has this session already consumed its free preview for this tool? ──
+//
+// r41 (2026-05-25): timeout reduced 3000→1500ms. trial_check IS on the
+// critical path of tool calls (free-tier user calling a paid tool waits
+// for this before getting either the preview or the paywall). When the
+// backend is slow, falling back to trial_used=true (paywall) within 1.5s
+// is better UX than waiting 3s for the same outcome.
 async function checkTrialEligibility(session_id, tool_name) {
   if (!session_id || !tool_name) return { trial_used: true };
   try {
@@ -187,7 +198,7 @@ async function checkTrialEligibility(session_id, tool_name) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify({ session_id, tool: tool_name }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(1500),
     });
     if (!resp.ok) return { trial_used: true };
     return await resp.json();
@@ -420,7 +431,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.4' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.5' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -650,7 +661,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.4',
+    version: '2.1.5',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -765,7 +776,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.4 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.5 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
