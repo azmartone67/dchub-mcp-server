@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.6
+ * DC Hub MCP Server v2.1.7
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -407,11 +407,38 @@ function trackedTool(srv, name, description, schema, handler) {
     let status = 'ok';
     const tier = c.tier || 'free';
     try {
-      const gate = applyTierGate(name, args, tier, !!c.api_key);
+      let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
+      const gate = applyTierGate(name, args, _gateTier, !!c.api_key);
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
-        if (tier === 'free' && PAID_ONLY_TOOLS.has(name)) {
+        if (_gateTier === 'free' && PAID_ONLY_TOOLS.has(name)) {
           const _trial = await checkTrialEligibility(c.session_id, name);
+
+          // r41-session-upgrade (2026-05-25): if the user redeemed a
+          // dev key via the paywall URL, trial-check now returns
+          // {tier_upgrade: 'developer'} (or pro/enterprise). Update
+          // sessionMeta in-place so subsequent calls in this session
+          // skip the paywall — closes the Claude.ai gap where the web
+          // UI has no way to attach an X-API-Key header.
+          if (_trial && _trial.tier_upgrade) {
+            const _newTier = String(_trial.tier_upgrade).toLowerCase();
+            if (_newTier === 'developer' || _newTier === 'pro' || _newTier === 'enterprise' || _newTier === 'founding') {
+              const _sid = c.session_id;
+              if (_sid && sessionMeta.has(_sid)) {
+                const _m = sessionMeta.get(_sid);
+                _m.tier = _newTier;
+                sessionMeta.set(_sid, _m);
+                console.log(`[MCP] session_upgrade sid=${_sid.slice(0,8)} tier=free→${_newTier} (redeem detected)`);
+                _gateTier = _newTier;
+                // Re-evaluate the gate at the new tier — should now allow.
+                const _gate2 = applyTierGate(name, args, _gateTier, true);
+                if (_gate2.allowed) {
+                  return await handler(args);
+                }
+              }
+            }
+          }
+
           if (!_trial.trial_used) {
             status = 'trial_used';
             const _trialResult = await handler(args);
@@ -535,7 +562,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.6' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.7' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -775,7 +802,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.6',
+    version: '2.1.7',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -901,7 +928,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.6 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.7 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
