@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.9
+ * DC Hub MCP Server v2.1.10
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -563,7 +563,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.9' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.10' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -583,6 +583,50 @@ function createServer() {
   trackedTool(srv, 'get_market_intel', 'Get market intelligence: supply/demand, pricing, vacancy.',
     { market: S, metric: S, period: S, compare_to: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
+
+  // r41-dcpi-rank (2026-05-25): expose DCPI verdict + composite_score
+  // as a first-class tool. Lets agents ask "should I build in
+  // Northern Virginia?" and get back a structured BUILD/CAUTION/AVOID
+  // verdict + 0-100 composite_score + per-component breakdown.
+  // Maps directly to /api/v1/dcpi/scores/<slug>.
+  trackedTool(srv, 'get_market_dcpi_rank',
+    'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. Use to answer "should I build here?" with structured reasoning across 100+ scored markets in 10 ISOs.',
+    { market_slug: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(
+      await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {})
+    ) }] }));
+
+  // r41-compare-isos (2026-05-25): single-call ISO comparison.
+  // Pre-fix agents had to call get_grid_data N times sequentially then
+  // reconcile units + timestamps themselves. Now one tool fans out 2-4
+  // /api/v1/grid/status calls in parallel and returns aligned results.
+  // /api/v1/grid/compare backend doesn't exist (and adding it is more
+  // work than it's worth) — the parallel fetch here is just as fast.
+  trackedTool(srv, 'compare_isos',
+    'Compare 2-4 ISO regions in a single call: fuel mix, demand, prices, carbon intensity. Covers all 10 supported ISOs — 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Pass isos as comma-separated list e.g. "PJM,ERCOT,CAISO". Use for "PJM vs ERCOT" / "where is power cheapest right now?" / "which ISO has cleanest grid?".',
+    { isos: S },
+    async (a) => {
+      const list = (a.isos || '').split(',')
+        .map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 4);
+      if (list.length < 2) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'Provide 2-4 ISOs as a comma-separated list, e.g. "PJM,ERCOT,CAISO"',
+          example: 'compare_isos(isos: "PJM,ERCOT,CAISO")',
+          supported_isos: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE',
+                            'HYDROQUEBEC', 'AESO', 'NORDPOOL'],
+        }) }] };
+      }
+      const results = await Promise.all(list.map(iso =>
+        callAPI('/api/v1/grid/status', { iso }).catch(e => ({ iso, error: String(e).slice(0, 200) }))
+      ));
+      const merged = {};
+      list.forEach((iso, i) => { merged[iso] = results[i]; });
+      return { content: [{ type: 'text', text: JSON.stringify({
+        isos: list,
+        comparison: merged,
+        as_of: new Date().toISOString(),
+      }, null, 2) }] };
+    });
 
   trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
@@ -832,7 +876,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.9',
+    version: '2.1.10',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -958,7 +1002,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.9 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.10 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
