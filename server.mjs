@@ -323,6 +323,52 @@ function phase9L_clean_preview(header, body) {
 // === end phase 9 ===
 
 
+// ── r46-trial-tune (2026-05-25): per-tool trial-preview header ──────────────
+//
+// 91% of all paywall sessions hit get_market_intel FIRST (959/1057 in 7d
+// per v_first_paywall_tool). The trial-preview header is the single
+// most-rendered piece of UI in the product funnel. Worth tuning beyond
+// the generic "first result only" line.
+//
+// Per-tool overrides go in TRIAL_HEADER_OVERRIDES; everything else falls
+// through to the generic header (which now mentions $9 Starter alongside
+// $49 Developer — was previously $49-only, missing the cheapest entry).
+//
+// Stripe Payment Links (verified 2026-05-25 against routes/_stripe_links.py):
+//   Starter $9      → 8x2dRa5sS0x75uteGuaZi0g
+//   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
+//   Pro $199        → eVq5kE4oOfs13mleGuaZi0h
+const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
+
+const TRIAL_HEADER_OVERRIDES = {
+  get_market_intel: (sessionId, refUrlDeveloper) => {
+    const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
+    return [
+      '## 📊 Market intel preview',
+      '',
+      "You're seeing the headline numbers above (real data, just trimmed to the first market). The **full report** — facility-level breakdown, pipeline detail, operator landscape, and every other market — unlocks instantly:",
+      '',
+      `→ **[Free dev key](${redeem})** · 60 sec · email only · 1,000 calls/day`,
+      `→ **[Starter — $9/mo](${STARTER_URL})** · most popular, 10,000 calls/day`,
+      `→ **[Developer — $49/mo](${refUrlDeveloper})** · unlimited + every Pro tool`,
+      '',
+      '---',
+      '',
+    ].join('\n');
+  },
+};
+
+function trialHeader(toolName, sessionId, refUrlDeveloper) {
+  const override = TRIAL_HEADER_OVERRIDES[toolName];
+  if (override) return override(sessionId, refUrlDeveloper);
+  const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
+  return '🔒 **Free trial preview** of `' + toolName + '` — first result only. Full set unlocks with any plan below.\n\n' +
+         `👉 **[Free dev key](${redeem})** (60 sec, email only) · ` +
+         `**[Starter — $9/mo](${STARTER_URL})** · ` +
+         `**[Developer — $49/mo](${refUrlDeveloper})**\n\n---\n\n`;
+}
+
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
   srv.tool(name, description, schema, async (args) => {
@@ -347,7 +393,11 @@ function trackedTool(srv, name, description, schema, handler) {
               _trialText = JSON.stringify(trimForTrial(parsed));
             } catch { /* not JSON, leave as prose */ }
             const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
-            const _upgradeHeader = '🔒 **Free trial preview** of `' + name + '` — first result only. Pro returns the full set + every paid tool.\n\n👉 **[Get Pro for $49/mo](' + _refUrl(UPGRADE_URL) + ')** · [Get your free dev key (60 sec, just your email)](https://dchub.cloud/api/v1/redeem/' + ((c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session') + ')\n\n---\n\n';
+            // r46-trial-tune (2026-05-25): per-tool header override.
+            // get_market_intel gets a tuned pitch; everything else gets the
+            // generic header (which now includes $9 Starter alongside $49 Developer).
+            const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
+            const _upgradeHeader = trialHeader(name, _sid, _refUrl(UPGRADE_URL));
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) }],
               structuredContent: {
