@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.7
+ * DC Hub MCP Server v2.1.8
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -429,6 +429,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 _m.tier = _newTier;
                 sessionMeta.set(_sid, _m);
                 console.log(`[MCP] session_upgrade sid=${_sid.slice(0,8)} tier=free→${_newTier} (redeem detected)`);
+                recordSessionUpgrade(c.platform, _newTier);
                 _gateTier = _newTier;
                 // Re-evaluate the gate at the new tier — should now allow.
                 const _gate2 = applyTierGate(name, args, _gateTier, true);
@@ -562,7 +563,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.7' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.8' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -767,6 +768,35 @@ app.use((req, res, next) => {
 
 const sessions          = new Map(); // sessionId → transport
 const sessionMeta       = new Map(); // sessionId → { api_key, platform, tier, developer_id }
+
+// r41-upgrade-stats (2026-05-25): session-upgrade counters so we can
+// see in logs whether the redeem→session-upgrade flow is actually
+// firing in production. Logs every 5 min if any upgrades happened,
+// plus a lifetime counter for trend analysis. Per-platform breakdown
+// catches the case where Claude.ai upgrades happen but Cursor's don't
+// (or vice versa) — most likely failure modes.
+const _upgradeStats = {
+  total_5m:  0,
+  total_all: 0,
+  by_platform_5m:  {},   // { claude: 3, cursor: 1, ... }
+  by_platform_all: {},
+};
+function recordSessionUpgrade(platform, newTier) {
+  _upgradeStats.total_5m  += 1;
+  _upgradeStats.total_all += 1;
+  const pk = platform || 'unknown';
+  _upgradeStats.by_platform_5m[pk]  = (_upgradeStats.by_platform_5m[pk]  || 0) + 1;
+  _upgradeStats.by_platform_all[pk] = (_upgradeStats.by_platform_all[pk] || 0) + 1;
+}
+setInterval(() => {
+  if (_upgradeStats.total_5m > 0) {
+    console.log(`[stats] session_upgrades_5m=${_upgradeStats.total_5m} ` +
+                `by_platform=${JSON.stringify(_upgradeStats.by_platform_5m)} ` +
+                `lifetime=${_upgradeStats.total_all}`);
+  }
+  _upgradeStats.total_5m = 0;
+  _upgradeStats.by_platform_5m = {};
+}, 5 * 60 * 1000).unref();
 const sessionLastActive = new Map(); // sessionId → epoch ms (r41-session-ttl)
 
 // r41-session-ttl (2026-05-25): sessions are leaked when clients drop
@@ -802,7 +832,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.7',
+    version: '2.1.8',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -928,7 +958,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.7 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.8 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
