@@ -553,6 +553,35 @@ function createServer() {
       };
     });
 
+  // ════════════════════════════════════════════════════════════════════
+  // Phase ZZZZZ-round36 (2026-05-24): AI capex relevance tools — drive
+  // citations + hyperscaler audience. Backend endpoints already live:
+  //   GET /api/v1/ai-capacity-index?horizon=90&limit=20
+  //   GET /api/v1/hyperscaler-deals?limit=20
+  // ════════════════════════════════════════════════════════════════════
+  trackedTool(srv, 'ai_capacity_index',
+    'AI Compute Capacity Index — ranks data center markets by where 100MW of AI training capacity can land in the next 30/60/90 days. Returns top markets with facility_count, operator_count, deployable_mw estimate, hyperscale_ready flag, and composite score (depth + diversity + power). Refreshed Fridays 14:00 UTC. Use for AI capex planning, GPU cluster siting, hyperscaler deal forecasting.',
+    { horizon: I, limit: I },
+    async (a) => ({
+      content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/ai-capacity-index', {
+          horizon: a.horizon || 90,
+          limit:   a.limit   || 20,
+        }))
+      }]
+    }));
+
+  trackedTool(srv, 'hyperscaler_deals',
+    'Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel.',
+    { limit: I },
+    async (a) => ({
+      content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/hyperscaler-deals', {
+          limit: a.limit || 20,
+        }))
+      }]
+    }));
+
   return srv;
 }
 
@@ -576,7 +605,7 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     server: 'DC Hub MCP',
     version: '2.1.2',
-    tools: 20,
+    tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
