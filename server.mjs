@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.5
+ * DC Hub MCP Server v2.1.6
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -68,19 +68,49 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     ? ('https://dchub.cloud/api/v1/redeem/' + sessionId)
     : signupUrl;
   const lock = String.fromCodePoint(0x1F513); // unlock symbol
-  // human_message: redeem-first (low friction), upgrade-second (high commit)
-  const human_message = (
-    lock + ' **' + toolName + ' is a paid tool.** Two ways to unlock:\n\n' +
-    '**1. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
-    '   25 calls/day across 14 paid tools, no credit card.\n\n' +
-    '**2. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
-    '   Full ' + toolName + ' data + all 7 ISO grid intel + fiber routes.'
-  );
+
+  // r41-platform-paywall (2026-05-25): Claude.ai web custom connectors
+  // don't yet have a UI field to attach an API key, so a free dev key
+  // doesn't help \u2014 the user has no way to send it back. Detect Claude.ai
+  // (UA-prefix matches claude) and reorder the message: Pro upgrade
+  // first (only path that works inside Claude.ai web), then dev-key
+  // with explicit Claude-Code instructions for paste-back.
+  //
+  // Pulled from AsyncLocalStorage if not passed explicitly so existing
+  // callers don't need to thread the platform argument.
+  let _platform = '';
+  try { _platform = (getCtx() && getCtx().platform) || ''; } catch (_) {}
+
+  let human_message;
+  if (_platform === 'claude') {
+    human_message = (
+      lock + ' **' + toolName + ' is a paid tool.**\n\n' +
+      '**1. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
+      '   Full ' + toolName + ' data + all 7 ISO grid intel + fiber routes.\n\n' +
+      '**2. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
+      '   25 calls/day across 14 paid tools, no credit card.\n' +
+      '   *Note: Claude.ai web custom connectors don\u2019t yet accept API keys. ' +
+      'Paste the key into Claude Code CLI instead:* ' +
+      '`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp`'
+    );
+  } else {
+    // Non-Claude clients (Cursor, Cline, Continue, ChatGPT-MCP, curl, etc.)
+    // \u2014 these CAN accept an X-API-Key header in their MCP config, so the
+    // free dev key is genuinely the lowest-friction unlock. Redeem-first.
+    human_message = (
+      lock + ' **' + toolName + ' is a paid tool.** Two ways to unlock:\n\n' +
+      '**1. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
+      '   25 calls/day across 14 paid tools, no credit card.\n\n' +
+      '**2. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
+      '   Full ' + toolName + ' data + all 7 ISO grid intel + fiber routes.'
+    );
+  }
   return {
     human_message: human_message,
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
     signup_url:    signupUrl,
+    platform:      _platform || null,
   };
 }
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -505,7 +535,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.5' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.6' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -735,7 +765,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.5',
+    version: '2.1.6',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -861,7 +891,7 @@ app.delete('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.5 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.6 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
