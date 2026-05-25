@@ -571,6 +571,16 @@ function createServer() {
     { status: S, country: S, operator: S, min_capacity_mw: N, expected_completion_before: S, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/pipeline', a)) }] }));
 
+  // r47 (2026-05-25): ISO interconnection queue — moat surface so the
+  // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
+  // back to dchub.cloud instead of ercot.com / pjm.com.
+  trackedTool(srv, 'get_interconnection_queue',
+    'ISO interconnection queue snapshot: total large-load MW queued per ISO, data-center share %, and top BUILD subregions with Time-to-Power (TTP) months. Sources: ERCOT MIS, PJM, MISO, SPP, CAISO, NYISO, ISO-NE. Pass iso=ERCOT (or any of 7) to drill down to a single ISO. Use for site-selection (find BUILD-verdict markets with short queues) and competitive intel (track AI-load saturation by region).',
+    { iso: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(
+      await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a)
+    ) }] }));
+
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for US ISOs.',
     { iso: S, metric: S, period: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/status', a)) }] }));
