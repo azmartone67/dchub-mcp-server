@@ -1,7 +1,7 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.3
+ * DC Hub MCP Server v2.1.4
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -58,7 +58,11 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     tool: toolName,
     tier: currentTier,
   }).toString();
-  const upgradeUrl = 'https://dchub.cloud/pricing?' + params;
+  // r40 (2026-05-25): point at /pricing/upgrade NOT /pricing — /pricing
+  // lands on a static page with no Stripe button (0% conv historically).
+  // /pricing/upgrade routes through email-capture → Stripe with prefilled
+  // email. The whole r38/39 funnel lives downstream of this URL.
+  const upgradeUrl = 'https://api.dchub.cloud/pricing/upgrade?' + params;
   const signupUrl  = 'https://dchub.cloud/signup?'  + params;
   const redeemUrl  = sessionId
     ? ('https://dchub.cloud/api/v1/redeem/' + sessionId)
@@ -416,7 +420,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.3' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.4' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -609,14 +613,44 @@ app.use((req, res, next) => {
   next();
 });
 
-const sessions    = new Map(); // sessionId → transport
-const sessionMeta = new Map(); // sessionId → { api_key, platform, tier, developer_id }
+const sessions          = new Map(); // sessionId → transport
+const sessionMeta       = new Map(); // sessionId → { api_key, platform, tier, developer_id }
+const sessionLastActive = new Map(); // sessionId → epoch ms (r41-session-ttl)
+
+// r41-session-ttl (2026-05-25): sessions are leaked when clients drop
+// without calling DELETE /mcp and transport.onclose doesn't fire. With
+// ~thousands of init calls per day the maps grow unbounded → eventual
+// memory exhaustion. Every request updates sessionLastActive; a periodic
+// sweep evicts sessions idle for > SESSION_IDLE_MS.
+const SESSION_IDLE_MS  = 30 * 60 * 1000;  // 30 min idle → evict
+const SESSION_SWEEP_MS = 60 * 1000;       // sweep every 1 min
+
+function touchSession(sid) {
+  if (sid) sessionLastActive.set(sid, Date.now());
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - SESSION_IDLE_MS;
+  let evicted = 0;
+  for (const [sid, ts] of sessionLastActive) {
+    if (ts >= cutoff) continue;
+    const transport = sessions.get(sid);
+    try { transport?.close?.(); } catch (_) {}
+    sessions.delete(sid);
+    sessionMeta.delete(sid);
+    sessionLastActive.delete(sid);
+    evicted++;
+  }
+  if (evicted > 0) {
+    console.log(`[session-sweep] evicted ${evicted} idle sessions (active=${sessions.size})`);
+  }
+}, SESSION_SWEEP_MS).unref();
 
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.3',
+    version: '2.1.4',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -643,6 +677,7 @@ app.post('/mcp', async (req, res) => {
 
     // Existing session — reuse meta
     if (sessionId && sessions.has(sessionId)) {
+      touchSession(sessionId);  // r41: mark active
       const transport = sessions.get(sessionId);
       const meta = sessionMeta.get(sessionId) || {};
       return ctx.run({ ...meta, session_id: sessionId }, async () => {
@@ -667,12 +702,17 @@ app.post('/mcp', async (req, res) => {
             developer_id: validation.developer_id,
             email: validation.email,
           });
+          touchSession(sid);  // r41: track creation as activity
           console.log(`[MCP] init sid=${sid.slice(0,8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0,6) + '…' : 'none'} active=${sessions.size}`);
         },
       });
       transport.onclose = () => {
         const sid = transport.sessionId;
-        if (sid) { sessions.delete(sid); sessionMeta.delete(sid); }
+        if (sid) {
+          sessions.delete(sid);
+          sessionMeta.delete(sid);
+          sessionLastActive.delete(sid);  // r41
+        }
       };
 
       const mcpServer = createServer();
@@ -703,6 +743,7 @@ app.post('/mcp', async (req, res) => {
 app.get('/mcp', async (req, res) => {
   const sid = req.headers['mcp-session-id'];
   if (sid && sessions.has(sid)) {
+    touchSession(sid);  // r41
     const meta = sessionMeta.get(sid) || {};
     return ctx.run({ ...meta, session_id: sid }, async () => {
       await sessions.get(sid).handleRequest(req, res);
@@ -717,13 +758,14 @@ app.delete('/mcp', async (req, res) => {
     await sessions.get(sid).close();
     sessions.delete(sid);
     sessionMeta.delete(sid);
+    sessionLastActive.delete(sid);  // r41
     return res.sendStatus(200);
   }
   res.status(404).json({ error: 'Session not found' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.3 on port ${PORT}`);
+  console.log(`DC Hub MCP Server v2.1.4 on port ${PORT}`);
   console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
   console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
   console.log(`  Backend: ${API_BASE}`);
