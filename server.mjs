@@ -81,28 +81,43 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   let _platform = '';
   try { _platform = (getCtx() && getCtx().platform) || ''; } catch (_) {}
 
+  // r48 (2026-05-25): rename $49 tier from "Pro" \u2192 "Developer" (Pro is
+  // actually $199), bump free-key wording from "25 calls/day across 14
+  // paid tools" \u2192 "1,000 calls/day" (the real limit), and add the $9
+  // Starter slot that was missing. This is the most-rendered paywall
+  // string in the product (every paid-tool block on every MCP client
+  // surfaces it), so getting the tier ladder right here matters most.
+  const STARTER_URL_LOCAL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
+
   let human_message;
   if (_platform === 'claude') {
+    // Claude.ai web custom connectors don't accept X-API-Key, so the
+    // dev key is a dead-end inside Claude.ai itself. Lead with a paid
+    // upgrade (Stripe checkout works in any browser), then explain the
+    // dev-key route for users on Claude Code CLI.
     human_message = (
       lock + ' **' + toolName + ' is a paid tool.**\n\n' +
-      '**1. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
-      '   Full ' + toolName + ' data + all 10 ISO grid intel (7 US + Hydro-Quebec + AESO + Nord Pool) + fiber routes.\n\n' +
-      '**2. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
-      '   25 calls/day across 14 paid tools, no credit card.\n' +
-      '   *Note: Claude.ai web custom connectors don\u2019t yet accept API keys. ' +
-      'Paste the key into Claude Code CLI instead:* ' +
+      '**1. $9/mo Starter (most popular, 10,000 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '   Unlocks ' + toolName + ' + most other paid tools.\n\n' +
+      '**2. $49/mo Developer (unlimited paid tools)** \u2192 ' + upgradeUrl + '\n' +
+      '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.\n\n' +
+      '**3. Free dev key (email, 1,000 calls/day)** \u2192 ' + redeemUrl + '\n' +
+      '   *Claude.ai web doesn\u2019t accept API keys yet \u2014 paste into Claude Code CLI:* ' +
       '`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp`'
     );
   } else {
-    // Non-Claude clients (Cursor, Cline, Continue, ChatGPT-MCP, curl, etc.)
-    // \u2014 these CAN accept an X-API-Key header in their MCP config, so the
-    // free dev key is genuinely the lowest-friction unlock. Redeem-first.
+    // Cursor, Cline, Continue, ChatGPT-MCP, curl, etc. \u2014 these CAN
+    // accept an X-API-Key header, so the free dev key is genuinely the
+    // lowest-friction unlock. Free-first, then $9 Starter as the
+    // "actually useful" paid bump.
     human_message = (
-      lock + ' **' + toolName + ' is a paid tool.** Two ways to unlock:\n\n' +
+      lock + ' **' + toolName + ' is a paid tool.** Three ways to unlock:\n\n' +
       '**1. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
-      '   25 calls/day across 14 paid tools, no credit card.\n\n' +
-      '**2. Upgrade to Pro ($49/mo unlimited)** \u2192 ' + upgradeUrl + '\n' +
-      '   Full ' + toolName + ' data + all 10 ISO grid intel (7 US + Hydro-Quebec + AESO + Nord Pool) + fiber routes.'
+      '   1,000 calls/day, no credit card.\n\n' +
+      '**2. $9/mo Starter (most popular, 10,000 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '   Unlocks every paid tool except Pro-only ones.\n\n' +
+      '**3. $49/mo Developer (unlimited paid tools)** \u2192 ' + upgradeUrl + '\n' +
+      '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.'
     );
   }
   return {
