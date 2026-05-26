@@ -161,6 +161,54 @@ function detectPlatform(ua = '') {
   return 'mcp';
 }
 
+// r47.30 (2026-05-26): MCP spec ships the canonical client identity in
+// body.params.clientInfo.name on every initialize call. Most clients send
+// a generic UA ("node", "fetch") so detectPlatform(ua) returns 'mcp' for
+// them — which dropped 109K calls into a single bucket on the backend
+// citations endpoint. Use clientInfo.name first; UA is the fallback.
+//
+// Known clientInfo.name values (per MCP spec convention):
+//   "claude-ai"           → Claude.ai web client
+//   "Claude Desktop"      → Anthropic's desktop client
+//   "Claude Code"         → Anthropic's coding agent CLI
+//   "cursor-vscode"       → Cursor IDE
+//   "cline-vscode"        → Cline coding agent
+//   "continue"            → Continue.dev
+//   "windsurf"            → Windsurf IDE
+//   "openai-chat"         → ChatGPT (when MCP-enabled)
+//   ...etc
+function detectPlatformFromInit(body, ua = '') {
+  const clientName = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
+  if (clientName) {
+    // Direct matches first (specific MCP client IDs)
+    if (clientName.includes('claude'))      return 'claude';
+    if (clientName.includes('chatgpt') || clientName.includes('openai')) return 'chatgpt';
+    if (clientName.includes('cursor'))      return 'cursor';
+    if (clientName.includes('cline'))       return 'cline';
+    if (clientName.includes('continue'))    return 'continue';
+    if (clientName.includes('windsurf'))    return 'windsurf';
+    if (clientName.includes('copilot'))     return 'copilot';
+    if (clientName.includes('codex'))       return 'codex';
+    if (clientName.includes('gemini'))      return 'gemini';
+    if (clientName.includes('perplexity'))  return 'perplexity';
+    if (clientName.includes('grok'))        return 'grok';
+    if (clientName.includes('deepseek'))    return 'deepseek';
+    if (clientName.includes('cohere'))      return 'cohere';
+    if (clientName.includes('groq'))        return 'groq';
+    if (clientName.includes('nvidia'))      return 'nvidia';
+    if (clientName.includes('mistral'))     return 'mistral';
+    if (clientName.includes('glama'))       return 'glama';
+    if (clientName.includes('meta'))        return 'meta';
+    if (clientName.includes('mcp-inspector')) return 'mcp-inspector';
+    // Else: ship the raw clientInfo.name as the platform tag (lowercase,
+    // truncated, alphanumeric-safe) so the citations endpoint can show
+    // distinct platforms even before we add a rule for each.
+    const safe = clientName.replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+    if (safe) return safe;
+  }
+  return detectPlatform(ua);
+}
+
 // ── Telemetry: POST every tool invocation to the backend ───────────────────
 //
 // r41 (2026-05-25): timeout reduced 5000→1500ms to match validateKey
@@ -960,7 +1008,9 @@ app.post('/mcp', async (req, res) => {
 
     const body = req.body;
     if (body?.method === 'initialize') {
-      const platform   = detectPlatform(userAgent);
+      // r47.30 (2026-05-26): use clientInfo.name as the canonical source
+      // (UA is a noisy fallback — most MCP clients ship "node" as UA).
+      const platform   = detectPlatformFromInit(body, userAgent);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
 
