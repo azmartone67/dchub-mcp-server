@@ -471,8 +471,20 @@ function trackedTool(srv, name, description, schema, handler) {
             // generic header (which now includes $9 Starter alongside $49 Developer).
             const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
             const _upgradeHeader = trialHeader(name, _sid, _refUrl(UPGRADE_URL));
+            // r51 (2026-05-26): mark trial_preview as isError=true. The
+            // blocked_paid_only branch already does this (r50) but ~95%
+            // of paywall hits land HERE — anon + free-tier users get
+            // the trim-to-one preview, NOT a hard block. Without
+            // isError, MCP clients (Claude/Cursor/Cline) treat the
+            // response as a successful tool call and summarize the
+            // teaser away. Conversion stayed at 0% post-r50 because
+            // this branch still rendered as success. 7d before r51:
+            // 3,374 hits, 0 free keys claimed. With isError=true,
+            // agents propagate the message verbatim → user sees the
+            // $9 Stripe link + free-key URL directly.
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) }],
+              isError: true,
               structuredContent: {
                 trial_preview: true,
                 tool: name,
