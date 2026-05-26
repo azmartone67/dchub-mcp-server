@@ -120,12 +120,39 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
       '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.'
     );
   }
+  // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
+  // no clientInfo on initialize — i.e. programmatic consumers (LangChain
+  // agents, custom MCP scripts, aggregator pipelines). Those callers
+  // can't render the human_message in a UI; they read JSON. Surface
+  // claim_endpoint at the top level so a script can detect the paywall
+  // pattern and self-serve a key without a human in the loop:
+  //
+  //   if (response.error?.data?.claim_endpoint) {
+  //     const r = await fetch(claim_endpoint, { method: 'POST',
+  //       body: JSON.stringify({ client_name: 'my-agent' }) });
+  //     const { api_key } = await r.json();
+  //   }
+  //
+  // Pairs with the existing /api/v1/keys/claim endpoint (no email
+  // required, instant key issuance — Phase ZZ+1).
+  const claimEndpoint = 'https://dchub.cloud/api/v1/keys/claim';
+  const claimCurl = (
+    "curl -X POST " + claimEndpoint +
+    " -H 'Content-Type: application/json' " +
+    "-d '{\"client_name\":\"<your-agent-name>\"}'"
+  );
   return {
     human_message: human_message,
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
     signup_url:    signupUrl,
     platform:      _platform || null,
+    // r52: programmatic self-serve fields. Detect via:
+    //   response.structuredContent?.claim_endpoint
+    claim_endpoint: claimEndpoint,
+    claim_curl:     claimCurl,
+    claim_payload:  { client_name: '<your-agent-name>' },
+    docs_url:       'https://dchub.cloud/integrations/mcp',
   };
 }
 // ── Config ──────────────────────────────────────────────────────────────────
