@@ -502,7 +502,19 @@ function trackedTool(srv, name, description, schema, handler) {
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if (_gateTier === 'free' && PAID_ONLY_TOOLS.has(name)) {
-          const _trial = await checkTrialEligibility(c.session_id, name);
+          // r42s (2026-05-26): for the 5 highest-demand tools, ALWAYS
+          // serve a trimmed preview (don't gate to once-per-session).
+          // Brain class `mcp_demand_gap_unaddressed` flagged these 5 as
+          // having ~990 sessions/week paywall-hitting with 0 conversions.
+          // Once-per-session was killing the "I see it works, let me
+          // claim a key" loop — agents got blocked on call #2 and
+          // moved on. Now: every call returns 1-3 sample rows + the
+          // upgrade pitch with a clickable redeem URL. Daily quota
+          // still applies at the worker layer (10/day for anon).
+          const _alwaysPreview = KEYED_FREE_BONUS.has(name);  // same top-5 set
+          const _trial = _alwaysPreview
+            ? { trial_used: false, _always_preview: true }
+            : await checkTrialEligibility(c.session_id, name);
 
           // r41-session-upgrade (2026-05-25): if the user redeemed a
           // dev key via the paywall URL, trial-check now returns
@@ -678,7 +690,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.11' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.12' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -998,7 +1010,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.11',
+    version: '2.1.12',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
