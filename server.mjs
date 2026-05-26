@@ -525,8 +525,21 @@ Free tier covers **100 calls/day** across:
 
 \u{1F449} **[Upgrade to Pro](${UPGRADE_URL})** — $49/mo. Full result sizes + all paid tools: \`analyze_site\`, \`compare_sites\`, \`get_grid_intelligence\`, \`get_fiber_intel\`, \`get_dchub_recommendation\`.`;
 
+        // r50 (2026-05-26): mark paywall response as isError=true so
+        // MCP clients (Claude Desktop/Cursor/Cline/ChatGPT-MCP) surface
+        // the CTA as a TOOL ERROR rather than tool output. Critical
+        // because soft-paywall content blocks get summarized away —
+        // "I can't access that tool, want to try something else?" —
+        // and the user never sees the $9 Stripe link. Errors get
+        // propagated verbatim because the agent assumes the user
+        // needs to see what went wrong.
+        //
+        // 7-day data before this: 990 unique sessions hit paywall,
+        // 0 claimed a key. Tier-copy fix landed but didn't move
+        // conversion because the message never reached the user.
         return {
           content: [{ type: 'text', text: _isKeyed ? _mdKeyed : _mdAnon }],
+          isError: true,
           structuredContent: {
             error: 'paid_only',
             tool: name,
