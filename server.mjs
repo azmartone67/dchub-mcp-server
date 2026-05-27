@@ -591,6 +591,55 @@ function trialHeader(toolName, sessionId, refUrlDeveloper) {
 }
 
 
+// ── Scraper detection (r-scraper-block, 2026-05-27) ───────────────────────
+// 20 anonymous sessions matched the same 5-tool sweep signature
+// (get_agent_registry, get_energy_prices, get_facility, get_fiber_intel,
+// get_grid_data) — rotating session IDs, 16 calls each, no email signup,
+// zero conversion potential. Burns 320 free-tier calls/week.
+//
+// Detection: per session, track which tools have been called. When the
+// session's tool-set fully contains SCRAPER_SIGNATURE AND total calls
+// have crossed the threshold, subsequent tool calls return a rate-limit
+// response with an identification ask. Anonymous-only — authenticated
+// callers (any api_key) are exempt because they've already self-identified.
+//
+// Detection state is in-memory (Map per process). Restarts reset it,
+// which is fine — the scraper either keeps scraping (caught again
+// within minutes) or stops.
+const SCRAPER_SIGNATURE = new Set([
+  'get_agent_registry',
+  'get_energy_prices',
+  'get_facility',
+  'get_fiber_intel',
+  'get_grid_data',
+]);
+const SCRAPER_BLOCK_THRESHOLD = 5;   // call count before block kicks in
+const _scraperTracker = new Map();   // session_id → { tools: Set, calls: number, firstAt: number }
+const _SCRAPER_TTL_MS = 60 * 60 * 1000;  // forget sessions older than 1h
+
+function _isScraperSession(sessionId, toolName, hasApiKey) {
+  if (!sessionId || hasApiKey) return false;  // authenticated = exempt
+  const now = Date.now();
+  let s = _scraperTracker.get(sessionId);
+  if (!s || (now - s.firstAt) > _SCRAPER_TTL_MS) {
+    s = { tools: new Set(), calls: 0, firstAt: now };
+  }
+  s.tools.add(toolName);
+  s.calls += 1;
+  _scraperTracker.set(sessionId, s);
+  // Trip if (a) tool-set fully contains the signature AND (b) total calls cross threshold
+  const signatureMet = [...SCRAPER_SIGNATURE].every(t => s.tools.has(t));
+  return signatureMet && s.calls >= SCRAPER_BLOCK_THRESHOLD;
+}
+
+// Lazy GC — sweep stale entries when the Map grows large.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of _scraperTracker.entries()) {
+    if ((now - v.firstAt) > _SCRAPER_TTL_MS) _scraperTracker.delete(k);
+  }
+}, 10 * 60 * 1000).unref();
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
   srv.tool(name, description, schema, async (args) => {
@@ -598,6 +647,42 @@ function trackedTool(srv, name, description, schema, handler) {
     const t0 = Date.now();
     let status = 'ok';
     const tier = c.tier || 'free';
+    // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
+    // Returns isError=true with a friendly identification CTA. Counts the
+    // call for telemetry but skips the tool handler entirely.
+    if (_isScraperSession(c.session_id, name, !!c.api_key)) {
+      status = 'blocked_scraper';
+      console.log(`[scraper-block] sid=${(c.session_id||'').slice(0,8)} tool=${name} platform=${c.platform||'?'} — pattern matched 5-tool sweep`);
+      // fire-and-forget telemetry, then return.
+      trackToolCall({
+        timestamp:   new Date().toISOString(),
+        tool:        name,
+        params:      args,
+        platform:    c.platform || 'unknown',
+        api_key:     null,
+        tier,
+        session_id:  c.session_id || null,
+        status,
+        duration_ms: 0,
+        referer:     c.referer || null,
+        user_agent:  c.user_agent || null,
+      }).catch(() => {});
+      return {
+        isError: true,
+        content: [{
+          type: 'text',
+          text: '\u{1F6AB} **Automated usage detected.**\n\nWe noticed this session is running the same 5-tool sweep that ~20 other anonymous sessions have run this week. We want to talk to whoever you are.\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or sign up** for a free dev key (60 sec, email only) → https://dchub.cloud/signup\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.'
+        }],
+        structuredContent: {
+          error: 'scraper_pattern_blocked',
+          tool: name,
+          reason: 'session matched 5-tool automated sweep signature',
+          identify_url: 'mailto:partner@dchub.cloud?subject=DC%20Hub%20MCP%20integration',
+          signup_url: 'https://dchub.cloud/signup',
+          claim_endpoint: 'https://dchub.cloud/api/v1/keys/claim',
+        },
+      };
+    }
     try {
       let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key);
