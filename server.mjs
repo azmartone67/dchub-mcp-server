@@ -396,7 +396,27 @@ const FREE_TIER_LIMITS = {
   get_infrastructure: { max_limit: 25 },
 };
 
-const PAID_ONLY_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_grid_intelligence', 'get_fiber_intel', 'get_dchub_recommendation', 'get_facility', 'get_market_intel', 'get_intelligence_index', 'get_grid_data', 'get_infrastructure', 'get_energy_prices', 'get_renewable_energy', 'get_tax_incentives', 'get_water_risk', 'get_pipeline']);
+// r-gate-tighten (2026-05-27): added 6 metrics-heavy tools that were
+// previously full-free. These return aggregate $-values, GW totals, and
+// queue depths — the exact "answer numbers" people pay $9/mo for.
+// Anonymous now blocked on these; free dev key unlocks them via the
+// KEYED_FREE_BONUS bridge OR the trial_preview path.
+const PAID_ONLY_TOOLS = new Set([
+  // PRO-only (the four highest-value premium tools)
+  'analyze_site', 'compare_sites', 'get_grid_intelligence', 'get_fiber_intel',
+  'get_dchub_recommendation',
+  // FREE-with-email-key (pre-existing)
+  'get_facility', 'get_market_intel', 'get_intelligence_index', 'get_grid_data',
+  'get_infrastructure', 'get_energy_prices', 'get_renewable_energy',
+  'get_tax_incentives', 'get_water_risk', 'get_pipeline',
+  // r-gate-tighten: previously full-free, now require email key
+  'list_transactions',       // M&A deals — $$$ aggregates (volume, $-totals)
+  'get_interconnection_queue', // ISO queue stats — GW totals, percentages
+  'compare_isos',            // multi-ISO scalar comparisons
+  'rank_markets',            // ranked market scores
+  'ai_capacity_index',       // composite metric per market
+  'hyperscaler_deals',       // $1B+ deal tracker — $-values
+]);
 
 // r46-conversion (2026-05-25): open the 5 highest-demand "paid" tools to
 // free-tier users WHO HAVE A DEV KEY. The visitor-intelligence dashboard
@@ -443,16 +463,55 @@ function applyTierGate(toolName, params, tier, hasApiKey) {
 }
 
 // ── Phase 7: trim trial responses so the LLM sees what's gated ─────────────
-// Free-tier users calling a paid tool get exactly ONE array element from
-// each result list, plus a "[N more — Pro]" placeholder. That's evidence
-// of value (real shape, real fields) without giving away the dataset.
+// r-gate-tighten (2026-05-27): the prior trim only handled arrays — scalar
+// metrics (total_mw, count, score, vacancy_rate, total_*, stats.*) passed
+// through unchanged. For metrics-heavy tools like get_market_intel that
+// IS the value: a single "Northern Virginia: 13442 MW / 737 facilities"
+// scalar reply gives the answer for free. New behavior:
+//   1. Arrays >1 still trim to first item + _gated marker (unchanged).
+//   2. Scalar keys matching aggregate-metric patterns are replaced with
+//      "[<type> — sign up to unlock]" so the shape leaks but the number
+//      doesn't.
+//   3. Nested objects recurse so stats:{total_mw:N} is also masked.
+//   4. Pass-through keeps: id, slug, name, status, url, source, country,
+//      state, city, market, type fields (identifiers, not metrics).
+const _PROTECTED_KEYS = new Set([
+  'id', 'slug', 'name', 'status', 'url', 'source', 'country', 'state',
+  'city', 'market', 'type', 'category', 'facility_type', 'tier',
+  'success', 'error', 'message', 'upgrade_url', 'signup_url', 'redeem_url',
+  'tier_required', 'tier_current', 'platform', 'last_updated',
+  'data_source', 'as_of', 'published_at', 'title', 'summary', 'provider',
+  'location_display', 'country_name', 'state_name', 'company', 'project',
+]);
+function _isMetricKey(k) {
+  if (_PROTECTED_KEYS.has(k)) return false;
+  const lk = String(k).toLowerCase();
+  // numeric-looking metric names: total_*, *_count, *_mw, *_gw, *_pct,
+  // *_rate, *_total, score, stats, capacity, mrr, revenue, locked,
+  // unique_*, average_*, median_*, max_*, min_*
+  return /(^total_|_count$|_mw$|_gw$|_kw$|_pct$|_rate$|_total$|^score|stats|capacity|^mrr|revenue|^locked$|^unique_|^average_|^median_|^max_|^min_|^count$|^total$|_billions$|_millions$|preleased)/i.test(lk);
+}
 function trimForTrial(parsed) {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+  if (parsed === null || parsed === undefined) return parsed;
+  if (Array.isArray(parsed)) {
+    if (parsed.length > 1) {
+      return [trimForTrial(parsed[0]), { _gated: `[${parsed.length - 1} more results — sign up to unlock]` }];
+    }
+    return parsed.map(trimForTrial);
+  }
+  if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
     if (Array.isArray(v) && v.length > 1) {
-      out[k] = [v[0], { _gated: `[${v.length - 1} more results — Pro unlocks the full set]` }];
+      out[k] = [trimForTrial(v[0]), { _gated: `[${v.length - 1} more results — sign up to unlock]` }];
       out[`_${k}_total_in_pro`] = v.length;
+    } else if (_isMetricKey(k) && typeof v === 'number') {
+      out[k] = '[number — sign up to unlock]';
+    } else if (_isMetricKey(k) && typeof v === 'object' && v !== null) {
+      // stats:{}, by_quarter:{}, etc. — recurse but mask scalars inside
+      out[k] = trimForTrial(v);
+    } else if (typeof v === 'object' && v !== null) {
+      out[k] = trimForTrial(v);
     } else {
       out[k] = v;
     }
@@ -712,6 +771,32 @@ Free tier covers **100 calls/day** across:
           },
         };
         return { content: [{ type: 'text', text: applyTrialGuardIfFree(name, wrapped, !!apiKey) }] };
+      }
+      // r-gate-tighten (2026-05-27): even for allowed/uncapped free tools,
+      // strip aggregate scalars from ANONYMOUS responses. Without this, an
+      // anonymous user calling search_facilities (free) gets 5 full rows
+      // PLUS scalar metrics (count, total_mw, etc.) unmasked — exactly the
+      // numbers people pay $9/mo to access. Trimmed responses keep the
+      // tool's shape and identifier fields (name, slug, city, state) so
+      // an agent can demonstrate the tool works, but mask aggregate
+      // metrics behind "[sign up to unlock]" placeholders.
+      // Authenticated callers (any api_key) keep current full-data behavior.
+      if (!c.api_key && tier === 'free') {
+        try {
+          let parsed;
+          try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
+          if (parsed && typeof parsed === 'object') {
+            const trimmed = trimForTrial(parsed);
+            const _sid = c.session_id || 'no-session';
+            trimmed._upgrade = {
+              tier:        'anonymous',
+              message:     'Anonymous tier — aggregate metrics masked. Get a free dev key for the real numbers.',
+              redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
+              starter_url: 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g',
+            };
+            return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+          }
+        } catch (_) { /* fall through to raw result on parse failure */ }
       }
       return result;
     } catch (err) {
