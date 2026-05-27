@@ -416,6 +416,19 @@ const KEYED_FREE_BONUS = new Set([
   'get_renewable_energy', // 425 sessions/7d
 ]);
 
+// r42ae (2026-05-27): partial-preview for the highest-demand Pro tools.
+// Funnel data showed 118 distinct users × 5,636 calls hitting
+// get_grid_intelligence paywall — they WANT this enough to keep trying.
+// The KEYED_FREE_BONUS pattern gives the tool away entirely (works for
+// free-key users on the top 5 demand tools). For these Pro tools we keep
+// the gate but ALWAYS return a trimmed preview (1 ISO / 1 fiber route)
+// instead of "blocked on call 2+". The visible value is what drives the
+// $49/mo upgrade — "I saw PJM data, now show me the other 6 ISOs."
+const ALWAYS_PARTIAL_PREVIEW = new Set([
+  'get_grid_intelligence',  // 5,636 calls / 118 users in last 30d
+  'get_fiber_intel',        // 5,162 calls / 116 users
+]);
+
 function applyTierGate(toolName, params, tier, hasApiKey) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r46-conversion: keyed-free users get the 5 demand-tools through —
@@ -541,7 +554,13 @@ function trackedTool(srv, name, description, schema, handler) {
           // moved on. Now: every call returns 1-3 sample rows + the
           // upgrade pitch with a clickable redeem URL. Daily quota
           // still applies at the worker layer (10/day for anon).
-          const _alwaysPreview = KEYED_FREE_BONUS.has(name);  // same top-5 set
+          // r42ae (2026-05-27): expand always-preview to high-demand Pro
+          // tools. Funnel data: 118 users × 5,636 calls on
+          // get_grid_intelligence — they WANT it. Letting them see 1
+          // ISO/route every call (vs blocked after #2) creates the
+          // "I see it works, $49 to see all 7" conversion moment.
+          const _alwaysPreview = KEYED_FREE_BONUS.has(name)
+                                  || ALWAYS_PARTIAL_PREVIEW.has(name);
           const _trial = _alwaysPreview
             ? { trial_used: false, _always_preview: true }
             : await checkTrialEligibility(c.session_id, name);
@@ -720,7 +739,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.12' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.13' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1040,7 +1059,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.12',
+    version: '2.1.13',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
