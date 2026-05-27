@@ -257,6 +257,36 @@ async function trackToolCall(payload) {
   } catch (err) {
     console.error('[track] failed:', err.message);
   }
+  // r47.39 (2026-05-26): also ping the source-registry heartbeat so
+  // /api/v1/sources/mcp-server stops showing 'never ran'. Rate-limited
+  // to once per 60s — we don't need a heartbeat per call, just regular
+  // proof-of-life. Fire-and-forget.
+  pingRegistryHeartbeat(payload?.tool, payload?.rows_affected);
+}
+
+let _lastRegistryHeartbeatAt = 0;
+async function pingRegistryHeartbeat(toolName, rowsAffected) {
+  const now = Date.now();
+  if (now - _lastRegistryHeartbeatAt < 60_000) return;  // 60s rate-limit
+  _lastRegistryHeartbeatAt = now;
+  try {
+    await fetch(new URL('/api/v1/sources/mcp-server/heartbeat', API_BASE).toString(), {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${INTERNAL_KEY}`,
+      },
+      body: JSON.stringify({
+        status:        'success',
+        rows_affected: rowsAffected ?? 1,
+        metadata:      { trigger: 'tool_call', tool: toolName || null },
+      }),
+      signal: AbortSignal.timeout(1500),
+    });
+  } catch (_) {
+    // silent — heartbeat is best-effort, never blocks tool calls
+  }
 }
 
 // ── Key validation (cached) ────────────────────────────────────────────────
