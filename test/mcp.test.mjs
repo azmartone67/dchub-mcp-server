@@ -12,9 +12,18 @@ import { describe, it, expect, beforeAll } from 'vitest';
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
 
+// r43-H (2026-05-27): supply an X-API-Key when MCP_API_KEY is set. The
+// suite exercises ~10 tools in one session, which is EXACTLY the 5-tool
+// automated-sweep signature the anonymous scraper-block now blocks — so
+// without a key the suite gets blocked/gated (trial_preview) and the
+// data assertions fail. A key bypasses the scraper-block AND unlocks the
+// paid data path. Set the MCP_API_KEY secret to a valid enterprise MCP
+// key in CI. (If a valid key STILL returns trial_preview, that's the
+// paywall-auth bug in the MCP worker, not a test problem.)
 const HEADERS = {
   'Content-Type': 'application/json',
   'Accept': 'application/json, text/event-stream',
+  ...(process.env.MCP_API_KEY ? { 'X-API-Key': process.env.MCP_API_KEY } : {}),
 };
 
 let sessionId = null;
