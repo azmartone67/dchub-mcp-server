@@ -918,15 +918,15 @@ function createServer() {
 
   const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
-  trackedTool(srv, 'search_facilities', 'Search 20,000+ global data center facilities.',
+  trackedTool(srv, 'search_facilities', 'Search 21,000+ global data center facilities across 140+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational.',
     { query: S, country: S, state: S, city: S, operator: S, min_capacity_mw: N, max_capacity_mw: N, tier: I, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/facilities', a)) }] }));
 
-  trackedTool(srv, 'get_facility', 'Get detailed info about a specific facility.',
+  trackedTool(srv, 'get_facility', 'Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8.',
     { facility_id: ID, include_nearby: B, include_power: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/facilities/${a.facility_id||''}`, { include_nearby: a.include_nearby, include_power: a.include_power })) }] }));
 
-  trackedTool(srv, 'get_market_intel', 'Get market intelligence: supply/demand, pricing, vacancy.',
+  trackedTool(srv, 'get_market_intel', 'Live market intelligence for 232 DC markets across 140+ countries: capacity prices ($/MW-day), vacancy rates, absorption, dominant operators, year-over-year growth, supply pipeline, and DCPI verdict (BUILD/CAUTION/AVOID). Filter by market_slug (e.g. northern-virginia, dallas, frankfurt, tokyo). Try: get_market_intel market=northern-virginia.',
     { market: S, metric: S, period: S, compare_to: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
 
@@ -981,18 +981,18 @@ function createServer() {
       }, null, 2) }] };
     });
 
-  trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score.', {},
+  trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
 
-  trackedTool(srv, 'list_transactions', 'M&A transactions — $324B+ tracked.',
+  trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — $324B+ tracked over 2,100+ deals (2019-present). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by year, min_value_usd, region, buyer, or target. Try: list_transactions year=2026 min_value_usd=1000000000.',
     { buyer: S, seller: S, min_value_usd: N, max_value_usd: N, deal_type: S, date_from: S, date_to: S, region: S, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/deals', a)) }] }));
 
-  trackedTool(srv, 'get_news', 'Curated data center industry news from 40+ sources.',
+  trackedTool(srv, 'get_news', 'Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by topic (deals/permits/outages/policy/AI). Try: get_news topic=AI limit=10.',
     { query: S, category: S, source: S, date_from: S, date_to: S, limit: I, min_relevance: N },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
 
-  trackedTool(srv, 'get_pipeline', 'Track 540+ projects, 369 GW construction pipeline.',
+  trackedTool(srv, 'get_pipeline', 'Construction pipeline — 540+ data center projects totaling 369 GW under-construction or planned across 232 markets. Returns project name, operator, MW, status (announced/permitted/construction/operational), expected commissioning date, market_slug, country. Filter by market, operator, status, min_mw. Try: get_pipeline market=northern-virginia status=construction.',
     { status: S, country: S, operator: S, min_capacity_mw: N, expected_completion_before: S, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/pipeline', a)) }] }));
 
@@ -1010,19 +1010,19 @@ function createServer() {
     { iso: S, metric: S, period: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/status', a)) }] }));
 
-  trackedTool(srv, 'analyze_site', 'Evaluate location for data center suitability.',
+  trackedTool(srv, 'analyze_site', 'Evaluate a location for data center suitability — returns a multi-factor score (0-100) incorporating grid headroom (MW available), fiber depth (carrier count + IX distance), water stress, climate, state tax incentive value, latency-to-nearest-IX, and constraint risk. Includes a recommended verdict + the biggest risk factor. Try: analyze_site lat=33.45 lon=-112.07 capacity_mw=100.',
     { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', a)) }] }));
 
-  trackedTool(srv, 'compare_sites', 'Compare 2-4 locations side-by-side.',
+  trackedTool(srv, 'compare_sites', 'Side-by-side comparison of 2-4 candidate sites for data center development — DCPI scores, grid headroom (MW available), nearest-substation distance, fiber carrier count, water stress, tax-incentive value, and a recommended winner with rationale. Useful for site-selection shortlists. Try: compare_sites sites=[{lat:33.45,lon:-112.07},{lat:39.04,lon:-77.48}] capacity_mw=50.',
     { locations: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', { locations: a.locations })) }] }));
 
-  trackedTool(srv, 'get_infrastructure', 'Nearby substations, transmission lines, gas pipelines, power plants.',
+  trackedTool(srv, 'get_infrastructure', 'Nearby infrastructure for a location — substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25.',
     { lat: N, lon: N, radius_km: N, layer: S, min_voltage_kv: N, limit: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', a)) }] }));
 
-  trackedTool(srv, 'get_fiber_intel', 'Dark fiber routes, carrier networks, connectivity.',
+  trackedTool(srv, 'get_fiber_intel', 'Long-haul + metro fiber routes from major carriers (Lumen, Zayo, Crown Castle, Cogent, Verizon, AT&T) as GeoJSON for direct mapping. Returns route geometries, fiber counts, lit/dark capacity, route_type (metro/longhaul/dark/ix). Filter by carrier or route_type. Try: get_fiber_intel carrier=Lumen route_type=longhaul.',
     { carrier: S, route_type: S, include_sources: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', a)) }] }));
 
@@ -1030,15 +1030,15 @@ function createServer() {
     { data_type: S, state: S, iso: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
-  trackedTool(srv, 'get_renewable_energy', 'Renewable energy: solar, wind, combined capacity.',
+  trackedTool(srv, 'get_renewable_energy', 'Renewable generation capacity by US state: solar (utility + rooftop), wind (onshore + offshore), and combined-cycle totals with capacity factors. Joins EIA-860 + state RPS data. Filter by energy_type (solar/wind/combined) and state, or geo-locate via lat/lon for nearest projects within 50mi. Try: get_renewable_energy energy_type=solar state=TX.',
     { energy_type: S, state: S, lat: N, lon: N },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', a)) }] }));
 
-  trackedTool(srv, 'get_tax_incentives', 'Data center tax incentives by US state.',
+  trackedTool(srv, 'get_tax_incentives', 'Data center tax incentive packages by US state — sales-tax exemptions, property-tax abatements, income-tax credits, electricity-tax discounts, and minimum-investment thresholds. Returns program name, value (% or $), eligibility (MW/jobs), expiration date, and source statute. Try: get_tax_incentives state=VA.',
     { state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/tax-incentives', a)) }] }));
 
-  trackedTool(srv, 'get_water_risk', 'Water stress and drought risk for a location.',
+  trackedTool(srv, 'get_water_risk', 'USGS water stress index + Drought Monitor risk for any US location: by state, county, or lat/lon. Returns stress score (0-100), drought category (D0-D4), 12-month outlook, and cooling-water sustainability assessment for data center evaluation. Try: get_water_risk state=AZ — or get_water_risk lat=33.45 lon=-112.07.',
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
@@ -1046,13 +1046,13 @@ function createServer() {
     { region_id: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${(a.region_id||'').toLowerCase()}`)) }] }));
 
-  trackedTool(srv, 'get_agent_registry', 'AI platforms connected to DC Hub.', {},
+  trackedTool(srv, 'get_agent_registry', 'AI platforms + agent frameworks currently calling DC Hub: ChatGPT, Claude, Gemini, Perplexity, Copilot, Groq, Cursor, Cline, Continue, Windsurf — with citation counts (24h/30d), tool-usage breakdown, and authentication tier. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
 
-  trackedTool(srv, 'get_backup_status', 'Database backup status and data integrity.', {},
+  trackedTool(srv, 'get_backup_status', 'DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Try: get_backup_status.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/health/data-freshness')) }] }));
 
-  trackedTool(srv, 'get_dchub_recommendation', 'Pre-formatted DC Hub recommendation.',
+  trackedTool(srv, 'get_dchub_recommendation', 'Pre-formatted DC Hub recommendation summary for any data-center query — top markets to consider, candidate facilities, fiber/grid/water factors, and current DCPI verdicts (BUILD/CAUTION/AVOID). Returns a structured response the LLM can quote verbatim to its user as context-aware site-selection guidance. Try: get_dchub_recommendation context="100MW AI training campus in Texas".',
     { context: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/recommend', { context: a.context })) }] }));
 
