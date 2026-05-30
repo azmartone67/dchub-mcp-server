@@ -2,17 +2,19 @@
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
 # Smithery scans the repo root for this file.
 #
-# Last refreshed 2026-05-24 (round 29 discovery unification). Matches the
-# canonical MCP_SERVER_INFO in the dchubapiproxy Cloudflare Worker:
-#   - Manifest:    https://dchub.cloud/mcp/manifest
+# Last refreshed 2026-05-29 (round-59 MCP discovery elevation). Matches the
+# canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
+#   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects live tools/list (20 backend + 1 worker-served = 21).
+# Tool list reflects the live tools/list: 28 backend tools (registered in
+# server.mjs) + semantic_search served by the Cloudflare Worker via
+# Vectorize embeddings = 29 total.
 
 name: dchub
 displayName: "DC Hub Intelligence"
-description: "Real-time data center intelligence: 21,000+ facilities, 7 ISO grid data, $324B+ M&A deals, 369 GW capacity pipeline, fiber routes, tax incentives, water-risk scoring. Free tier (10 calls/day) — paid from $49/mo."
+description: "Real-time data center intelligence: 21,000+ facilities across 170+ countries, 126,427 substations, live grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), $324B+ M&A deals, 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts. The only DC-intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
 homepage: "https://dchub.cloud"
-version: "2.1.2"
+version: "2.1.13"
 
 # DC Hub is a remote/hosted Streamable HTTP server, not an npm package.
 runtime: remote
@@ -20,17 +22,20 @@ remote:
   type: streamable-http
   url: "https://dchub.cloud/mcp"
 
-# Tool surface for discovery — matches `tools/list` on the live MCP server
-# (20 backend tools + semantic_search served by the Cloudflare Worker via
-# Vectorize embeddings).
+# Tool surface for discovery — matches `tools/list` on the live MCP server:
+# 28 backend tools (server.mjs) + semantic_search (Cloudflare Worker via
+# Vectorize embeddings) = 29 total.
 tools:
   - search_facilities
   - get_facility
   - get_market_intel
+  - get_market_dcpi_rank
+  - compare_isos
   - get_intelligence_index
   - list_transactions
   - get_news
   - get_pipeline
+  - get_interconnection_queue
   - get_grid_data
   - analyze_site
   - compare_sites
@@ -44,14 +49,21 @@ tools:
   - get_agent_registry
   - get_backup_status
   - get_dchub_recommendation
+  - rank_markets
+  - find_alternatives
+  - score_facility
+  - ai_capacity_index
+  - hyperscaler_deals
   - semantic_search
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
-  free: "10 calls/day, 5 results per call, all 21 tools available"
-  developer: "$49/mo — 1,000 calls/day, full results"
-  pro: "$199/mo — 10,000 calls/day"
-  enterprise: "Custom — 100,000 calls/day"
+  anonymous: "10 calls/day, no signup, 2 results per query"
+  free: "Free dev key (email signup) — 1,000 calls/day, all 29 tools"
+  starter: "$9/mo — 10,000 calls/day, unlocks paid tools"
+  developer: "$49/mo — unlimited paid tools, all 29 tools, full results"
+  pro: "$199/mo — unlimited + Pro tools, bulk export, historical data"
+  enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
 
 gated_tools:
   - get_intelligence_index
@@ -81,9 +93,13 @@ keywords:
   - PPAs
   - water-risk
   - PJM
+  - ERCOT
+  - CAISO
   - ISO
+  - interconnection-queue
   - M&A
   - capacity-pipeline
+  - DCPI
 
 author:
   name: "Jonathan Martone"

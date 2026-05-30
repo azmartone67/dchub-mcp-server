@@ -5,7 +5,7 @@
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Cline, Continue, and any AI assistant doing data center site selection, energy analysis, or market research.
 
-[![Install on Cursor](https://img.shields.io/badge/Cursor-Install-black?logo=cursor)](https://cursor.directory/plugins/mcp-dchub) [![Smithery](https://img.shields.io/badge/smithery-listed-orange)](https://smithery.ai/server/azmartone67/dchub) [![Glama](https://img.shields.io/badge/glama.ai-verified-purple)](https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server) [![Tools](https://img.shields.io/badge/tools-28-blue)](https://dchub.cloud/.well-known/mcp.json) [![Citations](https://img.shields.io/badge/cited%20by-ChatGPT%20%C2%B7%20Claude%20%C2%B7%20Gemini%20%C2%B7%20Groq-green)](https://dchub.cloud/cited-by)
+[![Install on Cursor](https://img.shields.io/badge/Cursor-Install-black?logo=cursor)](https://cursor.directory/plugins/mcp-dchub) [![Smithery](https://img.shields.io/badge/smithery-listed-orange)](https://smithery.ai/server/azmartone67/dchub) [![Glama](https://img.shields.io/badge/glama.ai-verified-purple)](https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server) [![Tools](https://img.shields.io/badge/tools-29-blue)](https://dchub.cloud/.well-known/mcp.json) [![Citations](https://img.shields.io/badge/cited%20by-ChatGPT%20%C2%B7%20Claude%20%C2%B7%20Gemini%20%C2%B7%20Groq-green)](https://dchub.cloud/cited-by)
 
 ---
 
@@ -24,15 +24,15 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## What's inside
 
-- **21,000+ data center facilities** across 140+ countries — operator, capacity, location, fiber connectivity
-- **126,000 substations** with voltage class, available capacity estimates
+- **21,000+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
+- **126,427 substations** with voltage class, available capacity estimates
 - **Live grid data for 10 ISOs** (PJM, MISO, ERCOT, CAISO, NYISO, SPP, ISO-NE + Hydro-Quebec, AESO, Nord Pool) refreshed every 5 minutes
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (ERCOT 410 GW / 87% DC, PJM 30 GW / 73% DC, etc.)
 - **$324B+ M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
-- **Market intelligence** for 32+ DC markets globally with daily DCPI verdicts
+- **Market intelligence** for 233 DC markets globally with daily DCPI verdicts
 
 **29 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
