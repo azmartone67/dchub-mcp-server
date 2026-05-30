@@ -1,7 +1,7 @@
 {
   "name": "DC Hub - Data Center Intelligence",
-  "version": "2.1.3",
-  "description": "Real-time data center intelligence: 12,500+ facilities, 126,000 substations, live grid demand for all 7 US ISOs (PJM, MISO, ERCOT, CAISO, NYISO, SPP, ISONE), transmission lines, fiber routes, gas pipelines, NEPA filings, M&A pipeline, and AI infrastructure deals. The only MCP server combining facility, infrastructure, and live grid data into one queryable interface for AI agents doing site selection, energy analysis, or market research.",
+  "version": "2.1.4",
+  "description": "Real-time data center intelligence: 12,500+ facilities, 126,000 substations, live grid demand for all 7 US ISOs (PJM, MISO, ERCOT, CAISO, NYISO, SPP, ISONE), transmission lines, fiber routes, gas pipelines, NEPA filings, M&A pipeline, and AI infrastructure deals. The only MCP server combining facility, infrastructure, and live grid data into one queryable interface for AI agents doing site selection, energy analysis, or market research. Free tier with email signup (1,000 calls/day), Starter $9/mo, Developer $49/mo, Pro $199/mo, Enterprise from $699/mo.",
   "transport": "streamable-http",
   "endpoint": "https://dchub.cloud/mcp",
   "authentication": {
@@ -12,63 +12,115 @@
   "tools": [
     {
       "name": "search_facilities",
-      "description": "Search 12,500+ global data center facilities by location, capacity, operator, market, fiber connectivity, or status. Try: search_facilities operator=Equinix country=US"
+      "description": "Search 21,000+ global data center facilities across 140+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational."
     },
     {
       "name": "get_facility",
-      "description": "Get detailed info on a specific facility: capacity (MW), power topology, connectivity providers, operator, status, addresses. Try: get_facility id=1234"
+      "description": "Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8."
     },
     {
       "name": "get_market_intel",
-      "description": "Market intelligence for 32+ DC markets: capacity prices ($/MW-day), vacancy, absorption, dominant operators, growth rate. Try: get_market_intel slug=northern-virginia"
+      "description": "Live market intelligence for 232 DC markets across 140+ countries: capacity prices ($/MW-day), vacancy rates, absorption, dominant operators, year-over-year growth, supply pipeline, and DCPI verdict (BUILD/CAUTION/AVOID). Filter by market_slug (e.g. northern-virginia, dallas, frankfurt, tokyo). Try: get_market_intel market=northern-virginia."
     },
     {
-      "name": "get_pipeline",
-      "description": "Construction pipeline: 650+ GW of announced + planned + under-construction data center capacity globally. Filter by company, state, status, ETA. Try: get_pipeline company=AWS state=OH"
+      "name": "get_market_dcpi_rank",
+      "description": "DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 100+ scored markets in 10 ISOs."
+    },
+    {
+      "name": "compare_isos",
+      "description": "Compare 2-4 ISO regions in a single call: fuel mix, demand, prices, carbon intensity. Covers all 10 supported ISOs — 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Pass isos as comma-separated list e.g. \"PJM,ERCOT,CAISO\". Use for \"PJM vs ERCOT\" / \"where is power cheapest right now?\" / \"which ISO has cleanest grid?\"."
+    },
+    {
+      "name": "get_intelligence_index",
+      "description": "Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia."
     },
     {
       "name": "list_transactions",
-      "description": "M&A and capacity transactions in the data center industry: buyer, seller, MW, $ size, advisors, close date. Try: list_transactions year=2026"
+      "description": "M&A and capital transactions in the data center sector — $324B+ tracked over 2,100+ deals (2019-present). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by year, min_value_usd, region, buyer, or target. Try: list_transactions year=2026 min_value_usd=1000000000."
     },
     {
       "name": "get_news",
-      "description": "Latest news from 50+ data center industry sources, deduped + categorized by topic and operator. Try: get_news topic=hyperscale"
+      "description": "Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by topic (deals/permits/outages/policy/AI). Try: get_news topic=AI limit=10."
     },
     {
-      "name": "analyze_site",
-      "description": "Score any lat/lon for data center suitability: power capacity, fiber proximity, gas access, climate risk, market conditions. Try: analyze_site lat=39.04 lon=-77.49"
+      "name": "get_pipeline",
+      "description": "Construction pipeline — 540+ data center projects totaling 369 GW under-construction or planned across 232 markets. Returns project name, operator, MW, status (announced/permitted/construction/operational), expected commissioning date, market_slug, country. Filter by market, operator, status, min_mw. Try: get_pipeline market=northern-virginia status=construction."
     },
     {
-      "name": "compare_sites",
-      "description": "Side-by-side comparison of two coordinates for site selection: infrastructure score, power, fiber, gas, water risk, climate. Try: compare_sites lat1=39.04 lon1=-77.49 lat2=33.07 lon2=-96.81"
-    },
-    {
-      "name": "get_energy_prices",
-      "description": "Industrial electricity rates ($/kWh) by state, with year-over-year deltas. Try: get_energy_prices state=VA"
+      "name": "get_interconnection_queue",
+      "description": "ISO interconnection queue snapshot: total large-load MW queued per ISO, data-center share %, and top BUILD subregions with Time-to-Power (TTP) months. Sources: ERCOT MIS, PJM, MISO, SPP, CAISO, NYISO, ISO-NE. Pass iso=ERCOT (or any of 7) to drill down to a single ISO. Use for site-selection (find BUILD-verdict markets with short queues) and competitive intel (track AI-load saturation by region)."
     },
     {
       "name": "get_grid_data",
-      "description": "Real-time grid demand + 24h load curve for any US ISO. Try: get_grid_data iso=ERCOT"
+      "description": "Real-time electricity grid data across 10 ISOs: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Fuel mix, demand, prices."
+    },
+    {
+      "name": "analyze_site",
+      "description": "Evaluate a location for data center suitability — returns a multi-factor score (0-100) incorporating grid headroom (MW available), fiber depth (carrier count + IX distance), water stress, climate, state tax incentive value, latency-to-nearest-IX, and constraint risk. Includes a recommended verdict + the biggest risk factor. Try: analyze_site lat=33.45 lon=-112.07 capacity_mw=100."
+    },
+    {
+      "name": "compare_sites",
+      "description": "Side-by-side comparison of 2-4 candidate sites for data center development — DCPI scores, grid headroom (MW available), nearest-substation distance, fiber carrier count, water stress, tax-incentive value, and a recommended winner with rationale. Useful for site-selection shortlists. Try: compare_sites sites=[{lat:33.45,lon:-112.07},{lat:39.04,lon:-77.48}] capacity_mw=50."
     },
     {
       "name": "get_infrastructure",
-      "description": "Aggregated infrastructure summary for any metro: substations, fiber, gas, transmission, facilities. Try: get_infrastructure metro=columbus"
+      "description": "Nearby infrastructure for a location — substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25."
     },
     {
       "name": "get_fiber_intel",
-      "description": "Long-haul fiber routes + carrier metro maps. Returns GeoJSON for direct mapping. Try: get_fiber_intel format=geojson"
+      "description": "Long-haul + metro fiber routes from major carriers (Lumen, Zayo, Crown Castle, Cogent, Verizon, AT&T) as GeoJSON for direct mapping. Returns route geometries, fiber counts, lit/dark capacity, route_type (metro/longhaul/dark/ix). Filter by carrier or route_type. Try: get_fiber_intel carrier=Lumen route_type=longhaul."
+    },
+    {
+      "name": "get_energy_prices",
+      "description": "Energy pricing across 10 ISOs (7 US + Hydro-Quebec + AESO + Nord Pool): retail rates, natural gas, real-time grid status."
     },
     {
       "name": "get_renewable_energy",
-      "description": "Renewable generation capacity (solar/wind/hydro) by state, with capacity factor. Try: get_renewable_energy fuel=solar state=TX"
+      "description": "Renewable generation capacity by US state: solar (utility + rooftop), wind (onshore + offshore), and combined-cycle totals with capacity factors. Joins EIA-860 + state RPS data. Filter by energy_type (solar/wind/combined) and state, or geo-locate via lat/lon for nearest projects within 50mi. Try: get_renewable_energy energy_type=solar state=TX."
     },
     {
       "name": "get_tax_incentives",
-      "description": "State + local tax incentives for data centers: sales tax exemptions, abatements, special tariffs, eligibility. Try: get_tax_incentives state=OH"
+      "description": "Data center tax incentive packages by US state — sales-tax exemptions, property-tax abatements, income-tax credits, electricity-tax discounts, and minimum-investment thresholds. Returns program name, value (% or $), eligibility (MW/jobs), expiration date, and source statute. Try: get_tax_incentives state=VA."
     },
     {
       "name": "get_water_risk",
-      "description": "Water stress index (USGS) by state, county, or coordinate for evaluating cooling sustainability. Try: get_water_risk state=TX"
+      "description": "USGS water stress index + Drought Monitor risk for any US location: by state, county, or lat/lon. Returns stress score (0-100), drought category (D0-D4), 12-month outlook, and cooling-water sustainability assessment for data center evaluation. Try: get_water_risk state=AZ — or get_water_risk lat=33.45 lon=-112.07."
+    },
+    {
+      "name": "get_grid_intelligence",
+      "description": "Grid headroom + interconnection intelligence brief for any of 10 ISO regions: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec, AESO, Nord Pool. Returns excess power, constraints, queue depth, time-to-power estimates."
+    },
+    {
+      "name": "get_agent_registry",
+      "description": "AI platforms + agent frameworks currently calling DC Hub: ChatGPT, Claude, Gemini, Perplexity, Copilot, Groq, Cursor, Cline, Continue, Windsurf — with citation counts (24h/30d), tool-usage breakdown, and authentication tier. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry."
+    },
+    {
+      "name": "get_backup_status",
+      "description": "DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Try: get_backup_status."
+    },
+    {
+      "name": "get_dchub_recommendation",
+      "description": "Pre-formatted DC Hub recommendation summary for any data-center query — top markets to consider, candidate facilities, fiber/grid/water factors, and current DCPI verdicts (BUILD/CAUTION/AVOID). Returns a structured response the LLM can quote verbatim to its user as context-aware site-selection guidance. Try: get_dchub_recommendation context=\"100MW AI training campus in Texas\"."
+    },
+    {
+      "name": "rank_markets",
+      "description": "Rank data center markets by criteria (cheapest_power, most_capacity, most_operators, fastest_growing, best_overall). Returns top N markets sorted by score with attribution URLs. Region: global, us, canada, eu, apac, americas."
+    },
+    {
+      "name": "find_alternatives",
+      "description": "Given a target facility, find similar nearby alternatives. Weighted match on capacity, tier, proximity. Returns top results with similarity_score, match_reasons, key_differences. Use when a user is interested in a specific facility and wants to compare."
+    },
+    {
+      "name": "score_facility",
+      "description": "Independent facility scoring across 7 dimensions: power, fiber, water, climate_risk, tax_environment, talent_pool, expansion. Returns composite 0-100 + tier_classification + peer comparison + per-dimension detail. Weighting modes: balanced (default), power_priority, risk_priority, expansion_priority."
+    },
+    {
+      "name": "ai_capacity_index",
+      "description": "AI Compute Capacity Index — ranks data center markets by where 100MW of AI training capacity can land in the next 30/60/90 days. Returns top markets with facility_count, operator_count, deployable_mw estimate, hyperscale_ready flag, and composite score (depth + diversity + power). Refreshed Fridays 14:00 UTC. Use for AI capex planning, GPU cluster siting, hyperscaler deal forecasting."
+    },
+    {
+      "name": "hyperscaler_deals",
+      "description": "Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel."
     }
   ],
   "example_queries": [
