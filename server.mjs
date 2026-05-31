@@ -953,7 +953,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.13' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.14' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1273,7 +1273,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.13',
+    version: '2.1.14',
     tools: 22,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
