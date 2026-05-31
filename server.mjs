@@ -371,35 +371,6 @@ async function checkTrialEligibility(session_id, tool_name) {
   }
 }
 
-// r54-conv (2026-05-31): server-side mint of a no-email dch_live_ key,
-// embedded inline in the paywall so an anonymous agent can retry IMMEDIATELY
-// with X-API-Key — zero second call, zero human, zero browser. 99.7% of
-// paywall hits are anonymous agents that won't self-claim (15 claim-starts /
-// 18,945 signals = 0.08%). /api/v1/keys/claim dedups per client_name, so
-// 'mcp-session:<sid>' gives each session its OWN key (no shared rate-limit);
-// session_id is also sent so the backend can later resolve session→email for
-// upgrade-pool outreach. Fail-open: any error / slow backend returns null and
-// the caller keeps the existing header + links (zero regression). Tight 1.5s
-// timeout (matches checkTrialEligibility) so the paywall never blocks on a
-// slow backend.
-async function mintAnonKey(sessionId) {
-  const sid = (sessionId && sessionId !== 'no-session') ? String(sessionId) : '';
-  if (!sid) return null;
-  try {
-    const resp = await fetch(new URL('/api/v1/keys/claim', API_BASE).toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_name: 'mcp-session:' + sid.slice(0, 48), session_id: sid }),
-      signal: AbortSignal.timeout(1500),
-    });
-    if (!resp.ok) return null;
-    const j = await resp.json();
-    return (j && typeof j.api_key === 'string' && j.api_key.startsWith('dch')) ? j.api_key : null;
-  } catch (err) {
-    return null;
-  }
-}
-
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -823,23 +794,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // get_market_intel gets a tuned pitch; everything else gets the
             // generic header (which now includes $9 Starter alongside $49 Developer).
             const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
-            // r54-conv (2026-05-31): hand the agent a WORKING key INLINE so it
-            // retries automatically — no second call, no browser, no email. Only
-            // for ANONYMOUS callers (keyed-free users already have a key → show
-            // upgrade instead) on clients that can send X-API-Key (Claude.ai web
-            // can't accept one, so skip there and keep the upgrade-first copy).
-            // mintAnonKey is fail-open (null on any error) → existing header.
-            const _isClaudeWeb = (c && c.platform) === 'claude';
-            const _mintedKey = (!(c && c.api_key) && !_isClaudeWeb) ? await mintAnonKey(_sid) : null;
-            let _upgradeHeader = trialHeader(name, _sid, _refUrl(UPGRADE_URL));
-            if (_mintedKey) {
-              _upgradeHeader =
-                '✨ **A free key was just minted for you — no signup, no email.** ' +
-                'Retry `' + name + '` with header `X-API-Key: ' + _mintedKey + '` for the ' +
-                'full result (1,000 calls/day). To keep it past 30 days, POST ' +
-                '`{"api_key":"' + _mintedKey + '","email":"<you>"}` to ' +
-                'https://dchub.cloud/api/v1/keys/auto-trial/redeem\n\n' + _upgradeHeader;
-            }
+            const _upgradeHeader = trialHeader(name, _sid, _refUrl(UPGRADE_URL));
             // r51 (2026-05-26): mark trial_preview as isError=true. The
             // blocked_paid_only branch already does this (r50) but ~95%
             // of paywall hits land HERE — anon + free-tier users get
@@ -857,11 +812,6 @@ function trackedTool(srv, name, description, schema, handler) {
               structuredContent: {
                 trial_preview: true,
                 tool: name,
-                ...(_mintedKey ? {
-                  minted_key: _mintedKey,
-                  retry_with_header: { 'X-API-Key': _mintedKey },
-                  minted_daily_calls: 1000,
-                } : {}),
                 signup_url: _refUrl(SIGNUP_URL),
                 upgrade_url: _refUrl(UPGRADE_URL),
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
