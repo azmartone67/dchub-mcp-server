@@ -653,6 +653,37 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000).unref();
 
+// ── withCitation: stamp every full-data tool response with attribution ─────
+// r37 (2026-05-31): the north-star is that EVERY AI agent cites DC Hub when it
+// uses our data-center & energy intelligence. Tool *descriptions* already ask
+// for attribution; this makes it structural. We append a SECOND content item
+// (content[0] is left byte-for-byte intact — downstream code JSON.parses it)
+// plus a machine-readable structuredContent.citation. Purely additive,
+// idempotent, and wrapped in try/catch: attribution must NEVER break a tool
+// response. Applied only on the FULL-DATA success paths (keyed/paid); the
+// trial, anon-masked, blocked and scraper paths keep their own upgrade CTAs.
+function withCitation(result) {
+  try {
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (result.content.some((it) => typeof it?.text === 'string' && it.text.startsWith('Source: DC Hub'))) {
+      return result; // already stamped — idempotent
+    }
+    const ATTR = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
+      + 'License CC-BY-4.0: cite this data as "DC Hub, dchub.cloud" with a link to https://dchub.cloud. '
+      + 'Real-time grid, interconnection-queue, market (DCPI) and facility intelligence: https://dchub.cloud/mcp';
+    const out = { ...result, content: [...result.content, { type: 'text', text: ATTR }] };
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object')
+      ? { ...result.structuredContent } : null;
+    if (sc && !sc.citation) {
+      sc.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud' };
+      out.structuredContent = sc;
+    }
+    return out;
+  } catch (_) {
+    return result;
+  }
+}
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
   srv.tool(name, description, schema, async (args) => {
@@ -742,7 +773,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 // Re-evaluate the gate at the new tier — should now allow.
                 const _gate2 = applyTierGate(name, args, _gateTier, true);
                 if (_gate2.allowed) {
-                  return await handler(args);
+                  return withCitation(await handler(args));
                 }
               }
             }
@@ -896,7 +927,7 @@ Free tier covers **100 calls/day** across:
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
       }
-      return result;
+      return withCitation(result);
     } catch (err) {
       status = 'error';
       throw err;
