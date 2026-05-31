@@ -89,6 +89,20 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // surfaces it), so getting the tier ladder right here matters most.
   const STARTER_URL_LOCAL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
 
+  // r53 (2026-05-31): the #1 conversion blocker is IDENTITY, not payment —
+  // 19,051 of 19,052 upgrade signals are anonymous, and 99.7% of paywall hits
+  // are programmatic agents that can't complete an email/browser flow. The
+  // /api/v1/keys/claim path issues an instant dch_live_ key with NO email, but
+  // it was only surfaced in top-level JSON. Lead the rendered message with it so
+  // agents that DO render markdown (Cursor, Cline, Continue) can self-serve a
+  // named key in one call — turning anonymous callers into identified ones.
+  const claimEndpoint = 'https://dchub.cloud/api/v1/keys/claim';
+  const claimCurl = (
+    "curl -X POST " + claimEndpoint +
+    " -H 'Content-Type: application/json' " +
+    "-d '{\"client_name\":\"<your-agent-name>\"}'"
+  );
+
   let human_message;
   if (_platform === 'claude') {
     // Claude.ai web custom connectors don't accept X-API-Key, so the
@@ -111,12 +125,15 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // lowest-friction unlock. Free-first, then $9 Starter as the
     // "actually useful" paid bump.
     human_message = (
-      lock + ' **' + toolName + ' is a paid tool.** Three ways to unlock:\n\n' +
-      '**1. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
+      lock + ' **' + toolName + ' is a paid tool.** Fastest unlock for an agent:\n\n' +
+      '**1. Instant free key \u2014 no email, one API call (1,000 calls/day):**\n' +
+      '   `' + claimCurl + '`\n' +
+      '   Returns {api_key}; send it as the `X-API-Key` header. No human, no browser.\n\n' +
+      '**2. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
       '   1,000 calls/day, no credit card.\n\n' +
-      '**2. $9/mo Starter (most popular, 10,000 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '**3. $9/mo Starter (most popular, 10,000 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
       '   Unlocks every paid tool except Pro-only ones.\n\n' +
-      '**3. $49/mo Developer (unlimited paid tools)** \u2192 ' + upgradeUrl + '\n' +
+      '**4. $49/mo Developer (unlimited paid tools)** \u2192 ' + upgradeUrl + '\n' +
       '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.'
     );
   }
@@ -134,13 +151,9 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   //   }
   //
   // Pairs with the existing /api/v1/keys/claim endpoint (no email
-  // required, instant key issuance — Phase ZZ+1).
-  const claimEndpoint = 'https://dchub.cloud/api/v1/keys/claim';
-  const claimCurl = (
-    "curl -X POST " + claimEndpoint +
-    " -H 'Content-Type: application/json' " +
-    "-d '{\"client_name\":\"<your-agent-name>\"}'"
-  );
+  // required, instant key issuance — Phase ZZ+1). r53: claimEndpoint +
+  // claimCurl are now defined above (before human_message) so the rendered
+  // message can lead with them; the duplicate definition here was removed.
   return {
     human_message: human_message,
     redeem_url:    redeemUrl,
