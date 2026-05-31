@@ -953,7 +953,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.18' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.19' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1013,12 +1013,57 @@ function createServer() {
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     });
 
-  // r39-revert (2026-05-31): get_grid_scoreboard removed. It needs an all-ISO
-  // live-fuel-mix feed, but /api/v1/grid/status is a single-location headroom
-  // teaser and /api/v1/grid/fuel-mix-live is deprecated (returns empty). No
-  // reliable single endpoint found yet, so the tool returned 0 ISOs. Revisit by
-  // reading the real fuel-mix source (the deprecated stub points to an MCP
-  // `get_fuel_mix`) before re-registering. compare_isos / get_grid_data cover ISO needs.
+  // r40 (2026-05-31): all-ISO grid scoreboard, rebuilt on the VERIFIED source.
+  // The two prior attempts wrapped /grid/status (a single-location CO headroom
+  // teaser) and /grid/fuel-mix-live (deprecated, empty) and returned 0 ISOs.
+  // The real per-ISO feed is /api/v1/grid/intelligence/<iso> (EIA hourly RTO):
+  // generation_mix uses EIA fuel codes (COL/NG/NUC/SUN/WND/WAT/OTH; mw is a
+  // STRING). Verified live across all 7 US ISOs. We fan out, parse, compute
+  // renewable & gas shares, and rank. (Intl HYDROQUEBEC/AESO/NORDPOOL aren't on
+  // this endpoint, so the scoreboard is the 7 US ISOs.)
+  const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
+  const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+  trackedTool(srv, 'get_grid_scoreboard',
+    'Live all-ISO grid scoreboard — all 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which US grid is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Source: EIA hourly RTO via DC Hub, ranked greenest-first by renewable share. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    {},
+    async (a) => {
+      const results = await Promise.all(_US_ISOS.map(iso =>
+        callAPI(`/api/v1/grid/intelligence/${iso}`, {})
+          .then(d => ({ iso, d }))
+          .catch(e => ({ iso, err: String(e).slice(0, 120) }))));
+      const grids = [];
+      for (const { iso, d, err } of results) {
+        if (err || !d || !d.generation_mix) { grids.push({ iso, error: err || 'no generation_mix' }); continue; }
+        const gm = d.generation_mix;
+        const mw = (k) => _num(gm[k] && gm[k].mw);
+        const ng = mw('NG'), nuc = mw('NUC'), col = mw('COL');
+        const sun = mw('SUN'), wnd = mw('WND'), wat = mw('WAT'), oth = mw('OTH');
+        const total = ng + nuc + col + sun + wnd + wat + oth;
+        const pct = (x) => total > 0 ? Math.round((x / total) * 1000) / 10 : null;
+        const renew = sun + wnd + wat;
+        grids.push({
+          iso,
+          region: d.region || iso,
+          demand_mw: _num(d.demand_mw) || null,
+          renewable_share_pct: pct(renew),
+          gas_share_pct: pct(ng),
+          mix_period: gm.NG && gm.NG.period || null,
+          fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, other: oth },
+          fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
+        });
+      }
+      const ranked = grids.filter(g => g.renewable_share_pct != null)
+        .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
+      const errored = grids.filter(g => g.renewable_share_pct == null);
+      const out = {
+        ok: true,
+        count: ranked.length,
+        ranked_by: 'renewable_share_pct (greenest US grid first)',
+        source: 'DC Hub + EIA hourly RTO',
+        grids: [...ranked, ...errored],
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
+    });
 
   // r41-compare-isos (2026-05-25): single-call ISO comparison.
   // Pre-fix agents had to call get_grid_data N times sequentially then
@@ -1300,8 +1345,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.18',
-    tools: 29,
+    version: '2.1.19',
+    tools: 30,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
