@@ -3,7 +3,7 @@
 Source of truth: `https://dchub.cloud/.well-known/mcp.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
 Live server **v2.1.19 · 30 tools** (verified via tools/list 2026-05-31) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
-> ⚠️ KNOWN ISSUE (fix before/with submitting): the public manifest `/.well-known/mcp.json` is STALE — it reports v2.1.11 / 29 tools and is missing `get_gas_index` + `get_grid_scoreboard`. It's served out-of-repo by the `dchubapiproxy` Cloudflare worker (not this repo's `mcp-server.json`, which is also stale at v2.1.13/28). Registries scrape this manifest, so refresh the worker's manifest to v2.1.19/30 tools first, or some registries will show outdated info. Submitting still works (the live `/mcp` tools/list is correct), but the listing card may lag until the manifest is refreshed.
+> ✅ MANIFEST FIXED (2026-05-31): the canonical Flask manifest now includes `get_gas_index` + `get_grid_scoreboard` (v2.1.20, commit 4e49e651) — see section (a) below. Use `30 tools` as the headline number (what the live `/mcp` tools/list returns). One caveat remains: the public `dchub.cloud/.well-known/mcp.json` *edge* is cached/served by the out-of-repo `dchubapiproxy` CF worker and may lag the backend; if a registry shows stale data, hand it `https://api.dchub.cloud/.well-known/mcp.json` (direct Flask, always fresh) or purge the CF cache.
 
 ---
 
@@ -54,7 +54,7 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 - Use the short description + categories above. Confirm the tool list auto-populates from the manifest (30 tools).
 
 ### Glama (glama.ai/mcp/connectors/cloud.dchub/...)
-- Already indexed as a connector. Refresh so it picks up v2.1.16 / 30 tools (now incl. `get_gas_index`, `get_grid_scoreboard`).
+- Already indexed as a connector. Refresh so it picks up the current 30 tools (now incl. `get_gas_index`, `get_grid_scoreboard`).
 - Long description + tags above lift the Glama quality score (target A).
 
 ### PulseMCP (pulsemcp.com/submit)
@@ -133,6 +133,6 @@ With a key:
 
 ## (a) Manifest status — FIXED in-repo (2026-05-31)
 
-Investigated + corrected. The canonical Flask manifest `_canonical_mcp_manifest()` (main.py, served at `/.well-known/mcp.json` + `/mcp/manifest` + `/api/v1/mcp/manifest`) listed 29 tools but was MISSING `get_gas_index` + `get_grid_scoreboard`. Added both + bumped version 2.1.13 → 2.1.20 (commit 4e49e651, additive 3-line change). After the backend redeploys, the canonical manifest reflects 31 tools incl. the gas index + grid scoreboard.
+Investigated + corrected. The canonical Flask manifest `_canonical_mcp_manifest()` (main.py, served at `/.well-known/mcp.json` + `/mcp/manifest` + `/api/v1/mcp/manifest`) listed 29 tools but was MISSING `get_gas_index` + `get_grid_scoreboard`. Added both + bumped version 2.1.13 → 2.1.20 (commit 4e49e651, additive 3-line change). After the backend redeploys, the canonical manifest lists these incl. the gas index + grid scoreboard. (Headline "30 tools" = live `/mcp` tools/list; the canonical manifest's hand-curated list differs slightly in membership — use 30 for listings.)
 
 Remaining caveat (out-of-repo, your call): the public **`dchub.cloud/.well-known/mcp.json` edge** is served/cached by the `dchubapiproxy` Cloudflare worker and showed an OLDER copy (v2.1.11) than even Railway-direct. After the backend deploy, if the edge still lags, it needs a CF cache purge or worker refresh (the worker is not in this repo). `/api/v1/admin/drift-check` surfaces the gap. `api.dchub.cloud/.well-known/mcp.json` always reflects the fresh canonical source if you need a clean URL to hand a registry now.
