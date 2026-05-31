@@ -953,7 +953,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.16' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.17' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1019,18 +1019,32 @@ function createServer() {
   // most gas-reliant right now?" had to fan out N calls + reconcile. This wraps
   // /api/v1/grid/status (all 13 grids, live EIA) and ranks cleanest-first.
   trackedTool(srv, 'get_grid_scoreboard',
-    'Live all-ISO grid scoreboard — every tracked North-American grid operator ranked side-by-side RIGHT NOW: carbon intensity (lbs CO2/MWh), renewable %, fuel mix (gas/coal/nuclear/renewables), demand (MW), and load status. One call answers "which grid is cleanest / greenest / most gas-reliant for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Ranked cleanest-first by carbon intensity; source EIA, refreshed ~hourly. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    'Live all-ISO grid scoreboard — every tracked US grid operator ranked side-by-side RIGHT NOW by renewable share: renewable %, full fuel mix (gas/nuclear/wind/solar/coal/hydro), and demand (MW). One call answers "which grid is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Source EIA, refreshed ~hourly. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
-      const data = await callAPI('/api/v1/grid/status', {});
-      const grids = (data && Array.isArray(data.grids)) ? data.grids.slice() : [];
-      grids.sort((x, y) => (x.carbon_lbs_per_mwh ?? 1e9) - (y.carbon_lbs_per_mwh ?? 1e9));
+      const data = await callAPI('/api/v1/grid/fuel-mix-live', {});
+      const raw = (data && Array.isArray(data.grids)) ? data.grids : [];
+      // the feed emits duplicate rows per ISO — dedupe by iso, keep the first
+      const seen = new Set();
+      const grids = [];
+      for (const g of raw) {
+        const k = (g && g.iso) || '';
+        if (k && !seen.has(k)) { seen.add(k); grids.push(g); }
+      }
+      grids.sort((x, y) => (y.renewable_share ?? -1) - (x.renewable_share ?? -1));
       const out = {
         ok: true,
         count: grids.length,
-        ranked_by: 'carbon_lbs_per_mwh (cleanest grid first)',
-        as_of: (grids[0] && grids[0].updated) || data?.updated || null,
-        grids,
+        ranked_by: 'renewable_share (greenest grid first)',
+        as_of: data?.as_of || null,
+        source: data?.source || 'DC Hub + EIA',
+        grids: grids.map(g => ({
+          iso: g.iso,
+          name: g.name,
+          renewable_share_pct: g.renewable_share,
+          demand_mw: g.demand_mw,
+          fuel_mix_pct: g.fuel_mix,
+        })),
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
     });
@@ -1315,7 +1329,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.16',
+    version: '2.1.17',
     tools: 30,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
