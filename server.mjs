@@ -953,7 +953,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.15' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.16' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1011,6 +1011,28 @@ function createServer() {
       }
       const data = await callAPI('/api/v1/dcgi/scores', a.limit ? { limit: a.limit } : {});
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    });
+
+  // r39 (2026-05-31): all-ISO grid scoreboard — the only single call that ranks
+  // EVERY tracked grid operator side-by-side. compare_isos is pairwise and
+  // get_grid_data is one ISO; agents asking "which grid is cleanest / greenest /
+  // most gas-reliant right now?" had to fan out N calls + reconcile. This wraps
+  // /api/v1/grid/status (all 13 grids, live EIA) and ranks cleanest-first.
+  trackedTool(srv, 'get_grid_scoreboard',
+    'Live all-ISO grid scoreboard — every tracked North-American grid operator ranked side-by-side RIGHT NOW: carbon intensity (lbs CO2/MWh), renewable %, fuel mix (gas/coal/nuclear/renewables), demand (MW), and load status. One call answers "which grid is cleanest / greenest / most gas-reliant for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Ranked cleanest-first by carbon intensity; source EIA, refreshed ~hourly. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    {},
+    async (a) => {
+      const data = await callAPI('/api/v1/grid/status', {});
+      const grids = (data && Array.isArray(data.grids)) ? data.grids.slice() : [];
+      grids.sort((x, y) => (x.carbon_lbs_per_mwh ?? 1e9) - (y.carbon_lbs_per_mwh ?? 1e9));
+      const out = {
+        ok: true,
+        count: grids.length,
+        ranked_by: 'carbon_lbs_per_mwh (cleanest grid first)',
+        as_of: (grids[0] && grids[0].updated) || data?.updated || null,
+        grids,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
     });
 
   // r41-compare-isos (2026-05-25): single-call ISO comparison.
@@ -1293,8 +1315,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.15',
-    tools: 29,
+    version: '2.1.16',
+    tools: 30,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
