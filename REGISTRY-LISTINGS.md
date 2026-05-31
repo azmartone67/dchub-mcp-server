@@ -1,7 +1,9 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Server version 2.1.16 · 30 tools · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **v2.1.19 · 30 tools** (verified via tools/list 2026-05-31) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+
+> ⚠️ KNOWN ISSUE (fix before/with submitting): the public manifest `/.well-known/mcp.json` is STALE — it reports v2.1.11 / 29 tools and is missing `get_gas_index` + `get_grid_scoreboard`. It's served out-of-repo by the `dchubapiproxy` Cloudflare worker (not this repo's `mcp-server.json`, which is also stale at v2.1.13/28). Registries scrape this manifest, so refresh the worker's manifest to v2.1.19/30 tools first, or some registries will show outdated info. Submitting still works (the live `/mcp` tools/list is correct), but the listing card may lag until the manifest is refreshed.
 
 ---
 
