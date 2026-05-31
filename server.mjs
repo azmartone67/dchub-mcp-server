@@ -953,7 +953,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.17' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.18' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1013,41 +1013,12 @@ function createServer() {
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     });
 
-  // r39 (2026-05-31): all-ISO grid scoreboard — the only single call that ranks
-  // EVERY tracked grid operator side-by-side. compare_isos is pairwise and
-  // get_grid_data is one ISO; agents asking "which grid is cleanest / greenest /
-  // most gas-reliant right now?" had to fan out N calls + reconcile. This wraps
-  // /api/v1/grid/status (all 13 grids, live EIA) and ranks cleanest-first.
-  trackedTool(srv, 'get_grid_scoreboard',
-    'Live all-ISO grid scoreboard — every tracked US grid operator ranked side-by-side RIGHT NOW by renewable share: renewable %, full fuel mix (gas/nuclear/wind/solar/coal/hydro), and demand (MW). One call answers "which grid is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Source EIA, refreshed ~hourly. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
-    {},
-    async (a) => {
-      const data = await callAPI('/api/v1/grid/fuel-mix-live', {});
-      const raw = (data && Array.isArray(data.grids)) ? data.grids : [];
-      // the feed emits duplicate rows per ISO — dedupe by iso, keep the first
-      const seen = new Set();
-      const grids = [];
-      for (const g of raw) {
-        const k = (g && g.iso) || '';
-        if (k && !seen.has(k)) { seen.add(k); grids.push(g); }
-      }
-      grids.sort((x, y) => (y.renewable_share ?? -1) - (x.renewable_share ?? -1));
-      const out = {
-        ok: true,
-        count: grids.length,
-        ranked_by: 'renewable_share (greenest grid first)',
-        as_of: data?.as_of || null,
-        source: data?.source || 'DC Hub + EIA',
-        grids: grids.map(g => ({
-          iso: g.iso,
-          name: g.name,
-          renewable_share_pct: g.renewable_share,
-          demand_mw: g.demand_mw,
-          fuel_mix_pct: g.fuel_mix,
-        })),
-      };
-      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
-    });
+  // r39-revert (2026-05-31): get_grid_scoreboard removed. It needs an all-ISO
+  // live-fuel-mix feed, but /api/v1/grid/status is a single-location headroom
+  // teaser and /api/v1/grid/fuel-mix-live is deprecated (returns empty). No
+  // reliable single endpoint found yet, so the tool returned 0 ISOs. Revisit by
+  // reading the real fuel-mix source (the deprecated stub points to an MCP
+  // `get_fuel_mix`) before re-registering. compare_isos / get_grid_data cover ISO needs.
 
   // r41-compare-isos (2026-05-25): single-call ISO comparison.
   // Pre-fix agents had to call get_grid_data N times sequentially then
@@ -1329,8 +1300,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.17',
-    tools: 30,
+    version: '2.1.18',
+    tools: 29,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
