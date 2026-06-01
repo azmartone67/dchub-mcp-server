@@ -597,10 +597,21 @@ function trialHeader(toolName, sessionId, refUrlDeveloper) {
   const override = TRIAL_HEADER_OVERRIDES[toolName];
   if (override) return override(sessionId, refUrlDeveloper);
   const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
-  return '🔒 **Free trial preview** of `' + toolName + '` — first result only. Full set unlocks with any plan below.\n\n' +
-         `👉 **[Free dev key](${redeem})** (60 sec, email only) · ` +
+  // r56-conv (2026-05-31): surface the NO-EMAIL claim path on the most-hit
+  // paywall surface (content[0].text — what LLM clients render). Previously
+  // only the email-redeem link + Stripe were here; the instant claim path
+  // lived only in structuredContent.human_message, which many clients ignore.
+  // The claimed dch_live_ key validates (mcp_dev_keys, tier:free) and unlocks
+  // the free-tier toolset. Honest about the session-init binding: the agent
+  // must add the key to its client and RECONNECT (tier is bound at init), not
+  // just retry in-session. Pro-only tools (grid/fiber) still need Developer.
+  return '🔒 **Free trial preview** of `' + toolName + '` — first result only.\n\n' +
+         '⚡ **Agents — unlock with no email, no browser:** claim an instant key, add it to your MCP client, reconnect:\n' +
+         '`POST https://dchub.cloud/api/v1/keys/claim` with `{"client_name":"<your-agent>"}` → returns `{api_key}`; ' +
+         'set it as the `X-API-Key` header and reconnect. Unlocks the free-tier toolset.\n\n' +
+         `👉 Prefer a link? **[Free dev key (email)](${redeem})** · ` +
          `**[Starter — $9/mo](${STARTER_URL})** · ` +
-         `**[Developer — $49/mo](${refUrlDeveloper})**\n\n---\n\n`;
+         `**[Developer — $49/mo](${refUrlDeveloper})** — Developer adds full \`${toolName}\` + all ISO grid intel + fiber routes.\n\n---\n\n`;
 }
 
 
