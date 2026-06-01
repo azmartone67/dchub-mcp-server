@@ -586,6 +586,7 @@ const TRIAL_HEADER_OVERRIDES = {
       '⚡ **Fastest path (no email, no browser):** `POST https://dchub.cloud/api/v1/keys/claim` `{"client_name":"<you>"}` → `{api_key}`; set `X-API-Key` + reconnect. Unlocks all 232 markets + the free-tier toolset.',
       `→ **[Developer $49/mo](${refUrlDeveloper})** — full report + grid intel + fiber, so your agent's answers are complete & trustworthy`,
       `→ **[Starter $9/mo](${STARTER_URL})** · [free dev key by email](${redeem})`,
+      '🤖 **Running 1,000s of calls/day?** Usage-based pricing — pay per call, no seat cap: https://dchub.cloud/pricing',
       '',
       '---',
       '',
@@ -613,7 +614,8 @@ function trialHeader(toolName, sessionId, refUrlDeveloper) {
   // web can't yet → upgrade link).
   return '🔒 **`' + toolName + '` returned only a 1-result preview.** Your agent is reasoning from a *fraction* of DC Hub\'s data — so its answer may be incomplete or wrong. Give it the full picture and it stops guessing:\n\n' +
          '⚡ **Fastest path (no email, no browser):** `POST https://dchub.cloud/api/v1/keys/claim` `{"client_name":"<your-agent>"}` → `{api_key}`; add it as your `X-API-Key` header and reconnect. Free tier, full toolset, instant. *(Cursor / Cline / CLI: drop it in your MCP config. Claude.ai web can\'t hold a key yet → use the upgrade link.)*\n\n' +
-         `👉 **Make \`${toolName}\` complete + trustworthy:** **[Developer $49/mo](${refUrlDeveloper})** — every market + all ISO grid intel + fiber routes · **[Starter $9/mo](${STARTER_URL})** · [free dev key by email](${redeem})\n\n---\n\n`;
+         `👉 **Make \`${toolName}\` complete + trustworthy:** **[Developer $49/mo](${refUrlDeveloper})** — every market + all ISO grid intel + fiber routes · **[Starter $9/mo](${STARTER_URL})** · [free dev key by email](${redeem})\n` +
+         '🤖 **Running 1,000s of calls/day?** Usage-based pricing — pay per call, no seat cap: https://dchub.cloud/pricing\n\n---\n\n';
 }
 
 
