@@ -371,6 +371,52 @@ async function checkTrialEligibility(session_id, tool_name) {
   }
 }
 
+// r61-conv (2026-06-01): inline auto-mint a working dch_trial_ key on the
+// preview/paywall path. The #1 conversion blocker is IDENTITY — 118/116
+// users hammer get_grid_intelligence/get_fiber_intel, see a 1-result
+// preview, hit a dead wall, and leave no email. POST /api/v1/keys/auto-mint
+// (routes/auto_trial.py) mints a dch_trial_ key resolved as IDENTIFIED tier
+// (1,000 calls/day, 30-day expiry) and DEDUPES on (ip_hash, ua) within 24h,
+// so a retrying agent reuses the same key instead of minting N. We forward
+// the real agent User-Agent so dedup keys on the actual caller (the MCP
+// server's own IP would otherwise collapse them). The agent gets a working
+// key in the SAME response → retries with X-API-Key → succeeds; the human
+// gets a one-click email-redeem CTA (POST /api/v1/keys/auto-trial/redeem).
+//
+// CRITICAL: returns null on ANY failure — the caller MUST fall back to the
+// exact existing preview/paywall behavior. Never throws, never blocks the
+// tool call. Short timeout (1500ms, same as trial-check) keeps it off the
+// critical-path latency budget.
+async function mintAutoTrial(tool_name) {
+  try {
+    const c = getCtx();
+    const url = new URL('/api/v1/keys/auto-mint', API_BASE);
+    if (tool_name) url.searchParams.set('tool', tool_name);
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Internal-Key': INTERNAL_KEY,
+    };
+    // Forward the real agent identity so the backend's (ip_hash, ua) dedup
+    // keys on the caller, not on this server. UA is the stable signal here.
+    if (c.user_agent) headers['User-Agent'] = c.user_agent;
+    if (c.session_id) headers['X-MCP-Session'] = c.session_id;
+    if (c.platform)   headers['X-MCP-Platform'] = c.platform;
+    const resp = await fetch(url.toString(), {
+      method: 'POST',
+      headers,
+      body: '{}',
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data || data.ok === false || !data.api_key) return null;
+    return data;  // { ok, api_key, expires_at, tier, daily_calls, trial_days, days_remaining, reused, ... }
+  } catch (err) {
+    console.error('[auto_mint] failed:', err && err.message);
+    return null;
+  }
+}
+
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -821,8 +867,44 @@ function trackedTool(srv, name, description, schema, handler) {
             // 3,374 hits, 0 free keys claimed. With isError=true,
             // agents propagate the message verbatim → user sees the
             // $9 Stripe link + free-key URL directly.
+            //
+            // r61-conv (2026-06-01): inline auto-mint a WORKING dch_trial_
+            // key here so the agent can retry immediately (no human, no
+            // email) AND surface a one-click email-redeem CTA so the user
+            // has an identity-capture path. Mint is best-effort: on ANY
+            // failure _mint is null and we fall back to the EXACT prior
+            // return below (additive-only — original fields untouched).
+            const _mint = await mintAutoTrial(name);
+            let _autoMintText = '';
+            let _autoMintSC = {};
+            if (_mint && _mint.api_key) {
+              const _days = _mint.days_remaining != null ? _mint.days_remaining : (_mint.trial_days || 30);
+              const _calls = _mint.daily_calls || 1000;
+              const _redeemHref = 'https://dchub.cloud/api/v1/keys/auto-trial/redeem';
+              // Markdown CTA appended ABOVE the existing preview footer so
+              // agents that render prose retry with the real key in one step.
+              _autoMintText =
+                '\n\n---\n' +
+                '✅ **Instant trial key minted — no email, no browser. Retry `' + name + '` now to get the full result:**\n' +
+                '`X-API-Key: ' + _mint.api_key + '`  (' + _calls + ' calls/day, ' + _days + ' day(s) left)\n\n' +
+                '\u{1F4E7} **Keep it / make it yours (one click, binds to your account, extends to 365 days):**\n' +
+                '`curl -X POST ' + _redeemHref + ' -H \'Content-Type: application/json\' -d \'{"api_key":"' + _mint.api_key + '","email":"YOUR_EMAIL"}\'`\n';
+              _autoMintSC = {
+                // r61-conv: the agent should detect this and retry with the key.
+                auto_trial_key:   _mint.api_key,
+                auto_trial_tier:  _mint.tier || 'IDENTIFIED',
+                auto_trial_daily_calls: _calls,
+                auto_trial_expires_at:  _mint.expires_at || null,
+                auto_trial_days_remaining: _days,
+                // one-click email-redeem (identity capture) for the human.
+                auto_trial_redeem_endpoint: _redeemHref,
+                auto_trial_redeem_payload:  { api_key: _mint.api_key, email: '<your-email>' },
+                retry_with_header: { 'X-API-Key': _mint.api_key },
+                retry_instructions: 'Set the X-API-Key header to auto_trial_key and call ' + name + ' again for the full result.',
+              };
+            }
             return {
-              content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) }],
+              content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText }],
               isError: true,
               structuredContent: {
                 trial_preview: true,
@@ -830,6 +912,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 signup_url: _refUrl(SIGNUP_URL),
                 upgrade_url: _refUrl(UPGRADE_URL),
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
+    ..._autoMintSC, /* r61-conv: present only when mint succeeded */
               },
             };
           }
@@ -888,8 +971,37 @@ Free tier covers **100 calls/day** across:
         // 7-day data before this: 990 unique sessions hit paywall,
         // 0 claimed a key. Tier-copy fix landed but didn't move
         // conversion because the message never reached the user.
+        //
+        // r61-conv (2026-06-01): same inline auto-mint as the preview
+        // branch. Best-effort: on ANY failure _mint2 is null and the
+        // return falls back to the EXACT prior hard-wall behavior.
+        const _mint2 = await mintAutoTrial(name);
+        let _autoMintText2 = '';
+        let _autoMintSC2 = {};
+        if (_mint2 && _mint2.api_key) {
+          const _days2 = _mint2.days_remaining != null ? _mint2.days_remaining : (_mint2.trial_days || 30);
+          const _calls2 = _mint2.daily_calls || 1000;
+          const _redeemHref2 = 'https://dchub.cloud/api/v1/keys/auto-trial/redeem';
+          _autoMintText2 =
+            '\n\n---\n' +
+            '✅ **Instant trial key minted — no email, no browser. Retry `' + name + '` now with the full toolset:**\n' +
+            '`X-API-Key: ' + _mint2.api_key + '`  (' + _calls2 + ' calls/day, ' + _days2 + ' day(s) left)\n\n' +
+            '\u{1F4E7} **Keep it / make it yours (one click, binds to your account, extends to 365 days):**\n' +
+            '`curl -X POST ' + _redeemHref2 + ' -H \'Content-Type: application/json\' -d \'{"api_key":"' + _mint2.api_key + '","email":"YOUR_EMAIL"}\'`\n';
+          _autoMintSC2 = {
+            auto_trial_key:   _mint2.api_key,
+            auto_trial_tier:  _mint2.tier || 'IDENTIFIED',
+            auto_trial_daily_calls: _calls2,
+            auto_trial_expires_at:  _mint2.expires_at || null,
+            auto_trial_days_remaining: _days2,
+            auto_trial_redeem_endpoint: _redeemHref2,
+            auto_trial_redeem_payload:  { api_key: _mint2.api_key, email: '<your-email>' },
+            retry_with_header: { 'X-API-Key': _mint2.api_key },
+            retry_instructions: 'Set the X-API-Key header to auto_trial_key and call ' + name + ' again for the full result.',
+          };
+        }
         return {
-          content: [{ type: 'text', text: _isKeyed ? _mdKeyed : _mdAnon }],
+          content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 }],
           isError: true,
           structuredContent: {
             error: 'paid_only',
@@ -898,6 +1010,7 @@ Free tier covers **100 calls/day** across:
             upgrade_url: UPGRADE_URL,
             signup_url: _isKeyed ? null : SIGNUP_URL,
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
+    ..._autoMintSC2, /* r61-conv: present only when mint succeeded */
           },
         };
       }
@@ -968,7 +1081,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.19' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.21' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1360,7 +1473,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.19',
+    version: '2.1.21',
     tools: 30,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
