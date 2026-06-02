@@ -381,7 +381,9 @@ async function checkTrialEligibility(session_id, tool_name) {
 // the real agent User-Agent so dedup keys on the actual caller (the MCP
 // server's own IP would otherwise collapse them). The agent gets a working
 // key in the SAME response → retries with X-API-Key → succeeds; the human
-// gets a one-click email-redeem CTA (POST /api/v1/keys/auto-trial/redeem).
+// owner gets a usage-based purchase CTA (METERED_URL) for permanent access.
+// (r62-conv: replaced the prior email-redeem CTA — an autonomous agent has
+// no human email to POST, so that path was structurally un-actionable.)
 //
 // CRITICAL: returns null on ANY failure — the caller MUST fall back to the
 // exact existing preview/paywall behavior. Never throws, never blocks the
@@ -620,6 +622,19 @@ function phase9L_clean_preview(header, body) {
 //   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
 //   Pro $199        → eVq5kE4oOfs13mleGuaZi0h
 const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
+
+// r62-conv (2026-06-01): live usage-based / metered Stripe Payment Link —
+// "Pay for usage, not seats" (no per-seat ceiling, scales with agent call
+// volume). This is the OWNER-facing purchase path for autonomous agents:
+// the human owner completes Stripe checkout once and an API key is issued
+// for the call volume picked (delivered by email right after checkout per
+// the live pricing copy). Verified live 2026-06-01 against
+// dchub-frontend/pricing.html (the "🤖 High-volume agent?" CTA, rendered on
+// https://dchub.cloud/pricing) and corroborated by GET /api/v1/billing/health
+// (metered_readiness.live_ready=true, metered_keys_linked=1). NOTE: this
+// metered link is NOT in routes/_stripe_links.py — pricing.html is its
+// source of truth; keep them in sync if it ever changes.
+const METERED_URL = 'https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i';
 
 const TRIAL_HEADER_OVERRIDES = {
   get_market_intel: (sessionId, refUrlDeveloper) => {
@@ -880,15 +895,18 @@ function trackedTool(srv, name, description, schema, handler) {
             if (_mint && _mint.api_key) {
               const _days = _mint.days_remaining != null ? _mint.days_remaining : (_mint.trial_days || 30);
               const _calls = _mint.daily_calls || 1000;
-              const _redeemHref = 'https://dchub.cloud/api/v1/keys/auto-trial/redeem';
-              // Markdown CTA appended ABOVE the existing preview footer so
-              // agents that render prose retry with the real key in one step.
+              // r62-conv (2026-06-01): the prior CTA here was an email-redeem
+              // curl (POST /keys/auto-trial/redeem with an email) — structurally
+              // un-actionable by an autonomous agent (no human email to supply).
+              // Replace it with the OWNER-facing usage-based purchase link: the
+              // human owner buys metered access once (no per-seat cap) and the
+              // backend issues a durable key. The freshly-minted dch_trial_ key
+              // above remains the INSTANT, zero-touch unblock (retry now).
               _autoMintText =
                 '\n\n---\n' +
                 '✅ **Instant trial key minted — no email, no browser. Retry `' + name + '` now to get the full result:**\n' +
                 '`X-API-Key: ' + _mint.api_key + '`  (' + _calls + ' calls/day, ' + _days + ' day(s) left)\n\n' +
-                '\u{1F4E7} **Keep it / make it yours (one click, binds to your account, extends to 365 days):**\n' +
-                '`curl -X POST ' + _redeemHref + ' -H \'Content-Type: application/json\' -d \'{"api_key":"' + _mint.api_key + '","email":"YOUR_EMAIL"}\'`\n';
+                '\u{1F916} **Owner: unlock every call permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
               _autoMintSC = {
                 // r61-conv: the agent should detect this and retry with the key.
                 auto_trial_key:   _mint.api_key,
@@ -896,9 +914,11 @@ function trackedTool(srv, name, description, schema, handler) {
                 auto_trial_daily_calls: _calls,
                 auto_trial_expires_at:  _mint.expires_at || null,
                 auto_trial_days_remaining: _days,
-                // one-click email-redeem (identity capture) for the human.
-                auto_trial_redeem_endpoint: _redeemHref,
-                auto_trial_redeem_payload:  { api_key: _mint.api_key, email: '<your-email>' },
+                // r62-conv: owner-facing usage-based purchase path (replaces the
+                // un-actionable email-redeem endpoint). Human owner checks out
+                // once; backend issues a durable key sized to chosen volume.
+                owner_purchase_url:    METERED_URL,
+                owner_purchase_model:  'usage_based_metered',
                 retry_with_header: { 'X-API-Key': _mint.api_key },
                 retry_instructions: 'Set the X-API-Key header to auto_trial_key and call ' + name + ' again for the full result.',
               };
@@ -981,21 +1001,22 @@ Free tier covers **100 calls/day** across:
         if (_mint2 && _mint2.api_key) {
           const _days2 = _mint2.days_remaining != null ? _mint2.days_remaining : (_mint2.trial_days || 30);
           const _calls2 = _mint2.daily_calls || 1000;
-          const _redeemHref2 = 'https://dchub.cloud/api/v1/keys/auto-trial/redeem';
+          // r62-conv (2026-06-01): same swap as the preview branch — replace the
+          // un-actionable email-redeem curl with the OWNER-facing usage-based
+          // purchase link. Minted dch_trial_ key stays the instant unblock.
           _autoMintText2 =
             '\n\n---\n' +
             '✅ **Instant trial key minted — no email, no browser. Retry `' + name + '` now with the full toolset:**\n' +
             '`X-API-Key: ' + _mint2.api_key + '`  (' + _calls2 + ' calls/day, ' + _days2 + ' day(s) left)\n\n' +
-            '\u{1F4E7} **Keep it / make it yours (one click, binds to your account, extends to 365 days):**\n' +
-            '`curl -X POST ' + _redeemHref2 + ' -H \'Content-Type: application/json\' -d \'{"api_key":"' + _mint2.api_key + '","email":"YOUR_EMAIL"}\'`\n';
+            '\u{1F916} **Owner: unlock every call permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
           _autoMintSC2 = {
             auto_trial_key:   _mint2.api_key,
             auto_trial_tier:  _mint2.tier || 'IDENTIFIED',
             auto_trial_daily_calls: _calls2,
             auto_trial_expires_at:  _mint2.expires_at || null,
             auto_trial_days_remaining: _days2,
-            auto_trial_redeem_endpoint: _redeemHref2,
-            auto_trial_redeem_payload:  { api_key: _mint2.api_key, email: '<your-email>' },
+            owner_purchase_url:    METERED_URL,
+            owner_purchase_model:  'usage_based_metered',
             retry_with_header: { 'X-API-Key': _mint2.api_key },
             retry_instructions: 'Set the X-API-Key header to auto_trial_key and call ' + name + ' again for the full result.',
           };
@@ -1081,7 +1102,7 @@ Free tier covers **100 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.21' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.22' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1473,7 +1494,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.21',
+    version: '2.1.22',
     tools: 30,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
