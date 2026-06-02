@@ -337,6 +337,12 @@ async function validateKey(api_key) {
       tier: data.tier || 'free',
       developer_id: data.developer_id || null,
       email: data.email || null,
+      // r62c-conv: backend stamps source:'auto_trial' ONLY after
+      // validate_trial_key() confirms a live, unexpired trial key in
+      // auto_trial_keys. Unforgeable (a fake dch_trial_ string fails that
+      // check → valid:false) and distinct from email keys (mcp_dev_keys
+      // path has no source) — so this safely gates the grid/fiber taste.
+      is_trial: data.valid === true && data.source === 'auto_trial',
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -523,8 +529,22 @@ const PRO_ONLY_TOOLS = new Set([
   'get_fiber_intel', 'get_dchub_recommendation',
 ]);
 
-function applyTierGate(toolName, params, tier, hasApiKey) {
+function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
+  // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
+  // after validate_trial_key() confirms a live, unexpired row in
+  // auto_trial_keys — unforgeable) unlocks the 2 highest-demand PRO tools
+  // (get_grid_intelligence, get_fiber_intel) as a capped TASTE. This is the
+  // lever that makes "mint → reconnect → FULL data → wow → upgrade" real:
+  // without it, the trial we hand out *on the grid/fiber paywall* can't unlock
+  // the very tool the agent came for (the 94% no-reconnect root cause).
+  // Bounded by the trial's 7-day expiry + per-key daily cap + ip/ua dedup.
+  // Email/regular free keys never hit this (they have no auto_trial source),
+  // so the paid conversion target is unchanged — this only upgrades the
+  // throwaway anon trial from "preview" to "time-boxed full taste".
+  if (isTrial === true && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+    return { allowed: true, params, trial_taste: true };
+  }
   // r46-conversion: keyed-free users get the 5 demand-tools through —
   // daily cap still applies at the worker layer (10/day).
   if (tier === 'free' && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true };
@@ -537,35 +557,38 @@ function applyTierGate(toolName, params, tier, hasApiKey) {
 }
 
 // ── buildAutoMintBlock: the agent-facing unlock CTA for a fresh trial key ───
-// r62b-conv (2026-06-01): replaces the per-site inline copy that made a FALSE
-// promise on Pro tools ("retry get_grid_intelligence for the full result" — a
-// trial key is IDENTIFIED tier and can't, so the agent retried into a hard
-// paywall). This version tells the truth and is machine-actionable:
+// r62c-conv (2026-06-01): the trial key now unlocks a 7-day capped TASTE of
+// get_grid_intelligence + get_fiber_intel (see applyTierGate trial_taste), so
+// "retry <grid/fiber> with this key for the full result" is finally TRUE. The
+// ONLY tools a trial still can't unlock are analyze_site, compare_sites,
+// get_dchub_recommendation (Pro-only, not in the preview set). The message:
 //   • LEADS with the working key + the single header action.
-//   • If the trial key genuinely unlocks THIS tool (IDENTIFIED-tier tool) →
-//     "retry <tool> for the full result" (true).
-//   • If it's a PRO-only tool → name the tools the key DOES unlock right now
-//     (live grid fuel-mix, market intel, pipeline, queue, M&A) and route the
-//     deep Pro brief to the owner's metered purchase (no signup form).
+//   • grid/fiber + the email-tier tools → "retry <tool> for the FULL result".
+//   • the 3 deep Pro tools → honest: key unlocks grid/fiber + 18 more; the
+//     deep recommendation/site-scoring needs Pro/metered.
+//   • Note the unlock takes effect on the next connect WITH the key configured
+//     (MCP reads the key at session init), not necessarily a same-call retry.
 //   • structuredContent carries retry_with_header + accurate retry_instructions
 //     + unlocked_tools so a programmatic agent can act without parsing prose.
 // Returns {text, sc}; {'',{}} if no key (caller falls back to prior behavior).
 const _TRIAL_UNLOCKED_HINT =
-  'get_grid_data (live fuel mix + demand + prices), get_market_intel, get_pipeline, get_interconnection_queue, list_transactions';
+  'get_grid_intelligence + get_fiber_intel (full), get_grid_data, get_market_intel, get_pipeline, get_interconnection_queue, list_transactions';
 function buildAutoMintBlock(mint, name) {
   if (!mint || !mint.api_key) return { text: '', sc: {} };
   const days  = mint.days_remaining != null ? mint.days_remaining : (mint.trial_days || 7);
   const calls = mint.daily_calls || 1000;
-  const proOnly = PRO_ONLY_TOOLS.has(name);  // trial (IDENTIFIED) can't unlock these
+  // Trial unlocks everything EXCEPT the 3 deep Pro tools (Pro-only AND not in
+  // the always-preview/taste set).
+  const stillPro = PRO_ONLY_TOOLS.has(name) && !ALWAYS_PARTIAL_PREVIEW.has(name);
   const text =
     '\n\n---\n' +
-    '✅ **Free trial key — no email, no signup. Add this header and keep going:**\n' +
+    '✅ **Free trial key — no email, no signup. Add this header, reconnect, and call again:**\n' +
     '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
-    (proOnly
-      ? ('→ It unlocks ' + _TRIAL_UNLOCKED_HINT + ' and 15+ more DC Hub tools right now.\n' +
-         '→ `' + name + '` is a Pro tool — the data above is your free taste; the full multi-ISO / all-routes brief needs Pro or metered access.\n')
-      : ('→ Retry `' + name + '` with that header now for the full (ungated) result.\n')) +
-    '\u{1F916} **Owner: unlock every call permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
+    (stillPro
+      ? ('→ It unlocks ' + _TRIAL_UNLOCKED_HINT + ' and 18+ more DC Hub tools.\n' +
+         '→ `' + name + '` is a deep Pro tool — the owner can unlock it permanently (usage-based, no signup) below.\n')
+      : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n')) +
+    '\u{1F916} **Owner: unlock everything permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
@@ -573,11 +596,11 @@ function buildAutoMintBlock(mint, name) {
     auto_trial_expires_at:     mint.expires_at || null,
     auto_trial_days_remaining: days,
     retry_with_header:         { 'X-API-Key': mint.api_key },
-    retry_instructions: proOnly
-      ? ('Add header X-API-Key: ' + mint.api_key + ' and you can call get_grid_data, get_market_intel, get_pipeline, get_interconnection_queue, list_transactions and 15+ more tools now. ' + name + ' is Pro — the owner can unlock it permanently (usage-based, no signup) at ' + METERED_URL + '.')
-      : ('Add header X-API-Key: ' + mint.api_key + ' and call ' + name + ' again for the full result.'),
-    trial_unlocks_this_tool:   !proOnly,
-    unlocked_tools:            ['get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
+    retry_instructions: stillPro
+      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it at ' + METERED_URL + '.')
+      : ('Add header X-API-Key: ' + mint.api_key + ' (configure it on the MCP server and reconnect), then call ' + name + ' again for the full result.'),
+    trial_unlocks_this_tool:   !stillPro,
+    unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
     owner_purchase_url:        METERED_URL,
     owner_purchase_model:      'usage_based_metered',
   };
@@ -939,7 +962,7 @@ function trackedTool(srv, name, description, schema, handler) {
     }
     try {
       let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
-      const gate = applyTierGate(name, args, _gateTier, !!c.api_key);
+      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if (_gateTier === 'free' && PAID_ONLY_TOOLS.has(name)) {
@@ -981,7 +1004,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 recordSessionUpgrade(c.platform, _newTier);
                 _gateTier = _newTier;
                 // Re-evaluate the gate at the new tier — should now allow.
-                const _gate2 = applyTierGate(name, args, _gateTier, true);
+                const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
                 if (_gate2.allowed) {
                   return withCitation(await handler(args));
                 }
@@ -1628,6 +1651,7 @@ app.post('/mcp', async (req, res) => {
             api_key: apiKey,
             platform,
             tier,
+            is_trial: validation.is_trial === true,  // r62c-conv: trial-taste gate
             developer_id: validation.developer_id,
             email: validation.email,
             // r46 (2026-05-25): attribution for paywall blocks. Forwarded
