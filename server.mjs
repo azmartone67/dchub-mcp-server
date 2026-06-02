@@ -1357,7 +1357,7 @@ function createServer() {
   const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
   trackedTool(srv, 'get_grid_scoreboard',
-    'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~12 European bidding zones (Germany/Frankfurt, France/Paris, Netherlands/Amsterdam, Ireland/Dublin, Spain, Belgium, Poland, Austria, Nordics — via ENTSO-E) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~12 European bidding zones (Germany/Frankfurt, France/Paris, Netherlands/Amsterdam, Ireland/Dublin, Spain, Belgium, Poland, Austria, Nordics — via ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
       const results = await Promise.all(_US_ISOS.map(iso =>
@@ -1443,6 +1443,33 @@ function createServer() {
         grids.push({ iso: 'AEMO', region: 'Australia NEM (AEMO)', error: (au && au.error) || 'no live snapshot' });
       }
 
+      // TW / TAIPOWER (#60, APAC #2) — full live fuel mix from Taipower's
+      // real-time generation. renewable = wind+solar+hydro (US/UK/EU definition),
+      // so Taiwan ranks apples-to-apples. Top APAC DC market (TSMC + hyperscalers).
+      const tw = await callAPI('/api/v1/iso/tw/snapshot', {});
+      const twm = tw && tw.metrics;
+      if (twm && _num(twm.generation_total_mw) > 0) {
+        grids.push({
+          iso: 'TAIPOWER',
+          region: 'Taiwan (Taipower)',
+          country: 'TW',
+          demand_mw: _num(twm.demand_mw) || null,
+          renewable_share_pct: _num(twm.renewable_pct),
+          gas_share_pct: _num(twm.gas_pct),
+          mix_period: 'Taipower genary (live)',
+          fuel_mw: {
+            gas: _num(twm.fuel_gas_mw), nuclear: _num(twm.fuel_nuclear_mw),
+            coal: _num(twm.fuel_coal_mw), wind: _num(twm.fuel_wind_mw),
+            solar: _num(twm.fuel_solar_mw), hydro: _num(twm.fuel_hydro_mw),
+            oil: _num(twm.fuel_oil_mw),
+          },
+          generation_total_mw: _num(twm.generation_total_mw),
+          note: 'renewable_share_pct = wind+solar+hydro (matches US/UK/EU). Live via Taipower.',
+        });
+      } else {
+        grids.push({ iso: 'TAIPOWER', region: 'Taiwan (Taipower)', error: (tw && tw.error) || 'no live snapshot' });
+      }
+
       // --- LIVE EU grids (#60, ENTSO-E Transparency — ~12 bidding zones) ---
       // One token unlocks many zones. /iso/eu/snapshot returns per-zone fuel
       // mix with renewable_pct ALREADY computed as wind+solar+hydro (the same
@@ -1486,8 +1513,8 @@ function createServer() {
         ok: true,
         count: ranked.length,
         ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
-        coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Australia NEM (AEMO)',
-        source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency (all live); AU: AEMO NEM (live)',
+        coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO)',
+        source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency; TW: Taipower (all live); AU: AEMO NEM (live)',
         grids: [...ranked, ...errored],
         partial_grids: partial,
       };
