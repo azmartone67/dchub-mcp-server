@@ -1,9 +1,18 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
-Source of truth: `https://dchub.cloud/.well-known/mcp.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **v2.1.19 · 30 tools** (verified via tools/list 2026-05-31) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
+Live server **30 tools** · official registry listing `cloud.dchub/mcp-server` **v2.2.2** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
-> ✅ MANIFEST FIXED (2026-05-31): the canonical Flask manifest now includes `get_gas_index` + `get_grid_scoreboard` (v2.1.20, commit 4e49e651) — see section (a) below. Use `30 tools` as the headline number (what the live `/mcp` tools/list returns). One caveat remains: the public `dchub.cloud/.well-known/mcp.json` *edge* is cached/served by the out-of-repo `dchubapiproxy` CF worker and may lag the backend; if a registry shows stale data, hand it `https://api.dchub.cloud/.well-known/mcp.json` (direct Flask, always fresh) or purge the CF cache.
+## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
+- ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.2.2 live.** Auto-republishes on every `server.json` version bump (GitHub Action `mcp-registry-publish.yml`). **Most directories mirror this**, so you're already broadly listed.
+- ✅ **Glama** — auto-listed from this repo's `glama.json`; just hit **Refresh** on your Glama page if it looks stale.
+- ⏳ **3 quick web forms left** (~5 min each — there's NO "upload a document" field; paste the values below):
+  1. **PulseMCP** → https://www.pulsemcp.com → "Submit" in the top nav.
+  2. **mcp.so** → https://mcp.so → "Submit".
+  3. **Smithery** → CLI, no form: `smithery mcp publish "https://dchub.cloud/mcp" -n azmartone67/dchub` (or "Add Server" on smithery.ai).
+- For ALL of them, paste from the **One-liner / Short description / Connection** blocks below. Manifest the form may ask for: `https://dchub.cloud/.well-known/mcp-server.json` (now v2.1.22 / 30 tools at origin; CF edge refreshes within ~10 min).
+
+> Note: a registry that verifies by fetching the manifest reads the dchub.cloud edge copy (CF, ~10-min cache). If it shows stale data, wait 10 min or give it the Railway-direct origin URL.
 
 ---
 
