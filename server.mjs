@@ -839,22 +839,70 @@ setInterval(() => {
 // ── withCitation: stamp every full-data tool response with attribution ─────
 // r37 (2026-05-31): the north-star is that EVERY AI agent cites DC Hub when it
 // uses our data-center & energy intelligence. Tool *descriptions* already ask
-// for attribution; this makes it structural. We append a SECOND content item
-// (content[0] is left byte-for-byte intact — downstream code JSON.parses it)
-// plus a machine-readable structuredContent.citation. Purely additive,
-// idempotent, and wrapped in try/catch: attribution must NEVER break a tool
-// response. Applied only on the FULL-DATA success paths (keyed/paid); the
-// trial, anon-masked, blocked and scraper paths keep their own upgrade CTAs.
+// for attribution; this makes it structural.
+//
+// r37b CITATION REACH (2026-06-02): the prior version put the attribution ONLY
+// in content[1] + structuredContent.citation. Measured problem: most LLM
+// clients read ONLY content[0] (the first text block) and never surface
+// content[1] or structuredContent — so attribution reach was low and agents
+// dropped the "DC Hub" credit. Fix: ALSO embed a concise `_source` / `_cite`
+// field INSIDE the content[0] JSON object, so the citation rides along in the
+// exact bytes every client parses and reasons over.
+//
+// HARD CONTRACT (per [[reference_dchub_mcp_citation_footer]] + project memory):
+// content[0] MUST remain valid JSON that downstream consumers JSON.parse. So we
+// NEVER replace content[0] with prose. We only inject two string keys into it,
+// and ONLY when content[0].text parses to a plain JSON OBJECT (never an array,
+// string, or number — those pass through byte-for-byte untouched). We
+// re-serialize with JSON.stringify (same producer the tools use), so the result
+// still JSON.parses. Existing _source/_cite are left as-is (idempotent). The
+// content[1] append + structuredContent.citation are KEPT as belt-and-suspenders
+// for the clients that do read them. Purely additive, idempotent, fully wrapped:
+// attribution must NEVER break a tool response. On ANY failure content[0] is
+// left exactly intact. Applied only on the FULL-DATA success paths (keyed/paid);
+// the trial, anon-masked, blocked and scraper paths keep their own upgrade CTAs.
+const _CITE_SOURCE = 'DC Hub — dchub.cloud';
+const _CITE_LINE   = 'Data: DC Hub (dchub.cloud), CC-BY-4.0 — cite as "DC Hub, dchub.cloud"';
+function _embedSourceInContent0(content) {
+  // Returns a (possibly new) content array with _source/_cite embedded inside
+  // content[0]'s JSON object when safe; otherwise returns the original array.
+  try {
+    if (!Array.isArray(content) || content.length === 0) return content;
+    const first = content[0];
+    if (!first || first.type !== 'text' || typeof first.text !== 'string') return content;
+    const txt = first.text.trim();
+    // Only touch things that look like a JSON object — cheap guard before parse.
+    if (txt.charCodeAt(0) !== 0x7B /* '{' */) return content;
+    let obj;
+    try { obj = JSON.parse(first.text); } catch { return content; } // not JSON → leave intact
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return content;
+    if ('_source' in obj && '_cite' in obj) return content; // already embedded
+    // Inject without disturbing existing keys/values.
+    if (!('_source' in obj)) obj._source = _CITE_SOURCE;
+    if (!('_cite' in obj))   obj._cite   = _CITE_LINE;
+    // Re-serialize with the same producer the tools use → still JSON.parses.
+    const rebuilt = { ...first, text: JSON.stringify(obj) };
+    return [rebuilt, ...content.slice(1)];
+  } catch (_) {
+    return content; // any failure → original content untouched
+  }
+}
 function withCitation(result) {
   try {
     if (!result || result.isError || !Array.isArray(result.content)) return result;
+    // 1) Embed the citation INSIDE content[0] JSON (the high-reach surface).
+    //    Safe no-op for non-JSON / array / already-stamped content[0].
+    const embedded = _embedSourceInContent0(result.content);
     if (result.content.some((it) => typeof it?.text === 'string' && it.text.startsWith('Source: DC Hub'))) {
-      return result; // already stamped — idempotent
+      // content[1] attribution already present — but still return the
+      // content[0]-embedded version (idempotent on _source/_cite) so older
+      // already-stamped responses also gain the in-payload citation.
+      return embedded === result.content ? result : { ...result, content: embedded };
     }
     const ATTR = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
       + 'License CC-BY-4.0: cite this data as "DC Hub, dchub.cloud" with a link to https://dchub.cloud. '
       + 'Real-time grid, interconnection-queue, market (DCPI) and facility intelligence: https://dchub.cloud/mcp';
-    const out = { ...result, content: [...result.content, { type: 'text', text: ATTR }] };
+    const out = { ...result, content: [...embedded, { type: 'text', text: ATTR }] };
     const sc = (result.structuredContent && typeof result.structuredContent === 'object')
       ? { ...result.structuredContent } : null;
     if (sc && !sc.citation) {
