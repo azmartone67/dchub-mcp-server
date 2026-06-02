@@ -580,15 +580,27 @@ function buildAutoMintBlock(mint, name) {
   // Trial unlocks everything EXCEPT the 3 deep Pro tools (Pro-only AND not in
   // the always-preview/taste set).
   const stillPro = PRO_ONLY_TOOLS.has(name) && !ALWAYS_PARTIAL_PREVIEW.has(name);
+  // r67-conv (2026-06-02): surface the KEY-BOUND pair-code upgrade path. The
+  // /upgrade?key=<this trial key>&tool= endpoint mints a pair-code, 302s the
+  // human to /redeem/DCM-XXXX, and on Stripe checkout the webhook flips THIS
+  // SAME api_key to a paid tier (redeem_pair_code in pair_code.py + main.py
+  // webhook). So the agent hands the human ONE link, they pay once, and the
+  // agent's existing key auto-upgrades — no key swap, no copy-paste. This
+  // replaces the prior generic METERED-only owner CTA (kept as a secondary
+  // usage-based option) which had no key binding, so payments never attached
+  // to the calling key.
+  const upgradeUrl = 'https://dchub.cloud/upgrade?key=' + encodeURIComponent(mint.api_key) + '&tool=' + encodeURIComponent(name || '');
   const text =
     '\n\n---\n' +
     '✅ **Free trial key — no email, no signup. Add this header, reconnect, and call again:**\n' +
     '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
     (stillPro
       ? ('→ It unlocks ' + _TRIAL_UNLOCKED_HINT + ' and 18+ more DC Hub tools.\n' +
-         '→ `' + name + '` is a deep Pro tool — the owner can unlock it permanently (usage-based, no signup) below.\n')
+         '→ `' + name + '` is a deep Pro tool — make it permanent below.\n')
       : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n')) +
-    '\u{1F916} **Owner: unlock everything permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
+    '\u{1F517} **Make it permanent — one link, no key swap:** have the human open ' + upgradeUrl + '\n' +
+    '   → they pick a plan (Developer $49/mo or Pro $199/mo), pay once, and THIS key auto-upgrades. Your next call returns full data.\n' +
+    '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + METERED_URL + '\n';
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
@@ -603,6 +615,10 @@ function buildAutoMintBlock(mint, name) {
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
     owner_purchase_url:        METERED_URL,
     owner_purchase_model:      'usage_based_metered',
+    upgrade_url:               upgradeUrl,
+    upgrade_model:             'pair_code_key_bound',
+    upgrade_instructions:      'Have the human open upgrade_url and complete checkout (Developer $49/mo or Pro $199/mo). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
+    pricing:                   { developer_usd_month: 49, pro_usd_month: 199, metered_url: METERED_URL },
   };
   return { text, sc };
 }
@@ -669,9 +685,16 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   if (hasApiKey) return (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
   let trimmed = parsed;
   try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed) : parsed; } catch(e) {}
+  // r67-conv (2026-06-02): fixed two bugs here — (1) "Get Pro for $49/mo" was
+  // wrong ($49 = Developer; Pro = $199 — canonical in tier_registry.py /
+  // _stripe_links.py); (2) the "free dev key" link pointed at
+  // /api/v1/redeem/<session_id>, which returns "Invalid session ID" for an MCP
+  // session id (that path expects a DCM- pair code, not a session id) — a dead
+  // CTA. Now: accurate prices → the working /pricing page, and the honest note
+  // that reconnecting auto-mints a free trial key (no email) via the gate.
   const ref = '?ref=mcp-trial&tool=' + encodeURIComponent(toolName);
-  const nudge = '\u{1F512} **Free trial preview** of `' + toolName + '` — first result only. Pro returns the full set + every paid tool.\n' +
-                '\u{1F449} **[Get Pro for $49/mo](https://dchub.cloud/ai#pricing' + ref + ')** · [Get your free dev key (60 sec, just your email)](https://dchub.cloud/api/v1/redeem/' + ((c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session') + ')\n---\n';
+  const nudge = '\u{1F512} **Free trial preview** of `' + toolName + '` — first result only. A paid plan returns the full set + every paid tool.\n' +
+                '\u{1F449} **[See plans — Developer $49/mo · Pro $199/mo](https://dchub.cloud/pricing' + ref + ')** · or just reconnect: DC Hub auto-mints you a free trial key (no email, no signup).\n---\n';
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return nudge + body;
 }
