@@ -1274,12 +1274,19 @@ function createServer() {
   // The real per-ISO feed is /api/v1/grid/intelligence/<iso> (EIA hourly RTO):
   // generation_mix uses EIA fuel codes (COL/NG/NUC/SUN/WND/WAT/OTH; mw is a
   // STRING). Verified live across all 7 US ISOs. We fan out, parse, compute
-  // renewable & gas shares, and rank. (Intl HYDROQUEBEC/AESO/NORDPOOL aren't on
-  // this endpoint, so the scoreboard is the 7 US ISOs.)
+  // renewable & gas shares, and rank.
+  //
+  // r65 (2026-06-02, #60): + two LIVE international grids on their own snapshot
+  // feeds — GB/NGESO (Elexon Insights, full fuel mix) and AU/AEMO (AEMO NEM
+  // summary). GB ranks side-by-side with the US (renewable recomputed as
+  // wind+solar+hydro to MATCH the US definition; biomass shown separately).
+  // AU's summary feed has NO full fuel split, so it is listed UNRANKED in
+  // partial_grids with an honest variable-renewable FLOOR (utility wind+solar,
+  // excludes hydro + rooftop) + live price — never faked into the ranking.
   const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
   trackedTool(srv, 'get_grid_scoreboard',
-    'Live all-ISO grid scoreboard — all 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which US grid is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Source: EIA hourly RTO via DC Hub, ranked greenest-first by renewable share. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    'Live grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB rank by wind+solar+hydro share; AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights (live); AU = AEMO NEM (live), all via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
       const results = await Promise.all(_US_ISOS.map(iso =>
@@ -1299,6 +1306,7 @@ function createServer() {
         grids.push({
           iso,
           region: d.region || iso,
+          country: 'US',
           demand_mw: _num(d.demand_mw) || null,
           renewable_share_pct: pct(renew),
           gas_share_pct: pct(ng),
@@ -1307,15 +1315,74 @@ function createServer() {
           fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
         });
       }
+
+      // --- LIVE international grids (#60, r65) ---
+      const partial = [];
+      // GB / NGESO — Elexon full fuel mix. The snapshot exposes gas/nuclear/
+      // wind/solar/hydro/biomass/coal + generation_total; "other" = the
+      // remainder (oil/pumped-storage/misc not separately exposed). Renewable
+      // recomputed as wind+solar+hydro / gen_total to MATCH the US definition
+      // (which excludes biomass), so the ranking is apples-to-apples.
+      const uk = await callAPI('/api/v1/iso/uk/snapshot', {});
+      const ukm = uk && uk.metrics;
+      if (ukm && _num(ukm.generation_total_mw) > 0) {
+        const gt = _num(ukm.generation_total_mw);
+        const pct = (x) => Math.round((x / gt) * 1000) / 10;
+        const gas = _num(ukm.fuel_gas_mw), wnd = _num(ukm.fuel_wind_mw),
+              sun = _num(ukm.fuel_solar_mw), wat = _num(ukm.fuel_hydro_mw),
+              nuc = _num(ukm.fuel_nuclear_mw), col = _num(ukm.fuel_coal_mw),
+              bio = _num(ukm.fuel_biomass_mw);
+        const other = Math.max(0, Math.round(gt - (gas + nuc + col + wnd + sun + wat + bio)));
+        grids.push({
+          iso: 'NGESO',
+          region: 'Great Britain (NESO)',
+          country: 'GB',
+          demand_mw: _num(ukm.demand_mw) || null,
+          renewable_share_pct: pct(sun + wnd + wat),  // wind+solar+hydro (US-comparable)
+          gas_share_pct: pct(gas),
+          mix_period: 'Elexon FUELINST (live, 5-min)',
+          fuel_mw: { gas, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, biomass: bio, other },
+          fuel_pct: { gas: pct(gas), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), biomass: pct(bio), other: pct(other) },
+          note: 'renewable_share_pct = wind+solar+hydro (matches the US definition; excludes biomass, shown separately). Live via Elexon Insights.',
+        });
+      } else {
+        grids.push({ iso: 'NGESO', region: 'Great Britain (NESO)', error: (uk && uk.error) || 'no live snapshot' });
+      }
+      // AU / AEMO — summary feed has NO full fuel split. Report demand, the
+      // utility-scale variable-renewable FLOOR (wind+solar; excludes hydro +
+      // rooftop), and live spot price. renewable_share_pct stays null because
+      // it is NOT comparable to the full-mix grids — kept honest, unranked.
+      const au = await callAPI('/api/v1/iso/au/snapshot', {});
+      const aum = au && au.metrics;
+      if (aum && _num(aum.generation_total_mw) > 0) {
+        partial.push({
+          iso: 'AEMO',
+          region: 'Australia NEM (AEMO)',
+          country: 'AU',
+          demand_mw: _num(aum.demand_mw) || null,
+          renewable_share_pct: null,
+          variable_renewable_pct: _num(aum.variable_renewable_pct),
+          gas_share_pct: null,
+          generation_total_mw: _num(aum.generation_total_mw) || null,
+          avg_price_usd_per_mwh: _num(aum.avg_price_usd_per_mwh) || null,
+          partial_feed: true,
+          note: 'AEMO NEM summary reports utility wind+solar only (no full fuel split). variable_renewable_pct is a FLOOR — it excludes hydro + rooftop solar — so it is NOT directly comparable to the full-mix renewable_share_pct and is listed unranked. Live via AEMO.',
+        });
+      } else {
+        grids.push({ iso: 'AEMO', region: 'Australia NEM (AEMO)', error: (au && au.error) || 'no live snapshot' });
+      }
+
       const ranked = grids.filter(g => g.renewable_share_pct != null)
         .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
       const errored = grids.filter(g => g.renewable_share_pct == null);
       const out = {
         ok: true,
         count: ranked.length,
-        ranked_by: 'renewable_share_pct (greenest US grid first)',
-        source: 'DC Hub + EIA hourly RTO',
+        ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
+        coverage: '7 US ISOs + Great Britain (NESO) + Australia NEM (AEMO)',
+        source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights (live); AU: AEMO NEM (live)',
         grids: [...ranked, ...errored],
+        partial_grids: partial,
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
     });
