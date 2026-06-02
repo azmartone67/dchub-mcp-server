@@ -1309,7 +1309,7 @@ function createServer() {
   const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
   trackedTool(srv, 'get_grid_scoreboard',
-    'Live grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB rank by wind+solar+hydro share; AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights (live); AU = AEMO NEM (live), all via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~12 European bidding zones (Germany/Frankfurt, France/Paris, Netherlands/Amsterdam, Ireland/Dublin, Spain, Belgium, Poland, Austria, Nordics — via ENTSO-E) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
       const results = await Promise.all(_US_ISOS.map(iso =>
@@ -1395,6 +1395,42 @@ function createServer() {
         grids.push({ iso: 'AEMO', region: 'Australia NEM (AEMO)', error: (au && au.error) || 'no live snapshot' });
       }
 
+      // --- LIVE EU grids (#60, ENTSO-E Transparency — ~12 bidding zones) ---
+      // One token unlocks many zones. /iso/eu/snapshot returns per-zone fuel
+      // mix with renewable_pct ALREADY computed as wind+solar+hydro (the same
+      // definition as the US/UK rows), so each European bidding zone ranks
+      // apples-to-apples alongside them. A data center sites in a specific
+      // zone (Frankfurt/Dublin/Amsterdam…), not "Europe" — so we surface the
+      // zones individually rather than the continent aggregate.
+      let euCount = 0;
+      const eu = await callAPI('/api/v1/iso/eu/snapshot', {});
+      const euZones = (eu && eu.zones) || null;
+      if (euZones && typeof euZones === 'object') {
+        for (const zc of Object.keys(euZones)) {
+          const z = euZones[zc] || {};
+          const gt = _num(z.generation_total_mw);
+          if (!(gt > 0)) continue;
+          grids.push({
+            iso: 'EU_' + zc,
+            region: (z.name || zc) + (z.hub ? ' — ' + z.hub : ''),
+            country: 'EU',
+            demand_mw: null,
+            renewable_share_pct: _num(z.renewable_pct),  // wind+solar+hydro (comparable)
+            gas_share_pct: _num(z.gas_pct),
+            mix_period: 'ENTSO-E A75 (live, latest settled period)',
+            fuel_mw: {
+              gas: _num(z.fuel_gas_mw), nuclear: _num(z.fuel_nuclear_mw),
+              coal: _num(z.fuel_coal_mw), wind: _num(z.fuel_wind_mw),
+              solar: _num(z.fuel_solar_mw), hydro: _num(z.fuel_hydro_mw),
+              biomass: _num(z.fuel_biomass_mw),
+            },
+            generation_total_mw: gt,
+            note: 'renewable_share_pct = wind+solar+hydro (matches the US/UK definition; biomass separate). Live via ENTSO-E Transparency.',
+          });
+          euCount++;
+        }
+      }
+
       const ranked = grids.filter(g => g.renewable_share_pct != null)
         .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
       const errored = grids.filter(g => g.renewable_share_pct == null);
@@ -1402,8 +1438,8 @@ function createServer() {
         ok: true,
         count: ranked.length,
         ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
-        coverage: '7 US ISOs + Great Britain (NESO) + Australia NEM (AEMO)',
-        source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights (live); AU: AEMO NEM (live)',
+        coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Australia NEM (AEMO)',
+        source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency (all live); AU: AEMO NEM (live)',
         grids: [...ranked, ...errored],
         partial_grids: partial,
       };
