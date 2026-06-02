@@ -1480,9 +1480,26 @@ function createServer() {
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
-  trackedTool(srv, 'get_grid_intelligence', 'Grid headroom + interconnection intelligence brief for any of 10 ISO regions: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec, AESO, Nord Pool. Returns excess power, constraints, queue depth, time-to-power estimates.',
-    { region_id: S },
-    async (a) => withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${(a.region_id||'').toLowerCase()}`)) }] }, 'get_grid_intelligence'));
+  trackedTool(srv, 'get_grid_intelligence', 'Grid headroom + interconnection intelligence brief for any of 10 ISO regions: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec, AESO, Nord Pool. Returns excess power, constraints, queue depth, time-to-power estimates. Pass the region as region_id (aliases iso/region also accepted), e.g. get_grid_intelligence region_id="PJM".',
+    { region_id: S, iso: S, region: S },
+    async (a) => {
+      // r66 (2026-06-02): accept region_id OR the natural iso/region aliases an
+      // agent infers from the description, and GUARD the empty case. Previously a
+      // call passing {iso:"PJM"} (or omitting region_id) built the path
+      // /api/v1/grid-headroom/ -> HTTP 404 on the #1 demand tool (152 users,
+      // 7,316 calls/30d), dead-ending the trial mint->reconnect->wow->paid loop
+      // at the "wow" step. Verified live: empty path=404, /pjm=200.
+      const region = (a.region_id || a.iso || a.region || a.market || '').toString().trim().toLowerCase();
+      if (!region) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'region required',
+          hint: 'Pass region_id (aliases iso/region accepted) = one of the 10 supported regions.',
+          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'HYDROQUEBEC', 'AESO', 'NORDPOOL'],
+          example: 'get_grid_intelligence region_id="PJM"',
+        }) }] };
+      }
+      return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${region}`)) }] }, 'get_grid_intelligence');
+    });
 
   trackedTool(srv, 'get_agent_registry', 'AI platforms + agent frameworks currently calling DC Hub: ChatGPT, Claude, Gemini, Perplexity, Copilot, Groq, Cursor, Cline, Continue, Windsurf — with citation counts (24h/30d), tool-usage breakdown, and authentication tier. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
