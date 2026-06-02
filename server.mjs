@@ -510,6 +510,19 @@ const ALWAYS_PARTIAL_PREVIEW = new Set([
   'get_fiber_intel',        // 5,162 calls / 116 users
 ]);
 
+// r62b-conv (2026-06-01): the 5 PRO-only tools. A minted dch_trial_ key
+// resolves to IDENTIFIED tier, which unlocks everything in PAID_ONLY_TOOLS
+// EXCEPT these 5. The conversion-funnel showed 33 trials minted / only 2 ever
+// reconnected (94% drop) — a top cause was the paywall telling agents to
+// "retry get_grid_intelligence for the full result" with a trial key that
+// CANNOT unlock it (it's Pro). The agent obeyed, retried into a hard paywall,
+// and gave up. We use this set to tell the truth: the trial key unlocks the
+// IDENTIFIED toolset NOW; the deep Pro brief needs Pro/metered.
+const PRO_ONLY_TOOLS = new Set([
+  'analyze_site', 'compare_sites', 'get_grid_intelligence',
+  'get_fiber_intel', 'get_dchub_recommendation',
+]);
+
 function applyTierGate(toolName, params, tier, hasApiKey) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r46-conversion: keyed-free users get the 5 demand-tools through —
@@ -521,6 +534,54 @@ function applyTierGate(toolName, params, tier, hasApiKey) {
     return { allowed: true, params: { ...params, limit: lim.max_limit }, capped: lim.max_limit };
   }
   return { allowed: true, params };
+}
+
+// ── buildAutoMintBlock: the agent-facing unlock CTA for a fresh trial key ───
+// r62b-conv (2026-06-01): replaces the per-site inline copy that made a FALSE
+// promise on Pro tools ("retry get_grid_intelligence for the full result" — a
+// trial key is IDENTIFIED tier and can't, so the agent retried into a hard
+// paywall). This version tells the truth and is machine-actionable:
+//   • LEADS with the working key + the single header action.
+//   • If the trial key genuinely unlocks THIS tool (IDENTIFIED-tier tool) →
+//     "retry <tool> for the full result" (true).
+//   • If it's a PRO-only tool → name the tools the key DOES unlock right now
+//     (live grid fuel-mix, market intel, pipeline, queue, M&A) and route the
+//     deep Pro brief to the owner's metered purchase (no signup form).
+//   • structuredContent carries retry_with_header + accurate retry_instructions
+//     + unlocked_tools so a programmatic agent can act without parsing prose.
+// Returns {text, sc}; {'',{}} if no key (caller falls back to prior behavior).
+const _TRIAL_UNLOCKED_HINT =
+  'get_grid_data (live fuel mix + demand + prices), get_market_intel, get_pipeline, get_interconnection_queue, list_transactions';
+function buildAutoMintBlock(mint, name) {
+  if (!mint || !mint.api_key) return { text: '', sc: {} };
+  const days  = mint.days_remaining != null ? mint.days_remaining : (mint.trial_days || 7);
+  const calls = mint.daily_calls || 1000;
+  const proOnly = PRO_ONLY_TOOLS.has(name);  // trial (IDENTIFIED) can't unlock these
+  const text =
+    '\n\n---\n' +
+    '✅ **Free trial key — no email, no signup. Add this header and keep going:**\n' +
+    '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
+    (proOnly
+      ? ('→ It unlocks ' + _TRIAL_UNLOCKED_HINT + ' and 15+ more DC Hub tools right now.\n' +
+         '→ `' + name + '` is a Pro tool — the data above is your free taste; the full multi-ISO / all-routes brief needs Pro or metered access.\n')
+      : ('→ Retry `' + name + '` with that header now for the full (ungated) result.\n')) +
+    '\u{1F916} **Owner: unlock every call permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
+  const sc = {
+    auto_trial_key:            mint.api_key,
+    auto_trial_tier:           mint.tier || 'IDENTIFIED',
+    auto_trial_daily_calls:    calls,
+    auto_trial_expires_at:     mint.expires_at || null,
+    auto_trial_days_remaining: days,
+    retry_with_header:         { 'X-API-Key': mint.api_key },
+    retry_instructions: proOnly
+      ? ('Add header X-API-Key: ' + mint.api_key + ' and you can call get_grid_data, get_market_intel, get_pipeline, get_interconnection_queue, list_transactions and 15+ more tools now. ' + name + ' is Pro — the owner can unlock it permanently (usage-based, no signup) at ' + METERED_URL + '.')
+      : ('Add header X-API-Key: ' + mint.api_key + ' and call ' + name + ' again for the full result.'),
+    trial_unlocks_this_tool:   !proOnly,
+    unlocked_tools:            ['get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
+    owner_purchase_url:        METERED_URL,
+    owner_purchase_model:      'usage_based_metered',
+  };
+  return { text, sc };
 }
 
 // ── Phase 7: trim trial responses so the LLM sees what's gated ─────────────
@@ -963,39 +1024,10 @@ function trackedTool(srv, name, description, schema, handler) {
             // failure _mint is null and we fall back to the EXACT prior
             // return below (additive-only — original fields untouched).
             const _mint = await mintAutoTrial(name);
-            let _autoMintText = '';
-            let _autoMintSC = {};
-            if (_mint && _mint.api_key) {
-              const _days = _mint.days_remaining != null ? _mint.days_remaining : (_mint.trial_days || 30);
-              const _calls = _mint.daily_calls || 1000;
-              // r62-conv (2026-06-01): the prior CTA here was an email-redeem
-              // curl (POST /keys/auto-trial/redeem with an email) — structurally
-              // un-actionable by an autonomous agent (no human email to supply).
-              // Replace it with the OWNER-facing usage-based purchase link: the
-              // human owner buys metered access once (no per-seat cap) and the
-              // backend issues a durable key. The freshly-minted dch_trial_ key
-              // above remains the INSTANT, zero-touch unblock (retry now).
-              _autoMintText =
-                '\n\n---\n' +
-                '✅ **Instant trial key minted — no email, no browser. Retry `' + name + '` now to get the full result:**\n' +
-                '`X-API-Key: ' + _mint.api_key + '`  (' + _calls + ' calls/day, ' + _days + ' day(s) left)\n\n' +
-                '\u{1F916} **Owner: unlock every call permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
-              _autoMintSC = {
-                // r61-conv: the agent should detect this and retry with the key.
-                auto_trial_key:   _mint.api_key,
-                auto_trial_tier:  _mint.tier || 'IDENTIFIED',
-                auto_trial_daily_calls: _calls,
-                auto_trial_expires_at:  _mint.expires_at || null,
-                auto_trial_days_remaining: _days,
-                // r62-conv: owner-facing usage-based purchase path (replaces the
-                // un-actionable email-redeem endpoint). Human owner checks out
-                // once; backend issues a durable key sized to chosen volume.
-                owner_purchase_url:    METERED_URL,
-                owner_purchase_model:  'usage_based_metered',
-                retry_with_header: { 'X-API-Key': _mint.api_key },
-                retry_instructions: 'Set the X-API-Key header to auto_trial_key and call ' + name + ' again for the full result.',
-              };
-            }
+            // r62b-conv: honest, machine-actionable unlock block (shared helper)
+            // — replaces the false "retry <pro tool> for the full result" promise
+            // a trial (IDENTIFIED) key can't keep on grid_intelligence/fiber_intel.
+            const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name);
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText }],
               isError: true,
@@ -1069,31 +1101,9 @@ Free tier covers **100 calls/day** across:
         // branch. Best-effort: on ANY failure _mint2 is null and the
         // return falls back to the EXACT prior hard-wall behavior.
         const _mint2 = await mintAutoTrial(name);
-        let _autoMintText2 = '';
-        let _autoMintSC2 = {};
-        if (_mint2 && _mint2.api_key) {
-          const _days2 = _mint2.days_remaining != null ? _mint2.days_remaining : (_mint2.trial_days || 30);
-          const _calls2 = _mint2.daily_calls || 1000;
-          // r62-conv (2026-06-01): same swap as the preview branch — replace the
-          // un-actionable email-redeem curl with the OWNER-facing usage-based
-          // purchase link. Minted dch_trial_ key stays the instant unblock.
-          _autoMintText2 =
-            '\n\n---\n' +
-            '✅ **Instant trial key minted — no email, no browser. Retry `' + name + '` now with the full toolset:**\n' +
-            '`X-API-Key: ' + _mint2.api_key + '`  (' + _calls2 + ' calls/day, ' + _days2 + ' day(s) left)\n\n' +
-            '\u{1F916} **Owner: unlock every call permanently — pay for usage, not seats (no signup form) →** ' + METERED_URL + '\n';
-          _autoMintSC2 = {
-            auto_trial_key:   _mint2.api_key,
-            auto_trial_tier:  _mint2.tier || 'IDENTIFIED',
-            auto_trial_daily_calls: _calls2,
-            auto_trial_expires_at:  _mint2.expires_at || null,
-            auto_trial_days_remaining: _days2,
-            owner_purchase_url:    METERED_URL,
-            owner_purchase_model:  'usage_based_metered',
-            retry_with_header: { 'X-API-Key': _mint2.api_key },
-            retry_instructions: 'Set the X-API-Key header to auto_trial_key and call ' + name + ' again for the full result.',
-          };
-        }
+        // r62b-conv: honest unlock block (shared helper) — same truthful CTA
+        // as the preview branch.
+        const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name);
         return {
           content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 }],
           isError: true,
