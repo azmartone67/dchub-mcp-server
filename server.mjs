@@ -1554,6 +1554,34 @@ function createServer() {
       const ranked = grids.filter(g => g.renewable_share_pct != null)
         .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
       const errored = grids.filter(g => g.renewable_share_pct == null);
+      // r70b (2026-06-03): enrich each grid with the DCPI per-ISO intelligence
+      // — avg queue-wait, curtailment %, BUILD-rate, and 30-day grid emergencies
+      // — from the live, populated /api/v1/dcpi/iso-comparison. "More ISO detail"
+      // with zero new data source. (The interconnection-queue/snapshot by_iso is
+      // empty, so it is NOT used — no faking with nulls.) total_queue_capacity_mw
+      // is also empty there, so it is deliberately omitted.
+      try {
+        const _isoCmp = await callAPI('/api/v1/dcpi/iso-comparison');
+        const _rows = (_isoCmp && (_isoCmp.isos || _isoCmp.comparison || _isoCmp.data))
+                      || (Array.isArray(_isoCmp) ? _isoCmp : []);
+        const _byIso = {};
+        for (const r of _rows) { if (r && r.iso) _byIso[String(r.iso).toUpperCase()] = r; }
+        for (const g of grids) {
+          const d = g && g.iso && _byIso[String(g.iso).toUpperCase()];
+          if (d) {
+            g.dcpi_detail = {
+              avg_queue_wait_months: _num(d.avg_queue_wait_months),
+              avg_curtailment_pct:   _num(d.avg_curtailment_pct),
+              build_markets:         _num(d.build_count),
+              total_markets:         _num(d.market_count),
+              build_rate_pct:        (d.market_count ? Math.round((d.build_count / d.market_count) * 1000) / 10 : null),
+              grid_emergencies_30d:  _num(d.sum_emergency_30d),
+              note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the DC Hub Power Index.',
+            };
+          }
+        }
+      } catch (_e) { /* best-effort enrichment; scoreboard works without it */ }
+
       // r70 (2026-06-03): surface the live EU gas-transmission context (ENTSOG)
       // on the flagship scoreboard too — it was only reachable at the
       // low-discoverability /api/v1/gas/eu/snapshot. It's a CONTEXT layer (gas
