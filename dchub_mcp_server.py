@@ -41,7 +41,7 @@ logger = logging.getLogger("dchub_mcp")
 # ---------------------------------------------------------------------------
 
 mcp = FastMCP(
-    "DC Hub Nexus",
+    "DC Hub",
     stateless_http=True,
     json_response=True,
 )
@@ -115,7 +115,7 @@ async def search_facilities(
     provider: str = "",
     limit: int = 25,
 ) -> str:
-    """Search 50,000+ global data center facilities by location, provider, or keyword.
+    """Search 21,000+ global data center facilities by location, provider, or keyword.
 
     Args:
         query: Free-text search (e.g. 'Equinix Dallas' or 'hyperscale')

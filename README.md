@@ -28,7 +28,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **126,427 substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load/headroom for CAISO, MISO, SPP, NYISO (refreshed ~every 5 min); coverage across PJM, ERCOT, ISO-NE + Hydro-Québec, AESO, Nord Pool
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (ERCOT 410 GW / 87% DC, PJM 30 GW / 73% DC, etc.)
-- **$324B+ M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
+- **2,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
@@ -84,7 +84,7 @@ Search for "DC Hub" in [Cursor MCP marketplace](https://cursor.directory/plugins
 
 ### Smithery.ai
 
-Listed at [smithery.ai/server/azmartone67/dchub](https://smithery.ai/server/azmartone67/dchub). Add via Smithery CLI:
+Listed at [smithery.ai/servers/azmartone67/dchub](https://smithery.ai/servers/azmartone67/dchub). Add via Smithery CLI:
 
 ```
 npx -y @smithery/cli install @azmartone67/dchub --client claude
