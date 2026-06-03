@@ -26,7 +26,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 - **21,000+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
 - **126,427 substations** with voltage class, available capacity estimates
-- **Live grid data for 10 ISOs** (PJM, MISO, ERCOT, CAISO, NYISO, SPP, ISO-NE + Hydro-Quebec, AESO, Nord Pool) refreshed every 5 minutes
+- **Real-time grid telemetry** — live load/headroom for CAISO, MISO, SPP, NYISO (refreshed ~every 5 min); coverage across PJM, ERCOT, ISO-NE + Hydro-Québec, AESO, Nord Pool
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (ERCOT 410 GW / 87% DC, PJM 30 GW / 73% DC, etc.)
 - **$324B+ M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
