@@ -1593,10 +1593,15 @@ function createServer() {
         const _isoCmp = await callAPI('/api/v1/dcpi/iso-comparison');
         const _rows = (_isoCmp && (_isoCmp.isos || _isoCmp.comparison || _isoCmp.data))
                       || (Array.isArray(_isoCmp) ? _isoCmp : []);
+        // r70b (2026-06-03): normalize the join key (strip non-alphanumerics) so
+        // the grid iso 'ISO-NE' matches the DCPI row keyed 'ISONE' (and guards any
+        // future hyphen/underscore drift). Without this, ISO-NE silently missed
+        // its dcpi_detail enrichment (6/7 US grids enriched instead of 7/7).
+        const _normIso = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
         const _byIso = {};
-        for (const r of _rows) { if (r && r.iso) _byIso[String(r.iso).toUpperCase()] = r; }
+        for (const r of _rows) { if (r && r.iso) _byIso[_normIso(r.iso)] = r; }
         for (const g of grids) {
-          const d = g && g.iso && _byIso[String(g.iso).toUpperCase()];
+          const d = g && g.iso && _byIso[_normIso(g.iso)];
           if (d) {
             g.dcpi_detail = {
               avg_queue_wait_months: _num(d.avg_queue_wait_months),
@@ -1638,6 +1643,17 @@ function createServer() {
         grids: [...ranked, ...errored],
         partial_grids: partial,
         eu_gas_context: euGas,
+        // r70 (2026-06-03): this free scoreboard answers "which grid is greenest
+        // RIGHT NOW" — the facts. The siting DECISION (how much headroom, how deep
+        // the interconnection queue, time-to-power, full multi-factor site score)
+        // is the paid layer. Honest signpost, not a paywall on the data above.
+        deep_intelligence: {
+          note: 'This is the live fuel-mix ranking (free). For the SITING DECISION — per-ISO grid headroom (MW available), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
+          per_iso_grid_headroom_queue_ttp: 'get_grid_intelligence (iso=…)',
+          score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)',
+          best_market_recommendation: 'get_dchub_recommendation',
+          attribution: 'Live grid data via DC Hub (dchub.cloud), CC-BY-4.0.',
+        },
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
     });
