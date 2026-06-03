@@ -554,6 +554,22 @@ const PRO_ONLY_TOOLS = new Set([
   'get_fiber_intel', 'get_dchub_recommendation',
 ]);
 
+// r70 (2026-06-03): the FREE FLAGSHIP HOOKS. A tool here is the citation
+// magnet — its entire value is the COMPLETE picture (e.g. the full global
+// grid scoreboard, greenest-first across ~22 grids on 4 continents). That
+// complete ranking is what wins agent citations + eyeballs and funnels them
+// to the PAID per-ISO/per-site decision tools (get_grid_intelligence,
+// analyze_site, get_dchub_recommendation). These tools return PUBLIC-source
+// aggregated facts (EIA / ENTSO-E / Elexon / AEMO / Taipower live fuel mix) —
+// NOT the proprietary $-aggregates (deal values, capacity totals) that the
+// anonymous trimForTrial pass exists to protect. So they are EXEMPT from that
+// anon trim: gutting the flagship to a 1-row "[sign up to unlock]" teaser
+// (the get_grid_scoreboard 2/22-grid regression) destroys the very hook that
+// drives conversion. The paid line stays the DECISION layer, not the facts.
+const FREE_FULL_TOOLS = new Set([
+  'get_grid_scoreboard',   // live global grid scoreboard — the flagship free hook
+]);
+
 function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
@@ -1284,7 +1300,12 @@ Free tier covers **100 calls/day** across:
       // an agent can demonstrate the tool works, but mask aggregate
       // metrics behind "[sign up to unlock]" placeholders.
       // Authenticated callers (any api_key) keep current full-data behavior.
-      if (!c.api_key && tier === 'free') {
+      // r70 (2026-06-03): FREE_FULL_TOOLS (the flagship citation hooks, e.g.
+      // get_grid_scoreboard) are EXEMPT — their value IS the complete picture,
+      // and they carry public-source facts, not the $-aggregates this trim
+      // protects. Without the exemption the trim truncated the scoreboard's
+      // ~22-grid array to a 1-grid teaser (the "2/22 grids" regression).
+      if (!c.api_key && tier === 'free' && !FREE_FULL_TOOLS.has(name)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
