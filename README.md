@@ -5,7 +5,7 @@
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Cline, Continue, and any AI assistant doing data center site selection, energy analysis, or market research.
 
-[![Install on Cursor](https://img.shields.io/badge/Cursor-Install-black?logo=cursor)](https://cursor.directory/plugins/mcp-dchub) [![Smithery](https://img.shields.io/badge/smithery-listed-orange)](https://smithery.ai/server/azmartone67/dchub) [![Glama](https://img.shields.io/badge/glama.ai-verified-purple)](https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server) [![Tools](https://img.shields.io/badge/tools-29-blue)](https://dchub.cloud/.well-known/mcp.json) [![Citations](https://img.shields.io/badge/cited%20by-ChatGPT%20%C2%B7%20Claude%20%C2%B7%20Gemini%20%C2%B7%20Groq-green)](https://dchub.cloud/cited-by)
+[![Install on Cursor](https://img.shields.io/badge/Cursor-Install-black?logo=cursor)](https://cursor.directory/plugins/mcp-dchub) [![Smithery](https://img.shields.io/badge/smithery-listed-orange)](https://smithery.ai/server/azmartone67/dchub) [![Glama](https://img.shields.io/badge/glama.ai-verified-purple)](https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server) [![Tools](https://img.shields.io/badge/tools-31-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
 
 ---
 
@@ -34,9 +34,9 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **Tax incentives** by state with eligibility details
 - **Market intelligence** for 233 DC markets globally with daily DCPI verdicts
 
-**29 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**31 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
-**Cited by ChatGPT, Claude, Gemini, Perplexity, and Groq** — see [/cited-by](https://dchub.cloud/cited-by).
+**Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
 
 ## Why DC Hub vs other directories
 
