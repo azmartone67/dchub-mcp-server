@@ -1288,7 +1288,7 @@ function createServer() {
 
   const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
-  trackedTool(srv, 'search_facilities', 'Search 21,000+ global data center facilities across 140+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational.',
+  trackedTool(srv, 'search_facilities', 'Search 21,000+ global data center facilities across 170+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational.',
     { query: S, country: S, state: S, city: S, operator: S, min_capacity_mw: N, max_capacity_mw: N, tier: I, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/facilities', a)) }] }));
 
@@ -1296,7 +1296,7 @@ function createServer() {
     { facility_id: ID, include_nearby: B, include_power: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/facilities/${a.facility_id||''}`, { include_nearby: a.include_nearby, include_power: a.include_power })) }] }));
 
-  trackedTool(srv, 'get_market_intel', 'Live market intelligence for 232 DC markets across 140+ countries: capacity prices ($/MW-day), vacancy rates, absorption, dominant operators, year-over-year growth, supply pipeline, and DCPI verdict (BUILD/CAUTION/AVOID). Filter by market_slug (e.g. northern-virginia, dallas, frankfurt, tokyo). Try: get_market_intel market=northern-virginia.',
+  trackedTool(srv, 'get_market_intel', 'Live market intelligence for 232 DC markets across 170+ countries: capacity prices ($/MW-day), vacancy rates, absorption, dominant operators, year-over-year growth, supply pipeline, and DCPI verdict (BUILD/CAUTION/AVOID). Filter by market_slug (e.g. northern-virginia, dallas, frankfurt, tokyo). Try: get_market_intel market=northern-virginia.',
     { market: S, metric: S, period: S, compare_to: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
 
@@ -1556,7 +1556,7 @@ function createServer() {
   trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
 
-  trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — $324B+ tracked over 2,100+ deals (2019-present). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by year, min_value_usd, region, buyer, or target. Try: list_transactions year=2026 min_value_usd=1000000000.',
+  trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — 2,000+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by year, min_value_usd, region, buyer, or target. Try: list_transactions year=2026 min_value_usd=1000000000.',
     { buyer: S, seller: S, min_value_usd: N, max_value_usd: N, deal_type: S, date_from: S, date_to: S, region: S, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/deals', a)) }] }));
 
@@ -1635,7 +1635,7 @@ function createServer() {
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${region}`)) }] }, 'get_grid_intelligence');
     });
 
-  trackedTool(srv, 'get_agent_registry', 'AI platforms + agent frameworks currently calling DC Hub: ChatGPT, Claude, Gemini, Perplexity, Copilot, Groq, Cursor, Cline, Continue, Windsurf — with citation counts (24h/30d), tool-usage breakdown, and authentication tier. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry.', {},
+  trackedTool(srv, 'get_agent_registry', 'Live roster of the AI platforms + agent frameworks that have actually called DC Hub in the window — returns each caller with its citation counts (24h/30d), tool-usage breakdown, and authentication tier (reflects real calls, not a fixed list). Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they connect. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
 
   trackedTool(srv, 'get_backup_status', 'DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Try: get_backup_status.', {},
