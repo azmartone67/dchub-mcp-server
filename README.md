@@ -34,7 +34,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **Tax incentives** by state with eligibility details
 - **Market intelligence** for 233 DC markets globally with daily DCPI verdicts
 
-**31 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**33 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
 **Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
 

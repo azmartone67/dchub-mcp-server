@@ -1,7 +1,7 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **30 tools** · official registry listing `cloud.dchub/mcp-server` **v2.2.2** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **33 tools** · official registry listing `cloud.dchub/mcp-server` **v2.2.2** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
 ## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
 - ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.2.2 live.** Auto-republishes on every `server.json` version bump (GitHub Action `mcp-registry-publish.yml`). **Most directories mirror this**, so you're already broadly listed.
@@ -10,7 +10,7 @@ Live server **30 tools** · official registry listing `cloud.dchub/mcp-server` *
   1. **PulseMCP** → https://www.pulsemcp.com → "Submit" in the top nav.
   2. **mcp.so** → https://mcp.so → "Submit".
   3. **Smithery** → CLI, no form: `smithery mcp publish "https://dchub.cloud/mcp" -n azmartone67/dchub` (or "Add Server" on smithery.ai).
-- For ALL of them, paste from the **One-liner / Short description / Connection** blocks below. Manifest the form may ask for: `https://dchub.cloud/.well-known/mcp-server.json` (now v2.1.22 / 30 tools at origin; CF edge refreshes within ~10 min).
+- For ALL of them, paste from the **One-liner / Short description / Connection** blocks below. Manifest the form may ask for: `https://dchub.cloud/.well-known/mcp-server.json` (now v2.1.22 / 33 tools at origin; CF edge refreshes within ~10 min).
 
 > Note: a registry that verifies by fetching the manifest reads the dchub.cloud edge copy (CF, ~10-min cache). If it shows stale data, wait 10 min or give it the Railway-direct origin URL.
 
@@ -20,7 +20,7 @@ Live server **30 tools** · official registry listing `cloud.dchub/mcp-server` *
 The data-center, energy & gas intelligence layer for AI agents — query AND cite, live.
 
 ## Short description (≤ 300 chars)
-DC Hub is the live data-center & energy intelligence MCP: 21k+ facilities, 232 markets, 10 ISO grids, the DCPI power index, the DCGI gas index, interconnection queues, M&A, fiber, water & tax. 30 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
+DC Hub is the live data-center & energy intelligence MCP: 21k+ facilities, 232 markets, 10 ISO grids, the DCPI power index, the DCGI gas index, interconnection queues, M&A, fiber, water & tax. 33 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
 
 ## Long description
 DC Hub is the neutral, real-time data layer for data-center infrastructure — built so AI agents can both **query** it (MCP + REST) and **cite** it (every full-data response carries `Source: DC Hub, CC-BY-4.0`).
@@ -60,10 +60,10 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 
 ### Smithery (smithery.ai/servers/azmartone67/dchub)
 - Type: Remote (Streamable HTTP). Base URL `https://dchub.cloud/mcp`. No auth required to list/try (free tier).
-- Use the short description + categories above. Confirm the tool list auto-populates from the manifest (30 tools).
+- Use the short description + categories above. Confirm the tool list auto-populates from the manifest (33 tools).
 
 ### Glama (glama.ai/mcp/connectors/cloud.dchub/...)
-- Already indexed as a connector. Refresh so it picks up the current 30 tools (now incl. `get_gas_index`, `get_grid_scoreboard`).
+- Already indexed as a connector. Refresh so it picks up the current 33 tools (now incl. `get_gas_index`, `get_grid_scoreboard`).
 - Long description + tags above lift the Glama quality score (target A).
 
 ### PulseMCP (pulsemcp.com/submit)
@@ -106,7 +106,7 @@ With a key:
 ### Smithery — audience: agent builders / developers
 **Title:** DC Hub — Data Center & Energy Intelligence
 **Description:**
-> Live data-center, power & gas intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 30 tools, no signup to start.
+> Live data-center, power & gas intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 33 tools, no signup to start.
 >
 > Built for agents that answer infrastructure questions: search 21,000+ data centers, score any lat/lon for buildability across 7 dimensions, rank 232 markets by the DCPI power index (BUILD/CAUTION/AVOID), check the DCGI gas index per state, compare all 7 US ISO grids live (fuel mix, carbon, demand), and pull interconnection-queue depth, M&A, fiber, water-stress & tax incentives.
 >
@@ -127,12 +127,12 @@ With a key:
 ### PulseMCP — audience: broad MCP discovery directory
 **Name:** DC Hub — Data Center Intelligence
 **Description:**
-> Real-time data-center, power & gas intelligence for AI agents. 30 MCP tools over Streamable HTTP: search 21k+ facilities, score sites, rank 232 markets (DCPI power index), check the DCGI gas index, compare US ISO grids live, and pull interconnection queues, M&A, fiber, water & tax data. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
+> Real-time data-center, power & gas intelligence for AI agents. 33 MCP tools over Streamable HTTP: search 21k+ facilities, score sites, rank 232 markets (DCPI power index), check the DCGI gas index, compare US ISO grids live, and pull interconnection queues, M&A, fiber, water & tax data. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
 **Use cases:** "Where should I build a data center?" · "Which US grid is greenest right now?" · "Which states are gas-advantaged for DC power?" · "What's Northern Virginia's DCPI verdict?"
 
 ### Cursor Directory — audience: IDE developers
 **Description:**
-> Give your agent live data-center, grid & gas intelligence. 30 MCP tools: facility search (21k+), site scoring, DCPI market ranks, the DCGI gas index, a live all-ISO grid scoreboard, interconnection queues, M&A, fiber, water & tax. Free tier needs no key; add `X-API-Key` for full data. Citation-ready (CC-BY-4.0).
+> Give your agent live data-center, grid & gas intelligence. 33 MCP tools: facility search (21k+), site scoring, DCPI market ranks, the DCGI gas index, a live all-ISO grid scoreboard, interconnection queues, M&A, fiber, water & tax. Free tier needs no key; add `X-API-Key` for full data. Citation-ready (CC-BY-4.0).
 **Config:**
 > ```json
 > { "mcpServers": { "dchub": { "url": "https://dchub.cloud/mcp" } } }
@@ -142,6 +142,6 @@ With a key:
 
 ## (a) Manifest status — FIXED in-repo (2026-05-31)
 
-Investigated + corrected. The canonical Flask manifest `_canonical_mcp_manifest()` (main.py, served at `/.well-known/mcp.json` + `/mcp/manifest` + `/api/v1/mcp/manifest`) listed 29 tools but was MISSING `get_gas_index` + `get_grid_scoreboard`. Added both + bumped version 2.1.13 → 2.1.20 (commit 4e49e651, additive 3-line change). After the backend redeploys, the canonical manifest lists these incl. the gas index + grid scoreboard. (Headline "30 tools" = live `/mcp` tools/list; the canonical manifest's hand-curated list differs slightly in membership — use 30 for listings.)
+Investigated + corrected. The canonical Flask manifest `_canonical_mcp_manifest()` (main.py, served at `/.well-known/mcp.json` + `/mcp/manifest` + `/api/v1/mcp/manifest`) listed 29 tools but was MISSING `get_gas_index` + `get_grid_scoreboard`. Added both + bumped version 2.1.13 → 2.1.20 (commit 4e49e651, additive 3-line change). After the backend redeploys, the canonical manifest lists these incl. the gas index + grid scoreboard. (Headline "33 tools" = live `/mcp` tools/list; the canonical manifest's hand-curated list differs slightly in membership — use 33 for listings.)
 
 Remaining caveat (out-of-repo, your call): the public **`dchub.cloud/.well-known/mcp.json` edge** is served/cached by the `dchubapiproxy` Cloudflare worker and showed an OLDER copy (v2.1.11) than even Railway-direct. After the backend deploy, if the edge still lags, it needs a CF cache purge or worker refresh (the worker is not in this repo). `/api/v1/admin/drift-check` surfaces the gap. `api.dchub.cloud/.well-known/mcp.json` always reflects the fresh canonical source if you need a clean URL to hand a registry now.

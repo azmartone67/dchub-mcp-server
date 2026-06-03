@@ -130,6 +130,18 @@
     {
       "name": "get_grid_scoreboard",
       "description": "Live all-ISO grid scoreboard — all 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers \"which US grid is greenest, or most gas-reliant, for siting a data center?\" Source: EIA hourly RTO via DC Hub, ranked greenest-first by renewable share. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard."
+    },
+    {
+      "name": "site_selection_canvas",
+      "description": "Guided end-to-end data-center site selection — give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO). Paid keys unlock the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. Try: site_selection_canvas capacity_mw=100 region=TX max_months=24."
+    },
+    {
+      "name": "grid_transition_radar",
+      "description": "Forward-looking 'where is the next hyperscale-friendly grid emerging' radar — the US markets + ISOs with the strongest near-term emergence signal (BUILD verdict + excess-power headroom + short time-to-power), plus an ISO rollup and grid-headroom leaderboard. Paid keys unlock the transition thesis (which ISO is opening up + why). Try: grid_transition_radar max_months=24."
+    },
+    {
+      "name": "deal_autopsy",
+      "description": "Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — 'what is the real play?' (long-dated land/power option vs near-term build vs queue gamble). Paid keys unlock the per-deal autopsy read. Try: deal_autopsy limit=15."
     }
   ],
   "example_queries": [
