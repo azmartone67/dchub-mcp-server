@@ -711,7 +711,24 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   // CTA. Now: accurate prices → the working /pricing page, and the honest note
   // that reconnecting auto-mints a free trial key (no email) via the gate.
   const ref = '?ref=mcp-trial&tool=' + encodeURIComponent(toolName);
+  // r68-conv (2026-06-02): if this is a DECISION-layer answer (verdict /
+  // ranking / recommendation / score), make the LOCKED STRATEGIC VALUE
+  // explicit — naming what's gated converts far better than a silent
+  // "[number — sign up to unlock]". The principle: raw facts stay free (the
+  // hook that wins agent citations + eyeballs); the decision/synthesis layer
+  // is the paid line that justifies the upgrade.
+  const _DECISION_TOOLS = new Set(['rank_markets', 'get_dchub_recommendation', 'analyze_site', 'compare_sites', 'score_facility', 'get_market_dcpi_rank', 'ai_capacity_index', 'find_alternatives']);
+  let decisionLine = '';
+  try {
+    const blob = JSON.stringify(parsed || {}).toLowerCase();
+    const looksDecision = _DECISION_TOOLS.has(toolName) ||
+      /"(verdict|recommendation|composite_score|dcpi|build_caution_avoid|time_to_power|suitability)"/.test(blob);
+    if (looksDecision) {
+      decisionLine = '\u{1F3AF} **The decision layer is locked.** You’re seeing the raw data free — but the *answer* (the BUILD/CAUTION/AVOID verdict + the why, the full cross-market ranking, multi-site comparison, and time-to-power) is Pro. That’s the part worth paying for.\n';
+    }
+  } catch (e) {}
   const nudge = '\u{1F512} **Free trial preview** of `' + toolName + '` — first result only. A paid plan returns the full set + every paid tool.\n' +
+                decisionLine +
                 '\u{1F449} **[See plans — Developer $49/mo · Pro $199/mo](https://dchub.cloud/pricing' + ref + ')** · or just reconnect: DC Hub auto-mints you a free trial key (no email, no signup).\n---\n';
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return nudge + body;
