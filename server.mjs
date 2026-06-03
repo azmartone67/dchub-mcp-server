@@ -1554,14 +1554,33 @@ function createServer() {
       const ranked = grids.filter(g => g.renewable_share_pct != null)
         .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
       const errored = grids.filter(g => g.renewable_share_pct == null);
+      // r70 (2026-06-03): surface the live EU gas-transmission context (ENTSOG)
+      // on the flagship scoreboard too — it was only reachable at the
+      // low-discoverability /api/v1/gas/eu/snapshot. It's a CONTEXT layer (gas
+      // throughput, not a power-grid fuel mix), so it rides ALONGSIDE `grids`,
+      // never inside the renewable ranking — kept honest, not a faked peer.
+      let euGas = null;
+      try {
+        const _g = await callAPI('/api/v1/gas/eu/snapshot');
+        if (_g && !_g.error && (_g.active_countries || _g.countries)) {
+          euGas = {
+            active_countries: _g.active_countries,
+            total_throughput_gwh_per_day: _g.total_throughput_gwh_per_day,
+            unit: _g.unit || 'GWh/d',
+            source: _g.source || 'ENTSOG Transparency (live)',
+            note: 'EU gas-transmission throughput context (ENTSOG, live). NOT a power-grid peer — pipeline flow, not generation mix.',
+          };
+        }
+      } catch (_e) { /* gas context is best-effort; scoreboard works without it */ }
       const out = {
         ok: true,
         count: ranked.length,
         ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
-        coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO)',
+        coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO)' + (euGas ? ' + EU gas transmission (ENTSOG)' : ''),
         source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency; TW: Taipower (all live); AU: AEMO NEM (live)',
         grids: [...ranked, ...errored],
         partial_grids: partial,
+        eu_gas_context: euGas,
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
     });
