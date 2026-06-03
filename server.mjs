@@ -450,7 +450,7 @@ function cacheKey(api_key, result) {
 }
 
 // ── Backend API helper: forwards user's API key when present ───────────────
-async function callAPI(path, params = {}) {
+async function callAPI(path, params = {}, opts = {}) {
   const url = new URL(path, API_BASE);
   for (const [k, v] of Object.entries(params)) {
     if (v !== '' && v !== 0 && v !== false && v !== null && v !== undefined)
@@ -464,6 +464,13 @@ async function callAPI(path, params = {}) {
   if (c.api_key)  headers['X-API-Key']      = c.api_key;
   if (c.platform) headers['X-MCP-Platform'] = c.platform;
   if (c.session_id) headers['X-MCP-Session'] = c.session_id;
+  // r70 (2026-06-03): {internal:true} callers present a dchub- User-Agent so the
+  // backend's server-to-server bypass (main.py:2465 phase19b_grid_intelligence —
+  // _is_internal is UA/IP-based, NOT X-Internal-Key-based) returns UNGATED data.
+  // get_grid_scoreboard's per-ISO fan-out uses this so its FREE fuel-mix overview
+  // isn't gated down to a 2-grid stub. Paid TOOLS are still gated per-caller at the
+  // MCP layer (applyTierGate) — this flag only affects the internal data fetch.
+  if (opts && opts.internal) headers['User-Agent'] = 'dchub-mcp-server/1.0';
   try {
     const resp = await fetch(url.toString(), { headers, signal: AbortSignal.timeout(30000) });
     const text = await resp.text();
@@ -1406,7 +1413,8 @@ function createServer() {
     {},
     async (a) => {
       const results = await Promise.all(_US_ISOS.map(iso =>
-        callAPI(`/api/v1/grid/intelligence/${iso}`, {})
+        // internal:true → ungated generation_mix (this is the free fuel-mix overview)
+        callAPI(`/api/v1/grid/intelligence/${iso}`, {}, { internal: true })
           .then(d => ({ iso, d }))
           .catch(e => ({ iso, err: String(e).slice(0, 120) }))));
       const grids = [];
