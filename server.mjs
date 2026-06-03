@@ -87,7 +87,8 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // Starter slot that was missing. This is the most-rendered paywall
   // string in the product (every paid-tool block on every MCP client
   // surfaces it), so getting the tier ladder right here matters most.
-  const STARTER_URL_LOCAL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
+  const STARTER_URL_LOCAL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
+  const DEVELOPER_URL_LOCAL = DEVELOPER_URL + PROMO_PARAM;
 
   // r53 (2026-05-31): the #1 conversion blocker is IDENTITY, not payment —
   // 19,051 of 19,052 upgrade signals are anonymous, and 99.7% of paywall hits
@@ -155,9 +156,14 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // claimCurl are now defined above (before human_message) so the rendered
   // message can lead with them; the duplicate definition here was removed.
   return {
-    human_message: human_message,
+    human_message: human_message + PROMO_TEXT,
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
+    starter_url:   STARTER_URL_LOCAL,   // includes PROMO_PARAM
+    developer_url: DEVELOPER_URL_LOCAL, // includes PROMO_PARAM
+    promo_cta:     PROMO_CTA,
+    promo_code:    PROMO_CODE,
+    promo_expires: '2026-07-01',
     signup_url:    signupUrl,
     platform:      _platform || null,
     // r52: programmatic self-serve fields. Detect via:
@@ -175,6 +181,18 @@ const PORT          = parseInt(process.env.PORT || '3100', 10);
 const UPGRADE_URL   = process.env.DCHUB_UPGRADE_URL   || 'https://dchub.cloud/ai#pricing';
 const SIGNUP_URL    = process.env.DCHUB_SIGNUP_URL    || 'https://dchub.cloud/ai';
 const KEY_CACHE_TTL = parseInt(process.env.DCHUB_KEY_CACHE_TTL_MS || '300000', 10); // 5 min
+
+// ── Launch promo (DCMCP50_LAUNCH) ──────────────────────────────────────────
+// 50% off first 3 months on Stripe Payment Links (Starter $9, Developer $49).
+// Stripe documented param `prefilled_promo_code` pre-fills the coupon at
+// buy.stripe.com checkout. Coupon must exist in Stripe dashboard — if not,
+// Stripe surfaces an inline "invalid promo code" message (no 500 / no broken
+// checkout). Expires 2026-07-01.
+const PROMO_CODE  = 'DCMCP50_LAUNCH';
+const PROMO_PARAM = '?prefilled_promo_code=' + PROMO_CODE;
+const PROMO_CTA   = '\u{1F381} 50% off first 3 months with code ' + PROMO_CODE + ' (expires 2026-07-01)';
+const PROMO_TEXT  = '\n\n\u{1F381} Use ' + PROMO_CODE + ' at checkout for 50% off the first 3 months. Expires 2026-07-01.';
+const DEVELOPER_URL = 'https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c';
 
 // ── Per-request context (api_key, platform, tier, session_id) ───────────────
 const ctx = new AsyncLocalStorage();
@@ -728,7 +746,7 @@ function phase9L_clean_preview(header, body) {
 //   Starter $9      → 8x2dRa5sS0x75uteGuaZi0g
 //   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
 //   Pro $199        → eVq5kE4oOfs13mleGuaZi0h
-const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
+const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
 
 // r62-conv (2026-06-01): live usage-based / metered Stripe Payment Link —
 // "Pay for usage, not seats" (no per-seat ceiling, scales with agent call
@@ -1123,13 +1141,16 @@ function trackedTool(srv, name, description, schema, handler) {
             // a trial (IDENTIFIED) key can't keep on grid_intelligence/fiber_intel.
             const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name);
             return {
-              content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText }],
+              content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText + PROMO_TEXT }],
               isError: true,
               structuredContent: {
                 trial_preview: true,
                 tool: name,
                 signup_url: _refUrl(SIGNUP_URL),
                 upgrade_url: _refUrl(UPGRADE_URL),
+                promo_cta:    PROMO_CTA,
+                promo_code:   PROMO_CODE,
+                promo_expires: '2026-07-01',
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
     ..._autoMintSC, /* r61-conv: present only when mint succeeded */
               },
@@ -1199,7 +1220,7 @@ Free tier covers **100 calls/day** across:
         // as the preview branch.
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name);
         return {
-          content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 }],
+          content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 + PROMO_TEXT }],
           isError: true,
           structuredContent: {
             error: 'paid_only',
@@ -1207,6 +1228,9 @@ Free tier covers **100 calls/day** across:
             current_tier: tier,
             upgrade_url: UPGRADE_URL,
             signup_url: _isKeyed ? null : SIGNUP_URL,
+            promo_cta:    PROMO_CTA,
+            promo_code:   PROMO_CODE,
+            promo_expires: '2026-07-01',
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
     ..._autoMintSC2, /* r61-conv: present only when mint succeeded */
           },
@@ -1247,7 +1271,11 @@ Free tier covers **100 calls/day** across:
               tier:        'anonymous',
               message:     'Anonymous tier — aggregate metrics masked. Get a free dev key for the real numbers.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
-              starter_url: 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g',
+              starter_url: 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM,
+              developer_url: DEVELOPER_URL + PROMO_PARAM,
+              promo_cta:   PROMO_CTA,
+              promo_code:  PROMO_CODE,
+              promo_expires: '2026-07-01',
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
           }
