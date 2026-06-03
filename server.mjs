@@ -1782,6 +1782,45 @@ function createServer() {
       }]
     }));
 
+  // ── DC Hub decision-layer products (2026-06-03) ──────────────────────────
+  // These three call the backend product APIs, which gate the SYNTHESIS layer
+  // server-side via tier_gate (callAPI forwards X-API-Key). So free/anon agents
+  // get the raw shortlist/radar/deal-flow (the hook + citations), and paid keys
+  // get the verdict/thesis/autopsy read. No extra MCP-side gating needed.
+  trackedTool(srv, 'site_selection_canvas',
+    'Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the DC Hub Power Index. Try: site_selection_canvas capacity_mw=100 region=TX max_months=24.',
+    { capacity_mw: I, region: S, max_months: I, verdict: S, limit: I },
+    async (a) => ({
+      content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/site-selection/canvas', {
+          capacity_mw: a.capacity_mw, region: a.region, max_months: a.max_months,
+          verdict: a.verdict, limit: a.limit || 12,
+        }))
+      }]
+    }));
+
+  trackedTool(srv, 'grid_transition_radar',
+    'Forward-looking "where is the next hyperscale-friendly grid emerging" radar. Returns the US markets + ISOs with the strongest near-term emergence signal (BUILD verdict + excess-power headroom + short time-to-power), an ISO rollup, and a grid-headroom leaderboard. With a paid key, also the transition thesis: which ISO is opening up and why. The predictive counter to retrospective "where capacity landed" reports. Try: grid_transition_radar max_months=24.',
+    { max_months: I, limit: I },
+    async (a) => ({
+      content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/grid-transition/radar', {
+          max_months: a.max_months, limit: a.limit || 15,
+        }))
+      }]
+    }));
+
+  trackedTool(srv, 'deal_autopsy',
+    'Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — "what is the real play?". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). Try: deal_autopsy limit=15.',
+    { limit: I },
+    async (a) => ({
+      content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/deal-autopsy', {
+          limit: a.limit || 15,
+        }))
+      }]
+    }));
+
   return srv;
 }
 
@@ -1864,7 +1903,7 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     server: 'DC Hub MCP',
     version: '2.1.22',
-    tools: 30,
+    tools: 33,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
