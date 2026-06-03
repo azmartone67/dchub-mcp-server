@@ -2122,12 +2122,23 @@ app.delete('/mcp', async (req, res) => {
   res.status(404).json({ error: 'Session not found' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DC Hub MCP Server v2.1.10 on port ${PORT}`);
-  console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
-  console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
-  console.log(`  Backend: ${API_BASE}`);
-  console.log(`  Telemetry: ${API_BASE}/api/v1/mcp/track`);
-  console.log(`  Key validation: ${API_BASE}/api/v1/keys/validate`);
-});
+// r70 (2026-06-03): skip binding the port under vitest so the pure gating
+// functions can be unit-tested by importing this module without starting a
+// live server. Production/Railway sets no VITEST env, so behavior is unchanged.
+if (!process.env.VITEST) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`DC Hub MCP Server v2.1.10 on port ${PORT}`);
+    console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
+    console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
+    console.log(`  Backend: ${API_BASE}`);
+    console.log(`  Telemetry: ${API_BASE}/api/v1/mcp/track`);
+    console.log(`  Key validation: ${API_BASE}/api/v1/keys/validate`);
+  });
+}
+
+// Test-only exports (ignored when run as the entrypoint — no effect on the
+// running server). These are the PURE, revenue-critical gating primitives that
+// have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
+// test/gating.test.mjs.
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey };
 
