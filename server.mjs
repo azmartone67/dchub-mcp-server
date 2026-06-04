@@ -83,7 +83,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 
   // r48 (2026-05-25): rename $49 tier from "Pro" \u2192 "Developer" (Pro is
   // actually $199), bump free-key wording from "25 calls/day across 14
-  // paid tools" \u2192 "1,000 calls/day" (the real limit), and add the $9
+  // paid tools" \u2192 "10 calls/day" (the real limit), and add the $9
   // Starter slot that was missing. This is the most-rendered paywall
   // string in the product (every paid-tool block on every MCP client
   // surfaces it), so getting the tier ladder right here matters most.
@@ -112,11 +112,11 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // dev-key route for users on Claude Code CLI.
     human_message = (
       lock + ' **' + toolName + ' ran on a 1-result preview \u2014 your agent is reasoning from a fraction of the data.** Make its answer complete + trustworthy:\n\n' +
-      '**1. $9/mo Starter (most popular, 10,000 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '**1. $9/mo Starter (most popular, 200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
       '   Unlocks ' + toolName + ' + most other paid tools.\n\n' +
       '**2. $49/mo Developer (unlimited paid tools)** \u2192 ' + upgradeUrl + '\n' +
       '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.\n\n' +
-      '**3. Free dev key (email, 1,000 calls/day)** \u2192 ' + redeemUrl + '\n' +
+      '**3. Free dev key (email, 10 calls/day)** \u2192 ' + redeemUrl + '\n' +
       '   *Claude.ai web doesn\u2019t accept API keys yet \u2014 paste into Claude Code CLI:* ' +
       '`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp`'
     );
@@ -127,12 +127,12 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // "actually useful" paid bump.
     human_message = (
       lock + ' **' + toolName + ' ran on a 1-result preview \u2014 your agent is reasoning from a fraction of the data.** Fastest fix (no email, no browser):\n\n' +
-      '**1. Instant free key \u2014 no email, one API call (1,000 calls/day):**\n' +
+      '**1. Instant free key \u2014 no email, one API call (10 calls/day):**\n' +
       '   `' + claimCurl + '`\n' +
       '   Returns {api_key}; send it as the `X-API-Key` header. No human, no browser.\n\n' +
       '**2. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
-      '   1,000 calls/day, no credit card.\n\n' +
-      '**3. $9/mo Starter (most popular, 10,000 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '   10 calls/day, no credit card.\n\n' +
+      '**3. $9/mo Starter (most popular, 200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
       '   Unlocks every paid tool except Pro-only ones.\n\n' +
       '**4. $49/mo Developer (unlimited paid tools)** \u2192 ' + upgradeUrl + '\n' +
       '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.'
@@ -400,7 +400,7 @@ async function checkTrialEligibility(session_id, tool_name) {
 // users hammer get_grid_intelligence/get_fiber_intel, see a 1-result
 // preview, hit a dead wall, and leave no email. POST /api/v1/keys/auto-mint
 // (routes/auto_trial.py) mints a dch_trial_ key resolved as IDENTIFIED tier
-// (1,000 calls/day, 30-day expiry) and DEDUPES on (ip_hash, ua) within 24h,
+// (10 calls/day, 30-day expiry) and DEDUPES on (ip_hash, ua) within 24h,
 // so a retrying agent reuses the same key instead of minting N. We forward
 // the real agent User-Agent so dedup keys on the actual caller (the MCP
 // server's own IP would otherwise collapse them). The agent gets a working
@@ -1229,7 +1229,7 @@ curl -X POST https://dchub.cloud/api/v1/dev-signup \\
 
 That returns an \`X-API-Key\` you drop into your MCP client config.
 
-Free tier covers **100 calls/day** across:
+Free tier covers **10 calls/day** across:
 - \`search_facilities\`, \`get_facility\`, \`list_transactions\`
 - \`get_news\`, \`get_market_intel\`, \`get_pipeline\`
 - \`get_grid_data\`, \`get_water_risk\`, \`get_renewable_energy\`, \`get_tax_incentives\`
