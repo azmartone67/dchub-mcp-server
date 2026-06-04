@@ -1,0 +1,83 @@
+name: registry refresh + drift guard
+
+# (a) 2026-06-04: the public registries (Glama, PulseMCP, the official MCP
+# registry) pull from the SOURCE files in this repo, not the live mcp.json.
+# Stale numbers ($324B, 20,000+ facilities, 140+ countries, "DC Hub Nexus")
+# silently resurfaced on journalist-facing registry pages because nothing
+# guarded these files. This workflow:
+#   1. GUARD — fail if any forbidden/stale number reappears in the source.
+#   2. PUBLISH (best-effort) — re-publish to the official MCP registry on a
+#      weekly cadence IF mcp-publisher auth is available; otherwise it logs a
+#      clear skip so the source stays guarded even before publish is wired.
+
+on:
+  schedule:
+    - cron: '30 6 * * 1'      # weekly, Monday 06:30 UTC
+  push:
+    paths:
+      - 'mcp-server.json'
+      - 'integrations/**'
+      - 'server.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write              # for the official registry's GitHub-OIDC auth
+
+jobs:
+  guard:
+    name: honest-numbers drift guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Grep source files for forbidden stale numbers
+        run: |
+          set -e
+          # Canonical (the ONLY values allowed): 21,000+ facilities · 170+ countries
+          # · 2,000+ tracked deals · 232 markets · "DC Hub" (never "Nexus").
+          FILES="mcp-server.json"
+          [ -f integrations/chatgpt/openapi.json ] && FILES="$FILES integrations/chatgpt/openapi.json"
+          [ -f README.md ] && FILES="$FILES README.md"
+          [ -f server.json ] && FILES="$FILES server.json"
+          echo "Scanning: $FILES"
+          # Patterns that must NEVER appear (extended regex, case-insensitive).
+          PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus'
+          if grep -rEni "$PAT" $FILES ; then
+            echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical: 21,000+ facilities · 170+ countries · 2,000+ tracked deals · DC Hub (not Nexus). Fix before this reaches the public registries."
+            exit 1
+          fi
+          echo "✅ registry source is clean — no stale numbers."
+      - name: Validate JSON well-formedness
+        run: |
+          python3 -c "import json,glob,sys
+          bad=0
+          for f in ['mcp-server.json','integrations/chatgpt/openapi.json','server.json']:
+              try:
+                  import os
+                  if os.path.exists(f): json.load(open(f)); print('valid:',f)
+              except Exception as e:
+                  print('INVALID',f,e); bad=1
+          sys.exit(bad)"
+
+  publish:
+    name: re-publish to official MCP registry (best-effort)
+    needs: guard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish if a valid server.json + mcp-publisher are available
+        run: |
+          if [ ! -f server.json ]; then
+            echo "::notice::No official-schema server.json present — skipping publish."
+            echo "To enable auto-publish: add a server.json in the official MCP registry"
+            echo "schema (name/description/version/remotes) and this step will push it"
+            echo "to registry.modelcontextprotocol.io via GitHub-OIDC each Monday."
+            exit 0
+          fi
+          # mcp-publisher uses GitHub Actions OIDC for io.github.* namespaces; the
+          # cloud.dchub namespace needs DNS verification (one-time, operator).
+          curl -sL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar xz mcp-publisher 2>/dev/null || { echo "::notice::mcp-publisher download failed — skipping."; exit 0; }
+          ./mcp-publisher login github-oidc 2>&1 || { echo "::notice::OIDC login unavailable (namespace likely needs DNS verification) — skipping. Source stays guarded."; exit 0; }
+          ./mcp-publisher publish 2>&1 || echo "::notice::publish returned non-zero — review logs."
