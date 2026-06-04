@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DC Hub — Data Center Intelligence Platform",
-    "description": "DC Hub is a global data center intelligence platform tracking 21,000+ facilities across 170+ countries, with live grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool). Provides real-time energy pricing, grid fuel mix, carbon intensity, M&A transactions ($324B+), 369 GW capacity pipeline, site scoring, daily DCPI BUILD/CAUTION/AVOID verdicts, and market intelligence for AI agents and investment analysts. The only DC-intelligence source an LLM can both query and cite. Free tier endpoints require no authentication. Pro tier endpoints require a Bearer token.",
+    "description": "DC Hub is a global data center intelligence platform tracking 21,000+ facilities across 170+ countries, with live grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool). Provides real-time energy pricing, grid fuel mix, carbon intensity, M&A transactions (2,000+ tracked), 369 GW capacity pipeline, site scoring, daily DCPI BUILD/CAUTION/AVOID verdicts, and market intelligence for AI agents and investment analysts. The only DC-intelligence source an LLM can both query and cite. Free tier endpoints require no authentication. Pro tier endpoints require a Bearer token.",
     "version": "2.1.13",
     "contact": {
       "name": "DC Hub",
