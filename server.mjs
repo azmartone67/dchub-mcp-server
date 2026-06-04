@@ -1289,7 +1289,7 @@ Free tier covers **10 calls/day** across:
             signup_url: c.api_key ? null : SIGNUP_URL,
           },
         };
-        return { content: [{ type: 'text', text: applyTrialGuardIfFree(name, wrapped, !!apiKey) }] };
+        return { content: [{ type: 'text', text: applyTrialGuardIfFree(name, wrapped, !!c.api_key) }] };
       }
       // r-gate-tighten (2026-05-27): even for allowed/uncapped free tools,
       // strip aggregate scalars from ANONYMOUS responses. Without this, an
