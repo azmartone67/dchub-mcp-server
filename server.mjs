@@ -1616,6 +1616,32 @@ function createServer() {
         }
       } catch (_e) { /* best-effort enrichment; scoreboard works without it */ }
 
+      // r70b (2026-06-04): attach LIVE interconnection-queue depth per US grid.
+      // The snapshot is now POPULATED (the iso-queue ingest cron + 6 real parsers:
+      // MISO/SPP/CAISO/NYISO fresh today, ERCOT/PJM/ISO-NE seeded) — so the earlier
+      // "by_iso empty" reason no longer holds. Greenest-grid ranking + queue depth
+      // in ONE flagship view. Fail-soft; internal UA so the snapshot isn't gated.
+      let usQueueGw = null;
+      try {
+        const _qsnap = await callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true });
+        const _qrows = (_qsnap && _qsnap.by_iso) || [];
+        const _qn = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const _qByIso = {};
+        for (const r of _qrows) { if (r && r.iso) _qByIso[_qn(r.iso)] = r; }
+        for (const g of grids) {
+          const q = g && g.iso && _qByIso[_qn(g.iso)];
+          if (q && _num(q.queued_load_total_gw) != null) {
+            g.interconnection_queue = {
+              queued_gw:    _num(q.queued_load_total_gw),
+              dc_share_pct: _num(q.queued_load_dc_share_pct),
+              as_of:        q.as_of || null,
+              note: 'Live ISO interconnection-queue depth (DC Hub iso-queue ingest). Pair renewable_share + queue depth for "greenest AND most buildable".',
+            };
+          }
+        }
+        if (_qsnap && _qsnap.totals) usQueueGw = _num(_qsnap.totals.queued_load_gw);
+      } catch (_e) { /* queue enrichment best-effort */ }
+
       // r70 (2026-06-03): surface the live EU gas-transmission context (ENTSOG)
       // on the flagship scoreboard too — it was only reachable at the
       // low-discoverability /api/v1/gas/eu/snapshot. It's a CONTEXT layer (gas
@@ -1643,6 +1669,7 @@ function createServer() {
         grids: [...ranked, ...errored],
         partial_grids: partial,
         eu_gas_context: euGas,
+        us_interconnection_queue_gw: usQueueGw,
         // r70 (2026-06-03): this free scoreboard answers "which grid is greenest
         // RIGHT NOW" — the facts. The siting DECISION (how much headroom, how deep
         // the interconnection queue, time-to-power, full multi-factor site score)
