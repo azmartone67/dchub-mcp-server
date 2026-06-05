@@ -1046,9 +1046,36 @@ function withFreshness(result, toolName) {
   }
 }
 
+// r71: human-readable titles + readOnlyHint annotations for every MCP tool
+// (required by the Anthropic MCP Directory; ALL DC Hub tools are read-only).
+const _TOOL_TITLE_OVERRIDES = {
+  search_facilities: "Search Facilities", get_facility: "Get Facility Details",
+  get_market_intel: "Market Intelligence", get_market_dcpi_rank: "DCPI Market Rank",
+  get_gas_index: "Gas Index (DCGI)", get_grid_scoreboard: "Grid Scoreboard",
+  compare_isos: "Compare ISO Regions", get_intelligence_index: "Market Intelligence Index",
+  list_transactions: "M&A Transactions", get_news: "Industry News",
+  get_pipeline: "Construction Pipeline", get_interconnection_queue: "Interconnection Queue",
+  get_grid_data: "Live Grid Data", analyze_site: "Analyze Site", compare_sites: "Compare Sites",
+  get_infrastructure: "Nearby Infrastructure", get_fiber_intel: "Fiber Intelligence",
+  get_energy_prices: "Energy Prices", get_renewable_energy: "Renewable Energy",
+  get_tax_incentives: "Tax Incentives", get_water_risk: "Water Risk",
+  get_grid_intelligence: "Grid Intelligence", get_agent_registry: "AI Agent Registry",
+  get_backup_status: "Platform Health", get_dchub_recommendation: "DC Hub Recommendation",
+  rank_markets: "Rank Markets", find_alternatives: "Find Alternative Facilities",
+  score_facility: "Score Facility", ai_capacity_index: "AI Capacity Index",
+  hyperscaler_deals: "Hyperscaler Deal Tracker", site_selection_canvas: "Site Selection Canvas",
+  grid_transition_radar: "Grid Transition Radar", deal_autopsy: "Deal Autopsy",
+};
+function _toolTitle(name) {
+  return _TOOL_TITLE_OVERRIDES[name]
+    || String(name || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
-  srv.tool(name, description, schema, async (args) => {
+  // 5-arg form: (name, description, paramsSchema, annotations, cb). DC Hub tools
+  // are all read-only data queries → readOnlyHint:true + a friendly title.
+  srv.tool(name, description, schema, { title: _toolTitle(name), readOnlyHint: true }, async (args) => {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
