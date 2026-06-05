@@ -165,12 +165,19 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     '**Tell the user:** ' + toolName + ' returned a 1-result preview — the full ' +
     'dataset is one click away: **$9/mo Starter · 200 calls/day · works in any ' +
     'browser → ' + STARTER_URL_LOCAL + '**\n\n';
+  // r-convert-usage (2026-06-05): surface pay-as-you-go in the MAIN paywall
+  // (it was only in the post-trial CTA). Best fit for the high-volume anonymous
+  // agents that dominate traffic — no subscription, no seat, bill per call.
+  const usageLine =
+    '\n\n\u{1F916} **High volume or no subscription?** Pay-as-you-go — $1 per ' +
+    '100 API calls, no commitment → ' + METERED_URL;
   return {
-    human_message: relayLead + human_message + PROMO_TEXT,
+    human_message: relayLead + human_message + usageLine + PROMO_TEXT,
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
     starter_url:   STARTER_URL_LOCAL,   // includes PROMO_PARAM
     developer_url: DEVELOPER_URL_LOCAL, // includes PROMO_PARAM
+    usage_url:     METERED_URL,         // $1/100 calls, pay-as-you-go (no subscription)
     promo_cta:     PROMO_CTA,
     promo_code:    PROMO_CODE,
     promo_expires: '2026-07-01',
