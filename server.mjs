@@ -87,8 +87,12 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // Starter slot that was missing. This is the most-rendered paywall
   // string in the product (every paid-tool block on every MCP client
   // surfaces it), so getting the tier ladder right here matters most.
-  const STARTER_URL_LOCAL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
-  const DEVELOPER_URL_LOCAL = DEVELOPER_URL + PROMO_PARAM;
+  // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL
+  // so the webhook can bind the successful checkout back to THIS MCP session.
+  const _STARTER_URL_RAW = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
+  const _DEVELOPER_URL_RAW = DEVELOPER_URL + PROMO_PARAM;
+  const STARTER_URL_LOCAL = _stripeWithSession(_STARTER_URL_RAW, sessionId);
+  const DEVELOPER_URL_LOCAL = _stripeWithSession(_DEVELOPER_URL_RAW, sessionId);
 
   // r53 (2026-05-31): the #1 conversion blocker is IDENTITY, not payment —
   // 19,051 of 19,052 upgrade signals are anonymous, and 99.7% of paywall hits
@@ -168,16 +172,18 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // r-convert-usage (2026-06-05): surface pay-as-you-go in the MAIN paywall
   // (it was only in the post-trial CTA). Best fit for the high-volume anonymous
   // agents that dominate traffic — no subscription, no seat, bill per call.
+  // Fix E: session-bound usage URL too (so a metered checkout also closes the loop).
+  const _USAGE_URL_LOCAL = _stripeWithSession(METERED_URL, sessionId);
   const usageLine =
     '\n\n\u{1F916} **High volume or no subscription?** Pay-as-you-go — $1 per ' +
-    '100 API calls, no commitment → ' + METERED_URL;
+    '100 API calls, no commitment → ' + _USAGE_URL_LOCAL;
   return {
     human_message: relayLead + human_message + usageLine + PROMO_TEXT,
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
-    starter_url:   STARTER_URL_LOCAL,   // includes PROMO_PARAM
-    developer_url: DEVELOPER_URL_LOCAL, // includes PROMO_PARAM
-    usage_url:     METERED_URL,         // $1/100 calls, pay-as-you-go (no subscription)
+    starter_url:   STARTER_URL_LOCAL,   // includes PROMO_PARAM + client_reference_id
+    developer_url: DEVELOPER_URL_LOCAL, // includes PROMO_PARAM + client_reference_id
+    usage_url:     _USAGE_URL_LOCAL,    // $1/100 calls + client_reference_id
     promo_cta:     PROMO_CTA,
     promo_code:    PROMO_CODE,
     promo_expires: '2026-07-01',
@@ -210,6 +216,36 @@ const PROMO_PARAM = '?prefilled_promo_code=' + PROMO_CODE;
 const PROMO_CTA   = '\u{1F381} 50% off first 3 months with code ' + PROMO_CODE + ' (expires 2026-07-01)';
 const PROMO_TEXT  = '\n\n\u{1F381} Use ' + PROMO_CODE + ' at checkout for 50% off the first 3 months. Expires 2026-07-01.';
 const DEVELOPER_URL = 'https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c';
+
+// ── Fix E (2026-06-06): client_reference_id = mcp_session_id on every Stripe URL ──
+// Threads the Mcp-Session-Id through every buy.stripe.com link surfaced in a
+// paywall response. When the human completes Stripe Checkout, the
+// checkout.session.completed webhook payload includes
+// session.client_reference_id = <mcp_session_id>; the backend handler
+// (handle_checkout_completed in main.py) inserts a row into
+// mcp_session_upgrades so the NEXT tool call from the same Mcp-Session-Id
+// is instantly served full data — no key swap, no email roundtrip, no
+// session restart. Closes the conversion loop end-to-end inside Claude.ai
+// web, ChatGPT, Cursor, Cline, and any other MCP client where the human
+// pays in-browser while the agent's session keeps going. Before this, the
+// payment landed but had no way to bind to the originating session — and
+// even the keyed flow lost the connection on hard paywalls.
+//
+// Safe with any URL shape: handles raw stripe links, promo-param links,
+// and absent session_id (falls back to plain URL). NEVER throws.
+function _stripeWithSession(url, sessionId) {
+  try {
+    if (!url || !sessionId) return url;
+    const sid = String(sessionId).slice(0, 200);
+    if (!sid || sid === 'no-session') return url;
+    // Already has client_reference_id → leave alone (idempotent).
+    if (/[?&]client_reference_id=/.test(url)) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return url + sep + 'client_reference_id=' + encodeURIComponent(sid);
+  } catch (_) {
+    return url;
+  }
+}
 
 // ── Per-request context (api_key, platform, tier, session_id) ───────────────
 const ctx = new AsyncLocalStorage();
@@ -711,6 +747,14 @@ function buildAutoMintBlock(mint, name) {
   // usage-based option) which had no key binding, so payments never attached
   // to the calling key.
   const upgradeUrl = 'https://dchub.cloud/upgrade?key=' + encodeURIComponent(mint.api_key) + '&tool=' + encodeURIComponent(name || '');
+  // Fix E (2026-06-06): bind METERED_URL to the current MCP session_id so a
+  // direct usage-based checkout (skipping the pair-code path) also closes the
+  // conversion loop via the webhook's client_reference_id binding.
+  let _meteredUrl = METERED_URL;
+  try {
+    const _sid = (getCtx() && getCtx().session_id) || '';
+    if (_sid) _meteredUrl = _stripeWithSession(METERED_URL, _sid);
+  } catch (_) {}
   const text =
     '\n\n---\n' +
     '✅ **Free trial key — no email, no signup. Add this header, reconnect, and call again:**\n' +
@@ -722,7 +766,7 @@ function buildAutoMintBlock(mint, name) {
       : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n')) +
     '\u{1F517} **Make it permanent — one link, no key swap:** have the human open ' + upgradeUrl + '\n' +
     '   → they pick a plan (Developer $49/mo or Pro $199/mo), pay once, and THIS key auto-upgrades. Your next call returns full data.\n' +
-    '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + METERED_URL + '\n';
+    '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + _meteredUrl + '\n';
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
@@ -733,11 +777,11 @@ function buildAutoMintBlock(mint, name) {
     persist_command:           'claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp',
     persist_hint:              'Save the X-API-Key header in your MCP client config (Claude Code: run persist_command) so this key is reused on every future session — no more previews. This is the fix for the retry-with-key step.',
     retry_instructions: stillPro
-      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it at ' + METERED_URL + '.')
+      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it at ' + _meteredUrl + '.')
       : ('Add header X-API-Key: ' + mint.api_key + ' (configure it on the MCP server and reconnect), then call ' + name + ' again for the full result.'),
     trial_unlocks_this_tool:   !stillPro,
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
-    owner_purchase_url:        METERED_URL,
+    owner_purchase_url:        _meteredUrl,
     owner_purchase_model:      'usage_based_metered',
     upgrade_url:               upgradeUrl,
     upgrade_model:             'pair_code_key_bound',
@@ -887,14 +931,17 @@ const METERED_URL = 'https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i';
 const TRIAL_HEADER_OVERRIDES = {
   get_market_intel: (sessionId, refUrlDeveloper) => {
     const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
+    // Fix E (2026-06-06): bind Stripe URLs to the current MCP session_id.
+    const _starter = _stripeWithSession(STARTER_URL, sessionId);
+    const _developer = _stripeWithSession(refUrlDeveloper, sessionId);
     return [
       '## 📊 Your agent just answered using 1 of 232 markets',
       '',
       "The number above is real — but it's a single market with no facility detail, pipeline, or operator landscape. **An agent reasoning from one data point gives incomplete answers.** Give it the full report so it reasons from everything:",
       '',
       '⚡ **Fastest path (no email, no browser):** `POST https://dchub.cloud/api/v1/keys/claim` `{"client_name":"<you>"}` → `{api_key}`; set `X-API-Key` + reconnect. Unlocks all 232 markets + the free-tier toolset.',
-      `→ **[Developer $49/mo](${refUrlDeveloper})** — full report + grid intel + fiber, so your agent's answers are complete & trustworthy`,
-      `→ **[Starter $9/mo](${STARTER_URL})** · [free dev key by email](${redeem})`,
+      `→ **[Developer $49/mo](${_developer})** — full report + grid intel + fiber, so your agent's answers are complete & trustworthy`,
+      `→ **[Starter $9/mo](${_starter})** · [free dev key by email](${redeem})`,
       '🤖 **Running 1,000s of calls/day?** Usage-based pricing — pay per call, no seat cap: https://dchub.cloud/pricing',
       '',
       '---',
@@ -907,6 +954,10 @@ function trialHeader(toolName, sessionId, refUrlDeveloper) {
   const override = TRIAL_HEADER_OVERRIDES[toolName];
   if (override) return override(sessionId, refUrlDeveloper);
   const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
+  // Fix E (2026-06-06): bind Stripe URLs to the current MCP session_id so the
+  // checkout.session.completed webhook can flip THIS session to upgraded.
+  const _starter = _stripeWithSession(STARTER_URL, sessionId);
+  const _developer = _stripeWithSession(refUrlDeveloper, sessionId);
   // r56-conv (2026-05-31): surface the NO-EMAIL claim path on the most-hit
   // paywall surface (content[0].text — what LLM clients render). Previously
   // only the email-redeem link + Stripe were here; the instant claim path
@@ -923,7 +974,7 @@ function trialHeader(toolName, sessionId, refUrlDeveloper) {
   // web can't yet → upgrade link).
   return '🔒 **`' + toolName + '` returned only a 1-result preview.** Your agent is reasoning from a *fraction* of DC Hub\'s data — so its answer may be incomplete or wrong. Give it the full picture and it stops guessing:\n\n' +
          '⚡ **Fastest path (no email, no browser):** `POST https://dchub.cloud/api/v1/keys/claim` `{"client_name":"<your-agent>"}` → `{api_key}`; add it as your `X-API-Key` header and reconnect. Free tier, full toolset, instant. *(Cursor / Cline / CLI: drop it in your MCP config. Claude.ai web can\'t hold a key yet → use the upgrade link.)*\n\n' +
-         `👉 **Make \`${toolName}\` complete + trustworthy:** **[Developer $49/mo](${refUrlDeveloper})** — every market + all ISO grid intel + fiber routes · **[Starter $9/mo](${STARTER_URL})** · [free dev key by email](${redeem})\n` +
+         `👉 **Make \`${toolName}\` complete + trustworthy:** **[Developer $49/mo](${_developer})** — every market + all ISO grid intel + fiber routes · **[Starter $9/mo](${_starter})** · [free dev key by email](${redeem})\n` +
          '🤖 **Running 1,000s of calls/day?** Usage-based pricing — pay per call, no seat cap: https://dchub.cloud/pricing\n\n---\n\n';
 }
 
@@ -1379,7 +1430,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transact
         // CTA from a dead-end curl to a working Stripe link should
         // capture even 2-3% = +3-5 conversions/mo from this cohort alone.
         const _isClaude = (c.platform || '').toLowerCase() === 'claude';
-        const _starterUrl_anon = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
+        // Fix E (2026-06-06): bind to MCP session_id so the checkout.session.completed
+        // webhook can mark THIS session as upgraded.
+        const _starterUrl_anon = _stripeWithSession(
+          'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM,
+          c.session_id);
         const _mdAnon = _isClaude
           ? `## \u{1F512} \`${name}\` is a paid feature
 
@@ -1509,12 +1564,13 @@ Free tier covers **10 calls/day** across:
           if (parsed && typeof parsed === 'object') {
             const trimmed = trimForTrial(parsed);
             const _sid = c.session_id || 'no-session';
+            // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL.
             trimmed._upgrade = {
               tier:        'anonymous',
               message:     'Anonymous tier — aggregate metrics masked. Get a free dev key for the real numbers.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
-              starter_url: 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM,
-              developer_url: DEVELOPER_URL + PROMO_PARAM,
+              starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
+              developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
               promo_cta:   PROMO_CTA,
               promo_code:  PROMO_CODE,
               promo_expires: '2026-07-01',
