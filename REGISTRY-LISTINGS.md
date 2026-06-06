@@ -30,7 +30,7 @@ Coverage:
 - **Markets** — 232 markets with the **DCPI** (Data Center Power Index): BUILD/CAUTION/AVOID
 - **Gas** — the **DCGI** (Data Center Gas Index): per-state natural-gas suitability for siting
 - **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 10 North-American grid operators; one-call all-ISO scoreboard
-- **Capital** — $324B+ M&A history + hyperscaler capex tracker + AI Compute Capacity Index
+- **Capital** — 2,000+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
 - **Site factors** — fiber routes, water-stress, tax incentives, nearby substations/transmission
 
 Why agents pick it: the only DC-intelligence source an LLM can query live AND cite — the MCP-native alternative to static PDF research. No NDAs, no quarterly reports, just live JSON.
@@ -117,7 +117,7 @@ With a key:
 **Description:**
 > DC Hub is the neutral, real-time data layer for data-center infrastructure, exposed as a Model Context Protocol server so any AI agent can both **query** it and **cite** it.
 >
-> **Coverage:** 21,000+ facilities (search, profile, score, alternatives); 232 markets scored by the DCPI Data Center Power Index; the DCGI Data Center Gas Index (per-state natural-gas suitability for siting); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; $324B+ M&A history and a hyperscaler-capex tracker; and site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission.
+> **Coverage:** 21,000+ facilities (search, profile, score, alternatives); 232 markets scored by the DCPI Data Center Power Index; the DCGI Data Center Gas Index (per-state natural-gas suitability for siting); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; 2,000+ tracked M&A deals and a hyperscaler-capex tracker; and site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission.
 >
 > **Why agents choose it:** it's the only data-center-intelligence source an LLM can query live *and* cite — every full-data response includes a `Source: DC Hub, CC-BY-4.0` attribution line. It's the MCP-native alternative to quarterly PDF research: live JSON, no contracts, no NDAs.
 >
