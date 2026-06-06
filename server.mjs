@@ -337,6 +337,40 @@ async function pingRegistryHeartbeat(toolName, rowsAffected) {
   }
 }
 
+// ── Paywall signal: fire-and-forget POST to /api/v1/mcp/signal-paywall ────
+//
+// 2026-06-06 (MCP-C): per-tool funnel optimization was structurally blind
+// because the trial_preview + blocked_paid_only branches below never wrote
+// mcp_upgrade_signals (only the Python gate path in mcp_upgrade_gate.py
+// did, and that only fires from Flask-served tools — NOT from the Node
+// MCP server). 4,540 paywall hits/30d on get_grid_intelligence had 0
+// signals tagged with tool_requested = 'get_grid_intelligence', so the
+// /api/v1/mcp/funnel rollup couldn't tell which tools were driving demand
+// at the paywall.
+//
+// signalPaywall() POSTs to a thin Flask endpoint that delegates to
+// fire_upgrade_signal() — which already handles synthetic-traffic
+// exclusion, api_key→user_email resolution, and the canonical INSERT
+// with tool_requested populated. Fire-and-forget — never blocks the
+// paywall response. 1500ms timeout to match the rest of the telemetry
+// pipeline (track / heartbeat / validateKey).
+async function signalPaywall(payload) {
+  try {
+    await fetch(new URL('/api/v1/mcp/signal-paywall', API_BASE).toString(), {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Key': INTERNAL_KEY,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(1500),
+    });
+  } catch (err) {
+    console.error('[signal-paywall] failed:', err.message);
+  }
+}
+
 // ── Key validation (cached) ────────────────────────────────────────────────
 //
 // r40-validator-unblock (2026-05-24): timeout reduced from 5000→1500ms to
@@ -1264,6 +1298,22 @@ function trackedTool(srv, name, description, schema, handler) {
             // — replaces the false "retry <pro tool> for the full result" promise
             // a trial (IDENTIFIED) key can't keep on grid_intelligence/fiber_intel.
             const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name);
+            // MCP-C (2026-06-06): write the upgrade signal with tool_requested
+            // populated. Per-tool funnel was blind before this — see
+            // signalPaywall() comment above and the /api/v1/mcp/signal-paywall
+            // route in flask_mcp_endpoints.py. Fire-and-forget — does NOT
+            // block the paywall response on backend slowness.
+            signalPaywall({
+              tool: name,
+              signal_type: 'trial_preview',
+              session_id: _sid,
+              mcp_client: c.platform || 'mcp',
+              user_agent: c.client_ua || null,
+              api_key: c.api_key || null,
+              tier_current: _gateTier || 'free',
+              tier_required: 'paid',
+              message_shown: 'trial_preview',
+            });
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText + PROMO_TEXT }],
               isError: true,
@@ -1388,6 +1438,24 @@ Free tier covers **10 calls/day** across:
         // r62b-conv: honest unlock block (shared helper) — same truthful CTA
         // as the preview branch.
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name);
+        // MCP-C (2026-06-06): write tool_requested-tagged signal here too.
+        // This is the second of two paywall return points (the other is
+        // trial_preview above). Without this write, hard-blocked Pro tools
+        // (when an _isKeyed=false anon can't be trial_preview'd, or when
+        // the user is keyed but on free tier) wouldn't appear in the
+        // per-tool funnel rollup. fire-and-forget, never blocks return.
+        const _sid2 = (c && c.session_id) || 'no-session';
+        signalPaywall({
+          tool: name,
+          signal_type: 'paid_tool_blocked',
+          session_id: _sid2,
+          mcp_client: c.platform || 'mcp',
+          user_agent: c.client_ua || null,
+          api_key: c.api_key || null,
+          tier_current: tier || 'free',
+          tier_required: 'paid',
+          message_shown: _isKeyed ? 'mdKeyed' : 'mdAnon',
+        });
         return {
           content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 + PROMO_TEXT }],
           isError: true,
