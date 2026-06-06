@@ -558,6 +558,35 @@ const ALWAYS_PARTIAL_PREVIEW = new Set([
   'get_fiber_intel',        // 5,162 calls / 116 users
 ]);
 
+// r71-anonpreview (2026-06-06): the 3 DECISION-layer Pro tools currently
+// return a HARD `_mdAnon` block for anonymous callers (PAID_ONLY + not in
+// ALWAYS_PARTIAL_PREVIEW). 30-day funnel data shows:
+//   analyze_site               — 94 calls / 23 distinct users / 0 conv
+//   compare_sites              — 69 calls / 22 distinct users / 0 conv
+//   get_dchub_recommendation   — 50 calls / 21 distinct users / 0 conv
+// → ~66 distinct site-decision users / month walked into a brick wall and
+// quit. That's ~22% of the addressable demand pool (297 users) being lost
+// at stage 0. Hard blocks have a strict 0% conversion vs the trim-preview
+// pattern (proven on get_grid_intelligence: 7 unique keys → 4 codes minted).
+//
+// This new ANON_PREVIEW_ONLY set is checked in the gate.allowed=false
+// branch alongside KEYED_FREE_BONUS / ALWAYS_PARTIAL_PREVIEW: anonymous
+// callers get a trimmed 1-result preview + the same conversion CTA stack
+// (auto-mint trial, claim-endpoint, $9/$49 Stripe, redeem URL) instead of
+// the hard wall. Trial keys still cannot unlock these (kept Pro-only) —
+// they're decision-layer outputs, not facts, so we don't want a 7-day
+// throwaway trial to consume the proprietary recommendation logic.
+//
+// Expected lift math: 66 distinct users × baseline-equivalent 3.7%
+// conversion (current paid-pool rate) = +2.4 conversions/mo, OR if
+// they convert at the higher signaled-intent rate of 11/107 ≈ 10%:
+// +6.6 conversions/mo. Floor estimate: +2/mo.
+const ANON_PREVIEW_ONLY = new Set([
+  'analyze_site',             // 94 calls / 23 users / 0 conv (30d)
+  'compare_sites',            // 69 calls / 22 users / 0 conv
+  'get_dchub_recommendation', // 50 calls / 21 users / 0 conv
+]);
+
 // r62b-conv (2026-06-01): the 5 PRO-only tools. A minted dch_trial_ key
 // resolves to IDENTIFIED tier, which unlocks everything in PAID_ONLY_TOOLS
 // EXCEPT these 5. The conversion-funnel showed 33 trials minted / only 2 ever
@@ -1156,8 +1185,16 @@ function trackedTool(srv, name, description, schema, handler) {
           // get_grid_intelligence — they WANT it. Letting them see 1
           // ISO/route every call (vs blocked after #2) creates the
           // "I see it works, $49 to see all 7" conversion moment.
+          // r71-anonpreview (2026-06-06): for the 3 DECISION-layer Pro tools
+          // (analyze_site, compare_sites, get_dchub_recommendation), give
+          // ANONYMOUS callers (no api_key) a trimmed preview instead of the
+          // hard `_mdAnon` block. Keyed callers still bounce → upgrade CTA,
+          // because they've already self-identified and need the paid plan.
+          // This converts ~66 distinct site-decision users/mo from "hard
+          // wall → quit" to "see it works → upgrade".
           const _alwaysPreview = KEYED_FREE_BONUS.has(name)
-                                  || ALWAYS_PARTIAL_PREVIEW.has(name);
+                                  || ALWAYS_PARTIAL_PREVIEW.has(name)
+                                  || (!c.api_key && ANON_PREVIEW_ONLY.has(name));
           const _trial = _alwaysPreview
             ? { trial_used: false, _always_preview: true }
             : await checkTrialEligibility(c.session_id, name);
@@ -1264,7 +1301,52 @@ You're on **free tier** with a dev key — this tool is gated to **Pro** ($49/mo
 
 Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`.`;
 
-        const _mdAnon = `## \u{1F512} \`${name}\` is a paid feature
+        // r71-claudetune (2026-06-06): platform-aware _mdAnon. Claude.ai
+        // is ~56% of attributable AI traffic (94,948 of ~204K external
+        // requests/mo, second-place ChatGPT at 27,080). Claude.ai web
+        // custom-connector users CANNOT paste an X-API-Key back into the
+        // chat — there is no UI surface for it. The prior _mdAnon led
+        // with `curl -X POST … dev-signup` and a "drop into your MCP
+        // client config" instruction, both of which are dead-ends inside
+        // Claude.ai web. Result: zero key-claim traffic from Claude.ai.
+        //
+        // Detection: c.platform is set by detectPlatformFromInit() at
+        // session start (clientInfo.name → 'claude' for claude-ai /
+        // Claude Desktop / Claude Code). For Claude, lead with the
+        // one-click Stripe Starter URL — it works in any browser, $9
+        // captures the most-rendered paywall slot (per r48 comment),
+        // and the human-in-the-loop conversion path is the proven one
+        // (all 11 of our 30d conversions came via Stripe webhook). For
+        // every other platform (Cursor/Cline/Continue/Codex/etc.) keep
+        // the prior dev-key-first ordering — those clients CAN hold an
+        // X-API-Key and the no-email claim path is genuinely fastest.
+        //
+        // Expected lift math (conservative): Claude.ai delivers ~56% of
+        // the 297 distinct paid-tool users = ~166 users/mo on this code
+        // path. Current Claude-attributable conversion = 0 (per
+        // signals_by_platform_30d: claude/claude-desktop/anthropicapi
+        // combined = 0 converted, 19 signals). Moving the first-rendered
+        // CTA from a dead-end curl to a working Stripe link should
+        // capture even 2-3% = +3-5 conversions/mo from this cohort alone.
+        const _isClaude = (c.platform || '').toLowerCase() === 'claude';
+        const _starterUrl_anon = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
+        const _mdAnon = _isClaude
+          ? `## \u{1F512} \`${name}\` is a paid feature
+
+### Fastest unlock for Claude.ai users (works in this browser)
+
+\u{1F449} **[Get Starter — $9/mo, 200 calls/day](${_starterUrl_anon})** — most popular. Click, pay, refresh this chat. Unlocks \`${name}\` + most paid tools.
+
+\u{1F449} **[Get Developer — $49/mo, 500 calls/day](${UPGRADE_URL})** — full \`${name}\` + all ISO grid intel + interconnection queue + fiber routes.
+
+> *${PROMO_CTA}*
+
+### Or get a free dev key by email (60 sec)
+
+If you also use **Claude Code CLI**, Cursor, Cline, or another MCP client that holds an X-API-Key header, you can claim a free key here: https://dchub.cloud/signup — then run \`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp\` to use it across sessions.
+
+Free tier covers **10 calls/day** across \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`, \`get_renewable_energy\`, \`get_tax_incentives\`, \`get_infrastructure\`, \`get_energy_prices\`, \`get_intelligence_index\`.`
+          : `## \u{1F512} \`${name}\` is a paid feature
 
 ### Get a free dev key in 30 seconds (no credit card)
 
