@@ -1,0 +1,7 @@
+.git
+.github
+__pycache__
+node_modules
+*.md
+!README.md
+.DS_Store
