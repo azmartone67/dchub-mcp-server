@@ -566,6 +566,33 @@ async function callAPI(path, params = {}, opts = {}) {
   } catch (err) { return { error: err.message }; }
 }
 
+// POST helper for the agent-WRITE tools (save_site / set_market_alert). Mirrors
+// callAPI's identity forwarding (X-API-Key from the active ctx) so a PRO agent's
+// writes persist to THAT user; the backend still enforces the per-user tier gate.
+async function callAPIWrite(path, body = {}, opts = {}) {
+  const url = new URL(path, API_BASE);
+  const c = getCtx();
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Internal-Key': INTERNAL_KEY,
+    'Accept': 'application/json',
+  };
+  if (c.api_key)    headers['X-API-Key']     = c.api_key;
+  if (c.platform)   headers['X-MCP-Platform'] = c.platform;
+  if (c.session_id) headers['X-MCP-Session']  = c.session_id;
+  try {
+    const resp = await fetch(url.toString(), {
+      method: opts.method || 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    });
+    const text = await resp.text();
+    if (!resp.ok) return { error: `API ${resp.status}`, detail: text.slice(0, 500) };
+    try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
+  } catch (err) { return { error: err.message }; }
+}
+
 // ── Free-tier limits and paid-only tools ───────────────────────────────────
 const FREE_TIER_LIMITS = {
   search_facilities:  { max_limit: 25 },
@@ -668,6 +695,10 @@ const ANON_PREVIEW_ONLY = new Set([
 const PRO_ONLY_TOOLS = new Set([
   'analyze_site', 'compare_sites', 'get_grid_intelligence',
   'get_fiber_intel', 'get_dchub_recommendation',
+  // 2026-06-06 agent moat: persistence + monitoring + bulk export. Backend
+  // already tier-gates these (require_tier PRO on /api/v1/lp/*); listed here
+  // so the MCP layer shows a clean paywall instead of proxying a raw 402.
+  'save_site', 'list_saved_sites', 'set_market_alert', 'export_dataset',
 ]);
 
 // r70 (2026-06-03): the FREE FLAGSHIP HOOKS. A tool here is the citation
@@ -1998,6 +2029,30 @@ function createServer() {
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data across 10 ISOs: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Fuel mix, demand, prices.',
     { iso: S, metric: S, period: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/status', a)) }] }));
+
+  // ── Agent moat (2026-06-06): memory + monitoring + incremental sync ──
+  // Turns DC Hub from a stateless lookup into agent state. get_changes wraps
+  // the public delta feed (free hook); the rest wrap PRO-gated persistence /
+  // monitoring endpoints (backend enforces the tier gate; listed PRO_ONLY).
+  trackedTool(srv, 'get_changes', 'Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d.',
+    { since: S, limit: I },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
+
+  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor. Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100.',
+    { lat: N, lon: N, name: S, state: S, market: S, target_mw: N, notes: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
+
+  trackedTool(srv, 'list_saved_sites', 'List the sites saved to your DC Hub account (PRO) — the persistent shortlist from save_site, each with its saved DCPI score, target MW, market, and notes. Try: list_saved_sites.',
+    {},
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
+
+  trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (PRO) — get notified when its Excess-Power / Constraint score moves. Use channel="email" + destination=<email>, or channel="webhook" + destination=<https URL>. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc.',
+    { market: S, channel: S, destination: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
+
+  trackedTool(srv, 'export_dataset', 'Bulk export your saved sites for offline analysis / ingestion (PRO). format="csv" (default) or "geojson"; returns the file contents. Try: export_dataset format=csv.',
+    { format: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(a.format === 'geojson' ? '/api/v1/lp/export.geojson' : '/api/v1/lp/export.csv', {})) }] }));
 
   trackedTool(srv, 'analyze_site', 'Evaluate a location for data center suitability — returns a multi-factor score (0-100) incorporating grid headroom (MW available), fiber depth (carrier count + IX distance), water stress, climate, state tax incentive value, latency-to-nearest-IX, and constraint risk. Includes a recommended verdict + the biggest risk factor. Try: analyze_site lat=33.45 lon=-112.07 capacity_mw=100.',
     { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
