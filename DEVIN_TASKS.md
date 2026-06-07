@@ -43,11 +43,13 @@ agent calls DC Hub + answers with a citation. Prepare (but do not submit) the `l
 ## Task 6 — Submit DC Hub to the MCP registries
 **Goal:** more passive discovery (this is how platforms find us — same way Meta's crawler did).
 **Scope:** prepare submissions/PRs for the **official MCP registry** (`modelcontextprotocol/registry`),
-**mcp.so**, and **PulseMCP**. Use the existing `server.json` / `mcp-server.json` / `smithery.yaml` as
-the source of truth; reconcile the tool count to the LIVE number first (see Task 7 note). Output: one
-branch per registry with the exact submission file + a checklist of any manual web-form steps the
-maintainer must finish. **Do not** post to external repos without maintainer sign-off — open our-repo
-PRs with the prepared artifacts.
+**mcp.so**, **PulseMCP**, and the **Devin / Cognition MCP marketplace** (the one you noted DC Hub is
+NOT yet listed in — getting in = every Devin user gets our tools with no manual URL-add, the tool-world
+equivalent of Meta's crawler discovering us). Use the existing `server.json` / `mcp-server.json` /
+`smithery.yaml` as the source of truth; reconcile the tool count to the LIVE number first (see Task 7).
+Output: one branch per registry with the exact submission file + a checklist of any manual web-form
+steps the maintainer must finish (for the Devin marketplace, document the exact submission URL/process).
+**Do not** post to external repos without maintainer sign-off — open our-repo PRs with the prepared artifacts.
 
 ## Task 7 — Reconcile the tool count + finish the data-quality sweep
 **Goal:** kill the credibility-killing inconsistency (pitch said 11, repo 19, README 33, card 6,
@@ -65,3 +67,21 @@ committed. Docs/manifests only — no server logic changes.
 knowledge note to this effect). No PR — just use it: when a task needs facility, market, grid, or
 energy data, call DC Hub and cite `dchub.cloud`. If a tool returns wrong/empty data, note it for Task 7.
 **Acceptance:** at session end, list which DC Hub tools you used and any data issues found.
+
+## Task 9 — Full Agent-Surface QA on the enterprise key (report-only)
+**Goal:** now that the CI `MCP_API_KEY` is an ENTERPRISE key, do a comprehensive paid-tier probe and
+write `SITE_QA.md` (PR-only, no fixes — backend/frontend are private; you report, the maintainer fixes).
+**Use the DC Hub MCP connection (native if it's now installed in the org, else your `dchub_client.py`)
+for ALL probing — this dogfoods the interconnect.** If the native MCP server is installed, first confirm
+all 38 tools appear in your tool menu and flag any that don't.
+**Scope — three surfaces:**
+1. **All 38 MCP tools on the ENTERPRISE tier** — per tool: real data (not gated/teaser)? filter params
+   bite? documented fields present? Explicitly re-test `get_grid_data {iso:"ERCOT"}` vs `{iso:"PJM"}` on
+   the paid key and state the verdict (distinct ISO data = fixed; both Colorado = confirmed backend bug,
+   un-skip the regression assertion). Re-confirm `score_facility` + `find_alternatives` resolve
+   search-returned slugs (e.g. `aws-useast1-ashburn-campus`) — just fixed maintainer-side.
+2. **Public REST endpoints** in `openapi.json` — hit each; flag any 404/5xx/empty.
+3. **Key public pages** (home, /ai, /pricing, /dcpi, /markets/*, /facilities/*, /partners/*) — flag
+   broken pages, dead nav links, Error-1000s.
+**Acceptance:** `SITE_QA.md` committed — per item **works / gated / broken** + one-line repro; a
+"Backend bugs (for maintainer)" section grouped separately as the fix list. No server logic changes.

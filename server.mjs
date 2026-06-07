@@ -199,7 +199,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 }
 // ── Config ──────────────────────────────────────────────────────────────────
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
-const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || 'dchub-internal-sync-2026';
+const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
 const UPGRADE_URL   = process.env.DCHUB_UPGRADE_URL   || 'https://dchub.cloud/ai#pricing';
 const SIGNUP_URL    = process.env.DCHUB_SIGNUP_URL    || 'https://dchub.cloud/ai';
@@ -629,7 +629,17 @@ async function validateKey(api_key) {
       body: JSON.stringify({ api_key }),
       signal: AbortSignal.timeout(1500),
     });
-    if (!resp.ok) return cacheKey(api_key, { valid: false, tier: 'free' });
+    if (!resp.ok) {
+      // 2026-06-07 (Devin QA — revenue-critical hardening): do NOT CACHE the
+      // downgrade. A transient backend 500/503/flap must not lock a PAID key to
+      // free for the full KEY_CACHE_TTL (5 min) — that silently bills enterprise
+      // customers at free tier on a single blip. Return free for THIS call only;
+      // leave the cache untouched so the very next call re-validates and self-heals.
+      // (The catch{} path below already avoids caching for the same reason.)
+      console.error('[validateKey] backend validate not ok:', resp.status,
+                    '— returning free for this call but NOT caching the downgrade');
+      return { valid: false, tier: 'free' };
+    }
     const data = await resp.json();
     return cacheKey(api_key, {
       valid: !!data.valid,
@@ -1856,7 +1866,7 @@ Free tier covers **10 calls/day** across:
 
 // ── Tool registrations (38 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.23' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.4' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -2248,7 +2258,18 @@ function createServer() {
 
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data across 10 ISOs: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Fuel mix, demand, prices.',
     { iso: S, metric: S, period: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/grid/status', a)) }] }));
+    async (a) => {
+      // 2026-06-07 (Devin QA): /api/v1/grid/status has no iso-aware handler, so it
+      // returned the same default (CO, lat 39.74) for EVERY iso. Repoint to the real
+      // iso-aware endpoint /api/v1/grid/intelligence/<iso> (path param). Keep
+      // metric/period as query (endpoint may ignore, but harmless).
+      const _iso = encodeURIComponent(String(a.iso || 'pjm').toLowerCase());
+      const _q = {};
+      if (a.metric) _q.metric = a.metric;
+      if (a.period) _q.period = a.period;
+      return { content: [{ type: 'text', text: JSON.stringify(
+        await callAPI(`/api/v1/grid/intelligence/${_iso}`, _q)) }] };
+    });
 
   // ── Agent moat (2026-06-06): memory + monitoring + incremental sync ──
   // Turns DC Hub from a stateless lookup into agent state. get_changes wraps
@@ -2549,8 +2570,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.1.22',
-    tools: 33,
+    version: '2.2.4',
+    tools: 38,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
