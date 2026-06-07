@@ -1,0 +1,4 @@
+llama-index-core>=0.11
+requests>=2.31
+# for example_agent.py (optional):
+# llama-index-llms-openai>=0.2

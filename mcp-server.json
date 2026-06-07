@@ -142,6 +142,26 @@
     {
       "name": "deal_autopsy",
       "description": "Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — 'what is the real play?' (long-dated land/power option vs near-term build vs queue gamble). Paid keys unlock the per-deal autopsy read. Try: deal_autopsy limit=15."
+    },
+    {
+      "name": "save_site",
+      "description": "Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor. Try: save_site lat=39.04 lon=-77.48 name=\"Ashburn parcel\" target_mw=100."
+    },
+    {
+      "name": "list_saved_sites",
+      "description": "List the sites saved to your DC Hub account (PRO) — the persistent shortlist from save_site, each with its saved DCPI score, target MW, market, and notes. Try: list_saved_sites."
+    },
+    {
+      "name": "set_market_alert",
+      "description": "Subscribe to movement alerts for a DCPI market (PRO) — get notified when its Excess-Power / Constraint score moves. Use channel=\"email\" + destination=<email>, or channel=\"webhook\" + destination=<https URL>. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc."
+    },
+    {
+      "name": "export_dataset",
+      "description": "Bulk export your saved sites for offline analysis / ingestion (PRO). format=\"csv\" (default) or \"geojson\"; returns the file contents. Try: export_dataset format=csv."
+    },
+    {
+      "name": "get_changes",
+      "description": "Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news. Pass since=<ISO-8601> or shorthand \"24h\"/\"7d\" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d."
     }
   ],
   "example_queries": [

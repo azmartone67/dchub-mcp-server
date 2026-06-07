@@ -1,7 +1,9 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "description": "Data-center, power & gas intelligence: 21,000+ facilities, DCPI/DCGI, grid & M&A. 38 MCP tools.",
+  "title": "DC Hub — Data Center & Energy Intelligence",
+  "description": "Live data-center, power & gas intelligence for AI agents — 38 tools, query and cite.",
+  "websiteUrl": "https://dchub.cloud",
   "version": "2.2.4",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
@@ -12,5 +14,14 @@
       "type": "streamable-http",
       "url": "https://dchub.cloud/mcp"
     }
-  ]
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "tool": "dchub-registry-refresh",
+      "version": "1.0.0",
+      "toolCount": 38,
+      "license": "CC-BY-4.0",
+      "freeTier": true
+    }
+  }
 }
