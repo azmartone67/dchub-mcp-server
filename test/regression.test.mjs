@@ -268,10 +268,11 @@ describe('MCP regression suite', () => {
       }
     }, 30000);
 
-    // FIXED 2026-06 (MCP v2.1.24): get_grid_data now honors `iso` — repointed to
-    // the iso-aware /api/v1/grid/intelligence/<iso>. Previously every ISO returned
-    // a fixed Colorado headroom teaser (the same param-ignore class as the original
-    // search_facilities bug). This assertion now bites: PJM and ERCOT must differ.
+    // FIXED (verified 2026-06, MCP v2.2.4): get_grid_data now honors `iso`,
+    // repointed to /api/v1/grid/intelligence/<iso>. iso=ERCOT (~70.5 GW demand)
+    // and iso=PJM (~121.6 GW demand) return distinct live demand curves.
+    // Previously skipped when the backend ignored `iso` and returned a fixed
+    // Colorado teaser for every ISO — now un-skipped as a live regression net.
     it('get_grid_data: iso=PJM vs iso=ERCOT should differ', async () => {
       const pjm = await callTool('get_grid_data', { iso: 'PJM' });
       const erc = await callTool('get_grid_data', { iso: 'ERCOT' });
