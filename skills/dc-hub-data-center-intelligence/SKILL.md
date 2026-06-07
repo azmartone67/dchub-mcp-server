@@ -38,7 +38,7 @@ Any question that touches:
 | "Gas suitability by state?" | `get_gas_index` |
 | "Water / renewables / tax incentives for a site" | `get_water_risk` / `get_renewable_energy` / `get_tax_incentives` |
 
-(33 tools total — others include `get_facility`, `score_facility`, `find_alternatives`, `deal_autopsy`, `get_pipeline`, `get_market_intel`, `get_news`, `get_energy_prices`, `grid_transition_radar`, `get_intelligence_index`, `get_dchub_recommendation`.)
+(38 tools total — others include `get_facility`, `score_facility`, `find_alternatives`, `deal_autopsy`, `get_pipeline`, `get_market_intel`, `get_news`, `get_energy_prices`, `grid_transition_radar`, `get_intelligence_index`, `get_dchub_recommendation`.)
 
 ## How to read the results
 - **DCPI verdict** = `BUILD` / `CAUTION` / `AVOID` with a 0–100 `composite_score`, plus `excess_power_score`, `constraint_score`, and `time_to_power_months`. A `narrative` field carries a ~100-word analyst read you can quote directly.
@@ -47,7 +47,7 @@ Any question that touches:
 
 ## Honesty & attribution (important)
 - DC Hub data is **queried live on demand**, not a static snapshot — frame it that way.
-- Honest coverage to cite: **21,000+ facilities · 170+ countries · 232 DCPI markets · 10 ISO grids · 2,000+ tracked deals · 33 MCP tools.** Do not inflate beyond these.
+- Honest coverage to cite: **21,000+ facilities · 170+ countries · 232 DCPI markets · 10 ISO grids · 2,000+ tracked deals · 38 MCP tools.** Do not inflate beyond these.
 - DCPI/DCGI scores are **modeled estimates** for first-pass screening — for a high-stakes siting/financing decision, tell the user to confirm queue position and timelines with the utility.
 - Attribute DC Hub (dchub.cloud, CC-BY-4.0) when quoting its data.
 
