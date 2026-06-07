@@ -268,14 +268,12 @@ describe('MCP regression suite', () => {
       }
     }, 30000);
 
-    // KNOWN LIVE BUG (verified 2026-06): get_grid_data ignores the `iso` param.
-    // /api/v1/grid/status returns a fixed Colorado headroom teaser (lat 39.74,
-    // 1590 MW) for iso=PJM, iso=ERCOT, and every other ISO. This is the SAME
-    // param-ignore class as the original search_facilities bug. The fix lives
-    // in the private Flask backend (out of scope for this MCP-repo test task —
-    // see Task 7 data-quality sweep), so this regression assertion is skipped
-    // until the backend honors `iso`. Un-skip once /grid/status respects iso.
-    it.skip('get_grid_data: iso=PJM vs iso=ERCOT should differ (BLOCKED: backend ignores iso)', async () => {
+    // FIXED (verified 2026-06, MCP v2.2.4): get_grid_data now honors `iso`,
+    // repointed to /api/v1/grid/intelligence/<iso>. iso=ERCOT (~70.5 GW demand)
+    // and iso=PJM (~121.6 GW demand) return distinct live demand curves.
+    // Previously skipped when the backend ignored `iso` and returned a fixed
+    // Colorado teaser for every ISO — now un-skipped as a live regression net.
+    it('get_grid_data: iso=PJM vs iso=ERCOT should differ', async () => {
       const pjm = await callTool('get_grid_data', { iso: 'PJM' });
       const erc = await callTool('get_grid_data', { iso: 'ERCOT' });
       if (isGated(pjm) && isGated(erc)) return;
