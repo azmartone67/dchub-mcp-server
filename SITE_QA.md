@@ -1,25 +1,30 @@
 # SITE_QA.md — Full Agent-Surface QA (report-only)
 
-> **Re-probed 2026-06-07** against `https://dchub.cloud` (MCP v2.1.24) and `https://dchub.cloud/mcp`.
+> **Re-probed 2026-06-07** against `https://dchub.cloud` (MCP **v2.2.4**) and `https://dchub.cloud/mcp`.
 > MCP key: org `MCP_API_KEY` (`dchub_live_70c…`). REST/pages probed with a browser User-Agent.
 > **No fixes applied — this is a report.** Backend bugs are grouped at the bottom as the maintainer's fix list.
 
-## ⚠️ Top remaining finding — tier detection still resolves `free` for this key
+## ⚠️ Top remaining finding — tier validator fix NOT yet deployed (PAID_ONLY tools still gate)
 
-Server v2.1.24 is deployed (the `7666a43` don't-cache-free-downgrade fix and the iso repoint are live). The PRO-only tools `save_site`, `list_saved_sites`, `export_dataset` still succeed — confirming the key is paid. **But every PAID_ONLY MCP tool still resolves `current_tier: "free"` and gates**, even after a full 5-min `keyCache` expiry cycle.
+**Root cause identified by the maintainer** (commits `14748fdc` + `cfe863b5`): the `from internal_auth import accepted_internal_keys` import was trapped inside a module docstring in `flask_mcp_endpoints.py`, so it never executed. Every `POST /api/v1/keys/validate` raised `NameError: name 'accepted_internal_keys' is not defined` → 500, which `server.mjs`'s `keyCache` recorded as `tier:"free"` for 5 min — exactly the signature this QA caught.
+
+**Status at re-probe: the fix is committed but NOT live on Railway yet.** The validate endpoint still throws the identical error, so all PAID_ONLY tools continue to gate as `free`:
 
 ```
-save_site {lat:38.95, lon:-77.45}          → ok:true, site_id:2          (PRO write works)
-get_interconnection_queue {iso:"ERCOT"}     → paid_only, current_tier:"free"   (PAID_ONLY still gates)
+POST https://dchub-backend-production.up.railway.app/api/v1/keys/validate
+  → {"error":"name 'accepted_internal_keys' is not defined","success":false}   (fix not deployed)
+
+save_site {lat:38.95, lon:-77.45}          → ok:true, site_id:2                 (PRO write works → key IS paid)
+get_interconnection_queue {iso:"ERCOT"}     → paid_only, current_tier:"free"     (PAID_ONLY still gates)
 ```
 
-**Diagnosis:** The fix stopped caching a transient validate failure as `free`, but the downgrade is **consistent** — `POST /api/v1/keys/validate` genuinely returns `tier: "free"` for this key (`dchub_live_70c…`). Either this key's `mcp_dev_keys.tier` row hasn't been set to `enterprise`, or the validate endpoint reads a different table/column. The key value I hold may differ from the one whose tier was updated (e.g., the CI secret could be a different key).
+**Consequence for this QA:** I still cannot verify "do the 16 PAID_ONLY tools return real data" — not because the root cause is unknown (it's fixed in source), but because the Railway deploy hasn't picked up `14748fdc`. Re-run the sweep once `validate` returns `tier:"enterprise"`. Those rows remain 🔒 BLOCKED below.
 
-**Consequence for this QA:** I cannot verify "do the 16 PAID_ONLY tools return real data" — the tier bug blocks them before they reach the backend. Those rows are marked 🔒 BLOCKED below.
+**Verified now (deploy-independent):** the keyed-free *bonus* tools return real data on this key — `get_market_intel`, `get_grid_data`, `get_energy_prices`, `get_renewable_energy`, `get_water_risk` — and the `get_grid_data` iso fix is live (see below).
 
 ---
 
-## Surface A — MCP tools (38) — v2.1.24
+## Surface A — MCP tools (38) — v2.2.4
 
 Legend: ✅ real data · 🔒 gated as `free` (blocked by tier issue) · 🟣 PRO works on this key · ❌ broken · 🔧 FIXED (was broken)
 
@@ -131,11 +136,13 @@ The scoring backend now resolves the **canonical slug** `stack-stafford-technolo
 
 ## Backend bugs (for maintainer) — the fix list
 
-### ~~Bug #1 — `get_grid_data` ignores `iso`~~ — FIXED in v2.1.24
-Repointed to `/api/v1/grid/intelligence/<iso>`. ERCOT and PJM now return distinct data (`demand_mw`, `generation_mix`, `headroom`). Regression assertion un-skipped and passing.
+### ~~Bug #1 — `get_grid_data` ignores `iso`~~ — FIXED in v2.2.4 (verified)
+Repointed to `/api/v1/grid/intelligence/<iso>`. ERCOT (~70.5 GW demand) and PJM (~121.6 GW demand) now return distinct live demand curves. Regression assertion un-skipped and **passing** (`test/regression.test.mjs` → `get_grid_data: iso=PJM vs iso=ERCOT should differ`).
 
-### Bug #2 — Tier detection still resolves `free` for this paid key
-On v2.1.24 (post `7666a43` fix), after a full `keyCache` TTL expiry, `validateKey()` → `/api/v1/keys/validate` still returns `tier: "free"` for the `dchub_live_70c…` key — even though PRO writes succeed (proving the key has paid entitlement). All 16 PAID_ONLY MCP tools gate as a result. Either this key's `mcp_dev_keys.tier` hasn't been set to `enterprise`, or the org-saved key differs from the one whose tier was updated.
+### ~~Bug #2 — Tier detection resolves `free` for paid keys~~ — ROOT CAUSE FIXED IN SOURCE, DEPLOY PENDING
+Root cause (maintainer, `14748fdc` + `cfe863b5`): `from internal_auth import accepted_internal_keys` was trapped inside a module docstring in `flask_mcp_endpoints.py`, so it never ran. `POST /api/v1/keys/validate` raised `NameError: name 'accepted_internal_keys' is not defined` → 500 → `server.mjs` `keyCache` recorded `tier:"free"` for 5 min. `cfe863b5` adds a `highest_of_3` cross-check (`users.plan` + `api_keys.rate_limit_tier` + `mcp_dev_keys.tier`) so a single-table drift can't silently demote a paying customer.
+
+**Not yet verifiable from this session — the Railway deploy has not picked up the fix.** At re-probe time `POST /api/v1/keys/validate` still returns `{"error":"name 'accepted_internal_keys' is not defined"}`, so all 16 PAID_ONLY tools still gate as `free`. Action: confirm the deploy lands (validate should return `tier:"enterprise"`, `tier_source:"highest_of_3"`), then re-run the paid sweep to fill the 🔒 rows in Surface A.
 
 ### Bug #3 — search → score/find round-trip broken (slug mismatch)
 `search_facilities` returns `id: "stack-stafford-va"` (name: "STACK Stafford Technology Campus"), but `score_facility` and `find_alternatives` only accept the **canonical slug** `stack-stafford-technology-campus`. The search-returned id `stack-stafford-va` 404s in both tools and the `/facilities/` page. The search index emits one slug; the scoring/detail catalog expects a different one. Fix: synchronize the id in `search_facilities` output to match the canonical slug accepted by scoring.
