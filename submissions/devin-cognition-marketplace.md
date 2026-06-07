@@ -59,3 +59,54 @@ Fix it at `/settings/mcp-marketplace/configure/...` for a much stronger listing:
 
 > Note: a curated listing is the single highest-leverage discovery channel here —
 > it's the only one that exposes DC Hub to *every* Devin org by default.
+
+---
+
+## Ready-to-paste "Suggest MCP Integration" copy
+
+Paste these into the **Suggest MCP Integration** form (Settings → MCP Marketplace).
+Field labels vary; map by intent.
+
+**Integration name:** `DC Hub`
+
+**Display title:** `DC Hub — Data Center & Energy Intelligence`
+
+**MCP server URL:** `https://dchub.cloud/mcp`  (transport: Streamable HTTP)
+
+**Category / tags:** Data & Analytics · Infrastructure · Energy
+
+**Auth:** None required for the free tier (connects anonymously). Optional
+`X-API-Key` header unlocks full data; keys are free (`POST https://dchub.cloud/api/v1/keys/claim`).
+
+**Short description (one line, ≤100 chars):**
+> Live data-center, power & gas intelligence for AI agents — 38 tools, query and cite (CC-BY-4.0).
+
+**Long description:**
+> DC Hub gives Devin agents ground-truth data-center & energy data instead of
+> stale training knowledge. 38 MCP tools over Streamable HTTP: search 21,000+
+> facilities, score build sites, rank 232 markets (DCPI power index), check the
+> DCGI gas index, compare US ISO grids live, and pull interconnection queues,
+> M&A, fiber, water & tax data. Every response is citation-ready (CC-BY-4.0).
+> Free tier, no signup. Connect once and any "where should I build / how much
+> capacity / which grid is greenest" question gets a real, sourced answer.
+
+**Why list it (value to Devin users):**
+> Infra, energy, real-estate and diligence workflows currently force agents to
+> guess at facility, power and grid facts. DC Hub turns those into live,
+> attributable lookups — useful by default to every Devin org, no per-user
+> setup. It's a remote server (nothing to install) with a working free tier, so
+> the listing is zero-friction to try.
+
+**Example prompts that trigger it:**
+> "Where should I build a data center?" · "How much data-center capacity is in
+> Northern Virginia?" · "Which US grid is greenest right now?" · "Which states
+> are gas-advantaged for DC power?"
+
+**Tool count:** 38 · **Repo:** https://github.com/azmartone67/dchub-mcp-server ·
+**Homepage:** https://dchub.cloud · **License:** CC-BY-4.0
+
+**Maintainer contact:** `<your email>`
+
+> ⚠️ Before submitting, fix the **PAID_ONLY tier** bug (`SITE_QA.md` #2) so a
+> reviewer testing with a key sees full data, not `current_tier:"free"`. On the
+> free tier the listing still connects and discovers all 38 tools.
