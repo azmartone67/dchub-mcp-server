@@ -629,7 +629,17 @@ async function validateKey(api_key) {
       body: JSON.stringify({ api_key }),
       signal: AbortSignal.timeout(1500),
     });
-    if (!resp.ok) return cacheKey(api_key, { valid: false, tier: 'free' });
+    if (!resp.ok) {
+      // 2026-06-07 (Devin QA — revenue-critical hardening): do NOT CACHE the
+      // downgrade. A transient backend 500/503/flap must not lock a PAID key to
+      // free for the full KEY_CACHE_TTL (5 min) — that silently bills enterprise
+      // customers at free tier on a single blip. Return free for THIS call only;
+      // leave the cache untouched so the very next call re-validates and self-heals.
+      // (The catch{} path below already avoids caching for the same reason.)
+      console.error('[validateKey] backend validate not ok:', resp.status,
+                    '— returning free for this call but NOT caching the downgrade');
+      return { valid: false, tier: 'free' };
+    }
     const data = await resp.json();
     return cacheKey(api_key, {
       valid: !!data.valid,
