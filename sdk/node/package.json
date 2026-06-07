@@ -1,0 +1,20 @@
+{
+  "name": "dchub",
+  "version": "0.1.0",
+  "description": "DC Hub Node SDK — live data-center, power & gas intelligence over MCP.",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": "./index.mjs",
+  "files": ["index.mjs", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": ["data-center", "energy", "mcp", "grid", "infrastructure"],
+  "license": "MIT",
+  "homepage": "https://dchub.cloud",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/azmartone67/dchub-mcp-server"
+  }
+}
