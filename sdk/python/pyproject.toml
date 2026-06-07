@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dchub"
+version = "0.1.0"
+description = "DC Hub Python SDK — live data-center, power & gas intelligence over MCP."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "DC Hub" }]
+keywords = ["data-center", "energy", "mcp", "grid", "infrastructure"]
+dependencies = []          # stdlib only (urllib) — zero runtime deps
+
+[project.urls]
+Homepage = "https://dchub.cloud"
+Repository = "https://github.com/azmartone67/dchub-mcp-server"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["dchub"]
