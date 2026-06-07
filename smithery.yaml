@@ -6,9 +6,8 @@
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects the live tools/list: 32 backend tools (registered in
-# server.mjs) + semantic_search served by the Cloudflare Worker via
-# Vectorize embeddings = 33 total.
+# Tool list reflects the live tools/list: 38 tools, all registered in
+# server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
 displayName: "DC Hub Intelligence"
@@ -23,8 +22,7 @@ remote:
   url: "https://dchub.cloud/mcp"
 
 # Tool surface for discovery — matches `tools/list` on the live MCP server:
-# 32 backend tools (server.mjs) + semantic_search (Cloudflare Worker via
-# Vectorize embeddings) = 33 total.
+# 38 tools, all registered in server.mjs.
 tools:
   - search_facilities
   - get_facility
@@ -54,14 +52,23 @@ tools:
   - score_facility
   - ai_capacity_index
   - hyperscaler_deals
-  - semantic_search
+  - site_selection_canvas
+  - grid_transition_radar
+  - deal_autopsy
+  - get_gas_index
+  - get_grid_scoreboard
+  - save_site
+  - list_saved_sites
+  - set_market_alert
+  - export_dataset
+  - get_changes
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
   anonymous: "10 calls/day, no signup, 2 results per query"
-  free: "Free dev key (email signup) — 50 calls/day, all 33 tools"
+  free: "Free dev key (email signup) — 50 calls/day, all 38 tools"
   starter: "$9/mo — 200 calls/day, unlocks paid tools"
-  developer: "$49/mo — 500 calls/day, all 33 tools, full results"
+  developer: "$49/mo — 500 calls/day, all 38 tools, full results"
   pro: "$199/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
   enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
 
@@ -72,7 +79,6 @@ gated_tools:
   - get_infrastructure
   - get_fiber_intel
   - get_grid_intelligence
-  - semantic_search
 
 # Categories help Cursor / Cline / Smithery users find the server.
 categories:
