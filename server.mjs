@@ -1854,7 +1854,7 @@ Free tier covers **10 calls/day** across:
   });
 }
 
-// ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
+// ── Tool registrations (38 tools, all wrapped) ─────────────────────────────
 function createServer() {
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.23' });
   const S = z.string().optional();
