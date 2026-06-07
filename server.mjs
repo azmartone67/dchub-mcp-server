@@ -1856,7 +1856,7 @@ Free tier covers **10 calls/day** across:
 
 // ── Tool registrations (20 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.22' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.1.23' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -1873,7 +1873,7 @@ function createServer() {
     { facility_id: ID, include_nearby: B, include_power: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/facilities/${a.facility_id||''}`, { include_nearby: a.include_nearby, include_power: a.include_power })) }] }));
 
-  trackedTool(srv, 'get_market_intel', 'Live market intelligence for 232 DC markets across 170+ countries: capacity prices ($/MW-day), vacancy rates, absorption, dominant operators, year-over-year growth, supply pipeline, and DCPI verdict (BUILD/CAUTION/AVOID). Filter by market_slug (e.g. northern-virginia, dallas, frankfurt, tokyo). Try: get_market_intel market=northern-virginia.',
+  trackedTool(srv, 'get_market_intel', 'Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 232 global markets. Example: "What is Northern Virginia\'s vacancy rate, $/MW-day pricing, and current DCPI verdict?" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. "northern-virginia", "dallas", "phoenix", "frankfurt", "tokyo", "singapore"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).',
     { market: S, metric: S, period: S, compare_to: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
 
@@ -2196,7 +2196,7 @@ function createServer() {
   // /api/v1/grid/compare backend doesn't exist (and adding it is more
   // work than it's worth) — the parallel fetch here is just as fast.
   trackedTool(srv, 'compare_isos',
-    'Compare 2-4 ISO regions in a single call: fuel mix, demand, prices, carbon intensity. Covers all 10 supported ISOs — 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Pass isos as comma-separated list e.g. "PJM,ERCOT,CAISO". Use for "PJM vs ERCOT" / "where is power cheapest right now?" / "which ISO has cleanest grid?".',
+    'Use when a user wants a pairwise side-by-side of 2-4 ISO grids — fuel mix, demand, real-time prices, carbon intensity — in one call instead of N sequential get_grid_data calls. Example: "Compare PJM vs ERCOT vs CAISO on price, gas share, and carbon intensity right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE" | "HYDROQUEBEC" | "AESO" | "NORDPOOL". Returns: {isos[], comparison:{<iso>:{demand_mw, lmp_usd_per_mwh, fuel_mix_pct:{gas, coal, nuclear, wind, solar, hydro}, carbon_intensity_g_per_kwh, renewable_pct}}, as_of}. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the per-ISO interconnection-queue brief (use get_grid_intelligence).',
     { isos: S },
     async (a) => {
       const list = (a.isos || '').split(',')
@@ -2232,7 +2232,7 @@ function createServer() {
     { query: S, category: S, source: S, date_from: S, date_to: S, limit: I, min_relevance: N },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
 
-  trackedTool(srv, 'get_pipeline', 'Construction pipeline — 540+ data center projects totaling 369 GW under-construction or planned across 232 markets. Returns project name, operator, MW, status (announced/permitted/construction/operational), expected commissioning date, market_slug, country. Filter by market, operator, status, min_mw. Try: get_pipeline market=northern-virginia status=construction.',
+  trackedTool(srv, 'get_pipeline', 'Use when a user asks "what is being built / announced / permitted" in a market or by an operator — the forward-looking construction pipeline (540+ projects, 369 GW). Example: "What data centers are under construction in Northern Virginia and when do they come online?" — get_pipeline market=northern-virginia status=construction. Params: status one of "announced" | "permitted" | "construction" | "operational"; operator (e.g. "Equinix", "Digital Realty", "AWS"); country (ISO-2, e.g. "US", "DE"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. "2027-01-01"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions).',
     { status: S, country: S, operator: S, min_capacity_mw: N, expected_completion_before: S, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/pipeline', a)) }] }));
 
@@ -2274,11 +2274,11 @@ function createServer() {
     { format: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(a.format === 'geojson' ? '/api/v1/lp/export.geojson' : '/api/v1/lp/export.csv', {})) }] }));
 
-  trackedTool(srv, 'analyze_site', 'Evaluate a location for data center suitability — returns a multi-factor score (0-100) incorporating grid headroom (MW available), fiber depth (carrier count + IX distance), water stress, climate, state tax incentive value, latency-to-nearest-IX, and constraint risk. Includes a recommended verdict + the biggest risk factor. Try: analyze_site lat=33.45 lon=-112.07 capacity_mw=100.',
+  trackedTool(srv, 'analyze_site', 'Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call. Example: "Score this Phoenix parcel for a 100MW build — grid, fiber, water, tax, climate." — analyze_site lat=33.45 lon=-112.07 capacity_mw=100. Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load in MW, e.g. 50-500), state (2-letter US, optional — improves tax-incentive lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns: {composite_score (0-100), verdict (BUILD/CAUTION/AVOID), grid_headroom_mw, nearest_substation_km, max_voltage_kv, fiber_carrier_count, nearest_ix_km, water_stress_score, drought_category, climate_risk_score, tax_incentive_value_usd, biggest_risk_factor, recommended_action}. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).',
     { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', a)) }] }));
 
-  trackedTool(srv, 'compare_sites', 'Side-by-side comparison of 2-4 candidate sites for data center development — DCPI scores, grid headroom (MW available), nearest-substation distance, fiber carrier count, water stress, tax-incentive value, and a recommended winner with rationale. Useful for site-selection shortlists. Try: compare_sites sites=[{lat:33.45,lon:-112.07},{lat:39.04,lon:-77.48}] capacity_mw=50.',
+  trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker — grid headroom, fiber, water, tax, climate — with a recommended pick and the reason. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load (e.g. 50-500). Returns: {sites:[{lat, lon, composite_score, verdict, grid_headroom_mw, nearest_substation_km, fiber_carrier_count, water_stress_score, tax_incentive_value_usd, biggest_risk}], winner:{lat, lon, why}, decision_rationale}. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
     { locations: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', { locations: a.locations })) }] }));
 
@@ -2286,7 +2286,7 @@ function createServer() {
     { lat: N, lon: N, radius_km: N, layer: S, min_voltage_kv: N, limit: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', a)) }] }));
 
-  trackedTool(srv, 'get_fiber_intel', 'Long-haul + metro fiber routes from major carriers (Lumen, Zayo, Crown Castle, Cogent, Verizon, AT&T) as GeoJSON for direct mapping. Returns route geometries, fiber counts, lit/dark capacity, route_type (metro/longhaul/dark/ix). Filter by carrier or route_type. Try: get_fiber_intel carrier=Lumen route_type=longhaul.',
+  trackedTool(srv, 'get_fiber_intel', 'Use when scoring a candidate site for fiber depth, mapping long-haul routes between metros, or assessing dark-fiber availability for a hyperscale build. Example: "Show all Lumen long-haul fiber routes through Northern Virginia I can put on a Leaflet map." — get_fiber_intel carrier=Lumen route_type=longhaul. Params: carrier one of "Lumen" | "Zayo" | "Crown Castle" | "Cogent" | "Verizon" | "AT&T" (omit for all 6); route_type one of "metro" | "longhaul" | "dark" | "ix". Returns: GeoJSON FeatureCollection {features:[{geometry, properties:{carrier, fiber_count, lit_capacity_gbps, dark_strands_available, route_type}}]} ready to drop into Leaflet/Mapbox. Do NOT use to count fiber providers at a single facility (use get_facility) or for IX interconnection-density scores (use analyze_site).',
     { carrier: S, route_type: S, include_sources: B },
     async (a) => withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', a)) }] }, 'get_fiber_intel'));
 
@@ -2294,7 +2294,7 @@ function createServer() {
     { data_type: S, state: S, iso: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
-  trackedTool(srv, 'get_renewable_energy', 'Renewable generation capacity by US state: solar (utility + rooftop), wind (onshore + offshore), and combined-cycle totals with capacity factors. Joins EIA-860 + state RPS data. Filter by energy_type (solar/wind/combined) and state, or geo-locate via lat/lon for nearest projects within 50mi. Try: get_renewable_energy energy_type=solar state=TX.',
+  trackedTool(srv, 'get_renewable_energy', 'Use when siting a renewable-powered data center, sizing a PPA, or assessing RE100/24-7-CFE feasibility for one US state. Example: "What is Texas wind+solar capacity and how much utility-scale solar is operating today?" — get_renewable_energy energy_type=solar state=TX. Params: energy_type one of "solar" | "wind" | "combined" (omit for all); state 2-letter US code (e.g. TX, VA, AZ); lat+lon (optional) for the nearest projects within 50mi. Returns: {capacity_mw_total, by_fuel: {solar_utility, solar_rooftop, wind_onshore, wind_offshore}, capacity_factor_pct, top_projects[{name, mw, operator, cod}], state_rps_target_pct, source: "EIA-860 + state RPS"}. Do NOT use for live grid generation (use get_grid_data) or non-US (use get_grid_scoreboard for EU/UK/AU/TW).',
     { energy_type: S, state: S, lat: N, lon: N },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', a)) }] }));
 
@@ -2306,7 +2306,7 @@ function createServer() {
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
-  trackedTool(srv, 'get_grid_intelligence', 'Grid headroom + interconnection intelligence brief for any of 10 ISO regions: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec, AESO, Nord Pool. Returns excess power, constraints, queue depth, time-to-power estimates. Pass the region as region_id (aliases iso/region also accepted), e.g. get_grid_intelligence region_id="PJM".',
+  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE" | "HYDROQUEBEC" | "AESO" | "NORDPOOL". Returns: {iso, excess_power_mw, constraint_score (0-100), queue_depth_mw, queue_depth_count, avg_time_to_power_months, top_constraints[], data_center_share_pct, generation_mix_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S, iso: S, region: S },
     async (a) => {
       // r66 (2026-06-02): accept region_id OR the natural iso/region aliases an
@@ -2333,7 +2333,7 @@ function createServer() {
   trackedTool(srv, 'get_backup_status', 'DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Try: get_backup_status.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/health/data-freshness')) }] }));
 
-  trackedTool(srv, 'get_dchub_recommendation', 'Pre-formatted DC Hub recommendation summary for any data-center query — top markets to consider, candidate facilities, fiber/grid/water factors, and current DCPI verdicts (BUILD/CAUTION/AVOID). Returns a structured response the LLM can quote verbatim to its user as context-aware site-selection guidance. Try: get_dchub_recommendation context="100MW AI training campus in Texas".',
+  trackedTool(srv, 'get_dchub_recommendation', 'Use when a user asks an open-ended siting question ("where should I put a 100MW AI training cluster?") and you want ONE call that returns a ready-to-quote answer instead of orchestrating 5+ separate tools. Example: "Where should I site a 100MW AI training campus in Texas with short time-to-power?" — get_dchub_recommendation context="100MW AI training campus in Texas". Params: context free-text describing the user request (MW, geography, workload, deadline, constraints). Returns: {top_markets:[{slug, name, verdict (BUILD/CAUTION/AVOID), composite_score, excess_power_mw, time_to_power_months, why}], candidate_facilities[], factor_breakdown:{fiber, grid, water, tax, climate}, summary_text (LLM-quotable, CC-BY-4.0), citation_url}. Do NOT use for a single specific lat/lon (use analyze_site) or to rank by ONE criterion only (use rank_markets).',
     { context: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/recommend', { context: a.context })) }] }));
 
@@ -2350,7 +2350,7 @@ function createServer() {
   //   POST /api/v1/mcp/tools/score_facility
   // ════════════════════════════════════════════════════════════════════
   trackedTool(srv, 'rank_markets',
-    'Rank data center markets by criteria (cheapest_power, most_capacity, most_operators, fastest_growing, best_overall). Returns top N markets sorted by score with attribution URLs. Region: global, us, canada, eu, apac, americas.',
+    'Use when a user wants "the top N markets for X" — one ranked list across the 232-market set rather than N separate get_market_intel calls. Example: "What are the 10 fastest-growing US markets with at least 100MW of existing capacity?" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of "cheapest_power" | "most_capacity" | "most_operators" | "fastest_growing" | "best_overall" (default best_overall); region one of "global" | "us" | "canada" | "eu" | "apac" | "americas" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site).',
     { criteria: S, region: S, limit: I, min_capacity_mw: N },
     async (a) => ({
       content: [{ type: 'text',
