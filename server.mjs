@@ -1049,7 +1049,12 @@ function trimForTrial(parsed) {
   if (parsed === null || parsed === undefined) return parsed;
   if (Array.isArray(parsed)) {
     if (parsed.length > 1) {
-      return [trimForTrial(parsed[0]), { _gated: `[${parsed.length - 1} more results — sign up to unlock]` }];
+      // 2026-06-07 de-spam (Devin QA): keep the DATA clean — return just the
+      // first row, NO inline {_gated:"sign up to unlock"} promo object. The
+      // upgrade CTA already lives once in the nudge header (applyTrialGuardIfFree);
+      // interleaving it into the array made agents echo promo to end users AND
+      // broke array typing for downstream parsers.
+      return [trimForTrial(parsed[0])];
     }
     return parsed.map(trimForTrial);
   }
@@ -1057,10 +1062,11 @@ function trimForTrial(parsed) {
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
     if (Array.isArray(v) && v.length > 1) {
-      out[k] = [trimForTrial(v[0]), { _gated: `[${v.length - 1} more results — sign up to unlock]` }];
-      out[`_${k}_total_in_pro`] = v.length;
+      out[k] = [trimForTrial(v[0])];          // clean — no inline _gated promo object
+      out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
     } else if (_isMetricKey(k) && typeof v === 'number') {
-      out[k] = '[number — sign up to unlock]';
+      out[k] = null;                          // gated metric → null (was a promo STRING
+                                              // that broke numeric typing for agents)
     } else if (_isMetricKey(k) && typeof v === 'object' && v !== null) {
       // stats:{}, by_quarter:{}, etc. — recurse but mask scalars inside
       out[k] = trimForTrial(v);

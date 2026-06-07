@@ -7,40 +7,43 @@ import {
   trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey,
 } from '../server.mjs';
 
-describe('trimForTrial — anonymous redaction', () => {
-  it('truncates arrays >1 to first item + a _gated marker', () => {
+describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)', () => {
+  // De-spam (Devin QA): gating must NOT pollute the data with promo strings —
+  // arrays trim to the first row only (+ an honest side count), gated metrics
+  // become null. The upgrade CTA lives once in the nudge header, not in the data.
+  it('truncates arrays >1 to ONLY the first item + an honest side count (no inline promo)', () => {
     const out = trimForTrial({ grids: [{ iso: 'PJM' }, { iso: 'ERCOT' }, { iso: 'CAISO' }] });
     expect(Array.isArray(out.grids)).toBe(true);
-    expect(out.grids).toHaveLength(2);
+    expect(out.grids).toHaveLength(1);
     expect(out.grids[0]).toEqual({ iso: 'PJM' });
-    expect(String(out.grids[1]._gated)).toMatch(/more results.*sign up to unlock/);
     expect(out._grids_total_in_pro).toBe(3);
   });
 
-  it('leaves a single-element array intact but still masks metric scalars inside', () => {
+  it('leaves a single-element array intact but NULLS metric scalars inside (no promo string)', () => {
     const out = trimForTrial({ rows: [{ iso: 'PJM', count: 5 }] });
     expect(out.rows).toHaveLength(1);
     expect(out.rows[0].iso).toBe('PJM');
-    expect(String(out.rows[0].count)).toMatch(/sign up to unlock/);
+    expect(out.rows[0].count).toBe(null);
   });
 
-  it('masks aggregate metric scalars but keeps identifier fields', () => {
+  it('nulls aggregate metric scalars but keeps identifier fields', () => {
     const out = trimForTrial({
       count: 42, total_mw: 1000, gas_share_pct: 33.3,
       name: 'Northern Virginia', slug: 'northern-virginia', state: 'VA', iso: 'PJM',
     });
-    expect(String(out.count)).toMatch(/sign up to unlock/);
-    expect(String(out.total_mw)).toMatch(/sign up to unlock/);
-    expect(String(out.gas_share_pct)).toMatch(/sign up to unlock/);
+    expect(out.count).toBe(null);
+    expect(out.total_mw).toBe(null);
+    expect(out.gas_share_pct).toBe(null);
     expect(out.name).toBe('Northern Virginia');
     expect(out.slug).toBe('northern-virginia');
     expect(out.state).toBe('VA');
     expect(out.iso).toBe('PJM');
   });
 
-  it('recurses into nested objects (stats:{...})', () => {
+  it('recurses into nested objects (stats:{...}) and nulls their metrics', () => {
     const out = trimForTrial({ stats: { total_mw: 999, region: 'east' } });
-    expect(String(out.stats.total_mw)).toMatch(/sign up to unlock/);
+    expect(out.stats.total_mw).toBe(null);
+    expect(out.stats.region).toBe('east');
   });
 
   it('passes through null / primitives unchanged', () => {
