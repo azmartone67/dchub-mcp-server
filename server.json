@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "description": "Data-center, power & gas intelligence: 21,000+ facilities, DCPI/DCGI, grid & M&A. 33 MCP tools.",
-  "version": "2.1.22",
+  "description": "Data-center, power & gas intelligence: 21,000+ facilities, DCPI/DCGI, grid & M&A. 38 MCP tools.",
+  "version": "2.2.4",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
