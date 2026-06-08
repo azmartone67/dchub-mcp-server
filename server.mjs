@@ -1192,11 +1192,11 @@ const TRIAL_HEADER_OVERRIDES = {
     const _starter = _stripeWithSession(STARTER_URL, sessionId);
     const _developer = _stripeWithSession(refUrlDeveloper, sessionId);
     return [
-      '## 📊 Your agent just answered using 1 of 232 markets',
+      '## 📊 Your agent just answered using 1 of 300 markets',
       '',
       "The number above is real — but it's a single market with no facility detail, pipeline, or operator landscape. **An agent reasoning from one data point gives incomplete answers.** Give it the full report so it reasons from everything:",
       '',
-      '⚡ **Fastest path (no email, no browser):** `POST https://dchub.cloud/api/v1/keys/claim` `{"client_name":"<you>"}` → `{api_key}`; set `X-API-Key` + reconnect. Unlocks all 232 markets + the free-tier toolset.',
+      '⚡ **Fastest path (no email, no browser):** `POST https://dchub.cloud/api/v1/keys/claim` `{"client_name":"<you>"}` → `{api_key}`; set `X-API-Key` + reconnect. Unlocks all 300 markets + the free-tier toolset.',
       `→ **[Developer $49/mo](${_developer})** — full report + grid intel + fiber, so your agent's answers are complete & trustworthy`,
       `→ **[Starter $9/mo](${_starter})** · [free dev key by email](${redeem})`,
       '🤖 **Running 1,000s of calls/day?** Usage-based pricing — pay per call, no seat cap: https://dchub.cloud/pricing',
@@ -1899,7 +1899,7 @@ function createServer() {
     { facility_id: ID, include_nearby: B, include_power: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/facilities/${a.facility_id||''}`, { include_nearby: a.include_nearby, include_power: a.include_power })) }] }));
 
-  trackedTool(srv, 'get_market_intel', 'Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 232 global markets. Example: "What is Northern Virginia\'s vacancy rate, $/MW-day pricing, and current DCPI verdict?" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. "northern-virginia", "dallas", "phoenix", "frankfurt", "tokyo", "singapore"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).',
+  trackedTool(srv, 'get_market_intel', 'Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 300 global markets. Example: "What is Northern Virginia\'s vacancy rate, $/MW-day pricing, and current DCPI verdict?" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. "northern-virginia", "dallas", "phoenix", "frankfurt", "tokyo", "singapore"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).',
     { market: S, metric: S, period: S, compare_to: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
 
@@ -2247,7 +2247,7 @@ function createServer() {
       }, null, 2) }] };
     });
 
-  trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia. Returns ONE composite health number for a market; do NOT use for the full market metric set (use get_market_intel) or to rank multiple markets (use rank_markets).', {},
+  trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 300-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia. Returns ONE composite health number for a market; do NOT use for the full market metric set (use get_market_intel) or to rank multiple markets (use rank_markets).', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
 
   trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — 2,000+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by year, min_value_usd, region, buyer, or target. Try: list_transactions year=2026 min_value_usd=1000000000. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).',
@@ -2387,7 +2387,7 @@ function createServer() {
   //   POST /api/v1/mcp/tools/score_facility
   // ════════════════════════════════════════════════════════════════════
   trackedTool(srv, 'rank_markets',
-    'Use when a user wants "the top N markets for X" — one ranked list across the 232-market set rather than N separate get_market_intel calls. Example: "What are the 10 fastest-growing US markets with at least 100MW of existing capacity?" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of "cheapest_power" | "most_capacity" | "most_operators" | "fastest_growing" | "best_overall" (default best_overall); region one of "global" | "us" | "canada" | "eu" | "apac" | "americas" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site).',
+    'Use when a user wants "the top N markets for X" — one ranked list across the 300-market set rather than N separate get_market_intel calls. Example: "What are the 10 fastest-growing US markets with at least 100MW of existing capacity?" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of "cheapest_power" | "most_capacity" | "most_operators" | "fastest_growing" | "best_overall" (default best_overall); region one of "global" | "us" | "canada" | "eu" | "apac" | "americas" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site).',
     { criteria: S, region: S, limit: I, min_capacity_mw: N },
     async (a) => ({
       content: [{ type: 'text',

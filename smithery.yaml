@@ -11,7 +11,7 @@
 
 name: dchub
 displayName: "DC Hub Intelligence"
-description: "Real-time data center intelligence: 21,000+ facilities across 170+ countries, 126,427 substations, live grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), 2,000+ tracked M&A deals, 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts across 232 markets. The only DC-intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
+description: "Real-time data center intelligence: 21,000+ facilities across 170+ countries, 126,427 substations, live grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), 2,000+ tracked M&A deals, 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts across 300 markets. The only DC-intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
 homepage: "https://dchub.cloud"
 version: "2.1.13"
 

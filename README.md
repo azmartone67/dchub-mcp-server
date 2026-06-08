@@ -32,7 +32,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
-- **Market intelligence** for 232 DC markets globally with daily DCPI verdicts
+- **Market intelligence** for 300 DC markets globally with daily DCPI verdicts
 
 **38 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 

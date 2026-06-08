@@ -18,6 +18,9 @@ on:
       - 'mcp-server.json'
       - 'integrations/**'
       - 'server.json'
+      - 'README.md'
+      - 'server.mjs'
+      - 'REGISTRY-LISTINGS.md'
   workflow_dispatch:
 
 permissions:
@@ -34,19 +37,45 @@ jobs:
         run: |
           set -e
           # Canonical (the ONLY values allowed): 21,000+ facilities · 170+ countries
-          # · 2,000+ tracked deals · 232 markets · "DC Hub" (never "Nexus").
+          # · 2,000+ tracked deals · 300 markets · "DC Hub" (never "Nexus").
           FILES="mcp-server.json"
           [ -f integrations/chatgpt/openapi.json ] && FILES="$FILES integrations/chatgpt/openapi.json"
           [ -f README.md ] && FILES="$FILES README.md"
           [ -f server.json ] && FILES="$FILES server.json"
           echo "Scanning: $FILES"
           # Patterns that must NEVER appear (extended regex, case-insensitive).
-          PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus'
+          PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus|\b232\s+.{0,15}markets'
           if grep -rEni "$PAT" $FILES ; then
             echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical: 21,000+ facilities · 170+ countries · 2,000+ tracked deals · DC Hub (not Nexus). Fix before this reaches the public registries."
             exit 1
           fi
           echo "✅ registry source is clean — no stale numbers."
+      - name: Market count drift guard (live /api/v1/stats)
+        run: |
+          set -e
+          # Fetch canonical market count from live API; fall back to pinned 300
+          LIVE=$(curl -sf --max-time 10 https://dchub.cloud/api/v1/stats \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('markets',''))" 2>/dev/null) || true
+          COUNT=${LIVE:-300}
+          echo "Canonical market count: $COUNT (live=$LIVE)"
+          # Scan all tracked files for N-market / N markets where N != canonical
+          python3 -c "
+import subprocess, re, sys
+count = int(sys.argv[1])
+out = subprocess.check_output(
+    ['git', 'grep', '-Pn', r'\b(\d{2,4})(?:\\s+(?:DCPI |global |DC |US power )?markets|-market)', '--', '.', ':!node_modules', ':!package-lock.json'],
+    text=True, stderr=subprocess.DEVNULL
+).strip()
+stale = []
+for line in (out.split('\n') if out else []):
+    for m in re.findall(r'\b(\d{2,4})(?:\\s|-)(?:DCPI |global |DC |US power )?market', line):
+        if int(m) != count: stale.append(line); break
+if stale:
+    print(f'::error::Stale market count (canonical={count}):')
+    for s in stale: print(s)
+    sys.exit(1)
+print(f'Market count ({count}) consistent across all source files.')
+" "$COUNT"
       - name: Validate JSON well-formedness
         run: |
           python3 -c "import json,glob,sys

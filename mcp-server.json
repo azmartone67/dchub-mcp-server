@@ -21,7 +21,7 @@
     },
     {
       "name": "get_market_intel",
-      "description": "Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 232 global markets. Example: \"What is Northern Virginia's vacancy rate, $/MW-day pricing, and current DCPI verdict?\" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. \"northern-virginia\", \"dallas\", \"phoenix\", \"frankfurt\", \"tokyo\", \"singapore\"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility)."
+      "description": "Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 300 global markets. Example: \"What is Northern Virginia's vacancy rate, $/MW-day pricing, and current DCPI verdict?\" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. \"northern-virginia\", \"dallas\", \"phoenix\", \"frankfurt\", \"tokyo\", \"singapore\"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility)."
     },
     {
       "name": "get_market_dcpi_rank",
@@ -33,7 +33,7 @@
     },
     {
       "name": "get_intelligence_index",
-      "description": "Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia."
+      "description": "Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 300-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia."
     },
     {
       "name": "list_transactions",
@@ -105,7 +105,7 @@
     },
     {
       "name": "rank_markets",
-      "description": "Use when a user wants \"the top N markets for X\" — one ranked list across the 232-market set rather than N separate get_market_intel calls. Example: \"What are the 10 fastest-growing US markets with at least 100MW of existing capacity?\" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of \"cheapest_power\" | \"most_capacity\" | \"most_operators\" | \"fastest_growing\" | \"best_overall\" (default best_overall); region one of \"global\" | \"us\" | \"canada\" | \"eu\" | \"apac\" | \"americas\" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site)."
+      "description": "Use when a user wants \"the top N markets for X\" — one ranked list across the 300-market set rather than N separate get_market_intel calls. Example: \"What are the 10 fastest-growing US markets with at least 100MW of existing capacity?\" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of \"cheapest_power\" | \"most_capacity\" | \"most_operators\" | \"fastest_growing\" | \"best_overall\" (default best_overall); region one of \"global\" | \"us\" | \"canada\" | \"eu\" | \"apac\" | \"americas\" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site)."
     },
     {
       "name": "find_alternatives",

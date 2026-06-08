@@ -25,7 +25,7 @@ in-IDE marketplace.
 {
   "id": "dchub",
   "name": "DC Hub — Data Center & Energy Intelligence",
-  "description": "Live data-center & energy intelligence MCP: 21k+ facilities, 232 markets, 10 ISO grids, DCPI power index, DCGI gas index, interconnection queues, M&A, fiber, water & tax. 38 tools, query and cite (CC-BY-4.0). Free tier, no signup.",
+  "description": "Live data-center & energy intelligence MCP: 21k+ facilities, 300 markets, 10 ISO grids, DCPI power index, DCGI gas index, interconnection queues, M&A, fiber, water & tax. 38 tools, query and cite (CC-BY-4.0). Free tier, no signup.",
   "homepage": "https://dchub.cloud",
   "repository": "https://github.com/azmartone67/dchub-mcp-server",
   "type": "streamable-http",

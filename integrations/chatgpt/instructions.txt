@@ -78,7 +78,7 @@ Direct them to: https://dchub.cloud/connect for Pro API access.
 
 ## Key Statistics (from DC Hub)
 - 21,000+ facilities tracked globally
-- 232 markets scored by the DC Hub Power Index (DCPI)
+- 300 markets scored by the DC Hub Power Index (DCPI)
 - 126,427 substations
 - 2,000+ M&A transactions tracked
 - 369 GW capacity pipeline
