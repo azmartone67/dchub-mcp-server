@@ -463,9 +463,24 @@ function claimVariantFromCtx(c) {
   return 'generic';
 }
 
+// r72: never mint high-intent claim URLs for our own bots / probes / test
+// clients. The claim funnel showed 50 minted -> 1 opened because the 2nd-hit
+// trigger fired on anonymous LOOPING keys (e.g. get_market_intel: 3199
+// sessions / 3 IPs) that have no human to open the link. Gate paid-hit
+// tracking + claim minting on a real-client check so claims only reach
+// identifiable agents. Unknown/empty client => ALLOWED (never suppress a
+// potentially-real anonymous agent); only KNOWN bot/probe markers are skipped.
+const _CLAIM_BOT_RE = /(loop|dchub|deadlink|self-?heal|brainradar|brainuniformity|redircheck|schema-audit|heartbeat|probe|scanner|scraper|inspector|validator|smoke|canary|qa-?test|postman|no-?auth|researchclient|agentdiscoveryindex|test-client|fastmcpclient|uptimerobot|statuscake|pingdom|python-requests|go-http-client|curl\/|wget|httpie|monitoring|health-?check)/i;
+function isBotOrInternalCtx(c) {
+  const s = ((c?.platform || '') + ' ' + (c?.client_ua || '') + ' ' + (c?.user_agent || '')).toLowerCase();
+  if (!s.trim()) return false;
+  return _CLAIM_BOT_RE.test(s);
+}
+
 async function trackPaidHit(sessionId, toolName) {
   try {
     const c = getCtx();
+    if (isBotOrInternalCtx(c)) return;  // r72: don't track bot/probe paid-hits
     const variant = claimVariantFromCtx(c);
     await fetch(new URL('/api/v1/mcp/track-paid-hit', API_BASE).toString(), {
       method: 'POST',
@@ -492,6 +507,7 @@ async function shouldMintClaim(sessionId, toolName) {
   if (!sessionId || !toolName) return null;
   try {
     const c = getCtx();
+    if (isBotOrInternalCtx(c)) return null;  // r72: never mint claims for bots/probes
     const variant = claimVariantFromCtx(c);
     const url = new URL('/api/v1/mcp/should-mint-claim', API_BASE);
     url.searchParams.set('session_id', sessionId);
