@@ -2717,7 +2717,20 @@ app.delete('/mcp', async (req, res) => {
 // r70 (2026-06-03): skip binding the port under vitest so the pure gating
 // functions can be unit-tested by importing this module without starting a
 // live server. Production/Railway sets no VITEST env, so behavior is unchanged.
-if (!process.env.VITEST) {
+if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
+  // r-glama (2026-06-08): stdio transport for Glama introspection + local
+  // stdio clients. Gated behind --stdio / MCP_TRANSPORT=stdio so the
+  // HTTP/Railway path is 100% unchanged. Glama's build spec runs
+  // `mcp-proxy -- node server.mjs --stdio`, and mcp-proxy needs a stdio MCP
+  // server (the auto-spec wrongly used `tsx` + assumed stdio). In stdio mode
+  // stdout IS the JSON-RPC channel, so route any stray console.log to stderr
+  // to avoid corrupting MCP frames.
+  console.log = (...a) => console.error('[log]', ...a);
+  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const stdioServer = createServer();
+  await stdioServer.connect(new StdioServerTransport());
+  console.error('DC Hub MCP Server — stdio mode ready (Glama/local introspection)');
+} else if (!process.env.VITEST) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`DC Hub MCP Server v2.1.10 on port ${PORT}`);
     console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
