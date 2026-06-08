@@ -98,3 +98,67 @@ describe('FREE_FULL_TOOLS — flagship hook exemption (regression guard: 2/22 gr
     expect(PAID_ONLY_TOOLS.has('get_grid_intelligence')).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cross-tier gate integrity (BIDIRECTIONAL). Now that both tiers are testable,
+// pin the whole contract in one place so a one-sided regression can't ship:
+//   • free gets the teaser with ZERO PAID_ONLY leak,
+//   • enterprise/paid get the FULL grant (no teaser/taste/bonus flags),
+// asserted across EVERY tool in PAID_ONLY_TOOLS — not a hand-picked sample — so
+// adding a paid tool without honouring the gate fails CI. Pure logic, no network.
+describe('cross-tier gate integrity (bidirectional) — free teaser vs enterprise full', () => {
+  const PAID = [...PAID_ONLY_TOOLS];
+
+  it('enterprise + paid get a FULL grant for EVERY PAID_ONLY tool (no teaser/taste/bonus)', () => {
+    for (const tool of PAID) {
+      for (const tier of ['enterprise', 'paid']) {
+        const g = applyTierGate(tool, {}, tier, false, false);
+        expect(g.allowed, `${tool} @ ${tier} should be allowed`).toBe(true);
+        // a genuine full grant carries none of the gated-path markers
+        expect(g.trial_taste, `${tool} @ ${tier} must not be a trial taste`).toBeFalsy();
+        expect(g.bonus, `${tool} @ ${tier} must not be a keyed-free bonus`).toBeFalsy();
+      }
+    }
+  });
+
+  it('anonymous free leaks ZERO PAID_ONLY tools (every paid tool blocked outright)', () => {
+    for (const tool of PAID) {
+      const g = applyTierGate(tool, {}, 'free', false, false);
+      expect(g.allowed, `${tool} @ free-anon must be blocked`).toBe(false);
+    }
+  });
+
+  it('keyed free opens ONLY the bonus demand-tools; the paid decision tools stay gated', () => {
+    let bonus = 0, blocked = 0;
+    for (const tool of PAID) {
+      const g = applyTierGate(tool, {}, 'free', true, false);
+      if (g.allowed) { expect(g.bonus, `${tool} keyed-free open must be a bonus`).toBe(true); bonus++; }
+      else blocked++;
+    }
+    expect(bonus, 'there is a keyed-free bonus subset').toBeGreaterThan(0);
+    expect(blocked, 'most paid tools stay gated even with a free key').toBeGreaterThan(bonus);
+  });
+
+  it('free-full flagship hooks are reachable on free and never overlap PAID_ONLY', () => {
+    for (const hook of FREE_FULL_TOOLS) {
+      expect(PAID_ONLY_TOOLS.has(hook), `${hook} must not be paid-only`).toBe(false);
+      expect(applyTierGate(hook, {}, 'free', false, false).allowed, `${hook} reachable on free`).toBe(true);
+    }
+  });
+
+  it('the free teaser (trimForTrial) nulls aggregate metrics & truncates arrays — no full-data leak', () => {
+    const out = trimForTrial({
+      count: 426900, total_mw: 426900, capacity: 999,
+      projects: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      name: 'ERCOT queue', iso: 'ERCOT',
+    });
+    expect(out.count).toBe(null);
+    expect(out.total_mw).toBe(null);
+    expect(out.capacity).toBe(null);
+    expect(out.projects).toHaveLength(1);
+    expect(out._projects_total_in_pro).toBe(3);
+    // identifiers survive — the teaser stays useful without leaking the metrics
+    expect(out.iso).toBe('ERCOT');
+    expect(out.name).toBe('ERCOT queue');
+  });
+});
