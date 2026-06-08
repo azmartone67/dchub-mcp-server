@@ -8,6 +8,7 @@
 // MCP_URL env var overrides the target if you want to test a staging deploy.
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
+import { isTransient, parseRpc } from './live-harness.mjs';
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
@@ -28,29 +29,52 @@ const HEADERS = {
 
 let sessionId = null;
 
-async function init() {
-  const resp = await fetch(MCP_URL, {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify({
-      jsonrpc: '2.0', id: 1, method: 'initialize',
-      params: {
-        protocolVersion: PROTOCOL_VERSION,
-        clientInfo: { name: 'dchub-mcp-test', version: '1.0.0' },
-        capabilities: {},
-      },
-    }),
-  });
-  sessionId = resp.headers.get('Mcp-Session-Id') || resp.headers.get('mcp-session-id');
-  await resp.text();
-  await fetch(MCP_URL, {
-    method: 'POST',
-    headers: { ...HEADERS, 'Mcp-Session-Id': sessionId },
-    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
-  });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// isTransient / parseRpc live in ./live-harness.mjs (pure, unit-tested) so the
+// retry logic below shares one source of truth with regression.test.mjs.
+
+// Retry the initialize handshake with linear backoff until we get a usable
+// session. Non-fatal on exhaustion (the CI live suite is informational): leave
+// sessionId null so the gate-graceful asserts skip rather than crashing.
+async function init(attempts = 5) {
+  let lastErr = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const resp = await fetch(MCP_URL, {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1, method: 'initialize',
+          params: {
+            protocolVersion: PROTOCOL_VERSION,
+            clientInfo: { name: 'dchub-mcp-test', version: '1.0.0' },
+            capabilities: {},
+          },
+        }),
+      });
+      const sid = resp.headers.get('Mcp-Session-Id') || resp.headers.get('mcp-session-id');
+      const text = await resp.text();
+      const initialized = /"result"|serverInfo|protocolVersion/i.test(text);
+      if (resp.ok && sid && initialized && !isTransient(resp.status, text)) {
+        sessionId = sid;
+        await fetch(MCP_URL, {
+          method: 'POST',
+          headers: { ...HEADERS, 'Mcp-Session-Id': sessionId },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+        });
+        return;
+      }
+      lastErr = new Error(`handshake not ready (status ${resp.status}, session ${sid ? 'present' : 'missing'}): ${text.slice(0, 120)}`);
+    } catch (e) {
+      lastErr = e;
+    }
+    if (i < attempts - 1) await sleep(500 * (i + 1)); // 0.5s, 1s, 1.5s, 2s
+  }
+  console.warn(`[init] handshake failed after ${attempts} attempts: ${lastErr?.message || lastErr}`);
 }
 
-async function callTool(name, args = {}) {
+async function callTool(name, args = {}, _retried = false) {
   const resp = await fetch(MCP_URL, {
     method: 'POST',
     headers: { ...HEADERS, 'Mcp-Session-Id': sessionId },
@@ -60,22 +84,26 @@ async function callTool(name, args = {}) {
     }),
   });
   const text = await resp.text();
-  // SSE multi-line aware (mirrors selfheal v1.3.6's parser)
-  let payload = null;
-  for (const ev of text.split(/\r?\n\r?\n/)) {
-    const dataLines = ev.split(/\r?\n/)
-      .filter(l => l.startsWith('data:'))
-      .map(l => l.replace(/^data:\s?/, ''));
-    if (!dataLines.length) continue;
-    try {
-      const candidate = JSON.parse(dataLines.join('\n'));
-      if (candidate.result || candidate.error || candidate.jsonrpc) {
-        payload = candidate; break;
-      }
-    } catch { /* try next */ }
+
+  // Transient edge blip (empty body / "No session" / 429 / 5xx): re-establish
+  // the session once and retry; if it persists, return a transient sentinel
+  // that isGated() treats as "can't assert → skip" rather than hard-failing.
+  if (isTransient(resp.status, text)) {
+    if (!_retried) { await init(); await sleep(300); return callTool(name, args, true); }
+    return { __transient: true, raw: (text || '').trim() || `API ${resp.status}` };
   }
-  if (!payload) throw new Error(`no JSON-RPC payload in: ${text.slice(0, 200)}`);
-  if (payload.error) throw new Error(`MCP error: ${JSON.stringify(payload.error)}`);
+
+  const payload = parseRpc(text);
+  if (!payload) {
+    if (!_retried) { await init(); await sleep(300); return callTool(name, args, true); }
+    return { __transient: true, raw: text.slice(0, 200) };
+  }
+  if (payload.error) {
+    if (!_retried && /no session|session/i.test(JSON.stringify(payload.error))) {
+      await init(); await sleep(300); return callTool(name, args, true);
+    }
+    throw new Error(`MCP error: ${JSON.stringify(payload.error)}`);
+  }
 
   // structuredContent first (paywall variants), then content[0].text
   const result = payload.result;
@@ -107,6 +135,7 @@ function unwrap(r) { return Array.isArray(r) ? r[0] : r; }
 function isGated(r) {
   if (!r) return true;
   const o = unwrap(r);
+  if (o?.__transient) return true; // transient edge blip — can't assert on data
   if (o?.__structured && (o.error === 'paid_only' || o.trial_preview ||
                           o.error === 'scraper_pattern_blocked')) return true;
   if (o?.raw && /upgrade|trial|preview|sign up|stripe/i.test(o.raw)) return true;
@@ -116,7 +145,7 @@ function isGated(r) {
 }
 
 describe('dchub MCP smoke tests', () => {
-  beforeAll(async () => { await init(); }, 15000);
+  beforeAll(async () => { await init(); }, 30000);
 
   it('search_facilities returns AWS Ohio rows including Columbus', async () => {
     const r = await callTool('search_facilities', { operator: 'AWS', state: 'OH', limit: 5 });

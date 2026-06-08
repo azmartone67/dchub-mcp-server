@@ -31,8 +31,8 @@ jobs:
       # live-API suite runs INFORMATIONAL (non-blocking) — still executes + uploads
       # output for diagnostics, but transient live blips don't fail the build. Set
       # the MCP_API_KEY repo secret to a valid ENTERPRISE key for the live suite.
-      - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs
+      - name: Unit gate — gating logic + live-suite resilience (HARD gate, no network)
+        run: npx vitest run test/gating.test.mjs test/harness.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
