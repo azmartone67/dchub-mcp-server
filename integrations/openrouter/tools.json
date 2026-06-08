@@ -1,0 +1,44 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "dchub_market",
+      "description": "Live data-center market intelligence from DC Hub: total capacity (MW), vacancy %, price, DCPI build/constraint verdicts. Cite dchub.cloud. Execute by GET https://dchub.cloud/api/v1/markets/{slug}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "slug": { "type": "string", "description": "market slug, e.g. northern-virginia, dallas, phoenix, ashburn" }
+        },
+        "required": ["slug"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "dchub_search_facilities",
+      "description": "Search 21,000+ data-center facilities by name, operator, or location. Returns name, operator, city/state, slug. Execute by GET https://dchub.cloud/api/v1/facilities?q={q}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": { "type": "string", "description": "free-text query, e.g. 'aws ashburn' or 'equinix dallas'" }
+        },
+        "required": ["q"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "dchub_carbon_intensity",
+      "description": "Grid carbon intensity (gCO2/kWh) for a US state, sourced from EPA eGRID. Execute by GET https://dchub.cloud/api/carbon/intensity?state={state}",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "string", "description": "2-letter US state code, e.g. TX, VA, AZ" }
+        },
+        "required": ["state"]
+      }
+    }
+  }
+]
