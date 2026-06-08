@@ -1,14 +1,14 @@
 # SITE_QA.md — Full Agent-Surface QA (report-only)
 
-> **Re-probed 2026-06-07** against `https://dchub.cloud` (MCP **v2.2.4**) and `https://dchub.cloud/mcp`.
+> **Re-probed 2026-06-08** against `https://dchub.cloud` (MCP **v2.2.4**) and `https://dchub.cloud/mcp`.
 > MCP key: org `MCP_API_KEY` (`dchub_live_70c…`). REST/pages probed with a browser User-Agent.
 > **No fixes applied — this is a report.** Backend bugs are grouped at the bottom as the maintainer's fix list.
 
-## ⚠️ Top remaining finding — v2.2.4 IS deployed, but the enterprise key STILL resolves `free` (16 PAID_ONLY tools gate)
+## ⚠️ Top remaining finding — this ONE standalone CI key still resolves `free` (16 PAID_ONLY tools gate). NOT systemic.
 
-**Root cause identified by the maintainer** (commits `14748fdc` + `cfe863b5`): the `from internal_auth import accepted_internal_keys` import was trapped inside a module docstring in `flask_mcp_endpoints.py`, so it never executed. Every `POST /api/v1/keys/validate` raised `NameError: name 'accepted_internal_keys' is not defined` → 500, which `server.mjs`'s `keyCache` recorded as `tier:"free"` for 5 min — exactly the signature this QA caught.
+**Scoped to this single CI key — not a systemic/revenue bug.** The systemic tier-detection fix is deployed and working: the maintainer independently verified that a *real* enterprise key returns full PAID_ONLY data live (`get_interconnection_queue {iso:"ERCOT"}` → ~426.9 GW, no gate). The `highest_of_3` cross-check (`14748fdc` + `cfe863b5`, which also un-trapped the `accepted_internal_keys` import that had been stuck inside a docstring → `NameError` → 500 → cached `free`) protects all real customers. The only thing still stuck is *this* key: `dchub_live_70c…` is a **standalone CI key** whose `mcp_dev_keys.tier` was `free` and isn't linked to an enterprise `users.plan`, so `highest_of_3` had nothing to elevate from. The maintainer set `mcp_dev_keys.tier='enterprise'` for it directly in Neon.
 
-**Status at re-probe (2026-06-07, MCP v2.2.4, two sweeps ~15 min apart — stable, not a cache artifact): the deploy landed but the key still gates as `free`.** The `NameError` is gone (validate no longer 500s — externally it now returns `forbidden`, i.e. it's reachable and rejecting unauthenticated callers rather than crashing), yet every PAID_ONLY tool still resolves `current_tier:"free"`:
+**Status at latest re-probe (2026-06-08, MCP v2.2.4, after the Neon tier set + a 5.5-min quiet keyCache-TTL window): the probe with this key STILL resolves trial/free.** Anonymous vs keyed responses differ (so the key IS recognized), but every PAID_ONLY tool comes back `trial_preview` / `paid_only current_tier:"free"` instead of enterprise data:
 
 ```
 serverInfo → {"name":"DC Hub Intelligence","version":"2.2.4"}                    (deploy IS live)
@@ -21,7 +21,7 @@ PAID sweep (16 PAID_ONLY tools, enterprise key dchub_live_70c…):
 save_site {lat:38.95, lon:-77.45}          → ok:true, site_id:2                 (PRO write works → key IS paid)
 ```
 
-**This is no longer a deploy-timing issue.** The key has paid entitlement at the Flask layer (PRO writes succeed) but the MCP upfront gate on `validateKey()` → `/api/v1/keys/validate` still resolves this key as `free`. Two stable sweeps rule out the 5-min `keyCache` TTL. Likely the `highest_of_3` lookup still maps this key/user to `free` (e.g. the `users.plan = enterprise` backfill isn't being joined for this key), or the MCP→validate hop is failing closed. I can't read the validator directly — `POST /api/v1/keys/validate` is `forbidden` to external callers (needs the internal `X-Internal-Key`) — so this needs a maintainer-side check. The 16 🔒 rows below stay BLOCKED until the validator returns `tier:"enterprise"` for this key.
+Concretely, `get_interconnection_queue {iso:"ERCOT"}` keyed → `{"trial_preview":true}` (not the ~426.9 GW a real enterprise key returns). So between `mcp_dev_keys.tier='enterprise'` in Neon and what the MCP server actually receives for *this* key, enterprise tier still isn't arriving — most likely the validate lookup for the exact row this key hashes to, or a cache that needs the MCP instance to clear. The same key's PRO writes (`save_site`) succeed, so it genuinely has paid entitlement at the Flask layer. **The real test is the tool probe, not reading `validate`** — and the probe still says trial. The 16 🔒 rows below stay BLOCKED on this one CI key until the probe returns enterprise data; this does **not** affect real enterprise keys.
 
 **Verified now (deploy-independent, real data on this key):** the keyed-free *bonus* tools return full data — `get_market_intel` (NoVA 739 fac / 13,442 MW, **not** masked), `get_grid_data`, `get_energy_prices`, `get_renewable_energy`, `get_water_risk` — and the `get_grid_data` iso fix is live (PJM 85,089 MW ≠ ERCOT 55,993 MW at re-probe; see below).
 
@@ -77,7 +77,7 @@ Filter-bites verified for all ✅ tools (consistent with the merged regression s
 
 ### score_facility / find_alternatives — FIXED but search round-trip still broken
 
-The scoring backend now resolves the **canonical slug** `stack-stafford-technology-campus` (composite 77.9, 5 alternatives). However, **`search_facilities` returns a different id** for the same facility: `id: "stack-stafford-va"` (name: "STACK Stafford Technology Campus"). The search-returned id `stack-stafford-va` still 404s in `score_facility`, `find_alternatives`, and the page `/facilities/stack-stafford-va`. So the tools work individually but the **search → score round-trip** is broken (search emits an id that score doesn't accept). See bug #3.
+`score_facility` resolves the short slug `stack-stafford-technology-campus` (composite 77.9, 5 alternatives), but no single slug works everywhere — `search_facilities` emits `id: "stack-stafford-va"`, which 404s on **all** of `score_facility`, `find_alternatives`, `get_facility` and the live page; the page/`get_facility` only accept the UUID-suffixed form `/api/v1/search` emits. The tools work individually with the *right* slug, but the **search → page/score round-trip** is broken because each surface expects a different slug. Full 3-way matrix + the new regression guard (PR #28) in bug #3.
 
 ### Explicit re-tests requested
 
@@ -142,23 +142,25 @@ The scoring backend now resolves the **canonical slug** `stack-stafford-technolo
 ### ~~Bug #1 — `get_grid_data` ignores `iso`~~ — FIXED in v2.2.4 (verified)
 Repointed to `/api/v1/grid/intelligence/<iso>`. ERCOT and PJM now return distinct live demand curves (live values fluctuate; at the latest re-probe PJM 85,089 MW ≠ ERCOT 55,993 MW). Regression assertion un-skipped and **passing** (`test/regression.test.mjs` → `get_grid_data: iso=PJM vs iso=ERCOT should differ`).
 
-### Bug #2 — Tier detection STILL resolves `free` for this paid key on v2.2.4 (deploy landed, key still gates) — OPEN
-Root cause (maintainer, `14748fdc` + `cfe863b5`): `from internal_auth import accepted_internal_keys` was trapped inside a module docstring in `flask_mcp_endpoints.py`, so it never ran. `POST /api/v1/keys/validate` raised `NameError` → 500 → `server.mjs` `keyCache` recorded `tier:"free"` for 5 min. `cfe863b5` adds a `highest_of_3` cross-check (`users.plan` + `api_keys.rate_limit_tier` + `mcp_dev_keys.tier`).
+### Bug #2 — This one standalone CI key still resolves `free` on v2.2.4 — OPEN (scoped, NOT systemic)
+**Not a systemic/revenue bug.** The systemic tier-detection fix (`14748fdc` un-trapped the `accepted_internal_keys` import from a docstring; `cfe863b5` added the `highest_of_3` cross-check over `users.plan` + `api_keys.rate_limit_tier` + `mcp_dev_keys.tier`) is deployed and working — the maintainer independently verified a *real* enterprise key returns full PAID_ONLY data live (`get_interconnection_queue {iso:"ERCOT"}` → ~426.9 GW, no gate). Real customers are unaffected.
 
-**The `NameError` fix is live (v2.2.4, validate no longer 500s) but the symptom persists.** Re-probed twice ~15 min apart: the enterprise key `dchub_live_70c…` still resolves `current_tier:"free"` for all 16 PAID_ONLY tools, even though the same key's PRO writes (`save_site`) succeed — so the key genuinely has paid entitlement, but the MCP gate's `validateKey()` → `/api/v1/keys/validate` lookup returns `free`. Two stable sweeps rule out the 5-min `keyCache` TTL, so this is **not** deploy timing. Likely the `highest_of_3` lookup still maps this key/user to `free` (e.g. the `users.plan = enterprise` backfill isn't being joined for this key), or the MCP→validate hop is failing closed.
+The stuck case is specific to the CI key `dchub_live_70c…`: it's a **standalone key** whose `mcp_dev_keys.tier` was `free` and that isn't linked to an enterprise `users.plan`, so `highest_of_3` had nothing to elevate from. The maintainer set `mcp_dev_keys.tier='enterprise'` for it directly in Neon.
 
-**Maintainer action (only readable server-side — the validate endpoint is `forbidden` to external callers):**
-```
-curl -X POST https://dchub-backend-production.up.railway.app/api/v1/keys/validate \
-  -H "X-Internal-Key: <internal>" -d '{"api_key":"dchub_live_70c…"}' | jq .
-# Expected: {"valid":true,"tier":"enterprise","tier_source":"highest_of_3",
-#            "tier_detail":{"users_plan":"enterprise","effective":"enterprise"}}
-# Observed (inferred from MCP gating): effective tier resolves "free".
-```
-Once `validate` returns `enterprise` for this key, re-run the paid sweep to fill the 🔒 rows in Surface A.
+**Symptom persists at latest re-probe (2026-06-08, after the Neon set + a 5.5-min quiet keyCache-TTL window):** the probe with this key still resolves `trial`/`free` for all 16 PAID_ONLY tools (e.g. `get_interconnection_queue {iso:"ERCOT"}` keyed → `{"trial_preview":true}`). Anon vs keyed differ, so the key is recognized; PRO writes (`save_site`) succeed, so it has Flask-layer entitlement — but enterprise tier still isn't reaching the MCP gate for this key. Likely the validate lookup for the exact row this key hashes to, or an MCP-instance cache that needs to clear.
 
-### Bug #3 — search → score/find round-trip broken (slug mismatch)
-`search_facilities` returns `id: "stack-stafford-va"` (name: "STACK Stafford Technology Campus"), but `score_facility` and `find_alternatives` only accept the **canonical slug** `stack-stafford-technology-campus`. The search-returned id `stack-stafford-va` 404s in both tools and the `/facilities/` page. The search index emits one slug; the scoring/detail catalog expects a different one. Fix: synchronize the id in `search_facilities` output to match the canonical slug accepted by scoring.
+**Maintainer action:** re-run the tool probe for this key (the probe is the real test — reading `validate` is moot). Once `get_interconnection_queue {iso:"ERCOT"}` returns real GW data on the key, the 🔒 rows in Surface A can be filled — ping and I'll re-run the paid sweep.
+
+### Bug #3 — search → page/score round-trip broken (3-way slug fragmentation)
+There is **no single canonical slug** — each surface accepts a different one, so any cross-tool round-trip dead-ends. Verified live 2026-06-08 for STACK Stafford Technology Campus:
+
+| slug | `get_facility` | live `/facilities/<slug>` page | `score_facility` |
+|------|----------------|--------------------------------|------------------|
+| `stack-stafford-va` (what `search_facilities` returns) | 404 | 404 | 404 |
+| `stack-stafford-technology-campus` (short form) | 404 | 404 | **200** (score 77.9) |
+| `stack-infrastructure-stack-stafford-technology-campus-eb55e369` (what `/api/v1/search` returns) | **200** | **200** | 404 |
+
+So the slug `search_facilities` emits resolves on **nothing**, and the two slugs that *do* work each cover only part of the surface. Across queries, **29** `search_facilities` slugs 404 on the live page. Fix: emit one canonical slug from `/api/v1/facilities` (the `search_facilities` source) that `get_facility`, the page, and `score_facility` all accept. **Now guarded** by a regression test (`test/regression.test.mjs` → "search → live page slug round-trip", PR #28) that fails until the slug source is aligned.
 
 ### Bug #4 — `GET /api/water/drought/state/{state}` 404 (documented endpoint dead)
 Documented in `openapi.json` (`getWaterStress`) but 404s for every variant (`/state/AZ`, `/AZ`, `?state=AZ`). The MCP `get_water_risk` works, so the data exists under a different route. Fix the route or update the OpenAPI spec.
