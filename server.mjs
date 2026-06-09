@@ -2299,7 +2299,7 @@ function createServer() {
     { lat: N, lon: N, name: S, state: S, market: S, target_mw: N, notes: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
 
-  trackedTool(srv, 'list_saved_sites', 'List the sites saved to your DC Hub account (PRO) — the persistent shortlist from save_site, each with its saved DCPI score, target MW, market, and notes. Try: list_saved_sites.',
+  trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (PRO). Example: "What sites have I saved?" / "Show my shortlist." — list_saved_sites. Params: none. Returns: an array of saved sites, each with name, market, lat/lon, saved DCPI score, target MW, and notes — the persistent shortlist built by save_site. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
     {},
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
 
@@ -2307,7 +2307,7 @@ function createServer() {
     { market: S, channel: S, destination: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
 
-  trackedTool(srv, 'export_dataset', 'Bulk export your saved sites for offline analysis / ingestion (PRO). format="csv" (default) or "geojson"; returns the file contents. Try: export_dataset format=csv.',
+  trackedTool(srv, 'export_dataset', 'Use when a user wants to pull their saved DC Hub shortlist OUT of the platform for offline analysis, a spreadsheet, or ingestion into another tool (PRO). Example: "Export my saved sites as GeoJSON for QGIS." — export_dataset format=geojson. Params: format ("csv" default, or "geojson"). Returns: the full file contents as text — CSV rows or a GeoJSON FeatureCollection of your saved sites with DCPI score, target MW, market, coordinates, and notes. Do NOT use to list sites in-chat (use list_saved_sites) or to save a new one (use save_site); this is the bulk-download path.',
     { format: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(a.format === 'geojson' ? '/api/v1/lp/export.geojson' : '/api/v1/lp/export.csv', {})) }] }));
 
@@ -2401,7 +2401,7 @@ function createServer() {
     }));
 
   trackedTool(srv, 'find_alternatives',
-    'Given a target facility, find similar nearby alternatives. Weighted match on capacity, tier, proximity. Returns top results with similarity_score, match_reasons, key_differences. Use when a user is interested in a specific facility and wants to compare.',
+    'Use when a user likes ONE specific facility and wants similar nearby options to consider instead ("what else looks like this?"). Example: "Find alternatives to the Ashburn QTS campus for about 50MW." — find_alternatives facility_id=<id>. Params: facility_id or name (the target, required); optional capacity_mw, radius_km, limit. Returns: ranked alternatives, each with similarity_score, match_reasons, and key_differences versus the target. Do NOT use to score one site (use score_facility or analyze_site) or to compare a known short-list head-to-head (use compare_sites); this DISCOVERS candidates from a single seed facility.',
     { facility_id: S, radius_km: N, match_on: S, exclude_operator: B, limit: I },
     async (a) => {
       if (!a.facility_id) {
@@ -2421,7 +2421,7 @@ function createServer() {
     });
 
   trackedTool(srv, 'score_facility',
-    'Independent facility scoring across 7 dimensions: power, fiber, water, climate_risk, tax_environment, talent_pool, expansion. Returns composite 0-100 + tier_classification + peer comparison + per-dimension detail. Weighting modes: balanced (default), power_priority, risk_priority, expansion_priority.',
+    'Use when a user wants an independent 0-100 grade for ONE existing facility across 7 dimensions — power, fiber, water, climate_risk, tax_environment, talent_pool, expansion. Example: "How does the CoreWeave Las Vegas site score, power-weighted?" — score_facility facility_id=<id> weighting=power_priority. Params: facility_id or name (required); weighting one of "balanced" (default) | "power_priority" | "risk_priority" | "expansion_priority". Returns: composite 0-100, tier_classification, peer comparison, and per-dimension detail. Do NOT use for a raw lat/lon parcel (use analyze_site), to compare 2 or more sites (use compare_sites), or to find similar sites (use find_alternatives).',
     { facility_id: S, weighting: S },
     async (a) => {
       if (!a.facility_id) {
