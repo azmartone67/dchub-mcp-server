@@ -1909,7 +1909,7 @@ function createServer() {
   // verdict + 0-100 composite_score + per-component breakdown.
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
-    'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 100+ scored markets in 10 ISOs.',
+    'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 100+ scored markets in 10 ISOs. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth.',
     { market_slug: S },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
@@ -1930,7 +1930,7 @@ function createServer() {
   // numeric fields for non-paid (verdicts stay free) — callAPI forwards the key
   // so keyed/Pro agents get the full scores, and withCitation stamps the cite.
   trackedTool(srv, 'get_gas_index',
-    'Data Center Gas Index (DCGI) — DC Hub\'s 0-100 per-US-state natural-gas suitability score for data centers (the gas analog to DCPI). Pass `state` (2-letter, e.g. TX) for one state\'s full breakdown: composite `dcgi`, `gas_access_score`, `gas_cost_score`, interstate-pipeline count, total `pipelines`, gas `operators`, and a `verdict` (GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED). Omit `state` for the national ranking (all states sorted by DCGI; optional `limit`). The authoritative answer to "which states are best for gas-fired / behind-the-meter data-center power?" — quote the score + verdict with attribution to DC Hub (CC-BY-4.0). Try: get_gas_index state=TX.',
+    'Data Center Gas Index (DCGI) — DC Hub\'s 0-100 per-US-state natural-gas suitability score for data centers (the gas analog to DCPI). Pass `state` (2-letter, e.g. TX) for one state\'s full breakdown: composite `dcgi`, `gas_access_score`, `gas_cost_score`, interstate-pipeline count, total `pipelines`, gas `operators`, and a `verdict` (GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED). Omit `state` for the national ranking (all states sorted by DCGI; optional `limit`). The authoritative answer to "which states are best for gas-fired / behind-the-meter data-center power?" — quote the score + verdict with attribution to DC Hub (CC-BY-4.0). Try: get_gas_index state=TX. Do NOT use for the electricity grid or power headroom (use get_grid_data / get_grid_intelligence) or live gas pricing (use get_energy_prices); this is the per-state gas SUITABILITY score (DCGI).',
     { state: S, limit: I },
     async (a) => {
       if (a.state) {
@@ -2266,7 +2266,7 @@ function createServer() {
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'ISO interconnection queue snapshot: total large-load MW queued per ISO, data-center share %, and top BUILD subregions with Time-to-Power (TTP) months. Sources: ERCOT MIS, PJM, MISO, SPP, CAISO, NYISO, ISO-NE. Pass iso=ERCOT (or any of 7) to drill down to a single ISO. Use for site-selection (find BUILD-verdict markets with short queues) and competitive intel (track AI-load saturation by region).',
+    'ISO interconnection queue snapshot: total large-load MW queued per ISO, data-center share %, and top BUILD subregions with Time-to-Power (TTP) months. Sources: ERCOT MIS, PJM, MISO, SPP, CAISO, NYISO, ISO-NE. Pass iso=ERCOT (or any of 7) to drill down to a single ISO. Use for site-selection (find BUILD-verdict markets with short queues) and competitive intel (track AI-load saturation by region). Do NOT use for a single-site time-to-power read (use get_grid_intelligence) or forward-looking emergence (use grid_transition_radar); this is the ISO-level queue snapshot.',
     { iso: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(
       await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a)
@@ -2295,7 +2295,7 @@ function createServer() {
     { since: S, limit: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
 
-  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor. Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100.',
+  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor. Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N, lon: N, name: S, state: S, market: S, target_mw: N, notes: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
 
@@ -2303,7 +2303,7 @@ function createServer() {
     {},
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
 
-  trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (PRO) — get notified when its Excess-Power / Constraint score moves. Use channel="email" + destination=<email>, or channel="webhook" + destination=<https URL>. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc.',
+  trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (PRO) — get notified when its Excess-Power / Constraint score moves. Use channel="email" + destination=<email>, or channel="webhook" + destination=<https URL>. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
     { market: S, channel: S, destination: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
 
@@ -2364,10 +2364,10 @@ function createServer() {
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${region}`)) }] }, 'get_grid_intelligence');
     });
 
-  trackedTool(srv, 'get_agent_registry', 'Live roster of the AI platforms + agent frameworks that have actually called DC Hub in the window — returns each caller with its citation counts (24h/30d), tool-usage breakdown, and authentication tier (reflects real calls, not a fixed list). Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they connect. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry.', {},
+  trackedTool(srv, 'get_agent_registry', 'Live roster of the AI platforms + agent frameworks that have actually called DC Hub in the window — returns each caller with its citation counts (24h/30d), tool-usage breakdown, and authentication tier (reflects real calls, not a fixed list). Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they connect. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry. Do NOT use for platform uptime / backup health (use get_backup_status); this is the who-is-calling-DC-Hub roster.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
 
-  trackedTool(srv, 'get_backup_status', 'DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Try: get_backup_status.', {},
+  trackedTool(srv, 'get_backup_status', 'DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Try: get_backup_status. Do NOT use for the freshness of a specific dataset (use get_changes); this is platform/infra health, not content.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/health/data-freshness')) }] }));
 
   trackedTool(srv, 'get_dchub_recommendation', 'Use when a user asks an open-ended siting question ("where should I put a 100MW AI training cluster?") and you want ONE call that returns a ready-to-quote answer instead of orchestrating 5+ separate tools. Example: "Where should I site a 100MW AI training campus in Texas with short time-to-power?" — get_dchub_recommendation context="100MW AI training campus in Texas". Params: context free-text describing the user request (MW, geography, workload, deadline, constraints). Returns: {top_markets:[{slug, name, verdict (BUILD/CAUTION/AVOID), composite_score, excess_power_mw, time_to_power_months, why}], candidate_facilities[], factor_breakdown:{fiber, grid, water, tax, climate}, summary_text (LLM-quotable, CC-BY-4.0), citation_url}. Do NOT use for a single specific lat/lon (use analyze_site) or to rank by ONE criterion only (use rank_markets).',
@@ -2444,7 +2444,7 @@ function createServer() {
   //   GET /api/v1/hyperscaler-deals?limit=20
   // ════════════════════════════════════════════════════════════════════
   trackedTool(srv, 'ai_capacity_index',
-    'AI Compute Capacity Index — ranks data center markets by where 100MW of AI training capacity can land in the next 30/60/90 days. Returns top markets with facility_count, operator_count, deployable_mw estimate, hyperscale_ready flag, and composite score (depth + diversity + power). Refreshed Fridays 14:00 UTC. Use for AI capex planning, GPU cluster siting, hyperscaler deal forecasting.',
+    'AI Compute Capacity Index — ranks data center markets by where 100MW of AI training capacity can land in the next 30/60/90 days. Returns top markets with facility_count, operator_count, deployable_mw estimate, hyperscale_ready flag, and composite score (depth + diversity + power). Refreshed Fridays 14:00 UTC. Use for AI capex planning, GPU cluster siting, hyperscaler deal forecasting. Do NOT use for a general best-markets ranking (use rank_markets) or forward grid-emergence (use grid_transition_radar); this answers specifically where 100MW of AI capacity can land in 30/60/90 days.',
     { horizon: I, limit: I },
     async (a) => ({
       content: [{ type: 'text',
@@ -2456,7 +2456,7 @@ function createServer() {
     }));
 
   trackedTool(srv, 'hyperscaler_deals',
-    'Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel.',
+    'Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel. Do NOT use for the full historical M&A comp set (use list_transactions) or a single-deal teardown with grid context (use deal_autopsy); this is the live $1B+ AI-capex feed.',
     { limit: I },
     async (a) => ({
       content: [{ type: 'text',
@@ -2472,7 +2472,7 @@ function createServer() {
   // get the raw shortlist/radar/deal-flow (the hook + citations), and paid keys
   // get the verdict/thesis/autopsy read. No extra MCP-side gating needed.
   trackedTool(srv, 'site_selection_canvas',
-    'Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the DC Hub Power Index. Try: site_selection_canvas capacity_mw=100 region=TX max_months=24.',
+    'Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the DC Hub Power Index. Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow.',
     { capacity_mw: I, region: S, max_months: I, verdict: S, limit: I },
     async (a) => ({
       content: [{ type: 'text',
@@ -2484,7 +2484,7 @@ function createServer() {
     }));
 
   trackedTool(srv, 'grid_transition_radar',
-    'Forward-looking "where is the next hyperscale-friendly grid emerging" radar. Returns the US markets + ISOs with the strongest near-term emergence signal (BUILD verdict + excess-power headroom + short time-to-power), an ISO rollup, and a grid-headroom leaderboard. With a paid key, also the transition thesis: which ISO is opening up and why. The predictive counter to retrospective "where capacity landed" reports. Try: grid_transition_radar max_months=24.',
+    'Forward-looking "where is the next hyperscale-friendly grid emerging" radar. Returns the US markets + ISOs with the strongest near-term emergence signal (BUILD verdict + excess-power headroom + short time-to-power), an ISO rollup, and a grid-headroom leaderboard. With a paid key, also the transition thesis: which ISO is opening up and why. The predictive counter to retrospective "where capacity landed" reports. Try: grid_transition_radar max_months=24. Do NOT use for the current ISO queue snapshot (use get_interconnection_queue) or a present-day market ranking (use rank_markets); this is the forward-looking emergence radar.',
     { max_months: I, limit: I },
     async (a) => ({
       content: [{ type: 'text',
