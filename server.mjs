@@ -964,6 +964,27 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   return { allowed: true, params };
 }
 
+
+// ── Free-tier dial (2026-06-11): per-(session,tool,day) full-data counter ───
+// A validated trial gets FULL grid/fiber (applyTierGate trial_taste). When
+// DCHUB_TRIAL_TOOL_DAILY_FULL > 0, calls 1..N/day/tool still return full data,
+// but call N+1 is demoted to the trimmed preview + a Pro upgrade CTA — so the
+// heaviest repeat trial users (the addressable upgrade pool) hit a conversion
+// nudge instead of unlimited free flagship data. In-memory soft counter
+// (resets on restart, per-replica) — fine for a nudge, not a hard limit.
+// env unset/0 => the helper is never called (short-circuit) => zero change.
+const _trialDayCounts = new Map();
+function _trialFullCallsExceeded(sessionId, tool, cap) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${sessionId || 'anon'}:${tool}:${day}`;
+    const n = (_trialDayCounts.get(key) || 0) + 1;
+    _trialDayCounts.set(key, n);
+    if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
+    return n > cap;
+  } catch (_) { return false; }
+}
+
 // ── buildAutoMintBlock: the agent-facing unlock CTA for a fresh trial key ───
 // r62c-conv (2026-06-01): the trial key now unlocks a 7-day capped TASTE of
 // get_grid_intelligence + get_fiber_intel (see applyTierGate trial_taste), so
@@ -1855,6 +1876,33 @@ Free tier covers **10 calls/day** across:
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
+      }
+      // 2026-06-11 free-tier dial (default OFF via DCHUB_TRIAL_TOOL_DAILY_FULL):
+      // a validated trial gets FULL grid/fiber (gate.trial_taste). After N full
+      // calls/day/tool, demote to the trimmed preview + Pro upgrade CTA so heavy
+      // repeat trial users convert instead of getting unlimited free flagship
+      // data. Calls 1..N still return full data → tool-call volume (the moat) is
+      // unchanged. env unset/0 → short-circuits to today's behavior.
+      if (gate.trial_taste) {
+        const _cap = parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '0', 10);
+        if (_cap > 0 && _trialFullCallsExceeded(c.session_id, name, _cap)) {
+          try {
+            const parsed = JSON.parse(result.content?.[0]?.text || '{}');
+            if (parsed && typeof parsed === 'object') {
+              const trimmed = trimForTrial(parsed);
+              const _sid = c.session_id || 'no-session';
+              trimmed._upgrade = {
+                tier: 'trial',
+                message: `You've used ${name} ${_cap}+ times today on a free trial — upgrade to Pro for unlimited grid + fiber intelligence.`,
+                upgrade_url: UPGRADE_URL,
+                starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
+                developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
+                promo_cta: PROMO_CTA, promo_code: PROMO_CODE, promo_expires: '2026-07-01',
+              };
+              return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+            }
+          } catch (_) { /* fall through to full data on parse failure */ }
+        }
       }
       return withCitation(result);
     } catch (err) {
