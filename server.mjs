@@ -102,10 +102,15 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // agents that DO render markdown (Cursor, Cline, Continue) can self-serve a
   // named key in one call — turning anonymous callers into identified ones.
   const claimEndpoint = 'https://dchub.cloud/api/v1/keys/claim';
+  // 2026-06-12 (owner): ask for the OPTIONAL owner email in the claim sample.
+  // The backend has accepted + stored it since Phase FF, but no rendered
+  // instruction ever ASKED — result: 0 external emailable keys, which starves
+  // key recovery, upgrade receipts, and the upgrade-nudge loop. Invalid or
+  // placeholder emails are ignored server-side; the key still mints.
   const claimCurl = (
     "curl -X POST " + claimEndpoint +
     " -H 'Content-Type: application/json' " +
-    "-d '{\"client_name\":\"<your-agent-name>\"}'"
+    "-d '{\"client_name\":\"<your-agent-name>\",\"email\":\"<owner-email, optional — enables key recovery + upgrade receipts>\"}'"
   );
 
   let human_message;
@@ -193,7 +198,8 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     //   response.structuredContent?.claim_endpoint
     claim_endpoint: claimEndpoint,
     claim_curl:     claimCurl,
-    claim_payload:  { client_name: '<your-agent-name>' },
+    claim_payload:  { client_name: '<your-agent-name>',
+                      email: '<owner-email (optional: key recovery + upgrade receipts)>' },
     docs_url:       'https://dchub.cloud/integrations/mcp',
   };
 }
@@ -1038,7 +1044,8 @@ function buildAutoMintBlock(mint, name) {
       : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n')) +
     '\u{1F517} **Make it permanent — one link, no key swap:** have the human open ' + upgradeUrl + '\n' +
     '   → they pick a plan (Developer $49/mo or Pro $199/mo), pay once, and THIS key auto-upgrades. Your next call returns full data.\n' +
-    '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + _meteredUrl + '\n';
+    '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + _meteredUrl + '\n' +
+    '\u{2709}\u{FE0F} *Optional — attach the owner’s email to this key (key recovery + upgrade receipts):* `curl -X POST https://dchub.cloud/api/v1/keys/identify -H "Content-Type: application/json" -d \'{"api_key":"' + mint.api_key + '","email":"<owner-email>"}\'`\n';
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
@@ -1055,6 +1062,9 @@ function buildAutoMintBlock(mint, name) {
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
     owner_purchase_url:        _meteredUrl,
     owner_purchase_model:      'usage_based_metered',
+    identify_endpoint:         'https://dchub.cloud/api/v1/keys/identify',
+    identify_payload:          { api_key: mint.api_key, email: '<owner-email>' },
+    identify_hint:             'Optional: POST the owner email with this key (existing /keys/identify endpoint) to enable key recovery and upgrade receipts. Idempotent; invalid emails are rejected softly and the key keeps working.',
     upgrade_url:               upgradeUrl,
     upgrade_model:             'pair_code_key_bound',
     upgrade_instructions:      'Have the human open upgrade_url and complete checkout (Developer $49/mo or Pro $199/mo). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
