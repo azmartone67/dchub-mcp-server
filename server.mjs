@@ -136,7 +136,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // "actually useful" paid bump.
     human_message = (
       lock + ' **' + toolName + ' ran on a 1-result preview \u2014 your agent is reasoning from a fraction of the data.** Fastest fix (no email, no browser):\n\n' +
-      '**1. Instant free key \u2014 no email, one API call (10 calls/day):**\n' +
+      '**1. Instant free key \u2014 call the `claim_free_key` tool (or one curl), no email (10 calls/day):**\n' +
       '   `' + claimCurl + '`\n' +
       '   Returns {api_key}; send it as the `X-API-Key` header. No human, no browser.\n\n' +
       '**2. Free dev key (60 sec, just your email)** \u2192 ' + redeemUrl + '\n' +
@@ -197,6 +197,10 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // r52: programmatic self-serve fields. Detect via:
     //   response.structuredContent?.claim_endpoint
     claim_endpoint: claimEndpoint,
+    // r85: point agents at the first-class claim_free_key TOOL — more native
+    // than a curl an agent has to hand-construct; one call mints a key inline
+    // and converts this anonymous session into an identified one.
+    claim_free_key_tool: 'claim_free_key',
     claim_curl:     claimCurl,
     claim_payload:  { client_name: '<your-agent-name>',
                       email: '<owner-email (optional: key recovery + upgrade receipts)>' },
@@ -2016,7 +2020,7 @@ Free tier covers **10 calls/day** across:
 
 // ── Tool registrations (38 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.4' });
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.5' });
   const S = z.string().optional();
   const N = z.number().optional();
   const I = z.number().int().optional();
@@ -2675,6 +2679,45 @@ function createServer() {
         }))
       }]
     }));
+
+  // r85 (2026-06-13): claim_free_key — the brain's (Opus-4-8) #1 conversion
+  // lever. 99.7% of paywall hits are anonymous agents that can't complete an
+  // email/browser flow; the binding constraint is anon→identified, NOT
+  // free→paid. This first-class tool lets an agent self-identify in ONE call
+  // the moment it shows intent (hits a paywall). The /keys/claim endpoint
+  // existed but was only a curl buried in the paywall text → agents
+  // summarized it away. Not in PAID_ONLY_TOOLS, so anonymous callers reach it.
+  trackedTool(srv, 'claim_free_key',
+    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header to unlock the full free tier (10 calls/day, all 232 markets + grid/fiber/DCPI data). Optionally pass your owner\'s email for key recovery + upgrade receipts (the key still mints without it). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
+    { client_name: S, email: S },
+    async (a) => {
+      const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
+      const body = { client_name: cn };
+      if (a.email) body.email = String(a.email).trim().slice(0, 200);
+      const r = await callAPIWrite('/api/v1/keys/claim', body);
+      const key = r && (r.api_key || r.key);
+      if (!key) {
+        return { isError: true, content: [{ type: 'text',
+          text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
+                '\nFallback: POST https://dchub.cloud/api/v1/keys/claim {"client_name":"' + cn + '"}' }] };
+      }
+      const text =
+        '✅ **Free DC Hub dev key minted for `' + cn + '`** — no email, no browser, active now.\n\n' +
+        '**Your key:** `' + key + '`\n\n' +
+        'Set header `X-API-Key: ' + key + '` and reconnect. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n\n' +
+        'Free tier = 10 calls/day, full toolset. Hitting limits? $9/mo Starter (200/day) → https://dchub.cloud/pricing/upgrade';
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: {
+          api_key:     key,
+          client_name: cn,
+          tier:        'free',
+          header:      'X-API-Key',
+          daily_limit: 10,
+          upgrade_url: 'https://dchub.cloud/pricing/upgrade',
+        },
+      };
+    });
 
   return srv;
 }
