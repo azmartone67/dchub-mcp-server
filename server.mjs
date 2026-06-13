@@ -1033,9 +1033,16 @@ function buildAutoMintBlock(mint, name) {
     const _sid = (getCtx() && getCtx().session_id) || '';
     if (_sid) _meteredUrl = _stripeWithSession(METERED_URL, _sid);
   } catch (_) {}
+  // r78: the email ask now leads with the REAL incentive that was always
+  // enforced server-side but never shown (unbound 15/day vs bound 50/day),
+  // and /keys/identify finally WORKS for trial keys (backend fallthrough to
+  // auto_trial_keys, r78) — it failed with unknown_api_key for 100% of the
+  // auto-trial cohort before, which is why 0 of 214 activated keys ever
+  // identified.
+  const boundCalls = mint.daily_calls_when_email_bound || 50;
   const text =
     '\n\n---\n' +
-    '✅ **Free trial key — no email, no signup. Add this header, reconnect, and call again:**\n' +
+    '✅ **Free trial key — works instantly, no signup. Add this header, reconnect, and call again:**\n' +
     '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
     '   **Keep it (one paste — Claude Code):** `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` — or save that header in your MCP client config. Do it once and previews stop.\n' +
     (stillPro
@@ -1045,7 +1052,7 @@ function buildAutoMintBlock(mint, name) {
     '\u{1F517} **Make it permanent — one link, no key swap:** have the human open ' + upgradeUrl + '\n' +
     '   → they pick a plan (Developer $49/mo or Pro $199/mo), pay once, and THIS key auto-upgrades. Your next call returns full data.\n' +
     '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + _meteredUrl + '\n' +
-    '\u{2709}\u{FE0F} *Optional — attach the owner’s email to this key (key recovery + upgrade receipts):* `curl -X POST https://dchub.cloud/api/v1/keys/identify -H "Content-Type: application/json" -d \'{"api_key":"' + mint.api_key + '","email":"<owner-email>"}\'`\n';
+    '\u{2709}\u{FE0F} **Raise this key ' + calls + ' → ' + boundCalls + ' calls/day — attach the owner’s email:** `curl -X POST https://dchub.cloud/api/v1/keys/identify -H "Content-Type: application/json" -d \'{"api_key":"' + mint.api_key + '","email":"<owner-email>"}\'` (ask your human for their email; also enables key recovery + upgrade receipts)\n';
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
@@ -1064,7 +1071,8 @@ function buildAutoMintBlock(mint, name) {
     owner_purchase_model:      'usage_based_metered',
     identify_endpoint:         'https://dchub.cloud/api/v1/keys/identify',
     identify_payload:          { api_key: mint.api_key, email: '<owner-email>' },
-    identify_hint:             'Optional: POST the owner email with this key (existing /keys/identify endpoint) to enable key recovery and upgrade receipts. Idempotent; invalid emails are rejected softly and the key keeps working.',
+    identify_hint:             ('Attach the owner email to RAISE this key’s daily cap ' + calls + ' → ' + boundCalls + ' calls/day (plus key recovery + upgrade receipts). Ask your human for their email and POST identify_payload to identify_endpoint. Idempotent; invalid emails are rejected softly and the key keeps working.'),
+    daily_calls_when_email_bound: boundCalls,
     upgrade_url:               upgradeUrl,
     upgrade_model:             'pair_code_key_bound',
     upgrade_instructions:      'Have the human open upgrade_url and complete checkout (Developer $49/mo or Pro $199/mo). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
@@ -1514,6 +1522,7 @@ function trackedTool(srv, name, description, schema, handler) {
         tool:        name,
         params:      args,
         platform:    c.platform || 'unknown',
+        client_name: c.client_name_raw || c.platform || null,  // r78
         api_key:     null,
         tier,
         session_id:  c.session_id || null,
@@ -1925,6 +1934,7 @@ Free tier covers **10 calls/day** across:
         tool:        name,
         params:      args,
         platform:    c.platform || 'unknown',
+        client_name: c.client_name_raw || c.platform || null,  // r78
         api_key:     c.api_key || null,
         tier,
         session_id:  c.session_id || null,
@@ -2017,10 +2027,31 @@ function createServer() {
   // excludes hydro + rooftop) + live price — never faked into the ranking.
   const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+  // r78: 90s assembled-payload cache for the no-argument scoreboard (see
+  // latency note inside the handler).
+  const _SCOREBOARD_CACHE = { at: 0, out: null };
   trackedTool(srv, 'get_grid_scoreboard',
     'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~12 European bidding zones (Germany/Frankfurt, France/Paris, Netherlands/Amsterdam, Ireland/Dublin, Spain, Belgium, Poland, Austria, Nordics — via ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
+      // r78 LATENCY FIX: this tool averaged 45.7s. Two causes: (1) the 7
+      // international/enrichment fetches below ran SEQUENTIALLY (each its
+      // own await — sum ≈ 21s warm, much worse cold), and (2) zero caching
+      // for a no-argument tool whose output is caller-independent. Now:
+      // every fetch is kicked off in parallel up front (wall-clock = the
+      // slowest single feed), and the assembled payload is reused for 90s
+      // (well inside the EIA-hourly / 5-min-Elexon freshness windows).
+      if (_SCOREBOARD_CACHE.out && (Date.now() - _SCOREBOARD_CACHE.at) < 90_000) {
+        return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }] };
+      }
+      const _softErr = (e) => ({ error: String(e).slice(0, 120) });
+      const _p_uk  = callAPI('/api/v1/iso/uk/snapshot', {}).catch(_softErr);
+      const _p_au  = callAPI('/api/v1/iso/au/snapshot', {}).catch(_softErr);
+      const _p_tw  = callAPI('/api/v1/iso/tw/snapshot', {}).catch(_softErr);
+      const _p_eu  = callAPI('/api/v1/iso/eu/snapshot', {}).catch(_softErr);
+      const _p_cmp = callAPI('/api/v1/dcpi/iso-comparison').catch(() => null);
+      const _p_q   = callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }).catch(() => null);
+      const _p_gas = callAPI('/api/v1/gas/eu/snapshot').catch(() => null);
       const results = await Promise.all(_US_ISOS.map(iso =>
         // internal:true → ungated generation_mix (this is the free fuel-mix overview)
         callAPI(`/api/v1/grid/intelligence/${iso}`, {}, { internal: true })
@@ -2056,7 +2087,7 @@ function createServer() {
       // remainder (oil/pumped-storage/misc not separately exposed). Renewable
       // recomputed as wind+solar+hydro / gen_total to MATCH the US definition
       // (which excludes biomass), so the ranking is apples-to-apples.
-      const uk = await callAPI('/api/v1/iso/uk/snapshot', {});
+      const uk = await _p_uk;   // r78: kicked off in parallel above
       const ukm = uk && uk.metrics;
       if (ukm && _num(ukm.generation_total_mw) > 0) {
         const gt = _num(ukm.generation_total_mw);
@@ -2085,7 +2116,7 @@ function createServer() {
       // utility-scale variable-renewable FLOOR (wind+solar; excludes hydro +
       // rooftop), and live spot price. renewable_share_pct stays null because
       // it is NOT comparable to the full-mix grids — kept honest, unranked.
-      const au = await callAPI('/api/v1/iso/au/snapshot', {});
+      const au = await _p_au;   // r78: kicked off in parallel above
       const aum = au && au.metrics;
       if (aum && _num(aum.generation_total_mw) > 0) {
         partial.push({
@@ -2108,7 +2139,7 @@ function createServer() {
       // TW / TAIPOWER (#60, APAC #2) — full live fuel mix from Taipower's
       // real-time generation. renewable = wind+solar+hydro (US/UK/EU definition),
       // so Taiwan ranks apples-to-apples. Top APAC DC market (TSMC + hyperscalers).
-      const tw = await callAPI('/api/v1/iso/tw/snapshot', {});
+      const tw = await _p_tw;   // r78: kicked off in parallel above
       const twm = tw && tw.metrics;
       if (twm && _num(twm.generation_total_mw) > 0) {
         grids.push({
@@ -2140,7 +2171,7 @@ function createServer() {
       // zone (Frankfurt/Dublin/Amsterdam…), not "Europe" — so we surface the
       // zones individually rather than the continent aggregate.
       let euCount = 0;
-      const eu = await callAPI('/api/v1/iso/eu/snapshot', {});
+      const eu = await _p_eu;   // r78: kicked off in parallel above
       const euZones = (eu && eu.zones) || null;
       if (euZones && typeof euZones === 'object') {
         for (const zc of Object.keys(euZones)) {
@@ -2178,7 +2209,7 @@ function createServer() {
       // empty, so it is NOT used — no faking with nulls.) total_queue_capacity_mw
       // is also empty there, so it is deliberately omitted.
       try {
-        const _isoCmp = await callAPI('/api/v1/dcpi/iso-comparison');
+        const _isoCmp = await _p_cmp;   // r78: kicked off in parallel above
         const _rows = (_isoCmp && (_isoCmp.isos || _isoCmp.comparison || _isoCmp.data))
                       || (Array.isArray(_isoCmp) ? _isoCmp : []);
         // r70b (2026-06-03): normalize the join key (strip non-alphanumerics) so
@@ -2211,7 +2242,7 @@ function createServer() {
       // in ONE flagship view. Fail-soft; internal UA so the snapshot isn't gated.
       let usQueueGw = null;
       try {
-        const _qsnap = await callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true });
+        const _qsnap = await _p_q;   // r78: kicked off in parallel above
         const _qrows = (_qsnap && _qsnap.by_iso) || [];
         const _qn = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
         const _qByIso = {};
@@ -2237,7 +2268,7 @@ function createServer() {
       // never inside the renewable ranking — kept honest, not a faked peer.
       let euGas = null;
       try {
-        const _g = await callAPI('/api/v1/gas/eu/snapshot');
+        const _g = await _p_gas;   // r78: kicked off in parallel above
         if (_g && !_g.error && (_g.active_countries || _g.countries)) {
           euGas = {
             active_countries: _g.active_countries,
@@ -2270,7 +2301,10 @@ function createServer() {
           attribution: 'Live grid data via DC Hub (dchub.cloud), CC-BY-4.0.',
         },
       };
-      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
+      const _outText = JSON.stringify(out, null, 2);
+      _SCOREBOARD_CACHE.at = Date.now();
+      _SCOREBOARD_CACHE.out = _outText;
+      return { content: [{ type: 'text', text: _outText }] };
     });
 
   // r41-compare-isos (2026-05-25): single-call ISO comparison.
@@ -2694,6 +2728,10 @@ app.post('/mcp', async (req, res) => {
           sessionMeta.set(sid, {
             api_key: apiKey,
             platform,
+            // r78: keep the RAW clientInfo.name too — telemetry rows were
+            // all client_name='unknown' since 5/18 because trackToolCall
+            // never had it to send (winback + cohort analytics went blind).
+            client_name_raw: (body?.params?.clientInfo?.name || '').toString().slice(0, 200) || null,
             tier,
             is_trial: validation.is_trial === true,  // r62c-conv: trial-taste gate
             developer_id: validation.developer_id,
