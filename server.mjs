@@ -1476,6 +1476,72 @@ function withFreshness(result, toolName) {
   }
 }
 
+// ── shapeGridIntelligence: assemble the get_grid_intelligence per-ISO payload ─
+// r78-gridfix (2026-06-12): PURE shaper extracted from the tool handler so the
+// "empty {freshness,citation} structuredContent" regression stays fenced by a
+// network-free unit test (gating.test.mjs). Inputs are the THREE raw feed
+// responses; output is the flat documented object that becomes BOTH content[0]
+// and structuredContent. No fetch, no ctx — deterministic given its inputs.
+//   gi    = /api/v1/grid/intelligence/<iso>   (demand + generation_mix)
+//   cmp   = /api/v1/dcpi/iso-comparison       ({isos:[{iso, avg_constraint, …}]})
+//   qsnap = /api/v1/interconnection-queue/snapshot ({by_iso:[{iso, queued_load_*}]})
+function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
+  const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); // "ISO-NE" -> "ISONE"
+  const _n = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+  const DCPI_CODE = { ISONE: 'ISONE', HYDROQUEBEC: 'HQ', HQ: 'HQ' };
+  const dcpiIso = DCPI_CODE[norm(ISO)] || norm(ISO);
+  // (1) fuel mix MW -> pct (+ US-definition renewable & gas shares: wind+solar+hydro)
+  const mixRaw = (gi && !gi.error && gi.generation_mix && typeof gi.generation_mix === 'object') ? gi.generation_mix : {};
+  const mixMw = {}; let genTot = 0;
+  for (const [k, v] of Object.entries(mixRaw)) {
+    const mw = parseFloat(v && (typeof v === 'object' ? v.mw : v));
+    if (Number.isFinite(mw)) { mixMw[k] = mw; genTot += mw; }
+  }
+  const pctOf = (mw) => genTot > 0 ? Math.round((mw / genTot) * 1000) / 10 : null;
+  const mixPct = {}; for (const [k, mw] of Object.entries(mixMw)) mixPct[k] = pctOf(mw);
+  // (2) DC Hub Power Index (DCPI) per-ISO row
+  const rows = (cmp && Array.isArray(cmp.isos)) ? cmp.isos : [];
+  const row  = rows.find((r) => norm(r.iso) === dcpiIso) || null;
+  // (3) live interconnection-queue row (US ISOs)
+  const qrows = (qsnap && Array.isArray(qsnap.by_iso)) ? qsnap.by_iso : [];
+  const q = qrows.find((r) => norm(r.iso) === norm(ISO)) || null;
+  const buildRate = (row && row.market_count) ? Math.round((row.build_count / row.market_count) * 1000) / 10 : null;
+  const out = {
+    iso:                      ISO,
+    iso_name:                 row ? row.iso_name : null,
+    demand_mw:                (gi && !gi.error) ? _n(gi.demand_mw) : null,
+    demand_period:            (gi && !gi.error) ? (gi.demand_period || null) : null,
+    generation_mix_mw:        Object.keys(mixMw).length  ? mixMw  : null,
+    generation_mix_pct:       Object.keys(mixPct).length ? mixPct : null,
+    renewable_share_pct:      genTot > 0 ? pctOf((mixMw.WND || 0) + (mixMw.SUN || 0) + (mixMw.WAT || 0)) : null,
+    gas_share_pct:            genTot > 0 ? pctOf(mixMw.NG || 0) : null,
+    constraint_score:         row ? _n(row.avg_constraint)            : null,
+    excess_power_score:       row ? _n(row.avg_excess)                : null,
+    avg_time_to_power_months: row ? _n(row.avg_queue_wait_months)     : null,
+    curtailment_pct:          row ? _n(row.avg_curtailment_pct)       : null,
+    reserve_margin_pct:       row ? _n(row.avg_reserve_margin_pct)    : null,
+    retail_price_cents_kwh:   row ? _n(row.avg_kwh_cents)             : null,
+    queue_depth_gw:           q   ? _n(q.queued_load_total_gw)        : null,
+    data_center_share_pct:    q   ? _n(q.queued_load_dc_share_pct)    : null,
+    stranded_capacity_mw:     row ? _n(row.total_stranded_capacity_mw): null,
+    grid_emergencies_30d:     row ? _n(row.sum_emergency_30d)         : null,
+    market_count:             row ? _n(row.market_count)              : null,
+    build_count:              row ? _n(row.build_count)               : null,
+    build_rate_pct:           buildRate,
+    as_of:                    (row && row.latest_computed_at) || (q && q.as_of) || null,
+    last_updated:             (row && row.latest_computed_at) || (gi && gi.demand_period) || null,
+    _scores_note: 'constraint_score, excess_power_score and build_rate_pct are 0-100 DC Hub Power Index (DCPI) aggregates across the ISO markets, not MW. queue_depth_gw is the live interconnection-queue load total. Substation-level available-MW headroom is Pro-gated — use get_grid_data or analyze_site for a site-specific estimate.',
+  };
+  const haveGrid = !!(gi && !gi.error && (out.demand_mw != null || out.generation_mix_pct));
+  if (!haveGrid && !row && !q) {
+    out._warning = `No live feed for "${ISO}". Supported: PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, HYDROQUEBEC, AESO, NORDPOOL.`;
+  } else {
+    if (!haveGrid) out._warning_grid = `Live EIA fuel-mix/demand feed unavailable for ${ISO} right now (Power Index scores still shown).`;
+    if (!row)      out._warning_dcpi = `No DC Hub Power Index row for ${ISO}.`;
+  }
+  return out;
+}
+
 // r71: human-readable titles + readOnlyHint annotations for every MCP tool
 // (required by the Anthropic MCP Directory; ALL DC Hub tools are read-only).
 const _TOOL_TITLE_OVERRIDES = {
@@ -2435,17 +2501,23 @@ function createServer() {
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE" | "HYDROQUEBEC" | "AESO" | "NORDPOOL". Returns: {iso, excess_power_mw, constraint_score (0-100), queue_depth_mw, queue_depth_count, avg_time_to_power_months, top_constraints[], data_center_share_pct, generation_mix_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
+  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE" | "HYDROQUEBEC" | "AESO" | "NORDPOOL". Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S, iso: S, region: S },
     async (a) => {
-      // r66 (2026-06-02): accept region_id OR the natural iso/region aliases an
-      // agent infers from the description, and GUARD the empty case. Previously a
-      // call passing {iso:"PJM"} (or omitting region_id) built the path
-      // /api/v1/grid-headroom/ -> HTTP 404 on the #1 demand tool (152 users,
-      // 7,316 calls/30d), dead-ending the trial mint->reconnect->wow->paid loop
-      // at the "wow" step. Verified live: empty path=404, /pjm=200.
-      const region = (a.region_id || a.iso || a.region || a.market || '').toString().trim().toLowerCase();
-      if (!region) {
+      // r78-gridfix (2026-06-12): the prior handler hit /api/v1/grid-headroom/${region},
+      // a lat/lon SUBSTATION analyzer that does NOT understand ISO names — it
+      // returned a DEFAULT COLORADO location (lat 39.74, -105.17, state CO) for
+      // EVERY ISO, and set NO structuredContent, so the documented fields never
+      // reached the caller (only the freshness/citation wrappers did → the
+      // "empty {freshness,citation} payload" bug). Now we assemble the real
+      // per-ISO brief from the three feeds that work ungated via the internal UA:
+      //   (1) /grid/intelligence/<iso>        EIA hourly RTO → demand + fuel mix
+      //   (2) /dcpi/iso-comparison            DC Hub Power Index → constraint/excess/queue-wait/curtailment
+      //   (3) /interconnection-queue/snapshot live queue depth + DC share
+      // The substation-level available-MW headroom block stays Pro-gated server-side
+      // (use get_grid_data / analyze_site for a site-specific available-MW estimate).
+      const raw = (a.region_id || a.iso || a.region || a.market || '').toString().trim();
+      if (!raw) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'region required',
           hint: 'Pass region_id (aliases iso/region accepted) = one of the 10 supported regions.',
@@ -2453,7 +2525,14 @@ function createServer() {
           example: 'get_grid_intelligence region_id="PJM"',
         }) }] };
       }
-      return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/grid-headroom/${region}`)) }] }, 'get_grid_intelligence');
+      const ISO = raw.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      const [gi, cmp, qsnap] = await Promise.all([
+        callAPI(`/api/v1/grid/intelligence/${ISO}`, {}, { internal: true }),
+        callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true }),
+        callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }),
+      ]);
+      const out = shapeGridIntelligence(ISO, gi, cmp, qsnap);
+      return withFreshness({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out }, 'get_grid_intelligence');
     });
 
   trackedTool(srv, 'get_agent_registry', 'Live roster of the AI platforms + agent frameworks that have actually called DC Hub in the window — returns each caller with its citation counts (24h/30d), tool-usage breakdown, and authentication tier (reflects real calls, not a fixed list). Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they connect. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry. Do NOT use for platform uptime / backup health (use get_backup_status); this is the who-is-calling-DC-Hub roster.', {},
@@ -2841,5 +2920,5 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey };
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence };
 
