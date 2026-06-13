@@ -1,1 +1,6 @@
 __pycache__/
+node_modules/
+sdk/python/dchub.egg-info/
+sdk/python/dist/
+upstream/
+.DS_Store
