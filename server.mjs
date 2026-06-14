@@ -1958,7 +1958,14 @@ Free tier covers **10 calls/day** across:
             // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL.
             trimmed._upgrade = {
               tier:        'anonymous',
-              message:     'Anonymous tier — aggregate metrics masked. Get a free dev key for the real numbers.',
+              message:     'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
+              // r86-reach: the live anon _upgrade pointed only at redeem/Stripe (browser steps a
+              // headless agent can't follow). Surface the NATIVE claim_free_key tool + persist as a
+              // structured next_tool so an arriving agent has a one-call in-protocol path to a key it
+              // keeps — the fix for the ~4.8-calls/IP one-shot leak (this is the path search_facilities
+              // and the masked free tools actually emit; trialHeader/applyTrialGuardIfFree are other branches).
+              next_tool:      'claim_free_key',
+              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting), then retry this tool for the full result.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
               starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
               developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
