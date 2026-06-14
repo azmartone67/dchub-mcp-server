@@ -947,6 +947,97 @@ const FREE_FULL_TOOLS = new Set([
   'get_grid_scoreboard',   // live global grid scoreboard — the flagship free hook
 ]);
 
+// ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
+// Diagnosis (live probe, 2026-06-14): a one-call, no-email free key
+// (dch_live_*, tier='free') was returning the FULL get_market_intel report —
+// byte-identical to an enterprise key — because get_market_intel is in
+// KEYED_FREE_BONUS (full-to-keyed). That's the "gate missing / too much free"
+// the owner flagged: the flagship SYNTHESIS payload (the paid line) given away
+// to anyone who mints a throwaway key.
+//
+// Policy: the SYNTHESIS / multi-row DEPTH tools below return FULL depth only to
+// DEVELOPER tier and up. Everyone below Developer (anonymous, free key, minted
+// trial/identified) gets a depth-limited taste: the headline + the top few rows
+// + an _upgrade hint that names the locked full depth. This is the owner's
+// chosen "Medium — tease the ~8 flagship tools" lever.
+//
+// Deliberately NOT teased (keep free — they drive the flywheel & citations):
+//   • discovery: search_facilities, get_facility, get_news
+//   • raw-fact citation hooks: get_grid_scoreboard, get_grid_data,
+//     get_water_risk, get_energy_prices, get_renewable_energy
+// Already hard-gated elsewhere (decision layer): analyze_site, compare_sites,
+//   get_dchub_recommendation (PRO_ONLY) — left as-is.
+const DEPTH_TEASE_TOOLS = new Set([
+  'get_market_intel',          // full market report — was leaking full to free keys
+  'get_intelligence_index',    // composite market-health synthesis
+  'list_transactions',         // M&A deal depth + $-aggregates
+  'get_infrastructure',        // multi-layer infra breakdown
+  'get_pipeline',              // construction pipeline (MW + delivery dates)
+  'get_interconnection_queue', // ISO queue depth / GW totals
+  'get_grid_intelligence',     // per-ISO deep brief (already gated for free; uniform + future-proof)
+  'get_fiber_intel',           // dark-fiber routes / carriers (same)
+]);
+const DEPTH_TEASE_KEEP = 3;   // owner's preview: "top 3-5 rows shown"
+function _isPaidDepthTier(t) {
+  // Developer ($49) and up get full depth. founding==pro (tier_registry.py).
+  return ['paid', 'enterprise', 'developer', 'pro', 'founding'].includes(String(t || '').toLowerCase());
+}
+// Like trimForTrial but keeps the TOP-N of each array (a more generous taste
+// than the anon top-1) and records the honest full count in a side field.
+function _teaseDepth(parsed, keep) {
+  if (parsed === null || parsed === undefined) return parsed;
+  if (Array.isArray(parsed)) {
+    return (parsed.length > keep ? parsed.slice(0, keep) : parsed).map(x => _teaseDepth(x, keep));
+  }
+  if (typeof parsed !== 'object') return parsed;
+  const out = {};
+  for (const [k, v] of Object.entries(parsed)) {
+    if (Array.isArray(v) && v.length > keep) {
+      out[k] = v.slice(0, keep).map(x => _teaseDepth(x, keep));
+      out[`_${k}_total_in_developer`] = v.length;   // honest "N total" for the upgrade pitch
+    } else if (_isMetricKey(k) && typeof v === 'number') {
+      out[k] = null;                                 // mask aggregate $-metrics (same rule as trial trim)
+    } else if (typeof v === 'object' && v !== null) {
+      out[k] = _teaseDepth(v, keep);
+    } else {
+      out[k] = v;                                    // identifiers, verdicts, summary strings stay
+    }
+  }
+  return out;
+}
+// Build the depth-teased response (or null if the payload isn't JSON to trim).
+function buildDepthTease(name, result, ctx, tier) {
+  let parsed;
+  try { parsed = JSON.parse(result?.content?.[0]?.text ?? 'null'); } catch { return null; }
+  if (parsed === null || typeof parsed !== 'object') return null;
+  const teased = _teaseDepth(parsed, DEPTH_TEASE_KEEP);
+  // Name the single largest locked list so the pitch is concrete ("Full 14 …").
+  let lockedField = null, lockedN = 0;
+  for (const [k, v] of Object.entries(teased)) {
+    if (k.endsWith('_total_in_developer') && typeof v === 'number' && v > lockedN) {
+      lockedN = v; lockedField = k.slice(1, -('_total_in_developer'.length));
+    }
+  }
+  const _sid = ctx.session_id || 'no-session';
+  const _isKeyed = !!ctx.api_key;
+  const fullLine = lockedField
+    ? `Full ${lockedN}-row \`${lockedField}\` + all masked metrics`
+    : 'The full breakdown + all masked metrics';
+  teased._upgrade = {
+    tier:    _isKeyed ? (tier || 'free') : 'anonymous',
+    locked:  'full_depth',
+    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. ${fullLine} is in Developer ($49/mo) and up.`,
+    developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
+    upgrade_url:   UPGRADE_URL,
+    ...(_isKeyed ? {} : {
+      next_tool:      'claim_free_key',
+      next_tool_hint: 'Call claim_free_key (no email) for the free identified tier; full depth requires Developer ($49/mo).',
+    }),
+    promo_cta: PROMO_CTA, promo_code: PROMO_CODE, promo_expires: '2026-07-01',
+  };
+  return { content: [{ type: 'text', text: JSON.stringify(teased) }] };
+}
+
 function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
@@ -2005,6 +2096,21 @@ Free tier covers **10 calls/day** across:
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
             }
           } catch (_) { /* fall through to full data on parse failure */ }
+        }
+      }
+      // 2026-06-14 depth-tease: flagship SYNTHESIS tools return FULL depth only
+      // to Developer+ . Every sub-developer caller that reaches this full-data
+      // choke point (notably a free KEYED_FREE_BONUS key on get_market_intel,
+      // and any minted identified/trial key) gets a headline + top-N taste +
+      // _upgrade hint instead. gate.trial_taste is EXEMPT — that's the
+      // deliberate validated-trial full-data "wow" lever (r62c); we don't
+      // undercut it. Anonymous already trimmed above (L1954) for non-FREE_FULL
+      // tools, so this is the keyed-but-unpaid leak it couldn't catch.
+      if (DEPTH_TEASE_TOOLS.has(name) && !_isPaidDepthTier(_gateTier) && !gate.trial_taste) {
+        const _teased = buildDepthTease(name, result, c, _gateTier);
+        if (_teased) {
+          status = 'depth_teased';
+          return _teased;
         }
       }
       return withCitation(result);
