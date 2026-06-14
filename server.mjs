@@ -760,6 +760,45 @@ async function mintAutoTrial(tool_name) {
   }
 }
 
+// r87-conv (2026-06-14): AUTO-BIND a just-minted paywall trial key to THIS
+// session — the same retention fix r86 applied to claim_free_key, now on the
+// PAYWALL path that actually carries the demand. Live probe (2026-06-14) proved
+// the loop was broken at the highest-demand wall: get_grid_intelligence (189
+// distinct free users/30d) and get_fiber_intel (185) mint a WORKING trial key,
+// but the agent had to manually set the X-API-Key header AND reconnect to reach
+// the full-data "wow" — call #2 on the SAME session (no header) still returned
+// the 1-row preview. ~94% never reconnect (Claude.ai web users literally CAN'T
+// set a header), so they never see the value, so they never upgrade → flat
+// funnel (7 conv/30d). Binding the trial to the session here makes the agent's
+// NEXT same-session call return the full trial taste with zero friction.
+// Safety mirrors r86: only an ANON session (no api_key) is touched — an upgrade,
+// never a downgrade; the trial is bounded server-side (7-day expiry + daily cap
+// + ip/ua dedup at /keys/auto-mint); is_trial=true routes grid/fiber through the
+// trial_taste gate (full), it does NOT unlock the deep Pro-only tools.
+function _autoBindTrialToSession(mint) {
+  try {
+    if (!mint || !mint.api_key) return false;
+    const _ctx = getCtx();
+    const _sid = _ctx && _ctx.session_id;
+    if (!_sid || !sessionMeta.has(_sid)) return false;
+    const _m = sessionMeta.get(_sid);
+    if (_m.api_key) return false;                 // never override an identified/keyed session
+    _m.api_key    = mint.api_key;
+    // Bind as FREE + is_trial (NOT 'identified'): the grid/fiber full-taste path
+    // keys on is_trial, so 'free' still delivers the wow — but it keeps every
+    // OTHER PAID_ONLY tool on the soft free-preview branch instead of the
+    // identified-tier HARD wall (which would flip a secondary tool from preview
+    // → wall on the agent's very next call). Strictly better UX, same wow.
+    _m.tier       = 'free';
+    _m.is_trial   = true;                         // r62c trial-taste gate → full grid/fiber next call
+    _m.auto_bound = true;
+    sessionMeta.set(_sid, _m);
+    try { recordSessionUpgrade(_m.platform, _m.tier); } catch (_) {}
+    console.log(`[auto_mint] trial auto-bound to session ${String(_sid).slice(0,8)} — full taste on next call, no reconnect`);
+    return true;
+  } catch (_e) { return false; }
+}
+
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -1103,7 +1142,7 @@ function _trialFullCallsExceeded(sessionId, tool, cap) {
 // Returns {text, sc}; {'',{}} if no key (caller falls back to prior behavior).
 const _TRIAL_UNLOCKED_HINT =
   'get_grid_intelligence + get_fiber_intel (full), get_grid_data, get_market_intel, get_pipeline, get_interconnection_queue, list_transactions';
-function buildAutoMintBlock(mint, name) {
+function buildAutoMintBlock(mint, name, autoBound) {
   if (!mint || !mint.api_key) return { text: '', sc: {} };
   const days  = mint.days_remaining != null ? mint.days_remaining : (mint.trial_days || 7);
   const calls = mint.daily_calls || 1000;
@@ -1135,15 +1174,25 @@ function buildAutoMintBlock(mint, name) {
   // auto-trial cohort before, which is why 0 of 214 activated keys ever
   // identified.
   const boundCalls = mint.daily_calls_when_email_bound || 50;
-  const text =
-    '\n\n---\n' +
+  // r87-conv: when the trial was auto-bound to this session, drop the
+  // "add header + reconnect" friction (the 94%-drop step) and tell the agent
+  // to simply call again — the bound session already returns full data.
+  const leadBound =
+    '✅ **Free trial unlocked on THIS session — call `' + name + '` again now for the full result. No header, no reconnect needed.**\n' +
+    '   Keep it across future sessions (one paste — Claude Code): `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` (' + calls + ' calls/day, ' + days + 'd left).\n';
+  const leadManual =
     '✅ **Free trial key — works instantly, no signup. Add this header, reconnect, and call again:**\n' +
     '`X-API-Key: ' + mint.api_key + '`  (' + calls + ' calls/day, ' + days + 'd left)\n' +
-    '   **Keep it (one paste — Claude Code):** `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` — or save that header in your MCP client config. Do it once and previews stop.\n' +
+    '   **Keep it (one paste — Claude Code):** `claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp` — or save that header in your MCP client config. Do it once and previews stop.\n';
+  const text =
+    '\n\n---\n' +
+    (autoBound ? leadBound : leadManual) +
     (stillPro
       ? ('→ It unlocks ' + _TRIAL_UNLOCKED_HINT + ' and 18+ more DC Hub tools.\n' +
          '→ `' + name + '` is a deep Pro tool — make it permanent below.\n')
-      : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n')) +
+      : (autoBound
+          ? ('→ `' + name + '` is FULL on this session now (free for ' + days + ' days) — just call it again.\n')
+          : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n'))) +
     '\u{1F517} **Make it permanent — one link, no key swap:** have the human open ' + upgradeUrl + '\n' +
     '   → they pick a plan (Developer $49/mo or Pro $199/mo), pay once, and THIS key auto-upgrades. Your next call returns full data.\n' +
     '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + _meteredUrl + '\n' +
@@ -1157,9 +1206,12 @@ function buildAutoMintBlock(mint, name) {
     retry_with_header:         { 'X-API-Key': mint.api_key },
     persist_command:           'claude mcp add dchub --transport http --header X-API-Key:' + mint.api_key + ' https://dchub.cloud/mcp',
     persist_hint:              'Save the X-API-Key header in your MCP client config (Claude Code: run persist_command) so this key is reused on every future session — no more previews. This is the fix for the retry-with-key step.',
+    auto_bound_session:        !!autoBound,   // r87-conv: trial already applied to this session
     retry_instructions: stillPro
       ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it at ' + _meteredUrl + '.')
-      : ('Add header X-API-Key: ' + mint.api_key + ' (configure it on the MCP server and reconnect), then call ' + name + ' again for the full result.'),
+      : (autoBound
+          ? ('This trial key is ALREADY applied to your current session — just call ' + name + ' again for the full result. No header, no reconnect. (Save persist_command to keep it across future sessions.)')
+          : ('Add header X-API-Key: ' + mint.api_key + ' (configure it on the MCP server and reconnect), then call ' + name + ' again for the full result.')),
     trial_unlocks_this_tool:   !stillPro,
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
     owner_purchase_url:        _meteredUrl,
@@ -1808,10 +1860,13 @@ function trackedTool(srv, name, description, schema, handler) {
             // failure _mint is null and we fall back to the EXACT prior
             // return below (additive-only — original fields untouched).
             const _mint = await mintAutoTrial(name);
+            // r87-conv: bind the trial to THIS session so the agent's next call
+            // returns the full taste with no header/reconnect (the 94%-drop fix).
+            const _mintBound = _autoBindTrialToSession(_mint);
             // r62b-conv: honest, machine-actionable unlock block (shared helper)
             // — replaces the false "retry <pro tool> for the full result" promise
             // a trial (IDENTIFIED) key can't keep on grid_intelligence/fiber_intel.
-            const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name);
+            const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name, _mintBound);
             // 2026-06-07 HIGH-INTENT CLAIM: bump per-(session,tool) counter +
             // mint a signed claim URL when count crosses 3. The URL goes
             // into a clearly-marked "Tell the user:" block — the proven
@@ -1965,9 +2020,12 @@ Free tier covers **10 calls/day** across:
         // branch. Best-effort: on ANY failure _mint2 is null and the
         // return falls back to the EXACT prior hard-wall behavior.
         const _mint2 = await mintAutoTrial(name);
+        // r87-conv: bind the trial to THIS session (the 94%-drop fix), same as
+        // the preview branch above.
+        const _mint2Bound = _autoBindTrialToSession(_mint2);
         // r62b-conv: honest unlock block (shared helper) — same truthful CTA
         // as the preview branch.
-        const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name);
+        const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name, _mint2Bound);
         // MCP-C (2026-06-06): write tool_requested-tagged signal here too.
         // This is the second of two paywall return points (the other is
         // trial_preview above). Without this write, hard-blocked Pro tools
