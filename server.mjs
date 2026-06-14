@@ -2723,20 +2723,48 @@ function createServer() {
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
                 '\nFallback: POST https://dchub.cloud/api/v1/keys/claim {"client_name":"' + cn + '"}' }] };
       }
+      // r86-reach: AUTO-BIND the just-minted key to THIS session so the agent gets the full
+      // free tier on its very NEXT call — no reconnect. The #1 retention leak (0.6 calls/key)
+      // is agents claiming a key then never reconnecting; the per-request context is rebuilt
+      // from sessionMeta (see POST /mcp ctx.run at L2934), so writing it here upgrades the
+      // session's subsequent calls. Only an ANON session is touched; tier = the free tier
+      // they'd get on reconnect anyway (no privilege escalation, no downgrade of keyed sessions).
+      let _autoBound = false;
+      try {
+        const _ctx = getCtx();
+        const _sid = _ctx && _ctx.session_id;
+        if (_sid && sessionMeta.has(_sid)) {
+          const _m = sessionMeta.get(_sid);
+          if (!_m.api_key) {
+            _m.api_key   = key;
+            _m.tier      = (r && r.tier) || 'free';
+            _m.auto_bound = true;
+            sessionMeta.set(_sid, _m);
+            recordSessionUpgrade(_m.platform, _m.tier);
+            _autoBound = true;
+            console.log(`[claim] auto-bound key to session ${String(_sid).slice(0,8)} — no reconnect needed`);
+          }
+        }
+      } catch (_e) { /* non-fatal: the agent can still reconnect with the key */ }
       const text =
-        '✅ **Free DC Hub dev key minted for `' + cn + '`** — no email, no browser, active now.\n\n' +
+        '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
+        (_autoBound
+          ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
+          : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
-        'Set header `X-API-Key: ' + key + '` and reconnect. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n\n' +
+        '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '` or CLI `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n\n' +
         'Free tier = 10 calls/day, full toolset. Hitting limits? $9/mo Starter (200/day) → https://dchub.cloud/pricing/upgrade';
       return {
         content: [{ type: 'text', text }],
         structuredContent: {
-          api_key:     key,
-          client_name: cn,
-          tier:        'free',
-          header:      'X-API-Key',
-          daily_limit: 10,
-          upgrade_url: 'https://dchub.cloud/pricing/upgrade',
+          api_key:                 key,
+          client_name:             cn,
+          tier:                    (r && r.tier) || 'free',
+          header:                  'X-API-Key',
+          daily_limit:             10,
+          auto_applied_to_session: _autoBound,
+          next_call_full_data:     _autoBound,
+          upgrade_url:             'https://dchub.cloud/pricing/upgrade',
         },
       };
     });
