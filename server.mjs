@@ -1124,6 +1124,13 @@ function _trialFullCallsExceeded(sessionId, tool, cap) {
     return n > cap;
   } catch (_) { return false; }
 }
+// r88-conv (2026-06-14): the daily-full cap now DEFAULTS to a bounded value (8)
+// instead of 0/off — so the inline trial taste (full grid/fiber on the first
+// paywall call) and every subsequent bound call are ALWAYS bounded, with no
+// Railway env var required. After N full calls/day/tool a trial is demoted to
+// the trimmed preview + the upgrade CTA (the conversion nudge). Still
+// env-overridable: set DCHUB_TRIAL_TOOL_DAILY_FULL to retune, 0 to disable.
+const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '8', 10));
 
 // ── buildAutoMintBlock: the agent-facing unlock CTA for a fresh trial key ───
 // r62c-conv (2026-06-01): the trial key now unlocks a 7-day capped TASTE of
@@ -1877,6 +1884,46 @@ function trackedTool(srv, name, description, schema, handler) {
             trackPaidHit(_sid, name);
             const _hiClaim = await shouldMintClaim(_sid, name);
             const { text: _hiText, sc: _hiSC } = buildHighIntentClaimBlock(_hiClaim, name);
+            // r88-conv (2026-06-14): INLINE FULL on the FIRST paywall call for
+            // the trial-taste flagship tools (get_grid_intelligence,
+            // get_fiber_intel) — the 189+185 distinct free users who ARE the
+            // demand. The handler already ran (_trialResult holds full data) and
+            // we just auto-bound a valid trial to this session, so deliver the
+            // FULL result NOW + the upgrade CTA, instead of a 1-row preview that
+            // needs a 2nd call ~96% never make. The wow lands on call #1.
+            // Bounded by the daily-full cap (default 8/day/tool) + the trial's
+            // 7d/ip/ua dedup; isError:false because the call SUCCEEDED with real
+            // data. Only when the bind worked (anon session) AND it's a
+            // trial-taste tool AND under the daily cap.
+            if (_mintBound && ALWAYS_PARTIAL_PREVIEW.has(name)) {
+              const _overCap = TRIAL_DAILY_FULL_CAP > 0 && _trialFullCallsExceeded(c.session_id, name, TRIAL_DAILY_FULL_CAP);
+              if (!_overCap) {
+                status = 'trial_taste_inline';
+                signalPaywall({
+                  tool: name,
+                  signal_type: 'trial_preview',           // keep counted in the existing funnel rollups
+                  session_id: _sid,
+                  mcp_client: c.platform || 'mcp',
+                  user_agent: c.client_ua || null,
+                  ip_address: c.client_ip || null,
+                  api_key: (_mint && _mint.api_key) || null,
+                  tier_current: 'trial',
+                  tier_required: 'paid',
+                  message_shown: 'trial_taste_inline',
+                });
+                const _fullText = (_trialResult && _trialResult.content && _trialResult.content[0] && _trialResult.content[0].text) || _trialText;
+                return {
+                  content: [{ type: 'text', text: _fullText + _autoMintText + _hiText }],
+                  structuredContent: {
+                    trial_taste: true,
+                    inline_full: true,
+                    tool: name,
+                    ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
+                    ..._hiSC,
+                  },
+                };
+              }
+            }
             // MCP-C (2026-06-06): write the upgrade signal with tool_requested
             // populated. Per-tool funnel was blind before this — see
             // signalPaywall() comment above and the /api/v1/mcp/signal-paywall
@@ -2129,14 +2176,15 @@ Free tier covers **10 calls/day** across:
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
       }
-      // 2026-06-11 free-tier dial (default OFF via DCHUB_TRIAL_TOOL_DAILY_FULL):
-      // a validated trial gets FULL grid/fiber (gate.trial_taste). After N full
-      // calls/day/tool, demote to the trimmed preview + Pro upgrade CTA so heavy
-      // repeat trial users convert instead of getting unlimited free flagship
-      // data. Calls 1..N still return full data → tool-call volume (the moat) is
-      // unchanged. env unset/0 → short-circuits to today's behavior.
+      // 2026-06-11 free-tier dial — r88-conv: now defaults to a BOUNDED cap
+      // (TRIAL_DAILY_FULL_CAP, default 8/day/tool) instead of off. A validated
+      // trial (or an auto-bound trial session) gets FULL grid/fiber for the
+      // first N calls/day/tool, then is demoted to the trimmed preview + the
+      // upgrade CTA so the heaviest repeat trial users — the addressable pool —
+      // hit the conversion nudge. Calls 1..N stay full (tool-call volume / the
+      // moat unchanged). Set DCHUB_TRIAL_TOOL_DAILY_FULL=0 to disable.
       if (gate.trial_taste) {
-        const _cap = parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '0', 10);
+        const _cap = TRIAL_DAILY_FULL_CAP;
         if (_cap > 0 && _trialFullCallsExceeded(c.session_id, name, _cap)) {
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
