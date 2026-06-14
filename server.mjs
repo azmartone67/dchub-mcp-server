@@ -1604,6 +1604,7 @@ function trackedTool(srv, name, description, schema, handler) {
         duration_ms: 0,
         referer:     c.referer || null,
         user_agent:  c.user_agent || null,
+        ip_address:  c.client_ip || null,  // item-3: real XFF caller IP
       }).catch(() => {});
       return {
         isError: true,
@@ -1741,6 +1742,7 @@ function trackedTool(srv, name, description, schema, handler) {
               session_id: _sid,
               mcp_client: c.platform || 'mcp',
               user_agent: c.client_ua || null,
+              ip_address: c.client_ip || null,  // item-3: real XFF caller IP
               api_key: c.api_key || null,
               tier_current: _gateTier || 'free',
               tier_required: 'paid',
@@ -1896,6 +1898,7 @@ Free tier covers **10 calls/day** across:
           session_id: _sid2,
           mcp_client: c.platform || 'mcp',
           user_agent: c.client_ua || null,
+          ip_address: c.client_ip || null,  // item-3: real XFF caller IP
           api_key: c.api_key || null,
           tier_current: tier || 'free',
           tier_required: 'paid',
@@ -2024,6 +2027,7 @@ Free tier covers **10 calls/day** across:
         // r46: paywall-block attribution — see v_paywall_attribution view
         referer:     c.referer || null,
         user_agent:  c.user_agent || null,
+        ip_address:  c.client_ip || null,  // item-3: real XFF caller IP
       }).catch(() => {});
     }
   });
@@ -2842,13 +2846,24 @@ app.post('/mcp', async (req, res) => {
     const apiKey    = req.headers['x-api-key']
                    || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
                    || null;
+    // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
+    // proxy egress IP (req.socket.remoteAddress), not the actual MCP caller.
+    // The true client IP rides in X-Forwarded-For (first hop). Capture it once
+    // here and thread it through ctx → trackToolCall so telemetry attributes
+    // the real origin. Falls back to the socket peer when XFF is absent.
+    const clientIp  = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+                   || req.socket?.remoteAddress
+                   || null;
 
     // Existing session — reuse meta
     if (sessionId && sessions.has(sessionId)) {
       touchSession(sessionId);  // r41: mark active
       const transport = sessions.get(sessionId);
       const meta = sessionMeta.get(sessionId) || {};
-      return ctx.run({ ...meta, session_id: sessionId }, async () => {
+      // item-3: stamp the live request's caller IP onto the reused ctx (the
+      // stored meta carries the init-time IP; a returning request may come
+      // from a different hop, so prefer the current one when present).
+      return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     }
@@ -2882,6 +2897,9 @@ app.post('/mcp', async (req, res) => {
             // Cursor / Cline / Browser — bucketed by Flask v_paywall_attribution view).
             referer: req.headers.referer || req.headers.referrer || null,
             user_agent: userAgent,
+            // item-3 (real caller IP): persist the init-time XFF client IP so
+            // every subsequent call in this session can stamp ip_address.
+            client_ip: clientIp,
           });
           touchSession(sid);  // r41: track creation as activity
           console.log(`[MCP] init sid=${sid.slice(0,8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0,6) + '…' : 'none'} active=${sessions.size}`);
@@ -2904,6 +2922,9 @@ app.post('/mcp', async (req, res) => {
         // r46: see sessionMeta.set above for rationale
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent,
+        // item-3 (real caller IP): the initialize call itself is a tracked tool
+        // call (tools/list etc.) — stamp it with the real XFF client IP too.
+        client_ip: clientIp,
       }, async () => {
         await transport.handleRequest(req, res, body);
       });
