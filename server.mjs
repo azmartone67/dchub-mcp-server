@@ -2252,7 +2252,7 @@ Free tier covers **10 calls/day** across:
   });
 }
 
-// ── Tool registrations (38 tools, all wrapped) ─────────────────────────────
+// ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 function createServer() {
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.5' }, {
     // r86-reach: the initialize `instructions` field was empty (verified live
@@ -2276,7 +2276,26 @@ function createServer() {
 
   trackedTool(srv, 'get_facility', 'Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',
     { facility_id: ID, include_nearby: B, include_power: B },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/facilities/${a.facility_id||''}`, { include_nearby: a.include_nearby, include_power: a.include_power })) }] }));
+    async (a) => {
+      const fid = a.facility_id || '';
+      const main = await callAPI(`/api/v1/facilities/${fid}`, { include_nearby: a.include_nearby, include_power: a.include_power });
+      // The plural facility handler doesn't join on-site fiber carriers; the singular
+      // /api/v1/facility/<slug> endpoint does — merge them so the promised carrier list lands.
+      try {
+        const carr = await callAPI(`/api/v1/facility/${fid}`);
+        const cd = carr && (carr.data || carr);
+        if (cd && cd.fiber_carrier_count != null) {
+          const md = (main && main.data) ? main.data : main;
+          if (md && typeof md === 'object') {
+            md.fiber_providers = cd.fiber_providers;
+            md.fiber_carrier_count = cd.fiber_carrier_count;
+            md.on_net = cd.on_net;
+            md.connectivity_note = cd.connectivity_note;
+          }
+        }
+      } catch (_e) { /* non-fatal */ }
+      return { content: [{ type: 'text', text: JSON.stringify(main) }] };
+    });
 
   trackedTool(srv, 'get_market_intel', 'Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 232 global markets. Example: "What is Northern Virginia\'s vacancy rate, $/MW-day pricing, and current DCPI verdict?" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. "northern-virginia", "dallas", "phoenix", "frankfurt", "tokyo", "singapore"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).',
     { market: S, metric: S, period: S, compare_to: S },
