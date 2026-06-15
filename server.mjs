@@ -225,7 +225,7 @@ const PROMO_CODE  = 'DCMCP50_LAUNCH';
 const PROMO_PARAM = '?prefilled_promo_code=' + PROMO_CODE;
 const PROMO_CTA   = '\u{1F381} 50% off first 3 months with code ' + PROMO_CODE + ' (expires 2026-07-01)';
 const PROMO_TEXT  = '\n\n\u{1F381} Use ' + PROMO_CODE + ' at checkout for 50% off the first 3 months. Expires 2026-07-01.';
-const DEVELOPER_URL = 'https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c';
+const DEVELOPER_URL = 'https://buy.stripe.com/7sY5kE8F4fs13ml0PEaZi0c'; // r88h: was ...13mI0... (capital I) — unified to the canonical _stripe_links.py value (...13ml0..., also used by main.py + pricing) so one Developer link feeds clean attribution
 
 // ── Fix E (2026-06-06): client_reference_id = mcp_session_id on every Stripe URL ──
 // Threads the Mcp-Session-Id through every buy.stripe.com link surfaced in a
