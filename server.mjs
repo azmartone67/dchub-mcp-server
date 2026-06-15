@@ -2254,7 +2254,7 @@ Free tier covers **10 calls/day** across:
 
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.5' }, {
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.6' }, {
     // r86-reach: the initialize `instructions` field was empty (verified live
     // 2026-06-14) — a headless agent arrived with zero in-protocol orientation,
     // tried once, and never learned how to persist. This is the first-touch
@@ -3098,7 +3098,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.2.5',
+    version: '2.2.6',
     tools: 39,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
