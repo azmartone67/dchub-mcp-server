@@ -5,8 +5,27 @@
 import { describe, it, expect } from 'vitest';
 import {
   trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey,
-  shapeGridIntelligence,
+  shapeGridIntelligence, _anonInlineFullEnabled,
 } from '../server.mjs';
+
+describe('_anonInlineFullEnabled — DCHUB_ANON_INLINE_FULL A/B toggle', () => {
+  it('defaults ON when unset/null/empty (preserve current behavior)', () => {
+    expect(_anonInlineFullEnabled(undefined)).toBe(true);
+    expect(_anonInlineFullEnabled(null)).toBe(true);
+    expect(_anonInlineFullEnabled('')).toBe(true);
+    expect(_anonInlineFullEnabled('on')).toBe(true);
+  });
+  it('is OFF only on an explicit "off" (case/space-insensitive)', () => {
+    expect(_anonInlineFullEnabled('off')).toBe(false);
+    expect(_anonInlineFullEnabled('OFF')).toBe(false);
+    expect(_anonInlineFullEnabled('  Off  ')).toBe(false);
+  });
+  it('any other value stays ON (fail-safe to current behavior)', () => {
+    expect(_anonInlineFullEnabled('true')).toBe(true);
+    expect(_anonInlineFullEnabled('1')).toBe(true);
+    expect(_anonInlineFullEnabled('disabled')).toBe(true);
+  });
+});
 
 describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)', () => {
   // De-spam (Devin QA): gating must NOT pollute the data with promo strings —

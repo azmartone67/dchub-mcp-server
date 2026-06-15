@@ -1132,6 +1132,25 @@ function _trialFullCallsExceeded(sessionId, tool, cap) {
 // env-overridable: set DCHUB_TRIAL_TOOL_DAILY_FULL to retune, 0 to disable.
 const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '8', 10));
 
+// 2026-06-15 A/B TOGGLE: DCHUB_ANON_INLINE_FULL (default 'on' = current behavior).
+// When 'on', a truly-anonymous first-touch on a flagship trial-taste tool
+// (get_grid_intelligence/get_fiber_intel) gets the FULL result inline + a minted
+// trial key auto-bound to the session (the "wow on call #1" lever). When set to
+// 'off', the anon first-touch instead gets the 1-row taste + the minted key + a
+// "add the X-API-Key header and reconnect" CTA — i.e. FULL data requires the
+// agent to actually configure/use the key. This tests whether requiring a
+// deliberate bind drives more key persistence/conversion vs. handing full data
+// away on the first anonymous call. Implemented by gating the auto-bind: with the
+// flag off, _autoBindTrialToSession is skipped, which (a) leaves the session
+// anonymous so the inline-full branch is naturally bypassed and (b) flips
+// buildAutoMintBlock to the "add header + reconnect" copy. Zero risk to the
+// current path (default on); a returning caller WITH the key always gets full.
+function _anonInlineFullEnabled(v) {
+  // default ON (current behavior); only an explicit 'off' disables.
+  return String(v == null ? 'on' : v).trim().toLowerCase() !== 'off';
+}
+const ANON_INLINE_FULL = _anonInlineFullEnabled(process.env.DCHUB_ANON_INLINE_FULL);
+
 // ── buildAutoMintBlock: the agent-facing unlock CTA for a fresh trial key ───
 // r62c-conv (2026-06-01): the trial key now unlocks a 7-day capped TASTE of
 // get_grid_intelligence + get_fiber_intel (see applyTierGate trial_taste), so
@@ -1876,7 +1895,9 @@ function trackedTool(srv, name, description, schema, handler) {
             const _mint = await mintAutoTrial(name);
             // r87-conv: bind the trial to THIS session so the agent's next call
             // returns the full taste with no header/reconnect (the 94%-drop fix).
-            const _mintBound = _autoBindTrialToSession(_mint);
+            // 2026-06-15: gated by DCHUB_ANON_INLINE_FULL — when 'off', skip the
+            // auto-bind so full data requires the agent to configure the key.
+            const _mintBound = ANON_INLINE_FULL ? _autoBindTrialToSession(_mint) : false;
             // r62b-conv: honest, machine-actionable unlock block (shared helper)
             // — replaces the false "retry <pro tool> for the full result" promise
             // a trial (IDENTIFIED) key can't keep on grid_intelligence/fiber_intel.
@@ -2075,8 +2096,9 @@ Free tier covers **10 calls/day** across:
         // return falls back to the EXACT prior hard-wall behavior.
         const _mint2 = await mintAutoTrial(name);
         // r87-conv: bind the trial to THIS session (the 94%-drop fix), same as
-        // the preview branch above.
-        const _mint2Bound = _autoBindTrialToSession(_mint2);
+        // the preview branch above. 2026-06-15: gated by DCHUB_ANON_INLINE_FULL
+        // (see preview branch) so the A/B toggle is consistent across both walls.
+        const _mint2Bound = ANON_INLINE_FULL ? _autoBindTrialToSession(_mint2) : false;
         // r62b-conv: honest unlock block (shared helper) — same truthful CTA
         // as the preview branch.
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name, _mint2Bound);
@@ -3278,5 +3300,5 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence };
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled };
 
