@@ -2736,6 +2736,10 @@ function createServer() {
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', p)) }] }, 'get_fiber_intel');
     });
 
+  trackedTool(srv, 'get_fiber_readiness', 'Use when you need the FIBER-READINESS / connectivity verdict for ONE parcel or site (lat/lon): near-net distance to a carrier-served facility, how many distinct fiber carriers are reachable, and whether there is single-carrier risk (no path diversity). This is the parcel connectivity answer engineering site-selectors screen on. Example: "Is this Loudoun County parcel fiber-ready and how many carriers can serve it?" — get_fiber_readiness lat=39.04 lon=-77.48 radius_km=50. Params: lat (-90..90, required), lon (-180..180, required), radius_km (search radius in km, default 50, range 5-200). Returns: {score 0-100, near_net_bucket ("on-net"|"near-net"|"acceptable"|"build-required"), nearest_carrier_km, carrier_count, top_carriers:[{carrier, distance_km}], single_carrier_risk (bool), fiber_coverage_km, verdict_short}. Do NOT use to map carrier ROUTES between metros (use get_fiber_intel) or for a full multi-factor site suitability score (use analyze_site).',
+    { lat: N, lon: N, radius_km: N },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', a)) }] }));
+
   trackedTool(srv, 'get_energy_prices', 'Energy pricing across 10 ISOs (7 US + Hydro-Quebec + AESO + Nord Pool): retail rates, natural gas, real-time grid status. Pricing-focused; do NOT use for fuel mix, demand or grid headroom (use get_grid_data or get_grid_intelligence).',
     { data_type: S, state: S, iso: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
