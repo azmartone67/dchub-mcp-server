@@ -2726,9 +2726,15 @@ function createServer() {
     { lat: N, lon: N, radius_km: N, layer: S, min_voltage_kv: N, limit: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', a)) }] }));
 
-  trackedTool(srv, 'get_fiber_intel', 'Use when scoring a candidate site for fiber depth, mapping long-haul routes between metros, or assessing dark-fiber availability for a hyperscale build. Example: "Show all Lumen long-haul fiber routes through Northern Virginia I can put on a Leaflet map." — get_fiber_intel carrier=Lumen route_type=longhaul. Params: carrier one of "Lumen" | "Zayo" | "Crown Castle" | "Cogent" | "Verizon" | "AT&T" (omit for all 6); route_type one of "metro" | "longhaul" | "dark" | "ix". Returns: GeoJSON FeatureCollection {features:[{geometry, properties:{carrier, fiber_count, lit_capacity_gbps, dark_strands_available, route_type}}]} ready to drop into Leaflet/Mapbox. Do NOT use to count fiber providers at a single facility (use get_facility) or for IX interconnection-density scores (use analyze_site).',
+  trackedTool(srv, 'get_fiber_intel', 'Use when scoring a candidate site for fiber depth, mapping long-haul routes between metros, or assessing dark-fiber availability for a hyperscale build. Example: "Show all Zayo long-haul fiber routes through Northern Virginia I can put on a Leaflet map." — get_fiber_intel carrier=Zayo route_type=longhaul. Params: carrier one of "Zayo" | "Lumen" | "Cogent" | "Crown Castle" | "Windstream" | "GTT" | "Uniti" | "FiberLight" | "Segra" | "Arcadian Infracom" (omit for all carriers); route_type one of "metro" | "longhaul" | "dark" | "ix". Returns: GeoJSON FeatureCollection {features:[{geometry, properties:{carrier, route_type, fiber_count, lit_capacity_gbps, capacity, distance_miles, distance_km}}]} ready to drop into Leaflet/Mapbox. Do NOT use to count fiber providers at a single facility (use get_facility) or for IX interconnection-density scores (use analyze_site).',
     { carrier: S, route_type: S, include_sources: B },
-    async (a) => withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', a)) }] }, 'get_fiber_intel'));
+    async (a) => {
+      // backend buckets the messy route_type taxonomy under `class` (metro|longhaul|dark|ix);
+      // passing route_type as an exact column match misses 'long-haul'/'long_haul' variants → empty results.
+      const p = { ...a };
+      if (p.route_type) { p.class = p.route_type; delete p.route_type; }
+      return withFreshness({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/routes', p)) }] }, 'get_fiber_intel');
+    });
 
   trackedTool(srv, 'get_energy_prices', 'Energy pricing across 10 ISOs (7 US + Hydro-Quebec + AESO + Nord Pool): retail rates, natural gas, real-time grid status. Pricing-focused; do NOT use for fuel mix, demand or grid headroom (use get_grid_data or get_grid_intelligence).',
     { data_type: S, state: S, iso: S },
