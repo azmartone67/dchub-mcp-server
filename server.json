@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
   "title": "DC Hub \u2014 Data Center & Energy Intelligence",
-  "description": "Live data-center, power & gas intelligence for AI agents \u2014 38 tools, query and cite.",
+  "description": "Live data-center, power & gas intelligence for AI agents \u2014 40 tools, query and cite.",
   "websiteUrl": "https://dchub.cloud",
   "version": "2.2.5",
   "repository": {
@@ -19,7 +19,7 @@
     "io.modelcontextprotocol.registry/publisher-provided": {
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
-      "toolCount": 38,
+      "toolCount": 40,
       "license": "CC-BY-4.0",
       "freeTier": true
     }
