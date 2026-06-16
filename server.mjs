@@ -1075,9 +1075,14 @@ function buildDepthTease(name, result, ctx, tier) {
     message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. ${fullLine} is in Developer ($49/mo) and up.`,
     developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
     upgrade_url:   UPGRADE_URL,
+    // Agent-native pricing: metered ($1/100 calls, no seat) is the right fit for
+    // high-volume tool-calling agents — the dominant caller here. Surface it on the
+    // tease so the addressable free users see usage-based billing, not just a seat.
+    metered_url:   _stripeWithSession(METERED_URL, _sid),
+    metered_pitch: 'High-volume agent? Skip the monthly seat — metered is $1 per 100 API calls, pay only for the calls you make. The natural fit for tool-calling agents; your API key is emailed right after checkout.',
     ...(_isKeyed ? {} : {
       next_tool:      'claim_free_key',
-      next_tool_hint: 'Call claim_free_key (no email) for the free identified tier; full depth requires Developer ($49/mo).',
+      next_tool_hint: 'Call claim_free_key (no email) for the free identified tier; for full depth at scale use metered ($1/100 calls) or Developer ($49/mo).',
     }),
     promo_cta: PROMO_CTA, promo_code: PROMO_CODE, promo_expires: '2026-07-01',
   };
@@ -2203,6 +2208,8 @@ Free tier covers **10 calls/day** across:
               next_tool:      'claim_free_key',
               next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting), then retry this tool for the full result.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
+              metered_url: _stripeWithSession(METERED_URL, _sid),
+              metered_hint: 'High-volume agent and want to pay now without the email step? Metered is $1 per 100 API calls (no seat) — the agent-native option.',
               starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
               developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
               promo_cta:   PROMO_CTA,
@@ -2230,7 +2237,12 @@ Free tier covers **10 calls/day** across:
               const _sid = c.session_id || 'no-session';
               trimmed._upgrade = {
                 tier: 'trial',
-                message: `You've used ${name} ${_cap}+ times today on a free trial — upgrade to Pro for unlimited grid + fiber intelligence.`,
+                // Usage-aware + agent-native: a heavy repeat caller on a paid tool is the
+                // ideal metered customer — lead with $1/100-calls (no seat), which fits
+                // tool-calling agents far better than a monthly seat. (Flywheel→revenue.)
+                message: `You've used ${name} ${_cap}+ times today on the free trial — you're a high-volume agent. Metered billing fits you best: $1 per 100 API calls, no seat, pay only for what you call. (Or Developer $49/mo for unlimited.)`,
+                metered_url: _stripeWithSession(METERED_URL, _sid),
+                metered_pitch: 'Metered = $1 / 100 API calls, no subscription, no per-seat ceiling — scales with your agent. API key emailed right after checkout.',
                 upgrade_url: UPGRADE_URL,
                 starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
                 developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
