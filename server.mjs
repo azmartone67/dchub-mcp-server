@@ -1226,9 +1226,9 @@ function buildAutoMintBlock(mint, name, autoBound) {
       : (autoBound
           ? ('→ `' + name + '` is FULL on this session now (free for ' + days + ' days) — just call it again.\n')
           : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n'))) +
-    '\u{1F517} **Make it permanent — one link, no key swap:** have the human open ' + upgradeUrl + '\n' +
-    '   → they pick a plan (Developer $49/mo or Pro $199/mo), pay once, and THIS key auto-upgrades. Your next call returns full data.\n' +
-    '\u{1F916} *Prefer usage-based (pay per call, no subscription)?* ' + _meteredUrl + '\n' +
+    '\u{1F916} **Make it permanent — pay for usage, not a seat: $1 per 100 API calls, no subscription, no per-seat ceiling →** ' + _meteredUrl + '\n' +
+    '   Monthly seats don’t fit agent traffic; metered scales with the calls your agent actually makes, and we email your API key right after checkout.\n' +
+    '\u{1F517} *Prefer a flat plan that auto-upgrades THIS key (no swap)?* have the human open ' + upgradeUrl + ' → Developer $49/mo or Pro $199/mo, pay once, and this key auto-upgrades.\n' +
     '\u{2709}\u{FE0F} **Raise this key ' + calls + ' → ' + boundCalls + ' calls/day — attach the owner’s email:** `curl -X POST https://dchub.cloud/api/v1/keys/identify -H "Content-Type: application/json" -d \'{"api_key":"' + mint.api_key + '","email":"<owner-email>"}\'` (ask your human for their email; also enables key recovery + upgrade receipts)\n';
   const sc = {
     auto_trial_key:            mint.api_key,
