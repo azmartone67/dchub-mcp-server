@@ -2980,6 +2980,25 @@ function createServer() {
       }]
     }));
 
+  // 2026-06-16: plan_fiber_leadin — diverse fibre lead-in route planner (backs the
+  // land+power map's "Plan fibre routes" tool). Wraps the open /api/v1/route-plan.
+  // Anon callers get trimForTrial'd to a 1-route teaser; keyed callers get all N.
+  trackedTool(srv, 'plan_fiber_leadin',
+    'Plan N diverse, road-following fibre lead-in routes from a candidate data-center site to a carrier hotel / POP, with indicative build cost and a route-diversity read. Answers "can I get N diverse fibre routes into this site, how far, how much, and where do they share a corridor?". Example: plan_fiber_leadin from="250 Paringa Road, Murarrie QLD" to="20 Wharf Street, Brisbane City QLD" n=4. Params: from (lat,lng OR street address), to (lat,lng OR address — e.g. a NextDC/Equinix POP), n (1-6 routes, default 4), fibre ("720F"|"1440F"), bore_m (river/rail bore length in metres, optional). Returns per-route length_km + GeoJSON geometry, total_route_km, diversity {min_separation_m_midhaul, shared_street_km}, and indicative cost {capex_usd, opex_usd_yr}. INDICATIVE auto-routed road corridors — NOT engineered alignments; subject to survey, DBYD and carrier confirmation. Do NOT use for a single site-suitability score (use analyze_site) or fibre-provider footprints (use get_fiber_intel).',
+    { from: S, to: S, n: I, fibre: S, bore_m: I },
+    async (a) => {
+      const from = String(a.from || '').trim(), to = String(a.to || '').trim();
+      if (!from || !to) return { content: [{ type: 'text', text: JSON.stringify({
+        error: 'from and to required (lat,lng or address)',
+        example: 'plan_fiber_leadin from="250 Paringa Rd, Murarrie QLD" to="20 Wharf St, Brisbane City QLD" n=4',
+      }) }] };
+      const n = Math.max(1, Math.min(6, parseInt(a.n, 10) || 4));
+      const fibre = a.fibre === '1440F' ? '1440F' : '720F';
+      const q = { from, to, n, fibre };
+      if (a.bore_m) q.bore_m = a.bore_m;
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/route-plan', q)) }] };
+    });
+
   // r85 (2026-06-13): claim_free_key — the brain's (Opus-4-8) #1 conversion
   // lever. 99.7% of paywall hits are anonymous agents that can't complete an
   // email/browser flow; the binding constraint is anon→identified, NOT
