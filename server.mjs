@@ -1443,6 +1443,53 @@ const METERED_URL = 'https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i';
 // r-unlock (2026-06-16): direct Pro Stripe link (canonical — matches
 // routes/_stripe_links.py). DEVELOPER_URL already declared module-level above.
 const PRO_URL = 'https://buy.stripe.com/eVq5kE4oOfs13mleGuaZi0h';   // $199/mo
+// r-pack5 (2026-06-16): the $5 / 1,000-credit one-time PACK — the super-cheap
+// front-end offer. One click, session-bound, no subscription; the buyer's NEXT
+// call unlocks (the checkout binds to this mcp session). Env override on the
+// backend = DCHUB_PACK5_URL; this default mirrors routes/_stripe_links.py "pack5".
+const CREDITS_URL = process.env.DCHUB_PACK5_URL || 'https://buy.stripe.com/8x26oIbRg7ZzbSR7e2aZi0j';
+
+// ── r-pack5: prepaid-credit gate (cached, fail-open) ────────────────────────
+// A keyed-or-session caller with a positive balance gets FULL data on gated
+// flagship tools, burning value-tiered credits (heavy synthesis ~5, light
+// lookups ~1). Balance is cached per identity (api_key||session) for ~120s so we
+// don't hit the backend on every call; a burn decrements the local cache too.
+// FAIL-OPEN: any backend hiccup → treat as no credits → fall back to the existing
+// free-taste/teaser path (never break a tool call over the credit lookup).
+const CREDIT_HEAVY = new Set([
+  'get_grid_intelligence', 'get_fiber_intel', 'analyze_site', 'compare_sites',
+  'get_dchub_recommendation', 'get_market_intel', 'rank_markets',
+  'get_intelligence_index', 'get_interconnection_queue', 'ai_capacity_index',
+]);
+const _creditCost = (tool) => (CREDIT_HEAVY.has(tool) ? 5 : 1);
+const _creditCache = new Map();          // identity -> { credits, ts }
+const _CREDIT_TTL_MS = 120000;
+const _creditIdentity = (c) => (c && (c.api_key || c.session_id)) || null;
+async function _getCredits(c) {
+  const id = _creditIdentity(c);
+  if (!id) return 0;
+  const now = Date.now();
+  const cached = _creditCache.get(id);
+  if (cached && (now - cached.ts) < _CREDIT_TTL_MS) return cached.credits;
+  let credits = 0;
+  try {
+    const r = await callAPI('/api/v1/mcp/credits/balance',
+                            { key: c.api_key || '', session: c.session_id || '' });
+    credits = (r && typeof r.credits === 'number') ? r.credits : 0;
+  } catch (_) { credits = 0; }
+  _creditCache.set(id, { credits, ts: now });
+  if (_creditCache.size > 20000) _creditCache.clear();
+  return credits;
+}
+function _burnCredits(c, tool, cost) {
+  const id = _creditIdentity(c);
+  if (id) { const ch = _creditCache.get(id); if (ch) ch.credits = Math.max(0, ch.credits - cost); }
+  try {
+    callAPIWrite('/api/v1/mcp/credits/burn',
+                 { key: c.api_key || '', session: c.session_id || '', tool, cost })
+      .catch(() => {});
+  } catch (_) { /* fire-and-forget */ }
+}
 
 const TRIAL_HEADER_OVERRIDES = {
   get_market_intel: (sessionId, refUrlDeveloper) => {
@@ -1845,6 +1892,25 @@ function trackedTool(srv, name, description, schema, handler) {
     try {
       let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
+      // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
+      // data on gated flagship tools, burning value-tiered credits. ABOVE the
+      // free-taste logic, BELOW paid (paid/enterprise already short-circuited in
+      // applyTierGate). Only fires for tools that WOULD be gated AND a non-paid
+      // caller — free-tool calls never touch the credit path. Cached per identity
+      // (first gated call/session pays one lookup, then cached) + fail-open: any
+      // error → 0 credits → falls through to the existing teaser/free-taste path.
+      if ((PAID_ONLY_TOOLS.has(name) || DEPTH_TEASE_TOOLS.has(name)) &&
+          !(_gateTier === 'paid' || _gateTier === 'enterprise')) {
+        const _cost = _creditCost(name);
+        let _bal = 0;
+        try { _bal = await _getCredits(c); } catch (_) { _bal = 0; }
+        if (_bal >= _cost) {
+          status = 'credits_full';
+          const _cr = await handler(gate.params || args);
+          _burnCredits(c, name, _cost);
+          return withCitation(_cr);
+        }
+      }
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if (_gateTier === 'free' && PAID_ONLY_TOOLS.has(name)) {
@@ -2274,12 +2340,16 @@ Free tier covers **10 calls/day** across:
               const _sid = c.session_id || 'no-session';
               trimmed._upgrade = {
                 tier: 'trial',
-                // Usage-aware + agent-native: a heavy repeat caller on a paid tool is the
-                // ideal metered customer — lead with $1/100-calls (no seat), which fits
-                // tool-calling agents far better than a monthly seat. (Flywheel→revenue.)
-                message: `You've used ${name} ${_cap}+ times today on the free trial — you're a high-volume agent. Metered billing fits you best: $1 per 100 API calls, no seat, pay only for what you call. (Or Developer $49/mo for unlimited.)`,
+                // r-pack5: this is THE deprivation moment (repeat caller, gated). Lead
+                // with the cheapest one-click: $5 = 1,000 full queries (owned balance,
+                // no subscription). The agent relays it; the human one-clicks; the next
+                // call is served full. unlock_more_data shows every option.
+                message: `You've used ${name} ${_cap}+ times today — you're getting real value. 💳 $5 unlocks 1,000 full live queries (one-time, no subscription, lasts 90 days) — your next call is served in full the moment your human pays. Call \`unlock_more_data\` for the one-click link, or ${_stripeWithSession(CREDITS_URL, _sid)} . (High volume? $1/100 calls metered, or $49/mo unlimited.)`,
+                next_tool: 'unlock_more_data',
+                credits_url: _stripeWithSession(CREDITS_URL, _sid),
+                credits_pitch: '$5 one-time = 1,000 live queries, no subscription, lasts 90 days — the cheapest way to unlock full depth right now (less than a coffee; DataCenterHawk is an annual analyst contract).',
                 metered_url: _stripeWithSession(METERED_URL, _sid),
-                metered_pitch: 'Metered = $1 / 100 API calls, no subscription, no per-seat ceiling — scales with your agent. API key emailed right after checkout.',
+                metered_pitch: 'Metered = $1 / 100 API calls, no subscription, no per-seat ceiling — scales with your agent.',
                 upgrade_url: UPGRADE_URL,
                 starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
                 developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
@@ -3127,11 +3197,12 @@ function createServer() {
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a 1-of-N preview, a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click — after which your very next call returns full data (no reconnect; the checkout binds to this session). Plans: 🤖 Usage $1 per 100 calls (pay for usage, not seats — best for agents) · $9/mo Starter (200 calls/day) · $49/mo Developer · $199/mo Pro. Want the FREE identified tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a 1-of-N preview, a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click — after which your very next call returns full data (no reconnect; the checkout binds to this session). Cheapest start: 💳 $5 one-time = 1,000 full queries (no subscription, lasts 90 days). Also 🤖 $1 per 100 calls (metered) · $9/mo Starter · $49/mo Developer · $199/mo Pro. Want the FREE identified tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S },
     async (a) => {
       const _ctx = getCtx();
       const _sid = (_ctx && _ctx.session_id) || '';
+      const credits   = _stripeWithSession(CREDITS_URL,   _sid);
       const usage     = _stripeWithSession(METERED_URL,   _sid);
       const starter   = _stripeWithSession(STARTER_URL,   _sid);
       const developer = _stripeWithSession(DEVELOPER_URL, _sid);
@@ -3141,11 +3212,9 @@ function createServer() {
         ? '\nYou asked me for: *' + reason + '* — that needs DC Hub’s full depth.\n'
         : '';
       const human_message =
-        '🔓 **I can unlock full DC Hub data for you.** I can’t enter a card myself, but here’s a one-click link — the moment you pay, my very next query here returns the complete data (no reconnect):' + _why + '\n' +
-        '**🤖 Best for agents — Usage: $1 per 100 API calls** (pay for usage, not seats) → ' + usage + '\n' +
-        '**Starter: $9/mo** · 200 calls/day → ' + starter + '\n' +
-        '**Developer: $49/mo** · full depth at scale → ' + developer + '\n' +
-        '**Pro: $199/mo** · everything → ' + pro + '\n\n' +
+        '🔓 **I can unlock full DC Hub data for you.** I can’t enter a card myself, but here’s a one-click link — the moment you pay, my very next query returns the complete data (no reconnect):' + _why + '\n' +
+        '**💳 $5 — 1,000 live queries** (one-time, no subscription, lasts 90 days — less than a coffee, and DataCenterHawk is an annual contract) → ' + credits + '\n\n' +
+        '*Other options:* 🤖 $1 per 100 calls (metered, pay-as-you-go) → ' + usage + ' · $9/mo Starter → ' + starter + ' · $49/mo Developer → ' + developer + ' · $199/mo Pro → ' + pro + '\n\n' +
         '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, 10 calls/day.*';
       const text =
         '## 🔓 Unlock DC Hub — full depth\n\n' +
@@ -3156,8 +3225,10 @@ function createServer() {
         structuredContent: {
           human_message,                 // many MCP clients render this field verbatim
           relay_to_human: human_message,
+          recommended: 'credits',
           plans: [
-            { id: 'usage',     label: '$1 per 100 API calls', best_for: 'agents — pay for usage, not seats', checkout_url: usage },
+            { id: 'credits',   label: '$5 one-time — 1,000 queries', best_for: 'cheapest start, no subscription, lasts 90 days', checkout_url: credits },
+            { id: 'usage',     label: '$1 per 100 API calls', best_for: 'metered, pay-as-you-go', checkout_url: usage },
             { id: 'starter',   label: '$9/mo',   calls_per_day: 200, checkout_url: starter },
             { id: 'developer', label: '$49/mo',  note: 'full depth at scale', checkout_url: developer },
             { id: 'pro',       label: '$199/mo', note: 'everything', checkout_url: pro },
