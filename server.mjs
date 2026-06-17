@@ -1902,8 +1902,14 @@ function trackedTool(srv, name, description, schema, handler) {
             let _trialText = _trialResult?.content?.[0]?.text || '';
             // Phase 7: trim arrays in the JSON payload so the LLM sees that
             // there IS more, but not the actual data.
+            // r-unlock (2026-06-16): capture the quantified-deprivation line from
+            // the ORIGINAL payload (pre-trim) so the dominant ~95% trial_preview
+            // branch leads with "you're seeing 1 of N" + a pointer to
+            // unlock_more_data — not just the generic applyTrialGuardIfFree path.
+            let _gapLine = '';
             try {
               const parsed = JSON.parse(_trialText);
+              _gapLine = _trialGapLine(parsed);
               _trialText = JSON.stringify(trimForTrial(parsed));
             } catch { /* not JSON, leave as prose */ }
             const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
@@ -2008,7 +2014,7 @@ function trackedTool(srv, name, description, schema, handler) {
               message_shown: 'trial_preview',
             });
             return {
-              content: [{ type: 'text', text: phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText + _hiText + PROMO_TEXT }],
+              content: [{ type: 'text', text: phase9L_clean_preview(_gapLine + _upgradeHeader, _trialText) + _autoMintText + _hiText + PROMO_TEXT }],
               isError: true,
               structuredContent: {
                 trial_preview: true,
