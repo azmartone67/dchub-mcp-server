@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
   "title": "DC Hub \u2014 Data Center & Energy Intelligence",
-  "description": "Live data-center, power & gas intelligence for AI agents \u2014 40 tools, query and cite.",
+  "description": "Live data-center, power, energy & gas intelligence for AI agents \u2014 40 tools across 10 ISO grids, fiber routes, renewables & hyperscaler deals; query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
