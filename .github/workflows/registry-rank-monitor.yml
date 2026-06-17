@@ -1,0 +1,59 @@
+name: registry rank + drift monitor
+
+# Automates the manual registry audit: tracks Smithery SEARCH RANK for the key
+# terms + cross-registry version/tool-count parity, and OPENS/REFRESHES a GitHub
+# issue when a CORE term falls out of #1 or the official registry drifts stale.
+# Read-only (public APIs) — no secrets. Dial the cron back to weekly once the
+# slipped terms have recovered.
+
+on:
+  schedule:
+    - cron: '17 14 * * *'        # daily 14:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: registry-rank-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run rank + drift monitor
+        id: mon
+        run: python3 scripts/registry_monitor.py
+
+      - name: Open / refresh alert issue on regression
+        if: steps.mon.outputs.regression == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="🔻 Registry rank/drift alert"
+          NUM=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$NUM" ]; then
+            echo "Refreshing existing alert issue #$NUM"
+            gh issue comment "$NUM" --body-file monitor_report.md
+          else
+            echo "Opening new alert issue"
+            gh issue create --title "$TITLE" --body-file monitor_report.md \
+              --label "registry,automated" 2>/dev/null \
+              || gh issue create --title "$TITLE" --body-file monitor_report.md
+          fi
+
+      - name: Auto-close alert issue when healthy again
+        if: steps.mon.outputs.regression == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="🔻 Registry rank/drift alert"
+          NUM=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "✅ Recovered — CORE cluster back at #1 and registry record in sync. Auto-closing."
+            gh issue close "$NUM"
+          fi
