@@ -98,6 +98,13 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // metered is the natural fit for the high-volume anonymous agents that dominate
   // calls. Session-bound so a metered checkout also closes the conversion loop.
   const _USAGE_URL_LOCAL = _stripeWithSession(METERED_URL, sessionId);
+  // r-pack5-frontdoor (2026-06-17, owner): the $5 / 1,000-query one-time PACK is
+  // the "super cheap front end" — a fixed, knowable $5 a human approves in seconds
+  // (vs open-ended metered), $0.005/call (cheaper than $1/100=$0.01), no
+  // subscription, 90-day expiry. It was only surfaced in unlock_more_data + the cap
+  // message; the MAIN paywall (99.7% of hits) led with metered and never mentioned
+  // it. Make the pack the #1 option here; metered drops to "#2, for high-volume".
+  const PACK5_URL_LOCAL = _stripeWithSession(CREDITS_URL, sessionId);
 
   // r53 (2026-05-31): the #1 conversion blocker is IDENTITY, not payment —
   // 19,051 of 19,052 upgrade signals are anonymous, and 99.7% of paywall hits
@@ -126,12 +133,12 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // dev-key route for users on Claude Code CLI.
     human_message = (
       lock + ' **' + toolName + ' ran on a 1-result preview \u2014 your agent is reasoning from a fraction of the data.** Make its answer complete + trustworthy:\n\n' +
-      '**1. \u{1F916} Usage-based \u2014 $1 per 100 API calls (pay for usage, not seats)** \u2192 ' + _USAGE_URL_LOCAL + '\n' +
-      '   Monthly seats don\u2019t fit agent traffic. No subscription, no per-seat ceiling; it scales up and down with the calls your agent actually makes. We email your API key right after checkout.\n\n' +
-      '**2. $9/mo Starter (200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
-      '   Unlocks ' + toolName + ' + most other paid tools.\n\n' +
-      '**3. $49/mo Developer (500 calls/day)** \u2192 ' + upgradeUrl + '\n' +
-      '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.\n\n' +
+      '**1. \u{1F4B3} $5 one-time = 1,000 full queries (no subscription, lasts 90 days)** \u2192 ' + PACK5_URL_LOCAL + '\n' +
+      '   The cheapest way to full depth: a fixed $5 your human approves in one click \u2014 no recurring charge, no seat. The moment they pay, THIS session unlocks; just call ' + toolName + ' again.\n\n' +
+      '**2. \u{1F916} High volume? Usage-based \u2014 $1 per 100 API calls (no subscription, no per-seat ceiling)** \u2192 ' + _USAGE_URL_LOCAL + '\n' +
+      '   For agents past ~1,000 calls; scales with the calls you actually make. We email your API key right after checkout.\n\n' +
+      '**3. $9/mo Starter (200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '   If you\u2019ll use ' + toolName + ' regularly \u2014 unlocks most paid tools.\n\n' +
       '**4. Free dev key (email, 10 calls/day)** \u2192 ' + redeemUrl + '\n' +
       '   *Claude.ai web doesn\u2019t accept API keys yet \u2014 paste into Claude Code CLI:* ' +
       '`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp`'
@@ -146,13 +153,12 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
       '**1. Instant free key \u2014 call the `claim_free_key` tool (or one curl), no email (10 calls/day):**\n' +
       '   `' + claimCurl + '`\n' +
       '   Returns {api_key}; send it as the `X-API-Key` header. No human, no browser.\n\n' +
-      '**2. \u{1F916} Usage-based \u2014 $1 per 100 API calls (pay for usage, not seats)** \u2192 ' + _USAGE_URL_LOCAL + '\n' +
-      '   Best fit for a high-volume agent: monthly seats don\u2019t fit agent traffic. No subscription, no per-seat ceiling; scales up and down with the calls you actually make. We email your API key right after checkout.\n\n' +
-      '**3. $9/mo Starter (200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
-      '   Unlocks every paid tool except Pro-only ones.\n\n' +
-      '**4. $49/mo Developer (500 calls/day)** \u2192 ' + upgradeUrl + '\n' +
-      '   Full ' + toolName + ' + all 10 ISO grid intel + interconnection queue + fiber routes.\n\n' +
-      '   (Or a free dev key with just your email \u2192 ' + redeemUrl + ')'
+      '**2. \u{1F4B3} Need full depth now? $5 one-time = 1,000 full queries (no subscription, 90 days)** \u2192 ' + PACK5_URL_LOCAL + '\n' +
+      '   Cheapest paid unlock \u2014 a fixed $5 your human one-clicks; THIS session unlocks the moment they pay.\n\n' +
+      '**3. \u{1F916} High volume? Usage-based \u2014 $1 per 100 API calls (no subscription, no per-seat ceiling)** \u2192 ' + _USAGE_URL_LOCAL + '\n' +
+      '   For agents past ~1,000 calls; scales with the calls you actually make. We email your API key right after checkout.\n\n' +
+      '**4. $9/mo Starter (200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
+      '   Unlocks every paid tool except Pro-only ones.'
     );
   }
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
@@ -182,9 +188,9 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // to its human — lead it with usage-based, since seats don't fit agent traffic.
   const relayLead =
     '**Tell the user:** ' + toolName + ' returned a 1-result preview — the full ' +
-    'dataset is one click away. For an agent making lots of calls, **usage-based ' +
-    'beats a seat: $1 per 100 API calls, no subscription, scales automatically → ' +
-    _USAGE_URL_LOCAL + '** (or $9/mo Starter · 200 calls/day → ' + STARTER_URL_LOCAL + ').\n\n';
+    'dataset is one click away. Cheapest unlock: **$5 one-time = 1,000 full queries, ' +
+    'no subscription → ' + PACK5_URL_LOCAL + '** (high-volume agent? $1 per 100 calls metered → ' +
+    _USAGE_URL_LOCAL + '). The moment your human pays, your next call returns full data.\n\n';
   const usageLine =
     '\n\n\u{1F916} Usage billing has no per-seat ceiling and is sized to the call ' +
     'volume you pick; we email your API key right after checkout — ping ' +
