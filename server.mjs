@@ -1117,32 +1117,38 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
 }
 
 
-// ── Free-tier dial (2026-06-11): per-(session,tool,day) full-data counter ───
-// A validated trial gets FULL grid/fiber (applyTierGate trial_taste). When
-// DCHUB_TRIAL_TOOL_DAILY_FULL > 0, calls 1..N/day/tool still return full data,
-// but call N+1 is demoted to the trimmed preview + a Pro upgrade CTA — so the
-// heaviest repeat trial users (the addressable upgrade pool) hit a conversion
-// nudge instead of unlimited free flagship data. In-memory soft counter
-// (resets on restart, per-replica) — fine for a nudge, not a hard limit.
+// ── Free-tier dial: per-(IP,tool,day) full-data counter ─────────────────────
+// A validated/auto-bound trial gets FULL grid/fiber (applyTierGate trial_taste).
+// When DCHUB_TRIAL_TOOL_DAILY_FULL > 0, the first N full answers per IP/day/tool
+// return full data, but answer N+1 is demoted to the trimmed preview + the
+// upgrade CTA — so a repeat caller hits the conversion nudge instead of unlimited
+// free flagship data. r-retention (2026-06-16): RE-KEYED FROM session_id TO
+// client_ip. Sessions are ephemeral (~25x distinct IPs), so a session-keyed cap
+// reset on every fresh session and NEVER bit — agents got unlimited free fulls.
+// Keying on the IP makes the cap actually bite on the 2nd+ touch (the
+// deprivation moment that drives claim/persist/upgrade). The first answer stays
+// fully free (the proven citation "wow"). In-memory soft counter (resets on
+// restart, per-replica) — fine for a nudge, not a hard limit.
 // env unset/0 => the helper is never called (short-circuit) => zero change.
 const _trialDayCounts = new Map();
-function _trialFullCallsExceeded(sessionId, tool, cap) {
+function _trialFullCallsExceeded(ipKey, tool, cap) {
   try {
     const day = new Date().toISOString().slice(0, 10);
-    const key = `${sessionId || 'anon'}:${tool}:${day}`;
+    const key = `${ipKey || 'anon'}:${tool}:${day}`;
     const n = (_trialDayCounts.get(key) || 0) + 1;
     _trialDayCounts.set(key, n);
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
     return n > cap;
   } catch (_) { return false; }
 }
-// r88-conv (2026-06-14): the daily-full cap now DEFAULTS to a bounded value (8)
-// instead of 0/off — so the inline trial taste (full grid/fiber on the first
-// paywall call) and every subsequent bound call are ALWAYS bounded, with no
-// Railway env var required. After N full calls/day/tool a trial is demoted to
-// the trimmed preview + the upgrade CTA (the conversion nudge). Still
-// env-overridable: set DCHUB_TRIAL_TOOL_DAILY_FULL to retune, 0 to disable.
-const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '8', 10));
+// r-retention (2026-06-16): default lowered 8 -> 2. With the cap now keyed on IP
+// (not ephemeral session), 2 means the first 2 flagship answers per IP/day are
+// full (wow + a little goodwill / citation surface), and the 3rd+ is teased with
+// the upgrade CTA. This is the "taste, then gate" the operator chose, finally
+// applied to the two highest-demand tools (get_grid_intelligence/get_fiber_intel)
+// where the inline-full taste previously leaked unbounded. Still env-overridable:
+// DCHUB_TRIAL_TOOL_DAILY_FULL=1 for max pressure, higher for more goodwill, 0=off.
+const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10));
 
 // 2026-06-15 A/B TOGGLE: DCHUB_ANON_INLINE_FULL (default 'on' = current behavior).
 // When 'on', a truly-anonymous first-touch on a flagship trial-taste tool
@@ -1968,7 +1974,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // data. Only when the bind worked (anon session) AND it's a
             // trial-taste tool AND under the daily cap.
             if (_mintBound && ALWAYS_PARTIAL_PREVIEW.has(name)) {
-              const _overCap = TRIAL_DAILY_FULL_CAP > 0 && _trialFullCallsExceeded(c.session_id, name, TRIAL_DAILY_FULL_CAP);
+              const _overCap = TRIAL_DAILY_FULL_CAP > 0 && _trialFullCallsExceeded(c.client_ip, name, TRIAL_DAILY_FULL_CAP);
               if (!_overCap) {
                 status = 'trial_taste_inline';
                 signalPaywall({
@@ -2260,7 +2266,7 @@ Free tier covers **10 calls/day** across:
       // moat unchanged). Set DCHUB_TRIAL_TOOL_DAILY_FULL=0 to disable.
       if (gate.trial_taste) {
         const _cap = TRIAL_DAILY_FULL_CAP;
-        if (_cap > 0 && _trialFullCallsExceeded(c.session_id, name, _cap)) {
+        if (_cap > 0 && _trialFullCallsExceeded(c.client_ip, name, _cap)) {
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
