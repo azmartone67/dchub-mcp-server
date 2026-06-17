@@ -1148,7 +1148,7 @@ function _trialFullCallsExceeded(ipKey, tool, cap) {
 // applied to the two highest-demand tools (get_grid_intelligence/get_fiber_intel)
 // where the inline-full taste previously leaked unbounded. Still env-overridable:
 // DCHUB_TRIAL_TOOL_DAILY_FULL=1 for max pressure, higher for more goodwill, 0=off.
-const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10));
+const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '3', 10));
 
 // 2026-06-15 A/B TOGGLE: DCHUB_ANON_INLINE_FULL (default 'on' = current behavior).
 // When 'on', a truly-anonymous first-touch on a flagship trial-taste tool
@@ -2373,7 +2373,7 @@ Free tier covers **10 calls/day** across:
                 // with the cheapest one-click: $5 = 1,000 full queries (owned balance,
                 // no subscription). The agent relays it; the human one-clicks; the next
                 // call is served full. unlock_more_data shows every option.
-                message: `You've used ${name} ${_cap}+ times today — you're getting real value. 💳 $5 unlocks 1,000 full live queries (one-time, no subscription, lasts 90 days) — your next call is served in full the moment your human pays. Call \`unlock_more_data\` for the one-click link, or ${_stripeWithSession(CREDITS_URL, _sid)} . (High volume? $1/100 calls metered, or $49/mo unlimited.)`,
+                message: `You've used ${name} ${_cap}+ times today — you're getting real value, and you're now on the 1-of-N preview. Unlock full depth (every premium tool, complete result sets, all 232 markets + grid/fiber/DCPI): 🔑 FREE key = 10 calls/day — call \`claim_free_key\` (one step, no card) · 💳 $5 one-time = 1,000 full queries (no subscription, lasts 90 days) → ${_stripeWithSession(CREDITS_URL, _sid)} · ⚡ $9/mo Starter = 200 calls/day → ${_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid)}. Call \`unlock_more_data\` for one-click links — the moment your human pays, your next call returns full data (no reconnect). High volume? $1/100 metered.`,
                 next_tool: 'unlock_more_data',
                 credits_url: _stripeWithSession(CREDITS_URL, _sid),
                 credits_pitch: '$5 one-time = 1,000 live queries, no subscription, lasts 90 days — the cheapest way to unlock full depth right now (less than a coffee; DataCenterHawk is an annual analyst contract).',
