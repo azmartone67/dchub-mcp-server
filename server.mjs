@@ -1467,19 +1467,20 @@ const _CREDIT_TTL_MS = 120000;
 const _creditIdentity = (c) => (c && (c.api_key || c.session_id)) || null;
 async function _getCredits(c) {
   const id = _creditIdentity(c);
-  if (!id) return 0;
+  if (!id) return { credits: 0, had_pack: false };
   const now = Date.now();
   const cached = _creditCache.get(id);
-  if (cached && (now - cached.ts) < _CREDIT_TTL_MS) return cached.credits;
-  let credits = 0;
+  if (cached && (now - cached.ts) < _CREDIT_TTL_MS) return { credits: cached.credits, had_pack: cached.had_pack };
+  let credits = 0, had_pack = false;
   try {
     const r = await callAPI('/api/v1/mcp/credits/balance',
                             { key: c.api_key || '', session: c.session_id || '' });
     credits = (r && typeof r.credits === 'number') ? r.credits : 0;
-  } catch (_) { credits = 0; }
-  _creditCache.set(id, { credits, ts: now });
+    had_pack = !!(r && r.had_pack);   // ever bought a pack (even if depleted) → re-up nudge
+  } catch (_) {}
+  _creditCache.set(id, { credits, had_pack, ts: now });
   if (_creditCache.size > 20000) _creditCache.clear();
-  return credits;
+  return { credits, had_pack };
 }
 function _burnCredits(c, tool, cost) {
   const id = _creditIdentity(c);
@@ -1902,13 +1903,41 @@ function trackedTool(srv, name, description, schema, handler) {
       if ((PAID_ONLY_TOOLS.has(name) || DEPTH_TEASE_TOOLS.has(name)) &&
           !(_gateTier === 'paid' || _gateTier === 'enterprise')) {
         const _cost = _creditCost(name);
-        let _bal = 0;
-        try { _bal = await _getCredits(c); } catch (_) { _bal = 0; }
-        if (_bal >= _cost) {
+        let _ci = { credits: 0, had_pack: false };
+        try { _ci = await _getCredits(c); } catch (_) {}
+        if (_ci.credits >= _cost) {
           status = 'credits_full';
           const _cr = await handler(gate.params || args);
           _burnCredits(c, name, _cost);
           return withCitation(_cr);
+        }
+        // r-reup (2026-06-16): a DEPLETED pack buyer (had_pack, 0 credits) is your
+        // highest-ROI re-conversion — they already paid once. Lead the teaser with
+        // "top up $5 for 1,000 more", NOT the generic claim-free-key nudge.
+        if (_ci.had_pack) {
+          try {
+            const _sid = c.session_id || '';
+            const _full = await handler(gate.params || args);
+            let _parsed = null;
+            try { _parsed = JSON.parse(_full?.content?.[0]?.text || '{}'); } catch (_) {}
+            const _trim = (_parsed && typeof _parsed === 'object') ? trimForTrial(_parsed) : {};
+            _trim._upgrade = {
+              tier: 'credits_depleted',
+              message: "You're out of pack credits. Top up $5 for 1,000 more live queries "
+                     + "(one-time, no subscription, instant) — or go unlimited from $9/mo. "
+                     + "Call `unlock_more_data` for a one-click link.",
+              next_tool: 'unlock_more_data',
+              credits_url: _stripeWithSession(CREDITS_URL, _sid),
+              usage_url:   _stripeWithSession(METERED_URL, _sid),
+              starter_url: _stripeWithSession(STARTER_URL, _sid),
+            };
+            status = 'credits_depleted';
+            return {
+              content: [{ type: 'text', text: JSON.stringify(_trim) }],
+              isError: true,
+              structuredContent: { credits_depleted: true, tool: name, ..._trim._upgrade },
+            };
+          } catch (_) { /* fall through to normal gating on any error */ }
         }
       }
       if (!gate.allowed) {
