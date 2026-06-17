@@ -2,18 +2,18 @@
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
 # Smithery scans the repo root for this file.
 #
-# Last refreshed 2026-06-16 (40-tool / v2.2.7 canonical sync). Matches the
+# Last refreshed 2026-06-16 (42-tool / v2.2.8 canonical sync). Matches the
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects the live tools/list: 40 tools, all registered in
+# Tool list reflects the live tools/list: 42 tools, all registered in
 # server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
 displayName: "DC Hub — Data Center & Energy Intelligence"
 description: "Real-time data-center, power & energy intelligence for AI agents: 21,000+ facilities across 170+ countries, 126,427 substations, live power-grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), renewable-energy and natural-gas price feeds, a hyperscaler $1B+ deal tracker, 2,000+ tracked M&A deals, a 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts across 232 markets. The only data-center, energy & hyperscale intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
 homepage: "https://dchub.cloud"
-version: "2.2.7"
+version: "2.2.8"
 keywords:
   - data center
   - datacenter
@@ -83,6 +83,8 @@ tools:
   - get_changes
   - get_fiber_readiness
   - claim_free_key
+  - plan_fiber_leadin
+  - unlock_more_data
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
