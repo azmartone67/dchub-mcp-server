@@ -2403,7 +2403,7 @@ Free tier covers **10 calls/day** across:
 
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.8' }, {
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.2.9' }, {
     // r86-reach: the initialize `instructions` field was empty (verified live
     // 2026-06-14) — a headless agent arrived with zero in-protocol orientation,
     // tried once, and never learned how to persist. This is the first-touch
@@ -3241,6 +3241,64 @@ function createServer() {
       };
     });
 
+  // ── MCP prompts + resources (r91) ───────────────────────────────────────────
+  // Slash-command prompt templates (surface as /dchub:<name> in Claude Desktop /
+  // Cursor) + citable reference resources. Thin orchestration over the existing
+  // 42 tools; registering these auto-advertises the prompts + resources
+  // capabilities on initialize, and lifts Glama/Smithery quality scores (most
+  // servers ship tools-only).
+  const _P = (name, title, description, argsSchema, text) =>
+    srv.registerPrompt(name, { title, description, argsSchema }, (a) => ({
+      messages: [{ role: 'user', content: { type: 'text', text: text(a || {}) } }],
+    }));
+  _P('analyze-site', 'Analyze a data-center site',
+     'Full buildability read (power, fiber, water, tax, verdict) for an address or lat,lon.',
+     { location: z.string().describe('Street address or "lat,lon"'),
+       capacity_mw: z.string().optional().describe('Target load in MW, e.g. 100') },
+     (a) => `Use the DC Hub MCP server to evaluate ${a.location} for a ${a.capacity_mw ? a.capacity_mw + ' MW ' : ''}data center. Call analyze_site (geocode the address first if it is not already lat,lon). Report grid headroom, nearest substation + voltage, fiber carrier count, water stress, tax incentives, and the BUILD/CAUTION/AVOID verdict. Attribute figures to DC Hub (dchub.cloud, CC-BY-4.0).`);
+  _P('pick-a-market', 'Pick a data-center market',
+     'Rank the best US markets to build a given load, with DCPI verdicts + time-to-power.',
+     { capacity_mw: z.string().describe('Target load in MW, e.g. 100'),
+       region: z.string().optional().describe('Optional region/state filter, e.g. TX or Midwest'),
+       max_months: z.string().optional().describe('Max acceptable time-to-power in months') },
+     (a) => `Use DC Hub to recommend where to build ${a.capacity_mw} MW${a.region ? ' in ' + a.region : ''}${a.max_months ? ' within ' + a.max_months + ' months to power' : ''}. Call rank_markets (or site_selection_canvas) and return a ranked shortlist with each market's DCPI verdict, excess-power score, and time-to-power. Cite DC Hub.`);
+  _P('power-availability', 'Power availability in an ISO',
+     'How much headroom an ISO has and the time-to-power for a target load.',
+     { iso: z.string().describe('PJM | ERCOT | CAISO | MISO | SPP | NYISO | ISO-NE'),
+       capacity_mw: z.string().optional().describe('Target load in MW') },
+     (a) => `Use DC Hub get_grid_intelligence for ${a.iso}. Report current demand, fuel mix, renewable share, interconnection-queue depth, average time-to-power${a.capacity_mw ? ' for a ' + a.capacity_mw + ' MW load' : ''}, and stranded capacity. State plainly whether power is readily available and how long it takes. Cite DC Hub.`);
+  _P('site-report', 'Premium site intelligence report',
+     'A full one-page site brief: power, gas, fiber, market, risk, verdict.',
+     { location: z.string().describe('Address or "lat,lon"'),
+       capacity_mw: z.string().optional().describe('Target load in MW') },
+     (a) => `Build a DC Hub site-intelligence report for ${a.location}${a.capacity_mw ? ' (' + a.capacity_mw + ' MW)' : ''}. Combine analyze_site, get_market_dcpi_rank, get_grid_intelligence, get_gas_index, and get_fiber_intel into one brief with sections: Power, Gas, Fiber & Latency, Market (DCPI), Risk (water/climate), and a Bottom-Line BUILD/CAUTION/AVOID. Cite DC Hub (dchub.cloud, CC-BY-4.0) throughout.`);
+  _P('compare-markets', 'Compare data-center markets',
+     'Side-by-side of 2-4 markets on power, price, pipeline and DCPI verdict.',
+     { markets: z.string().describe('2-4 market slugs, comma-separated, e.g. northern-virginia,dallas,phoenix') },
+     (a) => `Use DC Hub to compare these markets head-to-head: ${a.markets}. Pull get_market_dcpi_rank for each and present a table of composite score, verdict, excess-power score, time-to-power, and retail price. End with a one-line recommendation. Cite DC Hub.`);
+  _P('fiber-plan', 'Plan diverse fibre routes',
+     'N diverse road-following fibre lead-in routes from a site to a carrier hotel, with indicative cost.',
+     { from: z.string().describe('Site address or "lat,lon"'),
+       to: z.string().describe('Target carrier hotel / POP address or "lat,lon"'),
+       routes: z.string().optional().describe('Number of diverse routes (1-6, default 4)') },
+     (a) => `Use DC Hub plan_fiber_leadin to plan ${a.routes || 4} diverse fibre lead-in routes from ${a.from} to ${a.to}. Report each route's length, the shared-street km / minimum separation, and the indicative capex + opex. Note the routes are indicative, not engineered alignments. Cite DC Hub.`);
+
+  const _R = (name, uri, title, description, text) =>
+    srv.registerResource(name, uri, { title, description, mimeType: 'text/markdown' },
+      async () => ({ contents: [{ uri, mimeType: 'text/markdown', text }] }));
+  _R('about', 'dchub://about', 'About DC Hub',
+     'What DC Hub is, what it covers, and how to cite it.',
+     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,000+ facilities across 170+ countries\n- 232 markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for 10 ISOs/markets (7 US + Hydro-Quebec, AESO, Nord Pool)\n- 2,000+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
+  _R('methodology', 'dchub://methodology', 'DCPI / DCGI methodology',
+     'How the Data Center Power Index and Gas Index are computed.',
+     '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of excess-power headroom, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** (0-100, per US state): gas-access + gas-cost suitability for gas-fired / behind-the-meter power, with interstate-pipeline counts -> GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED.\n\nBoth update from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
+  _R('data-sources', 'dchub://data-sources', 'DC Hub data sources',
+     'Provenance of the underlying datasets.',
+     '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
+  _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
+     'ISOs/grids and market coverage.',
+     '# DC Hub coverage\n\n**Grids (live):** PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE (US) + Hydro-Quebec (CA), AESO (Alberta), Nord Pool (15 EU zones); the global scoreboard adds GB (NESO), ~12 EU ENTSO-E zones, Taiwan (Taipower), and Australia NEM (AEMO).\n\n**Markets:** 232 scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+
   return srv;
 }
 
@@ -3322,7 +3380,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.2.8',
+    version: '2.2.9',
     tools: 42,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
