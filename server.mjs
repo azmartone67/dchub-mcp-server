@@ -3545,7 +3545,7 @@ function createServer(descOverrides) {
   // existed but was only a curl buried in the paywall text → agents
   // summarized it away. Not in PAID_ONLY_TOOLS, so anonymous callers reach it.
   trackedTool(srv, 'claim_free_key',
-    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header to unlock the full free tier (10 calls/day, all 232 markets + grid/fiber/DCPI data). Optionally pass your owner\'s email for key recovery + upgrade receipts (the key still mints without it). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
+    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header to unlock the full free tier (10 calls/day, all 232 markets + grid/fiber/DCPI data). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
     { client_name: S, email: S },
     async (a) => {
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
@@ -3593,6 +3593,17 @@ function createServer(descOverrides) {
       // less web hosts (Claude.ai web/ChatGPT) bind email so it's recoverable.
       // Mirrors the proven paid-path relayLead. (~94% never reconnect today
       // because the old copy told the AGENT to save a key it can't persist.)
+      // r-emailbind-lead (2026-06-19, Lever #1): for an UNAMBIGUOUSLY header-
+      // less web host, lead with email-bind — the ONLY durable path for it
+      // (it can't persist a header). 'chatgpt' is clean; 'claude' is NOT used
+      // here because detectPlatformFromInit collapses Claude.ai web (header-
+      // less) AND Claude Code/Desktop (header-capable) into one 'claude' tag,
+      // so claude keeps the dual-path copy and only the clean case is reordered.
+      const _platform = ((getCtx() || {}).platform || '').toLowerCase();
+      const _headerlessWeb = _platform === 'chatgpt';
+      const _headerlessLead = (_headerlessWeb && CLAIM_CAROT_COPY)
+        ? '**🔑 Bind this key to your human’s email so it survives next session.** You’re on a hosted web client that can’t hold an `X-API-Key` header, so re-adding a key by hand each session is the #1 drop-off. Durable fix: `POST https://dchub.cloud/api/v1/keys/identify {"api_key":"' + key + '","email":"<your-human’s-email>"}` (or re-call `claim_free_key` with `email=`) — we email the key + a sign-in link so your human recovers it in one paste. Ask your human for their email and bind it now.\n\n'
+        : '';
       const _saveLine = CLAIM_CAROT_COPY
         ? '**🔑 Tell your human to save this key** — it’s the difference between this assistant reconnecting next session vs. starting over anonymous. You (the agent) usually can’t edit your own connector config, so relay this:\n' +
           '• **Desktop / IDE client** (Claude Code, Cursor, Cline, Continue, Windsurf): add header `X-API-Key: ' + key + '` to the DC Hub MCP connector — CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n' +
@@ -3608,6 +3619,7 @@ function createServer(descOverrides) {
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
+        _headerlessLead +
         _saveLine +
         _tierLine +
         // r-return (2026-06-18): retention hook at the point of PEAK engagement.
@@ -3632,6 +3644,9 @@ function createServer(descOverrides) {
           daily_limit:             (r && typeof r.daily_calls === 'number') ? r.daily_calls
                                      : (r && typeof r.daily_limit === 'number') ? r.daily_limit : 25,
           key_is_durable:          true,
+          cross_session_recovery:  _headerlessWeb
+            ? 'This web host can’t persist an X-API-Key header — bind email to recover the key next session: POST {api_key,email} to /api/v1/keys/identify, or re-call claim_free_key with email=.'
+            : 'Persist the X-API-Key header in your client config (auto-reused next session); hosted web hosts that can’t hold a header should bind email via /api/v1/keys/identify.',
           reuse_instruction:       'Persist this api_key in your MCP client config and send it as X-API-Key every session. Do NOT call claim_free_key again next session — the saved key already works.',
           relay_to_human:          'You (the agent) usually cannot edit your own connector config — RELAY this to your human. Header-capable clients (Claude Code / Cursor / Cline / Continue / Windsurf): add header X-API-Key:' + key + ' to the DC Hub MCP connector and it is reused automatically next session. Header-less web hosts (Claude.ai web / ChatGPT) cannot auto-apply a key: POST {"api_key":"' + key + '","email":"<email>"} to https://dchub.cloud/api/v1/keys/identify so it is RECOVERABLE (we email the key + a sign-in link) and your human re-applies it next session. Without saving or email-binding, the next session starts over as anonymous.',
           ...(CLAIM_CAROT_COPY ? {
