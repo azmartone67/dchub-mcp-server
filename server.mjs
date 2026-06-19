@@ -1230,6 +1230,66 @@ function _trialFullCallsExceeded(ipKey, tool, cap) {
 // DCHUB_TRIAL_TOOL_DAILY_FULL=1 for max pressure, higher for more goodwill, 0=off.
 const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '3', 10));
 
+// ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ───────────────────
+// (operator-approved 2026-06-18, "build but leave OFF"). The live /mcp path has
+// NO per-IP daily throttle today (the CF zone worker passes /mcp straight to this
+// Node gateway, which only depth-gates; Flask's limiter never sees the path). This
+// adds a SOFT nudge — NOT a hard wall — keyed on the TRUE client IP (c.client_ip,
+// the X-Forwarded first-hop already used for telemetry). Applies to ANONYMOUS
+// callers only (no api_key); keyed/paid/trial callers are NEVER affected, so
+// "claim/bind a key" stays the natural escape hatch (the carrot).
+//
+// Default 0 = OFF and COMPLETELY INERT: when the cap is 0 (or the IP is missing)
+// _anonOverCap returns false immediately with NO fetch, NO added latency, and NO
+// behavior change whatsoever (the short-circuit guard below is the critical line).
+// When > 0, the count is read from the durable mcp_tool_calls telemetry the gateway
+// already writes per call, via the backend endpoint GET /api/v1/mcp/anon-usage?ip=,
+// cached ~60s per IP in-process. FAIL-OPEN everywhere: any error/timeout reading the
+// count is treated as count 0 (never throttles) — a backend hiccup must never wall
+// the funnel. On over-cap the caller still gets a trimForTrial preview (anon callers
+// already do) PLUS a remaining_today:0 _upgrade escalation — no 429, no isError.
+const ANON_DAILY_CAP = Math.max(0, parseInt(process.env.DCHUB_ANON_DAILY_CAP || '0', 10));
+
+// 60s-per-IP in-process cache of today's anon call count. Bounded like
+// _trialDayCounts (clear at 50000) so it can't grow unbounded across distinct IPs.
+const _anonUsageCounts = new Map();  // ip -> { at: epochMs, count: number }
+async function _anonOverCap(ip) {
+  // INERT-when-off — the critical guard: cap disabled OR no usable IP => no fetch
+  // at all, no latency, returns false (never throttle). This is what makes the
+  // default (DCHUB_ANON_DAILY_CAP=0) a true no-op on the hot path.
+  if (ANON_DAILY_CAP <= 0 || !ip) return false;
+  try {
+    const now = Date.now();
+    const hit = _anonUsageCounts.get(ip);
+    let count;
+    if (hit && (now - hit.at) < 60_000) {
+      count = hit.count;  // 60s-cached per IP
+    } else {
+      // FAIL-OPEN: default to 0 so any fetch/parse failure below can't throttle.
+      count = 0;
+      try {
+        const u = new URL('/api/v1/mcp/anon-usage', API_BASE);
+        u.searchParams.set('ip', ip);
+        const r = await fetch(u.toString(), {
+          method: 'GET',
+          headers: { 'X-Internal-Key': INTERNAL_KEY },
+          signal: AbortSignal.timeout(2500),
+        });
+        if (r.ok) {
+          const j = await r.json();
+          const n = Number(j?.count);
+          if (Number.isFinite(n) && n >= 0) count = n;
+        }
+      } catch (_) { /* FAIL-OPEN: leave count = 0, never throttle on a backend hiccup */ }
+      if (_anonUsageCounts.size > 50000) _anonUsageCounts.clear();  // unbounded-growth guard
+      _anonUsageCounts.set(ip, { at: now, count });
+    }
+    return count >= ANON_DAILY_CAP;
+  } catch (_) {
+    return false;  // FAIL-OPEN on any unexpected error → treat as count 0
+  }
+}
+
 // 2026-06-15 A/B TOGGLE: DCHUB_ANON_INLINE_FULL (default 'on' = current behavior).
 // When 'on', a truly-anonymous first-touch on a flagship trial-taste tool
 // (get_grid_intelligence/get_fiber_intel) gets the FULL result inline + a minted
@@ -2383,6 +2443,43 @@ Free tier covers **10 calls/day** across:
         };
       }
       const result = await handler(gate.params || args);
+      // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
+      // (operator-approved 2026-06-18, "build but leave OFF"). Injected HERE — at
+      // the single chokepoint every ALLOWED tool call passes through right after
+      // the handler runs — for three reasons:
+      //   1. !c.api_key guard => ONLY anonymous callers. Keyed/paid/trial callers
+      //      skip this entire block, so paying users and the bind/claim escape are
+      //      never throttled (the whole point of the soft cap).
+      //   2. Gated/blocked anon tools (PAID_ONLY / depth-tease-not-allowed) already
+      //      RETURNED above (trial_preview / paid_only); they never reach this line,
+      //      so the trial-mint, credit, trial_taste and depth-tease cascades are
+      //      untouched. This only sees tools that were ALLOWED to run for an anon.
+      //   3. It sits ABOVE the existing anon-trim (L~2480) so it also covers
+      //      FREE_FULL_TOOLS (the scoreboard etc.) that bypass that trim and would
+      //      otherwise hand an over-cap anon FULL data at the final return.
+      // INERT-when-off: _anonOverCap returns false immediately (no fetch, no latency)
+      // when ANON_DAILY_CAP<=0 or the IP is missing. FAIL-OPEN: any backend hiccup =>
+      // count 0 => not over cap => no throttle. Over-cap => the SAME trimForTrial
+      // preview an anon already receives, PLUS a remaining_today:0 escalation. No 429,
+      // isError stays false — anon callers already get trimmed previews, so this just
+      // adds the "claim_free_key to keep going" nudge.
+      if (!c.api_key && await _anonOverCap(c.client_ip)) {
+        try {
+          let parsed;
+          try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
+          if (parsed && typeof parsed === 'object') {
+            status = 'anon_daily_cap';
+            const trimmed = trimForTrial(parsed);
+            trimmed._upgrade = {
+              tier: 'anon_daily_cap',
+              message: "You've used your free daily DC Hub calls from this IP. Claim a free key (call claim_free_key) to keep going, or upgrade.",
+              next_tool: 'claim_free_key',
+              remaining_today: 0,
+            };
+            return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+          }
+        } catch (_) { /* non-object/parse failure → fall through to normal handling */ }
+      }
       if (gate.capped) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
