@@ -1028,6 +1028,12 @@ const DEPTH_TEASE_TOOLS = new Set([
   'get_interconnection_queue', // ISO queue depth / GW totals
   'get_grid_intelligence',     // per-ISO deep brief (already gated for free; uniform + future-proof)
   'get_fiber_intel',           // dark-fiber routes / carriers (same)
+  // r-gas-gate (2026-06-19): the gas/forward synthesis "answer numbers" were
+  // fully ungated — the per-state DCGI suitability score and the forward
+  // grid-emergence radar are exactly the proprietary synthesis the paid line
+  // protects. Tease them to top-N for sub-Developer like the grid/fiber pair.
+  'get_gas_index',             // Data Center Gas Index (DCGI) per-state synthesis score
+  'grid_transition_radar',     // forward-looking ISO emergence synthesis
 ]);
 // r-map-upsell (2026-06-18): the map-feeding tools. When a free/Starter agent
 // pulls this data, the depth-tease ALSO points to the live Land & Power map (the
@@ -1983,7 +1989,7 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   };
   const haveGrid = !!(gi && !gi.error && (out.demand_mw != null || out.generation_mix_pct));
   if (!haveGrid && !row && !q) {
-    out._warning = `No live feed for "${ISO}". Supported: PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, HYDROQUEBEC, AESO, NORDPOOL.`;
+    out._warning = `No live feed for "${ISO}". Supported (live US ISOs): PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE. For GB/EU/Taiwan/Australia use get_grid_scoreboard.`;
   } else {
     if (!haveGrid) out._warning_grid = `Live EIA fuel-mix/demand feed unavailable for ${ISO} right now (Power Index scores still shown).`;
     if (!row)      out._warning_dcpi = `No DC Hub Power Index row for ${ISO}.`;
@@ -2811,6 +2817,49 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     });
 
+  // r-gas-econ (2026-06-19): surface the 4-layer gas ECONOMICS (Henry Hub +
+  // basis + delivered tariff + gas-to-grid $/MWh by heat-rate scenario) to the
+  // #1 agent channel. These endpoints are LIVE in the backend (powered_land_gas)
+  // but had NO MCP tool — gas-to-grid $/MWh is the exact number a behind-the-meter
+  // developer compares against a grid PPA. data_basis is labeled honestly
+  // (synthetic_seed until the eia_gas_prices loader lands → then real delivered).
+  trackedTool(srv, 'get_gas_economics',
+    'Behind-the-meter / gas-fired power ECONOMICS for a US data-center market: Henry Hub spot, regional basis differential, delivered industrial + electric gas tariff ($/MMBtu), and the gas-to-grid levelized cost ($/MWh) across CCGT/peaker heat-rate scenarios — the number a BTM developer compares against a grid PPA. Pass market=<slug> (e.g. "northern-virginia", "dallas", "phoenix"); optional heat_rate_btu_per_kwh for a custom scenario. Returns {market, henry_hub_spot_usd_mmbtu, basis_diff_usd_mmbtu, delivered_industrial_usd_mmbtu, delivered_electric_usd_mmbtu, gas_price_used_usd_mmbtu, scenarios_usd_per_mwh:{new_ccgt_6400, avg_ccgt_6800, old_ccgt_7500, old_peaker_12000, custom}, data_basis}. Pairs with get_gas_index (per-state DCGI suitability). Do NOT use for the electricity grid fuel mix (use get_grid_data) or the per-state gas suitability score (use get_gas_index); this is the $/MWh gas-power cost.',
+    { market: S, heat_rate_btu_per_kwh: N },
+    async (a) => {
+      const slug = String(a.market || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (!slug) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'market slug required, e.g. market="northern-virginia"',
+          example: 'get_gas_economics market="northern-virginia"',
+        }) }] };
+      }
+      const g2g_q = {};
+      if (a.heat_rate_btu_per_kwh) g2g_q.heat_rate_btu_per_kwh = a.heat_rate_btu_per_kwh;
+      const [pricing, g2g] = await Promise.all([
+        callAPI(`/api/v1/markets/${slug}/gas-pricing`, {}).catch(e => ({ error: String(e).slice(0, 200) })),
+        callAPI(`/api/v1/markets/${slug}/gas-to-grid`, g2g_q).catch(e => ({ error: String(e).slice(0, 200) })),
+      ]);
+      const out = {
+        market_slug: slug,
+        market_name: (pricing && pricing.market_name) || (g2g && g2g.market_name) || slug,
+        henry_hub_spot_usd_mmbtu:       pricing && pricing.henry_hub_spot_usd_mmbtu,
+        hub_spot_usd_mmbtu:             pricing && pricing.hub_spot_usd_mmbtu,
+        basis_diff_usd_mmbtu:           pricing && pricing.basis_diff_usd_mmbtu,
+        pricing_hub_key:                pricing && pricing.pricing_hub_key,
+        delivered_industrial_usd_mmbtu: pricing && pricing.delivered_industrial_usd_mmbtu,
+        delivered_electric_usd_mmbtu:   pricing && pricing.delivered_electric_usd_mmbtu,
+        gas_price_used_usd_mmbtu:       g2g && g2g.gas_price_used_usd_mmbtu,
+        scenarios_usd_per_mwh:          g2g && g2g.scenarios_usd_per_mwh,
+        formula:                        g2g && g2g.formula,
+        data_basis:                     (g2g && g2g.data_basis) || (pricing && pricing.data_basis),
+        as_of:                          (pricing && pricing.fetched_at) || (g2g && g2g.fetched_at),
+        pricing_error:                  pricing && pricing.error,
+        gas_to_grid_error:              g2g && g2g.error,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+    });
+
   // r40 (2026-05-31): all-ISO grid scoreboard, rebuilt on the VERIFIED source.
   // The two prior attempts wrapped /grid/status (a single-location CO headroom
   // teaser) and /grid/fuel-mix-live (deprecated, empty) and returned 0 ISOs.
@@ -2830,7 +2879,7 @@ function createServer(descOverrides) {
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
   // r78: 90s assembled-payload cache for the no-argument scoreboard (see
   // latency note inside the handler).
-  const _SCOREBOARD_CACHE = { at: 0, out: null };
+  const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null };
   trackedTool(srv, 'get_grid_scoreboard',
     'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~12 European bidding zones (Germany/Frankfurt, France/Paris, Netherlands/Amsterdam, Ireland/Dublin, Spain, Belgium, Poland, Austria, Nordics — via ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
@@ -2843,7 +2892,7 @@ function createServer(descOverrides) {
       // slowest single feed), and the assembled payload is reused for 90s
       // (well inside the EIA-hourly / 5-min-Elexon freshness windows).
       if (_SCOREBOARD_CACHE.out && (Date.now() - _SCOREBOARD_CACHE.at) < 90_000) {
-        return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }] };
+        return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }], structuredContent: _SCOREBOARD_CACHE.obj || undefined };
       }
       const _softErr = (e) => ({ error: String(e).slice(0, 120) });
       const _p_uk  = callAPI('/api/v1/iso/uk/snapshot', {}).catch(_softErr);
@@ -3105,39 +3154,62 @@ function createServer(descOverrides) {
       const _outText = JSON.stringify(out, null, 2);
       _SCOREBOARD_CACHE.at = Date.now();
       _SCOREBOARD_CACHE.out = _outText;
-      return { content: [{ type: 'text', text: _outText }] };
+      _SCOREBOARD_CACHE.obj = out;
+      // r-structured (2026-06-19): structuredContent so agent/structured clients
+      // get the full ranking, not just the next_session envelope (_withNextSession
+      // was synthesizing an empty structuredContent={next_session} for this
+      // content-only return → "empty scoreboard" to Claude.ai/agents).
+      return { content: [{ type: 'text', text: _outText }], structuredContent: out };
     });
 
-  // r41-compare-isos (2026-05-25): single-call ISO comparison.
-  // Pre-fix agents had to call get_grid_data N times sequentially then
-  // reconcile units + timestamps themselves. Now one tool fans out 2-4
-  // /api/v1/grid/status calls in parallel and returns aligned results.
-  // /api/v1/grid/compare backend doesn't exist (and adding it is more
-  // work than it's worth) — the parallel fetch here is just as fast.
+  // r41-compare-isos (2026-05-25; repointed r-compare-fix 2026-06-19):
+  // single-call ISO comparison. Fans out the iso-aware EIA feed
+  // /api/v1/grid/intelligence/<iso> per ISO (the SAME feed get_grid_intelligence
+  // uses) + the shared DCPI iso-comparison + live queue snapshot fetched ONCE,
+  // then shapes an aligned per-ISO brief via shapeGridIntelligence.
+  // PRIOR BUG: this hit /api/v1/grid/status?iso= which is NOT iso-aware — it
+  // returned the same default-Colorado substation blob for EVERY iso (the
+  // "every ISO looks identical" bug). HYDROQUEBEC/AESO/NORDPOOL are dropped:
+  // they are modeled baselines (not live) and error on /grid/intelligence.
   trackedTool(srv, 'compare_isos',
-    'Use when a user wants a pairwise side-by-side of 2-4 ISO grids — fuel mix, demand, real-time prices, carbon intensity — in one call instead of N sequential get_grid_data calls. Example: "Compare PJM vs ERCOT vs CAISO on price, gas share, and carbon intensity right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE" | "HYDROQUEBEC" | "AESO" | "NORDPOOL". Returns: {isos[], comparison:{<iso>:{demand_mw, lmp_usd_per_mwh, fuel_mix_pct:{gas, coal, nuclear, wind, solar, hydro}, carbon_intensity_g_per_kwh, renewable_pct}}, as_of}. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the per-ISO interconnection-queue brief (use get_grid_intelligence).',
+    'Use when a user wants a side-by-side of 2-4 ISO grids — fuel mix, demand, renewable/gas share, interconnection-queue depth, time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: "Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from the 7 live US ISOs: "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE". Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence).',
     { isos: S },
     async (a) => {
-      const list = (a.isos || '').split(',')
-        .map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 4);
-      if (list.length < 2) {
+      const SUPPORTED = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
+      const _norm = (s) => {
+        const u = String(s || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        return (u === 'ISONE' || u === 'ISO-NE' || u === 'NEISO') ? 'ISO-NE' : u;
+      };
+      const list = (a.isos || '').split(',').map(_norm).filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 4);
+      const unsupported = list.filter(iso => !SUPPORTED.includes(iso));
+      const valid = list.filter(iso => SUPPORTED.includes(iso));
+      if (valid.length < 2) {
         return { content: [{ type: 'text', text: JSON.stringify({
-          error: 'Provide 2-4 ISOs as a comma-separated list, e.g. "PJM,ERCOT,CAISO"',
+          error: 'Provide 2-4 of the 7 live US ISOs as a comma-separated list, e.g. "PJM,ERCOT,CAISO"',
           example: 'compare_isos(isos: "PJM,ERCOT,CAISO")',
-          supported_isos: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE',
-                            'HYDROQUEBEC', 'AESO', 'NORDPOOL'],
+          supported_isos: SUPPORTED,
+          unsupported_ignored: unsupported.length ? unsupported : undefined,
         }) }] };
       }
-      const results = await Promise.all(list.map(iso =>
-        callAPI('/api/v1/grid/status', { iso }).catch(e => ({ iso, error: String(e).slice(0, 200) }))
+      // shared all-ISO feeds fetched ONCE, reused across the per-ISO shaping
+      const [cmp, qsnap] = await Promise.all([
+        callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true }).catch(() => null),
+        callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }).catch(() => null),
+      ]);
+      const giList = await Promise.all(valid.map(iso =>
+        callAPI(`/api/v1/grid/intelligence/${iso}`, {}, { internal: true }).catch(e => ({ error: String(e).slice(0, 200) }))
       ));
-      const merged = {};
-      list.forEach((iso, i) => { merged[iso] = results[i]; });
-      return { content: [{ type: 'text', text: JSON.stringify({
-        isos: list,
-        comparison: merged,
+      const comparison = {};
+      valid.forEach((iso, i) => { comparison[iso] = shapeGridIntelligence(iso, giList[i], cmp, qsnap); });
+      const out = {
+        isos: valid,
+        comparison,
         as_of: new Date().toISOString(),
-      }, null, 2) }] };
+        source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
+        unsupported_ignored: unsupported.length ? unsupported : undefined,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
   trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia. Returns ONE composite health number for a market; do NOT use for the full market metric set (use get_market_intel) or to rank multiple markets (use rank_markets).', {},
@@ -3161,11 +3233,15 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_interconnection_queue',
     'ISO interconnection queue snapshot: total large-load MW queued per ISO, data-center share %, and top BUILD subregions with Time-to-Power (TTP) months. Sources: ERCOT MIS, PJM, MISO, SPP, CAISO, NYISO, ISO-NE. Pass iso=ERCOT (or any of 7) to drill down to a single ISO. Use for site-selection (find BUILD-verdict markets with short queues) and competitive intel (track AI-load saturation by region). Do NOT use for a single-site time-to-power read (use get_grid_intelligence) or forward-looking emergence (use grid_transition_radar); this is the ISO-level queue snapshot.',
     { iso: S },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(
-      await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a)
-    ) }] }));
+    async (a) => {
+      const data = await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a);
+      // r-structured (2026-06-19): structuredContent so agent clients get the
+      // queue payload, not just the next_session envelope.
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
 
-  trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data across 10 ISOs: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec (Canada) + AESO (Alberta) + Nord Pool (15 European zones). Fuel mix, demand, prices. Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices).',
+  trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard.',
     { iso: S, metric: S, period: S },
     async (a) => {
       // 2026-06-07 (Devin QA): /api/v1/grid/status has no iso-aware handler, so it
@@ -3176,8 +3252,11 @@ function createServer(descOverrides) {
       const _q = {};
       if (a.metric) _q.metric = a.metric;
       if (a.period) _q.period = a.period;
-      return { content: [{ type: 'text', text: JSON.stringify(
-        await callAPI(`/api/v1/grid/intelligence/${_iso}`, _q)) }] };
+      const data = await callAPI(`/api/v1/grid/intelligence/${_iso}`, _q);
+      // r-structured (2026-06-19): structuredContent so agent clients get the
+      // grid payload, not just the next_session envelope.
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
   // ── Agent moat (2026-06-06): memory + monitoring + incremental sync ──
@@ -3248,7 +3327,7 @@ function createServer(descOverrides) {
     { lat: N, lon: N, radius_km: N },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', a)) }] }));
 
-  trackedTool(srv, 'get_energy_prices', 'Energy pricing across 10 ISOs (7 US + Hydro-Quebec + AESO + Nord Pool): retail rates, natural gas, real-time grid status. Pricing-focused; do NOT use for fuel mix, demand or grid headroom (use get_grid_data or get_grid_intelligence).',
+  trackedTool(srv, 'get_energy_prices', 'Energy pricing for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail rates, natural gas, real-time grid status. Pricing-focused; do NOT use for fuel mix, demand or grid headroom (use get_grid_data or get_grid_intelligence).',
     { data_type: S, state: S, iso: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
@@ -3264,7 +3343,7 @@ function createServer(descOverrides) {
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE" | "HYDROQUEBEC" | "AESO" | "NORDPOOL". Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
+  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 live US ISOs: "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE". Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S, iso: S, region: S },
     async (a) => {
       // r78-gridfix (2026-06-12): the prior handler hit /api/v1/grid-headroom/${region},
@@ -3283,8 +3362,8 @@ function createServer(descOverrides) {
       if (!raw) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'region required',
-          hint: 'Pass region_id (aliases iso/region accepted) = one of the 10 supported regions.',
-          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'HYDROQUEBEC', 'AESO', 'NORDPOOL'],
+          hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs.',
+          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'],
           example: 'get_grid_intelligence region_id="PJM"',
         }) }] };
       }
@@ -3782,7 +3861,7 @@ function createServer(descOverrides) {
       async () => ({ contents: [{ uri, mimeType: 'text/markdown', text }] }));
   _R('about', 'dchub://about', 'About DC Hub',
      'What DC Hub is, what it covers, and how to cite it.',
-     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,000+ facilities across 170+ countries\n- 232 markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for 10 ISOs/markets (7 US + Hydro-Quebec, AESO, Nord Pool)\n- 2,000+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
+     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,000+ facilities across 170+ countries\n- 232 markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, ~12 EU zones, Taiwan, Australia)\n- 2,000+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
   _R('methodology', 'dchub://methodology', 'DCPI / DCGI methodology',
      'How the Data Center Power Index and Gas Index are computed.',
      '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of excess-power headroom, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** (0-100, per US state): gas-access + gas-cost suitability for gas-fired / behind-the-meter power, with interstate-pipeline counts -> GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED.\n\nBoth update from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
