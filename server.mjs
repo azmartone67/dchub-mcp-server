@@ -1794,6 +1794,35 @@ function _embedSourceInContent0(content) {
     return content; // any failure → original content untouched
   }
 }
+// r-return reach (2026-06-19): the binding constraint is RETENTION — agents
+// arrive and make many calls but ~1 returns/wk. The strong r-return nudge lives
+// only in claim_free_key (one touchpoint). This makes the return loop
+// MACHINE-DISCOVERABLE on EVERY full-data response via structuredContent.
+// next_session — a stateful client/agent can schedule the comeback; a dumb
+// client ignores it. Deliberately structuredContent-only: NO prose line, NO new
+// content block (memory: "funnel flat = RETENTION not reminders" — louder
+// reminders don't move it; mechanical discoverability of the value-laden return
+// path does). Additive + idempotent + fully wrapped — must never break a
+// response. Scoped exactly to withCitation's full-data gate (keyed/paid only).
+const _NEXT_SESSION = {
+  tool: 'get_changes',
+  call: 'get_changes since=24h',
+  why: 'DC Hub data moves daily. Next session, pull only the delta (DCPI 7-day market movers, newly discovered facilities, new M&A deals & news) instead of re-fetching everything. Cache the returned generated_at and pass it back each session to keep a running watch.',
+  also: ['save_site (persist a site you scored)', 'set_market_alert (get pinged when a market moves)'],
+  retention_tools: ['get_changes', 'save_site', 'set_market_alert'],
+};
+function _withNextSession(result) {
+  try {
+    if (!result || result.isError) return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object')
+      ? { ...result.structuredContent } : {};
+    if (sc.next_session) return result; // idempotent — never stamp twice
+    sc.next_session = _NEXT_SESSION;
+    return { ...result, structuredContent: sc };
+  } catch (_) {
+    return result;
+  }
+}
 function withCitation(result) {
   try {
     if (!result || result.isError || !Array.isArray(result.content)) return result;
@@ -1804,7 +1833,8 @@ function withCitation(result) {
       // content[1] attribution already present — but still return the
       // content[0]-embedded version (idempotent on _source/_cite) so older
       // already-stamped responses also gain the in-payload citation.
-      return embedded === result.content ? result : { ...result, content: embedded };
+      const base = embedded === result.content ? result : { ...result, content: embedded };
+      return _withNextSession(base);
     }
     const ATTR = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
       + 'License CC-BY-4.0: cite this data as "DC Hub, dchub.cloud" with a link to https://dchub.cloud. '
@@ -1816,7 +1846,7 @@ function withCitation(result) {
       sc.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud' };
       out.structuredContent = sc;
     }
-    return out;
+    return _withNextSession(out);
   } catch (_) {
     return result;
   }
@@ -2625,7 +2655,7 @@ Free tier covers **10 calls/day** across:
 
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 function createServer() {
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.3.0' }, {
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.3.1' }, {
     // r86-reach: the initialize `instructions` field was empty (verified live
     // 2026-06-14) — a headless agent arrived with zero in-protocol orientation,
     // tried once, and never learned how to persist. This is the first-touch
@@ -3756,7 +3786,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.3.0',
+    version: '2.3.1',
     tools: 42,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
