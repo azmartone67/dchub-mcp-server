@@ -2025,42 +2025,58 @@ function _toolTitle(name) {
 // overrides) substitutes the per-platform text at registration, falling back to
 // the generic description for any tool/platform with no override.
 //
-// STRICTLY fail-soft: a fetch failure, a missing override, or a disabled flag
-// all fall back to the exact generic description shipping today — never worse.
-// TTL-cached in-process (5 min, matches the backend's cache) so it adds ~0
-// latency after warmup. Kill-switch: DCHUB_PER_PLATFORM_DESC_DISABLE=1.
+// STRICTLY fail-soft: a missing override, a cold cache, or the disabled flag all
+// fall back to the exact generic description shipping today — never worse.
+//
+// ★ HOT-PATH SAFETY (r-tuner-warmcache 2026-06-19): the FIRST version fetched the
+// backend's DB-backed /tool-descriptions endpoint synchronously on EVERY session
+// init. Under load that hammered the backend's connection pool → pool exhaustion
+// → watchdog restart loop → site 502/404. NEVER put a synchronous, DB-touching
+// self-call in the init hot path. Fixed: a background refresher loads the 5 known
+// platforms ONCE at startup + every 30 min (5 calls/replica/30min, OFF the hot
+// path); init reads the in-process map SYNCHRONOUSLY with zero backend calls.
 let _activeDescOverrides = null;  // set by createServer() during the SYNCHRONOUS
                                   // tool-registration block (concurrency-safe: the
                                   // body of createServer never awaits).
-const _DESC_CACHE = new Map();    // platform -> { at, map }
-const _DESC_TTL_MS = 5 * 60 * 1000;
+const _DESC_BY_PLATFORM = new Map();                 // platform -> { tool: desc }
+const _DESC_KNOWN_PLATFORMS = ['claude', 'chatgpt', 'cline', 'cursor', 'perplexity'];
+const _DESC_REFRESH_MS = 30 * 60 * 1000;
+let _descRefreshStarted = false;
 function _perPlatformDescDisabled() {
   return ['1', 'true', 'yes'].includes(
     String(process.env.DCHUB_PER_PLATFORM_DESC_DISABLE || '').toLowerCase());
 }
-async function _loadPlatformDescriptions(platform) {
-  if (!platform || _perPlatformDescDisabled()) return null;
-  const cached = _DESC_CACHE.get(platform);
-  if (cached && (Date.now() - cached.at) < _DESC_TTL_MS) return cached.map;
-  try {
-    const url = new URL('/api/v1/mcp/tool-descriptions', API_BASE);
-    url.searchParams.set('platform', platform);
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 2500);
-    let map = {};
+async function _refreshPlatformDescriptions() {
+  if (_perPlatformDescDisabled()) return;
+  await Promise.all(_DESC_KNOWN_PLATFORMS.map(async (p) => {
     try {
-      const r = await fetch(url.toString(), {
-        headers: { 'User-Agent': 'dchub-mcp-server/desc-tuner' }, signal: ctl.signal });
-      if (r.ok) {
-        const j = await r.json();
-        if (j && j.overrides && typeof j.overrides === 'object') map = j.overrides;
-      }
-    } finally { clearTimeout(timer); }
-    _DESC_CACHE.set(platform, { at: Date.now(), map });
-    return map;
-  } catch (_) {
-    return cached ? cached.map : null;  // serve stale on a blip; else generic
-  }
+      const url = new URL('/api/v1/mcp/tool-descriptions', API_BASE);
+      url.searchParams.set('platform', p);
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 4000);
+      try {
+        const r = await fetch(url.toString(), {
+          headers: { 'User-Agent': 'dchub-mcp-server/desc-tuner' }, signal: ctl.signal });
+        if (r.ok) {
+          const j = await r.json();
+          if (j && j.overrides && typeof j.overrides === 'object') _DESC_BY_PLATFORM.set(p, j.overrides);
+        }
+      } finally { clearTimeout(timer); }
+    } catch (_) { /* keep any previously-cached value; never throw into init */ }
+  }));
+}
+function _ensureDescRefresher() {
+  // Lazy-start on first init: no module-load network call (clean for tests/stdio).
+  if (_descRefreshStarted || _perPlatformDescDisabled()) return;
+  _descRefreshStarted = true;
+  _refreshPlatformDescriptions().catch(() => {});           // initial load (async)
+  const t = setInterval(() => { _refreshPlatformDescriptions().catch(() => {}); }, _DESC_REFRESH_MS);
+  if (t && typeof t.unref === 'function') t.unref();        // don't hold the event loop open
+}
+function _platformOverrides(platform) {
+  // SYNCHRONOUS — reads the warm in-process map only. NO backend call here.
+  if (!platform || _perPlatformDescDisabled()) return null;
+  return _DESC_BY_PLATFORM.get(platform) || null;
 }
 
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
@@ -3934,11 +3950,13 @@ app.post('/mcp', async (req, res) => {
         }
       };
 
-      // Per-platform tool descriptions (ai_platform_tool_tuner). Fail-soft:
-      // null → createServer falls back to the generic descriptions. Cached, so
-      // this is ~0-latency after warmup.
+      // Per-platform tool descriptions (ai_platform_tool_tuner). SYNCHRONOUS read
+      // of the warm in-process map — NO backend call in the init hot path (see
+      // r-tuner-warmcache). A background refresher keeps it fresh. Cold/missing →
+      // null → createServer falls back to the generic descriptions. Fail-soft.
+      _ensureDescRefresher();
       let _descOverrides = null;
-      try { _descOverrides = await _loadPlatformDescriptions(platform); } catch (_) {}
+      try { _descOverrides = _platformOverrides(platform); } catch (_) {}
       const mcpServer = createServer(_descOverrides);
       await mcpServer.connect(transport);
 
