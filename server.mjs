@@ -980,7 +980,7 @@ const PRO_ONLY_TOOLS = new Set([
   // 2026-06-06 agent moat: persistence + monitoring + bulk export. Backend
   // already tier-gates these (require_tier PRO on /api/v1/lp/*); listed here
   // so the MCP layer shows a clean paywall instead of proxying a raw 402.
-  'save_site', 'list_saved_sites', 'set_market_alert', 'export_dataset',
+  'save_site', 'list_saved_sites', 'set_market_alert', 'set_site_alert', 'export_dataset',
 ]);
 
 // r70 (2026-06-03): the FREE FLAGSHIP HOOKS. A tool here is the citation
@@ -1808,8 +1808,8 @@ const _NEXT_SESSION = {
   tool: 'get_changes',
   call: 'get_changes since=24h',
   why: 'DC Hub data moves daily. Next session, pull only the delta (DCPI 7-day market movers, newly discovered facilities, new M&A deals & news) instead of re-fetching everything. Cache the returned generated_at and pass it back each session to keep a running watch.',
-  also: ['save_site (persist a site you scored)', 'set_market_alert (get pinged when a market moves)'],
-  retention_tools: ['get_changes', 'save_site', 'set_market_alert'],
+  also: ['save_site (persist a site you scored)', 'set_site_alert (have DC Hub email you when a saved site moves)', 'set_market_alert (get pinged when a market moves)'],
+  retention_tools: ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
 };
 function _withNextSession(result) {
   try {
@@ -3188,7 +3188,7 @@ function createServer(descOverrides) {
     { since: S, limit: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
 
-  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor. Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
+  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N, lon: N, name: S, state: S, market: S, target_mw: N, notes: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
 
@@ -3199,6 +3199,24 @@ function createServer(descOverrides) {
   trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (PRO) — get notified when its Excess-Power / Constraint score moves. Use channel="email" + destination=<email>, or channel="webhook" + destination=<https URL>. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
     { market: S, channel: S, destination: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
+
+  // r-site-alert (2026-06-19): the STRUCTURAL return loop. save_site already
+  // persists a shortlist, and the backend per-saved-site monitoring engine
+  // (saved_lp_alerts + lp_alerts_cron nightly fire + Resend delivery + 24h
+  // cooldown + CAN-SPAM suppression) is fully built and firing — but had NO MCP
+  // tool to write its table (set_market_alert points at market_subscriptions,
+  // market-level only). So an agent could save a site but never arm a watch on
+  // it. This wraps the existing POST /api/v1/lp/alerts (PRO) to close that gap:
+  // it turns save_site from a write-only shoebox into an inbox-delivered reason
+  // to come back — delivery the human receives, not a reminder the agent ignores.
+  trackedTool(srv, 'set_site_alert', 'Arm an email watch on a site you already saved (PRO) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move, so you don’t have to keep re-checking. The "monitor my shortlist for me" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type ("dcpi_change" | "capacity_change" | "new_facility_nearby", default "dcpi_change"), threshold (number — the points/MW move that fires it, default 5), notify_email (required — the address the alert is sent to). Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site.',
+    { saved_site_id: ID, trigger_type: S, threshold: N, notify_email: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/alerts', {
+      saved_site_id: a.saved_site_id,
+      trigger_type:  a.trigger_type || 'dcpi_change',
+      threshold:     a.threshold,
+      notify_email:  a.notify_email,
+    })) }] }));
 
   trackedTool(srv, 'export_dataset', 'Use when a user wants to pull their saved DC Hub shortlist OUT of the platform for offline analysis, a spreadsheet, or ingestion into another tool (PRO). Example: "Export my saved sites as GeoJSON for QGIS." — export_dataset format=geojson. Params: format ("csv" default, or "geojson"). Returns: the full file contents as text — CSV rows or a GeoJSON FeatureCollection of your saved sites with DCPI score, target MW, market, coordinates, and notes. Do NOT use to list sites in-chat (use list_saved_sites) or to save a new one (use save_site); this is the bulk-download path.',
     { format: S },
@@ -3520,7 +3538,7 @@ function createServer(descOverrides) {
         // Pro watchlist tools (save_site/set_market_alert) are the upgrade that
         // makes returning valuable, so this links retention → conversion.
         '🔁 **Come back — the data moves daily.** Your free key includes `get_changes`: next session call `get_changes since=24h` to pull only what shifted (DCPI market movers, newly discovered facilities, new M&A deals & news) since today — a live delta feed, not a one-shot lookup. Cache the returned `generated_at` and pass it back each session to keep a running watch.\n\n' +
-        'Want DC Hub to monitor *for* you? `save_site` your candidates + `set_market_alert` on a market to track Excess-Power / Constraint moves (Pro) → $9/mo Starter, 200/day: https://dchub.cloud/pricing/upgrade';
+        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market) — Pro → $9/mo Starter, 200/day: https://dchub.cloud/pricing/upgrade';
       return {
         content: [{ type: 'text', text }],
         structuredContent: {
@@ -3548,7 +3566,7 @@ function createServer(descOverrides) {
           // a concrete tool to return, not just an upgrade URL the agent ignores.
           return_hook:             'Your free key includes get_changes. Next session call get_changes since=24h to pull only what moved (DCPI market movers, new facilities, deals, news). Cache the returned generated_at and pass it back each session to keep a running watch.',
           next_session_tool:       'get_changes',
-          retention_tools:         ['get_changes', 'save_site', 'set_market_alert'],
+          retention_tools:         ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
           upgrade_url:             'https://dchub.cloud/pricing/upgrade',
         },
       };
@@ -3859,7 +3877,7 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     server: 'DC Hub MCP',
     version: '2.3.1',
-    tools: 42,
+    tools: 45,
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
