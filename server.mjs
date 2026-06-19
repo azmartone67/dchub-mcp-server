@@ -2016,11 +2016,61 @@ function _toolTitle(name) {
     || String(name || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// ── Per-platform tool descriptions (ai_platform_tool_tuner consumption) ─────
+// r-tuner-wire (2026-06-19): the backend's ai_platform_tool_tuner generated 50
+// per-(platform×tool) description variants (Claude/ChatGPT/Cline/Cursor/
+// Perplexity read tool descriptions differently) — but NOTHING consumed them:
+// the live tools/list shipped the SAME generic descriptions to every platform,
+// so the table was shelf-ware. This wires consumption: createServer(platform-
+// overrides) substitutes the per-platform text at registration, falling back to
+// the generic description for any tool/platform with no override.
+//
+// STRICTLY fail-soft: a fetch failure, a missing override, or a disabled flag
+// all fall back to the exact generic description shipping today — never worse.
+// TTL-cached in-process (5 min, matches the backend's cache) so it adds ~0
+// latency after warmup. Kill-switch: DCHUB_PER_PLATFORM_DESC_DISABLE=1.
+let _activeDescOverrides = null;  // set by createServer() during the SYNCHRONOUS
+                                  // tool-registration block (concurrency-safe: the
+                                  // body of createServer never awaits).
+const _DESC_CACHE = new Map();    // platform -> { at, map }
+const _DESC_TTL_MS = 5 * 60 * 1000;
+function _perPlatformDescDisabled() {
+  return ['1', 'true', 'yes'].includes(
+    String(process.env.DCHUB_PER_PLATFORM_DESC_DISABLE || '').toLowerCase());
+}
+async function _loadPlatformDescriptions(platform) {
+  if (!platform || _perPlatformDescDisabled()) return null;
+  const cached = _DESC_CACHE.get(platform);
+  if (cached && (Date.now() - cached.at) < _DESC_TTL_MS) return cached.map;
+  try {
+    const url = new URL('/api/v1/mcp/tool-descriptions', API_BASE);
+    url.searchParams.set('platform', platform);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 2500);
+    let map = {};
+    try {
+      const r = await fetch(url.toString(), {
+        headers: { 'User-Agent': 'dchub-mcp-server/desc-tuner' }, signal: ctl.signal });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.overrides && typeof j.overrides === 'object') map = j.overrides;
+      }
+    } finally { clearTimeout(timer); }
+    _DESC_CACHE.set(platform, { at: Date.now(), map });
+    return map;
+  } catch (_) {
+    return cached ? cached.map : null;  // serve stale on a blip; else generic
+  }
+}
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
   // 5-arg form: (name, description, paramsSchema, annotations, cb). DC Hub tools
   // are all read-only data queries → readOnlyHint:true + a friendly title.
-  srv.tool(name, description, schema, { title: _toolTitle(name), readOnlyHint: true }, async (args) => {
+  // Per-platform override (ai_platform_tool_tuner) when present; else generic.
+  const _ov = _activeDescOverrides && _activeDescOverrides[name];
+  const _desc = (typeof _ov === 'string' && _ov.trim()) ? _ov : description;
+  srv.tool(name, _desc, schema, { title: _toolTitle(name), readOnlyHint: true }, async (args) => {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
@@ -2654,7 +2704,11 @@ Free tier covers **10 calls/day** across:
 }
 
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
-function createServer() {
+// descOverrides: optional { tool_name: description } map from the per-platform
+// tuner. Set into the module-level _activeDescOverrides for the SYNCHRONOUS
+// registration block below, then cleared before return (see trackedTool).
+function createServer(descOverrides) {
+  _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.3.1' }, {
     // r86-reach: the initialize `instructions` field was empty (verified live
     // 2026-06-14) — a headless agent arrived with zero in-protocol orientation,
@@ -3705,6 +3759,8 @@ function createServer() {
      'ISOs/grids and market coverage.',
      '# DC Hub coverage\n\n**Grids (live):** PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE (US) + Hydro-Quebec (CA), AESO (Alberta), Nord Pool (15 EU zones); the global scoreboard adds GB (NESO), ~12 EU ENTSO-E zones, Taiwan (Taipower), and Australia NEM (AEMO).\n\n**Markets:** 232 scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
 
+  _activeDescOverrides = null;  // clear immediately after the synchronous tool-
+                                // registration block — never leak across sessions
   return srv;
 }
 
@@ -3878,7 +3934,12 @@ app.post('/mcp', async (req, res) => {
         }
       };
 
-      const mcpServer = createServer();
+      // Per-platform tool descriptions (ai_platform_tool_tuner). Fail-soft:
+      // null → createServer falls back to the generic descriptions. Cached, so
+      // this is ~0-latency after warmup.
+      let _descOverrides = null;
+      try { _descOverrides = await _loadPlatformDescriptions(platform); } catch (_) {}
+      const mcpServer = createServer(_descOverrides);
       await mcpServer.connect(transport);
 
       return ctx.run({
