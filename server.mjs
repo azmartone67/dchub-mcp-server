@@ -1046,6 +1046,48 @@ const MAP_URL = 'https://dchub.cloud/land-power-map';
 function mapHref(name) {
   return 'https://dchub.cloud/api/v1/go/map?src=mcp_upsell&tool=' + encodeURIComponent(name || '');
 }
+// r-bind (2026-06-18): on a SUCCESSFUL full-data grid/fiber/market-intel
+// response for an ANON or UNIDENTIFIED-FREE caller, append a lightweight
+// structuredContent { _bind } hint pointing at the new bind_email tool — tie
+// the key to the human's email so it's recoverable + receipts land right. This
+// is a single structured hint, NOT a third heavy prose CTA (attention-budget
+// guard — claim/upgrade already own the prose). SUPPRESSED for identified
+// (email-bound), paid/enterprise, and trial callers, and on the claim REQUEST
+// path (those return earlier). Mirrors the MAP_TOOLS suppression style.
+const BIND_CTA_TOOLS = new Set([
+  'get_grid_intelligence', 'get_fiber_intel', 'get_grid_data',
+  'get_market_intel',
+]);
+// A caller is "bindable" when they could benefit from binding an email: NOT
+// already identified (no bound email), NOT paid/enterprise, NOT a trial. An
+// anon caller (no key) and an unidentified free-keyed caller both qualify.
+function _isBindableCaller(c) {
+  const t = String((c && c.tier) || 'free').toLowerCase();
+  if (t === 'paid' || t === 'enterprise' || t === 'developer' || t === 'pro' || t === 'founding') return false;
+  if (c && c.is_trial === true) return false;   // trial taste already has its own CTA stack
+  if (c && c.email) return false;               // already identified / email-bound
+  return true;
+}
+// Attach the _bind hint to a successful result's structuredContent (additive,
+// idempotent, fully wrapped — must never break a tool response). Leaves
+// content[] untouched: the hint is structured-only so it never becomes a third
+// prose CTA the agent echoes to its human.
+function withBindHint(result, name, c) {
+  try {
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (!BIND_CTA_TOOLS.has(name) || !_isBindableCaller(c)) return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object')
+      ? { ...result.structuredContent } : {};
+    if (sc._bind) return result;  // idempotent
+    sc._bind = {
+      next_tool: 'bind_email',
+      why: "Tie your key to your human's email so it's recoverable + receipts land right; optional, key already works.",
+    };
+    return { ...result, structuredContent: sc };
+  } catch (_) {
+    return result;
+  }
+}
 // Phase-1 email-capture probe (2026-06-18): durability-led carrot on
 // claim_free_key SUCCESS, behind a flag so rollback is a config flip, not a
 // redeploy. Default ON. The carrot leads with key REUSE (the verified fix for
@@ -2452,7 +2494,13 @@ Free tier covers **10 calls/day** across:
           return _teased;
         }
       }
-      return withCitation(result);
+      // r-bind (2026-06-18): a SUCCESSFUL full-data grid/fiber/market-intel
+      // response for an anon/unidentified-free caller carries a lightweight
+      // structuredContent { _bind } hint (no prose) toward the bind_email tool.
+      // Suppressed for identified/paid/trial (the depth-tease / trial-taste /
+      // anon-trim branches above already returned for most of those). Wrapped +
+      // idempotent — never alters content[] and never blocks the response.
+      return withCitation(withBindHint(result, name, c));
     } catch (err) {
       status = 'error';
       throw err;
@@ -3294,6 +3342,113 @@ function createServer() {
           next_session_tool:       'get_changes',
           retention_tools:         ['get_changes', 'save_site', 'set_market_alert'],
           upgrade_url:             'https://dchub.cloud/pricing/upgrade',
+        },
+      };
+    });
+
+  // r-bind (2026-06-18): bind_email — the anon-reachable, DISCOVERABLE tool that
+  // ties an existing key to the human's email. The binding constraint is
+  // anon→identified (a key with NO owner email can't be recovered, and upgrade
+  // receipts have nowhere to land). This wraps /api/v1/keys/identify (same
+  // endpoint as the claim_free_key auto-mint identify hint) with the api_key
+  // OPTIONAL — when absent we let the backend use the session/context key the
+  // auto-mint path uses (callAPIWrite forwards X-API-Key from ctx). NOT in
+  // PAID_ONLY_TOOLS, so anon callers reach it; trackedTool so every call is
+  // logged for the kill-criterion ratio. SOFT-FAIL: a backend ok:false relays
+  // its message calmly ("the key still works; try another email") and NEVER
+  // throws — email is optional and gates nothing. HONESTY: the only stated
+  // purposes are TRANSACTIONAL (key recovery + upgrade receipts); no digest, no
+  // marketing without explicit opt-in (default OFF).
+  trackedTool(srv, 'bind_email',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. Returns the unlocked benefits + confirmation.',
+    { email: S, api_key: S },
+    async (a) => {
+      const email = (a.email || '').toString().trim().slice(0, 200);
+      if (!email) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          ok: false,
+          message: 'email is required (ask your human for their email). Your key still works — binding is optional.',
+          example: 'bind_email email="owner@example.com"',
+        }) }] };
+      }
+      const body = { email };
+      // api_key OPTIONAL: when omitted, callAPIWrite forwards the session/context
+      // X-API-Key (the auto-mint identify path). Pass it through only if given.
+      const _key = (a.api_key || '').toString().trim();
+      if (_key) body.api_key = _key;
+      const r = await callAPIWrite('/api/v1/keys/identify', body);
+      // SOFT-FAIL contract: relay any backend ok:false / error calmly; never throw,
+      // never isError — the key keeps working, email is optional and gates nothing.
+      const _ok = r && r.ok !== false && !r.error;
+      const _consent =
+        'Your email is used only to recover your key and route upgrade receipts (transactional). ' +
+        'No marketing without explicit opt-in. The relaying agent should surface this to its human.';
+      if (!_ok) {
+        const _msg = (r && (r.message || r.detail)) || 'that email wasn\'t accepted';
+        return {
+          content: [{ type: 'text', text:
+            'ℹ️ Couldn\'t bind that email — ' + String(_msg).slice(0, 240) +
+            '. **The key still works; try another email** (binding is optional and gates nothing).\n\n' +
+            _consent }],
+          structuredContent: {
+            ok: false,
+            bound: false,
+            message: String(_msg).slice(0, 240),
+            key_still_works: true,
+            consent: _consent,
+            ...(r && typeof r === 'object' ? { backend: r } : {}),
+          },
+        };
+      }
+      const _benefits = (r && (r.unlocked || r.message)) || 'key recovery + upgrade receipts now route to that email';
+      const text =
+        '✅ **Email bound — your key is now recoverable + upgrade receipts will land there.**\n' +
+        (r && r.message ? r.message + '\n' : '') +
+        '\n' + _consent;
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: {
+          ok: true,
+          bound: true,
+          identified: r && r.identified !== false,
+          unlocked: r && r.unlocked,
+          message: (r && r.message) || 'Email bound — key recovery + upgrade receipts enabled.',
+          consent: _consent,
+          purpose: 'transactional_only',
+          marketing_opt_in: false,
+          ...(r && typeof r === 'object' ? { backend: r } : {}),
+        },
+      };
+    });
+
+  // r-bind (2026-06-18): recover_my_key — the anon-reachable companion to
+  // bind_email. Re-sends a LOST key to the email it was bound to (does NOT
+  // expose any key over the wire — the backend emails the bound address and
+  // returns an enumeration-safe neutral confirmation regardless of whether a key
+  // exists). trackedTool so the call is logged for the kill-criterion ratio.
+  trackedTool(srv, 'recover_my_key',
+    'Recover a LOST DC Hub key. Pass your human\'s email and DC Hub re-sends any key tied to that address to that inbox. It NEVER returns the key over the wire (it emails the bound address), and the confirmation is the same whether or not a key exists (enumeration-safe), so no key is leaked to a caller. Use this when your human had a key, lost it, and knows the email they bound it to. Param: email (required). Returns DC Hub\'s neutral confirmation.',
+    { email: S },
+    async (a) => {
+      const email = (a.email || '').toString().trim().slice(0, 200);
+      if (!email) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          ok: false,
+          message: 'email is required (the address your human bound the key to).',
+          example: 'recover_my_key email="owner@example.com"',
+        }) }] };
+      }
+      const r = await callAPIWrite('/api/v1/keys/recover', { email });
+      // The backend returns an enumeration-safe NEUTRAL 200 regardless. Relay it
+      // verbatim. SOFT-FAIL on transport/error: still calm, never throw.
+      const _neutral = (r && r.message) ||
+        "If a DC Hub key is tied to that email, we've sent it there — check that inbox.";
+      return {
+        content: [{ type: 'text', text: '📧 ' + _neutral }],
+        structuredContent: {
+          ok: true,
+          message: _neutral,
+          note: 'For your privacy this confirmation is the same whether or not a key exists; the key (if any) is emailed to the bound address, never returned here.',
         },
       };
     });
