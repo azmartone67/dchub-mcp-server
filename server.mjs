@@ -3292,8 +3292,18 @@ function createServer() {
       // unenforced "10 calls/day" claim (28 anon calls drew ZERO throttle on the
       // live /mcp path, 2026-06-18, so no honest hard cap number to state). The
       // optional email-bind lives in structuredContent only (no third prose CTA).
+      // r-retention (2026-06-19): RELAY-led, not agent-self-save. The agent
+      // usually can't edit its own connector config (esp. hosted web hosts), so
+      // the make-or-break retention step is getting it to RELAY the save to its
+      // human. Two durable paths: header-capable clients paste the key; header-
+      // less web hosts (Claude.ai web/ChatGPT) bind email so it's recoverable.
+      // Mirrors the proven paid-path relayLead. (~94% never reconnect today
+      // because the old copy told the AGENT to save a key it can't persist.)
       const _saveLine = CLAIM_CAROT_COPY
-        ? '**🔑 This key is durable — reuse it, don’t re-mint.** Save it once and every future session skips the preview: header `X-API-Key: ' + key + '` or CLI `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`. (Re-minting a fresh key each session is the #1 thing agents get wrong — your saved key already works everywhere.)\n\n'
+        ? '**🔑 Tell your human to save this key** — it’s the difference between this assistant reconnecting next session vs. starting over anonymous. You (the agent) usually can’t edit your own connector config, so relay this:\n' +
+          '• **Desktop / IDE client** (Claude Code, Cursor, Cline, Continue, Windsurf): add header `X-API-Key: ' + key + '` to the DC Hub MCP connector — CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n' +
+          '• **Claude.ai web / ChatGPT / hosted chat** (no key field): bind it to your email so your human can RECOVER it — `POST https://dchub.cloud/api/v1/keys/identify {"api_key":"' + key + '","email":"<your-email>"}` — we email the key + a sign-in link. (Hosted web hosts can’t auto-apply a key, so your human re-adds it each new session — email-bind makes that a 1-paste recovery, not a re-mint.)\n' +
+          'Re-minting a fresh key every session is the #1 mistake — a key saved in a desktop/IDE config is reused automatically; an email-bound key has to be recovered by your human each new web session.\n\n'
         : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '` or CLI `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n\n';
       const _tierLine = CLAIM_CAROT_COPY
         ? 'Full free toolset — no card, no browser.\n\n'
@@ -3329,6 +3339,7 @@ function createServer() {
                                      : (r && typeof r.daily_limit === 'number') ? r.daily_limit : 25,
           key_is_durable:          true,
           reuse_instruction:       'Persist this api_key in your MCP client config and send it as X-API-Key every session. Do NOT call claim_free_key again next session — the saved key already works.',
+          relay_to_human:          'You (the agent) usually cannot edit your own connector config — RELAY this to your human. Header-capable clients (Claude Code / Cursor / Cline / Continue / Windsurf): add header X-API-Key:' + key + ' to the DC Hub MCP connector and it is reused automatically next session. Header-less web hosts (Claude.ai web / ChatGPT) cannot auto-apply a key: POST {"api_key":"' + key + '","email":"<email>"} to https://dchub.cloud/api/v1/keys/identify so it is RECOVERABLE (we email the key + a sign-in link) and your human re-applies it next session. Without saving or email-binding, the next session starts over as anonymous.',
           ...(CLAIM_CAROT_COPY ? {
             identify_endpoint: 'https://dchub.cloud/api/v1/keys/identify',
             identify_payload:  { api_key: key, email: '<owner-email>' },
