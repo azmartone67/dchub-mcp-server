@@ -13,6 +13,35 @@
 // rather than returning data. Run with: npx vitest run
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+// ── Version consistency guard (r-version-sync 2026-06-19) ──────────────────
+// The release flow bumps package.json + server.mjs, but server.json /
+// mcp-server.json / smithery.yaml have drifted behind before — and server.json is
+// what registry-refresh publishes to the official MCP registry, so a mismatch
+// silently UNDER-publishes the version (caught + fixed v2.3.0->2.3.1, 2026-06-19).
+// Fail the build if the five publish surfaces disagree. Pure local read, no network.
+describe('version consistency across publish surfaces', () => {
+  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  it('package.json / server.json / mcp-server.json / smithery.yaml / server.mjs all agree', () => {
+    const versions = {
+      'package.json':    JSON.parse(read('../package.json')).version,
+      'server.json':     JSON.parse(read('../server.json')).version,
+      'mcp-server.json': JSON.parse(read('../mcp-server.json')).version,
+    };
+    const sm = read('../smithery.yaml').match(/^version:\s*["']?(\d+\.\d+\.\d+)/m);
+    versions['smithery.yaml'] = sm ? sm[1] : null;
+    // server.mjs carries the version in 2+ spots (McpServer init + well-known);
+    // dedup — if they disagree, the joined string makes the set size > 1 and fails.
+    const mjs = [...new Set([...read('../server.mjs')
+      .matchAll(/version:\s*['"](\d+\.\d+\.\d+)['"]/g)].map((m) => m[1]))];
+    versions['server.mjs'] = mjs.length === 1 ? mjs[0] : mjs.join(',');
+    expect(
+      new Set(Object.values(versions)).size,
+      `version drift across publish surfaces: ${JSON.stringify(versions)}`,
+    ).toBe(1);
+  });
+});
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
