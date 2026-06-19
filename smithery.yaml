@@ -13,7 +13,7 @@ name: dchub
 displayName: "DC Hub — Data Center & Energy Intelligence"
 description: "Real-time data-center, power & energy intelligence for AI agents: 21,000+ facilities across 170+ countries, 126,427 substations, live power-grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), renewable-energy and natural-gas price feeds, a hyperscaler $1B+ deal tracker, 2,000+ tracked M&A deals, a 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts across 232 markets. The only data-center, energy & hyperscale intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
 homepage: "https://dchub.cloud"
-version: "2.2.9"
+version: "2.3.0"
 keywords:
   - data center
   - datacenter
