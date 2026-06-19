@@ -35,6 +35,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import { randomUUID } from 'crypto';
+import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
 
@@ -3966,6 +3967,25 @@ setInterval(() => {
   }
 }, SESSION_SWEEP_MS).unref();
 
+// OAuth 2.1 AS (Phase 1, DORMANT — every route 404s unless DCHUB_OAUTH_ENABLED;
+// see oauth.mjs). mintIdentity binds the OAuth subject to a durable free dev key
+// via the backend claim endpoint (direct fetch — runs outside the MCP ctx).
+registerOAuthRoutes(app, {
+  issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
+  mintIdentity: async () => {
+    try {
+      const resp = await fetch(API_BASE + '/api/v1/keys/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+        body: JSON.stringify({ client_name: 'oauth-connector' }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const r = await resp.json().catch(() => ({}));
+      return { api_key: r?.api_key || r?.key || null, tier: r?.tier || 'free' };
+    } catch { return { api_key: null, tier: 'free' }; }
+  },
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -3991,9 +4011,18 @@ app.post('/mcp', async (req, res) => {
   try {
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
-    const apiKey    = req.headers['x-api-key']
+    let apiKey      = req.headers['x-api-key']
                    || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
                    || null;
+    // OAuth (Phase 1, DORMANT unless DCHUB_OAUTH_ENABLED): if the Bearer is an
+    // issued OAuth access token, resolve it to its bound dev key. Flag off / not
+    // an OAuth token → null → apiKey unchanged (Bearer still treated as an
+    // X-API-Key, exactly as before). See oauth.mjs dormancy contract.
+    const _bearer   = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (_bearer) {
+      const _oauthId = resolveOAuthToken(_bearer);
+      if (_oauthId && _oauthId.api_key) apiKey = _oauthId.api_key;
+    }
     // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
     // proxy egress IP (req.socket.remoteAddress), not the actual MCP caller.
     // The true client IP rides in X-Forwarded-For (first hop). Capture it once
