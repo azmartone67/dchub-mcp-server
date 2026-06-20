@@ -1257,6 +1257,50 @@ function _trialFullCallsExceeded(ipKey, tool, cap) {
     return n > cap;
   } catch (_) { return false; }
 }
+
+// ── Returning-key reward (DCHUB_RETURN_REWARD) ──────────────────────────────
+// 2026-06-20 — the Optimization Engines' #1 named lever for the 0.5%-reuse
+// return-loop leak: give a genuinely RETURNING durable key (minted in a PRIOR
+// ISO week, used again now — per the backend /api/v1/keys/standing, same cohort
+// the retention KPI measures) ONE bonus full-depth call/day on an otherwise
+// depth-teased tool — a "welcome back" payoff so coming back is worth it.
+// DORMANT by default: when DCHUB_RETURN_REWARD is unset/off the standing fetch
+// is NEVER made (short-circuit) and behavior is byte-identical to today.
+const RETURN_REWARD = ['1', 'true', 'on', 'yes'].includes(
+  String(process.env.DCHUB_RETURN_REWARD || '').trim().toLowerCase());
+const _standingCache = new Map();   // api_key -> { at: epochMs, returning: bool }
+async function _keyReturning(apiKey) {
+  if (!RETURN_REWARD || !apiKey) return false;   // dormant short-circuit — zero overhead when off
+  try {
+    const now = Date.now();
+    const hit = _standingCache.get(apiKey);
+    if (hit && (now - hit.at) < 600_000) return hit.returning;   // 10-min per-key cache
+    let returning = false;
+    try {
+      const u = new URL('/api/v1/keys/standing', API_BASE);
+      u.searchParams.set('api_key', apiKey);
+      const r = await fetch(u.toString(), {
+        method: 'GET',
+        headers: { 'X-Internal-Key': INTERNAL_KEY },
+        signal: AbortSignal.timeout(2500),
+      });
+      if (r.ok) { const j = await r.json(); returning = !!(j && j.returning); }
+    } catch (_) { /* fail-soft: returning stays false, never block the funnel */ }
+    if (_standingCache.size > 50000) _standingCache.clear();
+    _standingCache.set(apiKey, { at: now, returning });
+    return returning;
+  } catch (_) { return false; }
+}
+const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
+function _returnRewardAvailableToday(apiKey) {
+  try {
+    const key = `${apiKey}:${new Date().toISOString().slice(0, 10)}`;
+    if (_returnRewardDay.get(key)) return false;   // already redeemed today
+    _returnRewardDay.set(key, true);
+    if (_returnRewardDay.size > 50000) _returnRewardDay.clear();
+    return true;
+  } catch (_) { return false; }
+}
 // r-retention (2026-06-16): default lowered 8 -> 2. With the cap now keyed on IP
 // (not ephemeral session), 2 means the first 2 flagship answers per IP/day are
 // full (wow + a little goodwill / citation surface), and the 3rd+ is teased with
@@ -2798,6 +2842,25 @@ Free tier covers **10 calls/day** across:
       // undercut it. Anonymous already trimmed above (L1954) for non-FREE_FULL
       // tools, so this is the keyed-but-unpaid leak it couldn't catch.
       if (DEPTH_TEASE_TOOLS.has(name) && !_isPaidDepthTier(_gateTier) && !gate.trial_taste) {
+        // Returning-key REWARD (DCHUB_RETURN_REWARD; dormant when off → the
+        // short-circuit in _keyReturning means this whole clause is a no-op):
+        // a genuine cross-session returner gets ONE bonus full-depth call/day
+        // here instead of the tease — the "welcome back" payoff for the
+        // 0.5%-reuse return loop. Bounded (1/key/day), returners only, no
+        // paid-data leak to one-shot/anon callers.
+        if (RETURN_REWARD && c.api_key && (await _keyReturning(c.api_key))
+            && _returnRewardAvailableToday(c.api_key)) {
+          status = 'return_reward_full';
+          const _full = withCitation(withBindHint(result, name, c));
+          try {
+            const _sc = (_full.structuredContent && typeof _full.structuredContent === 'object')
+              ? { ..._full.structuredContent } : {};
+            _sc.return_reward = { granted: true,
+              note: 'Welcome back — full result unlocked as a returning-caller bonus (1/day). Save your key and come back tomorrow for another.' };
+            _full.structuredContent = _sc;
+          } catch (_) { /* additive only */ }
+          return _full;
+        }
         const _teased = buildDepthTease(name, result, c, _gateTier);
         if (_teased) {
           status = 'depth_teased';
