@@ -1946,15 +1946,31 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   const _n = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
   const DCPI_CODE = { ISONE: 'ISONE', HYDROQUEBEC: 'HQ', HQ: 'HQ' };
   const dcpiIso = DCPI_CODE[norm(ISO)] || norm(ISO);
-  // (1) fuel mix MW -> pct (+ US-definition renewable & gas shares: wind+solar+hydro)
+  // (1) fuel mix MW -> pct (+ renewable & gas shares).
+  // ROBUSTNESS (2026-06-19): the EIA fetch now returns ALL fuel types (battery
+  // BAT, geothermal GEO, oil OIL, pumped-storage PS were dropped by a 7-fuel
+  // whitelist → understated totals + wrong shares). Compute shares correctly:
+  //  • clamp negatives (battery CHARGING / measurement artifacts like CAISO
+  //    SUN=-57 must not shrink the total),
+  //  • EXCLUDE storage (BAT/PS) from the generation denominator (storage is not
+  //    primary generation — it would double-count or distort),
+  //  • count GEO as renewable (it was missing from the wind+solar+hydro numerator).
+  // generation_mix_mw still shows the REAL signed telemetry for every fuel.
+  const STORAGE = new Set(['BAT', 'PS']);
+  const RENEW   = new Set(['WND', 'SUN', 'WAT', 'GEO']);
   const mixRaw = (gi && !gi.error && gi.generation_mix && typeof gi.generation_mix === 'object') ? gi.generation_mix : {};
-  const mixMw = {}; let genTot = 0;
+  const mixMw = {}; let genTot = 0, renewMw = 0, gasMw = 0;
   for (const [k, v] of Object.entries(mixRaw)) {
     const mw = parseFloat(v && (typeof v === 'object' ? v.mw : v));
-    if (Number.isFinite(mw)) { mixMw[k] = mw; genTot += mw; }
+    if (!Number.isFinite(mw)) continue;
+    mixMw[k] = mw;                       // display the real value (storage can be negative)
+    const pos = mw > 0 ? mw : 0;         // clamp for the share math
+    if (!STORAGE.has(k)) genTot += pos;  // storage excluded from primary-generation total
+    if (RENEW.has(k))    renewMw += pos;
+    if (k === 'NG')      gasMw   += pos;
   }
   const pctOf = (mw) => genTot > 0 ? Math.round((mw / genTot) * 1000) / 10 : null;
-  const mixPct = {}; for (const [k, mw] of Object.entries(mixMw)) mixPct[k] = pctOf(mw);
+  const mixPct = {}; for (const [k, mw] of Object.entries(mixMw)) mixPct[k] = pctOf(mw > 0 ? mw : 0);
   // (2) DC Hub Power Index (DCPI) per-ISO row
   const rows = (cmp && Array.isArray(cmp.isos)) ? cmp.isos : [];
   const row  = rows.find((r) => norm(r.iso) === dcpiIso) || null;
@@ -1969,8 +1985,8 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     demand_period:            (gi && !gi.error) ? (gi.demand_period || null) : null,
     generation_mix_mw:        Object.keys(mixMw).length  ? mixMw  : null,
     generation_mix_pct:       Object.keys(mixPct).length ? mixPct : null,
-    renewable_share_pct:      genTot > 0 ? pctOf((mixMw.WND || 0) + (mixMw.SUN || 0) + (mixMw.WAT || 0)) : null,
-    gas_share_pct:            genTot > 0 ? pctOf(mixMw.NG || 0) : null,
+    renewable_share_pct:      genTot > 0 ? pctOf(renewMw) : null,   // wind+solar+hydro+geothermal, clamped, storage-excluded
+    gas_share_pct:            genTot > 0 ? pctOf(gasMw) : null,
     constraint_score:         row ? _n(row.avg_constraint)            : null,
     excess_power_score:       row ? _n(row.avg_excess)                : null,
     avg_time_to_power_months: row ? _n(row.avg_queue_wait_months)     : null,
@@ -2912,12 +2928,24 @@ function createServer(descOverrides) {
       for (const { iso, d, err } of results) {
         if (err || !d || !d.generation_mix) { grids.push({ iso, error: err || 'no generation_mix' }); continue; }
         const gm = d.generation_mix;
-        const mw = (k) => _num(gm[k] && gm[k].mw);
-        const ng = mw('NG'), nuc = mw('NUC'), col = mw('COL');
-        const sun = mw('SUN'), wnd = mw('WND'), wat = mw('WAT'), oth = mw('OTH');
-        const total = ng + nuc + col + sun + wnd + wat + oth;
+        // ROBUSTNESS (2026-06-19): the EIA feed now returns ALL fuels — sum the
+        // FULL non-storage generation (incl geothermal GEO + oil OIL the old
+        // 7-fuel sum dropped), clamp negatives (charging storage / artifacts),
+        // count GEO as renewable. Storage (BAT/PS) excluded from the denominator.
+        const _STOR = new Set(['BAT', 'PS']);
+        const _REN  = new Set(['WND', 'SUN', 'WAT', 'GEO']);
+        const posv = (k) => { const n = _num(gm[k] && gm[k].mw); return (Number.isFinite(n) && n > 0) ? n : 0; };
+        let total = 0, renew = 0;
+        for (const k of Object.keys(gm)) {
+          if (k === 'period') continue;
+          const p = posv(k);
+          if (!_STOR.has(k)) total += p;
+          if (_REN.has(k)) renew += p;
+        }
+        const ng = posv('NG'), nuc = posv('NUC'), col = posv('COL');
+        const sun = posv('SUN'), wnd = posv('WND'), wat = posv('WAT'), oth = posv('OTH');
+        const geo = posv('GEO'), oil = posv('OIL');
         const pct = (x) => total > 0 ? Math.round((x / total) * 1000) / 10 : null;
-        const renew = sun + wnd + wat;
         grids.push({
           iso,
           region: d.region || iso,
@@ -2926,7 +2954,7 @@ function createServer(descOverrides) {
           renewable_share_pct: pct(renew),
           gas_share_pct: pct(ng),
           mix_period: gm.NG && gm.NG.period || null,
-          fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, other: oth },
+          fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, geothermal: geo, oil: oil, other: oth },
           fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
         });
       }
