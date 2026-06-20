@@ -2177,8 +2177,15 @@ const WRITE_TOOLS = new Set([
   'bind_email', 'claim_free_key', 'recover_my_key', 'unlock_more_data',
 ]);
 
+// Distinct registered tool NAMES — a Set so the per-connection createServer()
+// re-registrations dedupe (a plain counter would multiply). /health reports
+// its .size so the advertised count can never drift from reality (was a
+// hardcoded literal that fell behind the real registrations). 2026-06-20.
+const _registeredToolNames = new Set();
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
+  _registeredToolNames.add(name);
   // 5-arg form: (name, description, paramsSchema, annotations, cb). Most DC Hub
   // tools are read-only data queries → readOnlyHint:true; the WRITE_TOOLS above
   // are state-mutating → readOnlyHint:false + destructiveHint:false.
@@ -4145,7 +4152,7 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     server: 'DC Hub MCP',
     version: '2.3.1',
-    tools: 45,
+    tools: _registeredToolNames.size || 46,   // computed from real registrations — never drifts
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
