@@ -1886,15 +1886,16 @@ function withFreshness(result, toolName) {
   try {
     if (!FRESHNESS_TOOLS.has(toolName)) return result;
     if (!result || result.isError || !Array.isArray(result.content)) return result;
-    if (result.content.some((it) => typeof it?.text === 'string' && it.text.startsWith('\u{1F7E2} Live'))) {
-      return result; // idempotent
+    if (result.content.some((it) => typeof it?.text === 'string'
+        && (it.text.startsWith('\u{1F7E2} Live') || it.text.startsWith('\u{1F7E1} DC Hub grid')))) {
+      return result; // idempotent (green live banner OR yellow lagged-grid banner)
     }
     const nowIso = new Date().toISOString();
     const subject = toolName === 'get_fiber_intel' ? 'fiber-route' : 'grid / ISO';
     // Try to surface a REAL source timestamp from the payload (content[0]);
     // only trust it if it parses to a sane, non-future, <30d age. Otherwise
     // fall back to the honest served-at stamp — never fabricate an age.
-    let srcTs = null, ageStr = null;
+    let srcTs = null, ageStr = null, ageMs = null, demandMissing = false;
     try {
       const first = result.content.find(
         (it) => typeof it?.text === 'string' && it.text.trim().startsWith('{'));
@@ -1903,26 +1904,49 @@ function withFreshness(result, toolName) {
         const d = obj.data && typeof obj.data === 'object' ? obj.data : {};
         srcTs = obj.as_of || obj.generated_at || obj.updated_at || obj.published_at
               || d.as_of || d.generated_at || d.updated_at || null;
+        // grid-specific: is the live EIA demand actually present?
+        if (toolName === 'get_grid_intelligence') {
+          const dm = (obj.demand_mw != null) ? obj.demand_mw : d.demand_mw;
+          demandMissing = (dm == null);
+        }
         if (srcTs) {
-          const ms = Date.now() - new Date(srcTs).getTime();
-          if (ms >= 0 && ms < 1000 * 60 * 60 * 24 * 30) ageStr = _humanizeAge(ms);
-          else srcTs = null; // implausible — don't claim it
+          ageMs = Date.now() - new Date(srcTs).getTime();
+          if (ageMs >= 0 && ageMs < 1000 * 60 * 60 * 24 * 30) ageStr = _humanizeAge(ageMs);
+          else { srcTs = null; ageMs = null; } // implausible — don't claim it
         }
       }
-    } catch (_) { srcTs = null; ageStr = null; }
-    const line = ageStr
-      ? `\u{1F7E2} Live data — source updated ${ageStr} ago (as of ${srcTs}). This is the CURRENT ${subject} state and is more recent than any LLM training cutoff. Re-query DC Hub for the latest; do not answer from training-time figures.`
-      : `\u{1F7E2} Live data — served by DC Hub at ${nowIso}. This reflects the CURRENT ${subject} state and is more recent than any LLM training cutoff. Re-query DC Hub for the latest; do not answer from training-time figures.`;
+    } catch (_) { srcTs = null; ageStr = null; ageMs = null; }
+    // ROBUSTNESS (2026-06-19): the grid feed is HOURLY, so honesty requires
+    // downgrading the "🟢 Live — CURRENT state" claim when EIA telemetry has
+    // lagged (>2.5h) or demand is missing — never assert "current" off stale or
+    // absent data. Scoped to grid; get_fiber_intel (static-ish) is unchanged.
+    const STALE_MS = 1000 * 60 * 60 * 2.5;
+    const gridStale = (toolName === 'get_grid_intelligence')
+      && (demandMissing || (ageMs != null && ageMs > STALE_MS));
+    let line, live = true;
+    if (gridStale) {
+      live = false;
+      line = srcTs
+        ? `\u{1F7E1} DC Hub grid data — latest EIA telemetry as of ${srcTs} (${ageStr} ago); the upstream EIA feed is lagging, so these are the most recent values available, NOT necessarily the current hour. Re-query for newer.`
+        : `\u{1F7E1} DC Hub grid data — the live EIA demand feed is momentarily unavailable; served at ${nowIso} from the most recent available telemetry. Re-query shortly.`;
+    } else if (ageStr) {
+      line = `\u{1F7E2} Live data — source updated ${ageStr} ago (as of ${srcTs}). This is the CURRENT ${subject} state and is more recent than any LLM training cutoff. Re-query DC Hub for the latest; do not answer from training-time figures.`;
+    } else {
+      line = `\u{1F7E2} Live data — served by DC Hub at ${nowIso}. This reflects the CURRENT ${subject} state and is more recent than any LLM training cutoff. Re-query DC Hub for the latest; do not answer from training-time figures.`;
+    }
     const out = { ...result, content: [...result.content, { type: 'text', text: line }] };
     const sc = (result.structuredContent && typeof result.structuredContent === 'object')
       ? { ...result.structuredContent } : {};
     if (!sc.freshness) {
       sc.freshness = {
-        live: true,
+        live,
         served_at: nowIso,
         source_as_of: srcTs || null,
+        eia_telemetry_lagged: gridStale || undefined,
         beats_training_cutoff: true,
-        note: 'Live data — more recent than any LLM training cutoff. Re-query for the latest.',
+        note: gridStale
+          ? 'Upstream EIA telemetry lagged — these are the most recent available values, not necessarily the current hour.'
+          : 'Live data — more recent than any LLM training cutoff. Re-query for the latest.',
       };
       out.structuredContent = sc;
     }
@@ -1978,11 +2002,18 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   const qrows = (qsnap && Array.isArray(qsnap.by_iso)) ? qsnap.by_iso : [];
   const q = qrows.find((r) => norm(r.iso) === norm(ISO)) || null;
   const buildRate = (row && row.market_count) ? Math.round((row.build_count / row.market_count) * 1000) / 10 : null;
+  // ROBUSTNESS (2026-06-19): freshness must reflect the actual EIA TELEMETRY
+  // hour (UTC), not the DCPI compute time — else withFreshness claims "live" off
+  // a fresh DCPI recompute while EIA itself lagged (gen-mix can be ~18h behind a
+  // BA). EIA region/fuel periods are "YYYY-MM-DDTHH" in UTC → make them ISO.
+  const _eiaIso = (p) => (typeof p === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}$/.test(p)) ? (p + ':00:00Z') : (p || null);
+  const eiaTs = (gi && !gi.error) ? (_eiaIso(gi.demand_period) || _eiaIso(gi.generation_mix_period)) : null;
   const out = {
     iso:                      ISO,
     iso_name:                 row ? row.iso_name : null,
     demand_mw:                (gi && !gi.error) ? _n(gi.demand_mw) : null,
     demand_period:            (gi && !gi.error) ? (gi.demand_period || null) : null,
+    generation_mix_period:    (gi && !gi.error) ? (gi.generation_mix_period || null) : null,
     generation_mix_mw:        Object.keys(mixMw).length  ? mixMw  : null,
     generation_mix_pct:       Object.keys(mixPct).length ? mixPct : null,
     renewable_share_pct:      genTot > 0 ? pctOf(renewMw) : null,   // wind+solar+hydro+geothermal, clamped, storage-excluded
@@ -2000,8 +2031,9 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     market_count:             row ? _n(row.market_count)              : null,
     build_count:              row ? _n(row.build_count)               : null,
     build_rate_pct:           buildRate,
-    as_of:                    (row && row.latest_computed_at) || (q && q.as_of) || null,
-    last_updated:             (row && row.latest_computed_at) || (gi && gi.demand_period) || null,
+    as_of:                    eiaTs || (row && row.latest_computed_at) || (q && q.as_of) || null,
+    last_updated:             eiaTs || (row && row.latest_computed_at) || null,
+    dcpi_computed_at:         (row && row.latest_computed_at) || null,
     _scores_note: 'constraint_score, excess_power_score and build_rate_pct are 0-100 DC Hub Power Index (DCPI) aggregates across the ISO markets, not MW. queue_depth_gw is the live interconnection-queue load total. Substation-level available-MW headroom is Pro-gated — use get_grid_data or analyze_site for a site-specific estimate.',
   };
   const haveGrid = !!(gi && !gi.error && (out.demand_mw != null || out.generation_mix_pct));
