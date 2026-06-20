@@ -31,11 +31,33 @@ async function register() {
   });
   return { status: r.status, body: await r.json() };
 }
+// P3: /authorize now renders a CONSENT page (200 HTML) on valid params; the code
+// is issued by POST /oauth/authorize/decision. This helper preserves the old
+// contract: GET-stage validation failures (400/302 error) surface from the GET;
+// a valid request is then approved (simulating the human clicking Authorize) and
+// the resulting 302+code is returned. Pass _decision:'deny' to test denial.
 async function authorize(params) {
+  const u = new URL(base + '/oauth/authorize');
+  for (const [k, v] of Object.entries(params)) if (v != null && k[0] !== '_') u.searchParams.set(k, v);
+  const g = await fetch(u, { redirect: 'manual' });
+  if (g.status !== 200) {  // GET-stage validation failure (bad redirect / plain PKCE / etc.)
+    return { status: g.status, location: g.headers.get('location'), json: g.status >= 400 ? await g.json().catch(() => ({})) : null };
+  }
+  await g.text();  // drain the consent HTML
+  const form = {}; for (const [k, v] of Object.entries(params)) if (v != null && k[0] !== '_') form[k] = v;
+  form.decision = params._decision || 'approve';
+  const d = await fetch(base + '/oauth/authorize/decision', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(form), redirect: 'manual',
+  });
+  return { status: d.status, location: d.headers.get('location'), json: d.status >= 400 ? await d.json().catch(() => ({})) : null };
+}
+// Raw GET of /authorize (for asserting the consent page itself).
+async function authorizeGet(params) {
   const u = new URL(base + '/oauth/authorize');
   for (const [k, v] of Object.entries(params)) if (v != null) u.searchParams.set(k, v);
   const r = await fetch(u, { redirect: 'manual' });
-  return { status: r.status, location: r.headers.get('location'), json: r.status >= 400 ? await r.json().catch(() => ({})) : null };
+  return { status: r.status, ct: r.headers.get('content-type') || '', body: await r.text() };
 }
 async function token(form) {
   const r = await fetch(base + '/oauth/token', {
@@ -69,6 +91,7 @@ describe('DORMANCY — flag OFF', () => {
     expect((await fetch(base + '/.well-known/oauth-authorization-server')).status).toBe(404);
     expect((await register()).status).toBe(404);
     expect((await authorize({ client_id: 'x', redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256' })).status).toBe(404);
+    expect((await fetch(base + '/oauth/authorize/decision', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'decision=approve' })).status).toBe(404);
     expect((await token({ grant_type: 'authorization_code', code: 'x' })).status).toBe(404);
   });
   it('resolveOAuthToken returns null even for a valid-shaped token in cache', async () => {
@@ -89,6 +112,25 @@ describe('FULL FLOW — flag ON', () => {
     expect(as.grant_types_supported).toEqual(['authorization_code']);
     const prm = await (await fetch(base + '/.well-known/oauth-protected-resource/mcp')).json();
     expect(prm.authorization_servers).toContain('https://dchub.cloud');
+  });
+
+  it('GET /authorize renders a consent page (human click required, no auto-issued code)', async () => {
+    const reg = await register();
+    const g = await authorizeGet({ client_id: reg.body.client_id, redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256' });
+    expect(g.status).toBe(200);
+    expect(g.ct).toMatch(/text\/html/);
+    expect(g.body).toContain('/oauth/authorize/decision');
+    expect(g.body).toContain('Authorize');
+    expect(g.body).not.toContain('code=');   // no code leaked on the consent page itself
+  });
+
+  it('decision=deny → access_denied redirect (no code issued)', async () => {
+    const reg = await register();
+    const r = await authorize({ client_id: reg.body.client_id, redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256', _decision: 'deny' });
+    expect(r.status).toBe(302);
+    const loc = new URL(r.location);
+    expect(loc.searchParams.get('error')).toBe('access_denied');
+    expect(loc.searchParams.get('code')).toBeNull();
   });
 
   it('register → authorize → token → resolve binds a durable identity', async () => {
@@ -184,8 +226,9 @@ describe('C3 — mint failure never issues a hollow token', () => {
       const reg = await (await fetch(b2 + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ redirect_uris: [REDIRECT] }) })).json();
       const u = new URL(b2 + '/oauth/authorize');
       for (const [k, v] of Object.entries({ client_id: reg.client_id, redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256' })) u.searchParams.set(k, v);
-      const auth = await fetch(u, { redirect: 'manual' });
-      const code = new URL(auth.headers.get('location')).searchParams.get('code');
+      await (await fetch(u, { redirect: 'manual' })).text();   // consent page
+      const dec = await fetch(b2 + '/oauth/authorize/decision', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: reg.client_id, redirect_uri: REDIRECT, code_challenge: CHALLENGE, code_challenge_method: 'S256', response_type: 'code', decision: 'approve' }), redirect: 'manual' });
+      const code = new URL(dec.headers.get('location')).searchParams.get('code');
       const tok = await fetch(b2 + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code, client_id: reg.client_id, redirect_uri: REDIRECT, code_verifier: VERIFIER }) });
       expect(tok.status).toBe(503);
       expect((await tok.json()).error).toBe('temporarily_unavailable');
@@ -246,8 +289,9 @@ describe('P2 — durable store wiring (survives restart)', () => {
       const reg = await (await fetch(b3 + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ redirect_uris: [REDIRECT] }) })).json();
       const u = new URL(b3 + '/oauth/authorize');
       for (const [k, v] of Object.entries({ client_id: reg.client_id, redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256' })) u.searchParams.set(k, v);
-      const auth = await fetch(u, { redirect: 'manual' });
-      const code = new URL(auth.headers.get('location')).searchParams.get('code');
+      await (await fetch(u, { redirect: 'manual' })).text();   // consent page
+      const dec = await fetch(b3 + '/oauth/authorize/decision', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: reg.client_id, redirect_uri: REDIRECT, code_challenge: CHALLENGE, code_challenge_method: 'S256', response_type: 'code', decision: 'approve' }), redirect: 'manual' });
+      const code = new URL(dec.headers.get('location')).searchParams.get('code');
       const tok = await (await fetch(b3 + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code, client_id: reg.client_id, redirect_uri: REDIRECT, code_verifier: VERIFIER }) })).json();
       const access = tok.access_token;
       // the durable store saw the full lifecycle

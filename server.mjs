@@ -4067,12 +4067,16 @@ const _oauthStore = {
 registerOAuthRoutes(app, {
   issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
   store: _oauthStore,
-  mintIdentity: async () => {
+  mintIdentity: async (clientId) => {
     try {
+      // PER-CONNECTION client_name (review HIGH fix): a distinct client_name per
+      // OAuth client_id means the backend's (client_name, ip) dedupe hands each
+      // connector its OWN key, not one shared key for all OAuth users.
+      const cn = 'oauth-' + String(clientId || 'connector').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
       const resp = await fetch(API_BASE + '/api/v1/keys/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
-        body: JSON.stringify({ client_name: 'oauth-connector' }),
+        body: JSON.stringify({ client_name: cn }),
         signal: AbortSignal.timeout(15000),
       });
       const r = await resp.json().catch(() => ({}));

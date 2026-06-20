@@ -171,6 +171,40 @@ function _validRedirect(client, uri) {
       && typeof uri === 'string' && client.redirect_uris.includes(uri);
 }
 
+function _esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// P3 consent page (consent-only model): the human must click Authorize — no
+// silent auto-approve. The form POSTs the (re-validated) authorize params to
+// /oauth/authorize/decision. The redirect_uri host is shown (HTML-escaped) so
+// the human sees who they're authorizing. No CSRF token: consent-only binds no
+// pre-existing identity (each approval mints a fresh per-connection free key),
+// and the decision handler re-validates client+redirect, so a forged POST only
+// self-authorizes the poster's own connector (harmless) — revisit if a future
+// model binds real accounts.
+function _consentPage(p) {
+  let host = p.redirect_uri;
+  try { host = new URL(p.redirect_uri).host; } catch { /* keep raw */ }
+  const hidden = (k, v) => `<input type="hidden" name="${_esc(k)}" value="${_esc(v)}">`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize DC Hub</title>
+<style>body{font:16px/1.5 system-ui,-apple-system,sans-serif;max-width:30rem;margin:4rem auto;padding:0 1rem;color:#111}
+.card{border:1px solid #e3e3e3;border-radius:12px;padding:1.5rem}h1{font-size:1.2rem;margin:0 0 .75rem}
+.host{font-weight:600}button{font:inherit;padding:.6rem 1.2rem;border-radius:8px;border:0;cursor:pointer;margin:.25rem .5rem .25rem 0}
+.ok{background:#0a5;color:#fff}.no{background:#eee;color:#333}.muted{color:#666;font-size:.85rem;margin-top:1rem}</style></head>
+<body><div class="card"><h1>Authorize DC Hub access</h1>
+<p>Allow your AI assistant connecting from <span class="host">${_esc(host)}</span> to query DC Hub's data-center intelligence (free tier) on your behalf?</p>
+<form method="POST" action="${_esc(p.issuer)}/oauth/authorize/decision">
+${hidden('client_id', p.client_id)}${hidden('redirect_uri', p.redirect_uri)}${hidden('code_challenge', p.code_challenge)}${hidden('code_challenge_method', p.code_challenge_method)}${hidden('response_type', p.response_type)}${p.state != null ? hidden('state', p.state) : ''}
+<button class="ok" type="submit" name="decision" value="approve">Authorize</button>
+<button class="no" type="submit" name="decision" value="deny">Deny</button>
+</form>
+<p class="muted">DC Hub (dchub.cloud) · free-tier data access · disconnect anytime in your client's connector settings.</p>
+</div></body></html>`;
+}
+
 // registerOAuthRoutes(app, { issuer, mintIdentity, store })
 //   issuer       : public base URL, e.g. 'https://dchub.cloud'
 //   mintIdentity : async () => ({ api_key, tier }) — binds the OAuth subject to
@@ -178,7 +212,7 @@ function _validRedirect(client, uri) {
 //   store        : optional {put,get,consume} durable adapter (default: in-memory).
 export function registerOAuthRoutes(app, opts = {}) {
   const issuer = (opts.issuer || 'https://dchub.cloud').replace(/\/$/, '');
-  const mintIdentity = opts.mintIdentity || (async () => ({ api_key: null, tier: 'free' }));
+  const mintIdentity = opts.mintIdentity || (async (_clientId) => ({ api_key: null, tier: 'free' }));
   const store = opts.store || _memStore();
   _activeStore = store;   // resolveOAuthToken() reads the same store
   const off = (res) => res.status(404).json({ error: 'not_found' });
@@ -270,16 +304,47 @@ export function registerOAuthRoutes(app, opts = {}) {
     if (String(q.code_challenge_method) !== 'S256')  return fail('invalid_request', 'PKCE S256 required');
     const challenge = String(q.code_challenge || '');
     if (challenge.length < 43 || challenge.length > 128) return fail('invalid_request', 'code_challenge required (S256)');
-    // P2: auto-approve (no consent UI yet). Issue a single-use code into the store.
+    // P3: render a click-through consent page (no silent auto-approve). The
+    // code is issued only after the human clicks Authorize (POST /decision).
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.send(_consentPage({
+      issuer, client_id: String(q.client_id), redirect_uri,
+      code_challenge: challenge, code_challenge_method: 'S256',
+      response_type: 'code', state,
+    }));
+  });
+
+  // ── P3 consent decision — the consent-page form POSTs here ──
+  app.post('/oauth/authorize/decision', _rlGuard('authz', 60), form, async (req, res) => {
+    if (!oauthEnabled()) return off(res);
+    const b = req.body || {};
+    const redirect_uri = String(b.redirect_uri || '');
+    let client = null;
+    try { client = await store.get('client', String(b.client_id || '')); } catch { client = null; }
+    // Re-validate the redirect against the registered client (never trust the
+    // POSTed redirect) — same no-open-redirect guarantee as GET /authorize.
+    if (!_validRedirect(client, redirect_uri)) {
+      return res.status(400).json({ error: 'invalid_request', error_description: 'unknown client_id or unregistered redirect_uri' });
+    }
+    const ru = new URL(redirect_uri);
+    const state = (b.state != null && b.state !== '') ? String(b.state) : null;
+    const back = (params) => {
+      for (const [k, v] of Object.entries(params)) ru.searchParams.set(k, v);
+      if (state != null) ru.searchParams.set('state', state);
+      return res.redirect(302, ru.toString());
+    };
+    if (String(b.decision) !== 'approve') return back({ error: 'access_denied' });
+    const challenge = String(b.code_challenge || '');
+    if (String(b.code_challenge_method) !== 'S256' || challenge.length < 43 || challenge.length > 128) {
+      return back({ error: 'invalid_request', error_description: 'PKCE S256 required' });
+    }
     const code = _rand(24);
     try {
-      await store.put('code', code, { client_id: String(q.client_id), redirect_uri, challenge }, CODE_TTL_S);
+      await store.put('code', code, { client_id: String(b.client_id), redirect_uri, challenge }, CODE_TTL_S);
     } catch {
-      return fail('temporarily_unavailable');
+      return back({ error: 'temporarily_unavailable' });
     }
-    ru.searchParams.set('code', code);
-    if (state != null) ru.searchParams.set('state', state);
-    return res.redirect(302, ru.toString());
+    return back({ code });
   });
 
   // ── OAuth 2.1 token endpoint (authorization_code + PKCE) ──
@@ -304,15 +369,36 @@ export function registerOAuthRoutes(app, opts = {}) {
     if (!verifyPkceS256(String(b.code_verifier || ''), rec.challenge)) {
       return res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
     }
-    let identity = null;
-    try { identity = await mintIdentity(); } catch { identity = null; }
-    // C3 (review): never issue a HOLLOW token. The code is already consumed, so
-    // on a binding failure the client must re-authorize.
-    if (!identity || !identity.api_key) {
-      return res.status(503).json({ error: 'temporarily_unavailable', error_description: 'identity binding failed; please retry the authorization' });
+    // Consent-only durable identity: ONE free key PER CONNECTION (client_id),
+    // reused across this connector's exchanges. Fixes the shared-key collision
+    // (review HIGH) — mintIdentity gets the client_id so the backend mints a
+    // distinct key per connector, and we persist it on the client record so
+    // every later exchange/refresh resolves the SAME identity (the OAuth token,
+    // persisted by the client, is the cross-session anchor).
+    let clientRec = null;
+    try { clientRec = await store.get('client', rec.client_id); } catch { clientRec = null; }
+    let boundKey = (clientRec && clientRec.api_key) || null;
+    let tier = (clientRec && clientRec.tier) || 'free';
+    if (!boundKey) {
+      let identity = null;
+      try { identity = await mintIdentity(rec.client_id); } catch { identity = null; }
+      // C3 (review): never issue a HOLLOW token. The code is already consumed,
+      // so on a binding failure the client must re-authorize.
+      if (!identity || !identity.api_key) {
+        return res.status(503).json({ error: 'temporarily_unavailable', error_description: 'identity binding failed; please retry the authorization' });
+      }
+      boundKey = identity.api_key;
+      tier = identity.tier || 'free';
+      try {  // best-effort persist the bound key on the client record (reuse next time)
+        await store.put('client', rec.client_id, {
+          ...(clientRec || {}),
+          redirect_uris: (clientRec && clientRec.redirect_uris) || [],
+          api_key: boundKey, tier,
+        }, 0);
+      } catch { /* non-fatal: a later exchange re-mints (still per-client_name, so still distinct) */ }
     }
     const access_token = TOKEN_PREFIX + _rand(32);
-    const tokenRec = { api_key: identity.api_key, tier: identity.tier || 'free', client_id: rec.client_id };
+    const tokenRec = { api_key: boundKey, tier, client_id: rec.client_id };
     try {
       await store.put('token', access_token, tokenRec, TOKEN_TTL_S);
     } catch {
