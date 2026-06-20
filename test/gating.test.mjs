@@ -162,7 +162,10 @@ describe('shapeGridIntelligence — non-empty per-ISO payload (regression guard:
     // live interconnection queue (matched to the RIGHT iso, not the first row)
     expect(out.queue_depth_gw).toBe(172.6);
     expect(out.data_center_share_pct).toBe(3.4);
-    expect(out.last_updated).toBe('2026-06-13T01:25:38Z');
+    // ed328ee (honest freshness): last_updated now reflects the EIA telemetry
+    // hour; the DCPI compute time moved to its own dcpi_computed_at field.
+    expect(out.dcpi_computed_at).toBe('2026-06-13T01:25:38Z');
+    expect(out.last_updated).toBe('2026-06-13T00:00:00Z');
     // the bug contract: at least the core data fields are non-null
     expect(out._warning).toBeUndefined();
     const nonNull = ['demand_mw', 'generation_mix_pct', 'constraint_score', 'queue_depth_gw']
