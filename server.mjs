@@ -2165,14 +2165,30 @@ function _platformOverrides(platform) {
   return _DESC_BY_PLATFORM.get(platform) || null;
 }
 
+// State-mutating MCP tools — these create/update server-side state or trigger a
+// side effect (mint a key, bind an email, create an alert/saved-site, open a
+// Stripe checkout), so they must NOT be annotated readOnlyHint:true. (2026-06-20,
+// for the Anthropic Connectors Directory: reviewers check annotation accuracy and
+// a write mislabeled read-only gets incorrect auto-permission in Claude.) All are
+// create/upsert/side-effect, none DELETE → destructiveHint:false. list_saved_sites
+// and export_dataset are READS and correctly stay read-only.
+const WRITE_TOOLS = new Set([
+  'save_site', 'set_market_alert', 'set_site_alert',
+  'bind_email', 'claim_free_key', 'recover_my_key', 'unlock_more_data',
+]);
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
-  // 5-arg form: (name, description, paramsSchema, annotations, cb). DC Hub tools
-  // are all read-only data queries → readOnlyHint:true + a friendly title.
+  // 5-arg form: (name, description, paramsSchema, annotations, cb). Most DC Hub
+  // tools are read-only data queries → readOnlyHint:true; the WRITE_TOOLS above
+  // are state-mutating → readOnlyHint:false + destructiveHint:false.
   // Per-platform override (ai_platform_tool_tuner) when present; else generic.
   const _ov = _activeDescOverrides && _activeDescOverrides[name];
   const _desc = (typeof _ov === 'string' && _ov.trim()) ? _ov : description;
-  srv.tool(name, _desc, schema, { title: _toolTitle(name), readOnlyHint: true }, async (args) => {
+  const _annot = WRITE_TOOLS.has(name)
+    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false }
+    : { title: _toolTitle(name), readOnlyHint: true };
+  srv.tool(name, _desc, schema, _annot, async (args) => {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
