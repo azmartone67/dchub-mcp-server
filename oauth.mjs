@@ -52,6 +52,43 @@ function _capInsert(map, key, val, max) {
   map.set(key, val);
 }
 
+// Rate limiter (security review M2): per-IP fixed-window counters so an ARMED
+// AS can't be used to hammer the backend key-mint (the /token success path
+// mints a dev key per exchange) or OOM via /register|/authorize spam. In-memory
+// + bounded (limiter state is soft and self-heals on restart). No-op when
+// dormant (the guard short-circuits before touching state).
+const _rl = new Map();              // `${ip}|${bucket}` -> { count, resetAt }
+const RL_MAX_KEYS = 50_000;
+const RL_WINDOW_MS = 10 * 60_000;   // 10-minute window
+function _clientIp(req) {
+  return ((req.headers && req.headers['x-forwarded-for']) || '').split(',')[0].trim()
+      || (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+// Returns null if allowed, else seconds until the window resets.
+function _rateLimited(req, bucket, max) {
+  const key = _clientIp(req) + '|' + bucket;
+  const now = Date.now();
+  let e = _rl.get(key);
+  if (!e || e.resetAt <= now) {
+    if (_rl.size >= RL_MAX_KEYS) _rl.clear();   // hard bound (coarse, soft state)
+    e = { count: 0, resetAt: now + RL_WINDOW_MS };
+    _rl.set(key, e);
+  }
+  e.count += 1;
+  return e.count > max ? Math.ceil((e.resetAt - now) / 1000) : null;
+}
+function _rlGuard(bucket, max) {
+  return (req, res, next) => {
+    if (!oauthEnabled()) return next();         // dormant: never touch state
+    const retry = _rateLimited(req, bucket, max);
+    if (retry != null) {
+      res.set('Retry-After', String(retry));
+      return res.status(429).json({ error: 'rate_limited', error_description: 'too many requests', retry_after: retry });
+    }
+    next();
+  };
+}
+
 function _b64url(buf) {
   return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -124,7 +161,7 @@ export function registerOAuthRoutes(app, opts = {}) {
   });
 
   // ── RFC 7591 — dynamic client registration (public, PKCE) ──
-  app.post('/oauth/register', (req, res) => {
+  app.post('/oauth/register', _rlGuard('reg', 20), (req, res) => {
     if (!oauthEnabled()) return off(res);
     const body = req.body || {};
     const uris = Array.isArray(body.redirect_uris)
@@ -152,7 +189,7 @@ export function registerOAuthRoutes(app, opts = {}) {
   });
 
   // ── OAuth 2.1 authorization endpoint (PKCE required) ──
-  app.get('/oauth/authorize', (req, res) => {
+  app.get('/oauth/authorize', _rlGuard('authz', 60), (req, res) => {
     if (!oauthEnabled()) return off(res);
     const q = req.query || {};
     const client = _clients.get(String(q.client_id || ''));
@@ -190,7 +227,7 @@ export function registerOAuthRoutes(app, opts = {}) {
   });
 
   // ── OAuth 2.1 token endpoint (authorization_code + PKCE) ──
-  app.post('/oauth/token', form, async (req, res) => {
+  app.post('/oauth/token', _rlGuard('token', 60), form, async (req, res) => {
     if (!oauthEnabled()) return off(res);
     res.set('Cache-Control', 'no-store');
     const b = req.body || {};
@@ -235,4 +272,4 @@ export function registerOAuthRoutes(app, opts = {}) {
 }
 
 // Test-only hooks (never used by production paths).
-export const __test = { _clients, _codes, _tokens, _b64url, _rand, CODE_TTL_MS, TOKEN_TTL_S };
+export const __test = { _clients, _codes, _tokens, _rl, _b64url, _rand, CODE_TTL_MS, TOKEN_TTL_S };

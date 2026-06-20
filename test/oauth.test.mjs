@@ -189,3 +189,33 @@ describe('C3 — mint failure never issues a hollow token', () => {
     } finally { srv2.close(); }
   });
 });
+
+describe('M2 — rate limiting (armed)', () => {
+  beforeAll(ON);
+  afterAll(OFF);
+  const regWithIp = (ip) => fetch(base + '/oauth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip },
+    body: JSON.stringify({ redirect_uris: [REDIRECT] }),
+  });
+  it('429s after the per-IP register limit (Retry-After set); a different IP is unaffected', async () => {
+    const IP = '203.0.113.7';          // TEST-NET-3 — unique bucket, no pollution of other tests
+    let got429 = false, retryAfter = null;
+    for (let i = 0; i < 25; i++) {     // register limit is 20 / 10min
+      const r = await regWithIp(IP);
+      if (r.status === 429) { got429 = true; retryAfter = r.headers.get('retry-after'); break; }
+    }
+    expect(got429).toBe(true);
+    expect(Number(retryAfter)).toBeGreaterThan(0);
+    const other = await regWithIp('203.0.113.8');
+    expect(other.status).toBe(201);    // per-IP isolation: a fresh IP still works
+  });
+  it('does NOT rate-limit when dormant (guard short-circuits)', async () => {
+    OFF();
+    for (let i = 0; i < 30; i++) {
+      const r = await regWithIp('203.0.113.9');
+      expect(r.status).toBe(404);      // dormant → 404, never 429, no limiter state
+    }
+    ON();
+  });
+});
