@@ -936,6 +936,15 @@ const KEYED_FREE_BONUS = new Set([
 const ALWAYS_PARTIAL_PREVIEW = new Set([
   'get_grid_intelligence',  // 5,636 calls / 118 users in last 30d
   'get_fiber_intel',        // 5,162 calls / 116 users
+  // r-tease-wow (2026-06-20): get_market_intel is the ~91% first-touch tool.
+  // Routing it through the trial_taste path gives a BOUND TRIAL a capped full
+  // taste (TRIAL_DAILY_FULL_CAP calls/IP/day) — the "wow on call 1/2" that
+  // justifies the upgrade — then demotes to preview. Regular free keys are
+  // UNAFFECTED (isTrial=false → no trial_taste → still depth-teased to top-3,
+  // no full leak); anon call-1 still previews+mints; paid unchanged. All tiers
+  // probed for no free-key full-data leak before shipping (the documented
+  // get_market_intel free-key leak the depth-tease fixed stays fixed).
+  'get_market_intel',
 ]);
 
 // r71-anonpreview (2026-06-06): the 3 DECISION-layer Pro tools currently
@@ -2643,10 +2652,18 @@ Free tier covers **10 calls/day** across:
           if (parsed && typeof parsed === 'object') {
             status = 'anon_daily_cap';
             const trimmed = trimForTrial(parsed);
+            const _sidc = c.session_id || 'no-session';
+            // r-tease-pack (2026-06-20): the over-cap nudge is a CARROT, not a
+            // wall (still returns the preview). Lead with the free key (keep
+            // going free) then the $5 pack via unlock_more_data — match the
+            // front-door ladder instead of the bare "or upgrade".
             trimmed._upgrade = {
               tier: 'anon_daily_cap',
-              message: "You've used your free daily DC Hub calls from this IP. Claim a free key (call claim_free_key) to keep going, or upgrade.",
+              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (10 calls/day) and SAVE the key to your MCP config. Want full depth now? 💳 $5 one-time = 1,000 full queries (no subscription, 90 days) → call `unlock_more_data` for the one-click link. The moment your human pays, your next call returns full data — no reconnect.",
               next_tool: 'claim_free_key',
+              unlock_tool: 'unlock_more_data',
+              credits_url: _stripeWithSession(CREDITS_URL, _sidc),
+              credits_pitch: '$5 one-time = 1,000 full queries, no subscription, 90 days — the cheapest unlock.',
               remaining_today: 0,
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
