@@ -1,4 +1,4 @@
-// oauth.mjs — DC Hub MCP OAuth 2.1 Authorization Server (Phase 1, DORMANT).
+// oauth.mjs — DC Hub MCP OAuth 2.1 Authorization Server (Phase 2, DORMANT).
 // =====================================================================
 // The durable-identity fix for hosted web connectors (Claude.ai web) that
 // can't persist an X-API-Key header. RFC 9728 (protected-resource metadata)
@@ -10,17 +10,24 @@
 // DCHUB_OAUTH_ENABLED, default OFF) as its FIRST action. When OFF:
 //   • every /oauth/* and /.well-known/oauth-* route returns 404 (as if absent)
 //   • resolveOAuthToken() returns null → a Bearer header falls through to the
-//     existing X-API-Key path, unchanged
+//     existing X-API-Key path, unchanged (and makes ZERO backend calls)
 // → live behavior is byte-identical to a build WITHOUT this module. The CF
 // worker also 404s these paths today, so there are TWO independent guards.
-// Arm (P3) only AFTER: the CF worker routes these paths to the gateway, the
-// stores move to the backend (P2 — these in-memory maps die on restart), and
-// a security review of the armed flow. Header/X-API-Key auth stays in parallel
-// (OAuth is ADDITIVE, never a replacement).
+//
+// ── P2 (durable store) ──
+// Clients / authorization-codes / access-tokens persist through a `store`
+// adapter (server.mjs wires it to the backend oauth_store endpoints; tests use
+// the default in-memory adapter). So the AS survives a gateway restart instead
+// of mass-logging-out on every redeploy. Authorization codes are consumed
+// ATOMICALLY (store.consume → DELETE…RETURNING) so a code can't be replayed
+// even across gateway replicas. resolveOAuthToken keeps a warm in-process token
+// cache over the store so the hot /mcp path never adds a per-request DB call
+// (only a 'dcht_'-prefixed Bearer on a cache miss hits the store, once, then
+// it's cached). Arm (P3) only AFTER the CF worker routes these paths + review.
 //
 // Conservative by construction: PKCE S256 ONLY (no 'plain'), exact pre-
-// registered redirect_uri match (no open redirect), single-use short-TTL
-// codes burned on any failure, opaque random tokens, constant-time PKCE compare.
+// registered redirect_uri match (no open redirect), single-use short-TTL codes,
+// opaque random tokens, constant-time PKCE compare.
 
 import express from 'express';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
@@ -30,18 +37,19 @@ export function oauthEnabled() {
   return v === 'on' || v === '1' || v === 'true' || v === 'yes';
 }
 
-// ── in-memory stores (P1; P2 moves to backend tables for durability) ──
-const _clients = new Map();   // client_id  -> { redirect_uris:Set<string>, created }
-const _codes   = new Map();   // code        -> { client_id, redirect_uri, challenge, expires, used }
+const TOKEN_PREFIX = 'dcht_';   // hot-path gate: only our tokens trigger a store lookup
+const CODE_TTL_S   = 60;        // 60s authorization-code lifetime (RFC: short)
+const TOKEN_TTL_S  = 3600;      // 1h access-token lifetime
+const TOKEN_CACHE_MS = 300_000; // warm-cache a store-resolved token ≤5 min (bounds staleness)
+
+// ── in-memory maps: the DEFAULT store (tests) + the warm token cache (prod) ──
+const _clients = new Map();   // client_id   -> { redirect_uris:[...], expires? }
+const _codes   = new Map();   // code        -> { client_id, redirect_uri, challenge, expires }
 const _tokens  = new Map();   // access_token-> { api_key, tier, client_id, expires }
 
-const CODE_TTL_MS = 60_000;   // 60s authorization-code lifetime (RFC: short)
-const TOKEN_TTL_S = 3600;     // 1h access-token lifetime
-
-// P1 caps + lazy eviction (security review M1/G2): bound every map so an
-// attacker can't OOM the single backend replica once armed. No background
-// timer (keeps tests deterministic) — expired entries are swept and the oldest
-// is evicted on each write. (P2/P3 add real rate-limiting; see review M2.)
+// Caps + lazy eviction (review M1/G2): bound every map so an attacker can't OOM
+// the single backend replica once armed. No background timer (deterministic for
+// tests) — expired entries swept + oldest evicted on each write.
 const MAX_CLIENTS = 5000, MAX_CODES = 5000, MAX_TOKENS = 20000;
 function _sweepExpired(map) {
   const now = Date.now();
@@ -52,25 +60,57 @@ function _capInsert(map, key, val, max) {
   map.set(key, val);
 }
 
-// Rate limiter (security review M2): per-IP fixed-window counters so an ARMED
-// AS can't be used to hammer the backend key-mint (the /token success path
-// mints a dev key per exchange) or OOM via /register|/authorize spam. In-memory
-// + bounded (limiter state is soft and self-heals on restart). No-op when
-// dormant (the guard short-circuits before touching state).
-const _rl = new Map();              // `${ip}|${bucket}` -> { count, resetAt }
+// Default in-memory store adapter. The maps above ARE this store; prod passes a
+// backend-backed adapter with the same {put,get,consume} shape. Single-thread
+// JS → consume()'s get-then-delete is atomic enough for the in-memory case;
+// the backend adapter gets real atomicity via DELETE…RETURNING.
+function _memStore() {
+  const mapFor = (k) => k === 'client' ? _clients : k === 'code' ? _codes : _tokens;
+  const maxFor = (k) => k === 'client' ? MAX_CLIENTS : k === 'code' ? MAX_CODES : MAX_TOKENS;
+  return {
+    async put(kind, key, data, ttlS) {
+      const rec = { ...data };
+      if (ttlS) rec.expires = Date.now() + ttlS * 1000;
+      const m = mapFor(kind); _sweepExpired(m); _capInsert(m, key, rec, maxFor(kind));
+    },
+    async get(kind, key) {
+      const m = mapFor(kind); const rec = m.get(key);
+      if (!rec) return null;
+      if (rec.expires && rec.expires < Date.now()) { m.delete(key); return null; }
+      return rec;
+    },
+    async consume(kind, key) {
+      const m = mapFor(kind); const rec = m.get(key);
+      if (!rec) return null;
+      m.delete(key);
+      if (rec.expires && rec.expires < Date.now()) return null;
+      return rec;
+    },
+  };
+}
+
+// The active store for the standalone resolveOAuthToken() export. Set by
+// registerOAuthRoutes(); defaults to in-memory so resolve never throws.
+let _activeStore = null;
+function _store() { return _activeStore || (_activeStore = _memStore()); }
+
+// Rate limiter (review M2): per-IP fixed-window counters so an ARMED AS can't be
+// used to hammer the backend key-mint (the /token success path mints a dev key
+// per exchange) or OOM via /register|/authorize spam. In-memory + bounded.
+// No-op when dormant (guard short-circuits before touching state).
+const _rl = new Map();
 const RL_MAX_KEYS = 50_000;
-const RL_WINDOW_MS = 10 * 60_000;   // 10-minute window
+const RL_WINDOW_MS = 10 * 60_000;
 function _clientIp(req) {
   return ((req.headers && req.headers['x-forwarded-for']) || '').split(',')[0].trim()
       || (req.socket && req.socket.remoteAddress) || 'unknown';
 }
-// Returns null if allowed, else seconds until the window resets.
 function _rateLimited(req, bucket, max) {
   const key = _clientIp(req) + '|' + bucket;
   const now = Date.now();
   let e = _rl.get(key);
   if (!e || e.resetAt <= now) {
-    if (_rl.size >= RL_MAX_KEYS) _rl.clear();   // hard bound (coarse, soft state)
+    if (_rl.size >= RL_MAX_KEYS) _rl.clear();
     e = { count: 0, resetAt: now + RL_WINDOW_MS };
     _rl.set(key, e);
   }
@@ -79,7 +119,7 @@ function _rateLimited(req, bucket, max) {
 }
 function _rlGuard(bucket, max) {
   return (req, res, next) => {
-    if (!oauthEnabled()) return next();         // dormant: never touch state
+    if (!oauthEnabled()) return next();
     const retry = _rateLimited(req, bucket, max);
     if (retry != null) {
       res.set('Retry-After', String(retry));
@@ -105,30 +145,44 @@ export function verifyPkceS256(verifier, challenge) {
   try { return timingSafeEqual(a, b); } catch { return false; }
 }
 
-// Resolve a Bearer token to its bound identity, or null (flag off / unknown /
-// expired). Null = caller falls back to the X-API-Key path (dormant-safe).
-export function resolveOAuthToken(token) {
+// Resolve a Bearer to its bound identity, or null. ASYNC (P2): on a warm-cache
+// miss it reads the durable store. Null when: flag off, not a 'dcht_' token
+// (→ caller falls back to X-API-Key — the hot path for normal keys never hits
+// the store), unknown, or expired. Dormant-safe + dormant makes ZERO store calls.
+export async function resolveOAuthToken(token) {
   if (!oauthEnabled() || !token || typeof token !== 'string') return null;
-  const t = _tokens.get(token);
-  if (!t) return null;
-  if (t.expires < Date.now()) { _tokens.delete(token); return null; }
-  return { api_key: t.api_key, tier: t.tier };
+  if (!token.startsWith(TOKEN_PREFIX)) return null;           // not our token → fall through, no store call
+  const cached = _tokens.get(token);                          // warm cache (fast path)
+  if (cached) {
+    if (!cached.expires || cached.expires >= Date.now()) return { api_key: cached.api_key, tier: cached.tier };
+    _tokens.delete(token);
+  }
+  let rec = null;
+  try { rec = await _store().get('token', token); } catch { rec = null; }
+  if (!rec || !rec.api_key) return null;
+  // warm the cache (bounded: ≤5 min, or the rec's own expiry if sooner)
+  const exp = rec.expires && rec.expires < Date.now() + TOKEN_CACHE_MS ? rec.expires : Date.now() + TOKEN_CACHE_MS;
+  _capInsert(_tokens, token, { api_key: rec.api_key, tier: rec.tier, client_id: rec.client_id, expires: exp }, MAX_TOKENS);
+  return { api_key: rec.api_key, tier: rec.tier };
 }
 
 function _validRedirect(client, uri) {
-  return !!client && typeof uri === 'string' && client.redirect_uris.has(uri);
+  return !!client && Array.isArray(client.redirect_uris)
+      && typeof uri === 'string' && client.redirect_uris.includes(uri);
 }
 
-// registerOAuthRoutes(app, { issuer, mintIdentity })
+// registerOAuthRoutes(app, { issuer, mintIdentity, store })
 //   issuer       : public base URL, e.g. 'https://dchub.cloud'
 //   mintIdentity : async () => ({ api_key, tier }) — binds the OAuth subject to
-//                  a durable dev key (server.mjs wires this to the backend claim;
-//                  tests inject a stub). Called once per successful code exchange.
+//                  a durable dev key (server.mjs wires this to the backend claim).
+//   store        : optional {put,get,consume} durable adapter (default: in-memory).
 export function registerOAuthRoutes(app, opts = {}) {
   const issuer = (opts.issuer || 'https://dchub.cloud').replace(/\/$/, '');
   const mintIdentity = opts.mintIdentity || (async () => ({ api_key: null, tier: 'free' }));
+  const store = opts.store || _memStore();
+  _activeStore = store;   // resolveOAuthToken() reads the same store
   const off = (res) => res.status(404).json({ error: 'not_found' });
-  const form = express.urlencoded({ extended: false });  // OAuth token endpoint is form-encoded
+  const form = express.urlencoded({ extended: false });
 
   // ── RFC 9728 — protected-resource metadata (path-suffixed for /mcp) ──
   const prm = (_req, res) => {
@@ -153,15 +207,15 @@ export function registerOAuthRoutes(app, opts = {}) {
       token_endpoint:         issuer + '/oauth/token',
       registration_endpoint:  issuer + '/oauth/register',
       response_types_supported: ['code'],
-      grant_types_supported:    ['authorization_code'],     // refresh is P2
-      code_challenge_methods_supported: ['S256'],            // PKCE S256 ONLY
-      token_endpoint_auth_methods_supported: ['none'],       // public clients
+      grant_types_supported:    ['authorization_code'],
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none'],
       scopes_supported: ['mcp'],
     });
   });
 
   // ── RFC 7591 — dynamic client registration (public, PKCE) ──
-  app.post('/oauth/register', _rlGuard('reg', 20), (req, res) => {
+  app.post('/oauth/register', _rlGuard('reg', 20), async (req, res) => {
     if (!oauthEnabled()) return off(res);
     const body = req.body || {};
     const uris = Array.isArray(body.redirect_uris)
@@ -178,7 +232,11 @@ export function registerOAuthRoutes(app, opts = {}) {
       if (!ok) return res.status(400).json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must be https (or localhost)' });
     }
     const client_id = 'dchc_' + _rand(18);
-    _capInsert(_clients, client_id, { redirect_uris: new Set(uris), created: Date.now() }, MAX_CLIENTS);
+    try {
+      await store.put('client', client_id, { redirect_uris: uris, created: Date.now() }, 0);
+    } catch {
+      return res.status(503).json({ error: 'temporarily_unavailable' });
+    }
     res.status(201).json({
       client_id,
       redirect_uris: uris,
@@ -189,11 +247,12 @@ export function registerOAuthRoutes(app, opts = {}) {
   });
 
   // ── OAuth 2.1 authorization endpoint (PKCE required) ──
-  app.get('/oauth/authorize', _rlGuard('authz', 60), (req, res) => {
+  app.get('/oauth/authorize', _rlGuard('authz', 60), async (req, res) => {
     if (!oauthEnabled()) return off(res);
     const q = req.query || {};
-    const client = _clients.get(String(q.client_id || ''));
     const redirect_uri = String(q.redirect_uri || '');
+    let client = null;
+    try { client = await store.get('client', String(q.client_id || '')); } catch { client = null; }
     // redirect_uri MUST be pre-registered — validate BEFORE any redirect so we
     // never bounce an error to an attacker-controlled URI (no open redirect).
     if (!_validRedirect(client, redirect_uri)) {
@@ -211,16 +270,13 @@ export function registerOAuthRoutes(app, opts = {}) {
     if (String(q.code_challenge_method) !== 'S256')  return fail('invalid_request', 'PKCE S256 required');
     const challenge = String(q.code_challenge || '');
     if (challenge.length < 43 || challenge.length > 128) return fail('invalid_request', 'code_challenge required (S256)');
-    // P1: auto-approve (no consent UI — P2 adds it). Issue a single-use code.
-    _sweepExpired(_codes);
+    // P2: auto-approve (no consent UI yet). Issue a single-use code into the store.
     const code = _rand(24);
-    _capInsert(_codes, code, {
-      client_id: String(q.client_id),
-      redirect_uri,
-      challenge,
-      expires: Date.now() + CODE_TTL_MS,
-      used: false,
-    }, MAX_CODES);
+    try {
+      await store.put('code', code, { client_id: String(q.client_id), redirect_uri, challenge }, CODE_TTL_S);
+    } catch {
+      return fail('temporarily_unavailable');
+    }
     ru.searchParams.set('code', code);
     if (state != null) ru.searchParams.set('state', state);
     return res.redirect(302, ru.toString());
@@ -234,42 +290,39 @@ export function registerOAuthRoutes(app, opts = {}) {
     if (String(b.grant_type) !== 'authorization_code') {
       return res.status(400).json({ error: 'unsupported_grant_type' });
     }
-    const codeKey = String(b.code || '');
-    const rec = _codes.get(codeKey);
-    if (!rec || rec.used || rec.expires < Date.now()) {
-      if (rec) _codes.delete(codeKey);               // burn on any failure
+    // ATOMIC single-use: consume the code (DELETE…RETURNING at the backend, or
+    // get-then-delete in-memory). Any exchange attempt burns it — a wrong PKCE
+    // verifier can't be retried with a guessed one.
+    let rec = null;
+    try { rec = await store.consume('code', String(b.code || '')); } catch { rec = null; }
+    if (!rec) {
       return res.status(400).json({ error: 'invalid_grant', error_description: 'code invalid/expired/used' });
     }
-    // The code is bound to the client_id + redirect_uri from /authorize.
     if (rec.client_id !== String(b.client_id || '') || rec.redirect_uri !== String(b.redirect_uri || '')) {
-      _codes.delete(codeKey);
       return res.status(400).json({ error: 'invalid_grant', error_description: 'client/redirect mismatch' });
     }
     if (!verifyPkceS256(String(b.code_verifier || ''), rec.challenge)) {
-      _codes.delete(codeKey);
       return res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
     }
-    _codes.delete(codeKey);                            // single-use: consume now
-
     let identity = null;
     try { identity = await mintIdentity(); } catch { identity = null; }
-    // C3 (review): never issue a HOLLOW token. The code is already consumed
-    // (single-use), so on a binding failure the client must re-authorize —
-    // better than a 200 token that silently resolves to anonymous forever.
+    // C3 (review): never issue a HOLLOW token. The code is already consumed, so
+    // on a binding failure the client must re-authorize.
     if (!identity || !identity.api_key) {
       return res.status(503).json({ error: 'temporarily_unavailable', error_description: 'identity binding failed; please retry the authorization' });
     }
-    _sweepExpired(_tokens);
-    const access_token = 'dcht_' + _rand(32);
-    _capInsert(_tokens, access_token, {
-      api_key: identity.api_key,
-      tier:    identity.tier || 'free',
-      client_id: rec.client_id,
-      expires: Date.now() + TOKEN_TTL_S * 1000,
-    }, MAX_TOKENS);
+    const access_token = TOKEN_PREFIX + _rand(32);
+    const tokenRec = { api_key: identity.api_key, tier: identity.tier || 'free', client_id: rec.client_id };
+    try {
+      await store.put('token', access_token, tokenRec, TOKEN_TTL_S);
+    } catch {
+      return res.status(503).json({ error: 'temporarily_unavailable', error_description: 'could not persist token; please retry' });
+    }
+    // warm the in-process cache so the agent's very next /mcp call is fast
+    _capInsert(_tokens, access_token, { ...tokenRec, expires: Date.now() + TOKEN_TTL_S * 1000 }, MAX_TOKENS);
     return res.json({ access_token, token_type: 'Bearer', expires_in: TOKEN_TTL_S, scope: 'mcp' });
   });
 }
 
 // Test-only hooks (never used by production paths).
-export const __test = { _clients, _codes, _tokens, _rl, _b64url, _rand, CODE_TTL_MS, TOKEN_TTL_S };
+export const __test = { _clients, _codes, _tokens, _rl, _memStore, _b64url, _rand, CODE_TTL_S, TOKEN_TTL_S };

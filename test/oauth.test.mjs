@@ -71,10 +71,10 @@ describe('DORMANCY — flag OFF', () => {
     expect((await authorize({ client_id: 'x', redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256' })).status).toBe(404);
     expect((await token({ grant_type: 'authorization_code', code: 'x' })).status).toBe(404);
   });
-  it('resolveOAuthToken returns null even for a token in the store', () => {
-    __test._tokens.set('probe', { api_key: 'k', tier: 'free', expires: Date.now() + 1e6 });
-    expect(resolveOAuthToken('probe')).toBeNull();
-    __test._tokens.delete('probe');
+  it('resolveOAuthToken returns null even for a valid-shaped token in cache', async () => {
+    __test._tokens.set('dcht_probe', { api_key: 'k', tier: 'free', expires: Date.now() + 1e6 });
+    expect(await resolveOAuthToken('dcht_probe')).toBeNull();   // flag off → null before any cache/store read
+    __test._tokens.delete('dcht_probe');
   });
 });
 
@@ -110,7 +110,7 @@ describe('FULL FLOW — flag ON', () => {
     const access = tok.body.access_token;
     expect(access).toMatch(/^dcht_/);
 
-    const id = resolveOAuthToken(access);
+    const id = await resolveOAuthToken(access);   // warm-cache hit (token just minted)
     expect(id).toEqual({ api_key: 'dch_live_stub', tier: 'free' });
   });
 
@@ -163,8 +163,11 @@ describe('FULL FLOW — flag ON', () => {
     expect(t.body.error).toBe('invalid_grant');
   });
 
-  it('X1: resolveOAuthToken returns null for an unknown token (anon-fallthrough fence)', () => {
-    expect(resolveOAuthToken('dcht_never_issued')).toBeNull();
+  it('X1: resolveOAuthToken returns null for an unknown token (anon-fallthrough fence)', async () => {
+    expect(await resolveOAuthToken('dcht_never_issued')).toBeNull();
+  });
+  it('X1b: resolveOAuthToken returns null for a non-dcht_ Bearer WITHOUT touching the store (hot-path gate)', async () => {
+    expect(await resolveOAuthToken('dch_live_somekey')).toBeNull();   // real X-API-Key as Bearer → fall through
   });
 });
 
@@ -217,5 +220,46 @@ describe('M2 — rate limiting (armed)', () => {
       expect(r.status).toBe(404);      // dormant → 404, never 429, no limiter state
     }
     ON();
+  });
+});
+
+describe('P2 — durable store wiring (survives restart)', () => {
+  beforeAll(ON);
+  afterAll(OFF);
+  function fakeStore() {
+    const db = { client: new Map(), code: new Map(), token: new Map() };
+    const calls = [];
+    return {
+      db, calls,
+      async put(kind, key, data) { calls.push(['put', kind]); db[kind].set(key, { ...data }); },
+      async get(kind, key) { calls.push(['get', kind]); return db[kind].get(key) || null; },
+      async consume(kind, key) { calls.push(['consume', kind]); const v = db[kind].get(key) || null; db[kind].delete(key); return v; },
+    };
+  }
+  it('write-throughs client/code/token to the store; resolve read-throughs on a cache miss', async () => {
+    const fs = fakeStore();
+    const app3 = express(); app3.use(express.json());
+    registerOAuthRoutes(app3, { issuer: 'https://dchub.cloud', mintIdentity: async () => ({ api_key: 'dch_live_p2', tier: 'free' }), store: fs });
+    const srv3 = await new Promise((r) => { const s = app3.listen(0, () => r(s)); });
+    const b3 = `http://127.0.0.1:${srv3.address().port}`;
+    try {
+      const reg = await (await fetch(b3 + '/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ redirect_uris: [REDIRECT] }) })).json();
+      const u = new URL(b3 + '/oauth/authorize');
+      for (const [k, v] of Object.entries({ client_id: reg.client_id, redirect_uri: REDIRECT, response_type: 'code', code_challenge: CHALLENGE, code_challenge_method: 'S256' })) u.searchParams.set(k, v);
+      const auth = await fetch(u, { redirect: 'manual' });
+      const code = new URL(auth.headers.get('location')).searchParams.get('code');
+      const tok = await (await fetch(b3 + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', code, client_id: reg.client_id, redirect_uri: REDIRECT, code_verifier: VERIFIER }) })).json();
+      const access = tok.access_token;
+      // the durable store saw the full lifecycle
+      expect(fs.calls).toEqual(expect.arrayContaining([['put', 'client'], ['get', 'client'], ['put', 'code'], ['consume', 'code'], ['put', 'token']]));
+      expect(fs.db.token.has(access)).toBe(true);
+      // simulate a gateway restart: drop the warm cache → resolve MUST read the store
+      __test._tokens.delete(access);
+      const before = fs.calls.filter((c) => c[0] === 'get' && c[1] === 'token').length;
+      const id = await resolveOAuthToken(access);
+      expect(id).toEqual({ api_key: 'dch_live_p2', tier: 'free' });
+      const after = fs.calls.filter((c) => c[0] === 'get' && c[1] === 'token').length;
+      expect(after).toBe(before + 1);   // read-through happened
+    } finally { srv3.close(); }
   });
 });

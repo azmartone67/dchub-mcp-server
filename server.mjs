@@ -3995,11 +3995,46 @@ setInterval(() => {
   }
 }, SESSION_SWEEP_MS).unref();
 
-// OAuth 2.1 AS (Phase 1, DORMANT — every route 404s unless DCHUB_OAUTH_ENABLED;
-// see oauth.mjs). mintIdentity binds the OAuth subject to a durable free dev key
-// via the backend claim endpoint (direct fetch — runs outside the MCP ctx).
+// OAuth 2.1 AS (Phase 2, DORMANT — every route 404s + resolveOAuthToken returns
+// null unless DCHUB_OAUTH_ENABLED; see oauth.mjs). The durable store = the
+// backend oauth_store endpoints (clients/codes/tokens survive a gateway restart);
+// mintIdentity binds the OAuth subject to a free dev key. All via direct fetch +
+// the gateway↔backend internal key (runs outside the MCP ctx). When dormant the
+// store is NEVER called (the flag check precedes every store op).
+const _oauthStore = {
+  async put(kind, key, data, ttlS) {
+    const resp = await fetch(API_BASE + '/api/v1/oauth/store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ kind, key, data, ttl_s: ttlS || 0 }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) throw new Error('oauth_store put ' + resp.status);  // -> handler 503 (don't issue on failed persist)
+  },
+  async get(kind, key) {
+    const resp = await fetch(API_BASE + '/api/v1/oauth/fetch?kind=' + encodeURIComponent(kind) + '&key=' + encodeURIComponent(key), {
+      headers: { 'X-Internal-Key': INTERNAL_KEY },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const j = await resp.json().catch(() => ({}));
+    return (j && j.data) ? j.data : null;
+  },
+  async consume(kind, key) {
+    const resp = await fetch(API_BASE + '/api/v1/oauth/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ kind, key }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const j = await resp.json().catch(() => ({}));
+    return (j && j.data) ? j.data : null;
+  },
+};
 registerOAuthRoutes(app, {
   issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
+  store: _oauthStore,
   mintIdentity: async () => {
     try {
       const resp = await fetch(API_BASE + '/api/v1/keys/claim', {
@@ -4048,7 +4083,7 @@ app.post('/mcp', async (req, res) => {
     // X-API-Key, exactly as before). See oauth.mjs dormancy contract.
     const _bearer   = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
     if (_bearer) {
-      const _oauthId = resolveOAuthToken(_bearer);
+      const _oauthId = await resolveOAuthToken(_bearer);
       if (_oauthId && _oauthId.api_key) apiKey = _oauthId.api_key;
     }
     // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
