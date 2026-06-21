@@ -936,6 +936,30 @@ const _WORKOS_RESOURCE_METADATA_URL = (() => {
   }
 })();
 const _WWW_AUTH_HINT_VALUE = `Bearer resource_metadata="${_WORKOS_RESOURCE_METADATA_URL}"`;
+
+// ── Conditional 401 OAuth challenge (r-workos-challenge, 2026-06-21) ─────────
+// The hint above is NOT enough: per Anthropic's connector docs, Claude.ai only
+// initiates OAuth from an HTTP 401 — a WWW-Authenticate header on a 200 is
+// ignored. So a credential-less Claude.ai WEB connector must receive a 401 to
+// start the WorkOS flow. We scope this tightly to avoid nuking the anon funnel:
+//   • Only the Claude.ai WEB connector (clientInfo.name ~ "claudeai", i.e.
+//     "Anthropic/ClaudeAI") — the one client that CANNOT persist an X-API-Key,
+//     so today it connects anon forever and never gets a durable identity.
+//     Claude Code ("claude-code"), Cursor, Cline, SDK, raw agents are NOT
+//     challenged — they keep the anon 200 / claim_free_key path untouched.
+//   • Only when NO credential resolved (no valid key, no OAuth bearer).
+//   • Only on the `initialize` handshake.
+//   • DORMANT unless DCHUB_MCP_OAUTH_CHALLENGE is truthy AND WorkOS is live —
+//     flip the flag off to instantly restore silent-anon for Claude.ai.
+const _oauthChallengeEnabled = () =>
+  _workosEnabled() && !!_WORKOS_DOMAIN
+  && /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_MCP_OAUTH_CHALLENGE || ''));
+function _isClaudeWebConnector(body) {
+  const cn = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
+  // Claude.ai web identifies as "Anthropic/ClaudeAI" (no hyphen). Claude Code
+  // is "claude-code" → does NOT contain "claudeai" → never matched here.
+  return cn.includes('claudeai') || cn.includes('claude.ai') || cn.includes('claude ai');
+}
 let _workosJwks = null;
 function _getWorkosJwks() {
   if (!_workosJwks && _WORKOS_DOMAIN) {
@@ -4609,6 +4633,23 @@ app.post('/mcp', async (req, res) => {
       const platform   = detectPlatformFromInit(body, userAgent);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
+
+      // r-workos-challenge: trigger the WorkOS OAuth flow for a credential-less
+      // Claude.ai WEB connector by answering `initialize` with a 401 +
+      // WWW-Authenticate (Claude ignores the hint on a 200; only a 401 starts
+      // OAuth). Tightly scoped + dormant by default — see helper comment above.
+      // Vary so the edge never caches this 401 for a keyed/OAuth'd caller.
+      if (_oauthChallengeEnabled() && !validation.valid && !apiKey && _isClaudeWebConnector(body)) {
+        res.setHeader('WWW-Authenticate', _WWW_AUTH_HINT_VALUE);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Vary', 'Authorization, X-API-Key');
+        console.log(`[oauth] 401 challenge → Claude.ai web connector (no credential) → advertise WorkOS AS`);
+        return res.status(401).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Authentication required: authenticate with WorkOS to connect (durable identity).' },
+          id: body?.id ?? null,
+        });
+      }
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
