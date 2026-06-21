@@ -4,7 +4,7 @@
   "title": "DC Hub — Data Center & Energy Intelligence",
   "description": "Data-center, power, energy, renewables & gas intelligence for AI agents — query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -19,7 +19,7 @@
     "io.modelcontextprotocol.registry/publisher-provided": {
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
-      "toolCount": 46,
+      "toolCount": 47,
       "license": "CC-BY-4.0",
       "freeTier": true
     }
