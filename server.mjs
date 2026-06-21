@@ -3483,6 +3483,38 @@ function createServer(descOverrides) {
     { status: S, country: S, operator: S, min_capacity_mw: N, expected_completion_before: S, limit: I, offset: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/pipeline', a)) }] }));
 
+  // 2026-06-21: forward power-supply pipeline (EIA-860M planned generators).
+  // Distinct from get_pipeline (data-center CONSTRUCTION) — this is new POWER
+  // GENERATION coming online, incl. the non-ISO regions the per-ISO queue misses.
+  trackedTool(srv, 'get_power_pipeline', 'Use when a user asks WHERE NEW POWER GENERATION is coming online (the forward supply pipeline) — e.g. "how much new generation is planned in Virginia / the Southeast / ERCOT, and when?". Planned, permitting, and under-construction generators NATIONWIDE from EIA-860M, INCLUDING non-ISO regions (TVA, Southern Co, Arizona PS, PacifiCorp, LADWP) that interconnection-queue feeds miss. Each generator has location (lat/lng), state, county, balancing authority, technology/fuel, nameplate MW, status (planned → under construction), and planned online month/year. Filter by state (2-letter, e.g. VA), ba (balancing-authority/ISO code, e.g. PJM, ERCO, SOCO, TVA), status (P/L/T=planned, U/V=under construction, TS=testing), or min_mw. Returns a summary (total planned MW, mix by technology + status) plus the largest projects. Try: get_power_pipeline state=VA. Do NOT use for ALREADY-OPERATING capacity or grid headroom (use get_grid_intelligence / get_grid_data) or for data-center construction projects (use get_pipeline).',
+    { state: S, ba: S, status: S, min_mw: N, limit: I },
+    async (a) => {
+      const q = { format: 'json', limit: Math.min((a && a.limit) || 800, 2000) };
+      if (a && a.state) q.state = a.state;
+      if (a && a.ba) q.ba = a.ba;
+      if (a && a.status) q.status = a.status;
+      if (a && a.min_mw) q.min_mw = a.min_mw;
+      const d = await callAPI('/api/v1/planned-generators', q);
+      const gens = (d && d.generators) || [];
+      const byTech = {}, byStatus = {}; let totalMw = 0;
+      for (const g of gens) {
+        const mw = Number(g.capacity_mw) || 0; totalMw += mw;
+        const t = g.technology || 'Unknown'; byTech[t] = (byTech[t] || 0) + mw;
+        const s = (g.status || 'Unknown').replace(/^\([A-Za-z]+\)\s*/, '').split(',')[0]; byStatus[s] = (byStatus[s] || 0) + 1;
+      }
+      const top = gens.slice().sort((x, y) => (Number(y.capacity_mw) || 0) - (Number(x.capacity_mw) || 0)).slice(0, 25);
+      const out = {
+        count: gens.length,
+        total_planned_mw: Math.round(totalMw),
+        by_technology_mw: Object.fromEntries(Object.entries(byTech).sort((p, r) => r[1] - p[1]).slice(0, 10).map(([k, v]) => [k, Math.round(v)])),
+        by_status: byStatus,
+        as_of: d && d.as_of,
+        source: 'DC Hub — EIA-860M planned generators (dchub.cloud)',
+        largest_projects: top,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+    });
+
   // r47 (2026-05-25): ISO interconnection queue — moat surface so the
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
