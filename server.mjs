@@ -33,6 +33,12 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+// MPP per-call rail (DARK unless MPP_ENABLED=1 + MPP_SIDECAR_URL). Pure hook (no
+// mppx in the gateway) — calls the isolated sidecar over HTTP. NOTE: the MCP SDK
+// reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
+// error codes, so payment challenge/failure are surfaced as structured TOOL
+// RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
+import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED } from './mpp-hook.mjs';
 import express from 'express';
 import { randomUUID } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
@@ -2289,7 +2295,7 @@ function trackedTool(srv, name, description, schema, handler) {
   const _annot = WRITE_TOOLS.has(name)
     ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false }
     : { title: _toolTitle(name), readOnlyHint: true };
-  srv.tool(name, _desc, schema, _annot, async (args) => {
+  srv.tool(name, _desc, schema, _annot, async (args, extra) => {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
@@ -2381,6 +2387,55 @@ function trackedTool(srv, name, description, schema, handler) {
             };
           } catch (_) { /* fall through to normal gating on any error */ }
         }
+      }
+      // r-mpp (2026-06-21): MPP per-call rail — DARK unless MPP_ENABLED=1 +
+      // MPP_SIDECAR_URL. Fires only for a deep-tier MPP tool (analyze_site /
+      // compare_sites / site reports) an UNPAID caller can't otherwise unlock
+      // (!gate.allowed; the credit cascade above already returned for pack holders):
+      //   • SPT credential in _meta → verify+settle via the mppx sidecar → run the
+      //     tool → FULL data + receipt. ADDITIVE: only an agent actively presenting
+      //     a credential ever takes this path.
+      //   • no credential + MPP_HARD_GATE=1 → throw -32042 + challenge (pure
+      //     pay-per-call). Default (no hard gate) → fall through to the normal
+      //     trial/tease below, so non-MPP human callers are UNAFFECTED.
+      // Sidecar unreachable → falls through to the normal cascade (no regression).
+      // mppEnabled() is false by default → the whole block is a no-op until flipped on.
+      if (mppEnabled() && isMppTool(name) && !gate.allowed) {
+        const _mppCred = mppCredential(extra);
+        if (_mppCred) {
+          const _mppV = await mppVerify(name, _mppCred);
+          if (!_mppV.ok) {
+            // SDK swallows custom McpError codes → return a structured result.
+            status = 'mpp_verify_failed';
+            return {
+              isError: true,
+              content: [{ type: 'text', text: `Payment verification failed for ${name}: ${_mppV.error}` }],
+              structuredContent: { payment_failed: true, code: MPP_PAYMENT_FAILED, tool: name, error: _mppV.error },
+            };
+          }
+          status = 'mpp_paid';
+          const _mppR = await handler(gate.params || args);
+          const _mppFull = withCitation(_mppR);
+          try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
+          return _mppFull;
+        } else if (process.env.MPP_HARD_GATE === '1') {
+          const _mppErr = await mppChallengeError(name);
+          if (_mppErr) {
+            // Payment-required challenge as a structured tool result (the SDK would
+            // mis-tag a thrown -32042 as UrlElicitationRequired and discard others).
+            status = 'mpp_challenge';
+            return {
+              isError: true,
+              content: [{ type: 'text', text: _mppErr.message }],
+              structuredContent: {
+                payment_required: true, code: MPP_PAYMENT_REQUIRED, tool: name,
+                price_usd: _mppErr.data?.price_usd, challenges: _mppErr.data?.challenges,
+              },
+            };
+          }
+          // sidecar down → fall through to the normal trial/tease (no regression)
+        }
+        // no credential + no hard gate → fall through (funnel unchanged)
       }
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
