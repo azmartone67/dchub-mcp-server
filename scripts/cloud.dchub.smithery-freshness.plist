@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  DC Hub MCP — Smithery freshness heartbeat (LaunchAgent).
+  Install:  cp scripts/cloud.dchub.smithery-freshness.plist ~/Library/LaunchAgents/
+            launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cloud.dchub.smithery-freshness.plist
+  Run now:  launchctl kickstart -k gui/$(id -u)/cloud.dchub.smithery-freshness
+  Stop:     launchctl bootout gui/$(id -u)/cloud.dchub.smithery-freshness
+  Fires Mon + Thu 13:17 local (~2x/week); if the Mac is asleep, launchd runs it on next wake.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cloud.dchub.smithery-freshness</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/jonathanmartone/dchub-mcp-server/scripts/smithery-freshness-heartbeat.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Weekday</key><integer>1</integer>
+      <key>Hour</key><integer>13</integer>
+      <key>Minute</key><integer>17</integer>
+    </dict>
+    <dict>
+      <key>Weekday</key><integer>4</integer>
+      <key>Hour</key><integer>13</integer>
+      <key>Minute</key><integer>17</integer>
+    </dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/jonathanmartone/Library/Logs/dchub-smithery-freshness.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jonathanmartone/Library/Logs/dchub-smithery-freshness.err.log</string>
+</dict>
+</plist>
