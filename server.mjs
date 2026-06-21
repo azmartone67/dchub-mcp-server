@@ -44,6 +44,7 @@ import { randomUUID } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 
 // phase39_human_message — paywall response enrichment for higher conversion
@@ -880,6 +881,83 @@ async function callAPIWrite(path, body = {}, opts = {}) {
     if (!resp.ok) return { error: `API ${resp.status}`, detail: text.slice(0, 500) };
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
   } catch (err) { return { error: err.message }; }
+}
+
+// ── WorkOS OAuth Bearer validation (Phase B, r-workos 2026-06-21) ───────────
+// DC Hub is the RESOURCE SERVER; WorkOS AuthKit is the Authorization Server.
+// When a client (Claude.ai / ChatGPT web connector) finishes the OAuth flow it
+// sends `Authorization: Bearer <workos-jwt>`. This validates that JWT against
+// the WorkOS JWKS (signature + issuer + audience + exp) and, on success, maps
+// the verified identity to a DURABLE dev key via the internal-keyed backend
+// /api/v1/oauth/identity endpoint — so the agent re-resolves to the SAME key
+// across sessions (the retention lever).
+//
+// SAFETY — this is purely ADDITIVE and DORMANT by default:
+//   • Off unless DCHUB_WORKOS_OAUTH_ENABLED is truthy AND WORKOS_AUTHKIT_DOMAIN
+//     is set → returns null → the Bearer falls through unchanged (treated as an
+//     X-API-Key, exactly as today).
+//   • Only ever attempted for a JWT-shaped Bearer with NO X-API-Key header.
+//   • Any verification/identity failure → null → no behaviour change.
+// X-API-Key and fully-anonymous flows are never touched.
+const _workosEnabled = () => /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_WORKOS_OAUTH_ENABLED || ''));
+const _WORKOS_DOMAIN = (process.env.WORKOS_AUTHKIT_DOMAIN || '').trim().replace(/\/+$/, '');
+const _WORKOS_AUD    = (process.env.DCHUB_MCP_RESOURCE || 'https://dchub.cloud/mcp').trim();
+// aud binding (RFC 8707 resource indicator) is enforced by default; set
+// DCHUB_WORKOS_AUD_ENFORCE=0 only as a first-arm debugging escape hatch.
+const _workosAudEnforce = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WORKOS_AUD_ENFORCE ?? '1'));
+let _workosJwks = null;
+function _getWorkosJwks() {
+  if (!_workosJwks && _WORKOS_DOMAIN) {
+    try { _workosJwks = createRemoteJWKSet(new URL(`${_WORKOS_DOMAIN}/oauth2/jwks`)); }
+    catch (_) { _workosJwks = null; }
+  }
+  return _workosJwks;
+}
+const _workosTokenCache = new Map();   // jwt → { api_key, tier, exp }
+const _WORKOS_CACHE_TTL = 300_000;     // 5 min positive cache (mirrors validateKey)
+const _WORKOS_NEG_TTL   = 60_000;      // 1 min negative cache (bad/expired tokens)
+function _looksLikeJwt(t) {
+  return typeof t === 'string'
+    && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t);
+}
+async function resolveWorkosBearer(token) {
+  if (!_workosEnabled() || !_WORKOS_DOMAIN) return null;
+  if (!_looksLikeJwt(token)) return null;               // not a JWT → fall through
+  const cached = _workosTokenCache.get(token);
+  if (cached && cached.exp > Date.now()) return cached.api_key ? cached : null;
+  const jwks = _getWorkosJwks();
+  if (!jwks) return null;
+  let payload;
+  try {
+    // jose checks signature against the JWKS, the issuer, and exp/nbf.
+    ({ payload } = await jwtVerify(token, jwks, { issuer: _WORKOS_DOMAIN }));
+  } catch (e) {
+    console.log(`[oauth] workos jwt verify failed: ${e && (e.code || e.message)}`);
+    _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
+    return null;
+  }
+  // Audience binding — the token must be issued FOR this resource.
+  const auds = Array.isArray(payload.aud) ? payload.aud : (payload.aud ? [payload.aud] : []);
+  if (_workosAudEnforce() && !auds.includes(_WORKOS_AUD)) {
+    console.log(`[oauth] workos jwt aud mismatch: got=${JSON.stringify(auds)} want=${_WORKOS_AUD}`);
+    _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
+    return null;
+  }
+  const sub = payload.sub;
+  if (!sub) return null;
+  // Verified identity → durable dev key (get-or-create) via internal endpoint.
+  const idn = await callAPIWrite('/api/v1/oauth/identity', {
+    sub, iss: payload.iss || _WORKOS_DOMAIN, email: payload.email || null,
+  });
+  if (!idn || idn.error || !idn.api_key) {
+    console.log(`[oauth] identity resolve failed: ${idn && (idn.error || 'no api_key')}`);
+    _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
+    return null;
+  }
+  const out = { api_key: idn.api_key, tier: idn.tier || 'free', exp: Date.now() + _WORKOS_CACHE_TTL };
+  _workosTokenCache.set(token, out);
+  console.log(`[oauth] workos bearer → durable key ${idn.api_key.slice(0, 12)}… tier=${out.tier}`);
+  return out;
 }
 
 // ── Free-tier limits and paid-only tools ───────────────────────────────────
@@ -4425,7 +4503,17 @@ app.post('/mcp', async (req, res) => {
     const _bearer   = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
     if (_bearer) {
       const _oauthId = await resolveOAuthToken(_bearer);
-      if (_oauthId && _oauthId.api_key) apiKey = _oauthId.api_key;
+      if (_oauthId && _oauthId.api_key) {
+        apiKey = _oauthId.api_key;
+      } else if (!req.headers['x-api-key']) {
+        // Phase B (r-workos): the Bearer is a WorkOS OAuth JWT, not a DC-Hub AS
+        // token. Validate it against the WorkOS JWKS and map to a durable key.
+        // DORMANT unless DCHUB_WORKOS_OAUTH_ENABLED; null → apiKey stays as the
+        // raw Bearer (treated as X-API-Key, exactly as before). X-API-Key wins
+        // (this branch only runs when no x-api-key header was sent).
+        const _wid = await resolveWorkosBearer(_bearer);
+        if (_wid && _wid.api_key) apiKey = _wid.api_key;
+      }
     }
     // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
     // proxy egress IP (req.socket.remoteAddress), not the actual MCP caller.
