@@ -4595,8 +4595,14 @@ app.post('/mcp', async (req, res) => {
     if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector
         && !req.headers['x-api-key'] && !_workosAuthed
         && !(sessionId && sessions.has(sessionId))) {
+      // scope="…": WorkOS AuthKit only issues standard OIDC scopes
+      // (openid/profile/email/offline_access). Without this param Claude requests
+      // the metadata's custom scopes (read:facilities…) → WorkOS rejects with
+      // invalid_scope. Per Claude's connector docs, the WWW-Authenticate `scope`
+      // overrides scopes_supported for what the client asks for.
       res.set('WWW-Authenticate',
-        'Bearer resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource/mcp"');
+        'Bearer resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource/mcp", '
+        + 'scope="openid profile email offline_access"');
       console.log('[oauth] 401 challenge → Claude.ai connector (no token) — triggering WorkOS sign-in');
       return res.status(401).json({
         jsonrpc: '2.0',
