@@ -1,0 +1,44 @@
+name: smithery freshness heartbeat
+
+# PREVENTIVE freshness lever (durable / cloud). Re-publishes the Smithery listing
+# on a cadence so our recency signal never decays below a competitor's — Smithery
+# ranks partly on freshness, so a stale-but-better server gets passed by a merely-
+# fresher one (e.g. ByteAsk, an embedded-systems docs server, tied us on
+# "interconnection" on recency alone). registry_monitor.py DETECTS slips; this
+# PREVENTS them. Pairs with the local LaunchAgent (scripts/cloud.dchub.smithery-
+# freshness.plist, Mon/Thu) — this one runs whether or not the Mac is awake.
+#
+# Auth: repo secret SMITHERY_API_KEY (the smithery CLI reads $SMITHERY_API_KEY).
+# `smithery mcp publish` re-scans the live server + refreshes freshness — no
+# version bump or code change required. Rotate: re-set the secret from
+# ~/Library/Application Support/smithery/settings.json .apiKey.
+
+on:
+  schedule:
+    - cron: '23 14 * * 2,5'   # Tue + Fri 14:23 UTC (interleaves with the local Mon/Thu agent)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smithery-freshness
+  cancel-in-progress: false
+
+jobs:
+  republish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Re-publish to Smithery (freshness heartbeat)
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+        run: |
+          if [ -z "${SMITHERY_API_KEY:-}" ]; then
+            echo "::warning::SMITHERY_API_KEY secret not set — skipping freshness heartbeat (add it to re-enable)."
+            exit 0
+          fi
+          npx -y @smithery/cli@latest mcp publish https://dchub.cloud/mcp -n azmartone67/dchub
