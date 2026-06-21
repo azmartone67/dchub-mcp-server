@@ -1007,6 +1007,7 @@ const PRO_ONLY_TOOLS = new Set([
 // drives conversion. The paid line stays the DECISION layer, not the facts.
 const FREE_FULL_TOOLS = new Set([
   'get_grid_scoreboard',   // live global grid scoreboard — the flagship free hook
+  'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
 ]);
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
