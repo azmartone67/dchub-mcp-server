@@ -4599,8 +4599,12 @@ app.post('/mcp', async (req, res) => {
       // worker at /.well-known/*, which advertises custom scopes WorkOS rejects).
       // The Flask doc advertises the standard OIDC scopes WorkOS issues. scope=
       // is also set as a belt-and-suspenders override per Claude's connector docs.
+      // Use the no-/mcp Flask path: the /mcp-suffixed one got a stale 404 cached
+      // at the CF edge (from pre-deploy probes); this one serves a fresh 200 with
+      // the correct OIDC scopes on the same host. Same metadata (resource still
+      // identifies https://dchub.cloud/mcp).
       res.set('WWW-Authenticate',
-        'Bearer resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource/mcp", '
+        'Bearer resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource", '
         + 'scope="openid profile email offline_access"');
       console.log('[oauth] 401 challenge → Claude.ai connector (no token) — triggering WorkOS sign-in');
       return res.status(401).json({
