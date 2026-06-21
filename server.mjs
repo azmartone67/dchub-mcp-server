@@ -905,6 +905,37 @@ const _WORKOS_AUD    = (process.env.DCHUB_MCP_RESOURCE || 'https://dchub.cloud/m
 // aud binding (RFC 8707 resource indicator) is enforced by default; set
 // DCHUB_WORKOS_AUD_ENFORCE=0 only as a first-arm debugging escape hatch.
 const _workosAudEnforce = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WORKOS_AUD_ENFORCE ?? '1'));
+
+// ── WWW-Authenticate hint (r-workos-hint, 2026-06-21) ───────────────────────
+// Root cause we are fixing: anon `POST /mcp` returns 200 with NO WWW-Authenticate
+// header, so OAuth-capable MCP clients (Claude.ai) get no "auth is available"
+// signal and connect anonymously — the WorkOS OAuth flow never fires and no
+// durable dch_oauth_ key mints (the retention lever stays dark).
+//
+// This advertises the RFC 9728 protected-resource metadata on every /mcp
+// response WITHOUT forcing a 401 — anon free-tier access is untouched (the
+// status code stays 200). OAuth-aware clients can read the pointer and offer
+// the authenticate affordance; clients that ignore it keep working exactly as
+// before. Purely ADDITIVE.
+//   • Only emitted when WorkOS OAuth is actually live (_workosEnabled() + domain
+//     set) — no point advertising an auth server that can't mint keys.
+//   • Independent kill-switch DCHUB_MCP_WWW_AUTH_HINT=0 disables the hint
+//     without turning off bearer resolution.
+//   • resource_metadata points at the path-suffixed metadata for THIS resource
+//     (RFC 9728 §3.1): https://dchub.cloud/.well-known/oauth-protected-resource/mcp
+const _wwwAuthHintEnabled = () =>
+  _workosEnabled() && !!_WORKOS_DOMAIN
+  && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_MCP_WWW_AUTH_HINT ?? '1'));
+const _WORKOS_RESOURCE_METADATA_URL = (() => {
+  try {
+    const u = new URL(_WORKOS_AUD);   // e.g. https://dchub.cloud/mcp
+    const path = u.pathname === '/' ? '' : u.pathname;
+    return `${u.origin}/.well-known/oauth-protected-resource${path}`;
+  } catch (_) {
+    return 'https://dchub.cloud/.well-known/oauth-protected-resource/mcp';
+  }
+})();
+const _WWW_AUTH_HINT_VALUE = `Bearer resource_metadata="${_WORKOS_RESOURCE_METADATA_URL}"`;
 let _workosJwks = null;
 function _getWorkosJwks() {
   if (!_workosJwks && _WORKOS_DOMAIN) {
@@ -4343,7 +4374,13 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key');
-  res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id');
+  res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
+  // r-workos-hint: advertise OAuth availability on /mcp so OAuth-capable clients
+  // (Claude.ai) can discover the WorkOS AS and offer to authenticate. Does NOT
+  // force a 401 — anon stays 200. Gated on WorkOS being live + a kill-switch.
+  if (req.path === '/mcp' && _wwwAuthHintEnabled()) {
+    res.setHeader('WWW-Authenticate', _WWW_AUTH_HINT_VALUE);
+  }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
