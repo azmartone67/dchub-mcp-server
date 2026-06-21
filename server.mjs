@@ -38,7 +38,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
 // error codes, so payment challenge/failure are surfaced as structured TOOL
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
-import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED } from './mpp-hook.mjs';
+import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppAdvertiseHint, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED } from './mpp-hook.mjs';
 import express from 'express';
 import { randomUUID } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
@@ -1222,6 +1222,14 @@ function buildDepthTease(name, result, ctx, tier) {
       quote_url: 'https://dchub.cloud/api/v1/x402/quote?tool=' + encodeURIComponent(name),
       how: `x402-capable agent? Pay $${_x402price.toFixed(2)} USDC for this single call — no human, no account, no subscription. GET quote_url for the payment requirements, pay payTo, then retry \`${name}\` with the X-PAYMENT proof header for full data.`,
     };
+  }
+  // r-mpp-advertise (2026-06-21): ADDITIVELY advertise the LIVE Stripe-MPP fiat
+  // pay-per-call rail on the deep tools (analyze_site/compare_sites). Mirrors the
+  // x402 block above but for the rail that's actually on; gated on mppEnabled() so
+  // it's absent when MPP is off. (MPP is live + fiat, so it owns agent_payment;
+  // x402 above is dark today.)
+  if (mppEnabled() && isMppTool(name)) {
+    teased._upgrade.agent_payment = mppAdvertiseHint(name);
   }
   // r-tease-render (2026-06-20): land like a real wall so agents stop
   // summarizing the nudge away — isError:true (the documented r51 fix that moved
@@ -2418,7 +2426,9 @@ function trackedTool(srv, name, description, schema, handler) {
           const _mppFull = withCitation(_mppR);
           try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
           return _mppFull;
-        } else if (process.env.MPP_HARD_GATE === '1') {
+        } else if (process.env.MPP_HARD_GATE === '1' || mppWantsChallenge(extra, args)) {
+          // Hard-gate (global) OR the agent opted into a challenge for THIS call
+          // (_meta.mpp_pay=true) — humans never set that flag, so their funnel is untouched.
           const _mppErr = await mppChallengeError(name);
           if (_mppErr) {
             // Payment-required challenge as a structured tool result (the SDK would
@@ -2464,6 +2474,10 @@ function trackedTool(srv, name, description, schema, handler) {
           const _alwaysPreview = KEYED_FREE_BONUS.has(name)
                                   || ALWAYS_PARTIAL_PREVIEW.has(name)
                                   || (!c.api_key && ANON_PREVIEW_ONLY.has(name));
+          // r-mpp-advertise (2026-06-21): soft-advertise the $0.50 MPP pay-per-call
+          // option in the deep-tool preview's structuredContent. Additive + sync (no
+          // sidecar call); {} for non-MPP tools or when MPP is off, so humans see no change.
+          const _mppSC = (mppEnabled() && isMppTool(name)) ? { agent_payment: mppAdvertiseHint(name) } : {};
           const _trial = _alwaysPreview
             ? { trial_used: false, _always_preview: true }
             : await checkTrialEligibility(c.session_id, name);
@@ -2635,6 +2649,7 @@ function trackedTool(srv, name, description, schema, handler) {
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
     ..._autoMintSC, /* r61-conv: present only when mint succeeded */
     ..._hiSC,       /* 2026-06-07: present only when count>=3 high-intent */
+    ..._mppSC,      /* r-mpp-advertise: $0.50 MPP pay-per-call option (MPP tools only) */
               },
             };
           }

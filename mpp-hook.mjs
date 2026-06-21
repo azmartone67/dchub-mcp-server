@@ -72,3 +72,32 @@ export async function mppVerify(name, credential) {
                      : { ok: false, error: (j && j.error) || 'verification failed' };
   } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 160) }; }
 }
+
+/**
+ * Per-call opt-in: did the agent ask for an MPP payment challenge on THIS call?
+ * Lets an MPP-capable agent get a 402 challenge without the global MPP_HARD_GATE —
+ * so humans (who never set this) keep their normal trial/preview funnel.
+ */
+export function mppWantsChallenge(extra, args) {
+  const m = (extra && (extra._meta || extra.meta || (extra.requestInfo && extra.requestInfo._meta))) || {};
+  return !!(m.mpp_pay || m['org.paymentauth/pay'] || (args && args.mpp_pay));
+}
+
+/**
+ * SOFT-ADVERTISE hint to embed in a deep-tool tease/preview's structuredContent.
+ * Purely informational + SYNC (no sidecar call) — tells an MPP-capable agent it can
+ * pay per-call, and exactly how. Returns null unless MPP is live AND it's an MPP tool,
+ * so it never appears for non-MPP tools or when MPP is off.
+ */
+export function mppAdvertiseHint(name) {
+  if (!mppEnabled() || !isMppTool(name)) return null;
+  const price = mppPrice(name);
+  return {
+    protocol: 'stripe-mpp',
+    price_usd: price,
+    machine_payable: true,
+    note: `Machine-payable: pay $${price} for this single \`${name}\` call (no key, no subscription) via Stripe MPP — a Shared Payment Token — to unlock the full result.`,
+    how: `Step 1: retry this exact call with _meta.mpp_pay=true to receive a payment challenge (in structuredContent.payment_required). Step 2: mint a Shared Payment Token from that challenge and retry once more with it in _meta[${JSON.stringify(MPP_CRED_KEY)}] — you get full data + a payment receipt.`,
+    credential_meta_key: MPP_CRED_KEY,
+  };
+}
