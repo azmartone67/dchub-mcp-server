@@ -4538,6 +4538,7 @@ app.post('/mcp', async (req, res) => {
     // an OAuth token → null → apiKey unchanged (Bearer still treated as an
     // X-API-Key, exactly as before). See oauth.mjs dormancy contract.
     const _bearer   = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    let _workosAuthed = false;
     if (_bearer) {
       const _oauthId = await resolveOAuthToken(_bearer);
       if (_oauthId && _oauthId.api_key) {
@@ -4549,8 +4550,35 @@ app.post('/mcp', async (req, res) => {
         // raw Bearer (treated as X-API-Key, exactly as before). X-API-Key wins
         // (this branch only runs when no x-api-key header was sent).
         const _wid = await resolveWorkosBearer(_bearer);
-        if (_wid && _wid.api_key) apiKey = _wid.api_key;
+        if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; }
       }
+    }
+    // ── Phase B+ (r-workos-challenge): trigger the OAuth handshake ──────────
+    // Per the MCP auth spec (2025-06-18) + Claude's connector docs, a client
+    // only STARTS OAuth when the server answers an unauthenticated request with
+    // 401 + WWW-Authenticate. We return 200 for anonymous (to keep the broad
+    // agent population working), so Claude.ai's web connector never signs in and
+    // stays anonymous → paywall. Fix: challenge ONLY the Claude.ai/desktop
+    // connector (it identifies itself as `User-Agent: Claude-User` /
+    // clientInfo `Anthropic/ClaudeAI`), ONLY when it presents no usable
+    // credential (no X-API-Key, no valid WorkOS bearer), and ONLY while OAuth is
+    // enabled. Every other client (anonymous agents, Claude Code, X-API-Key
+    // callers) is untouched → still 200. resource stays https://dchub.cloud/mcp
+    // so the metadata / WorkOS resource-indicator / aud all remain aligned.
+    // Kill switch: DCHUB_OAUTH_CHALLENGE_DISABLE=1 (keeps token validation on).
+    const _isClaudeConnector = /Claude-User/i.test(userAgent);
+    const _challengeDisabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_DISABLE || ''));
+    if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector
+        && !req.headers['x-api-key'] && !_workosAuthed
+        && !(sessionId && sessions.has(sessionId))) {
+      res.set('WWW-Authenticate',
+        'Bearer resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource/mcp"');
+      console.log('[oauth] 401 challenge → Claude.ai connector (no token) — triggering WorkOS sign-in');
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'Authorization required — sign in to DC Hub to continue.' },
+        id: (req.body && req.body.id) ?? null,
+      });
     }
     // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
     // proxy egress IP (req.socket.remoteAddress), not the actual MCP caller.
