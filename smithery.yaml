@@ -2,25 +2,27 @@
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
 # Smithery scans the repo root for this file.
 #
-# Last refreshed 2026-06-16 (42-tool / v2.2.9 canonical sync). Matches the
+# Last refreshed 2026-06-21 (47-tool / v2.3.3 canonical sync). Matches the
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects the live tools/list: 46 tools, all registered in
+# Tool list reflects the live tools/list: 47 tools, all registered in
 # server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
 displayName: "DC Hub — Data Center & Energy Intelligence"
-description: "Real-time data-center, power & energy intelligence for AI agents: 21,000+ facilities across 170+ countries, 126,427 substations, live power-grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), renewable-energy and natural-gas price feeds, a hyperscaler $1B+ deal tracker, 2,000+ tracked M&A deals, a 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts across 232 markets. The only data-center, energy & hyperscale intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
+description: "Real-time data-center, power-grid, interconnection-queue & energy intelligence for AI agents: 21,000+ facilities across 170+ countries, 126,427 substations, live power-grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), renewable-energy and natural-gas price feeds, a hyperscaler $1B+ deal tracker, 2,000+ tracked M&A deals, a 369 GW capacity pipeline, live ISO interconnection-queue snapshots + queue-depth and per-ISO interconnection-queue BUILD/CAUTION/AVOID verdicts, fiber routes, tax incentives, water-risk scoring, and daily DCPI verdicts across 232 markets. The only data-center, grid-interconnection, energy & hyperscale intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
 homepage: "https://dchub.cloud"
-version: "2.3.1"
+version: "2.3.3"
 keywords:
   - data center
+  - data centers
   - datacenter
   - power
-  - energy
   - power grid
   - electricity grid
+  - utility grid
+  - energy
   - renewable energy
   - renewables
   - natural gas
@@ -28,11 +30,24 @@ keywords:
   - hyperscale
   - hyperscaler
   - interconnection
+  - interconnection queue
+  - grid interconnection
+  - ISO interconnection queue
+  - interconnection queue snapshots
   - capacity
+  - capacity pipeline
   - infrastructure
   - market intelligence
   - site selection
+  - tax incentives
+  - water risk
+  - PPAs
+  - PJM
+  - ERCOT
+  - CAISO
+  - ISO
   - M&A
+  - DCPI
 
 # DC Hub is a remote/hosted Streamable HTTP server, not an npm package.
 runtime: remote
@@ -85,13 +100,18 @@ tools:
   - claim_free_key
   - plan_fiber_leadin
   - unlock_more_data
+  - get_power_pipeline
+  - get_gas_economics
+  - set_site_alert
+  - bind_email
+  - recover_my_key
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
   anonymous: "10 calls/day, no signup, 2 results per query"
-  free: "Free dev key (email signup) — 50 calls/day, all 40 tools"
+  free: "Free dev key (email signup) — 50 calls/day, all 47 tools"
   starter: "$9/mo — 200 calls/day, unlocks paid tools"
-  developer: "$49/mo — 500 calls/day, all 40 tools, full results"
+  developer: "$49/mo — 500 calls/day, all 47 tools, full results"
   pro: "$199/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
   enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
 
@@ -110,25 +130,6 @@ categories:
   - real-estate
   - energy
   - research
-
-keywords:
-  - data-centers
-  - hyperscaler
-  - utility-grid
-  - fiber
-  - site-selection
-  - tax-incentives
-  - renewable-energy
-  - PPAs
-  - water-risk
-  - PJM
-  - ERCOT
-  - CAISO
-  - ISO
-  - interconnection-queue
-  - M&A
-  - capacity-pipeline
-  - DCPI
 
 author:
   name: "Jonathan Martone"
