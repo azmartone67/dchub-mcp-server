@@ -19,6 +19,8 @@ Title: Show HN: DC Hub – an MCP server for live data-center & energy intellige
 Body:
 I built DC Hub, an MCP server that gives AI agents live, *citable* data on the
 physical infrastructure behind AI — instead of guessing from stale training data.
+(It's currently the #1 data-center MCP on Smithery across data center, power grid,
+fiber, capacity, and interconnection.)
 
 It exposes 47 tools + 6 guided prompts over: 21,000+ data-center facilities
 (170+ countries), 232 power markets scored by a Data Center Power Index (DCPI),
@@ -61,6 +63,9 @@ EOF
 # --- 3. LinkedIn ---
 cat > "$OUT/linkedin-launch.md" <<'EOF'
 LinkedIn post:
+
+DC Hub is now the #1 data-center MCP server on Smithery — ranked #1 for
+"data center," "power grid," "fiber," "capacity," and "interconnection."
 
 AI agents keep getting asked data-center questions they can only answer from
 stale training data. So we built DC Hub — an MCP server that gives any AI
