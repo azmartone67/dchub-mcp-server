@@ -1,14 +1,15 @@
 name: registry rank + drift monitor
 
-# Automates the manual registry audit: tracks Smithery SEARCH RANK for the key
-# terms + cross-registry version/tool-count parity, and OPENS/REFRESHES a GitHub
-# issue when a CORE term falls out of #1 or the official registry drifts stale.
-# Read-only (public APIs) — no secrets. Dial the cron back to weekly once the
-# slipped terms have recovered.
+# Automates the manual registry audit: a PROACTIVE competitive radar that tracks
+# Smithery SEARCH RANK for the key terms (naming the leader to beat on each),
+# cross-registry version/tool-count parity, and README drift; OPENS/REFRESHES a
+# GitHub issue when a CORE term falls out of #1, a rival contests 2+ CORE terms,
+# or the registry/README drifts stale. Read-only (public APIs) — no secrets.
+# Runs every 6h so a slip is caught in hours, not a day (freshness races are fast).
 
 on:
   schedule:
-    - cron: '17 14 * * *'        # daily 14:17 UTC
+    - cron: '17 */6 * * *'       # every 6 hours (00:17, 06:17, 12:17, 18:17 UTC)
   workflow_dispatch:
 
 permissions:

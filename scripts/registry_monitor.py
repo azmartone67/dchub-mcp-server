@@ -32,16 +32,21 @@ def _get(url):
 
 
 def smithery_rank(term):
+    """(our_position, total, leader_qualifiedName) for a search term. `leader` is the
+    #1 result — it powers the COMPETITIVE RADAR / proactive early-warning: we want to
+    SEE a rival leading (or newly closing on) a term we own BEFORE we lose #1, and to
+    name who to beat — not just learn after the fact that a number changed."""
     try:
         d = _get("https://registry.smithery.ai/servers?" + urllib.parse.urlencode({"q": term, "pageSize": "50"}))
     except Exception:
-        return None, None
+        return None, None, None
     servers = d.get("servers") or []
     total = (d.get("pagination") or {}).get("totalCount")
+    leader = servers[0].get("qualifiedName") if servers else None
     for i, s in enumerate(servers, 1):
         if "dchub" in (s.get("qualifiedName") or "").lower():
-            return i, total
-    return None, total
+            return i, total, leader
+    return None, total, leader
 
 
 def canonical():
@@ -181,11 +186,25 @@ def main():
     # --- regressions (the only things that page) ---
     reasons = []
     core_one = 0
-    for t, (pos, _tot) in core.items():
+    for t, (pos, _tot, leader) in core.items():
         if pos == 1:
             core_one += 1
         else:
-            reasons.append(f"CORE term **{t}** fell to {('#'+str(pos)) if pos else '>50'} (expected #1)")
+            who = f" — **{leader}** leads (beat them on relevance/freshness)" \
+                  if leader and "dchub" not in (leader or "").lower() else ""
+            reasons.append(f"CORE term **{t}** at {('#'+str(pos)) if pos else '>50'} (expected #1){who}")
+    # PROACTIVE escalation: one rival leading 2+ CORE terms = a coordinated threat
+    # contesting our cluster, not a one-off slip → call it out by name, loudly.
+    core_set = set(CORE)
+    rivals = {}
+    for t in CORE:
+        _pos, _t, leader = core[t]
+        if leader and "dchub" not in (leader or "").lower():
+            rivals.setdefault(leader, []).append(t)
+    for rival, terms in sorted(rivals.items(), key=lambda kv: -len(kv[1])):
+        if len(terms) >= 2:
+            reasons.append(f"⚠️ THREAT: **{rival}** now leads {len(terms)} CORE terms "
+                           f"({', '.join(terms)}) — a single rival is contesting the core cluster")
     if off_ver and can_ver and off_ver != can_ver:
         reasons.append(f"Official registry version **{off_ver}** ≠ repo canonical **{can_ver}**")
     if off_tools and can_tools and off_tools != can_tools:
@@ -233,17 +252,22 @@ def main():
     L.append(f"| LobeHub | — | {lobe_tools if lobe_tools is not None else '—'} | "
              f"{lobe_status} · README-synced, 429s CI |")
     L.append("")
-    L.append(f"### Smithery search ranks — CORE ({core_one}/{len(CORE)} at #1)")
-    L.append("| Term | Rank | of N |")
-    L.append("|---|---|---|")
-    for t, (pos, tot) in core.items():
-        L.append(f"| {t} | {('#'+str(pos)) if pos else '>50'} | {tot} |")
+    L.append(f"### 🛡 Smithery competitive radar — CORE ({core_one}/{len(CORE)} held at #1)")
+    L.append("| | Term | Our rank | Leader (← who to beat) | of N |")
+    L.append("|---|---|---|---|---|")
+    for t, (pos, tot, leader) in core.items():
+        held = "✅" if pos == 1 else "🔻"
+        lead = leader or "—"
+        if pos == 1:
+            lead = "**(us)**"
+        L.append(f"| {held} | {t} | {('#'+str(pos)) if pos else '>50'} | {lead} | {tot} |")
     L.append("")
-    L.append("### Watch terms")
-    L.append("| Term | Rank | of N |")
-    L.append("|---|---|---|")
-    for t, (pos, tot) in watch.items():
-        L.append(f"| {t} | {('#'+str(pos)) if pos else '>50'} | {tot} |")
+    L.append("### Watch terms (relevance opportunities — track, don't page)")
+    L.append("| Term | Our rank | Leader | of N |")
+    L.append("|---|---|---|---|")
+    for t, (pos, tot, leader) in watch.items():
+        lead = "**(us)**" if pos == 1 else (leader or "—")
+        L.append(f"| {t} | {('#'+str(pos)) if pos else '>50'} | {lead} | {tot} |")
     L.append("")
     if regression:
         L.append("### 🔻 Regression detected")
