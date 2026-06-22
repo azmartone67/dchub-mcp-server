@@ -927,6 +927,26 @@ function _looksLikeJwt(t) {
   return typeof t === 'string'
     && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t);
 }
+// WorkOS access tokens don't carry an `email` claim — but the OIDC userinfo
+// endpoint does (we request the `email` scope). Fetch it ONCE per fresh token
+// (the result folds into the 5-min token→key cache, so no per-request cost) so
+// the durable identity is also CONTACTABLE: key recovery, receipts, and the
+// opt-in weekly digest (Lever #1). Fully fail-safe — any error returns null,
+// which is exactly today's behaviour (no regression). NOTE: capturing the email
+// does NOT consent to marketing; the digest stays gated on marketing_opt_in.
+async function _workosFetchEmail(token) {
+  if (!_WORKOS_DOMAIN) return null;
+  try {
+    const r = await fetch(`${_WORKOS_DOMAIN}/oauth2/userinfo`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return null;
+    const u = await r.json().catch(() => ({}));
+    const e = (u && (u.email || u.email_address)) || null;
+    return (typeof e === 'string' && e.includes('@')) ? e.trim().toLowerCase() : null;
+  } catch (_) { return null; }
+}
 async function resolveWorkosBearer(token) {
   if (!_workosEnabled() || !_WORKOS_DOMAIN) return null;
   if (!_looksLikeJwt(token)) return null;               // not a JWT → fall through
@@ -961,13 +981,16 @@ async function resolveWorkosBearer(token) {
   // freshly-authenticated user out → 401 storm (the connector flaps). Instead:
   // retry a few times with backoff, and on persistent transient failure return
   // null WITHOUT caching so the very next request re-attempts immediately.
+  // Resolve email once (claim if present, else userinfo) and reuse across retries.
+  let _email = payload.email || null;
+  if (!_email) { try { _email = await _workosFetchEmail(token); } catch (_) { _email = null; } }
   let idn = await callAPIWrite('/api/v1/oauth/identity', {
-    sub, iss: payload.iss || _WORKOS_DOMAIN, email: payload.email || null,
+    sub, iss: payload.iss || _WORKOS_DOMAIN, email: _email,
   });
   for (let attempt = 0; attempt < 3 && (!idn || idn.error || !idn.api_key); attempt++) {
     await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
     idn = await callAPIWrite('/api/v1/oauth/identity', {
-      sub, iss: payload.iss || _WORKOS_DOMAIN, email: payload.email || null,
+      sub, iss: payload.iss || _WORKOS_DOMAIN, email: _email,
     });
   }
   if (!idn || idn.error || !idn.api_key) {
