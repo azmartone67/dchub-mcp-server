@@ -4216,8 +4216,8 @@ function createServer(descOverrides) {
   // purposes are TRANSACTIONAL (key recovery + upgrade receipts); no digest, no
   // marketing without explicit opt-in (default OFF).
   trackedTool(srv, 'bind_email',
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. Returns the unlocked benefits + confirmation.',
-    { email: S, api_key: S },
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    { email: S, api_key: S, marketing_opt_in: B },
     async (a) => {
       const email = (a.email || '').toString().trim().slice(0, 200);
       if (!email) {
@@ -4256,10 +4256,24 @@ function createServer(descOverrides) {
           },
         };
       }
+      // r-consent (2026-06-22): EXPLICIT marketing opt-in. Default OFF. Only when
+      // the human said yes (agent passes marketing_opt_in=true) do we record it —
+      // sets metadata.marketing_opt_in='true' (the field the weekly digest reads)
+      // + an opt_in_consents audit row. Best-effort: a failure NEVER breaks the
+      // bind (which already succeeded above). Nothing happens on the default path.
+      let _optedIn = false;
+      if (a.marketing_opt_in === true || String(a.marketing_opt_in).toLowerCase() === 'true') {
+        try {
+          const _cr = await callAPIWrite('/api/v1/keys/marketing-consent',
+            { email, ...(_key ? { api_key: _key } : {}), opt_in: true });
+          _optedIn = !!(_cr && _cr.ok !== false && _cr.opted_in);
+        } catch (_) { /* soft-fail: consent is best-effort; the email bind stands */ }
+      }
       const _benefits = (r && (r.unlocked || r.message)) || 'key recovery + upgrade receipts now route to that email';
       const text =
         '✅ **Email bound — your key is now recoverable + upgrade receipts will land there.**\n' +
         (r && r.message ? r.message + '\n' : '') +
+        (_optedIn ? '📬 Subscribed to the free weekly digest (markets/deals/facilities that moved — unsubscribe anytime).\n' : '') +
         '\n' + _consent;
       return {
         content: [{ type: 'text', text }],
@@ -4270,8 +4284,8 @@ function createServer(descOverrides) {
           unlocked: r && r.unlocked,
           message: (r && r.message) || 'Email bound — key recovery + upgrade receipts enabled.',
           consent: _consent,
-          purpose: 'transactional_only',
-          marketing_opt_in: false,
+          purpose: _optedIn ? 'transactional_plus_marketing' : 'transactional_only',
+          marketing_opt_in: _optedIn,
           ...(r && typeof r === 'object' ? { backend: r } : {}),
         },
       };
