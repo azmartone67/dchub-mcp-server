@@ -1,0 +1,58 @@
+name: distribution radar
+
+# Weekly distribution worklist (the adoption + discoverability lever). Audits the
+# curated MCP directory + 'best MCP' roundup targets — is dchub.cloud listed? —
+# and opens/refreshes ONE GitHub issue with the worklist + the matching draft for
+# each gap. READ-ONLY audit; it does NOT send any outreach (cold publisher pitches
+# stay human — drafts in ~/Downloads/dchub-mcp-tier3/). A target flips ✅ once a
+# pitch lands, so the issue self-prunes as you work it.
+
+on:
+  schedule:
+    - cron: '23 15 * * 1'        # Mondays 15:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: distribution-radar
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run distribution radar
+        id: radar
+        run: python3 scripts/distribution_radar.py
+
+      - name: Open / refresh the distribution worklist issue
+        if: steps.radar.outputs.gaps != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="📡 Distribution worklist (directories + roundups)"
+          NUM=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body-file distribution_report.md
+          else
+            gh issue create --title "$TITLE" --body-file distribution_report.md \
+              --label "distribution,automated" 2>/dev/null \
+              || gh issue create --title "$TITLE" --body-file distribution_report.md
+          fi
+
+      - name: Close the worklist when everything is listed
+        if: steps.radar.outputs.gaps == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="📡 Distribution worklist (directories + roundups)"
+          NUM=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "✅ All tracked directories + roundups now list DC Hub. Auto-closing — radar keeps watching weekly."
+            gh issue close "$NUM"
+          fi
