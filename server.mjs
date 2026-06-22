@@ -2604,6 +2604,36 @@ function trackedTool(srv, name, description, schema, handler) {
         }
         // no credential + no hard gate → fall through (funnel unchanged)
       }
+      // r-x402-honor (2026-06-22): x402 USDC pay-per-call — the missing half of
+      // the advertise block (L~1345). That block tells x402-capable agents to
+      // retry with an X-PAYMENT proof header; THIS reads it. DARK unless
+      // X402_ENABLED==='true'. Fires only for an x402 tool an unpaid caller can't
+      // unlock (!gate.allowed) AND only when the agent actually presented a proof.
+      // verify+settle run backend-side (/api/v1/x402/verify → facilitator); on ok
+      // we serve full data for THIS call. Any failure → structured payment_failed
+      // (NEVER a silent bypass: a forged/absent proof can't unlock). Additive — a
+      // caller with no proof falls straight through to the normal teaser below.
+      if (process.env.X402_ENABLED === 'true' && X402_TOOLS.has(name) && !gate.allowed && c.x_payment) {
+        let _x402ok = false, _x402err = 'verify_unreachable', _x402receipt = null;
+        try {
+          const _xr = await callAPIWrite('/api/v1/x402/verify', { payment: c.x_payment, tool: name });
+          if (_xr && _xr.ok === true) { _x402ok = true; _x402receipt = _xr.token || _xr.receipt || null; }
+          else if (_xr) { _x402err = _xr.error || 'payment_unverified'; }
+        } catch (e) { _x402err = (e && e.message) || 'verify_error'; }
+        if (_x402ok) {
+          status = 'x402_paid';
+          const _xRes = await handler(gate.params || args);
+          const _xFull = withCitation(_xRes);
+          try { _xFull._meta = { ...(_xFull._meta || {}), 'org.x402/receipt': _x402receipt }; } catch (_) { /* additive */ }
+          return _xFull;
+        }
+        status = 'x402_failed';
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `x402 payment verification failed for ${name}: ${_x402err}` }],
+          structuredContent: { payment_failed: true, protocol: 'x402', tool: name, error: _x402err },
+        };
+      }
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if (_gateTier === 'free' && PAID_ONLY_TOOLS.has(name)) {
@@ -4701,6 +4731,10 @@ app.post('/mcp', async (req, res) => {
     const clientIp  = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
                    || req.socket?.remoteAddress
                    || null;
+    // r-x402-honor (2026-06-22): the per-call x402 payment proof rides as an
+    // X-PAYMENT HTTP header (x402 spec). Capture it and thread it through ctx so
+    // the tool handler's x402 block can verify it. null when absent (the norm).
+    const xPayment = req.headers['x-payment'] || null;
 
     // Existing session — reuse meta
     if (sessionId && sessions.has(sessionId)) {
@@ -4710,7 +4744,7 @@ app.post('/mcp', async (req, res) => {
       // item-3: stamp the live request's caller IP onto the reused ctx (the
       // stored meta carries the init-time IP; a returning request may come
       // from a different hop, so prefer the current one when present).
-      return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId }, async () => {
+      return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     }
@@ -4786,6 +4820,7 @@ app.post('/mcp', async (req, res) => {
         // item-3 (real caller IP): the initialize call itself is a tracked tool
         // call (tools/list etc.) — stamp it with the real XFF client IP too.
         client_ip: clientIp,
+        x_payment: xPayment,  // r-x402-honor: thread the X-PAYMENT proof header
       }, async () => {
         await transport.handleRequest(req, res, body);
       });
