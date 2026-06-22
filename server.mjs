@@ -45,6 +45,7 @@ import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { withNextSession as _withNextSessionImpl } from './lib/result-shaping.mjs';
 
 
 // phase39_human_message — paywall response enrichment for higher conversion
@@ -2054,17 +2055,14 @@ const _NEXT_SESSION = {
   also: ['save_site (persist a site you scored)', 'set_site_alert (have DC Hub email you when a saved site moves)', 'set_market_alert (get pinged when a market moves)'],
   retention_tools: ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
 };
+// 2026-06-21 FIX: delegate to lib/result-shaping.withNextSession, which MIRRORS
+// the content[0] payload into structuredContent instead of fabricating a
+// {next_session}-only object. The old inline version created a data-less
+// structuredContent for the ~40 tools that return data only in content[0].text,
+// so structuredContent-preferring clients (Claude Desktop/.ai) saw ONLY the
+// retention nudge and the real payload was hidden. See lib/result-shaping.mjs.
 function _withNextSession(result) {
-  try {
-    if (!result || result.isError) return result;
-    const sc = (result.structuredContent && typeof result.structuredContent === 'object')
-      ? { ...result.structuredContent } : {};
-    if (sc.next_session) return result; // idempotent — never stamp twice
-    sc.next_session = _NEXT_SESSION;
-    return { ...result, structuredContent: sc };
-  } catch (_) {
-    return result;
-  }
+  return _withNextSessionImpl(result, _NEXT_SESSION);
 }
 function withCitation(result) {
   try {
