@@ -1392,6 +1392,17 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   if (isTrial === true && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
     return { allowed: true, params, trial_taste: true };
   }
+  // r-inversion-fix (2026-06-22): a claim_free_key user (tier 'free' + key) must
+  // get AT LEAST the same first-touch taste as an anonymous auto-trial on the
+  // flagship preview tools — otherwise claiming a key is a DOWNGRADE (anon got
+  // trial_taste FULL via the branch above; the keyed user fell through to the
+  // depth-tease). That inversion makes the desired action — claim a key — strictly
+  // worse, which kills conversion. Route keyed-free through the SAME trial_taste
+  // path so the per-IP/day full cap (DCHUB_TRIAL_TOOL_DAILY_FULL) applies EQUALLY:
+  // parity with anon, not a giveaway — the unlimited depth stays paid.
+  if (tier === 'free' && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+    return { allowed: true, params, trial_taste: true };
+  }
   // r46-conversion: keyed-free users get the 5 demand-tools through —
   // daily cap still applies at the worker layer (10/day).
   if (tier === 'free' && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true };
