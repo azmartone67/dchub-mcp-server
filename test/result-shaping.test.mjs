@@ -41,6 +41,15 @@ describe('withNextSession — payload must survive into structuredContent', () =
     expect(out.structuredContent.deals).toEqual([{ id: 9 }]);
   });
 
+  it('merges payload UNDER a metadata-only structuredContent (withFreshness/fiber case)', () => {
+    const res = { content: [{ type: 'text', text: JSON.stringify({ features: [{ id: 1 }] }) }],
+                  structuredContent: { freshness: { live: true }, citation: {} } };
+    const out = withNextSession(res, NS);
+    expect(out.structuredContent.features).toEqual([{ id: 1 }]); // payload now carried
+    expect(out.structuredContent.freshness.live).toBe(true);     // metadata preserved
+    expect(out.structuredContent.next_session).toEqual(NS);
+  });
+
   it('is idempotent — never stamps twice', () => {
     const once = withNextSession(textResult({ a: 1 }), NS);
     const twice = withNextSession(once, NS);
