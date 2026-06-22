@@ -927,23 +927,31 @@ function _looksLikeJwt(t) {
   return typeof t === 'string'
     && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t);
 }
-// WorkOS access tokens don't carry an `email` claim — but the OIDC userinfo
-// endpoint does (we request the `email` scope). Fetch it ONCE per fresh token
-// (the result folds into the 5-min token→key cache, so no per-request cost) so
-// the durable identity is also CONTACTABLE: key recovery, receipts, and the
-// opt-in weekly digest (Lever #1). Fully fail-safe — any error returns null,
-// which is exactly today's behaviour (no regression). NOTE: capturing the email
-// does NOT consent to marketing; the digest stays gated on marketing_opt_in.
-async function _workosFetchEmail(token) {
-  if (!_WORKOS_DOMAIN) return null;
+// Make the durable identity CONTACTABLE (key recovery, receipts, opt-in weekly
+// digest — Lever #1) by capturing the user's email. TWO supported sources, both
+// fail-safe (any miss → null email = no regression; result folds into the 5-min
+// token→key cache so there's no per-request cost):
+//   (a) PREFERRED, zero extra calls — the JWT itself. WorkOS access tokens omit
+//       `email` by default; add it to the AuthKit access-token claims (dashboard
+//       → Authentication → Sessions JWT template: email = {{user.email}}) and
+//       resolveWorkosBearer picks it up via `payload.email` with NO network hop.
+//   (b) FALLBACK — WorkOS Management API by user_id (the JWT `sub`). DORMANT
+//       unless WORKOS_API_KEY is set, so the gateway stays JWKS-only by default.
+// NB: the OIDC /oauth2/userinfo endpoint is NOT usable here — we bind the token
+// aud to DCHUB_MCP_RESOURCE (RFC 8707), so it's valid for us, not for WorkOS's
+// own API, and userinfo 401s it. Capturing email ≠ marketing consent (the digest
+// stays gated on marketing_opt_in).
+async function _workosFetchEmail(sub) {
+  const key = (process.env.WORKOS_API_KEY || '').trim();
+  if (!key || typeof sub !== 'string' || !sub.startsWith('user_')) return null;
   try {
-    const r = await fetch(`${_WORKOS_DOMAIN}/oauth2/userinfo`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    const r = await fetch(`https://api.workos.com/user_management/users/${encodeURIComponent(sub)}`, {
+      headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(4000),
     });
     if (!r.ok) return null;
     const u = await r.json().catch(() => ({}));
-    const e = (u && (u.email || u.email_address)) || null;
+    const e = (u && u.email) || null;
     return (typeof e === 'string' && e.includes('@')) ? e.trim().toLowerCase() : null;
   } catch (_) { return null; }
 }
@@ -981,9 +989,9 @@ async function resolveWorkosBearer(token) {
   // freshly-authenticated user out → 401 storm (the connector flaps). Instead:
   // retry a few times with backoff, and on persistent transient failure return
   // null WITHOUT caching so the very next request re-attempts immediately.
-  // Resolve email once (claim if present, else userinfo) and reuse across retries.
+  // Resolve email once (JWT claim if present, else Management API by user_id) and reuse across retries.
   let _email = payload.email || null;
-  if (!_email) { try { _email = await _workosFetchEmail(token); } catch (_) { _email = null; } }
+  if (!_email) { try { _email = await _workosFetchEmail(sub); } catch (_) { _email = null; } }
   let idn = await callAPIWrite('/api/v1/oauth/identity', {
     sub, iss: payload.iss || _WORKOS_DOMAIN, email: _email,
   });
