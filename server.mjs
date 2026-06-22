@@ -906,60 +906,11 @@ const _WORKOS_AUD    = (process.env.DCHUB_MCP_RESOURCE || 'https://dchub.cloud/m
 // DCHUB_WORKOS_AUD_ENFORCE=0 only as a first-arm debugging escape hatch.
 const _workosAudEnforce = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WORKOS_AUD_ENFORCE ?? '1'));
 
-// ── WWW-Authenticate hint (r-workos-hint, 2026-06-21) ───────────────────────
-// Root cause we are fixing: anon `POST /mcp` returns 200 with NO WWW-Authenticate
-// header, so OAuth-capable MCP clients (Claude.ai) get no "auth is available"
-// signal and connect anonymously — the WorkOS OAuth flow never fires and no
-// durable dch_oauth_ key mints (the retention lever stays dark).
-//
-// This advertises the RFC 9728 protected-resource metadata on every /mcp
-// response WITHOUT forcing a 401 — anon free-tier access is untouched (the
-// status code stays 200). OAuth-aware clients can read the pointer and offer
-// the authenticate affordance; clients that ignore it keep working exactly as
-// before. Purely ADDITIVE.
-//   • Only emitted when WorkOS OAuth is actually live (_workosEnabled() + domain
-//     set) — no point advertising an auth server that can't mint keys.
-//   • Independent kill-switch DCHUB_MCP_WWW_AUTH_HINT=0 disables the hint
-//     without turning off bearer resolution.
-//   • resource_metadata points at the path-suffixed metadata for THIS resource
-//     (RFC 9728 §3.1): https://dchub.cloud/.well-known/oauth-protected-resource/mcp
-const _wwwAuthHintEnabled = () =>
-  _workosEnabled() && !!_WORKOS_DOMAIN
-  && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_MCP_WWW_AUTH_HINT ?? '1'));
-const _WORKOS_RESOURCE_METADATA_URL = (() => {
-  try {
-    const u = new URL(_WORKOS_AUD);   // e.g. https://dchub.cloud/mcp
-    const path = u.pathname === '/' ? '' : u.pathname;
-    return `${u.origin}/.well-known/oauth-protected-resource${path}`;
-  } catch (_) {
-    return 'https://dchub.cloud/.well-known/oauth-protected-resource/mcp';
-  }
-})();
-const _WWW_AUTH_HINT_VALUE = `Bearer resource_metadata="${_WORKOS_RESOURCE_METADATA_URL}"`;
-
-// ── Conditional 401 OAuth challenge (r-workos-challenge, 2026-06-21) ─────────
-// The hint above is NOT enough: per Anthropic's connector docs, Claude.ai only
-// initiates OAuth from an HTTP 401 — a WWW-Authenticate header on a 200 is
-// ignored. So a credential-less Claude.ai WEB connector must receive a 401 to
-// start the WorkOS flow. We scope this tightly to avoid nuking the anon funnel:
-//   • Only the Claude.ai WEB connector (clientInfo.name ~ "claudeai", i.e.
-//     "Anthropic/ClaudeAI") — the one client that CANNOT persist an X-API-Key,
-//     so today it connects anon forever and never gets a durable identity.
-//     Claude Code ("claude-code"), Cursor, Cline, SDK, raw agents are NOT
-//     challenged — they keep the anon 200 / claim_free_key path untouched.
-//   • Only when NO credential resolved (no valid key, no OAuth bearer).
-//   • Only on the `initialize` handshake.
-//   • DORMANT unless DCHUB_MCP_OAUTH_CHALLENGE is truthy AND WorkOS is live —
-//     flip the flag off to instantly restore silent-anon for Claude.ai.
-const _oauthChallengeEnabled = () =>
-  _workosEnabled() && !!_WORKOS_DOMAIN
-  && /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_MCP_OAUTH_CHALLENGE || ''));
-function _isClaudeWebConnector(body) {
-  const cn = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
-  // Claude.ai web identifies as "Anthropic/ClaudeAI" (no hyphen). Claude Code
-  // is "claude-code" → does NOT contain "claudeai" → never matched here.
-  return cn.includes('claudeai') || cn.includes('claude.ai') || cn.includes('claude ai');
-}
+// (r-workos-consolidate 2026-06-21) Removed the parallel-edit duplicates: the
+// 200-response "hint" helpers (_wwwAuthHintEnabled / _WWW_AUTH_HINT_VALUE) and a
+// second challenge gate (_oauthChallengeEnabled / _isClaudeWebConnector). The MCP
+// auth flow has ONE trigger — the 401 challenge in the POST /mcp handler
+// (keyed on the Claude-User UA, gated by _workosEnabled + DCHUB_OAUTH_CHALLENGE_DISABLE).
 let _workosJwks = null;
 function _getWorkosJwks() {
   if (!_workosJwks && _WORKOS_DOMAIN) {
@@ -4412,12 +4363,10 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key');
   res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
-  // r-workos-hint: advertise OAuth availability on /mcp so OAuth-capable clients
-  // (Claude.ai) can discover the WorkOS AS and offer to authenticate. Does NOT
-  // force a 401 — anon stays 200. Gated on WorkOS being live + a kill-switch.
-  if (req.path === '/mcp' && _wwwAuthHintEnabled()) {
-    res.setHeader('WWW-Authenticate', _WWW_AUTH_HINT_VALUE);
-  }
+  // (r-workos-consolidate 2026-06-21) Removed the 200-response WWW-Authenticate
+  // "hint": per the MCP auth spec a client only starts OAuth on a 401, so a hint
+  // on a 200 is inert. The single source of truth is the 401 challenge block in
+  // the POST /mcp handler (r-workos-challenge) — keep one mechanism, not three.
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -4656,22 +4605,12 @@ app.post('/mcp', async (req, res) => {
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
 
-      // r-workos-challenge: trigger the WorkOS OAuth flow for a credential-less
-      // Claude.ai WEB connector by answering `initialize` with a 401 +
-      // WWW-Authenticate (Claude ignores the hint on a 200; only a 401 starts
-      // OAuth). Tightly scoped + dormant by default — see helper comment above.
-      // Vary so the edge never caches this 401 for a keyed/OAuth'd caller.
-      if (_oauthChallengeEnabled() && !validation.valid && !apiKey && _isClaudeWebConnector(body)) {
-        res.setHeader('WWW-Authenticate', _WWW_AUTH_HINT_VALUE);
-        res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('Vary', 'Authorization, X-API-Key');
-        console.log(`[oauth] 401 challenge → Claude.ai web connector (no credential) → advertise WorkOS AS`);
-        return res.status(401).json({
-          jsonrpc: '2.0',
-          error: { code: -32001, message: 'Authentication required: authenticate with WorkOS to connect (durable identity).' },
-          id: body?.id ?? null,
-        });
-      }
+      // (r-workos-consolidate 2026-06-21) Removed the duplicate 401 challenge that
+      // lived here. It was unreachable in practice — the single challenge block
+      // earlier in this handler (r-workos-challenge, keyed on the Claude-User UA)
+      // fires first and returns 401 before we ever reach initialize. Keeping two
+      // blocks (with two different WWW-Authenticate targets) was the parallel-edit
+      // collision; this is now the one and only OAuth challenge path.
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
