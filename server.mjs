@@ -1001,13 +1001,26 @@ async function resolveWorkosBearer(token) {
   const sub = payload.sub;
   if (!sub) return null;
   // Verified identity → durable dev key (get-or-create) via internal endpoint.
-  const idn = await callAPIWrite('/api/v1/oauth/identity', {
+  // RESILIENCE (r-workos-mint-retry, 2026-06-21): the JWT is already proven valid
+  // at this point — the ONLY thing that can fail here is the backend identity
+  // call, which is intermittently transient from the gateway's internal Railway
+  // path (one of 2 backend replicas mid-rollover → API 404/5xx). A transient
+  // failure must NOT negative-cache the token: a 60s null-cache locks a
+  // freshly-authenticated user out → 401 storm (the connector flaps). Instead:
+  // retry a few times with backoff, and on persistent transient failure return
+  // null WITHOUT caching so the very next request re-attempts immediately.
+  let idn = await callAPIWrite('/api/v1/oauth/identity', {
     sub, iss: payload.iss || _WORKOS_DOMAIN, email: payload.email || null,
   });
+  for (let attempt = 0; attempt < 3 && (!idn || idn.error || !idn.api_key); attempt++) {
+    await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    idn = await callAPIWrite('/api/v1/oauth/identity', {
+      sub, iss: payload.iss || _WORKOS_DOMAIN, email: payload.email || null,
+    });
+  }
   if (!idn || idn.error || !idn.api_key) {
-    console.log(`[oauth] identity resolve failed: ${idn && (idn.error || 'no api_key')}`);
-    _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
-    return null;
+    console.log(`[oauth] identity resolve failed after retries (transient — NOT cached): ${idn && (idn.error || 'no api_key')}`);
+    return null;  // transient: do not negative-cache; next request retries
   }
   const out = { api_key: idn.api_key, tier: idn.tier || 'free', exp: Date.now() + _WORKOS_CACHE_TTL };
   _workosTokenCache.set(token, out);
