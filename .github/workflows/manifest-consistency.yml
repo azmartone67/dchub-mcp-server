@@ -1,0 +1,15 @@
+name: manifest-consistency
+# Fails if the MCP tool manifest surfaces drift from server.mjs (the single
+# source of truth). Prevents the 42-vs-47 / 2.2.x-vs-2.3.x drift registries scrape.
+on:
+  push: { branches: [main] }
+  pull_request: {}
+  workflow_dispatch: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: node scripts/sync-tools-manifest.mjs
