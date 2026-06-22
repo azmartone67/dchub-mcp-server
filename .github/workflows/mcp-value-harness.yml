@@ -1,0 +1,21 @@
+name: mcp-value-harness
+# Calls each flagship MCP tool through the live gateway and asserts the payload
+# is non-empty. Catches a tool returning a success envelope with NO data — the
+# one failure mode test_honest_numbers.py (string constants) cannot see.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run value harness
+        env:
+          DCHUB_MCP_KEY: ${{ secrets.DCHUB_MCP_PAID_KEY }}
+        run: |
+          if [ -z "$DCHUB_MCP_KEY" ]; then
+            echo "::error::DCHUB_MCP_PAID_KEY secret not set — add a paid/enterprise key to repo secrets"; exit 1
+          fi
+          bash tools/mcp_value_harness.sh
