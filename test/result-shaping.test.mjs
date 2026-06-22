@@ -1,7 +1,7 @@
 // Offline unit tests for the next_session structuredContent fix.
 // Regression guard: structuredContent must never hide the content payload.
 import { describe, it, expect } from 'vitest';
-import { withNextSession, payloadObjFromContent } from '../lib/result-shaping.mjs';
+import { withNextSession, payloadObjFromContent, embedClaim } from '../lib/result-shaping.mjs';
 
 const NS = { tool: 'get_changes', call: 'get_changes since=24h' };
 const textResult = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
@@ -57,6 +57,32 @@ describe('withNextSession — payload must survive into structuredContent', () =
     expect(withNextSession(arr, NS).structuredContent).toBeUndefined();
     const prose = { content: [{ type: 'text', text: 'not json' }] };
     expect(withNextSession(prose, NS).structuredContent).toBeUndefined();
+  });
+});
+
+describe('embedClaim — in-context claim at the value moment (#1241)', () => {
+  const CLAIM = { url: 'https://dchub.cloud/claim/abc', headline: 'Unlock all 7 ISOs', expires_at: '2026-06-29', relay: 'Tell the user: claim full access →' };
+  const res = () => ({ content: [{ type: 'text', text: JSON.stringify({ iso: 'PJM', demand_mw: 1 }) }] });
+
+  it('injects the claim into content[0] JSON', () => {
+    const out = embedClaim(res(), CLAIM);
+    const o = JSON.parse(out.content[0].text);
+    expect(o.demand_mw).toBe(1);            // payload preserved
+    expect(o.claim.url).toBe(CLAIM.url);    // claim surfaced inline
+  });
+
+  it('mirrors the claim into structuredContent when present', () => {
+    const r = { ...res(), structuredContent: { iso: 'PJM', demand_mw: 1 } };
+    const out = embedClaim(r, CLAIM);
+    expect(out.structuredContent.claim.url).toBe(CLAIM.url);
+  });
+
+  it('is idempotent and safe (no url / isError / non-json)', () => {
+    expect(embedClaim(res(), { headline: 'x' })).toEqual(res());           // no url → no-op
+    const err = { isError: true, content: [{ type: 'text', text: '{"a":1}' }] };
+    expect(embedClaim(err, CLAIM)).toBe(err);                              // isError → untouched
+    const already = embedClaim(res(), CLAIM);
+    expect(embedClaim(already, CLAIM).content[0].text).toBe(already.content[0].text); // idempotent
   });
 });
 
