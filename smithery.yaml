@@ -56,7 +56,7 @@ remote:
   url: "https://dchub.cloud/mcp"
 
 # Tool surface for discovery — matches `tools/list` on the live MCP server:
-# 40 tools, all registered in server.mjs.
+# 47 tools, all registered in server.mjs.
 tools:
   - search_facilities
   - get_facility
