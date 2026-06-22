@@ -14,6 +14,10 @@ Live server **42 tools** · official registry listing `cloud.dchub/mcp-server` *
 
 > Note: a registry that verifies by fetching the manifest reads the dchub.cloud edge copy (CF, ~10-min cache). If it shows stale data, wait 10 min or give it the Railway-direct origin URL.
 
+## ★ HIGHEST-LEVERAGE, NOT YET DONE (2026-06-22) — reach is the binding constraint
+- 🔲 **Anthropic Connectors Directory** — APPLY (it's an application/review, not an API). This is the **single highest-traffic placement**: ~100% of current external reach already comes from Claude, so a verified directory listing puts DC Hub in front of exactly the users who convert. Apply at the Anthropic "Submit a connector" flow; use the One-liner + Long description + Connection (`https://dchub.cloud/mcp`) below.
+- 🔲 **Scan-based directories that need a *runnable* command** (Smithery/Cursor/Cline/Glama verify by introspecting a process, not a bare remote URL) — give them the **stdio bridge command** (verified working 2026-06-22): `npx mcp-remote https://dchub.cloud/mcp`. This is the structural fix for "listed but unverified / Claude-only reach": a remote-only server can't be scanned, but the `mcp-remote` shim exposes it as a runnable stdio server every directory can introspect. See the **Stdio install** block under Connection.
+
 ---
 
 ## One-liner (≤ 100 chars)
@@ -96,6 +100,24 @@ With a key:
   }
 }
 ```
+
+### Stdio install — for clients/directories that need a runnable command (verified 2026-06-22)
+Some clients and scan-based directories want a stdio *command*, not a remote URL. The standard `mcp-remote` bridge proxies stdio ↔ the remote server — no custom package to publish, nothing to install:
+```bash
+npx mcp-remote https://dchub.cloud/mcp
+```
+As an `mcpServers` entry (Cursor / Cline / Windsurf / Claude Desktop):
+```json
+{
+  "mcpServers": {
+    "dchub": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://dchub.cloud/mcp"]
+    }
+  }
+}
+```
+This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor/Cline/Glama verify by introspecting a running process, which a bare remote URL can't provide but this shim can. Connects on the free tier (no key); for full data add `X-API-Key` as a header in the client.
 
 > Submissions are yours to send (they require your registry accounts). This file is the copy to paste.
 
