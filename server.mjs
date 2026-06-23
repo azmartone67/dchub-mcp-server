@@ -368,7 +368,7 @@ async function trackToolCall(payload) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
   } catch (err) {
     console.error('[track] failed:', err.message);
@@ -398,7 +398,7 @@ async function pingRegistryHeartbeat(toolName, rowsAffected) {
         rows_affected: rowsAffected ?? 1,
         metadata:      { trigger: 'tool_call', tool: toolName || null },
       }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
   } catch (_) {
     // silent — heartbeat is best-effort, never blocks tool calls
@@ -432,7 +432,7 @@ async function signalPaywall(payload) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
   } catch (err) {
     console.error('[signal-paywall] failed:', err.message);
@@ -528,7 +528,7 @@ async function trackPaidHit(sessionId, toolName) {
         mcp_client: c.platform || null,
         variant,
       }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
   } catch (err) {
     console.error('[track-paid-hit] failed:', err.message);
@@ -548,7 +548,7 @@ async function shouldMintClaim(sessionId, toolName) {
     const resp = await fetch(url.toString(), {
       method: 'GET',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
     if (!resp.ok) return null;
     const data = await resp.json();
@@ -675,7 +675,7 @@ async function validateKey(api_key) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify({ api_key }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
     if (!resp.ok) {
       // 2026-06-07 (Devin QA — revenue-critical hardening): do NOT CACHE the
@@ -724,7 +724,7 @@ async function checkTrialEligibility(session_id, tool_name) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify({ session_id, tool: tool_name }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
     if (!resp.ok) return { trial_used: true };
     return await resp.json();
@@ -770,7 +770,7 @@ async function mintAutoTrial(tool_name) {
       method: 'POST',
       headers,
       body: '{}',
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(3000),
     });
     if (!resp.ok) return null;
     const data = await resp.json();
@@ -4623,7 +4623,7 @@ const sessionLastActive = new Map(); // sessionId → epoch ms (r41-session-ttl)
 // ~thousands of init calls per day the maps grow unbounded → eventual
 // memory exhaustion. Every request updates sessionLastActive; a periodic
 // sweep evicts sessions idle for > SESSION_IDLE_MS.
-const SESSION_IDLE_MS  = 30 * 60 * 1000;  // 30 min idle → evict
+const SESSION_IDLE_MS  = 120 * 60 * 1000; // 120 min idle → evict (r-session-ttl 2026-06-23: raised from 30 — sporadic-use connectors like Claude.ai that hold the connection open but query infrequently were getting swept mid-session → "No session. Send initialize first.")
 const SESSION_SWEEP_MS = 60 * 1000;       // sweep every 1 min
 
 function touchSession(sid) {
