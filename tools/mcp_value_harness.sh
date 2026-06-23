@@ -29,26 +29,37 @@ get_pipeline|{"market":"northern-virginia","limit":3}|data
 EOF
 )
 
-# One fresh session per run (mirrors a real client connect).
-H>/dev/null 2>&1 || true
-HDR=$(mktemp)
-curl -s --max-time 30 -D "$HDR" "$U" \
-  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -H "X-API-Key: $K" -H "User-Agent: $UA" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"value-harness","version":"1.0"}}}' >/dev/null
-SID=$(awk 'BEGIN{IGNORECASE=1}/^mcp-session-id:/{print $2}' "$HDR" | tr -d '\r'); rm -f "$HDR"
-curl -s --max-time 20 "$U" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-  -H "X-API-Key: $K" -H "User-Agent: $UA" -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+# r-harness-fix (2026-06-22): FRESH session PER TOOL + one retry. A single
+# long-lived MCP session can intermittently return empty/error envelopes
+# (documented: reference_dchub_mcp_value_harness) while a fresh keyed handshake
+# returns full — which false-flagged list_transactions (the 8th call in the
+# old shared session) as "empty" even though the tool was healthy. Re-handshake
+# before every tool, and retry once so a transient (cold replica / rate blip)
+# doesn't red the whole job. A PERSISTENT empty payload still fails after retry.
+mk_session() {
+  local HDR; HDR=$(mktemp)
+  curl -s --max-time 30 -D "$HDR" "$U" \
+    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+    -H "X-API-Key: $K" -H "User-Agent: $UA" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"value-harness","version":"1.0"}}}' >/dev/null
+  local SID; SID=$(awk 'BEGIN{IGNORECASE=1}/^mcp-session-id:/{print $2}' "$HDR" | tr -d '\r'); rm -f "$HDR"
+  curl -s --max-time 20 "$U" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+    -H "X-API-Key: $K" -H "User-Agent: $UA" -H "Mcp-Session-Id: $SID" \
+    -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+  printf '%s' "$SID"
+}
 
 while IFS='|' read -r tool args reqkey; do
   [ -z "$tool" ] && continue
-  resp=$(curl -s --max-time 40 "$U" \
-    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
-    -H "X-API-Key: $K" -H "User-Agent: $UA" -H "Mcp-Session-Id: $SID" \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool\",\"arguments\":$args}}" \
-    | tr -d '\r' | grep '^data:' | sed 's/^data: //' | head -1)
-  verdict=$(printf '%s' "$resp" | python3 -c "
+  verdict=""
+  for attempt in 1 2; do
+    SID=$(mk_session)   # FRESH session per attempt
+    resp=$(curl -s --max-time 40 "$U" \
+      -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+      -H "X-API-Key: $K" -H "User-Agent: $UA" -H "Mcp-Session-Id: $SID" \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool\",\"arguments\":$args}}" \
+      | tr -d '\r' | grep '^data:' | sed 's/^data: //' | head -1)
+    verdict=$(printf '%s' "$resp" | python3 -c "
 import sys,json
 try:
     d=json.load(sys.stdin)
@@ -63,6 +74,9 @@ try:
 except Exception as e:
     print('FAIL parse:%s'%(repr(str(e))[:60]))
 " 2>/dev/null)
+    [[ "$verdict" == PASS ]] && break
+    sleep 2
+  done
   if [[ "$verdict" == PASS ]]; then
     printf '  \033[32m✓\033[0m %-26s %s\n' "$tool" "($reqkey)"
   else
