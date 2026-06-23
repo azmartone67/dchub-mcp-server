@@ -3156,7 +3156,9 @@ Free tier covers **10 calls/day** across:
       // power_mw / coords-beyond-latlng / specs / internal dropped — so claiming a
       // key is still full discovery, not the whole proprietary dataset. Paid/dev+
       // (tier != 'free') and non-discovery tools skip this. Fail-soft to raw.
+      try { if (KEYED_FACILITY_MASK.has(name)) console.log(`[fix5dbg] tool=${name} apiKey=${!!c.api_key} tier=${tier} reached=true`); } catch(_){}
       if (c.api_key && tier === 'free' && KEYED_FACILITY_MASK.has(name)) {
+        console.log(`[fix5dbg] MASK FIRED tool=${name} textLen=${(result.content?.[0]?.text||'').length}`);
         try {
           let parsed; try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
