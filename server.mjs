@@ -1405,7 +1405,7 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   }
   // r46-conversion: keyed-free users get the 5 demand-tools through —
   // daily cap still applies at the worker layer (10/day).
-  if (tier === 'free' && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true };
+  if ((tier === 'free' || tier === 'identified') && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true }; // free-class: identified is the registration carrot (r-identified)
   if (PAID_ONLY_TOOLS.has(toolName)) return { allowed: false };
   const lim = FREE_TIER_LIMITS[toolName];
   if (lim && Number(params?.limit) > lim.max_limit) {
@@ -2680,7 +2680,7 @@ function trackedTool(srv, name, description, schema, handler) {
       }
       if (!gate.allowed) {
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
-        if (_gateTier === 'free' && PAID_ONLY_TOOLS.has(name)) {
+        if ((_gateTier === 'free' || _gateTier === 'identified') && PAID_ONLY_TOOLS.has(name)) { // free-class parity: identified keys get the same always-preview as anon (r-identified)
           // r42s (2026-05-26): for the 5 highest-demand tools, ALWAYS
           // serve a trimmed preview (don't gate to once-per-session).
           // Brain class `mcp_demand_gap_unaddressed` flagged these 5 as
