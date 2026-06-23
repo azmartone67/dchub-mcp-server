@@ -1726,6 +1726,39 @@ function _isMetricKey(k) {
   // unique_*, average_*, median_*, max_*, min_*
   return /(^total_|_count$|_mw$|_gw$|_kw$|_pct$|_rate$|_total$|^score|stats|capacity|^mrr|revenue|^locked$|^unique_|^average_|^median_|^max_|^min_|^count$|^total$|_billions$|_millions$|preleased)/i.test(lk);
 }
+// r-search-keyed-mask (2026-06-22): a KEYED free-tier caller skips the anon trim
+// (that branch is !c.api_key only) and was getting the FULL deep facility record —
+// power_mw, exact coords, acreage, JV partners, power-procurement notes —
+// byte-identical to enterprise on the discovery tools (audit #2: the entire
+// 21,808-facility dataset free with a no-email key). Project each facility row to
+// the SAME free allowlist the REST /api/v1/search now uses. Discovery (find any
+// facility by name/geo) is preserved; capacity/specs/internal become the upgrade.
+const KEYED_FACILITY_MASK = new Set(['search_facilities', 'get_facility']);
+const _FACILITY_FREE_FIELDS = new Set([
+  'id', 'name', 'slug', 'profile_url', 'city', 'state', 'country', 'status',
+  'provider', 'operator', 'region', 'market', 'facility_type',
+  'latitude', 'longitude', 'confidence_badge',
+]);
+function _looksLikeFacility(o) {
+  return o && typeof o === 'object' && !Array.isArray(o) && 'name' in o
+    && ('power_mw' in o || 'provider' in o || 'latitude' in o
+        || 'confidence_score' in o || 'raw_data' in o || 'investment_usd' in o);
+}
+function _maskFacilityFieldsForFree(parsed) {
+  if (Array.isArray(parsed)) return parsed.map(_maskFacilityFieldsForFree);
+  if (parsed && typeof parsed === 'object') {
+    if (_looksLikeFacility(parsed)) {
+      const out = {};
+      for (const k of Object.keys(parsed)) if (_FACILITY_FREE_FIELDS.has(k)) out[k] = parsed[k];
+      return out;
+    }
+    const out = {};
+    for (const [k, v] of Object.entries(parsed)) out[k] = _maskFacilityFieldsForFree(v);
+    return out;
+  }
+  return parsed;
+}
+
 function trimForTrial(parsed) {
   if (parsed === null || parsed === undefined) return parsed;
   if (Array.isArray(parsed)) {
@@ -3114,6 +3147,28 @@ Free tier covers **10 calls/day** across:
               promo_expires: '2026-07-01',
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+          }
+        } catch (_) { /* fall through to raw result on parse failure */ }
+      }
+      // r-search-keyed-mask: a KEYED free-tier caller skipped the anon trim above
+      // and got the full deep facility record on the discovery tools (audit #2).
+      // Project to the free facility allowlist — rows + name/geo/provider kept;
+      // power_mw / coords-beyond-latlng / specs / internal dropped — so claiming a
+      // key is still full discovery, not the whole proprietary dataset. Paid/dev+
+      // (tier != 'free') and non-discovery tools skip this. Fail-soft to raw.
+      if (c.api_key && tier === 'free' && KEYED_FACILITY_MASK.has(name)) {
+        try {
+          let parsed; try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
+          if (parsed && typeof parsed === 'object') {
+            const masked = _maskFacilityFieldsForFree(parsed);
+            if (masked && typeof masked === 'object' && !Array.isArray(masked)) {
+              masked._upgrade = {
+                tier: 'free',
+                message: 'Free tier: facility capacity (MW), exact coordinates + deep specs are Developer. You have full discovery — search any of 21,808 facilities by name/geo. Call unlock_more_data to upgrade.',
+                next_tool: 'unlock_more_data',
+              };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(masked) }] };
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
       }
