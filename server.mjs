@@ -1400,7 +1400,7 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   // worse, which kills conversion. Route keyed-free through the SAME trial_taste
   // path so the per-IP/day full cap (DCHUB_TRIAL_TOOL_DAILY_FULL) applies EQUALLY:
   // parity with anon, not a giveaway — the unlimited depth stays paid.
-  if (tier === 'free' && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+  if ((tier === 'free' || tier === 'identified') && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
     return { allowed: true, params, trial_taste: true };
   }
   // r46-conversion: keyed-free users get the 5 demand-tools through —
@@ -3156,9 +3156,7 @@ Free tier covers **10 calls/day** across:
       // power_mw / coords-beyond-latlng / specs / internal dropped — so claiming a
       // key is still full discovery, not the whole proprietary dataset. Paid/dev+
       // (tier != 'free') and non-discovery tools skip this. Fail-soft to raw.
-      try { if (KEYED_FACILITY_MASK.has(name)) console.log(`[fix5dbg] tool=${name} key=${(c.api_key||'').slice(0,14)} ctier=${c.tier} tier=${tier} freeClass=${_isFreeClassTier(tier)}`); } catch(_){}
-      if (c.api_key && _isFreeClassTier(tier) && KEYED_FACILITY_MASK.has(name)) {
-        console.log(`[fix5dbg] MASK FIRED tool=${name} textLen=${(result.content?.[0]?.text||'').length}`);
+      if (c.api_key && (tier === 'free' || tier === 'identified') && KEYED_FACILITY_MASK.has(name)) {
         try {
           let parsed; try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
