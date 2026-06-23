@@ -2661,7 +2661,7 @@ function trackedTool(srv, name, description, schema, handler) {
         let _x402ok = false, _x402err = 'verify_unreachable', _x402receipt = null;
         try {
           const _xr = await callAPIWrite('/api/v1/x402/verify', { payment: c.x_payment, tool: name });
-          if (_xr && _xr.ok === true) { _x402ok = true; _x402receipt = _xr.token || _xr.receipt || null; }
+          if (_xr && _xr.ok === true) { _x402ok = true; _x402receipt = _xr.unlock_token || _xr.token || _xr.receipt || null; }
           else if (_xr) { _x402err = _xr.error || 'payment_unverified'; }
         } catch (e) { _x402err = (e && e.message) || 'verify_error'; }
         if (_x402ok) {
