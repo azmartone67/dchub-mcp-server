@@ -98,9 +98,17 @@ describe('applyTierGate — tier access', () => {
     expect(applyTierGate('get_news', {}, 'free', false, false).allowed).toBe(true);
   });
   it('keyed-free bonus unlocks the demand tools with an api key', () => {
-    const g = applyTierGate('get_market_intel', {}, 'free', true, false);
+    // Use a bonus-ONLY tool: get_market_intel is also in ALWAYS_PARTIAL_PREVIEW,
+    // whose branch runs first (r-tease-wow → trial_taste), so it no longer reaches
+    // the bonus path. get_grid_data is purely KEYED_FREE_BONUS.
+    const g = applyTierGate('get_grid_data', {}, 'free', true, false);
     expect(g.allowed).toBe(true);
     expect(g.bonus).toBe(true);
+  });
+  it('keyed-free market_intel routes through the always-preview taste (r-tease-wow)', () => {
+    const g = applyTierGate('get_market_intel', {}, 'free', true, false);
+    expect(g.allowed).toBe(true);
+    expect(g.trial_taste).toBe(true);
   });
   it('a validated trial unlocks the always-preview Pro tools as a taste', () => {
     const g = applyTierGate('get_grid_intelligence', {}, 'free', false, true);

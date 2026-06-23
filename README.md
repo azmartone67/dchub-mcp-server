@@ -42,7 +42,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## Guided prompts & resources
 
-Beyond the 47 tools, DC Hub ships **6 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients:
+Beyond the 48 tools, DC Hub ships **6 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients:
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
