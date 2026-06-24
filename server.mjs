@@ -1393,8 +1393,19 @@ function buildDepthTease(name, result, ctx, tier) {
       developer: 'https://dchub.cloud/upgrade?key=' + _k + '&tier=developer',
       pro:       'https://dchub.cloud/upgrade?key=' + _k + '&tier=pro',
     };
-    teased._upgrade.message += ' — Or upgrade THIS key in place (no swap): Starter $9/mo → '
-      + _starterKeyUrl + ' (the moment your human pays, this same key unlocks — no reconnect).';
+    // Key-bound $5 PACK (move #3 step 2): 1,000 credits bound to THIS key-hash via
+    // /upgrade?key=…&pack=5 → pk-<hash> ref → webhook grants credits to the KEY (not
+    // the ephemeral session the plain credits_url above would credit). Cheapest
+    // durable unlock — lead with it, offer Starter as the permanent option.
+    const _packKeyUrl = 'https://dchub.cloud/upgrade?key=' + _k + '&pack=5';
+    teased._upgrade.upgrade_this_key_pack_url   = _packKeyUrl;
+    teased._upgrade.upgrade_this_key_pack_pitch =
+      '$5 one-time = 1,000 full queries bound to THIS key (no subscription, lasts 90 days) — '
+      + 'pay once and this same key keeps returning full data; the cheapest durable unlock.';
+    teased._upgrade.message += ' — Or bind a paid upgrade to THIS key (no swap, no reconnect): '
+      + '💳 $5 one-time = 1,000 full queries → ' + _packKeyUrl
+      + '  ·  or Starter $9/mo → ' + _starterKeyUrl
+      + ' (the moment your human pays, this same key unlocks).';
   }
   // r-map-upsell: for the map-feeding tools, point the agent (+ its human) to the
   // live Land & Power map — the visual payoff of the data they just pulled.
