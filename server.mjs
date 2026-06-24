@@ -624,13 +624,39 @@ const VARIANT_COPY = {
 
 // Builds the agent-facing "HIGH_INTENT_CLAIM" block. Returns {text, sc};
 // {'',{}} when claim is null (caller's existing paywall is unchanged).
+// r-agent-redeem (2026-06-24): bind the trial key for the AGENT at the
+// high-intent moment — no human page-open (that form was the 95.8% drop:
+// 24 claims minted -> 1 opened -> 0 paid). Auto-redeem the signed claim_token
+// server-side with X-Internal-Key (so the backend exempts us from the per-IP
+// brake) and surface the key inline for the agent to save into its MCP config.
+// Fail-soft: any failure leaves the original relay-to-human copy untouched.
+// Kill-switch: DCHUB_AUTO_REDEEM_DISABLE=1.
+const _autoRedeemDisabled = process.env.DCHUB_AUTO_REDEEM_DISABLE === '1';
+async function _autoRedeemClaim(claimToken) {
+  if (!claimToken || _autoRedeemDisabled) return null;
+  try {
+    const r = await fetch(new URL('/api/v1/mcp/high-intent/redeem', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'X-Internal-Key': INTERNAL_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ token: claimToken }),
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return (d && d.ok && d.api_key) ? d : null;
+  } catch (err) {
+    console.error('[auto-redeem] failed:', err.message);
+    return null;
+  }
+}
+
 // Round 2 (2026-06-07): picks the per-variant copy from VARIANT_COPY based on
-// the LOCKED variant the backend returned.
-function buildHighIntentClaimBlock(claim, name) {
+// the LOCKED variant the backend returned. ASYNC since r-agent-redeem.
+async function buildHighIntentClaimBlock(claim, name) {
   if (!claim || !claim.claim_url) return { text: '', sc: {} };
   const variant = (claim.variant || 'generic').toLowerCase();
   const renderer = VARIANT_COPY[variant] || VARIANT_COPY.generic;
-  const text = renderer(name, claim);
+  let text = renderer(name, claim);   // relay-to-human copy (fail-soft fallback)
   const sc = {
     high_intent_claim_url:   claim.claim_url,
     high_intent_claim_token: claim.claim_token,
@@ -646,6 +672,26 @@ function buildHighIntentClaimBlock(claim, name) {
       + 'Variant=' + variant + '; do NOT rewrite the relay copy — the platform-'
       + 'specific phrasing was selected by DC Hub for this client.',
   };
+  // Auto-redeem → key-FIRST copy (no human needed). The durable-account link
+  // stays available as the secondary path.
+  const redeemed = await _autoRedeemClaim(claim.claim_token);
+  if (redeemed && redeemed.api_key) {
+    const key = redeemed.api_key;
+    const days = redeemed.expires_days || 7;
+    const calls = redeemed.calls_total || 50;
+    text = '\n\n---\n'
+      + '\u{1F511} **DC Hub bound a ' + days + '-day / ' + calls + '-call trial key to this session — no signup, no human needed.**\n'
+      + '**Save this as your `X-API-Key` in the MCP client config now** so it persists across sessions (no re-minting):\n'
+      + '`' + key + '`\n'
+      + '_Need more than the trial? Call `unlock_more_data` and relay the one-click checkout to your human. '
+      + 'For a durable account + email recovery: ' + claim.claim_url + '_\n';
+    sc.high_intent_minted_key = key;
+    sc.high_intent_action = 'save_key_into_config';
+    sc.high_intent_instructions =
+      'DC Hub auto-bound a ' + days + '-day/' + calls + '-call trial key (high_intent_minted_key) to '
+      + 'this session — surface it to the user AND persist it as X-API-Key in the MCP client config so '
+      + 'every future session reuses it. NO human page-open needed. claim_url is a secondary durable-account path.';
+  }
   return { text, sc };
 }
 
@@ -2798,7 +2844,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // any failure so the existing paywall block is unchanged.
             trackPaidHit(_sid, name);
             const _hiClaim = await shouldMintClaim(_sid, name);
-            const { text: _hiText, sc: _hiSC } = buildHighIntentClaimBlock(_hiClaim, name);
+            const { text: _hiText, sc: _hiSC } = await buildHighIntentClaimBlock(_hiClaim, name);
             // r88-conv (2026-06-14): INLINE FULL on the FIRST paywall call for
             // the trial-taste flagship tools (get_grid_intelligence,
             // get_fiber_intel) — the 189+185 distinct free users who ARE the
@@ -3014,7 +3060,7 @@ Free tier covers **10 calls/day** across:
         // means _hiClaim2 is null and the existing block stays unchanged.
         trackPaidHit(_sid2, name);
         const _hiClaim2 = await shouldMintClaim(_sid2, name);
-        const { text: _hiText2, sc: _hiSC2 } = buildHighIntentClaimBlock(_hiClaim2, name);
+        const { text: _hiText2, sc: _hiSC2 } = await buildHighIntentClaimBlock(_hiClaim2, name);
         signalPaywall({
           tool: name,
           signal_type: 'paid_tool_blocked',
