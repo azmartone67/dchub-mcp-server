@@ -1374,6 +1374,28 @@ function buildDepthTease(name, result, ctx, tier) {
           next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For full depth now, call unlock_more_data ($5 = 1,000 queries).' }),
     promo_cta: PROMO_CTA, promo_code: PROMO_CODE, promo_expires: '2026-07-01',
   };
+  // r-move3-keybound (2026-06-24): for a KEYED caller (free/trial key), surface a
+  // KEY-BOUND upgrade so paying upgrades THIS exact key IN PLACE — no key swap, no
+  // reconnect. /upgrade?key=…&tier=starter mints a DCM- pair-code hashed to the key;
+  // the Stripe webhook (redeem_pair_code, main.py) flips mcp_dev_keys.tier for THAT
+  // key on payment — the proven rail the $9/$49/$299 conversions already ride. The
+  // credits/developer/metered URLs above stay session-bound; this is the durable
+  // key-bound option. Smallest move-#3 increment: gateway-only, reuse, no backend change.
+  if (_isKeyed && ctx.api_key) {
+    const _k = encodeURIComponent(ctx.api_key);
+    const _starterKeyUrl = 'https://dchub.cloud/upgrade?key=' + _k + '&tier=starter';
+    teased._upgrade.upgrade_this_key_url   = _starterKeyUrl;
+    teased._upgrade.upgrade_this_key_pitch =
+      'Upgrade THIS key in place — Starter $9/mo (200 calls/day), no key swap: the instant your '
+      + 'human pays, this same key unlocks and you just call `' + name + '` again (no reconnect, no re-config).';
+    teased._upgrade.upgrade_this_key_tiers = {
+      starter:   _starterKeyUrl,
+      developer: 'https://dchub.cloud/upgrade?key=' + _k + '&tier=developer',
+      pro:       'https://dchub.cloud/upgrade?key=' + _k + '&tier=pro',
+    };
+    teased._upgrade.message += ' — Or upgrade THIS key in place (no swap): Starter $9/mo → '
+      + _starterKeyUrl + ' (the moment your human pays, this same key unlocks — no reconnect).';
+  }
   // r-map-upsell: for the map-feeding tools, point the agent (+ its human) to the
   // live Land & Power map — the visual payoff of the data they just pulled.
   if (MAP_TOOLS.has(name)) {
@@ -2862,6 +2884,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 status = 'trial_taste_inline';
                 signalPaywall({
                   tool: name,
+                  args,                                    // brain #1264: site query (region/ISO/MW) -> paid-intent ledger
                   signal_type: 'trial_preview',           // keep counted in the existing funnel rollups
                   session_id: _sid,
                   mcp_client: c.platform || 'mcp',
@@ -2902,6 +2925,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // block the paywall response on backend slowness.
             signalPaywall({
               tool: name,
+              args,                              // brain #1264: site query (region/ISO/MW) -> paid-intent ledger
               signal_type: 'trial_preview',
               session_id: _sid,
               mcp_client: c.platform || 'mcp',
@@ -3063,6 +3087,7 @@ Free tier covers **10 calls/day** across:
         const { text: _hiText2, sc: _hiSC2 } = await buildHighIntentClaimBlock(_hiClaim2, name);
         signalPaywall({
           tool: name,
+          args,                          // brain #1264: site query (region/ISO/MW) -> paid-intent ledger
           signal_type: 'paid_tool_blocked',
           session_id: _sid2,
           mcp_client: c.platform || 'mcp',
