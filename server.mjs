@@ -4675,7 +4675,7 @@ function createServer(descOverrides) {
      '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
-     '# DC Hub coverage\n\n**Grids (live):** PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE (US) + Hydro-Quebec (CA), AESO (Alberta), Nord Pool (15 EU zones); the global scoreboard adds GB (NESO), ~12 EU ENTSO-E zones, Taiwan (Taipower), and Australia NEM (AEMO).\n\n**Markets:** 232 scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 4 EIA balancing authorities (Phoenix/AZPS, SRP, Las Vegas/NEVP, Pacific NW/BPAT) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), ~12 EU ENTSO-E bidding zones, Taiwan (Taipower), and Australia NEM (AEMO). (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 232 scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions
