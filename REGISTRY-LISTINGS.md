@@ -1,16 +1,16 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **42 tools** · official registry listing `cloud.dchub/mcp-server` **v2.2.8** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **49 tools** · official registry listing `cloud.dchub/mcp-server` **v2.3.3** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
 ## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
-- ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.2.8 live.** Auto-republishes on every `server.json` version bump (GitHub Action `registry-refresh.yml`, DNS-auth). **Most directories mirror this**, so you're already broadly listed.
+- ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.3.3 live.** Auto-republishes on every `server.json` version bump (GitHub Action `registry-refresh.yml`, DNS-auth). **Most directories mirror this**, so you're already broadly listed.
 - ✅ **Glama** — auto-listed from this repo's `glama.json`; just hit **Refresh** on your Glama page if it looks stale.
 - ⏳ **3 quick web forms left** (~5 min each — there's NO "upload a document" field; paste the values below):
   1. **PulseMCP** → https://www.pulsemcp.com → "Submit" in the top nav.
   2. **mcp.so** → https://mcp.so → "Submit".
   3. **Smithery** → CLI, no form: `smithery mcp publish "https://dchub.cloud/mcp" -n azmartone67/dchub` (or "Add Server" on smithery.ai).
-- For ALL of them, paste from the **One-liner / Short description / Connection** blocks below. Manifest the form may ask for: `https://dchub.cloud/.well-known/mcp-server.json` (now v2.2.8 / 42 tools at origin; CF edge refreshes within ~10 min).
+- For ALL of them, paste from the **One-liner / Short description / Connection** blocks below. Manifest the form may ask for: `https://dchub.cloud/.well-known/mcp-server.json` (now v2.3.3 / 49 tools at origin; CF edge refreshes within ~10 min).
 
 > Note: a registry that verifies by fetching the manifest reads the dchub.cloud edge copy (CF, ~10-min cache). If it shows stale data, wait 10 min or give it the Railway-direct origin URL.
 
@@ -24,7 +24,7 @@ Live server **42 tools** · official registry listing `cloud.dchub/mcp-server` *
 The data-center, power & energy intelligence layer for AI agents — query AND cite, live.
 
 ## Short description (≤ 300 chars)
-DC Hub is the live data-center, power & energy intelligence MCP: 21k+ facilities, 232 markets, 10 ISO grids, the DCPI power index + DCGI gas index, interconnection queues, renewables, fiber, hyperscaler deals, M&A, water & tax. 42 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
+DC Hub is the live data-center, power & energy intelligence MCP: 21k+ facilities, 232 markets, 10 ISO grids, the DCPI power index + DCGI gas index, interconnection queues, renewables, fiber, hyperscaler deals, M&A, water & tax. 49 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
 
 ## Long description
 DC Hub is the neutral, real-time data layer for data-center infrastructure — built so AI agents can both **query** it (MCP + REST) and **cite** it (every full-data response carries `Source: DC Hub, CC-BY-4.0`).
@@ -64,10 +64,10 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 
 ### Smithery (smithery.ai/servers/azmartone67/dchub)
 - Type: Remote (Streamable HTTP). Base URL `https://dchub.cloud/mcp`. No auth required to list/try (free tier).
-- Use the short description + categories above. Confirm the tool list auto-populates from the manifest (42 tools).
+- Use the short description + categories above. Confirm the tool list auto-populates from the manifest (49 tools).
 
 ### Glama (glama.ai/mcp/connectors/cloud.dchub/...)
-- Already indexed as a connector. Refresh so it picks up the current 42 tools (now incl. `get_gas_index`, `get_grid_scoreboard`, `get_fiber_readiness`, `claim_free_key`).
+- Already indexed as a connector. Refresh so it picks up the current 49 tools (now incl. `get_gas_index`, `get_grid_scoreboard`, `get_fiber_readiness`, `claim_free_key`).
 - Long description + tags above lift the Glama quality score (target A).
 
 ### PulseMCP (pulsemcp.com/submit)
@@ -128,7 +128,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 ### Smithery — audience: agent builders / developers
 **Title:** DC Hub — Data Center & Energy Intelligence
 **Description:**
-> Live data-center, power, energy & gas intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 42 tools, no signup to start.
+> Live data-center, power, energy & gas intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 49 tools, no signup to start.
 >
 > Built for agents that answer infrastructure, power and energy questions: search 21,000+ data centers, score any lat/lon for buildability across 7 dimensions, rank 232 markets by the DCPI power index (BUILD/CAUTION/AVOID), check the DCGI gas index per state, compare all 7 US ISO grids live (fuel mix, renewables, carbon, demand), track hyperscaler $1B+ deals, and pull interconnection-queue depth, renewable-energy mix, M&A, fiber, water-stress & tax incentives.
 >
