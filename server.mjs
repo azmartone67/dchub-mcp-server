@@ -1922,7 +1922,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   let trimmed = parsed;
   try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed) : parsed; } catch(e) {}
   // r67-conv (2026-06-02): fixed two bugs here — (1) "Get Pro for $49/mo" was
-  // wrong ($49 = Developer; Pro = $199 — canonical in tier_registry.py /
+  // wrong ($49 = Developer; Pro = $299 — canonical in tier_registry.py /
   // _stripe_links.py); (2) the "free dev key" link pointed at
   // /api/v1/redeem/<session_id>, which returns "Invalid session ID" for an MCP
   // session id (that path expects a DCM- pair code, not a session id) — a dead
@@ -3576,7 +3576,7 @@ function createServer(descOverrides) {
   // latency note inside the handler).
   const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null };
   trackedTool(srv, 'get_grid_scoreboard',
-    'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~25 European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + 24 European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
       // r78 LATENCY FIX: this tool averaged 45.7s. Two causes: (1) the 7
@@ -3720,7 +3720,7 @@ function createServer(descOverrides) {
         grids.push({ iso: 'TAIPOWER', region: 'Taiwan (Taipower)', error: (tw && tw.error) || 'no live snapshot' });
       }
 
-      // --- LIVE EU grids (#60, ENTSO-E Transparency — ~12 bidding zones) ---
+      // --- LIVE EU grids (#60, ENTSO-E Transparency — ~25 bidding zones) ---
       // One token unlocks many zones. /iso/eu/snapshot returns per-zone fuel
       // mix with renewable_pct ALREADY computed as wind+solar+hydro (the same
       // definition as the US/UK rows), so each European bidding zone ranks
@@ -4082,7 +4082,7 @@ function createServer(descOverrides) {
     { lat: N, lon: N, state: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
+  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S, iso: S, region: S },
     async (a) => {
       // r78-gridfix (2026-06-12): the prior handler hit /api/v1/grid-headroom/${region},
@@ -4695,7 +4695,7 @@ function createServer(descOverrides) {
       async () => ({ contents: [{ uri, mimeType: 'text/markdown', text }] }));
   _R('about', 'dchub://about', 'About DC Hub',
      'What DC Hub is, what it covers, and how to cite it.',
-     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,000+ facilities across 170+ countries\n- 232 markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, ~12 EU zones, Taiwan, Australia)\n- 2,000+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
+     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,000+ facilities across 170+ countries\n- 232 markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, 24 EU zones, Taiwan, Australia)\n- 2,000+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
   _R('methodology', 'dchub://methodology', 'DCPI / DCGI methodology',
      'How the Data Center Power Index and Gas Index are computed.',
      '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of excess-power headroom, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** (0-100, per US state): gas-access + gas-cost suitability for gas-fired / behind-the-meter power, with interstate-pipeline counts -> GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED.\n\nBoth update from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
@@ -4704,7 +4704,7 @@ function createServer(descOverrides) {
      '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
-     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 4 EIA balancing authorities (Phoenix/AZPS, SRP, Las Vegas/NEVP, Pacific NW/BPAT) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), ~12 EU ENTSO-E bidding zones, Taiwan (Taipower), and Australia NEM (AEMO). (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 232 scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), and Australia NEM (AEMO). (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 232 scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions

@@ -30,7 +30,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 - **21,000+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
 - **126,427 substations** with voltage class, available capacity estimates
-- **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), ~25 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
+- **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (e.g. ERCOT ~225 GW of data-center load in the interconnection queue)
 - **2,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
@@ -44,7 +44,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## Guided prompts & resources
 
-Beyond the 48 tools, DC Hub ships **6 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients:
+Beyond the 49 tools, DC Hub ships **6 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients:
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
@@ -113,7 +113,7 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 - **Free key (email signup, ~60 sec):** [https://dchub.cloud/signup](https://dchub.cloud/signup) — 50 calls/day
 - **Starter ($9/mo):** 200 calls/day → [Stripe](https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g)
 - **Developer ($49/mo):** 500 calls/day, full field access → [Stripe](https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c)
-- **Pro ($199/mo):** 2,000 calls/day + bulk export, historical data
+- **Pro ($299/mo):** 2,000 calls/day + bulk export, historical data
 - **Enterprise (custom):** 100,000 calls/day, dedicated support, custom integrations
 - **Metered overflow:** $1 per 100 calls beyond your daily cap (no overage cutoffs)
 
