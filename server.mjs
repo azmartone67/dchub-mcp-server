@@ -1275,8 +1275,12 @@ const BIND_CTA_TOOLS = new Set([
 function _isBindableCaller(c) {
   const t = String((c && c.tier) || 'free').toLowerCase();
   if (t === 'paid' || t === 'enterprise' || t === 'developer' || t === 'pro' || t === 'founding') return false;
-  if (c && c.is_trial === true) return false;   // trial taste already has its own CTA stack
-  if (c && c.email) return false;               // already identified / email-bound
+  if (c && c.email) return false;               // already identified / email-bound (covers email-bound trials)
+  // r-bind2 (2026-06-25): Step 3. UNBOUND trials need the bind hint MOST — they
+  // hold a key but no email, so header-less hosts (Claude.ai web, ChatGPT) drop
+  // it and 0 trials have ever bound. The old `is_trial` suppression hid the hint
+  // from exactly the worst-retention cohort. Fire for any caller without a bound
+  // email (the structured hint is additive, never a third prose CTA).
   return true;
 }
 // Attach the _bind hint to a successful result's structuredContent (additive,
@@ -1573,6 +1577,17 @@ function _returnRewardAvailableToday(apiKey) {
 // where the inline-full taste previously leaked unbounded. Still env-overridable:
 // DCHUB_TRIAL_TOOL_DAILY_FULL=1 for max pressure, higher for more goodwill, 0=off.
 const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '3', 10));
+// r-ladder (2026-06-25): Step 2, the re-rung. When DCHUB_LADDER_RERUNG=1 the anon
+// (unbound) inline-full taste tightens to DCHUB_LADDER_RERUNG_CAP (default 1) so
+// the fuller tier is EARNED by binding an email — fixing the inversion where an
+// anonymous agent got identified-tier depth for free. OFF by default → current
+// behavior (cap = TRIAL_DAILY_FULL_CAP). REACH-SENSITIVE: flip the env on, watch
+// /api/v1/ai/reach/trend new_external_ips for 24-48h, roll back by unsetting it
+// (no redeploy). Only the anon inline-full path (server.mjs ~2909) reads this.
+const LADDER_RERUNG = process.env.DCHUB_LADDER_RERUNG === '1';
+const ANON_FULL_CAP = LADDER_RERUNG
+  ? Math.max(0, parseInt(process.env.DCHUB_LADDER_RERUNG_CAP || '1', 10))
+  : TRIAL_DAILY_FULL_CAP;
 
 // r-fiber-taste-cap (2026-06-20): the trial "taste" caps call COUNT
 // (TRIAL_DAILY_FULL_CAP) but NOT payload SIZE. get_fiber_intel's full payload is
@@ -2906,7 +2921,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // data. Only when the bind worked (anon session) AND it's a
             // trial-taste tool AND under the daily cap.
             if (_mintBound && ALWAYS_PARTIAL_PREVIEW.has(name)) {
-              const _overCap = TRIAL_DAILY_FULL_CAP > 0 && _trialFullCallsExceeded(c.client_ip, name, TRIAL_DAILY_FULL_CAP);
+              const _overCap = ANON_FULL_CAP > 0 && _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP);
               if (!_overCap) {
                 status = 'trial_taste_inline';
                 signalPaywall({
