@@ -1172,12 +1172,13 @@ const ANON_PREVIEW_ONLY = new Set([
 const PRO_ONLY_TOOLS = new Set([
   'analyze_site', 'compare_sites', 'get_grid_intelligence',
   'get_fiber_intel', 'get_dchub_recommendation',
-  // 2026-06-06 agent moat: monitoring + bulk export stay PRO. r-free-shortlist
-  // (2026-06-24): save_site + list_saved_sites OPENED to free (with a key) — a
-  // free agent can persist + revisit its own shortlist (no email/abuse vector);
-  // the retention "reason to come back". Alerts (set_*_alert) stay PRO until the
-  // alert destination is constrained to the verified bound email (spam-relay guard).
-  'set_market_alert', 'set_site_alert', 'export_dataset',
+  // 2026-06-06 agent moat: bulk export stays PRO. r-free-shortlist + r-free-alerts
+  // (2026-06-24): save_site/list_saved_sites AND set_site_alert/set_market_alert are
+  // now FREE-with-a-key — the persist + monitor retention loop. The spam-relay guard
+  // lives in the backend: free email alerts are LOCKED to the caller's bound email
+  // (no third-party destinations) and webhooks stay Pro. Only export_dataset (bulk
+  // extract) remains Pro here.
+  'export_dataset',
 ]);
 
 // r70 (2026-06-03): the FREE FLAGSHIP HOOKS. A tool here is the citation
@@ -4013,7 +4014,7 @@ function createServer(descOverrides) {
     {},
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
 
-  trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (PRO) — get notified when its Excess-Power / Constraint score moves. Use channel="email" + destination=<email>, or channel="webhook" + destination=<https URL>. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
+  trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (FREE with a key) — get notified when its Excess-Power / Constraint score moves. On the free tier, email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel="email". Webhook delivery (channel="webhook" + destination=<https URL>) is Pro. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
     { market: S, channel: S, destination: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
 
@@ -4026,7 +4027,7 @@ function createServer(descOverrides) {
   // it. This wraps the existing POST /api/v1/lp/alerts (PRO) to close that gap:
   // it turns save_site from a write-only shoebox into an inbox-delivered reason
   // to come back — delivery the human receives, not a reminder the agent ignores.
-  trackedTool(srv, 'set_site_alert', 'Arm an email watch on a site you already saved (PRO) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move, so you don’t have to keep re-checking. The "monitor my shortlist for me" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type ("dcpi_change" | "capacity_change" | "new_facility_nearby", default "dcpi_change"), threshold (number — the points/MW move that fires it, default 5), notify_email (required — the address the alert is sent to). Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site.',
+  trackedTool(srv, 'set_site_alert', 'Arm an email watch on a site you already saved (FREE with a key) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move, so you don’t have to keep re-checking. On the free tier the alert is delivered to your human’s bound email (call bind_email first; notify_email is forced to that address). Pro can send to any address. The "monitor my shortlist for me" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type ("dcpi_change" | "capacity_change" | "new_facility_nearby", default "dcpi_change"), threshold (number — the points/MW move that fires it, default 5), notify_email (required — the address the alert is sent to). Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site.',
     { saved_site_id: ID, trigger_type: S, threshold: N, notify_email: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/alerts', {
       saved_site_id: a.saved_site_id,
