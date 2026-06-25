@@ -1172,10 +1172,12 @@ const ANON_PREVIEW_ONLY = new Set([
 const PRO_ONLY_TOOLS = new Set([
   'analyze_site', 'compare_sites', 'get_grid_intelligence',
   'get_fiber_intel', 'get_dchub_recommendation',
-  // 2026-06-06 agent moat: persistence + monitoring + bulk export. Backend
-  // already tier-gates these (require_tier PRO on /api/v1/lp/*); listed here
-  // so the MCP layer shows a clean paywall instead of proxying a raw 402.
-  'save_site', 'list_saved_sites', 'set_market_alert', 'set_site_alert', 'export_dataset',
+  // 2026-06-06 agent moat: monitoring + bulk export stay PRO. r-free-shortlist
+  // (2026-06-24): save_site + list_saved_sites OPENED to free (with a key) — a
+  // free agent can persist + revisit its own shortlist (no email/abuse vector);
+  // the retention "reason to come back". Alerts (set_*_alert) stay PRO until the
+  // alert destination is constrained to the verified bound email (spam-relay guard).
+  'set_market_alert', 'set_site_alert', 'export_dataset',
 ]);
 
 // r70 (2026-06-03): the FREE FLAGSHIP HOOKS. A tool here is the citation
@@ -2229,6 +2231,13 @@ const _NEXT_SESSION = {
   why: 'DC Hub data moves daily. Next session, pull only the delta (DCPI 7-day market movers, newly discovered facilities, new M&A deals & news) instead of re-fetching everything. Cache the returned generated_at and pass it back each session to keep a running watch.',
   also: ['save_site (persist a site you scored)', 'set_site_alert (have DC Hub email you when a saved site moves)', 'set_market_alert (get pinged when a market moves)'],
   retention_tools: ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
+  // r-digest-offer (2026-06-24): the FREE weekly digest is the recurring return
+  // touchpoint, but its audience is opt-in (default OFF) so it sits empty.
+  // Surface it at the value moment so an engaged agent can offer it to its human.
+  digest_offer: {
+    what: 'Offer your human a FREE weekly DC Hub digest — once a week, emailed: the markets, deals and facilities that moved in what they queried.',
+    how: 'If (and only if) they agree to a weekly email, call bind_email with their email AND marketing_opt_in=true (one call). Default is transactional-only; they can unsubscribe anytime.',
+  },
 };
 // ── #1241: in-context claim delivery at the VALUE moment (default OFF) ───────
 // The 3-strike high-intent claim fired only on the BLOCKED (trial-preview) path
@@ -3996,11 +4005,11 @@ function createServer(descOverrides) {
     { since: S, limit: I },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
 
-  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (PRO). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
+  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don\'t have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N, lon: N, name: S, state: S, market: S, target_mw: N, notes: S },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
 
-  trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (PRO). Example: "What sites have I saved?" / "Show my shortlist." — list_saved_sites. Params: none. Returns: an array of saved sites, each with name, market, lat/lon, saved DCPI score, target MW, and notes — the persistent shortlist built by save_site. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
+  trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key). Example: "What sites have I saved?" / "Show my shortlist." — list_saved_sites. Params: none. Returns: an array of saved sites, each with name, market, lat/lon, saved DCPI score, target MW, and notes — the persistent shortlist built by save_site. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
     {},
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
 
