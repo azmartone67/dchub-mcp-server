@@ -15,7 +15,7 @@ name: smithery freshness heartbeat
 
 on:
   schedule:
-    - cron: '23 14 * * 2,5'   # Tue + Fri 14:23 UTC (interleaves with the local Mon/Thu agent)
+    - cron: '23 14 * * *'   # DAILY 14:23 UTC (r-daily-freshness 2026-06-24): Smithery ranks on recency + its re-scan refreshes the listing WITHOUT a version bump, so a daily re-publish keeps DC Hub fresh and #1. Local Mon/Thu LaunchAgent is now redundant backup.
   workflow_dispatch:
 
 permissions:
