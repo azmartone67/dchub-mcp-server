@@ -1,0 +1,53 @@
+name: daily manifest + README sync
+
+# DAILY self-heal of the tool count / version across the registry-facing SOURCE
+# files (README.md, smithery.yaml, mcp-server.json) from server.mjs — the single
+# source of truth. Glama, PulseMCP and the GitHub MCP Registry scrape these source
+# files, so keeping them accurate every day keeps every listing current with no
+# manual edits.
+#
+# Why this exists (2026-06-25): the GitHub MCP Registry listing drifted to
+# "48 MCP tools" while the live server had 49. Nothing auto-synced the README
+# prose, and the drift guard's regex matched "N tools" but not "N MCP tools",
+# so CI never caught it. This job + the widened regex close that gap.
+#
+# Companion crons: smithery-freshness (daily, re-scans the LIVE server) and
+# registry-refresh (weekly publish + honest-numbers guard).
+
+on:
+  schedule:
+    - cron: '41 13 * * *'     # DAILY 13:41 UTC (offset from smithery 14:23 / registry-refresh Mon 06:30)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-manifest-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Sync tool count + version from server.mjs into registry source files
+        run: node scripts/sync-tools-manifest.mjs --fix
+      - name: Commit + push only if a surface drifted
+        run: |
+          set -e
+          if git diff --quiet -- README.md smithery.yaml mcp-server.json; then
+            echo "✓ no drift — all registry surfaces already in sync"
+            exit 0
+          fi
+          echo "Surfaces drifted — healing:"; git --no-pager diff --stat -- README.md smithery.yaml mcp-server.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # stage ONLY the registry source files this job owns (never -A)
+          git add README.md smithery.yaml mcp-server.json
+          git commit -m "chore(registry): daily tool-count/version sync from server.mjs [skip ci]"
+          git push
+          echo "✓ healed registry surfaces — Glama/PulseMCP/GitHub will re-scan the updated source"
