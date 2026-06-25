@@ -1129,6 +1129,7 @@ const ALWAYS_PARTIAL_PREVIEW = new Set([
   // probed for no free-key full-data leak before shipping (the documented
   // get_market_intel free-key leak the depth-tease fixed stays fixed).
   'get_market_intel',
+  'get_gas_intelligence',   // r-gas-intel (2026-06-25): gas synthesizer — trial-taste like grid/fiber
 ]);
 
 // r71-anonpreview (2026-06-06): the 3 DECISION-layer Pro tools currently
@@ -1229,6 +1230,7 @@ const DEPTH_TEASE_TOOLS = new Set([
   // grid-emergence radar are exactly the proprietary synthesis the paid line
   // protects. Tease them to top-N for sub-Developer like the grid/fiber pair.
   'get_gas_index',             // Data Center Gas Index (DCGI) per-state synthesis score
+  'get_gas_intelligence',      // r-gas-intel: full gas synthesizer above DCGI (same depth-tease)
   'grid_transition_radar',     // forward-looking ISO emergence synthesis
 ]);
 // r-map-upsell (2026-06-18): the map-feeding tools. When a free/Starter agent
@@ -4102,6 +4104,23 @@ function createServer(descOverrides) {
       ]);
       const out = shapeGridIntelligence(ISO, gi, cmp, qsnap);
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out }, 'get_grid_intelligence');
+    });
+
+  // r-gas-intel (2026-06-25): get_gas_intelligence — the GAS analogue of
+  // get_grid_intelligence. The Flask route (/api/v1/gas/intelligence/<state>)
+  // fuses DCGI + gas-economics + pipeline-operator presence + live grid gas share
+  // into one per-STATE behind-meter-vs-grid brief with per-field data_basis labels.
+  // internal:true → full clean payload; anon/free are gated at the proven MCP layer
+  // (ALWAYS_PARTIAL_PREVIEW + DEPTH_TEASE_TOOLS), exactly like grid/fiber — not by
+  // trusting the route's own auth (the origin-bypass quirk makes that unreliable).
+  trackedTool(srv, 'get_gas_intelligence',
+    'Use when a human asks about gas-fired or behind-the-meter power economics for a data center in a US state — "is gas power cheaper than the grid in Texas?", "what is the gas access + pipeline situation in Virginia?". The GAS analogue of get_grid_intelligence: fuses the DC Hub Gas Index (DCGI), live Henry Hub, gas-to-grid $/MWh across heat-rate scenarios, pipeline-operator presence, and the live grid gas share into one per-STATE brief. Params: region (US state code or name, e.g. "TX" | "Texas" | "Virginia"). Returns: {region, region_name, dcgi_score (0-100), dcgi_verdict (GAS-ADVANTAGED/ADEQUATE/GAS-CONSTRAINED), gas_access (pipeline counts + operators — PRESENCE not firm capacity), henry_hub_usd_mmbtu (live), basis_usd_mmbtu (synthetic-labeled), delivered_price_usd_mmbtu (null where the tariff table is sparse — surfaced honestly, never fabricated), gas_to_grid_usd_per_mwh (5 heat-rate scenarios), live_grid_gas_share_pct, headline_behind_meter_vs_grid_delta_usd_mwh (the punchline: gas vs grid $/MWh), pipeline_presence (operators + parent midstreams), data_basis (per-field provenance/confidence), omitted_no_fabrication}. Every field carries a data_basis label; gas storage / LNG / firm pipeline capacity are deliberately OMITTED (no feed). Do NOT use for electricity grid headroom (use get_grid_intelligence) or the DCGI score alone (use get_gas_index).',
+    { region: S, state: S },
+    async (a) => {
+      const raw = String((a && (a.region || a.state)) || '').trim();
+      if (!raw) return { content: [{ type: 'text', text: JSON.stringify({ error: 'region required (US state code or name)', example: 'get_gas_intelligence region="TX"' }) }] };
+      const out = await callAPI(`/api/v1/gas/intelligence/${encodeURIComponent(raw)}`, {}, { internal: true });
+      return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
     });
 
   trackedTool(srv, 'get_agent_registry', 'Live roster of the AI platforms + agent frameworks that have actually called DC Hub in the window — returns each caller with its citation counts (24h/30d), tool-usage breakdown, and authentication tier (reflects real calls, not a fixed list). Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they connect. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry. Do NOT use for platform uptime / backup health (use get_backup_status); this is the who-is-calling-DC-Hub roster.', {},
