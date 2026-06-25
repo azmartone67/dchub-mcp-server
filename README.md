@@ -5,7 +5,7 @@
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Cline, Continue, and any AI assistant doing data center site selection, energy analysis, or market research.
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![Tools](https://img.shields.io/badge/tools-47-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![Tools](https://img.shields.io/badge/tools-48-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
 
 > ⭐ **Find DC Hub useful? [Star the repo](https://github.com/azmartone67/dchub-mcp-server)** — stars help agents (and people) discover it across the MCP registries.
 
@@ -19,6 +19,8 @@ The only MCP server combining facility data, infrastructure, and live grid intel
 "Compare ERCOT vs PJM capacity prices over the last 30 days"
 "Find data centers within 50km of Northern Virginia substations >230kV"
 "What's the live demand and generation mix in CAISO right now?"
+"Is behind-the-meter gas power cheaper than the grid in Texas?"
+"What's the grid mix in Atlanta (SOCO) and is power available?"
 "Get fiber routes between Ashburn and Atlanta"
 ```
 
@@ -28,15 +30,15 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 - **21,000+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
 - **126,427 substations** with voltage class, available capacity estimates
-- **Real-time grid telemetry** — live load/headroom for CAISO, MISO, SPP, NYISO (refreshed ~every 5 min); coverage across PJM, ERCOT, ISO-NE + Hydro-Québec, AESO, Nord Pool
-- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (ERCOT 410 GW / 87% DC, PJM 30 GW / 73% DC, etc.)
+- **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), ~25 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
+- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (e.g. ERCOT ~225 GW of data-center load in the interconnection queue)
 - **2,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
 - **Market intelligence** for 232 DC markets globally with daily DCPI verdicts
 
-**47 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**48 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
 **Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
 
