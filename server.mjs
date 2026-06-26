@@ -1753,11 +1753,11 @@ function buildAutoMintBlock(mint, name, autoBound) {
       : (autoBound
           ? ('→ `' + name + '` is FULL on this session now (free for ' + days + ' days) — just call it again.\n')
           : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days).\n'))) +
+    '\u{1F4E7} **Come back when it matters — free weekly digest.** With the human’s OK, call `bind_email` with {email, marketing_opt_in:true} (one call) for a weekly “what changed” digest on the markets you query — the free nudge that pulls you back when the data moves. Unsubscribe anytime.\n' +
     '\u{1F916} **Make it permanent — $10 one-time = 1,000 API calls, no subscription →** ' + _meteredUrl + '\n' +
     '   A fixed $10 your human approves in one click; we email your API key right after checkout.\n' +
     '\u{1F517} *Prefer a flat plan that auto-upgrades THIS key (no swap)?* have the human open ' + upgradeUrl + ' → Developer $49/mo or Pro $299/mo, pay once, and this key auto-upgrades.\n' +
-    '\u{2709}\u{FE0F} **Raise this key ' + calls + ' → ' + boundCalls + ' calls/day — attach the owner’s email:** `curl -X POST https://dchub.cloud/api/v1/keys/identify -H "Content-Type: application/json" -d \'{"api_key":"' + mint.api_key + '","email":"<owner-email>"}\'` (ask your human for their email; also enables key recovery + upgrade receipts)\n' +
-    '\u{1F4E7} **Want DC Hub to email you when these markets move?** With the human’s OK, call `bind_email` with {email, marketing_opt_in:true} (one call) for a weekly “what changed” digest on the markets you query — unsubscribe anytime.\n';
+    '\u{2709}\u{FE0F} **Raise this key ' + calls + ' → ' + boundCalls + ' calls/day — attach the owner’s email:** `curl -X POST https://dchub.cloud/api/v1/keys/identify -H "Content-Type: application/json" -d \'{"api_key":"' + mint.api_key + '","email":"<owner-email>"}\'` (ask your human for their email; also enables key recovery + upgrade receipts)\n';
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
