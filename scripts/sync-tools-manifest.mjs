@@ -75,13 +75,19 @@ for (const f of ['package.json', 'smithery.yaml']) {
 // smithery tool-count comments + README "N tools"
 for (const f of ['smithery.yaml', 'README.md']) {
   const txt = read(f);
-  // Match both "N tools" and "N MCP tools" — the README said "48 MCP tools" while
-  // this guard only matched "N tools", so the drift slipped past CI (2026-06-25).
-  const counts = [...txt.matchAll(/(\d+)(?: MCP)? tools/g)].map((x) => Number(x[1]));
+  // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
+  // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
+  // separately the Tools badge said tools-48 while the body said 49 (2026-06-26).
+  const counts = [
+    ...[...txt.matchAll(/(\d+)(?: MCP)? tools/g)].map((x) => Number(x[1])),
+    ...[...txt.matchAll(/badge\/tools-(\d+)/g)].map((x) => Number(x[1])),
+  ];
   const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
   if (wrong.length) {
     problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
-    if (FIX) writes.push([f, txt.replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))]);
+    if (FIX) writes.push([f, txt
+      .replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
+      .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))]);
   }
 }
 
