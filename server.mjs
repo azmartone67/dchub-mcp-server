@@ -2260,6 +2260,28 @@ async function _maybeEmbedValueClaim(result, name, c) {
 function _withNextSession(result) {
   return _withNextSessionImpl(result, _NEXT_SESSION);
 }
+// r-optin-visible (2026-06-26): the retention machine (winback digest + return
+// reward) is ARMED but its audience is EMPTY — the opt-in ask lived only in
+// structuredContent that header-less clients (Claude.ai/ChatGPT — the exact
+// cohort that can't return on a bare key) never render → 0 opt-ins from thousands
+// of calls. Surface ONE visible, value-anchored opt-in line on the two highest-
+// demand free tools (grid/fiber: 198/179 distinct free users) so the ask is
+// actually seen. Idempotent · one line · never on error/preview · skips paid.
+const _OPTIN_TOOLS = new Set(['get_grid_intelligence', 'get_fiber_intel']);
+function withVisibleOptIn(result, name, c) {
+  try {
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (!_OPTIN_TOOLS.has(name) || result._optin) return result;
+    const t = String((c && c.tier) || '').toLowerCase();
+    if (t.includes('paid') || t.includes('pro') || t.includes('enterprise') || t.includes('developer')) return result;
+    result._optin = true;
+    result.content.push({ type: 'text', text:
+      '\n\n📧 **Want DC Hub to email you when these markets move?** Have your agent call `bind_email` ' +
+      'with the operator’s email and `marketing_opt_in=true` — one call. You get a weekly “what changed” ' +
+      'digest for the markets you query (unsubscribe anytime), and your key keeps working across sessions.' });
+  } catch (_) { /* never block the response on the opt-in line */ }
+  return result;
+}
 function withCitation(result) {
   try {
     if (!result || result.isError || !Array.isArray(result.content)) return result;
@@ -3381,7 +3403,7 @@ Free tier covers **10 calls/day** across:
       // idempotent — never alters content[] and never blocks the response.
       // #1241: embed an in-context claim at the value moment (grid/fiber, flag-gated).
       const _valued = await _maybeEmbedValueClaim(result, name, c);
-      return withCitation(withBindHint(_valued, name, c));
+      return withCitation(withVisibleOptIn(withBindHint(_valued, name, c), name, c));
     } catch (err) {
       status = 'error';
       throw err;
