@@ -53,6 +53,20 @@ const names = new Set(tools.map((t) => t.name));
 const problems = [];
 const writes = [];
 
+// server.json — the OFFICIAL-registry publish source (cascades to the GitHub MCP
+// Registry mirror). Its description is evergreen (no tool count to drift); the only
+// count lives in _meta.toolCount, so keep just that honest daily. NOTE: we do NOT
+// bump server.json.version here — the canonical version is operator-owned; the
+// existing registry-refresh publish carries the corrected count on the next bump.
+{
+  const sj = readJSON('server.json');
+  const meta = sj._meta && sj._meta['io.modelcontextprotocol.registry/publisher-provided'];
+  if (meta && meta.toolCount !== COUNT) {
+    problems.push(`server.json _meta.toolCount ${meta.toolCount} != ${COUNT}`);
+    if (FIX) { meta.toolCount = COUNT; writes.push(['server.json', JSON.stringify(sj, null, 2) + '\n']); }
+  }
+}
+
 // mcp-server.json — the manifest that feeds registry scrapes
 {
   const m = readJSON('mcp-server.json');
