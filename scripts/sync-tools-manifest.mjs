@@ -55,9 +55,10 @@ const writes = [];
 
 // server.json — the OFFICIAL-registry publish source (cascades to the GitHub MCP
 // Registry mirror). Its description is evergreen (no tool count to drift); the only
-// count lives in _meta.toolCount, so keep just that honest daily. NOTE: we do NOT
-// bump server.json.version here — the canonical version is operator-owned; the
-// existing registry-refresh publish carries the corrected count on the next bump.
+// count lives in _meta.toolCount, so keep just that honest daily. We do NOT bump
+// server.json.version here — the canonical version is operator-owned. When this fix
+// changes server.json, daily-manifest-sync.yml auto-publishes a PUBLISH-ONLY patch
+// bump (scripts/registry-autopublish.mjs) so the listing refreshes the SAME DAY.
 {
   const sj = readJSON('server.json');
   const meta = sj._meta && sj._meta['io.modelcontextprotocol.registry/publisher-provided'];

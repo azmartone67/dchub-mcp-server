@@ -37,12 +37,17 @@ jobs:
       - name: Sync tool count + version from server.mjs into registry source files
         run: node scripts/sync-tools-manifest.mjs --fix
       - name: Commit + push only if a surface drifted
+        id: commit
         run: |
           set -e
           if git diff --quiet -- README.md smithery.yaml mcp-server.json server.json; then
             echo "✓ no drift — all registry surfaces already in sync"
+            echo "server_json=no" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Did server.json (the OFFICIAL-registry publish source) change? If so the live
+          # tool set drifted and we auto-publish a patch bump below.
+          if git diff --quiet -- server.json; then echo "server_json=no" >> "$GITHUB_OUTPUT"; else echo "server_json=yes" >> "$GITHUB_OUTPUT"; fi
           echo "Surfaces drifted — healing:"; git --no-pager diff --stat -- README.md smithery.yaml mcp-server.json server.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -51,3 +56,32 @@ jobs:
           git commit -m "chore(registry): daily tool-count/version sync from server.mjs [skip ci]"
           git push
           echo "✓ healed registry surfaces — Glama/PulseMCP/GitHub will re-scan the updated source"
+      - name: Auto patch-bump + publish to official registry (cascades to GitHub mirror)
+        # Runs ONLY when server.json drifted (tool set changed). The bot's commit does NOT
+        # trigger registry-refresh (GitHub's recursion guard), so we publish inline here so
+        # the official + GitHub listings refresh the SAME DAY — not on the next manual bump.
+        if: steps.commit.outputs.server_json == 'yes'
+        env:
+          MCP_REGISTRY_DNS_KEY: ${{ secrets.MCP_REGISTRY_DNS_KEY }}
+        run: |
+          set -e
+          if [ -z "$MCP_REGISTRY_DNS_KEY" ]; then
+            echo "::warning::MCP_REGISTRY_DNS_KEY not set — repo healed but auto-publish skipped. Add the hex key to enable same-day refresh."
+            exit 0
+          fi
+          # Compute + write a patch version strictly above the registry's latest (publish-only;
+          # reverted after, so the repo's canonical version stays operator-owned).
+          NEXT=$(node scripts/registry-autopublish.mjs)
+          echo "auto patch-bump publish version: $NEXT"
+          curl -sL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar xz mcp-publisher || { echo "::warning::mcp-publisher download failed — skipping"; git checkout -- server.json; exit 0; }
+          ./mcp-publisher login dns --domain dchub.cloud --private-key "$MCP_REGISTRY_DNS_KEY" \
+            || { echo "::error::DNS login failed — MCP_REGISTRY_DNS_KEY must match the dchub.cloud apex TXT record"; git checkout -- server.json; exit 1; }
+          OUT=$(./mcp-publisher publish 2>&1) || true
+          echo "$OUT"
+          git checkout -- server.json   # publish-only bump — never commit it
+          if echo "$OUT" | grep -qi "Successfully published"; then
+            echo "::notice::✅ auto-published $NEXT — official registry + GitHub mirror + aggregators refresh on their own cadence."
+          else
+            echo "::warning::publish did not confirm success — review the log above."
+          fi
