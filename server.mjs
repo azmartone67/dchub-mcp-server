@@ -44,6 +44,7 @@ import { randomUUID } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
+import { readFileSync } from 'node:fs';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim } from './lib/result-shaping.mjs';
 
@@ -2613,6 +2614,13 @@ const WRITE_TOOLS = new Set([
 // its .size so the advertised count can never drift from reality (was a
 // hardcoded literal that fell behind the real registrations). 2026-06-20.
 const _registeredToolNames = new Set();
+// /health tool count: tools register inside a PER-SESSION server builder, so the
+// module-level Set is empty at /health time and the old `|| 47` literal went stale
+// (live showed 47 while tools/list returns 49). Read the canonical total from
+// mcp-server.json — the manifest sync-tools-manifest.mjs keeps == tools/list — so it
+// can never drift again. Falls back to 49 if the file can't be read.
+let CANONICAL_TOOL_COUNT = 49;
+try { CANONICAL_TOOL_COUNT = JSON.parse(readFileSync(new URL('./mcp-server.json', import.meta.url), 'utf8')).tools.length || CANONICAL_TOOL_COUNT; } catch { /* keep default */ }
 
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
 function trackedTool(srv, name, description, schema, handler) {
@@ -4852,7 +4860,7 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     server: 'DC Hub MCP',
     version: '2.3.3',
-    tools: _registeredToolNames.size || 47,   // computed from real registrations — never drifts
+    tools: CANONICAL_TOOL_COUNT,   // canonical count from mcp-server.json (matches live tools/list); CI-guarded by sync-tools-manifest
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
