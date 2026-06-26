@@ -125,7 +125,7 @@ claude mcp add dchub --transport http --header "X-API-Key: YOUR_KEY_HERE" https:
 | Pro | $199/mo | 2,000 |
 | Enterprise | custom | 100,000 |
 
-Metered overflow is available at $1 per 100 calls beyond your daily cap.
+A $10 one-time credit pack (1,000 API calls, no subscription) is available at https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i.
 
 ## Verify the connection
 

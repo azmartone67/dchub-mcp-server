@@ -115,7 +115,7 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 - **Developer ($49/mo):** 500 calls/day, full field access → [Stripe](https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c)
 - **Pro ($299/mo):** 2,000 calls/day + bulk export, historical data
 - **Enterprise (custom):** 100,000 calls/day, dedicated support, custom integrations
-- **Metered overflow:** $1 per 100 calls beyond your daily cap (no overage cutoffs)
+- **Credit pack:** $10 one-time = 1,000 API calls (no subscription) → [Stripe](https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i)
 
 ## Data sources
 
