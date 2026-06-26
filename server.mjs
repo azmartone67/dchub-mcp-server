@@ -3318,7 +3318,18 @@ Free tier covers **10 calls/day** across:
                 developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
                 promo_cta: PROMO_CTA, promo_code: PROMO_CODE, promo_expires: '2026-07-01',
               };
-              return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+              return { content: [
+                { type: 'text', text: JSON.stringify(trimmed) },
+                // r-overcap-cta (2026-06-26): the $10 CTA was ONLY nested in
+                // _upgrade.message inside the JSON above — clients that render
+                // content[0] literally / ignore _upgrade never show the human the
+                // upgrade (verified: no visible-prose $10 on over-cap). Surface it
+                // as a clean VISIBLE content item at the deprivation moment.
+                { type: 'text', text:
+                  '\n\n💳 **Unlock full depth now — $10 one-time = 1,000 API calls (no subscription):** ' +
+                  _stripeWithSession(CREDITS_URL, _sid) + ' — your human one-clicks; your very next `' + name +
+                  '` call returns the complete result (no reconnect). Prefer free? call `claim_free_key` (10 calls/day, no card).' },
+              ] };
             }
           } catch (_) { /* fall through to full data on parse failure */ }
         }
