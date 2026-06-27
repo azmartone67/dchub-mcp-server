@@ -5113,6 +5113,39 @@ app.post('/mcp', async (req, res) => {
       });
     }
 
+    // r-stateless-list (2026-06-27): tools/list and ping are caller-independent
+    // and need NO session state — the registered catalog is identical across
+    // sessions. Smithery (and any mcp-remote-based scanner) introspects via
+    // SEPARATE HTTP round-trips through CF → this single Railway service, so the
+    // follow-up tools/list frequently lands without a live in-process session
+    // (different replica, post-`railway up` Map wipe, or 120-min idle eviction at
+    // :4822) and previously fell through to the 400 below. That 400 IS the
+    // ~12.66% tools/list "server error" rate Smithery reports (agents abandon on
+    // the handshake → retention leak). Serve these from a fresh STATELESS
+    // transport (sessionIdGenerator: undefined → SDK validateSession() returns
+    // immediately, bypassing the _initialized check) so ANY process/replica
+    // returns the same tool catalog with zero dependence on a prior init. SSE
+    // mode is unchanged (enableJsonResponse left unset, matching the stateful
+    // transport above) so Smithery's existing SSE consumption is unaffected.
+    if (body?.method === 'tools/list' || body?.method === 'ping') {
+      const platform = detectPlatformFromInit(body, userAgent);
+      let _descOverrides = null;
+      try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
+      const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const ephServer = createServer(_descOverrides);
+      await ephServer.connect(ephTransport);
+      // No onclose handler: this is a one-shot stateless request. The SDK closes
+      // the SSE stream after the response and both objects become GC-eligible;
+      // there is no session in the Map to clean up (sessionIdGenerator: undefined).
+      return ctx.run({
+        api_key: apiKey, platform, tier: 'free', session_id: null,
+        referer: req.headers.referer || req.headers.referrer || null,
+        user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+      }, async () => {
+        await ephTransport.handleRequest(req, res, body);
+      });
+    }
+
     res.status(400).json({
       jsonrpc: '2.0',
       error: { code: -32000, message: 'No session. Send initialize first.' },
