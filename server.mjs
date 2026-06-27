@@ -274,6 +274,25 @@ function _stripeWithSession(url, sessionId) {
 const ctx = new AsyncLocalStorage();
 const getCtx = () => ctx.getStore() || {};
 
+// r-appstore-clean (2026-06-27): ChatGPT/OpenAI is the app-store surface — OpenAI's
+// app review screens out promotional spam, and the conversion-funnel walls (Stripe
+// links, trial-key pastes, promo codes, "1 of N — upgrade" prose) read as spam there
+// AND make a poor first impression. For these platforms we return DATA + ONE subtle
+// upgrade line; the full funnel is UNCHANGED for every other client (Claude Code,
+// Cursor, Cline, anon API, ...). Extend via env DCHUB_CLEAN_PLATFORMS (comma list of
+// platform substrings, e.g. "gemini,perplexity"). Paid/OAuth callers never hit the
+// funnel branches anyway (they get full data); this only cleans the FREE path.
+function _isCleanPlatform() {
+  try {
+    const p = (getCtx()?.platform || '').toLowerCase();
+    if (!p) return false;
+    if (p.includes('chatgpt') || p.includes('openai')) return true;
+    const extra = (process.env.DCHUB_CLEAN_PLATFORMS || '').toLowerCase()
+      .split(',').map(s => s.trim()).filter(Boolean);
+    return extra.some(s => p.includes(s));
+  } catch (_) { return false; }
+}
+
 // ── Platform detection (User-Agent → canonical platform name) ───────────────
 function detectPlatform(ua = '') {
   const u = (ua || '').toLowerCase();
@@ -3030,6 +3049,20 @@ function trackedTool(srv, name, description, schema, handler) {
               tier_required: 'paid',
               message_shown: 'trial_preview',
             });
+            // r-appstore-clean: ChatGPT/OpenAI get DATA + ONE subtle line, no walls.
+            if (_isCleanPlatform()) {
+              return {
+                content: [{ type: 'text', text: _trialText }],
+                isError: false,
+                structuredContent: {
+                  tier: 'free',
+                  tool: name,
+                  note: 'Free preview — a sample is shown. For the complete result, sign in to DC Hub or call claim_free_key (free, no email, one call).',
+                  upgrade_url: _refUrl(SIGNUP_URL),
+                  citation: 'According to DC Hub (dchub.cloud)',
+                },
+              };
+            }
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_gapLine + _upgradeHeader, _trialText) + _autoMintText + _hiText + PROMO_TEXT }],
               isError: true,
@@ -3290,6 +3323,12 @@ Free tier covers **10 calls/day** across:
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
             const trimmed = trimForTrial(parsed);
+            // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
+            if (_isCleanPlatform()) {
+              trimmed._note = 'Free preview — a sample is shown. For complete data, call claim_free_key (free, no email) or sign in to DC Hub.';
+              return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
+                       structuredContent: { tier: 'free', tool: name, upgrade_url: SIGNUP_URL, citation: 'According to DC Hub (dchub.cloud)' } };
+            }
             const _sid = c.session_id || 'no-session';
             // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL.
             trimmed._upgrade = {
