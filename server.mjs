@@ -890,7 +890,7 @@ async function callAPI(path, params = {}, opts = {}) {
   // MCP layer (applyTierGate) — this flag only affects the internal data fetch.
   if (opts && opts.internal) headers['User-Agent'] = 'dchub-mcp-server/1.0';
   try {
-    const resp = await fetch(url.toString(), { headers, signal: AbortSignal.timeout(30000) });
+    const resp = await fetch(url.toString(), { headers, signal: AbortSignal.timeout(opts.timeout || 30000) });
     const text = await resp.text();
     if (!resp.ok) return { error: `API ${resp.status}`, detail: text.slice(0, 500) };
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
@@ -4098,7 +4098,7 @@ function createServer(descOverrides) {
       lat: a.lat, lon: a.lon, capacity_mw: a.capacity_mw, prepared_for: a.prepared_for,
       prepared_by: a.prepared_by, latency_target: a.latency_target, use_case: a.use_case,
       form: 'premium', format: 'json',
-    })) }] }));
+    }, { timeout: 60000 })) }] }));
 
   trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker — grid headroom, fiber, water, tax, climate — with a recommended pick and the reason. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load (e.g. 50-500). Returns: {sites:[{lat, lon, composite_score, verdict, grid_headroom_mw, nearest_substation_km, fiber_carrier_count, water_stress_score, tax_incentive_value_usd, biggest_risk}], winner:{lat, lon, why}, decision_rationale}. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
     { locations: S },
