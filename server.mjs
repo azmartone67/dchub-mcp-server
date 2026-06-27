@@ -1066,9 +1066,9 @@ const FREE_TIER_LIMITS = {
 // Anonymous now blocked on these; free dev key unlocks them via the
 // KEYED_FREE_BONUS bridge OR the trial_preview path.
 const PAID_ONLY_TOOLS = new Set([
-  // PRO-only (the four highest-value premium tools)
+  // PRO-only premium tools (+ the generate_site_analysis PDF deliverable)
   'analyze_site', 'compare_sites', 'get_grid_intelligence', 'get_fiber_intel',
-  'get_dchub_recommendation',
+  'get_dchub_recommendation', 'generate_site_analysis',
   // FREE-with-email-key (pre-existing)
   'get_facility', 'get_market_intel', 'get_intelligence_index', 'get_grid_data',
   'get_infrastructure', 'get_energy_prices', 'get_renewable_energy',
@@ -1150,6 +1150,7 @@ const ANON_PREVIEW_ONLY = new Set([
   'analyze_site',             // 94 calls / 23 users / 0 conv (30d)
   'compare_sites',            // 69 calls / 22 users / 0 conv
   'get_dchub_recommendation', // 50 calls / 21 users / 0 conv
+  'generate_site_analysis',   // branded PDF deliverable — gated/preview for anon
 ]);
 
 // r62b-conv (2026-06-01): the 5 PRO-only tools. A minted dch_trial_ key
@@ -1162,7 +1163,7 @@ const ANON_PREVIEW_ONLY = new Set([
 // IDENTIFIED toolset NOW; the deep Pro brief needs Pro/metered.
 const PRO_ONLY_TOOLS = new Set([
   'analyze_site', 'compare_sites', 'get_grid_intelligence',
-  'get_fiber_intel', 'get_dchub_recommendation',
+  'get_fiber_intel', 'get_dchub_recommendation', 'generate_site_analysis',
   // 2026-06-06 agent moat: bulk export stays PRO. r-free-shortlist + r-free-alerts
   // (2026-06-24): save_site/list_saved_sites AND set_site_alert/set_market_alert are
   // now FREE-with-a-key — the persist + monitor retention loop. The spam-relay guard
@@ -1241,10 +1242,10 @@ const MAP_URL = 'https://dchub.cloud/land-power-map';
 // agent-autonomous pay-per-call (USDC) rail. Prices mirror the backend
 // routes/x402_payments.py table; the /quote endpoint is the source of truth.
 const X402_TOOLS = new Set(['get_grid_intelligence', 'get_fiber_intel',
-  'analyze_site', 'compare_sites']);
+  'analyze_site', 'compare_sites', 'generate_site_analysis']);
 const X402_PRICE = {
   get_grid_intelligence: 0.10, get_fiber_intel: 0.10,
-  analyze_site: 0.50, compare_sites: 0.50,
+  analyze_site: 0.50, compare_sites: 0.50, generate_site_analysis: 0.50,
 };
 // Map-CTA click tracking (2026-06-18): human-clickable map links route through
 // the backend /api/v1/go/map logging 302 so we can tell whether the upsell
@@ -1958,7 +1959,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   // "[number — sign up to unlock]". The principle: raw facts stay free (the
   // hook that wins agent citations + eyeballs); the decision/synthesis layer
   // is the paid line that justifies the upgrade.
-  const _DECISION_TOOLS = new Set(['rank_markets', 'get_dchub_recommendation', 'analyze_site', 'compare_sites', 'score_facility', 'get_market_dcpi_rank', 'ai_capacity_index', 'find_alternatives']);
+  const _DECISION_TOOLS = new Set(['rank_markets', 'get_dchub_recommendation', 'analyze_site', 'compare_sites', 'score_facility', 'get_market_dcpi_rank', 'ai_capacity_index', 'find_alternatives', 'generate_site_analysis']);
   let decisionLine = '';
   try {
     const blob = JSON.stringify(parsed || {}).toLowerCase();
@@ -2039,6 +2040,7 @@ const CREDIT_HEAVY = new Set([
   'get_grid_intelligence', 'get_fiber_intel', 'analyze_site', 'compare_sites',
   'get_dchub_recommendation', 'get_market_intel', 'rank_markets',
   'get_intelligence_index', 'get_interconnection_queue', 'ai_capacity_index',
+  'generate_site_analysis',
 ]);
 const _creditCost = (tool) => (CREDIT_HEAVY.has(tool) ? 5 : 1);
 const _creditCache = new Map();          // identity -> { credits, ts }
@@ -2533,7 +2535,7 @@ const _TOOL_TITLE_OVERRIDES = {
   compare_isos: "Compare ISO Regions", get_intelligence_index: "Market Intelligence Index",
   list_transactions: "M&A Transactions", get_news: "Industry News",
   get_pipeline: "Construction Pipeline", get_interconnection_queue: "Interconnection Queue",
-  get_grid_data: "Live Grid Data", analyze_site: "Analyze Site", compare_sites: "Compare Sites",
+  get_grid_data: "Live Grid Data", analyze_site: "Analyze Site", compare_sites: "Compare Sites", generate_site_analysis: "Generate Site Analysis",
   get_infrastructure: "Nearby Infrastructure", get_fiber_intel: "Fiber Intelligence",
   get_energy_prices: "Energy Prices", get_renewable_energy: "Renewable Energy",
   get_tax_incentives: "Tax Incentives", get_water_risk: "Water Risk",
@@ -4086,6 +4088,17 @@ function createServer(descOverrides) {
   trackedTool(srv, 'analyze_site', 'Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call. Example: "Score this Phoenix parcel for a 100MW build — grid, fiber, water, tax, climate." — analyze_site lat=33.45 lon=-112.07 capacity_mw=100. Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load in MW, e.g. 50-500), state (2-letter US, optional — improves tax-incentive lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns: {composite_score (0-100), verdict (BUILD/CAUTION/AVOID), grid_headroom_mw, nearest_substation_km, max_voltage_kv, fiber_carrier_count, nearest_ix_km, water_stress_score, drought_category, climate_risk_score, tax_incentive_value_usd, biggest_risk_factor, recommended_action}. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).',
     { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', a)) }] }));
+
+  // r-sitestudy (2026-06-26): the branded, shareable DELIVERABLE (PDF), distinct
+  // from analyze_site's numeric score. Returns the structured summary + a signed
+  // pdf_report_url the human can open with no login (PRO-gated; HMAC-signed link).
+  trackedTool(srv, 'generate_site_analysis', 'Use when a user wants a SHAREABLE, branded multi-page Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score. Example: "Make the Site Analysis PDF for this Carrier Mills parcel, 150 MW, for TON Infrastructure." — generate_site_analysis lat=37.694 lon=-88.65 capacity_mw=150 prepared_for="TON Infrastructure" prepared_by="Martone Advisors". Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load MW, e.g. 50-500), prepared_for (client name on the cover), prepared_by (your firm — brands the report; defaults to DC Hub), latency_target (optional metro override; default = nearest real carrier hotel). Returns: {survey:{verdict, power/transmission, gas, water, air-permitting, fiber carriers, latency-to-nearest-carrier-hotel, market, tax}, pdf_report_url}. pdf_report_url is a ready-to-open link to download the branded 5-page PDF — no login needed, valid ~7 days; hand it to your human. For just the numeric suitability score (no PDF), use analyze_site instead.',
+    { lat: N, lon: N, capacity_mw: N, prepared_for: S, prepared_by: S, latency_target: S, use_case: S },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-report', {
+      lat: a.lat, lon: a.lon, capacity_mw: a.capacity_mw, prepared_for: a.prepared_for,
+      prepared_by: a.prepared_by, latency_target: a.latency_target, use_case: a.use_case,
+      form: 'premium', format: 'json',
+    })) }] }));
 
   trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker — grid headroom, fiber, water, tax, climate — with a recommended pick and the reason. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load (e.g. 50-500). Returns: {sites:[{lat, lon, composite_score, verdict, grid_headroom_mw, nearest_substation_km, fiber_carrier_count, water_stress_score, tax_incentive_value_usd, biggest_risk}], winner:{lat, lon, why}, decision_rationale}. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
     { locations: S },
