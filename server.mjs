@@ -293,6 +293,40 @@ function _isCleanPlatform() {
   } catch (_) { return false; }
 }
 
+// r-appstore-clean: on a large full-data response, ChatGPT's app renderer surfaced
+// the `deep_intelligence` SIGNPOST sub-object (a "next steps: call get_grid_intelligence…"
+// hint) instead of the actual data. For clean platforms, strip the signpost / upsell /
+// meta keys so the DATA is the single unambiguous payload (content[0] + structuredContent),
+// keep ONE content item, and carry a plain `source` for attribution. No-op for every other
+// client. Returns the result unchanged on any parse issue (fail-soft).
+const _SIGNPOST_KEYS = new Set([
+  'deep_intelligence', '_upgrade', '_bind', 'next_session', '_next_session',
+  '_NEXT_SESSION', '_source', '_cite', '_more', '_note',
+]);
+function _stripSignpost(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (_SIGNPOST_KEYS.has(k)) continue;
+    out[k] = v;
+  }
+  out.source = 'DC Hub (dchub.cloud)';
+  return out;
+}
+function _leanForClean(result, name) {
+  if (!_isCleanPlatform()) return result;
+  try {
+    const items = (result && result.content) || [];
+    const dataItem = items.find(c => c && c.type === 'text' && typeof c.text === 'string');
+    if (!dataItem) return result;
+    let obj;
+    try { obj = JSON.parse(dataItem.text); } catch { return result; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return result;
+    const clean = _stripSignpost(obj);
+    return { ...result, content: [{ type: 'text', text: JSON.stringify(clean) }], structuredContent: clean };
+  } catch (_) { return result; }
+}
+
 // ── Platform detection (User-Agent → canonical platform name) ───────────────
 function detectPlatform(ua = '') {
   const u = (ua || '').toLowerCase();
@@ -3494,7 +3528,8 @@ Free tier covers **10 calls/day** across:
       // idempotent — never alters content[] and never blocks the response.
       // #1241: embed an in-context claim at the value moment (grid/fiber, flag-gated).
       const _valued = await _maybeEmbedValueClaim(result, name, c);
-      return withCitation(withBindHint(_valued, name, c));
+      // r-appstore-clean: strip signpost/meta for ChatGPT so the DATA renders (no-op elsewhere).
+      return _leanForClean(withCitation(withBindHint(_valued, name, c)), name);
     } catch (err) {
       status = 'error';
       throw err;
