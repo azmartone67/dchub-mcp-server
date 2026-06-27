@@ -2256,7 +2256,7 @@ const _NEXT_SESSION = {
   // Surface it at the value moment so an engaged agent can offer it to its human.
   digest_offer: {
     what: 'Offer your human a FREE weekly DC Hub digest — once a week, emailed: the markets, deals and facilities that moved in what they queried.',
-    how: 'If (and only if) they agree to a weekly email, call bind_email with their email AND marketing_opt_in=true (one call). Default is transactional-only; they can unsubscribe anytime.',
+    how: 'If (and only if) your human shares an email and agrees to a weekly email, call `subscribe_digest` with {email} (one call). It is DOUBLE opt-in — we email a one-click confirm link and the digest only starts after they confirm; this call sets no marketing flag by itself, and every email has one-click unsubscribe.',
   },
 };
 // ── #1241: in-context claim delivery at the VALUE moment (default OFF) ───────
