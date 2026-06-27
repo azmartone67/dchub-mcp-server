@@ -1788,7 +1788,7 @@ function buildAutoMintBlock(mint, name, autoBound) {
     upgrade_url:               upgradeUrl,
     upgrade_model:             'pair_code_key_bound',
     upgrade_instructions:      'Have the human open upgrade_url and complete checkout (Developer $49/mo or Pro $299/mo). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
-    pricing:                   { developer_usd_month: 49, pro_usd_month: 199, metered_url: METERED_URL },
+    pricing:                   { developer_usd_month: 49, pro_usd_month: 299, metered_url: METERED_URL },
   };
   return { text, sc };
 }
