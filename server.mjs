@@ -3481,6 +3481,16 @@ Free tier covers **10 calls/day** across:
   });
 }
 
+// r-scoreboard-cache-hoist (2026-06-27): MODULE-SCOPE cache for get_grid_scoreboard.
+// Was declared INSIDE createServer → one cache per session/createServer-instance, so
+// every NEW session paid the full ~14s per-ISO + intl fan-out cold (live prod p50=13.8s,
+// p95=36s, the #1 driver of the Smithery tools/call P95). get_grid_scoreboard is in
+// FREE_FULL_TOOLS (server.mjs:1189) — full, IDENTICAL, caller-independent data for every
+// caller — so a single process-wide cache is leak-safe: the first call warms it, all
+// subsequent calls across ALL sessions/replicas-process hit warm (~instant) for 90s
+// (well inside the EIA-hourly / 5-min-Elexon freshness window).
+const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null };
+
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 // descOverrides: optional { tool_name: description } map from the per-platform
 // tuner. Set into the module-level _activeDescOverrides for the SYNCHRONOUS
@@ -3633,9 +3643,10 @@ function createServer(descOverrides) {
   // excludes hydro + rooftop) + live price — never faked into the ranking.
   const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
-  // r78: 90s assembled-payload cache for the no-argument scoreboard (see
-  // latency note inside the handler).
-  const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null };
+  // r78: 90s assembled-payload cache for the no-argument scoreboard (see latency
+  // note inside the handler). r-scoreboard-cache-hoist (2026-06-27): _SCOREBOARD_CACHE
+  // now lives at MODULE scope (above createServer) so it is shared across ALL sessions,
+  // not re-created cold per session — see the note there.
   trackedTool(srv, 'get_grid_scoreboard',
     'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + 24 European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). US + GB + EU all rank by wind+solar+hydro share (apples-to-apples); AU is listed unranked (its feed reports a variable-renewable floor only, no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; AU = AEMO NEM — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
