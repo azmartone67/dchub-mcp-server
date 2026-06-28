@@ -1,0 +1,51 @@
+name: docker build + introspect (Glama parity)
+
+# Glama lists DC Hub by BUILDING this repo's Dockerfile, running it, and probing
+# tools/list — and it has NO auto-update (manual rebuild only). So if a change ever
+# breaks the Docker build or changes the tool count, Glama would silently go stale
+# or show 0 on its next rebuild. This job builds the image EXACTLY as Glama does and
+# asserts the container introspects the canonical mcp-server.json tool count — so a
+# broken/drifted image is caught here, not on Glama.
+
+on:
+  push:
+    branches: [main]
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json', 'scripts/introspect_probe.py']
+  pull_request:
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'mcp-server.json']
+  schedule:
+    - cron: '27 13 * * *'   # daily belt-and-suspenders (before the registry syncs)
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-introspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image exactly as Glama does
+        run: docker build -t dchub-mcp:ci .
+
+      - name: Run the container + assert tools/list == canonical
+        run: |
+          set -e
+          EXPECTED=$(python3 -c "import json;print(len(json.load(open('mcp-server.json'))['tools']))")
+          docker run -d --name dchub-ci -p 8088:8080 dchub-mcp:ci
+          echo "waiting for the container to boot..."
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8088/health >/dev/null 2>&1 && break; sleep 2; done
+          HEALTH=$(curl -s --max-time 8 http://127.0.0.1:8088/health || echo '{}')
+          echo "health: $HEALTH"
+          COUNT=$(python3 scripts/introspect_probe.py http://127.0.0.1:8088)
+          docker logs dchub-ci 2>&1 | tail -15 || true
+          docker rm -f dchub-ci >/dev/null 2>&1 || true
+          echo "container tools/list = $COUNT | canonical mcp-server.json = $EXPECTED"
+          if [ "$COUNT" != "$EXPECTED" ]; then
+            echo "::error::Glama-parity FAIL — the container introspects $COUNT tools but mcp-server.json says $EXPECTED. A Glama rebuild would list the wrong count. Run: node scripts/sync-tools-manifest.mjs --fix"
+            exit 1
+          fi
+          echo "✓ Glama will introspect $COUNT tools — matches canonical. Image is Glama-ready."

@@ -15,7 +15,7 @@ the top nav. PulseMCP lists remote servers.
 | Tags | data-center, energy, natural-gas, electricity-grid, infrastructure, market-intelligence, M&A |
 
 **Description (paste-ready):**
-> Real-time data-center, power & gas intelligence for AI agents. 38 MCP tools over Streamable HTTP: search 21k+ facilities, score sites, rank 232 markets (DCPI power index), check the DCGI gas index, compare US ISO grids live, and pull interconnection queues, M&A, fiber, water & tax data. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
+> Real-time data-center, power & gas intelligence for AI agents. 38 MCP tools over Streamable HTTP: search 21k+ facilities, score sites, rank 300+ markets (DCPI power index), check the DCGI gas index, compare US ISO grids live, and pull interconnection queues, M&A, fiber, water & tax data. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
 
 **Suggested use-case prompts:**
 - "Where should I build a data center?"

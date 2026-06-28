@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+// ============================================================================
+// Single-source-of-truth for the MCP tool manifest.
+//
+// server.mjs (the live gateway) is the ONLY place tools are defined. This script
+// DERIVES the tool list + count from its trackedTool() registrations and keeps
+// the manifest surfaces in sync, so the version/tool-count drift that registries
+// scrape (mcp-server.json had 42 while server.mjs registers 47) can't recur.
+//
+//   node scripts/sync-tools-manifest.mjs           # CHECK (CI guard; exit 1 on drift)
+//   node scripts/sync-tools-manifest.mjs --fix     # rewrite mcp-server.json + version strings
+//
+// Canonical version  = server.json .version
+// Canonical tool set = name+description of every trackedTool(srv, '<name>', '<desc>', …) in server.mjs
+// ============================================================================
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const FIX = process.argv.includes('--fix');
+const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+const readJSON = (f) => JSON.parse(read(f));
+
+// ---- canonical version -----------------------------------------------------
+const VERSION = readJSON('server.json').version;
+
+// ---- canonical tool list (parsed from server.mjs) --------------------------
+// Matches: trackedTool(srv, 'name', '<string literal>' …  — handles single OR
+// double quotes with escapes, across newlines. Falls back to the existing
+// description if a literal can't be safely evaluated (e.g. concatenation).
+function canonicalTools() {
+  const src = read('server.mjs');
+  const re = /trackedTool\(\s*srv\s*,\s*'([a-z_]+)'\s*,\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g;
+  const existing = Object.fromEntries((tryReadTools() || []).map((t) => [t.name, t.description]));
+  const out = [];
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const name = m[1];
+    let description = existing[name] || '';
+    try { description = (0, eval)(m[2]); } catch { /* keep fallback */ }
+    out.push({ name, description });
+  }
+  return out;
+}
+function tryReadTools() { try { return readJSON('mcp-server.json').tools; } catch { return null; } }
+
+const tools = canonicalTools();
+const COUNT = tools.length;
+const names = new Set(tools.map((t) => t.name));
+
+// ---- surfaces to keep in sync ---------------------------------------------
+const problems = [];
+const writes = [];
+
+// server.json — the OFFICIAL-registry publish source (cascades to the GitHub MCP
+// Registry mirror). Its description is evergreen (no tool count to drift); the only
+// count lives in _meta.toolCount, so keep just that honest daily. We do NOT bump
+// server.json.version here — the canonical version is operator-owned. When this fix
+// changes server.json, daily-manifest-sync.yml auto-publishes a PUBLISH-ONLY patch
+// bump (scripts/registry-autopublish.mjs) so the listing refreshes the SAME DAY.
+{
+  const sj = readJSON('server.json');
+  const meta = sj._meta && sj._meta['io.modelcontextprotocol.registry/publisher-provided'];
+  if (meta && meta.toolCount !== COUNT) {
+    problems.push(`server.json _meta.toolCount ${meta.toolCount} != ${COUNT}`);
+    if (FIX) { meta.toolCount = COUNT; writes.push(['server.json', JSON.stringify(sj, null, 2) + '\n']); }
+  }
+}
+
+// mcp-server.json — the manifest that feeds registry scrapes
+{
+  const m = readJSON('mcp-server.json');
+  const cur = (m.tools || []).map((t) => t.name);
+  const missing = [...names].filter((n) => !cur.includes(n));
+  const extra = cur.filter((n) => !names.has(n));
+  if (m.version !== VERSION) problems.push(`mcp-server.json version ${m.version} != ${VERSION}`);
+  if (missing.length) problems.push(`mcp-server.json MISSING ${missing.length} tools: ${missing.join(', ')}`);
+  if (extra.length) problems.push(`mcp-server.json has ${extra.length} STALE tools: ${extra.join(', ')}`);
+  if (FIX) { m.version = VERSION; m.tools = tools; if ('tools_count' in m) m.tools_count = COUNT;
+    writes.push(['mcp-server.json', JSON.stringify(m, null, 2) + '\n']); }
+}
+
+// version strings in the other registry-facing files
+for (const f of ['package.json', 'smithery.yaml']) {
+  const txt = read(f);
+  if (!txt.includes(VERSION)) problems.push(`${f} does not contain canonical version ${VERSION}`);
+}
+
+// smithery tool-count comments + README "N tools"
+for (const f of ['smithery.yaml', 'README.md']) {
+  const txt = read(f);
+  // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
+  // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
+  // separately the Tools badge said tools-48 while the body said 49 (2026-06-26).
+  const counts = [
+    ...[...txt.matchAll(/(\d+)(?: MCP)? tools/g)].map((x) => Number(x[1])),
+    ...[...txt.matchAll(/badge\/tools-(\d+)/g)].map((x) => Number(x[1])),
+  ];
+  const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
+  if (wrong.length) {
+    problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
+    if (FIX) writes.push([f, txt
+      .replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
+      .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))]);
+  }
+}
+
+// ---- canonical FACTS drift-guard (pricing / coverage) ----------------------
+// canonical/mcp_facts.json is generated by dchub-backend/mcp_facts_export.py from
+// the Python SoTs (tier_registry + canonical_stats). The Node repo can't import
+// those, so this JSON is the cross-language bridge — that drift is exactly why
+// "Pro $199", "countries 140", and "EU ~12 zones" kept reappearing here. We CHECK
+// the registry surfaces against it. Auto-rewriting prose is fragile, so facts
+// drift FAILS CI but is NOT --fix'd: re-run the exporter + correct the surface.
+const factProblems = [];
+let facts = null;
+try { facts = readJSON('canonical/mcp_facts.json'); } catch { /* not generated yet */ }
+if (facts) {
+  const proPrice = facts.pricing_usd_month?.pro;
+  const euZones = facts.grid_coverage?.eu_entsoe_zones;
+  for (const f of ['smithery.yaml', 'README.md', 'mcp-server.json']) {
+    const txt = read(f);
+    if (proPrice) for (const m of txt.matchAll(/\bpro\b[^\n$]{0,6}\$(\d{2,4})/gi))
+      if (Number(m[1]) !== proPrice) factProblems.push(`${f}: Pro $${m[1]} != canonical $${proPrice}`);
+    if (euZones) for (const m of txt.matchAll(/~?(\d{1,3})\+?\s+(?:EU|European)[A-Za-z \-]*?zones/g))
+      if (Number(m[1]) !== euZones) factProblems.push(`${f}: EU-zone count ${m[1]} != canonical ${euZones}`);
+  }
+}
+
+// ---- apply / report --------------------------------------------------------
+if (FIX) {
+  for (const [f, content] of writes) fs.writeFileSync(path.join(ROOT, f), content);
+  console.log(`✓ synced to v${VERSION} / ${COUNT} tools — wrote: ${writes.map((w) => w[0]).join(', ') || '(nothing)'}`);
+  if (factProblems.length) console.warn('⚠ FACTS DRIFT (not auto-fixable — re-run dchub-backend/mcp_facts_export.py, then edit the surface):\n  - ' + factProblems.join('\n  - '));
+  process.exit(0);
+}
+console.log(`canonical: v${VERSION} / ${COUNT} tools`);
+const allProblems = [...problems, ...factProblems];
+if (allProblems.length) { console.error('MANIFEST/FACTS DRIFT:\n  - ' + allProblems.join('\n  - ') + '\n\nTool drift → node scripts/sync-tools-manifest.mjs --fix. Facts drift → match canonical/mcp_facts.json.'); process.exit(1); }
+console.log('✓ all manifest + facts surfaces consistent');

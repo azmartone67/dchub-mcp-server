@@ -1,11 +1,13 @@
 <!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
-**Real-time data center intelligence for AI agents.**
+**Real-time data-center, power & energy intelligence for AI agents.**
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Cline, Continue, and any AI assistant doing data center site selection, energy analysis, or market research.
 
-[![Install on Cursor](https://img.shields.io/badge/Cursor-Install-black?logo=cursor)](https://cursor.directory/plugins/mcp-dchub) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama](https://img.shields.io/badge/glama.ai-verified-purple)](https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server) [![Tools](https://img.shields.io/badge/tools-38-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![Tools](https://img.shields.io/badge/tools-51-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
+
+> ⭐ **Find DC Hub useful? [Star the repo](https://github.com/azmartone67/dchub-mcp-server)** — stars help agents (and people) discover it across the MCP registries.
 
 ---
 
@@ -17,6 +19,8 @@ The only MCP server combining facility data, infrastructure, and live grid intel
 "Compare ERCOT vs PJM capacity prices over the last 30 days"
 "Find data centers within 50km of Northern Virginia substations >230kV"
 "What's the live demand and generation mix in CAISO right now?"
+"Is behind-the-meter gas power cheaper than the grid in Texas?"
+"What's the grid mix in Atlanta (SOCO) and is power available?"
 "Get fiber routes between Ashburn and Atlanta"
 ```
 
@@ -26,17 +30,30 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 - **21,000+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
 - **126,427 substations** with voltage class, available capacity estimates
-- **Real-time grid telemetry** — live load/headroom for CAISO, MISO, SPP, NYISO (refreshed ~every 5 min); coverage across PJM, ERCOT, ISO-NE + Hydro-Québec, AESO, Nord Pool
-- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (ERCOT 410 GW / 87% DC, PJM 30 GW / 73% DC, etc.)
+- **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
+- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (e.g. ERCOT ~225 GW of data-center load in the interconnection queue)
 - **2,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
-- **Market intelligence** for 232 DC markets globally with daily DCPI verdicts
+- **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
 
-**38 MCP tools** across facility search, market intel, grid + interconnection, site analysis, deals, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**51 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
 **Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
+
+## Guided prompts & resources
+
+Beyond the 51 tools, DC Hub ships **6 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients:
+
+- `/dchub:analyze-site` — full buildability read for an address or lat,lon
+- `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
+- `/dchub:power-availability` — headroom + time-to-power for an ISO
+- `/dchub:site-report` — premium one-page site brief (power · gas · fiber · market · risk)
+- `/dchub:compare-markets` — 2–4 markets head-to-head
+- `/dchub:fiber-plan` — diverse fibre lead-in routes to a carrier hotel
+
+Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
 
 ## Why DC Hub vs other directories
 
@@ -96,9 +113,9 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 - **Free key (email signup, ~60 sec):** [https://dchub.cloud/signup](https://dchub.cloud/signup) — 50 calls/day
 - **Starter ($9/mo):** 200 calls/day → [Stripe](https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g)
 - **Developer ($49/mo):** 500 calls/day, full field access → [Stripe](https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c)
-- **Pro ($199/mo):** 2,000 calls/day + bulk export, historical data
+- **Pro ($299/mo):** 2,000 calls/day + bulk export, historical data
 - **Enterprise (custom):** 100,000 calls/day, dedicated support, custom integrations
-- **Metered overflow:** $1 per 100 calls beyond your daily cap (no overage cutoffs)
+- **Credit pack:** $10 one-time = 1,000 API calls (no subscription) → [Stripe](https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i)
 
 ## Data sources
 

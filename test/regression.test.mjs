@@ -13,6 +13,35 @@
 // rather than returning data. Run with: npx vitest run
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+// ── Version consistency guard (r-version-sync 2026-06-19) ──────────────────
+// The release flow bumps package.json + server.mjs, but server.json /
+// mcp-server.json / smithery.yaml have drifted behind before — and server.json is
+// what registry-refresh publishes to the official MCP registry, so a mismatch
+// silently UNDER-publishes the version (caught + fixed v2.3.0->2.3.1, 2026-06-19).
+// Fail the build if the five publish surfaces disagree. Pure local read, no network.
+describe('version consistency across publish surfaces', () => {
+  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  it('package.json / server.json / mcp-server.json / smithery.yaml / server.mjs all agree', () => {
+    const versions = {
+      'package.json':    JSON.parse(read('../package.json')).version,
+      'server.json':     JSON.parse(read('../server.json')).version,
+      'mcp-server.json': JSON.parse(read('../mcp-server.json')).version,
+    };
+    const sm = read('../smithery.yaml').match(/^version:\s*["']?(\d+\.\d+\.\d+)/m);
+    versions['smithery.yaml'] = sm ? sm[1] : null;
+    // server.mjs carries the version in 2+ spots (McpServer init + well-known);
+    // dedup — if they disagree, the joined string makes the set size > 1 and fails.
+    const mjs = [...new Set([...read('../server.mjs')
+      .matchAll(/version:\s*['"](\d+\.\d+\.\d+)['"]/g)].map((m) => m[1]))];
+    versions['server.mjs'] = mjs.length === 1 ? mjs[0] : mjs.join(',');
+    expect(
+      new Set(Object.values(versions)).size,
+      `version drift across publish surfaces: ${JSON.stringify(versions)}`,
+    ).toBe(1);
+  });
+});
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
@@ -450,5 +479,107 @@ describe('MCP regression suite', () => {
         expect(gated || hasData).toBe(true);
       }, 20000);
     }
+  });
+
+  // ─── search → live page slug round-trip ────────────────────────────────────
+  // Regression guard for a backend slug-source divergence. The agent-facing
+  // `search_facilities` tool (→ /api/v1/facilities) emits a slug that does NOT
+  // resolve on the canonical surfaces, so an agent that searches then opens the
+  // result dead-ends. Verified live 2026-06-08 — two incompatible namespaces,
+  // and NO single slug resolves on all three surfaces:
+  //
+  //   slug                                            get_facility  page  score_facility
+  //   stack-stafford-technology-campus (search emits)     404        404      200
+  //   stack-infrastructure-…-eb55e369 (/api/v1/search)    200        200      404
+  //
+  // The user-requested assertion is "every search-returned slug 200s on the
+  // live page". It currently FAILS — flagging the divergence for the maintainer
+  // to align the backend slug source. This suite is non-blocking (informational)
+  // in CI, so the red surfaces the bug without gating; once /api/v1/facilities'
+  // slug output is aligned with /facilities/<slug>, it becomes a passing guard.
+  describe('search → live page slug round-trip', () => {
+    const SITE = MCP_URL.replace(/\/mcp\/?$/, '') || 'https://dchub.cloud';
+    const transient = (s) => s === 429 || s >= 500;
+
+    // Collect the slugs the agent-facing search tool actually emits.
+    async function searchToolSlugs() {
+      const slugs = new Set();
+      const probes = [
+        { country: 'US', state: 'VA', limit: 10 },
+        { query: 'ashburn', limit: 10 },
+        { country: 'US', state: 'TX', limit: 10 },
+      ];
+      for (const args of probes) {
+        let r;
+        try { r = await callTool('search_facilities', args); } catch { continue; }
+        if (isGated(r)) continue;
+        const items = r.results || r.facilities || r.data || (Array.isArray(r) ? r : []);
+        for (const f of items) {
+          const s = f?.slug || f?.id;
+          // skip bare numeric ids — the page/get_facility are slug-addressed
+          if (typeof s === 'string' && s && !/^\d+$/.test(s)) slugs.add(s);
+        }
+      }
+      return [...slugs];
+    }
+
+    it('every slug search_facilities returns resolves 200 on the live /facilities/<slug> page', async () => {
+      const slugs = await searchToolSlugs();
+      if (!slugs.length) return; // gated/empty/transient → nothing to assert
+      const broken = [];
+      let checked = 0;
+      for (const slug of slugs) {
+        const res = await fetch(`${SITE}/facilities/${encodeURIComponent(slug)}`, { method: 'HEAD' });
+        if (transient(res.status)) continue; // live blip → don't count
+        checked++;
+        if (res.status !== 200) broken.push(`${slug} → HTTP ${res.status}`);
+      }
+      if (checked === 0) return;
+      if (broken.length) {
+        console.error(
+          'SEARCH→PAGE SLUG DIVERGENCE — search_facilities emits slugs that 404 on the live page:\n  ' +
+          broken.join('\n  ') +
+          '\n  The resolvable page slug is the UUID-suffixed form /api/v1/search emits ' +
+          '(e.g. stack-infrastructure-stack-stafford-technology-campus-eb55e369). ' +
+          'Align /api/v1/facilities slug output with the /facilities/<slug> source.'
+        );
+      }
+      expect(broken, 'search_facilities slugs that do not 200 on the live page').toEqual([]);
+    }, 60000);
+
+    // The full round-trip the user described: a slug an agent gets from
+    // search_facilities should open (page), fetch (get_facility) AND score
+    // (score_facility). Currently the search slug (e.g. "stack-stafford-va")
+    // dead-ends on ALL three — a fully dangling identifier. This prints the
+    // exact 3-surface matrix and asserts the round-trip so it stays visible
+    // until the backend emits one canonical, resolvable slug everywhere.
+    it('the search slug resolves on get_facility + page + score_facility (full round-trip)', async () => {
+      const slugs = await searchToolSlugs();
+      if (!slugs.length) return;
+      const slug = slugs[0];
+      const [getFac, page, score] = await Promise.all([
+        fetch(`${SITE}/api/v1/facilities/${encodeURIComponent(slug)}`),
+        fetch(`${SITE}/facilities/${encodeURIComponent(slug)}`, { method: 'HEAD' }),
+        fetch(`${SITE}/api/v1/mcp/tools/score_facility`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ facility_id: slug }),
+        }),
+      ]);
+      if (transient(getFac.status) || transient(page.status) || transient(score.status)) return;
+      const scoreText = await score.text().catch(() => '');
+      const scoreResolves = score.ok && !/facility not found/i.test(scoreText);
+      console.error(
+        `SEARCH SLUG "${slug}" resolution → ` +
+        `get_facility=${getFac.status} | page=${page.status} | score_facility=${scoreResolves ? '200' : score.status}`
+      );
+      const failures = [];
+      if (getFac.status !== 200) failures.push(`get_facility=${getFac.status}`);
+      if (page.status !== 200) failures.push(`page=${page.status}`);
+      if (!scoreResolves) failures.push(`score_facility=${score.status}`);
+      expect(
+        failures,
+        `search slug "${slug}" should resolve everywhere; failed on: ${failures.join(', ')}`
+      ).toEqual([]);
+    }, 40000);
   });
 });

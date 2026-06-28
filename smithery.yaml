@@ -2,18 +2,52 @@
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
 # Smithery scans the repo root for this file.
 #
-# Last refreshed 2026-05-29 (round-59 MCP discovery elevation). Matches the
+# Last refreshed 2026-06-21 (47-tool / v2.3.3 canonical sync). Matches the
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects the live tools/list: 38 tools, all registered in
+# Tool list reflects the live tools/list: 51 tools, all registered in
 # server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
-displayName: "DC Hub Intelligence"
-description: "Real-time data center intelligence: 21,000+ facilities across 170+ countries, 126,427 substations, live grid data for 10 ISOs (7 US + Hydro-Quebec, AESO, Nord Pool), 2,000+ tracked M&A deals, 369 GW capacity pipeline, interconnection-queue snapshots, fiber routes, tax incentives, water-risk scoring, and daily DCPI BUILD/CAUTION/AVOID verdicts across 232 markets. The only DC-intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
+displayName: "DC Hub — Data Center & Power Intelligence"
+description: "Real-time data-center, power-grid, interconnection-queue & energy intelligence for AI agents: 21,000+ facilities across 170+ countries, 126,427 substations, live power-grid telemetry for the 7 US ISOs + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Phoenix, Pacific NW...) plus Great Britain, 24 European ENTSO-E bidding zones, Taiwan & Australia, renewable-energy and natural-gas price feeds, a hyperscaler $1B+ deal tracker, 2,000+ tracked M&A deals, a 369 GW capacity pipeline, live ISO interconnection-queue snapshots + queue-depth and per-ISO interconnection-queue BUILD/CAUTION/AVOID verdicts, fiber routes, tax incentives, water-risk scoring, and daily DCPI verdicts across 232 markets. The only data-center, grid-interconnection, energy & hyperscale intelligence source an LLM can both query and cite. Free tier (10 calls/day anonymous, 1,000/day with email key) — paid from $9/mo."
 homepage: "https://dchub.cloud"
-version: "2.1.13"
+version: "2.4.0"
+keywords:
+  - data center
+  - data centers
+  - datacenter
+  - power
+  - power grid
+  - electricity grid
+  - utility grid
+  - energy
+  - renewable energy
+  - renewables
+  - natural gas
+  - fiber
+  - hyperscale
+  - hyperscaler
+  - interconnection
+  - interconnection queue
+  - grid interconnection
+  - ISO interconnection queue
+  - interconnection queue snapshots
+  - capacity
+  - capacity pipeline
+  - infrastructure
+  - market intelligence
+  - site selection
+  - tax incentives
+  - water risk
+  - PPAs
+  - PJM
+  - ERCOT
+  - CAISO
+  - ISO
+  - M&A
+  - DCPI
 
 # DC Hub is a remote/hosted Streamable HTTP server, not an npm package.
 runtime: remote
@@ -22,7 +56,7 @@ remote:
   url: "https://dchub.cloud/mcp"
 
 # Tool surface for discovery — matches `tools/list` on the live MCP server:
-# 38 tools, all registered in server.mjs.
+# 51 tools, all registered in server.mjs.
 tools:
   - search_facilities
   - get_facility
@@ -56,20 +90,31 @@ tools:
   - grid_transition_radar
   - deal_autopsy
   - get_gas_index
+  - get_gas_intelligence
   - get_grid_scoreboard
   - save_site
   - list_saved_sites
   - set_market_alert
   - export_dataset
   - get_changes
+  - get_fiber_readiness
+  - claim_free_key
+  - plan_fiber_leadin
+  - unlock_more_data
+  - get_power_pipeline
+  - get_gas_economics
+  - set_site_alert
+  - bind_email
+  - recover_my_key
+  - why_dchub
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
   anonymous: "10 calls/day, no signup, 2 results per query"
-  free: "Free dev key (email signup) — 50 calls/day, all 38 tools"
+  free: "Free dev key (email signup) — 50 calls/day, all 51 tools"
   starter: "$9/mo — 200 calls/day, unlocks paid tools"
-  developer: "$49/mo — 500 calls/day, all 38 tools, full results"
-  pro: "$199/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
+  developer: "$49/mo — 500 calls/day, all 51 tools, full results"
+  pro: "$299/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
   enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
 
 gated_tools:
@@ -87,25 +132,6 @@ categories:
   - real-estate
   - energy
   - research
-
-keywords:
-  - data-centers
-  - hyperscaler
-  - utility-grid
-  - fiber
-  - site-selection
-  - tax-incentives
-  - renewable-energy
-  - PPAs
-  - water-risk
-  - PJM
-  - ERCOT
-  - CAISO
-  - ISO
-  - interconnection-queue
-  - M&A
-  - capacity-pipeline
-  - DCPI
 
 author:
   name: "Jonathan Martone"

@@ -60,24 +60,46 @@ jobs:
           sys.exit(bad)"
 
   publish:
-    name: re-publish to official MCP registry (best-effort)
+    name: auto-refresh official MCP registry (cascades to aggregators)
     needs: guard
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # AUTO-REFRESH (2026-06-14): runs on every manifest change (push to server.json),
+    # the weekly cron, and manual dispatch. The official registry is the CASCADE SOURCE —
+    # publishing a NEW server.json version re-syncs PulseMCP / mcp.so / Glama / ToolPlex
+    # and the GitHub MCP Registry on their own cadence, so a single bump refreshes them
+    # all. An UNCHANGED version is a graceful no-op (the registry rejects duplicate
+    # versions). So: bump server.json's version when you modify things → everything refreshes.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      MCP_REGISTRY_DNS_KEY: ${{ secrets.MCP_REGISTRY_DNS_KEY }}
     steps:
       - uses: actions/checkout@v4
-      - name: Publish if a valid server.json + mcp-publisher are available
+      - name: Publish server.json to the official MCP registry (DNS-auth)
         run: |
           if [ ! -f server.json ]; then
-            echo "::notice::No official-schema server.json present — skipping publish."
-            echo "To enable auto-publish: add a server.json in the official MCP registry"
-            echo "schema (name/description/version/remotes) and this step will push it"
-            echo "to registry.modelcontextprotocol.io via GitHub-OIDC each Monday."
-            exit 0
+            echo "::notice::No server.json present — skipping publish."; exit 0
           fi
-          # mcp-publisher uses GitHub Actions OIDC for io.github.* namespaces; the
-          # cloud.dchub namespace needs DNS verification (one-time, operator).
+          VER=$(python3 -c "import json;print(json.load(open('server.json')).get('version','?'))")
+          echo "server.json version: $VER"
           curl -sL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
             | tar xz mcp-publisher 2>/dev/null || { echo "::notice::mcp-publisher download failed — skipping."; exit 0; }
-          ./mcp-publisher login github-oidc 2>&1 || { echo "::notice::OIDC login unavailable (namespace likely needs DNS verification) — skipping. Source stays guarded."; exit 0; }
-          ./mcp-publisher publish 2>&1 || echo "::notice::publish returned non-zero — review logs."
+          # cloud.dchub is a DNS namespace — OIDC (io.github.* only) does NOT cover it, which
+          # is why this used to silently skip. Authenticate with the operator's Ed25519 key:
+          # secret MCP_REGISTRY_DNS_KEY = the hex private key whose public key is published in
+          # the dchub.cloud APEX TXT record (v=MCPv1; k=ed25519; p=...). One-time setup.
+          if [ -n "$MCP_REGISTRY_DNS_KEY" ]; then
+            ./mcp-publisher login dns --domain dchub.cloud --private-key "$MCP_REGISTRY_DNS_KEY" 2>&1 \
+              || { echo "::error::DNS login failed — the MCP_REGISTRY_DNS_KEY secret must match the dchub.cloud apex TXT record."; exit 1; }
+          else
+            echo "::warning::MCP_REGISTRY_DNS_KEY secret not set — auto-publish disabled. Add it (hex key from ~/.mcp-publisher/dchub-registry-key.hex) to enable the cascade refresh. Trying OIDC as a fallback…"
+            ./mcp-publisher login github-oidc 2>&1 || { echo "::notice::No usable auth — skipping. Source stays guarded."; exit 0; }
+          fi
+          OUT=$(./mcp-publisher publish 2>&1) || true
+          echo "$OUT"
+          if echo "$OUT" | grep -qi "Successfully published"; then
+            echo "::notice::✅ published $VER — PulseMCP / mcp.so / Glama / ToolPlex will re-sync from the official registry on their own cadence."
+          elif echo "$OUT" | grep -qiE "already exists|version.*exists|invalid.*version|duplicate"; then
+            echo "::notice::version $VER is already on the registry (no change). Bump server.json's version to publish a refresh — it cascades to every aggregator."
+          else
+            echo "::warning::publish did not confirm success — review the log above."
+          fi

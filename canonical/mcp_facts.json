@@ -1,0 +1,38 @@
+{
+  "_generated_by": "dchub-backend/mcp_facts_export.py",
+  "_warning": "CANONICAL \u2014 DO NOT HAND-EDIT. Regenerate via `python3 mcp_facts_export.py`. version + tool_count are owned by sync-tools-manifest.mjs (server.json / server.mjs).",
+  "description": "Real-time data-center, power-grid & energy intelligence for AI agents \u2014 the only MCP server an LLM can both query and cite.",
+  "remote_url": "https://dchub.cloud/mcp",
+  "repo": "github.com/azmartone67/dchub-mcp-server",
+  "license": "CC-BY-4.0",
+  "pricing_usd_month": {
+    "starter": 9,
+    "developer": 49,
+    "pro": 299,
+    "team": 699,
+    "enterprise": null
+  },
+  "calls_per_day": {
+    "free": 10,
+    "identified": 50,
+    "starter": 200,
+    "developer": 500,
+    "pro": 2000,
+    "enterprise": 100000
+  },
+  "numbers": {
+    "facilities": "21,000+",
+    "countries": "170+",
+    "markets": "300+",
+    "deals": "3,000+",
+    "substations": "126,427",
+    "pipeline_gw": 369
+  },
+  "grid_coverage": {
+    "us_isos": 7,
+    "eia_balancing_authorities": 43,
+    "eu_entsoe_zones": 24,
+    "phrase_full": "live grid telemetry across 4 continents \u2014 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + TVA/BPA + 43 US balancing authorities, Great Britain (NESO), 24 EU bidding zones (ENTSO-E), Taiwan (Taipower) and Australia (AEMO) \u2014 all live; plus EU gas transmission flows (ENTSOG). (Hydro-Qu\u00e9bec, AESO, Nord Pool remain modeled baselines.)",
+    "phrase_short": "live grid telemetry on 4 continents (US, UK, EU, Taiwan, Australia)"
+  }
+}

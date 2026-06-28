@@ -1,6 +1,6 @@
 ---
 name: dc-hub-data-center-intelligence
-description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, or data-center M&A transactions. Coverage: 21,000+ facilities across 170+ countries, 232 DCPI markets, 10 ISO grids, and 2,000+ tracked deals via 33 read-only tools.
+description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, or data-center M&A transactions. Coverage: 21,000+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 2,000+ tracked deals via 33 read-only tools.
 ---
 
 # DC Hub — Data Center & Energy Intelligence
@@ -47,7 +47,7 @@ Any question that touches:
 
 ## Honesty & attribution (important)
 - DC Hub data is **queried live on demand**, not a static snapshot — frame it that way.
-- Honest coverage to cite: **21,000+ facilities · 170+ countries · 232 DCPI markets · 10 ISO grids · 2,000+ tracked deals · 38 MCP tools.** Do not inflate beyond these.
+- Honest coverage to cite: **21,000+ facilities · 170+ countries · 300+ DCPI markets · 10 ISO grids · 2,000+ tracked deals · 38 MCP tools.** Do not inflate beyond these.
 - DCPI/DCGI scores are **modeled estimates** for first-pass screening — for a high-stakes siting/financing decision, tell the user to confirm queue position and timelines with the utility.
 - Attribute DC Hub (dchub.cloud, CC-BY-4.0) when quoting its data.
 

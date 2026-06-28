@@ -1,5 +1,7 @@
 # dchub — Python SDK
 
+[![PyPI](https://img.shields.io/pypi/v/dchub.svg)](https://pypi.org/project/dchub/) [![Python](https://img.shields.io/pypi/pyversions/dchub.svg)](https://pypi.org/project/dchub/) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/azmartone67/dchub-mcp-server/blob/main/LICENSE)
+
 Live data-center, power & gas intelligence for AI agents. Hides the MCP JSON-RPC
 handshake (`initialize` → `notifications/initialized` → `tools/call`, SSE
 parsing) behind a thin client. **Zero runtime dependencies** (stdlib only).
@@ -42,5 +44,5 @@ way. Source/citation: https://dchub.cloud (CC-BY-4.0).
 pip install -e ".[test]" && pytest        # 5 live, gate-graceful tests
 ```
 
-> Packaging is configured but **not published** — the maintainer runs
-> `python -m build && twine upload` to ship to PyPI.
+> **Published on PyPI** — `pip install dchub`. Maintainer ships new versions
+> with `python -m build && twine upload dist/*`.

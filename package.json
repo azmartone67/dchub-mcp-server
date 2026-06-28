@@ -1,7 +1,7 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.1.19",
-  "description": "DC Hub Intelligence MCP Server \u2014 Standalone Streamable HTTP",
+  "version": "2.3.3",
+  "description": "DC Hub Intelligence MCP Server — Standalone Streamable HTTP",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -13,6 +13,7 @@
     "@hono/node-server": "^1.14.3",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "express": "^4.21.2",
+    "jose": "^6.2.3",
     "zod": "^4.3.6"
   },
   "engines": {

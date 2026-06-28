@@ -32,7 +32,7 @@ jobs:
       # output for diagnostics, but transient live blips don't fail the build. Set
       # the MCP_API_KEY repo secret to a valid ENTERPRISE key for the live suite.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true

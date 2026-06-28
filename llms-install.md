@@ -14,7 +14,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 ## What it does
 
 DC Hub gives an agent real-time, structured answers about data-center and power-market
-infrastructure: 21,000+ data-center facilities across 170+ countries, 232 US power markets
+infrastructure: 21,000+ data-center facilities across 170+ countries, 300+ markets
 scored by the DC Hub Power Index (DCPI), 2,000+ tracked M&A deals, live ISO grid telemetry
 (PJM, ERCOT, CAISO, MISO, SPP, NYISO + more), interconnection-queue snapshots, fiber routes,
 gas pipelines, NEPA filings, and energy pricing.
@@ -125,7 +125,7 @@ claude mcp add dchub --transport http --header "X-API-Key: YOUR_KEY_HERE" https:
 | Pro | $199/mo | 2,000 |
 | Enterprise | custom | 100,000 |
 
-Metered overflow is available at $1 per 100 calls beyond your daily cap.
+A $10 one-time credit pack (1,000 API calls, no subscription) is available at https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i.
 
 ## Verify the connection
 
