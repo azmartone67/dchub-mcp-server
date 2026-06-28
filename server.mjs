@@ -5150,7 +5150,19 @@ app.post('/mcp', async (req, res) => {
     // callers) is untouched → still 200. resource stays https://dchub.cloud/mcp
     // so the metadata / WorkOS resource-indicator / aud all remain aligned.
     // Kill switch: DCHUB_OAUTH_CHALLENGE_DISABLE=1 (keeps token validation on).
-    const _isClaudeConnector = /Claude-User/i.test(userAgent);
+    // r-workos-challenge-clientinfo (2026-06-28): the UA-only check was INERT —
+    // Claude.ai's web connector ships clientInfo.name="claude-ai" (the canonical
+    // identity detectPlatformFromInit already trusts, see ~L358) with a GENERIC
+    // user-agent (mostly "node"), so /Claude-User/ never matched and the connector
+    // connected ANONYMOUSLY → auto-mint trial → no durable OAuth identity (verified
+    // live: real Claude.ai connect → 200, oauth_durable stayed at 2). Also match the
+    // clientInfo.name so the challenge actually fires for the header-less web cohort
+    // #3 targets. Scoped to "claude-ai" ONLY (the web client that CANNOT persist an
+    // X-API-Key); Claude Desktop (config-savable key) + Claude Code (keyed CLI) are
+    // intentionally NOT challenged → they stay 200. Keyed/sessioned callers already
+    // bypass via the conditions below. Kill switch: DCHUB_OAUTH_CHALLENGE_DISABLE=1.
+    const _ciName = (req.body?.params?.clientInfo?.name || '').toString().trim().toLowerCase();
+    const _isClaudeConnector = /Claude-User/i.test(userAgent) || _ciName === 'claude-ai';
     const _challengeDisabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_DISABLE || ''));
     if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector
         && !req.headers['x-api-key'] && !_workosAuthed
