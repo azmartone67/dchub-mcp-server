@@ -875,6 +875,47 @@ async function mintAutoTrial(tool_name) {
   }
 }
 
+// r-paid-durable (2026-06-28, redesign #4): an agent that JUST PAID autonomously is
+// the highest-intent moment to hand it a DURABLE identity so it returns paid on day 2
+// — the binding retention constraint (mature multi-day return ~0.8%). Mint the SAME
+// durable dch_live_ key claim_free_key issues (free tier: 10/day, all 300+ markets +
+// grid/fiber/DCPI at free depth; flagship tools STAY pay-per-call — so a $0.50 single
+// call does NOT become free recurring full depth = no over-grant), auto-bind it to THIS
+// session (no reconnect, mirrors claim_free_key r86), and return it as machine_credential
+// so the agent SAVEs it. Only an ANON payer (no existing api_key) is minted — a keyed
+// payer already has a durable identity. Fail-soft: never throws, never blocks the paid
+// response; null on any failure (the agent still got its full paid data).
+async function _mintDurableForPaidAgent(source) {
+  try {
+    const _ctx = getCtx();
+    if (_ctx && _ctx.api_key) return null;            // keyed caller already has identity
+    const _sid = _ctx && _ctx.session_id;
+    const cn = String((_ctx && (_ctx.client_name_raw || _ctx.platform)) || 'paid-agent').slice(0, 120);
+    const r = await callAPIWrite('/api/v1/keys/claim', { client_name: cn });
+    const key = r && (r.api_key || r.key);
+    if (!key) return null;
+    try {                                             // auto-bind to THIS session (no reconnect)
+      if (_sid && sessionMeta.has(_sid)) {
+        const _m = sessionMeta.get(_sid);
+        if (!_m.api_key) {
+          _m.api_key = key; _m.tier = (r && r.tier) || 'free'; _m.auto_bound = true;
+          sessionMeta.set(_sid, _m);
+          recordSessionUpgrade(_m.platform, _m.tier);
+          console.log(`[paid-durable] ${source} → durable key bound to session ${String(_sid).slice(0, 8)}`);
+        }
+      }
+    } catch (_) { /* non-fatal: the agent can still save the key manually */ }
+    return {
+      api_key: key,
+      tier: (r && r.tier) || 'free',
+      durable: true,
+      save_as_header: 'X-API-Key',
+      note: 'Payment succeeded — and you now have a DURABLE DC Hub identity. SAVE this api_key in your MCP client config as the `X-API-Key` header: it never expires, and every future session reuses it (free tier — all 300+ markets + grid/fiber/DCPI at free depth; flagship tools stay pay-per-call). Returning with this key on a later day is recognized automatically — no re-mint, no human.',
+      source,
+    };
+  } catch (_) { return null; }
+}
+
 // r87-conv (2026-06-14): AUTO-BIND a just-minted paywall trial key to THIS
 // session — the same retention fix r86 applied to claim_free_key, now on the
 // PAYWALL path that actually carries the demand. Live probe (2026-06-14) proved
@@ -2851,6 +2892,11 @@ function trackedTool(srv, name, description, schema, handler) {
           const _mppR = await handler(gate.params || args);
           const _mppFull = withCitation(_mppR);
           try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
+          // #4 (2026-06-28): fuse pay → durable identity — the paying agent returns paid on day 2.
+          try {
+            const _cred = await _mintDurableForPaidAgent('mpp_paid');
+            if (_cred) _mppFull.structuredContent = { ...(_mppFull.structuredContent || {}), machine_credential: _cred };
+          } catch (_) { /* additive only — never blocks the paid response */ }
           return _mppFull;
         } else if (process.env.MPP_HARD_GATE === '1' || mppWantsChallenge(extra, args)) {
           // Hard-gate (global) OR the agent opted into a challenge for THIS call
@@ -2894,6 +2940,11 @@ function trackedTool(srv, name, description, schema, handler) {
           const _xRes = await handler(gate.params || args);
           const _xFull = withCitation(_xRes);
           try { _xFull._meta = { ...(_xFull._meta || {}), 'org.x402/receipt': _x402receipt }; } catch (_) { /* additive */ }
+          // #4 (2026-06-28): fuse pay → durable identity (same as the MPP path above).
+          try {
+            const _cred = await _mintDurableForPaidAgent('x402_paid');
+            if (_cred) _xFull.structuredContent = { ...(_xFull.structuredContent || {}), machine_credential: _cred };
+          } catch (_) { /* additive only */ }
           return _xFull;
         }
         status = 'x402_failed';
