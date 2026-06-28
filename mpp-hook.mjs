@@ -7,8 +7,11 @@
  * mppEnabled() short-circuits every path otherwise, so importing this file is a
  * no-op for the running gateway until an operator flips it on.
  *
- * Deep tier only ($0.50 = fiat SPT minimum): analyze_site, compare_sites,
- * site reports. Constants mirror mppx's Mcp module (hardcoded so we don't import it).
+ * Priced at the $0.50 fiat SPT minimum. Covers the deep tier (analyze_site,
+ * compare_sites, site reports) PLUS the high-traffic flagship value-moment tools
+ * (get_grid_intelligence, get_fiber_intel, get_market_intel) — where the bulk of
+ * paywall hits land — so the live fiat rail and real demand actually overlap.
+ * Constants mirror mppx's Mcp module (hardcoded so we don't import it).
  */
 export const MPP_CRED_KEY         = 'org.paymentauth/credential';
 export const MPP_RECEIPT_KEY      = 'org.paymentauth/receipt';
@@ -19,6 +22,12 @@ const MPP_PRICE = {
   analyze_site: '0.50', compare_sites: '0.50',
   get_site_capacity_report: '0.50', get_developer_brief: '0.50',
   site_selection_canvas: '0.50',
+  // r-mpp-flagships (2026-06-28): extend the LIVE fiat rail onto the high-traffic
+  // value-moment tools (~4,540 paywall hits/30d landed here) — previously assigned
+  // ONLY to the DARK x402 rail, so the working agent-pay rail and real demand never
+  // overlapped. Priced at the $0.50 Stripe SPT fiat minimum (x402's $0.10 is USDC,
+  // which has no fiat floor — a sub-$0.50 SPT would be rejected by Stripe).
+  get_grid_intelligence: '0.50', get_fiber_intel: '0.50', get_market_intel: '0.50',
 };
 const MPP_TOOLS = new Set(Object.keys(MPP_PRICE));
 
