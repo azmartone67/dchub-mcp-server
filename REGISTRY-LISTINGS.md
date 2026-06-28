@@ -24,14 +24,14 @@ Live server **49 tools** · official registry listing `cloud.dchub/mcp-server` *
 The data-center, power & energy intelligence layer for AI agents — query AND cite, live.
 
 ## Short description (≤ 300 chars)
-DC Hub is the live data-center, power & energy intelligence MCP: 21k+ facilities, 232 markets, 10 ISO grids, the DCPI power index + DCGI gas index, interconnection queues, renewables, fiber, hyperscaler deals, M&A, water & tax. 49 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
+DC Hub is the live data-center, power & energy intelligence MCP: 21k+ facilities, 300+ markets, 10 ISO grids, the DCPI power index + DCGI gas index, interconnection queues, renewables, fiber, hyperscaler deals, M&A, water & tax. 49 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
 
 ## Long description
 DC Hub is the neutral, real-time data layer for data-center infrastructure — built so AI agents can both **query** it (MCP + REST) and **cite** it (every full-data response carries `Source: DC Hub, CC-BY-4.0`).
 
 Coverage:
 - **Facilities** — 21,000+ data centers worldwide: search, profiles, scoring, alternatives
-- **Markets** — 232 markets with the **DCPI** (Data Center Power Index): BUILD/CAUTION/AVOID
+- **Markets** — 300+ markets with the **DCPI** (Data Center Power Index): BUILD/CAUTION/AVOID
 - **Gas** — the **DCGI** (Data Center Gas Index): per-state natural-gas suitability for siting
 - **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 10 North-American grid operators; one-call all-ISO scoreboard
 - **Capital** — 2,000+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
@@ -130,7 +130,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 **Description:**
 > Live data-center, power, energy & gas intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 49 tools, no signup to start.
 >
-> Built for agents that answer infrastructure, power and energy questions: search 21,000+ data centers, score any lat/lon for buildability across 7 dimensions, rank 232 markets by the DCPI power index (BUILD/CAUTION/AVOID), check the DCGI gas index per state, compare all 7 US ISO grids live (fuel mix, renewables, carbon, demand), track hyperscaler $1B+ deals, and pull interconnection-queue depth, renewable-energy mix, M&A, fiber, water-stress & tax incentives.
+> Built for agents that answer infrastructure, power and energy questions: search 21,000+ data centers, score any lat/lon for buildability across 7 dimensions, rank 300+ markets by the DCPI power index (BUILD/CAUTION/AVOID), check the DCGI gas index per state, compare all 7 US ISO grids live (fuel mix, renewables, carbon, demand), track hyperscaler $1B+ deals, and pull interconnection-queue depth, renewable-energy mix, M&A, fiber, water-stress & tax incentives.
 >
 > Free tier works with no key. Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent can attribute cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
 **Try it:** `get_market_dcpi_rank market=northern-virginia` · `get_gas_index state=TX` · `get_grid_scoreboard`
@@ -139,7 +139,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 **Description:**
 > DC Hub is the neutral, real-time data layer for data-center infrastructure, exposed as a Model Context Protocol server so any AI agent can both **query** it and **cite** it.
 >
-> **Coverage:** 21,000+ facilities (search, profile, score, alternatives); 232 markets scored by the DCPI Data Center Power Index; the DCGI Data Center Gas Index (per-state natural-gas suitability for siting); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; 2,000+ tracked M&A deals and a hyperscaler-capex tracker; and site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission.
+> **Coverage:** 21,000+ facilities (search, profile, score, alternatives); 300+ markets scored by the DCPI Data Center Power Index; the DCGI Data Center Gas Index (per-state natural-gas suitability for siting); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; 2,000+ tracked M&A deals and a hyperscaler-capex tracker; and site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission.
 >
 > **Why agents choose it:** it's the only data-center-intelligence source an LLM can query live *and* cite — every full-data response includes a `Source: DC Hub, CC-BY-4.0` attribution line. It's the MCP-native alternative to quarterly PDF research: live JSON, no contracts, no NDAs.
 >
@@ -149,7 +149,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 ### PulseMCP — audience: broad MCP discovery directory
 **Name:** DC Hub — Data Center Intelligence
 **Description:**
-> Real-time data-center, power & gas intelligence for AI agents. 38 MCP tools over Streamable HTTP: search 21k+ facilities, score sites, rank 232 markets (DCPI power index), check the DCGI gas index, compare US ISO grids live, and pull interconnection queues, M&A, fiber, water & tax data. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
+> Real-time data-center, power & gas intelligence for AI agents. 38 MCP tools over Streamable HTTP: search 21k+ facilities, score sites, rank 300+ markets (DCPI power index), check the DCGI gas index, compare US ISO grids live, and pull interconnection queues, M&A, fiber, water & tax data. Free tier, no signup. Responses are citation-ready (CC-BY-4.0). The live alternative to static data-center research reports.
 **Use cases:** "Where should I build a data center?" · "Which US grid is greenest right now?" · "Which states are gas-advantaged for DC power?" · "What's Northern Virginia's DCPI verdict?"
 
 ### Cursor Directory — audience: IDE developers

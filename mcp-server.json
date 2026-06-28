@@ -21,7 +21,7 @@
     },
     {
       "name": "get_market_intel",
-      "description": "Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 232 global markets. Example: \"What is Northern Virginia's vacancy rate, $/MW-day pricing, and current DCPI verdict?\" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. \"northern-virginia\", \"dallas\", \"phoenix\", \"frankfurt\", \"tokyo\", \"singapore\"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility)."
+      "description": "Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 300+ markets. Example: \"What is Northern Virginia's vacancy rate, $/MW-day pricing, and current DCPI verdict?\" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. \"northern-virginia\", \"dallas\", \"phoenix\", \"frankfurt\", \"tokyo\", \"singapore\"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility)."
     },
     {
       "name": "get_market_dcpi_rank",
@@ -45,7 +45,7 @@
     },
     {
       "name": "get_intelligence_index",
-      "description": "Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 232-market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia. Returns ONE composite health number for a market; do NOT use for the full market metric set (use get_market_intel) or to rank multiple markets (use rank_markets)."
+      "description": "Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 300+ market set, 7d/30d trend direction, and underlying component scores. Try: get_intelligence_index market=northern-virginia. Returns ONE composite health number for a market; do NOT use for the full market metric set (use get_market_intel) or to rank multiple markets (use rank_markets)."
     },
     {
       "name": "list_transactions",
@@ -165,7 +165,7 @@
     },
     {
       "name": "rank_markets",
-      "description": "Use when a user wants \"the top N markets for X\" — one ranked list across the 232-market set rather than N separate get_market_intel calls. Example: \"What are the 10 fastest-growing US markets with at least 100MW of existing capacity?\" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of \"cheapest_power\" | \"most_capacity\" | \"most_operators\" | \"fastest_growing\" | \"best_overall\" (default best_overall); region one of \"global\" | \"us\" | \"canada\" | \"eu\" | \"apac\" | \"americas\" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site)."
+      "description": "Use when a user wants \"the top N markets for X\" — one ranked list across the 300+ market set rather than N separate get_market_intel calls. Example: \"What are the 10 fastest-growing US markets with at least 100MW of existing capacity?\" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of \"cheapest_power\" | \"most_capacity\" | \"most_operators\" | \"fastest_growing\" | \"best_overall\" (default best_overall); region one of \"global\" | \"us\" | \"canada\" | \"eu\" | \"apac\" | \"americas\" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site)."
     },
     {
       "name": "find_alternatives",
@@ -201,7 +201,7 @@
     },
     {
       "name": "claim_free_key",
-      "description": "Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header to unlock the full free tier (10 calls/day, all 232 markets + grid/fiber/DCPI data). Pass your owner's email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}."
+      "description": "Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header to unlock the full free tier (10 calls/day, all 300+ markets + grid/fiber/DCPI data). Pass your owner's email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}."
     },
     {
       "name": "bind_email",
