@@ -3017,7 +3017,19 @@ function trackedTool(srv, name, description, schema, handler) {
 
           if (!_trial.trial_used) {
             status = 'trial_used';
-            const _trialResult = await handler(args);
+            // r-latency (2026-06-28): the data fetch, trial auto-mint, and
+            // high-intent claim check are mutually independent backend hops —
+            // none reads another's result. Kick them off concurrently so the
+            // gated path stops paying ~3 sequential ~1s round-trips (gated
+            // tools measured ~5s vs ~1s for served tools). trackPaidHit keeps
+            // its prior fire-and-forget increment; shouldMintClaim's count
+            // tolerance is unchanged from its already-racy fire-and-forget shape.
+            const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
+            trackPaidHit(_sid, name);
+            const _dataP    = handler(args);
+            const _mintP    = mintAutoTrial(name);
+            const _hiClaimP = shouldMintClaim(_sid, name);
+            const _trialResult = await _dataP;
             let _trialText = _trialResult?.content?.[0]?.text || '';
             // Phase 7: trim arrays in the JSON payload so the LLM sees that
             // there IS more, but not the actual data.
@@ -3035,7 +3047,6 @@ function trackedTool(srv, name, description, schema, handler) {
             // r46-trial-tune (2026-05-25): per-tool header override.
             // get_market_intel gets a tuned pitch; everything else gets the
             // generic header (which now includes $9 Starter alongside $49 Developer).
-            const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
             const _upgradeHeader = trialHeader(name, _sid, _refUrl(UPGRADE_URL));
             // r51 (2026-05-26): mark trial_preview as isError=true. The
             // blocked_paid_only branch already does this (r50) but ~95%
@@ -3055,7 +3066,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // has an identity-capture path. Mint is best-effort: on ANY
             // failure _mint is null and we fall back to the EXACT prior
             // return below (additive-only — original fields untouched).
-            const _mint = await mintAutoTrial(name);
+            const _mint = await _mintP;
             // r87-conv: bind the trial to THIS session so the agent's next call
             // returns the full taste with no header/reconnect (the 94%-drop fix).
             // 2026-06-15: gated by DCHUB_ANON_INLINE_FULL — when 'off', skip the
@@ -3072,8 +3083,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // BOTH calls are fire-and-forget shape: trackPaidHit awaits its
             // own write but never throws; shouldMintClaim returns null on
             // any failure so the existing paywall block is unchanged.
-            trackPaidHit(_sid, name);
-            const _hiClaim = await shouldMintClaim(_sid, name);
+            const _hiClaim = await _hiClaimP;
             const { text: _hiText, sc: _hiSC } = await buildHighIntentClaimBlock(_hiClaim, name);
             // r88-conv (2026-06-14): INLINE FULL on the FIRST paywall call for
             // the trial-taste flagship tools (get_grid_intelligence,
