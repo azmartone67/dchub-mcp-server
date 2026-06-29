@@ -138,9 +138,20 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // \u2014 instead of the 3-item plan menu that re-stacked $9 Starter and (non-Claude
   // branch) led with the free key. The $9/$49 plan links stay in the sc fields
   // (starter_url/developer_url) for machine consumers, not in the relayed prose.
-  const human_message = (_platform === 'claude')
-    ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
-    : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (10 calls/day) \u2014 full depth still needs the $10 above.*';
+  // 2026-06-29 \u2014 TRIAL\u2192EMAIL BRIDGE. If the caller is ALREADY on a dch_trial_
+  // key, claim_free_key just mints ANOTHER anonymous trial (the loop that gave
+  // 0 email binds over 1,909 trials). The real conversion is bind_email \u2014 free,
+  // lifts the cap to 50/day, captures the operator as a lead, and makes the key
+  // persist next session. So for trial holders, lead the secondary line with
+  // bind_email instead of claim_free_key.
+  let _apiKey = '';
+  try { _apiKey = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
+  const _isTrial = typeof _apiKey === 'string' && _apiKey.startsWith('dch_trial_');
+  const human_message = _isTrial
+    ? '\u{1F511} *Your DC Hub trial\u2019s free calls are used up. To keep going FREE (50 calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
+    : (_platform === 'claude')
+      ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
+      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (10 calls/day) \u2014 full depth still needs the $10 above.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
   // agents, custom MCP scripts, aggregator pipelines). Those callers
@@ -190,6 +201,13 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // than a curl an agent has to hand-construct; one call mints a key inline
     // and converts this anonymous session into an identified one.
     claim_free_key_tool: 'claim_free_key',
+    // 2026-06-29 — trial→email bridge: for trial holders the next step is bind,
+    // not claim. Surfaced as a top-level structured action for machine consumers.
+    ...(_isTrial ? {
+      bind_email_tool: 'bind_email',
+      bind_email_endpoint: 'POST https://dchub.cloud/api/v1/keys/auto-trial/bind {api_key, email}',
+      bind_email_why: 'trial free calls used — bind to continue free (50/day), capture the key durably, stop re-minting trials',
+    } : {}),
     claim_curl:     claimCurl,
     claim_payload:  { client_name: '<your-agent-name>',
                       email: '<owner-email (optional: key recovery + upgrade receipts)>' },
