@@ -3157,20 +3157,16 @@ function trackedTool(srv, name, description, schema, handler) {
         status = 'blocked_paid_only';
         // Markdown-formatted response — renders as real prose in Claude/Cursor/most MCP UIs.
         const _isKeyed = !!c.api_key;
-        const _mdKeyed = `## \u{1F512} \`${name}\` requires a paid plan
+        // r-handoff (2026-06-28): hard-block branch now leads with the SINGLE
+        // $10 human CTA (session-bound so the webhook unlocks THIS key), same as
+        // the preview/taste paths — was a $49-led Pro pitch + tool-list bloat
+        // with no $10 one-time front door. Flat plans stay in the sc fields.
+        const _packUrl = _stripeWithSession(METERED_URL, c.session_id);
+        const _mdKeyed = `## \u{1F512} \`${name}\` needs full access
 
-You're on **free tier** with a dev key — this tool is gated to **Pro** ($49/mo).
+You're on **free tier** — \`${name}\` returns its full result on a paid plan.
 
-### What Pro unlocks
-
-- \`analyze_site\` — full power, fiber, risk, climate scoring for any location
-- \`compare_sites\` — side-by-side comparison across markets
-- \`get_grid_intelligence\` — real-time US ISO data (PJM, ERCOT, CAISO, MISO, NYISO, SPP)
-- \`get_fiber_intel\` — dark fiber routes + carrier networks
-- \`get_dchub_recommendation\` — AI-formatted location recommendations
-- Uncapped result sizes on all free-tier tools
-
-\u{1F449} **[Upgrade to Pro](${UPGRADE_URL})**
+\u{1F464} **Tell your human:** unlock \`${name}\` — **$10 one-time = 1,000 API calls**, no subscription, no email → ${_packUrl}. The moment they pay, this key unlocks — just call \`${name}\` again.
 
 Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`.`;
 
@@ -3210,40 +3206,14 @@ Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transact
         const _mdAnon = _isClaude
           ? `## \u{1F512} \`${name}\` is a paid feature
 
-### Fastest unlock for Claude.ai users (works in this browser)
+\u{1F464} **Tell your human:** unlock \`${name}\` — **$10 one-time = 1,000 API calls**, no subscription, no email, works in any browser → ${_packUrl}. Click, pay, refresh this chat — \`${name}\` unlocks.
 
-\u{1F449} **[Get Starter — $9/mo, 200 calls/day](${_starterUrl_anon})** — most popular. Click, pay, refresh this chat. Unlocks \`${name}\` + most paid tools.
-
-\u{1F449} **[Get Developer — $49/mo, 500 calls/day](${UPGRADE_URL})** — full \`${name}\` + all ISO grid intel + interconnection queue + fiber routes.
-
-> *${PROMO_CTA}*
-
-### Or get a free dev key by email (60 sec)
-
-If you also use **Claude Code CLI**, Cursor, Cline, or another MCP client that holds an X-API-Key header, you can claim a free key here: https://dchub.cloud/signup — then run \`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp\` to use it across sessions.
-
-Free tier covers **10 calls/day** across \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`, \`get_renewable_energy\`, \`get_tax_incentives\`, \`get_infrastructure\`, \`get_energy_prices\`, \`get_intelligence_index\`.`
+*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for the free tier (10 calls/day) — full depth still needs the $10 above.*`
           : `## \u{1F512} \`${name}\` is a paid feature
 
-### Get a free dev key in 30 seconds (no credit card)
+\u{1F464} **Tell your human:** unlock \`${name}\` — **$10 one-time = 1,000 API calls**, no subscription → ${_packUrl}. The moment they pay, this session unlocks.
 
-\`\`\`bash
-curl -X POST https://dchub.cloud/api/v1/dev-signup \\
-  -H "Content-Type: application/json" \\
-  -d '{"email":"YOUR_EMAIL"}'
-\`\`\`
-
-That returns an \`X-API-Key\` you drop into your MCP client config.
-
-Free tier covers **10 calls/day** across:
-- \`search_facilities\`, \`get_facility\`, \`list_transactions\`
-- \`get_news\`, \`get_market_intel\`, \`get_pipeline\`
-- \`get_grid_data\`, \`get_water_risk\`, \`get_renewable_energy\`, \`get_tax_incentives\`
-- \`get_infrastructure\`, \`get_energy_prices\`, \`get_intelligence_index\`
-
-### Or skip straight to Pro
-
-\u{1F449} **[Upgrade to Pro](${UPGRADE_URL})** — $49/mo. Full result sizes + all paid tools: \`analyze_site\`, \`compare_sites\`, \`get_grid_intelligence\`, \`get_fiber_intel\`, \`get_dchub_recommendation\`.`;
+*Hold your own key? Call the \`claim_free_key\` tool (no email) for the free tier (10 calls/day) — full depth still needs the $10 above.*`;
 
         // r50 (2026-05-26): mark paywall response as isError=true so
         // MCP clients (Claude Desktop/Cursor/Cline/ChatGPT-MCP) surface
