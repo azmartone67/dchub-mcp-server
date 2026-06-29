@@ -133,38 +133,14 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     "-d '{\"client_name\":\"<your-agent-name>\",\"email\":\"<owner-email, optional — enables key recovery + upgrade receipts>\"}'"
   );
 
-  let human_message;
-  if (_platform === 'claude') {
-    // Claude.ai web custom connectors don't accept X-API-Key, so the
-    // dev key is a dead-end inside Claude.ai itself. Lead with a paid
-    // upgrade (Stripe checkout works in any browser), then explain the
-    // dev-key route for users on Claude Code CLI.
-    human_message = (
-      lock + ' **' + toolName + ' ran on a 1-result preview \u2014 your agent is reasoning from a fraction of the data.** Make its answer complete + trustworthy:\n\n' +
-      '**1. \u{1F4B3} $10 one-time = 1,000 API calls (no subscription)** \u2192 ' + PACK5_URL_LOCAL + '\n' +
-      '   The cheapest way to full depth: a fixed $10 your human approves in one click \u2014 no recurring charge, no seat. The moment they pay, THIS session unlocks; just call ' + toolName + ' again.\n\n' +
-      '**2. $9/mo Starter (200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
-      '   If you\u2019ll use ' + toolName + ' regularly \u2014 unlocks most paid tools.\n\n' +
-      '**3. Free dev key (email, 10 calls/day)** \u2192 ' + redeemUrl + '\n' +
-      '   *Claude.ai web doesn\u2019t accept API keys yet \u2014 paste into Claude Code CLI:* ' +
-      '`claude mcp add dchub --transport http --header X-API-Key:<key> https://dchub.cloud/mcp`'
-    );
-  } else {
-    // Cursor, Cline, Continue, ChatGPT-MCP, curl, etc. \u2014 these CAN
-    // accept an X-API-Key header, so the free dev key is genuinely the
-    // lowest-friction unlock. Free-first, then $9 Starter as the
-    // "actually useful" paid bump.
-    human_message = (
-      lock + ' **' + toolName + ' ran on a 1-result preview \u2014 your agent is reasoning from a fraction of the data.** Fastest fix (no email, no browser):\n\n' +
-      '**1. Instant free key \u2014 call the `claim_free_key` tool (or one curl), no email (10 calls/day):**\n' +
-      '   `' + claimCurl + '`\n' +
-      '   Returns {api_key}; send it as the `X-API-Key` header. No human, no browser.\n\n' +
-      '**2. \u{1F4B3} Need full depth now? $10 one-time = 1,000 API calls (no subscription)** \u2192 ' + PACK5_URL_LOCAL + '\n' +
-      '   Cheapest paid unlock \u2014 a fixed $10 your human one-clicks; THIS session unlocks the moment they pay.\n\n' +
-      '**3. $9/mo Starter (200 calls/day)** \u2192 ' + STARTER_URL_LOCAL + '\n' +
-      '   Unlocks every paid tool except Pro-only ones.'
-    );
-  }
+  // r-handoff (2026-06-28): relayLead (below) is the single $10 human CTA. Keep
+  // human_message to ONE secondary line \u2014 a free off-ramp for key-holding agents
+  // \u2014 instead of the 3-item plan menu that re-stacked $9 Starter and (non-Claude
+  // branch) led with the free key. The $9/$49 plan links stay in the sc fields
+  // (starter_url/developer_url) for machine consumers, not in the relayed prose.
+  const human_message = (_platform === 'claude')
+    ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
+    : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (10 calls/day) \u2014 full depth still needs the $10 above.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
   // agents, custom MCP scripts, aggregator pipelines). Those callers
