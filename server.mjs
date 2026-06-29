@@ -1336,6 +1336,15 @@ function mapHref(name) {
 const BIND_CTA_TOOLS = new Set([
   'get_grid_intelligence', 'get_fiber_intel', 'get_grid_data',
   'get_market_intel',
+  // 2026-06-29 — perfect the trial→email bridge: the gated FACILITY + flagship
+  // tools are where an unbound trial most often hits a wall, so they must carry
+  // the bind hint too (the structured _bind is additive/idempotent, never a
+  // prose CTA). search_facilities/get_facility = the KEYED_FACILITY_MASK path
+  // the founder flagged; the rest are the depth-teased flagships.
+  'search_facilities', 'get_facility', 'get_pipeline',
+  'get_intelligence_index', 'analyze_site', 'compare_sites',
+  'get_infrastructure', 'get_renewable_energy', 'get_energy_prices',
+  'list_transactions',
 ]);
 // A caller is "bindable" when they could benefit from binding an email: NOT
 // already identified (no bound email), NOT paid/enterprise, NOT a trial. An
@@ -3432,7 +3441,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transact
                 next_tool: 'unlock_more_data',
               };
             }
-            return { content: [{ type: 'text', text: JSON.stringify(masked) }] };
+            // 2026-06-29: route the masked (search_facilities/get_facility) path
+            // through withBindHint so an unbound trial here is told to bind_email
+            // (was returning raw — the gap the founder flagged).
+            return withBindHint({ content: [{ type: 'text', text: JSON.stringify(masked) }] }, name, c);
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
       }
@@ -3543,7 +3555,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transact
         const _teased = buildDepthTease(name, result, c, _gateTier);
         if (_teased) {
           status = 'depth_teased';
-          return _teased;
+          // 2026-06-29: depth-teased flagship previews for an unbound trial also
+          // carry the bind hint (was bypassing withBindHint via early return).
+          return withBindHint(_teased, name, c);
         }
       }
       // r-bind (2026-06-18): a SUCCESSFUL full-data grid/fiber/market-intel
