@@ -12,6 +12,14 @@
   },
   "tools": [
     {
+      "name": "search",
+      "description": "Search DC Hub for relevant records (OpenAI Deep Research / ChatGPT connector format). Returns a list of matching data-center facilities as {id, title, url}; pass an id to the `fetch` tool for the record, or open the url to cite the live facility page. For structured queries (by MW, operator, status, market) use search_facilities directly."
+    },
+    {
+      "name": "fetch",
+      "description": "Fetch a DC Hub record for an id returned by the `search` tool (OpenAI Deep Research / ChatGPT connector format). Returns {id, title, text, url, metadata} — a citable public summary of one data-center facility (name, operator, location, status, market). For full structured specs (capacity MW, coordinates) use get_facility or open the url."
+    },
+    {
       "name": "search_facilities",
       "description": "Search 21,000+ global data center facilities across 170+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational. Use this to find EXISTING facilities; do NOT use for the forward-looking construction pipeline (use get_pipeline) or for the full profile of one facility (use get_facility)."
     },
@@ -149,7 +157,7 @@
     },
     {
       "name": "get_agent_registry",
-      "description": "Live roster of the AI platforms + agent frameworks that have actually called DC Hub in the window — returns each caller with its citation counts (24h/30d), tool-usage breakdown, and authentication tier (reflects real calls, not a fixed list). Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they connect. Useful for benchmarking which agents discover and integrate the platform. Try: get_agent_registry. Do NOT use for platform uptime / backup health (use get_backup_status); this is the who-is-calling-DC-Hub roster."
+      "description": "Curated roster of the AI platforms + agent frameworks in the DC Hub agent ecosystem — each with its recommended DC Hub tools and authentication tier. Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they are integrated. Use it to see which platforms DC Hub supports and how to connect them. Try: get_agent_registry. NOTE: this is a curated ecosystem/capability index, NOT live per-caller call/citation telemetry. Do NOT use for platform uptime / backup health (use get_backup_status)."
     },
     {
       "name": "get_backup_status",

@@ -1269,6 +1269,13 @@ const FREE_FULL_TOOLS = new Set([
   'get_grid_scoreboard',   // live global grid scoreboard — the flagship free hook
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
+  // audit item 2 (2026-06-30): the OpenAI Deep Research `search`/`fetch` pair return
+  // ONLY public, crawlable facility-page fields (name, operator, location, status,
+  // market, url) — never MW/coords/specs — so they're exempt from the anon $-aggregate
+  // trim, which would otherwise mangle their {results}/{id,title,text} connector shape.
+  // Safe by construction: the handlers project to public fields, so "full" leaks nothing.
+  'search',
+  'fetch',
 ]);
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
@@ -3651,6 +3658,57 @@ function createServer(descOverrides) {
   const ID = z.union([z.string(), z.number()]).transform(v => String(v)).optional();  // accepts numeric or string ids; coerces to string for the API path
 
   const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+
+  // ── OpenAI Deep Research connector tools (audit item 2, 2026-06-30) ──────────
+  // OpenAI's Deep Research / ChatGPT MCP connector REQUIRES a tool pair named
+  // exactly `search` and `fetch` (search → list of {id,title,url}; fetch → full
+  // {id,title,text,url,metadata}). Without them the connector rejects the server at
+  // handshake — blocking the entire OpenAI Deep Research reach channel. These are
+  // thin, ADDITIVE wrappers over the existing facility endpoints that surface ONLY
+  // public, crawlable facility-page fields (name/operator/location/status/market/url),
+  // never the gated MW/coords/specs — so they leak nothing and need no per-tier gate.
+  // id = facility slug/id; url = the live facility page (https://dchub.cloud/facility/<id>, 200).
+  const _facLoc = (r) => [r && r.city, r && r.state, r && r.country].filter(Boolean).join(', ');
+  const _facUrl = (id) => 'https://dchub.cloud/facility/' + encodeURIComponent(id);
+  trackedTool(srv, 'search',
+    'Search DC Hub for relevant records (OpenAI Deep Research / ChatGPT connector format). Returns a list of matching data-center facilities as {id, title, url}; pass an id to the `fetch` tool for the record, or open the url to cite the live facility page. For structured queries (by MW, operator, status, market) use search_facilities directly.',
+    { query: z.string().describe('Free-text query, e.g. "data centers in Northern Virginia" or "Ashburn hyperscale power"') },
+    async (a) => {
+      const q = String((a && a.query) || '').trim();
+      const out = await callAPI('/api/v1/facilities', { query: q, limit: 20 }, { internal: true });
+      const rows = Array.isArray(out && out.data) ? out.data
+        : (Array.isArray(out && out.facilities) ? out.facilities
+        : (Array.isArray(out) ? out : []));
+      const results = rows.map((r) => {
+        const id = String((r && (r.slug || r.id || r.facility_id)) || '').trim();
+        if (!id) return null;
+        const name = (r && (r.name || r.facility_name)) || id;
+        const loc = _facLoc(r);
+        return { id, title: loc ? (name + ' — ' + loc) : String(name), url: _facUrl(id) };
+      }).filter(Boolean);
+      return { content: [{ type: 'text', text: JSON.stringify({ results }) }], structuredContent: { results } };
+    });
+  trackedTool(srv, 'fetch',
+    'Fetch a DC Hub record for an id returned by the `search` tool (OpenAI Deep Research / ChatGPT connector format). Returns {id, title, text, url, metadata} — a citable public summary of one data-center facility (name, operator, location, status, market). For full structured specs (capacity MW, coordinates) use get_facility or open the url.',
+    { id: z.string().describe('A facility id/slug from a prior `search` result, e.g. equinix-dc1-ashburn') },
+    async (a) => {
+      const id = String((a && a.id) || '').trim();
+      if (!id) return { content: [{ type: 'text', text: JSON.stringify({ error: 'id is required (use an id from the search tool)' }) }], isError: true };
+      const out = await callAPI('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
+      const d = (out && (out.data || out)) || {};
+      const name = d.name || d.facility_name || id;
+      const loc = _facLoc(d);
+      const url = _facUrl(id);
+      const market = d.market_slug || d.market || null;
+      const text = String(name) + (loc ? (' — ' + loc) : '') + '. '
+        + 'Operator: ' + (d.operator || d.provider || 'n/a') + '. '
+        + 'Status: ' + (d.status || 'n/a') + '. '
+        + 'Market: ' + (market || 'n/a') + '. '
+        + 'Capacity (MW), coordinates and full specs: open ' + url + ' or call get_facility (DC Hub). '
+        + 'Source: DC Hub (dchub.cloud).';
+      const rec = { id, title: String(name), text, url, metadata: { source: 'DC Hub (dchub.cloud)', market, country: d.country || null } };
+      return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
+    });
 
   trackedTool(srv, 'search_facilities', 'Search 21,000+ global data center facilities across 170+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational. Use this to find EXISTING facilities; do NOT use for the forward-looking construction pipeline (use get_pipeline) or for the full profile of one facility (use get_facility).',
     { query: S, country: S, state: S, city: S, operator: S, min_capacity_mw: N, max_capacity_mw: N, tier: I, limit: I, offset: I },
