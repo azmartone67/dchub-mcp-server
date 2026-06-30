@@ -3012,6 +3012,37 @@ function trackedTool(srv, name, description, schema, handler) {
             ? { trial_used: false, _always_preview: true }
             : await checkTrialEligibility(c.session_id, name);
 
+          // keystone (audit item 1, 2026-06-30): DURABLE free-identified session
+          // bind. trial-check returns session_api_key when claim_free_key (or
+          // bind_email) stamped THIS Mcp-Session-Id onto a key (metadata.session_id).
+          // The prior bind lived only in this replica's in-memory sessionMeta, so a
+          // next call on another replica saw anon → claim_free_key reported
+          // auto_applied_to_session:false and the next call came back _bind-only.
+          // Bind the real key to the session here so it resolves identified-tier
+          // across replicas. UPGRADE-ONLY: only an ANON session (no api_key) is
+          // touched; a PRO tool the identified tier can't unlock still falls through
+          // to the normal paywall below.
+          if (_trial && _trial.session_api_key && c && !c.api_key) {
+            const _sid = c.session_id;
+            if (_sid && sessionMeta.has(_sid)) {
+              const _m = sessionMeta.get(_sid);
+              if (!_m.api_key) {
+                _m.api_key    = _trial.session_api_key;
+                _m.tier       = String(_trial.tier_upgrade || 'identified').toLowerCase();
+                _m.auto_bound = true;
+                sessionMeta.set(_sid, _m);
+                c.api_key = _m.api_key;          // reflect into this call's context
+                c.tier    = _m.tier;
+                _gateTier = _m.tier;
+                try { recordSessionUpgrade(c.platform, _m.tier); } catch (_) {}
+                console.log(`[MCP] keystone session-bind sid=${String(_sid).slice(0,8)} → ${_m.tier} (durable claim, cross-replica)`);
+                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
+                if (_gateK.allowed) {
+                  return withCitation(await handler(args));
+                }
+              }
+            }
+          }
           // r41-session-upgrade (2026-05-25): if the user redeemed a
           // dev key via the paywall URL, trial-check now returns
           // {tier_upgrade: 'developer'} (or pro/enterprise). Update
