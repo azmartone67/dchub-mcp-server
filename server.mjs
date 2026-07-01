@@ -415,7 +415,11 @@ async function trackToolCall(payload) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(3000),
+      // 2026-07-01: 3000→10000. The 3s wall-clock timer includes event-loop
+      // stalls — when this fires concurrently with a multi-MB payload fetch+
+      // JSON.parse (gated grid/fiber calls), the abort tripped before the
+      // backend (~1s) ever answered, silently dropping telemetry.
+      signal: AbortSignal.timeout(10000),
     });
   } catch (err) {
     console.error('[track] failed:', err.message);
@@ -479,7 +483,7 @@ async function signalPaywall(payload) {
         'X-Internal-Key': INTERNAL_KEY,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(10000),   // 2026-07-01: 3s tripped on event-loop stalls (see trackToolCall)
     });
   } catch (err) {
     console.error('[signal-paywall] failed:', err.message);
@@ -561,7 +565,13 @@ async function trackPaidHit(sessionId, toolName) {
     const c = getCtx();
     if (isBotOrInternalCtx(c)) return;  // r72: don't track bot/probe paid-hits
     const variant = claimVariantFromCtx(c);
-    await fetch(new URL('/api/v1/mcp/track-paid-hit', API_BASE).toString(), {
+    // 2026-07-01: 3000→10000 + status logging. This fires BEFORE/concurrent
+    // with the gated data fetch, so the 3s wall-clock abort expired during
+    // the payload parse stall on virtually every gated call — zero rows
+    // landed in mcp_high_intent_sessions from 06-24 to 07-01 while the
+    // backend endpoint itself answered in ~1s. signalPaywall survived only
+    // because it fires AFTER the payload await.
+    const resp = await fetch(new URL('/api/v1/mcp/track-paid-hit', API_BASE).toString(), {
       method: 'POST',
       keepalive: true,
       headers: {
@@ -575,8 +585,9 @@ async function trackPaidHit(sessionId, toolName) {
         mcp_client: c.platform || null,
         variant,
       }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(10000),
     });
+    if (!resp.ok) console.error('[track-paid-hit] backend status', resp.status);
   } catch (err) {
     console.error('[track-paid-hit] failed:', err.message);
   }
@@ -595,7 +606,7 @@ async function shouldMintClaim(sessionId, toolName) {
     const resp = await fetch(url.toString(), {
       method: 'GET',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(10000),   // 2026-07-01: 3s tripped on event-loop stalls (see trackPaidHit)
     });
     if (!resp.ok) return null;
     const data = await resp.json();
