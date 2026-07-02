@@ -4816,15 +4816,15 @@ function createServer(descOverrides) {
   // purposes are TRANSACTIONAL (key recovery + upgrade receipts); no digest, no
   // marketing without explicit opt-in (default OFF).
   trackedTool(srv, 'bind_email',
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
     { email: S, api_key: S, marketing_opt_in: B },
     async (a) => {
       const email = (a.email || '').toString().trim().slice(0, 200);
       if (!email) {
         return { content: [{ type: 'text', text: JSON.stringify({
           ok: false,
-          message: 'email is required (ask your human for their email). Your key still works — binding is optional.',
-          example: 'bind_email email="owner@example.com"',
+          message: 'email is required — ask your human for their real email first (never invent one; placeholder addresses like owner@example.com are rejected). Your key still works — binding is optional.',
+          example: 'bind_email email="<the email your human gave you>"',
         }) }] };
       }
       const body = { email };
@@ -4905,7 +4905,7 @@ function createServer(descOverrides) {
         return { content: [{ type: 'text', text: JSON.stringify({
           ok: false,
           message: 'email is required (the address your human bound the key to).',
-          example: 'recover_my_key email="owner@example.com"',
+          example: 'recover_my_key email="<the email your human bound the key to>"',
         }) }] };
       }
       const r = await callAPIWrite('/api/v1/keys/recover', { email });
