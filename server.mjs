@@ -159,7 +159,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     (_apiKey.startsWith('dch_trial_') ||
      (_apiKey.startsWith('dch_live_') && !_ctxEmail));
   const human_message = _isTrial
-    ? '\u{1F511} *Your DC Hub trial\u2019s free calls are used up. To keep going FREE (50 calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
+    ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (50 calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
       ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
       : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (10 calls/day) \u2014 full depth still needs the $10 above.*';
@@ -1409,9 +1409,9 @@ function _isBindableCaller(c) {
   return true;
 }
 // Attach the _bind hint to a successful result's structuredContent (additive,
-// idempotent, fully wrapped — must never break a tool response). Leaves
-// content[] untouched: the hint is structured-only so it never becomes a third
-// prose CTA the agent echoes to its human.
+// idempotent, fully wrapped — must never break a tool response). The hint is
+// structured-first; r-bind-visible below additionally surfaces ONE prose line
+// per session, since most hosts never render structuredContent.
 function withBindHint(result, name, c) {
   try {
     if (!result || result.isError || !Array.isArray(result.content)) return result;
@@ -3261,7 +3261,9 @@ function trackedTool(srv, name, description, schema, handler) {
             const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name);
             const _overCap = _capApplies && ANON_FULL_CAP > 0
               && _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP);
-            const _remainingFull = ANON_FULL_CAP > 0
+            // Only claim a remaining-count for tools the cap actually governs —
+            // a non-taste tool must not advertise "N more full answers today".
+            const _remainingFull = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
               ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP)
               : null;
             const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name, _mintBound, _remainingFull);
@@ -3471,7 +3473,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transact
         // as the preview branch.
         // r-honest-cap (2026-07-01): pure PEEK here — this hard-wall response
         // consumes no full answer, so no increment; the count is already honest.
-        const _remainingFull2 = ANON_FULL_CAP > 0
+        const _remainingFull2 = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
           ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP)
           : null;
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name, _mint2Bound, _remainingFull2);
