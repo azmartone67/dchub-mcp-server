@@ -239,7 +239,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.4.3' }.version;
+const SERVER_VERSION = { version: '2.4.4' }.version;
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -1230,6 +1230,14 @@ const KEYED_FREE_BONUS = new Set([
 const ALWAYS_PARTIAL_PREVIEW = new Set([
   'get_grid_intelligence',  // 5,636 calls / 118 users in last 30d
   'get_fiber_intel',        // 5,162 calls / 116 users
+  // r-rank-parity (2026-07-02, friction audit): rank_markets/ai_capacity_index
+  // were hard-blocked for KEYED free users while ANON got a 1-of-N preview —
+  // claiming the free key (the exact step we recommend) made both tools
+  // strictly WORSE. Route them through the same capped-taste path
+  // (DCHUB_TRIAL_TOOL_DAILY_FULL, default 8 full/day/IP, then preview) so
+  // keyed ≥ anon always holds — the r-inversion-fix principle.
+  'rank_markets',
+  'ai_capacity_index',
   // r-tease-wow (2026-06-20): get_market_intel is the ~91% first-touch tool.
   // Routing it through the trial_taste path gives a BOUND TRIAL a capped full
   // taste (TRIAL_DAILY_FULL_CAP calls/IP/day) — the "wow on call 1/2" that
@@ -1658,6 +1666,15 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   // r46-conversion: keyed-free users get the 5 demand-tools through —
   // daily cap still applies at the worker layer (10/day).
   if ((tier === 'free' || tier === 'identified') && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true }; // free-class: identified is the registration carrot (r-identified)
+  // r-facility-parity (2026-07-02, friction audit): a KEYED free user calling
+  // get_facility was hard-blocked (PAID_ONLY) even though (a) the block text
+  // itself lists get_facility as free-covered and (b) the KEYED_FACILITY_MASK
+  // pipeline already exists to serve the basic-fields version. search→detail
+  // is the single most natural agent flow; let it through — the downstream
+  // mask (KEYED_FACILITY_MASK branch) strips MW/specs to the free field set.
+  if ((tier === 'free' || tier === 'identified') && hasApiKey && KEYED_FACILITY_MASK.has(toolName)) {
+    return { allowed: true, params, masked: true };
+  }
   if (PAID_ONLY_TOOLS.has(toolName)) return { allowed: false };
   const lim = FREE_TIER_LIMITS[toolName];
   if (lim && Number(params?.limit) > lim.max_limit) {
@@ -3290,7 +3307,13 @@ function trackedTool(srv, name, description, schema, handler) {
             try {
               const parsed = JSON.parse(_trialText);
               _gapLine = _trialGapLine(parsed);
-              _trialText = JSON.stringify(trimForTrial(parsed));
+              // r-facility-preview (2026-07-02, friction audit): trimForTrial on a
+              // single facility object nulls every metric and empties the preview —
+              // anon get_facility returned literally zero fields. Use the basic-
+              // fields mask instead (name/city/provider/coords) — a REAL teaser.
+              _trialText = JSON.stringify(name === 'get_facility'
+                ? _maskFacilityFieldsForFree(parsed)
+                : trimForTrial(parsed));
             } catch { /* not JSON, leave as prose */ }
             const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
             // r46-trial-tune (2026-05-25): per-tool header override.
@@ -3476,7 +3499,7 @@ You're on **free tier** — \`${name}\` returns its full result on a paid plan.
 
 \u{1F464} **Tell your human:** unlock \`${name}\` — **$10 one-time = 1,000 API calls**, no subscription, no email → ${_packUrl}. The moment they pay, this key unlocks — just call \`${name}\` again.
 
-Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transactions\`, \`get_news\`, \`get_market_intel\`, \`get_pipeline\`, \`get_grid_data\`, \`get_water_risk\`.`;
+Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), \`get_market_intel\`, \`get_grid_data\`, \`get_water_risk\`, \`get_energy_prices\`, \`get_renewable_energy\`, \`get_news\`.`;
 
         // r71-claudetune (2026-06-06): platform-aware _mdAnon. Claude.ai
         // is ~56% of attributable AI traffic (94,948 of ~204K external
