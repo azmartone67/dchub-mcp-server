@@ -2645,8 +2645,69 @@ async function _maybeEmbedValueClaim(result, name, c) {
 function _withNextSession(result) {
   return _withNextSessionImpl(result, _NEXT_SESSION);
 }
-function withCitation(result) {
+// ── r-outputschema (2026-07-02): entity-type envelope. Gemini's agent-legibility
+// recommendation — instead of a strict per-tool outputSchema (unworkable here:
+// the SDK would force EVERY return path, incl. gated previews / iso-errors /
+// scraper-blocks, to conform to one shape), stamp each response's
+// structuredContent with a coarse `_entity` type discriminator so an agent can
+// branch on the payload class BEFORE parsing the blob. Additive + namespaced +
+// idempotent — never changes existing keys, never breaks a response.
+const _ENTITY_MAP = {
+  search: 'facility', fetch: 'facility', search_facilities: 'facility',
+  get_facility: 'facility', score_facility: 'facility', find_alternatives: 'facility',
+  get_market_intel: 'market', rank_markets: 'market', get_market_dcpi_rank: 'market',
+  get_grid_data: 'grid', get_grid_intelligence: 'grid', get_interconnection_queue: 'grid',
+  compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
+  get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
+  get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
+  list_transactions: 'deal', hyperscaler_deals: 'deal', deal_autopsy: 'deal',
+  analyze_site: 'site', compare_sites: 'site', site_selection_canvas: 'site',
+  generate_site_analysis: 'site', save_site: 'site', list_saved_sites: 'site',
+  get_dchub_recommendation: 'site', get_news: 'news', get_energy_prices: 'energy',
+  get_renewable_energy: 'energy', get_tax_incentives: 'incentives', get_water_risk: 'risk',
+  ai_capacity_index: 'index', get_intelligence_index: 'index', get_agent_registry: 'meta',
+  get_changes: 'changes', get_pipeline: 'pipeline', get_power_pipeline: 'pipeline',
+  get_infrastructure: 'infrastructure', export_dataset: 'export', get_backup_status: 'meta',
+  why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
+  recover_my_key: 'meta', subscribe_digest: 'meta', set_market_alert: 'alert',
+  set_site_alert: 'alert',
+};
+function _entityType(name) { return _ENTITY_MAP[name] || (name || 'record'); }
+
+// Wrap a tool callback so EVERY return path (data, gated preview, error) stamps
+// a `_entity` type discriminator onto its structuredContent — universal coverage
+// that withCitation (keyed-path only) can't give. Additive, guarded, idempotent.
+function _stampEntityCb(toolName, fn) {
+  return async (args, extra) => {
+    const r = await fn(args, extra);
+    try {
+      if (r && Array.isArray(r.content)) {
+        const sc = (r.structuredContent && typeof r.structuredContent === 'object'
+                    && !Array.isArray(r.structuredContent)) ? r.structuredContent : null;
+        if (sc) {
+          if (!sc._entity) {
+            return { ...r, structuredContent: { _entity: _entityType(toolName), ...sc } };
+          }
+        } else {
+          // content-only tool → add a minimal discriminator (no data dup) so an
+          // agent can branch on the payload class before parsing content[0].
+          return { ...r, structuredContent: { _entity: _entityType(toolName) } };
+        }
+      }
+    } catch (_) { /* never break a response over a metadata stamp */ }
+    return r;
+  };
+}
+
+function withCitation(result, toolName) {
   try {
+    // Entity-type stamp (any branch below): additive, keeps existing keys.
+    if (result && result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent) && toolName
+        && !result.structuredContent._entity) {
+      result = { ...result,
+                 structuredContent: { _entity: _entityType(toolName), ...result.structuredContent } };
+    }
     if (!result || result.isError || !Array.isArray(result.content)) return result;
     // 1) Embed the citation INSIDE content[0] JSON (the high-reach surface).
     //    Safe no-op for non-JSON / array / already-stamped content[0].
@@ -3041,7 +3102,7 @@ function trackedTool(srv, name, description, schema, handler) {
   const _annot = WRITE_TOOLS.has(name)
     ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false }
     : { title: _toolTitle(name), readOnlyHint: true };
-  srv.tool(name, _desc, schema, _annot, async (args, extra) => {
+  srv.tool(name, _desc, schema, _annot, _stampEntityCb(name, async (args, extra) => {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
@@ -3117,7 +3178,7 @@ function trackedTool(srv, name, description, schema, handler) {
           status = 'credits_full';
           const _cr = await handler(gate.params || args);
           _burnCredits(c, name, _cost);
-          return withCitation(_cr);
+          return withCitation(_cr, name);
         }
         // r-reup (2026-06-16): a DEPLETED pack buyer (had_pack, 0 credits) is your
         // highest-ROI re-conversion — they already paid once. Lead the teaser with
@@ -3179,7 +3240,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
           status = 'mpp_paid';
           const _mppR = await handler(gate.params || args);
-          const _mppFull = withCitation(_mppR);
+          const _mppFull = withCitation(_mppR, name);
           try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
           // #4 (2026-06-28): fuse pay → durable identity — the paying agent returns paid on day 2.
           try {
@@ -3227,7 +3288,7 @@ function trackedTool(srv, name, description, schema, handler) {
         if (_x402ok) {
           status = 'x402_paid';
           const _xRes = await handler(gate.params || args);
-          const _xFull = withCitation(_xRes);
+          const _xFull = withCitation(_xRes, name);
           try { _xFull._meta = { ...(_xFull._meta || {}), 'org.x402/receipt': _x402receipt }; } catch (_) { /* additive */ }
           // #4 (2026-06-28): fuse pay → durable identity (same as the MPP path above).
           try {
@@ -3304,7 +3365,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 console.log(`[MCP] keystone session-bind sid=${String(_sid).slice(0,8)} → ${_m.tier} (durable claim, cross-replica)`);
                 const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
                 if (_gateK.allowed) {
-                  return withCitation(await handler(args));
+                  return withCitation(await handler(args), name);
                 }
               }
             }
@@ -3329,7 +3390,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 // Re-evaluate the gate at the new tier — should now allow.
                 const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
                 if (_gate2.allowed) {
-                  return withCitation(await handler(args));
+                  return withCitation(await handler(args), name);
                 }
               }
             }
@@ -3910,7 +3971,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         if (RETURN_REWARD && c.api_key && (await _keyReturning(c.api_key))
             && _returnRewardAvailableToday(c.api_key)) {
           status = 'return_reward_full';
-          const _full = withCitation(withBindHint(result, name, c));
+          const _full = withCitation(withBindHint(result, name, c), name);
           try {
             const _sc = (_full.structuredContent && typeof _full.structuredContent === 'object')
               ? { ..._full.structuredContent } : {};
@@ -3937,7 +3998,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // #1241: embed an in-context claim at the value moment (grid/fiber, flag-gated).
       const _valued = await _maybeEmbedValueClaim(result, name, c);
       // r-appstore-clean: strip signpost/meta for ChatGPT so the DATA renders (no-op elsewhere).
-      return _leanForClean(withCitation(withBindHint(_valued, name, c)), name);
+      return _leanForClean(withCitation(withBindHint(_valued, name, c), name), name);
     } catch (err) {
       status = 'error';
       throw err;
@@ -3960,7 +4021,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ip_address:  c.client_ip || null,  // item-3: real XFF caller IP
       }).catch(() => {});
     }
-  });
+  }));
 }
 
 // r-scoreboard-cache-hoist (2026-06-27): MODULE-SCOPE cache for get_grid_scoreboard.
