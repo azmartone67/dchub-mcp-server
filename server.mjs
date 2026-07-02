@@ -1750,7 +1750,11 @@ function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
     const n = (_trialDayCounts.get(key) || 0) + 1;
     _trialDayCounts.set(key, n);
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
-    _fullCapConsume(id, tool, cap);   // r-durable-cap: write-behind, fire-and-forget
+    // r-durable-cap: write-behind, fire-and-forget. Stop mirroring once the
+    // caller is clearly over cap — a looper hammering a gated tool would
+    // otherwise add one outbound HTTP call per hit and grow the backend
+    // counter without bound (past cap, only "over" matters, not the count).
+    if (n <= cap + 3) _fullCapConsume(id, tool, cap);
     return n > cap;
   } catch (_) { return false; }
 }
