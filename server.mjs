@@ -4004,9 +4004,13 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'get_facility', 'Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',
-    { facility_id: ID, include_nearby: B, include_power: B },
+    // r-slug-alias (2026-07-02, friction audit): the description advertises
+    // `slug=` and search_facilities returns `slug` fields, but the handler read
+    // ONLY facility_id — the natural search→detail chain sent slug, fid
+    // resolved '', and the backend 404'd on /api/v1/facilities/ for EVERY tier.
+    { facility_id: ID, slug: S, id: ID, name: S, include_nearby: B, include_power: B },
     async (a) => {
-      const fid = a.facility_id || '';
+      const fid = a.facility_id || a.slug || a.id || a.name || '';
       const main = await callAPI(`/api/v1/facilities/${fid}`, { include_nearby: a.include_nearby, include_power: a.include_power });
       // The plural facility handler doesn't join on-site fiber carriers; the singular
       // /api/v1/facility/<slug> endpoint does — merge them so the promised carrier list lands.
