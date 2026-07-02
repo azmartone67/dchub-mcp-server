@@ -2989,7 +2989,47 @@ const _registeredToolNames = new Set();
 let CANONICAL_TOOL_COUNT = 49;
 try { CANONICAL_TOOL_COUNT = JSON.parse(readFileSync(new URL('./mcp-server.json', import.meta.url), 'utf8')).tools.length || CANONICAL_TOOL_COUNT; } catch { /* keep default */ }
 
+// ── r-error-legibility (2026-07-02): validate enum-ish args (iso) BEFORE the
+// tier gate so an invalid value returns a helpful, self-correcting error
+// instead of the $10 paywall/preview upsell — which an agent literally cannot
+// satisfy by paying (Gemini/Perplexity feedback 2026-07-02). Module scope so
+// the trackedTool wrapper (below) can call it before applyTierGate. STRICT set
+// = tools whose `iso` MUST be one of the 7 US ISOs; get_grid_intelligence is
+// deliberately EXCLUDED (it also accepts 40+ EIA balancing authorities).
+const US_ISOS = ['ERCOT', 'PJM', 'MISO', 'CAISO', 'SPP', 'NYISO', 'ISONE'];
+const _US_ISO_SET = new Set(US_ISOS);
+const _INTL_ISOS = new Set(['NGESO', 'NESO', 'AEMO', 'TAIPOWER', 'EIRGRID',
+                            'ENTSOE', 'TEPCO', 'KEPCO', 'IESO']);
+const _normIso = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const _isoValid = v => _US_ISO_SET.has(_normIso(v));
+const _isoError = (raw, toolName) => {
+  const intl = _INTL_ISOS.has(_normIso(raw))
+    ? ' For non-US grids (GB/EU/Taiwan/Australia/Canada) use get_grid_scoreboard.' : '';
+  const payload = {
+    error: 'invalid_iso',
+    detail: `iso="${raw}" not recognized for ${toolName}. Valid US ISOs: `
+            + US_ISOS.join(', ') + '.' + intl,
+    valid_isos: US_ISOS,
+    _source: 'DC Hub — dchub.cloud',
+  };
+  return { content: [{ type: 'text', text: JSON.stringify(payload) }],
+           structuredContent: payload };
+};
+const STRICT_ISO_TOOLS = new Set(['get_grid_data', 'get_interconnection_queue']);
+function _validateToolArgs(name, args) {
+  // Returns an MCP error-content object if the args are invalid, else null.
+  if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
+      && String(args.iso).trim() !== '' && !_isoValid(args.iso)) {
+    return _isoError(args.iso, name);
+  }
+  return null;
+}
+
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
+// TODO(outputSchema): trackedTool has no outputSchema arg. Adding structured
+// output schemas (so /mcp tools/list advertises each tool's return shape) needs
+// a signature change here (thread an optional outputSchema into srv.tool's 5-arg
+// form) + per-tool schema objects. Deferred as a separate legibility pass.
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
   // 5-arg form: (name, description, paramsSchema, annotations, cb). Most DC Hub
@@ -3043,6 +3083,20 @@ function trackedTool(srv, name, description, schema, handler) {
           claim_endpoint: 'https://dchub.cloud/api/v1/keys/claim',
         },
       };
+    }
+    // r-error-legibility (2026-07-02): reject invalid enum args (bad iso)
+    // BEFORE the tier gate, so the agent gets a self-correcting error rather
+    // than a paywall it cannot satisfy. Skips gate + handler; counted 'ok'.
+    const _argErr = _validateToolArgs(name, args);
+    if (_argErr) {
+      trackToolCall({
+        timestamp: new Date().toISOString(), tool: name, params: args,
+        platform: c.platform || 'unknown', client_name: c.client_name_raw || c.platform || null,
+        api_key: c.api_key || null, tier, session_id: c.session_id || null,
+        status: 'invalid_args', duration_ms: 0, referer: c.referer || null,
+        user_agent: c.user_agent || null, ip_address: c.client_ip || null,
+      }).catch(() => {});
+      return _argErr;
     }
     try {
       let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
@@ -3938,6 +3992,16 @@ function createServer(descOverrides) {
   const I = z.number().int().optional();
   const B = z.boolean().optional();
   const ID = z.union([z.string(), z.number()]).transform(v => String(v)).optional();  // accepts numeric or string ids; coerces to string for the API path
+  // r-legibility (2026-07-02): bounded int aliases so /mcp tools/list shows real
+  // bounds ("1-500") instead of the JS Number.MAX_SAFE_INTEGER garbage bounds that
+  // bare z.number().int() serializes. Prefer these (or an inline .describe()) over
+  // the raw `I` for any int param; leave `I` for params that legitimately need a
+  // large unbounded value. Every param below ALSO carries a .describe() at its USE
+  // site (aliases S/N/I are shared, so the description belongs on the use, not the
+  // alias) — this is the metadata AI agents read to decide tool calls.
+  const LIMIT  = z.number().int().min(1).max(500).optional().describe('Max results to return (1-500; default varies by tool)');
+  const OFFSET = z.number().int().min(0).max(100000).optional().describe('Pagination offset, 0-based (skip this many results)');
+  const TIER   = z.number().int().min(1).max(4).optional().describe('Uptime Institute tier filter (1-4)');
 
   const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
@@ -3993,7 +4057,14 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'search_facilities', 'Search 21,000+ global data center facilities across 170+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational. Use this to find EXISTING facilities; do NOT use for the forward-looking construction pipeline (use get_pipeline) or for the full profile of one facility (use get_facility).',
-    { query: S, country: S, state: S, city: S, operator: S, min_capacity_mw: N, max_capacity_mw: N, tier: I, limit: I, offset: I },
+    { query: S.describe('Free-text search over facility name/operator/location (mapped to the backend `q` param), e.g. "hyperscale Ashburn"'),
+      country: S.describe('ISO 3166-1 alpha-2 country code, e.g. US, GB, SG'),
+      state: S.describe('US state abbreviation or region, e.g. VA, TX'),
+      city: S.describe('City name to filter facilities, e.g. Ashburn, Dallas'),
+      operator: S.describe('Operator/provider company name, e.g. Equinix, Digital Realty'),
+      min_capacity_mw: N.describe('Minimum power capacity filter in megawatts (MW)'),
+      max_capacity_mw: N.describe('Maximum power capacity filter in megawatts (MW)'),
+      tier: TIER, limit: LIMIT, offset: OFFSET },
     async (a) => {
       // r-qshim (2026-07-01): the backend /api/v1/facilities reads `q`, not
       // `query` — the tool schema exposes `query`, so free-text searches were
@@ -4008,7 +4079,12 @@ function createServer(descOverrides) {
     // `slug=` and search_facilities returns `slug` fields, but the handler read
     // ONLY facility_id — the natural search→detail chain sent slug, fid
     // resolved '', and the backend 404'd on /api/v1/facilities/ for EVERY tier.
-    { facility_id: ID, slug: S, id: ID, name: S, include_nearby: B, include_power: B },
+    { facility_id: ID.describe('Facility id from a prior search_facilities/search result (numeric or string), e.g. equinix-dc1-ashburn'),
+      slug: S.describe('Facility slug from a prior search result, e.g. digital-realty-iad8'),
+      id: ID.describe('Alias for facility_id — a facility id/slug from a prior search result'),
+      name: S.describe('Facility name as a fallback lookup when no id/slug is known, e.g. "QTS Ashburn"'),
+      include_nearby: B.describe('Include peer facilities near this one in the response (default true)'),
+      include_power: B.describe('Include power capacity detail (total/used MW) in the response (default true)') },
     async (a) => {
       const fid = a.facility_id || a.slug || a.id || a.name || '';
       const main = await callAPI(`/api/v1/facilities/${fid}`, { include_nearby: a.include_nearby, include_power: a.include_power });
@@ -4031,7 +4107,10 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'get_market_intel', 'Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 300+ markets. Example: "What is Northern Virginia\'s vacancy rate, $/MW-day pricing, and current DCPI verdict?" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. "northern-virginia", "dallas", "phoenix", "frankfurt", "tokyo", "singapore"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).',
-    { market: S, metric: S, period: S, compare_to: S },
+    { market: S.describe('Market slug (metro), e.g. northern-virginia, dallas, frankfurt, singapore — valid slugs come from rank_markets / get_market_dcpi_rank'),
+      metric: S.describe('Optional single metric to focus on, e.g. vacancy, pricing, absorption, pipeline'),
+      period: S.describe('Optional time window for the metric, e.g. ttm, 12mo, ytd'),
+      compare_to: S.describe('Optional second market slug to compare against, e.g. dallas') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
 
   // r41-dcpi-rank (2026-05-25): expose DCPI verdict + composite_score
@@ -4041,7 +4120,7 @@ function createServer(descOverrides) {
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
     'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 100+ scored markets in 10 ISOs. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth.',
-    { market_slug: S },
+    { market_slug: S.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
       // r42i: surface the narrative up-top so agents see prose first,
@@ -4062,7 +4141,8 @@ function createServer(descOverrides) {
   // so keyed/Pro agents get the full scores, and withCitation stamps the cite.
   trackedTool(srv, 'get_gas_index',
     'Data Center Gas Index (DCGI) — DC Hub\'s 0-100 per-US-state natural-gas suitability score for data centers (the gas analog to DCPI). Pass `state` (2-letter, e.g. TX) for one state\'s full breakdown: composite `dcgi`, `gas_access_score`, `gas_cost_score`, interstate-pipeline count, total `pipelines`, gas `operators`, and a `verdict` (GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED). Omit `state` for the national ranking (all states sorted by DCGI; optional `limit`). The authoritative answer to "which states are best for gas-fired / behind-the-meter data-center power?" — quote the score + verdict with attribution to DC Hub (CC-BY-4.0). Try: get_gas_index state=TX. Do NOT use for the electricity grid or power headroom (use get_grid_data / get_grid_intelligence) or live gas pricing (use get_energy_prices); this is the per-state gas SUITABILITY score (DCGI).',
-    { state: S, limit: I },
+    { state: S.describe('US state abbreviation for a single-state DCGI breakdown, e.g. TX, VA, AZ; omit for the national ranking'),
+      limit: LIMIT },
     async (a) => {
       if (a.state) {
         const st = String(a.state).trim().toUpperCase().slice(0, 2);
@@ -4081,7 +4161,8 @@ function createServer(descOverrides) {
   // (synthetic_seed until the eia_gas_prices loader lands → then real delivered).
   trackedTool(srv, 'get_gas_economics',
     'Behind-the-meter / gas-fired power ECONOMICS for a US data-center market: Henry Hub spot, regional basis differential, delivered industrial + electric gas tariff ($/MMBtu), and the gas-to-grid levelized cost ($/MWh) across CCGT/peaker heat-rate scenarios — the number a BTM developer compares against a grid PPA. Pass market=<slug> (e.g. "northern-virginia", "dallas", "phoenix"); optional heat_rate_btu_per_kwh for a custom scenario. Returns {market, henry_hub_spot_usd_mmbtu, basis_diff_usd_mmbtu, delivered_industrial_usd_mmbtu, delivered_electric_usd_mmbtu, gas_price_used_usd_mmbtu, scenarios_usd_per_mwh:{new_ccgt_6400, avg_ccgt_6800, old_ccgt_7500, old_peaker_12000, custom}, data_basis}. Pairs with get_gas_index (per-state DCGI suitability). Do NOT use for the electricity grid fuel mix (use get_grid_data) or the per-state gas suitability score (use get_gas_index); this is the $/MWh gas-power cost.',
-    { market: S, heat_rate_btu_per_kwh: N },
+    { market: S.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
+      heat_rate_btu_per_kwh: N.describe('Optional custom generator heat rate in Btu/kWh for the gas-to-grid $/MWh scenario, e.g. 6800 (avg CCGT)') },
     async (a) => {
       const slug = String(a.market || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
       if (!slug) {
@@ -4442,7 +4523,7 @@ function createServer(descOverrides) {
   // they are modeled baselines (not live) and error on /grid/intelligence.
   trackedTool(srv, 'compare_isos',
     'Use when a user wants a side-by-side of 2-4 ISO grids — fuel mix, demand, renewable/gas share, interconnection-queue depth, time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: "Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from the 7 live US ISOs: "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE". Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence).',
-    { isos: S },
+    { isos: S.describe('Comma-separated list of 2-4 US ISO/RTO grid regions to compare, e.g. "PJM,ERCOT,CAISO" (valid: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE)') },
     async (a) => {
       const SUPPORTED = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
       const _norm = (s) => {
@@ -4485,22 +4566,45 @@ function createServer(descOverrides) {
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
 
   trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — 2,000+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by year, min_value_usd, region, buyer, or target. Try: list_transactions year=2026 min_value_usd=1000000000. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).',
-    { buyer: S, seller: S, min_value_usd: N, max_value_usd: N, deal_type: S, date_from: S, date_to: S, region: S, limit: I, offset: I },
+    { buyer: S.describe('Filter by acquiring company name, e.g. Blackstone, KKR, Digital Realty'),
+      seller: S.describe('Filter by selling/target company name, e.g. CyrusOne'),
+      min_value_usd: N.describe('Minimum disclosed deal value in US dollars, e.g. 1000000000 for $1B+'),
+      max_value_usd: N.describe('Maximum disclosed deal value in US dollars'),
+      deal_type: S.describe('Deal type filter, e.g. acquisition, jv, refinance, recap'),
+      date_from: S.describe('Earliest deal date, ISO-8601 (YYYY-MM-DD)'),
+      date_to: S.describe('Latest deal date, ISO-8601 (YYYY-MM-DD)'),
+      region: S.describe('Geographic region filter, e.g. us, eu, apac, americas'),
+      limit: LIMIT, offset: OFFSET },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/deals', a)) }] }));
 
   trackedTool(srv, 'get_news', 'Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by topic (deals/permits/outages/policy/AI). Try: get_news topic=AI limit=10. Industry news only; do NOT use for structured M&A deal data (use list_transactions) or the construction pipeline (use get_pipeline).',
-    { query: S, category: S, source: S, date_from: S, date_to: S, limit: I, min_relevance: N },
+    { query: S.describe('Free-text keyword to filter news, e.g. "Stargate" or "interconnection queue"'),
+      category: S.describe('News topic filter, e.g. deals, permits, outages, policy, AI'),
+      source: S.describe('Restrict to one trade source, e.g. DCD, "Data Center Frontier", "Capacity Media"'),
+      date_from: S.describe('Earliest published date, ISO-8601 (YYYY-MM-DD)'),
+      date_to: S.describe('Latest published date, ISO-8601 (YYYY-MM-DD)'),
+      limit: LIMIT,
+      min_relevance: N.describe('Minimum relevance score 0-1 to include an item, e.g. 0.5') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
 
   trackedTool(srv, 'get_pipeline', 'Use when a user asks "what is being built / announced / permitted" in a market or by an operator — the forward-looking construction pipeline (540+ projects, 369 GW). Example: "What data centers are under construction in Northern Virginia and when do they come online?" — get_pipeline market=northern-virginia status=construction. Params: status one of "announced" | "permitted" | "construction" | "operational"; operator (e.g. "Equinix", "Digital Realty", "AWS"); country (ISO-2, e.g. "US", "DE"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. "2027-01-01"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions).',
-    { status: S, country: S, operator: S, min_capacity_mw: N, expected_completion_before: S, limit: I, offset: I },
+    { status: S.describe('Pipeline stage filter: announced, permitted, construction, or operational'),
+      country: S.describe('ISO 3166-1 alpha-2 country code, e.g. US, DE, SG'),
+      operator: S.describe('Operator/provider company name, e.g. Equinix, Digital Realty, AWS'),
+      min_capacity_mw: N.describe('Minimum project power capacity filter in megawatts (MW), e.g. 50 for hyperscale'),
+      expected_completion_before: S.describe('Only projects with expected commissioning before this ISO-8601 date (YYYY-MM-DD), e.g. 2027-01-01'),
+      limit: LIMIT, offset: OFFSET },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/pipeline', a)) }] }));
 
   // 2026-06-21: forward power-supply pipeline (EIA-860M planned generators).
   // Distinct from get_pipeline (data-center CONSTRUCTION) — this is new POWER
   // GENERATION coming online, incl. the non-ISO regions the per-ISO queue misses.
   trackedTool(srv, 'get_power_pipeline', 'Use when a user asks WHERE NEW POWER GENERATION is coming online (the forward supply pipeline) — e.g. "how much new generation is planned in Virginia / the Southeast / ERCOT, and when?". Planned, permitting, and under-construction generators NATIONWIDE from EIA-860M, INCLUDING non-ISO regions (TVA, Southern Co, Arizona PS, PacifiCorp, LADWP) that interconnection-queue feeds miss. Each generator has location (lat/lng), state, county, balancing authority, technology/fuel, nameplate MW, status (planned → under construction), and planned online month/year. Filter by state (2-letter, e.g. VA), ba (balancing-authority/ISO code, e.g. PJM, ERCO, SOCO, TVA), status (P/L/T=planned, U/V=under construction, TS=testing), or min_mw. Returns a summary (total planned MW, mix by technology + status) plus the largest projects. Try: get_power_pipeline state=VA. Do NOT use for ALREADY-OPERATING capacity or grid headroom (use get_grid_intelligence / get_grid_data) or for data-center construction projects (use get_pipeline).',
-    { state: S, ba: S, status: S, min_mw: N, limit: I },
+    { state: S.describe('US state abbreviation to filter generators, e.g. VA, TX'),
+      ba: S.describe('Balancing-authority / ISO code, e.g. PJM, ERCO, SOCO, TVA, AZPS'),
+      status: S.describe('Generator status code: P/L/T (planned), U/V (under construction), TS (testing)'),
+      min_mw: N.describe('Minimum nameplate capacity filter in megawatts (MW)'),
+      limit: LIMIT },
     async (a) => {
       const q = { format: 'json', limit: Math.min((a && a.limit) || 800, 2000) };
       if (a && a.state) q.state = a.state;
@@ -4533,8 +4637,9 @@ function createServer(descOverrides) {
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
     'ISO interconnection queue snapshot: total queued GENERATION capacity (queued_load_total_gw, GW) per ISO from each ISO\'s public queue. For ERCOT it ALSO returns the large-load (data-center-driven) interconnection queue in queued_load_data_center_gw — >225 GW in process / ~9 GW approved-to-energize (ERCOT\'s published Q1-2026 figure; ERCOT is the only ISO that publishes a comparable large-load feed, so other ISOs\' data_center_gw is null), with provenance in top_subregions. Sources: ERCOT GIS + Large Load Integration, PJM/MISO/SPP/CAISO/NYISO/ISO-NE public queues. Pass iso=ERCOT (or any of 7) to drill down. Use for queue-depth site-selection and AI/data-center-load saturation intel (the ERCOT 225 GW number is the headline large-load figure no other source surfaces machine-readably). Do NOT use for a single-site time-to-power read (use get_grid_intelligence) or forward-looking emergence (use grid_transition_radar); this is the ISO-level queue snapshot.',
-    { iso: S },
+    { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
     async (a) => {
+      if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
       const data = await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a);
       // r-structured (2026-06-19): structuredContent so agent clients get the
       // queue payload, not just the next_session envelope.
@@ -4543,8 +4648,11 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard.',
-    { iso: S, metric: S, period: S },
+    { iso: S.describe('ISO/RTO grid region (required): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
+      metric: S.describe('Optional metric focus, e.g. fuel_mix, demand, demand_curve'),
+      period: S.describe('Optional time window for the metric, e.g. 24h') },
     async (a) => {
+      if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_grid_data');
       // 2026-06-07 (Devin QA): /api/v1/grid/status has no iso-aware handler, so it
       // returned the same default (CO, lat 39.74) for EVERY iso. Repoint to the real
       // iso-aware endpoint /api/v1/grid/intelligence/<iso> (path param). Keep
@@ -4565,11 +4673,18 @@ function createServer(descOverrides) {
   // the public delta feed (free hook); the rest wrap PRO-gated persistence /
   // monitoring endpoints (backend enforces the tier gate; listed PRO_ONLY).
   trackedTool(srv, 'get_changes', 'Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d.',
-    { since: S, limit: I },
+    { since: S.describe('Return changes since this ISO-8601 timestamp (YYYY-MM-DD or full datetime) or shorthand "24h"/"7d"; default 24h'),
+      limit: LIMIT },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
 
   trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don\'t have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
-    { lat: N, lon: N, name: S, state: S, market: S, target_mw: N, notes: S },
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90), e.g. 39.04'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -77.48'),
+      name: S.describe('Optional label for the saved site, e.g. "Ashburn parcel"'),
+      state: S.describe('US state abbreviation for the site, e.g. VA'),
+      market: S.describe('Market slug (metro) the site belongs to, e.g. northern-virginia'),
+      target_mw: N.describe('Target power load for the planned build in megawatts (MW), e.g. 100'),
+      notes: S.describe('Optional free-text notes to store with the saved site') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
 
   trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key). Example: "What sites have I saved?" / "Show my shortlist." — list_saved_sites. Params: none. Returns: an array of saved sites, each with name, market, lat/lon, saved DCPI score, target MW, and notes — the persistent shortlist built by save_site. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
@@ -4577,7 +4692,9 @@ function createServer(descOverrides) {
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
 
   trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (FREE with a key) — get notified when its Excess-Power / Constraint score moves. On the free tier, email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel="email". Webhook delivery (channel="webhook" + destination=<https URL>) is Pro. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
-    { market: S, channel: S, destination: S },
+    { market: S.describe('Market slug (metro) to watch, e.g. northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
+      channel: S.describe('Delivery channel: "email" (free, sent to your bound email) or "webhook" (Pro)'),
+      destination: S.describe('For channel="webhook", the https URL to POST alerts to (Pro); ignored for email (forced to bound address)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
 
   // MOVE-4 (2026-06-26): one-call retention opt-in. The weekly-digest offer
@@ -4586,7 +4703,8 @@ function createServer(descOverrides) {
   // consent-safe double-opt-in endpoint: it emails a tokenized CONFIRM link and
   // sets NOTHING; marketing_opt_in flips only on the human's confirm click.
   trackedTool(srv, 'subscribe_digest', 'Subscribe your human to DC Hub\'s FREE weekly "what changed in the markets/sites you queried" digest (DCPI movers, new facilities, new deals & news) — ONE call, the nudge that pulls your agent back when the data moves. DOUBLE opt-in + consent-safe: we email a one-click CONFIRM link, the human only gets the digest after confirming, and every email has one-click unsubscribe — this call alone sets no marketing flag. Only call once your human shares their email and wants a weekly email. Params: email (required), source (optional tag). Returns {ok, sent, message}. Prefer this over hand-building POST /api/v1/opt-in/request.',
-    { email: S, source: S },
+    { email: S.describe("Your human's email address (required) — a one-click confirm link is sent; use only an address they explicitly gave"),
+      source: S.describe('Optional attribution tag for where the subscription came from, e.g. mcp_digest') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/opt-in/request', { email: a.email, source: (a.source || 'mcp_digest') })) }] }));
 
   // r-site-alert (2026-06-19): the STRUCTURAL return loop. save_site already
@@ -4599,7 +4717,10 @@ function createServer(descOverrides) {
   // it turns save_site from a write-only shoebox into an inbox-delivered reason
   // to come back — delivery the human receives, not a reminder the agent ignores.
   trackedTool(srv, 'set_site_alert', 'Arm an email watch on a site you already saved (FREE with a key) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move, so you don’t have to keep re-checking. On the free tier the alert is delivered to your human’s bound email (call bind_email first; notify_email is forced to that address). Pro can send to any address. The "monitor my shortlist for me" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type ("dcpi_change" | "capacity_change" | "new_facility_nearby", default "dcpi_change"), threshold (number — the points/MW move that fires it, default 5), notify_email (required — the address the alert is sent to). Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site.',
-    { saved_site_id: ID, trigger_type: S, threshold: N, notify_email: S },
+    { saved_site_id: ID.describe('The saved_site_id returned by save_site or list_saved_sites (required)'),
+      trigger_type: S.describe('What movement fires the alert: "dcpi_change" (default), "capacity_change", or "new_facility_nearby"'),
+      threshold: N.describe('The points/MW move that fires the alert (default 5)'),
+      notify_email: S.describe("Email address the alert is sent to (required); on free tier forced to your human's bound email") },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/alerts', {
       saved_site_id: a.saved_site_id,
       trigger_type:  a.trigger_type || 'dcpi_change',
@@ -4608,18 +4729,30 @@ function createServer(descOverrides) {
     })) }] }));
 
   trackedTool(srv, 'export_dataset', 'Use when a user wants to pull their saved DC Hub shortlist OUT of the platform for offline analysis, a spreadsheet, or ingestion into another tool (PRO). Example: "Export my saved sites as GeoJSON for QGIS." — export_dataset format=geojson. Params: format ("csv" default, or "geojson"). Returns: the full file contents as text — CSV rows or a GeoJSON FeatureCollection of your saved sites with DCPI score, target MW, market, coordinates, and notes. Do NOT use to list sites in-chat (use list_saved_sites) or to save a new one (use save_site); this is the bulk-download path.',
-    { format: S },
+    { format: S.describe('Output file format: "csv" (default) or "geojson" (for GIS tools like QGIS)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(a.format === 'geojson' ? '/api/v1/lp/export.geojson' : '/api/v1/lp/export.csv', {})) }] }));
 
   trackedTool(srv, 'analyze_site', 'Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call. Example: "Score this Phoenix parcel for a 100MW build — grid, fiber, water, tax, climate." — analyze_site lat=33.45 lon=-112.07 capacity_mw=100. Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load in MW, e.g. 50-500), state (2-letter US, optional — improves tax-incentive lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns: {composite_score (0-100), verdict (BUILD/CAUTION/AVOID), grid_headroom_mw, nearest_substation_km, max_voltage_kv, fiber_carrier_count, nearest_ix_km, water_stress_score, drought_category, climate_risk_score, tax_incentive_value_usd, biggest_risk_factor, recommended_action}. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).',
-    { lat: N, lon: N, state: S, capacity_mw: N, include_grid: B, include_risk: B, include_fiber: B },
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      state: S.describe('US state abbreviation (optional) — improves the tax-incentive lookup, e.g. AZ'),
+      capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 100 (typical 50-500)'),
+      include_grid: B.describe('Include grid-headroom / substation analysis (default true)'),
+      include_risk: B.describe('Include water/drought/climate risk analysis (default true)'),
+      include_fiber: B.describe('Include fiber-connectivity analysis (default true)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', a)) }] }));
 
   // r-sitestudy (2026-06-26): the branded, shareable DELIVERABLE (PDF), distinct
   // from analyze_site's numeric score. Returns the structured summary + a signed
   // pdf_report_url the human can open with no login (PRO-gated; HMAC-signed link).
   trackedTool(srv, 'generate_site_analysis', 'Use when a user wants a SHAREABLE, branded multi-page Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score. Example: "Make the Site Analysis PDF for this Carrier Mills parcel, 150 MW, for TON Infrastructure." — generate_site_analysis lat=37.694 lon=-88.65 capacity_mw=150 prepared_for="TON Infrastructure" prepared_by="Martone Advisors". Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load MW, e.g. 50-500), prepared_for (client name on the cover), prepared_by (your firm — brands the report; defaults to DC Hub), latency_target (optional metro override; default = nearest real carrier hotel). Returns: {survey:{verdict, power/transmission, gas, water, air-permitting, fiber carriers, latency-to-nearest-carrier-hotel, market, tax}, pdf_report_url}. pdf_report_url is a ready-to-open link to download the branded 5-page PDF — no login needed, valid ~7 days; hand it to your human. For just the numeric suitability score (no PDF), use analyze_site instead.',
-    { lat: N, lon: N, capacity_mw: N, prepared_for: S, prepared_by: S, latency_target: S, use_case: S },
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 37.694'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -88.65'),
+      capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 150 (typical 50-500)'),
+      prepared_for: S.describe('Client name printed on the report cover, e.g. "TON Infrastructure"'),
+      prepared_by: S.describe('Your firm name that brands the report; defaults to DC Hub, e.g. "Martone Advisors"'),
+      latency_target: S.describe('Optional metro to measure latency against; default = nearest real carrier hotel'),
+      use_case: S.describe('Optional workload descriptor to tailor the report, e.g. "AI training campus"') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-report', {
       lat: a.lat, lon: a.lon, capacity_mw: a.capacity_mw, prepared_for: a.prepared_for,
       prepared_by: a.prepared_by, latency_target: a.latency_target, use_case: a.use_case,
@@ -4627,15 +4760,22 @@ function createServer(descOverrides) {
     }, { timeout: 60000 })) }] }));
 
   trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker — grid headroom, fiber, water, tax, climate — with a recommended pick and the reason. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load (e.g. 50-500). Returns: {sites:[{lat, lon, composite_score, verdict, grid_headroom_mw, nearest_substation_km, fiber_carrier_count, water_stress_score, tax_incentive_value_usd, biggest_risk}], winner:{lat, lon, why}, decision_rationale}. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
-    { locations: S },
+    { locations: S.describe('Semicolon-separated list of 2-4 "lat,lon" pairs to compare, e.g. "33.45,-112.07;39.04,-77.48"') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', { locations: a.locations })) }] }));
 
   trackedTool(srv, 'get_infrastructure', 'Nearby infrastructure for a location — substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site).',
-    { lat: N, lon: N, radius_km: N, layer: S, min_voltage_kv: N, limit: I },
+    { lat: N.describe('Center latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Center longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      radius_km: N.describe('Search radius in kilometers around the point, e.g. 25'),
+      layer: S.describe('Optional single asset layer to return, e.g. substations, transmission, pipelines, power_plants'),
+      min_voltage_kv: N.describe('Only include transmission/substations at or above this voltage in kV, e.g. 69'),
+      limit: LIMIT },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', a)) }] }));
 
   trackedTool(srv, 'get_fiber_intel', 'Use when scoring a candidate site for fiber depth, mapping long-haul routes between metros, or assessing dark-fiber availability for a hyperscale build. Example: "Show all Zayo long-haul fiber routes through Northern Virginia I can put on a Leaflet map." — get_fiber_intel carrier=Zayo route_type=longhaul. Params: carrier one of "Zayo" | "Lumen" | "Cogent" | "Crown Castle" | "Windstream" | "GTT" | "Uniti" | "FiberLight" | "Segra" | "Arcadian Infracom" (omit for all carriers); route_type one of "metro" | "longhaul" | "dark" | "ix". Returns: GeoJSON FeatureCollection {features:[{geometry, properties:{carrier, route_type, fiber_count, lit_capacity_gbps, capacity, distance_miles, distance_km}}]} ready to drop into Leaflet/Mapbox. Do NOT use to count fiber providers at a single facility (use get_facility) or for IX interconnection-density scores (use analyze_site).',
-    { carrier: S, route_type: S, include_sources: B },
+    { carrier: S.describe('Fiber carrier to filter on, e.g. Zayo, Lumen, Cogent, "Crown Castle", Windstream, GTT, Uniti; omit for all carriers'),
+      route_type: S.describe('Route class: "metro", "longhaul", "dark", or "ix"'),
+      include_sources: B.describe('Include upstream data-source/provenance metadata in the response') },
     async (a) => {
       // backend buckets the messy route_type taxonomy under `class` (metro|longhaul|dark|ix);
       // passing route_type as an exact column match misses 'long-haul'/'long_haul' variants → empty results.
@@ -4645,27 +4785,38 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'get_fiber_readiness', 'Use when you need the FIBER-READINESS / connectivity verdict for ONE parcel or site (lat/lon): near-net distance to a carrier-served facility, how many distinct fiber carriers are reachable, and whether there is single-carrier risk (no path diversity). This is the parcel connectivity answer engineering site-selectors screen on. Example: "Is this Loudoun County parcel fiber-ready and how many carriers can serve it?" — get_fiber_readiness lat=39.04 lon=-77.48 radius_km=50. Params: lat (-90..90, required), lon (-180..180, required), radius_km (search radius in km, default 50, range 5-200). Returns: {score 0-100, near_net_bucket ("on-net"|"near-net"|"acceptable"|"build-required"), nearest_carrier_km, carrier_count, top_carriers:[{carrier, distance_km}], single_carrier_risk (bool), fiber_coverage_km, verdict_short}. Do NOT use to map carrier ROUTES between metros (use get_fiber_intel) or for a full multi-factor site suitability score (use analyze_site).',
-    { lat: N, lon: N, radius_km: N },
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 39.04'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -77.48'),
+      radius_km: N.describe('Search radius in km for reachable fiber carriers (default 50, range 5-200)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', a)) }] }));
 
   trackedTool(srv, 'get_energy_prices', 'Use when a user asks "what does power/gas COST in <ISO> right now?" — live energy PRICING for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail electricity rate (cents/kWh), wholesale/LMP context, Henry Hub-referenced natural-gas price, and a real-time grid-status flag. Example: "What is the retail power price and gas price in ERCOT today?" — get_energy_prices iso=ERCOT. Params: iso (one of the 7 US ISOs; required). Returns: {iso, retail_price_cents_kwh, wholesale_price_usd_mwh, natural_gas_usd_mmbtu, grid_status, as_of}. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh economics (use get_gas_economics); this is the live retail+gas PRICE read for one ISO.',
-    { data_type: S, state: S, iso: S },
+    { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
+      state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
+      iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/summary', a)) }] }));
 
   trackedTool(srv, 'get_renewable_energy', 'Use when siting a renewable-powered data center, sizing a PPA, or assessing RE100/24-7-CFE feasibility for one US state. Example: "What is Texas wind+solar capacity and how much utility-scale solar is operating today?" — get_renewable_energy energy_type=solar state=TX. Params: energy_type one of "solar" | "wind" | "combined" (omit for all); state 2-letter US code (e.g. TX, VA, AZ); lat+lon (optional) for the nearest projects within 50mi. Returns: {capacity_mw_total, by_fuel: {solar_utility, solar_rooftop, wind_onshore, wind_offshore}, capacity_factor_pct, top_projects[{name, mw, operator, cod}], state_rps_target_pct, source: "EIA-860 + state RPS"}. Do NOT use for live grid generation (use get_grid_data) or non-US (use get_grid_scoreboard for EU/UK/AU/TW).',
-    { energy_type: S, state: S, lat: N, lon: N },
+    { energy_type: S.describe('Renewable type: "solar", "wind", or "combined"; omit for all'),
+      state: S.describe('US state abbreviation, e.g. TX, VA, AZ'),
+      lat: N.describe('Optional latitude in decimal degrees (-90 to 90) to find nearest projects within 50mi'),
+      lon: N.describe('Optional longitude in decimal degrees (-180 to 180) to find nearest projects within 50mi') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', a)) }] }));
 
   trackedTool(srv, 'get_tax_incentives', 'Use when a user asks "what tax breaks does <state> give data centers?" — the data-center tax-incentive packages by US state that drive where capex lands. Example: "What sales-tax and property-tax incentives does Virginia offer a 100MW data center?" — get_tax_incentives state=VA. Params: state (2-letter US code; required). Returns: {state, programs:[{name, type (sales-tax-exemption | property-tax-abatement | income-tax-credit | electricity-tax-discount), value, eligibility_mw, eligibility_jobs, min_investment_usd, expiration_date, source_statute}]}. Cite the statute with attribution to DC Hub (CC-BY-4.0). Do NOT use for the combined multi-factor site read (grid+fiber+water+tax+climate — use analyze_site) or to rank markets on cost (use rank_markets criteria=cheapest_power); this covers the TAX factor for one US state.',
-    { state: S },
+    { state: S.describe('US state abbreviation (required), e.g. VA, TX, AZ') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/tax-incentives', a)) }] }));
 
   trackedTool(srv, 'get_water_risk', 'Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: "Is this Phoenix parcel water-constrained for a 100MW build?" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ / county=Maricopa). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or county; lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only.',
-    { lat: N, lon: N, state: S },
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90) for the most precise water-risk read, e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -112.07'),
+      state: S.describe('US state abbreviation as an alternative to lat/lon, e.g. AZ') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
   trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
-    { region_id: S, iso: S, region: S },
+    { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or an EIA balancing-authority code, e.g. SOCO, DUK, AZPS, TVA'),
+      iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
+      region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code') },
     async (a) => {
       // r78-gridfix (2026-06-12): the prior handler hit /api/v1/grid-headroom/${region},
       // a lat/lon SUBSTATION analyzer that does NOT understand ISO names — it
@@ -4707,7 +4858,8 @@ function createServer(descOverrides) {
   // trusting the route's own auth (the origin-bypass quirk makes that unreliable).
   trackedTool(srv, 'get_gas_intelligence',
     'Use when a human asks about gas-fired or behind-the-meter power economics for a data center in a US state — "is gas power cheaper than the grid in Texas?", "what is the gas access + pipeline situation in Virginia?". The GAS analogue of get_grid_intelligence: fuses the DC Hub Gas Index (DCGI), live Henry Hub, gas-to-grid $/MWh across heat-rate scenarios, pipeline-operator presence, and the live grid gas share into one per-STATE brief. Params: region (US state code or name, e.g. "TX" | "Texas" | "Virginia"). Returns: {region, region_name, dcgi_score (0-100), dcgi_verdict (GAS-ADVANTAGED/ADEQUATE/GAS-CONSTRAINED), gas_access (pipeline counts + operators — PRESENCE not firm capacity), henry_hub_usd_mmbtu (live), basis_usd_mmbtu (synthetic-labeled), delivered_price_usd_mmbtu (null where the tariff table is sparse — surfaced honestly, never fabricated), gas_to_grid_usd_per_mwh (5 heat-rate scenarios), live_grid_gas_share_pct, headline_behind_meter_vs_grid_delta_usd_mwh (the punchline: gas vs grid $/MWh), pipeline_presence (operators + parent midstreams), data_basis (per-field provenance/confidence), omitted_no_fabrication}. Every field carries a data_basis label; gas storage / LNG / firm pipeline capacity are deliberately OMITTED (no feed). Do NOT use for electricity grid headroom (use get_grid_intelligence) or the DCGI score alone (use get_gas_index).',
-    { region: S, state: S },
+    { region: S.describe('US state code or name (required), e.g. "TX", "Texas", "Virginia"'),
+      state: S.describe('Alias for region — the US state code or name') },
     async (a) => {
       const raw = String((a && (a.region || a.state)) || '').trim();
       if (!raw) return { content: [{ type: 'text', text: JSON.stringify({ error: 'region required (US state code or name)', example: 'get_gas_intelligence region="TX"' }) }] };
@@ -4731,7 +4883,7 @@ function createServer(descOverrides) {
   // Free + full (FREE_FULL_TOOLS) — it's a sales asset, not gated data.
   trackedTool(srv, 'why_dchub',
     'Use when a human asks how DC Hub compares to other data-center data sources — DataCenterHawk (DCHawk), DC Byte, Data Center Dynamics (DCD), Data Center Frontier (DCF), Baxtel, datacenters.com — or asks "why should I use DC Hub / is it better than <X> / what can you give me a PDF or directory can\'t?". Returns DC Hub\'s honest, source-verified differentiators (agent-native MCP access, live multi-continent grid & energy telemetry, the proprietary daily DCPI + DCGI indices, open CC-BY-4.0 cited data, 21,000+ facilities) each with a proof URL, a citation line, plus the canonical head-to-head comparison pages. Free, no key required. Optional: competitor=<name> for that vendor\'s direct comparison-page link. Do NOT use to query infrastructure data itself (use the data tools); this answers positioning / "how do you compare" questions with citable facts.',
-    { competitor: S },
+    { competitor: S.describe('Optional competitor/vendor name for a direct comparison-page link, e.g. DataCenterHawk, "DC Byte", DCD, Baxtel') },
     async (a) => {
       const why = await callAPI('/api/v1/competitive/why-dchub');
       const pages = {
@@ -4764,7 +4916,7 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'get_dchub_recommendation', 'Use when a user asks an open-ended siting question ("where should I put a 100MW AI training cluster?") and you want ONE call that returns a ready-to-quote answer instead of orchestrating 5+ separate tools. Example: "Where should I site a 100MW AI training campus in Texas with short time-to-power?" — get_dchub_recommendation context="100MW AI training campus in Texas". Params: context free-text describing the user request (MW, geography, workload, deadline, constraints). Returns: {top_markets:[{slug, name, verdict (BUILD/CAUTION/AVOID), composite_score, excess_power_mw, time_to_power_months, why}], candidate_facilities[], factor_breakdown:{fiber, grid, water, tax, climate}, summary_text (LLM-quotable, CC-BY-4.0), citation_url}. Do NOT use for a single specific lat/lon (use analyze_site) or to rank by ONE criterion only (use rank_markets).',
-    { context: S },
+    { context: S.describe('Free-text description of the siting request — MW, geography, workload, deadline, constraints, e.g. "100MW AI training campus in Texas, short time-to-power"') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/recommend', { context: a.context })) }] }));
 
   // ════════════════════════════════════════════════════════════════════
@@ -4781,7 +4933,10 @@ function createServer(descOverrides) {
   // ════════════════════════════════════════════════════════════════════
   trackedTool(srv, 'rank_markets',
     'Use when a user wants "the top N markets for X" — one ranked list across the 300+ market set rather than N separate get_market_intel calls. Example: "What are the 10 fastest-growing US markets with at least 100MW of existing capacity?" — rank_markets criteria=fastest_growing region=us limit=10 min_capacity_mw=100. Params: criteria one of "cheapest_power" | "most_capacity" | "most_operators" | "fastest_growing" | "best_overall" (default best_overall); region one of "global" | "us" | "canada" | "eu" | "apac" | "americas" (default us); limit 1-50 (default 10); min_capacity_mw filter floor (e.g. 100). Returns: {criteria, region, markets:[{rank, slug, name, country, score, criterion_value, dcpi_verdict, attribution_url}], total_eligible, generated_at}. Do NOT use for a deep read on ONE market (use get_market_intel) or for scoring a specific lat/lon (use analyze_site).',
-    { criteria: S, region: S, limit: I, min_capacity_mw: N },
+    { criteria: S.describe('Ranking criterion: "cheapest_power", "most_capacity", "most_operators", "fastest_growing", or "best_overall" (default)'),
+      region: S.describe('Region scope: "global", "us" (default), "canada", "eu", "apac", or "americas"'),
+      limit: LIMIT.describe('Number of markets to return, 1-50 (default 10)'),
+      min_capacity_mw: N.describe('Minimum existing capacity filter in megawatts (MW), e.g. 100') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/mcp/tools/rank_markets', {
@@ -4795,7 +4950,11 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'find_alternatives',
     'Use when a user likes ONE specific facility and wants similar nearby options to consider instead ("what else looks like this?"). Example: "Find alternatives to the Ashburn QTS campus for about 50MW." — find_alternatives facility_id=<id>. Params: facility_id or name (the target, required); optional capacity_mw, radius_km, limit. Returns: ranked alternatives, each with similarity_score, match_reasons, and key_differences versus the target. Do NOT use to score one site (use score_facility or analyze_site) or to compare a known short-list head-to-head (use compare_sites); this DISCOVERS candidates from a single seed facility.',
-    { facility_id: S, radius_km: N, match_on: S, exclude_operator: B, limit: I },
+    { facility_id: S.describe('The seed facility id/slug (or use name) to find alternatives to, from a prior search result'),
+      radius_km: N.describe('Search radius in km for candidate alternatives around the seed facility'),
+      match_on: S.describe('Optional similarity dimension to weight, e.g. capacity, operator, fiber, market'),
+      exclude_operator: B.describe('If true, exclude facilities from the same operator as the seed'),
+      limit: LIMIT },
     async (a) => {
       if (!a.facility_id) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'facility_id is required' }) }], isError: true };
@@ -4815,7 +4974,8 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'score_facility',
     'Use when a user wants an independent 0-100 grade for ONE existing facility across 7 dimensions — power, fiber, water, climate_risk, tax_environment, talent_pool, expansion. Example: "How does the CoreWeave Las Vegas site score, power-weighted?" — score_facility facility_id=<id> weighting=power_priority. Params: facility_id or name (required); weighting one of "balanced" (default) | "power_priority" | "risk_priority" | "expansion_priority". Returns: composite 0-100, tier_classification, peer comparison, and per-dimension detail. Do NOT use for a raw lat/lon parcel (use analyze_site), to compare 2 or more sites (use compare_sites), or to find similar sites (use find_alternatives).',
-    { facility_id: S, weighting: S },
+    { facility_id: S.describe('The facility id/slug to score (required), from a prior search_facilities result'),
+      weighting: S.describe('Scoring profile: "balanced" (default), "power_priority", "risk_priority", or "expansion_priority"') },
     async (a) => {
       if (!a.facility_id) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'facility_id is required' }) }], isError: true };
@@ -4838,7 +4998,8 @@ function createServer(descOverrides) {
   // ════════════════════════════════════════════════════════════════════
   trackedTool(srv, 'ai_capacity_index',
     'AI Compute Capacity Index — ranks data center markets by where 100MW of AI training capacity can land in the next 30/60/90 days. Returns top markets with facility_count, operator_count, deployable_mw estimate, hyperscale_ready flag, and composite score (depth + diversity + power). Refreshed Fridays 14:00 UTC. Use for AI capex planning, GPU cluster siting, hyperscaler deal forecasting. Do NOT use for a general best-markets ranking (use rank_markets) or forward grid-emergence (use grid_transition_radar); this answers specifically where 100MW of AI capacity can land in 30/60/90 days.',
-    { horizon: I, limit: I },
+    { horizon: z.number().int().min(30).max(90).optional().describe('Deployment horizon in days: 30, 60, or 90 (default 90)'),
+      limit: LIMIT.describe('Number of top markets to return (default 20)') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/ai-capacity-index', {
@@ -4850,7 +5011,7 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'hyperscaler_deals',
     'Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel. Do NOT use for the full historical M&A comp set (use list_transactions) or a single-deal teardown with grid context (use deal_autopsy); this is the live $1B+ AI-capex feed.',
-    { limit: I },
+    { limit: LIMIT.describe('Number of recent AI-capex deals to return (default 20)') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/hyperscaler-deals', {
@@ -4866,7 +5027,11 @@ function createServer(descOverrides) {
   // get the verdict/thesis/autopsy read. No extra MCP-side gating needed.
   trackedTool(srv, 'site_selection_canvas',
     'Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the DC Hub Power Index. Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow.',
-    { capacity_mw: I, region: S, max_months: I, verdict: S, limit: I },
+    { capacity_mw: z.number().int().min(1).max(5000).optional().describe('Target power load for the build in megawatts (MW), 1-5000, e.g. 100'),
+      region: S.describe('Geography scope, e.g. a US state code like TX or a region like us/apac'),
+      max_months: z.number().int().min(1).max(120).optional().describe('Maximum acceptable time-to-power in months, 1-120, e.g. 24'),
+      verdict: S.describe('Optional DCPI verdict filter: BUILD, CAUTION, or AVOID'),
+      limit: LIMIT.describe('Number of shortlist markets to return') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/site-selection/canvas', {
@@ -4878,7 +5043,8 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'grid_transition_radar',
     'Forward-looking "where is the next hyperscale-friendly grid emerging" radar. Returns the US markets + ISOs with the strongest near-term emergence signal (BUILD verdict + excess-power headroom + short time-to-power), an ISO rollup, and a grid-headroom leaderboard. With a paid key, also the transition thesis: which ISO is opening up and why. The predictive counter to retrospective "where capacity landed" reports. Try: grid_transition_radar max_months=24. Do NOT use for the current ISO queue snapshot (use get_interconnection_queue) or a present-day market ranking (use rank_markets); this is the forward-looking emergence radar.',
-    { max_months: I, limit: I },
+    { max_months: z.number().int().min(1).max(120).optional().describe('Maximum acceptable time-to-power in months for the emergence signal, 1-120, e.g. 24'),
+      limit: LIMIT.describe('Number of emerging markets to return') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/grid-transition/radar', {
@@ -4889,7 +5055,7 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'deal_autopsy',
     'Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — "what is the real play?". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). Try: deal_autopsy limit=15.',
-    { limit: I },
+    { limit: LIMIT.describe('Number of recent deals to return (default ~15)') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/deal-autopsy', {
@@ -4903,7 +5069,11 @@ function createServer(descOverrides) {
   // Anon callers get trimForTrial'd to a 1-route teaser; keyed callers get all N.
   trackedTool(srv, 'plan_fiber_leadin',
     'Plan N diverse, road-following fibre lead-in routes from a candidate data-center site to a carrier hotel / POP, with indicative build cost and a route-diversity read. Answers "can I get N diverse fibre routes into this site, how far, how much, and where do they share a corridor?". Example: plan_fiber_leadin from="250 Paringa Road, Murarrie QLD" to="20 Wharf Street, Brisbane City QLD" n=4. Params: from (lat,lng OR street address), to (lat,lng OR address — e.g. a NextDC/Equinix POP), n (1-6 routes, default 4), fibre ("720F"|"1440F"), bore_m (river/rail bore length in metres, optional). Returns per-route length_km + GeoJSON geometry, total_route_km, diversity {min_separation_m_midhaul, shared_street_km}, and indicative cost {capex_usd, opex_usd_yr}. INDICATIVE auto-routed road corridors — NOT engineered alignments; subject to survey, DBYD and carrier confirmation. Do NOT use for a single site-suitability score (use analyze_site) or fibre-provider footprints (use get_fiber_intel).',
-    { from: S, to: S, n: I, fibre: S, bore_m: I },
+    { from: S.describe('Origin site as "lat,lng" OR a street address, e.g. "250 Paringa Road, Murarrie QLD"'),
+      to: S.describe('Destination carrier hotel/POP as "lat,lng" OR an address, e.g. "20 Wharf Street, Brisbane City QLD"'),
+      n: z.number().int().min(1).max(6).optional().describe('Number of diverse routes to plan, 1-6 (default 4)'),
+      fibre: S.describe('Fibre count spec for cost estimate: "720F" or "1440F"'),
+      bore_m: z.number().int().min(0).max(100000).optional().describe('River/rail bore length in metres to add to the route, 0-100000 (optional)') },
     async (a) => {
       const from = String(a.from || '').trim(), to = String(a.to || '').trim();
       if (!from || !to) return { content: [{ type: 'text', text: JSON.stringify({
@@ -4926,7 +5096,8 @@ function createServer(descOverrides) {
   // summarized it away. Not in PAID_ONLY_TOOLS, so anonymous callers reach it.
   trackedTool(srv, 'claim_free_key',
     'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
-    { client_name: S, email: S },
+    { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
+      email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave") },
     async (a) => {
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
       const body = { client_name: cn };
@@ -5068,7 +5239,9 @@ function createServer(descOverrides) {
   // marketing without explicit opt-in (default OFF).
   trackedTool(srv, 'bind_email',
     'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
-    { email: S, api_key: S, marketing_opt_in: B },
+    { email: S.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
+      api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
+      marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
     async (a) => {
       const email = (a.email || '').toString().trim().slice(0, 200);
       if (!email) {
@@ -5149,7 +5322,7 @@ function createServer(descOverrides) {
   // exists). trackedTool so the call is logged for the kill-criterion ratio.
   trackedTool(srv, 'recover_my_key',
     'Recover a LOST DC Hub key. Pass your human\'s email and DC Hub re-sends any key tied to that address to that inbox. It NEVER returns the key over the wire (it emails the bound address), and the confirmation is the same whether or not a key exists (enumeration-safe), so no key is leaked to a caller. Use this when your human had a key, lost it, and knows the email they bound it to. Param: email (required). Returns DC Hub\'s neutral confirmation.',
-    { email: S },
+    { email: S.describe("Your human's email address that a lost key was bound to (required) — the key is re-sent to that inbox, never returned over the wire") },
     async (a) => {
       const email = (a.email || '').toString().trim().slice(0, 200);
       if (!email) {
@@ -5187,7 +5360,7 @@ function createServer(descOverrides) {
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
     'Unlock DC Hub\'s full depth. Call this when a result came back as a 1-of-N preview, a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click — after which your very next call returns full data (no reconnect; the checkout binds to this session). Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · $49/mo Developer · $299/mo Pro. Want the FREE identified tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
-    { reason: S },
+    { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => {
       const _ctx = getCtx();
       const _sid = (_ctx && _ctx.session_id) || '';
