@@ -1,7 +1,8 @@
 // phase63f_redeem_v3 -- redeem URL with balanced-paren walker
 
 /**
- * DC Hub MCP Server v2.1.10
+ * DC Hub MCP Server (version: see SERVER_VERSION — the single source used by
+ * the McpServer init, /health, and the startup banner)
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
  *   - Path corrections to match production Flask routes:
@@ -233,6 +234,12 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   };
 }
 // ── Config ──────────────────────────────────────────────────────────────────
+// Single source of truth for the server version — used by the McpServer init,
+// the /health endpoint, and the startup banner (the banner sat at a stale
+// hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
+// regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
+// still sees it and keeps server.mjs in the cross-manifest consistency check.
+const SERVER_VERSION = { version: '2.4.3' }.version;
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -1674,13 +1681,76 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
 // restart, per-replica) — fine for a nudge, not a hard limit.
 // env unset/0 => the helper is never called (short-circuit) => zero change.
 const _trialDayCounts = new Map();
-function _trialFullCallsExceeded(ipKey, tool, cap) {
+
+// ── r-durable-cap (2026-07-01): backend-backed durable daily counter ────────
+// _trialDayCounts is in-memory, so EVERY deploy/restart/replica reset the cap
+// to zero — repeat callers got a fresh set of full answers and the deprivation
+// moment (the bind/upgrade CTA) never fired across restarts. The backend now
+// persists the count (POST /api/v1/mcp/full-cap/consume + GET .../peek, both
+// fail-open: {ok:false} on DB trouble, always HTTP 200). Integration is fully
+// ASYNC — the gate check stays synchronous with ZERO added latency:
+//   • HYDRATE: on the FIRST gate check per (identity, tool) per process-day,
+//     fire a non-awaited GET peek; when it lands, lift the local count to
+//     Math.max(local, remote) so subsequent checks see the durable floor.
+//   • WRITE-BEHIND: every local increment fires a non-awaited POST consume
+//     (5s AbortSignal — NOT 3s: the high-intent 3s-timeout starvation lesson —
+//     with .catch(()=>{}) so a backend hiccup can never throw or block).
+// Identity = api_key||ip (durable across replicas); the LOCAL Map stays keyed
+// by ip exactly as before. ACCEPTED RACE: the very first call after a fresh
+// deploy may serve one extra full answer before the hydration peek lands —
+// strictly better than today, where the ENTIRE day's count reset to zero.
+const _fullCapHydrated = new Set();   // `${identity}:${tool}:${day}` — peek fired (day in key = self-resets on rollover)
+function _fullCapHydrate(localKey, identity, tool, cap) {
+  try {
+    const u = new URL('/api/v1/mcp/full-cap/peek', API_BASE);
+    u.searchParams.set('identity', identity);
+    u.searchParams.set('tool', tool);
+    u.searchParams.set('cap', String(cap));
+    fetch(u.toString(), {
+      method: 'GET',
+      headers: { 'X-Internal-Key': INTERNAL_KEY },
+      signal: AbortSignal.timeout(5000),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        // Fail-open: {ok:false} / missing n / junk → leave the local count alone.
+        const remote = Number(j && j.ok ? j.n : NaN);
+        if (!Number.isFinite(remote) || remote <= 0) return;
+        const local = _trialDayCounts.get(localKey) || 0;
+        if (remote > local) _trialDayCounts.set(localKey, remote);
+      })
+      .catch(() => {});  // never throw, never block — the counter is a nudge, not a wall
+  } catch (_) { /* fire-and-forget */ }
+}
+function _fullCapConsume(identity, tool, cap) {
+  try {
+    fetch(new URL('/api/v1/mcp/full-cap/consume', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ identity, tool, cap }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {});  // write-behind: ignore ALL failures (fail-open by design)
+  } catch (_) { /* fire-and-forget */ }
+}
+
+function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
   try {
     const day = new Date().toISOString().slice(0, 10);
     const key = `${ipKey || 'anon'}:${tool}:${day}`;
+    // r-durable-cap: hydrate from the backend once per (identity, tool, day)
+    // per process — fired async BEFORE the increment, never awaited (the gate
+    // stays sync). Day is part of the guard key, so rollover re-hydrates.
+    const id = durableId || ipKey || 'anon';
+    const hydrateKey = `${id}:${tool}:${day}`;
+    if (!_fullCapHydrated.has(hydrateKey)) {
+      if (_fullCapHydrated.size > 50000) _fullCapHydrated.clear();  // unbounded-growth guard
+      _fullCapHydrated.add(hydrateKey);
+      _fullCapHydrate(key, id, tool, cap);
+    }
     const n = (_trialDayCounts.get(key) || 0) + 1;
     _trialDayCounts.set(key, n);
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
+    _fullCapConsume(id, tool, cap);   // r-durable-cap: write-behind, fire-and-forget
     return n > cap;
   } catch (_) { return false; }
 }
@@ -3260,7 +3330,8 @@ function trackedTool(srv, name, description, schema, handler) {
             // buildAutoMintBlock keeps the uncapped copy.
             const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name);
             const _overCap = _capApplies && ANON_FULL_CAP > 0
-              && _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP);
+              && _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP,
+                                         c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
             // Only claim a remaining-count for tools the cap actually governs —
             // a non-taste tool must not advertise "N more full answers today".
             const _remainingFull = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
@@ -3668,7 +3739,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\`, \`list_transact
         // email buys a real, visible benefit (more full flagship answers/day).
         const _bound = !!c.email;
         const _cap = _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
-        if (_cap > 0 && _trialFullCallsExceeded(c.client_ip, name, _cap)) {
+        if (_cap > 0 && _trialFullCallsExceeded(c.client_ip, name, _cap,
+                                                c.api_key || c.client_ip)) {  // r-durable-cap: durable identity = api_key||ip
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
@@ -3826,7 +3898,7 @@ const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null };
 // registration block below, then cleared before return (see trackedTool).
 function createServer(descOverrides) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
-  const srv = new McpServer({ name: 'DC Hub Intelligence', version: '2.4.2' }, {
+  const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
     // r86-reach: the initialize `instructions` field was empty (verified live
     // 2026-06-14) — a headless agent arrived with zero in-protocol orientation,
     // tried once, and never learned how to persist. This is the first-touch
@@ -5345,7 +5417,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     server: 'DC Hub MCP',
-    version: '2.4.2',
+    version: SERVER_VERSION,
     tools: CANONICAL_TOOL_COUNT,   // canonical count from mcp-server.json (matches live tools/list); CI-guarded by sync-tools-manifest
     sessions: sessions.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
@@ -5632,7 +5704,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
   console.error('DC Hub MCP Server — stdio mode ready (Glama/local introspection)');
 } else if (!process.env.VITEST) {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`DC Hub MCP Server v2.1.10 on port ${PORT}`);
+    console.log(`DC Hub MCP Server v${SERVER_VERSION} on port ${PORT}`);
     console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
     console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
     console.log(`  Backend: ${API_BASE}`);
