@@ -4883,7 +4883,7 @@ function createServer(descOverrides) {
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
 
   trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
-    { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or an EIA balancing-authority code, e.g. SOCO, DUK, AZPS, TVA'),
+    { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for live Ashburn / Northern Virginia zone load + real-time LMP (the world\'s #1 DC market, invisible in EIA)'),
       iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
       region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code') },
     async (a) => {
@@ -4904,11 +4904,19 @@ function createServer(descOverrides) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'region required',
           hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs.',
-          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'],
+          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'PJM-DOM'],
           example: 'get_grid_intelligence region_id="PJM"',
         }) }] };
       }
       const ISO = raw.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      // PJM Dominion (DOM) sub-zone — Ashburn / Northern Virginia (world's #1 DC
+      // market), invisible in EIA-930 (no sub-BA DOM). The backend serves live
+      // DOM-zone LOAD + real-time LMP (gridstatus.io); return it directly rather
+      // than through the ISO-level 3-feed shaper, which expects RTO fuel-mix.
+      if (['PJM-DOM', 'PJMDOM', 'DOM', 'DOMINION'].includes(ISO)) {
+        const dom = await callAPI('/api/v1/grid/intelligence/PJM-DOM', {}, { internal: true });
+        return withFreshness({ content: [{ type: 'text', text: JSON.stringify(dom) }], structuredContent: dom }, 'get_grid_intelligence');
+      }
       const [gi, cmp, qsnap] = await Promise.all([
         callAPI(`/api/v1/grid/intelligence/${ISO}`, {}, { internal: true }),
         callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true }),
