@@ -4656,6 +4656,24 @@ function createServer(descOverrides) {
       min_relevance: N.describe('Minimum relevance score 0-1 to include an item, e.g. 0.5') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
 
+  // 2026-07-03: semantic (meaning-based) search over news + M&A deals + 21k+
+  // facilities via the RAG layer (Cohere embeddings + pgvector). For fuzzy /
+  // conceptual queries that keyword filters miss. Free — an agent magnet.
+  trackedTool(srv, 'semantic_search',
+    'Use for CONCEPTUAL / fuzzy questions where keyword filters fall short — semantic (meaning-based) retrieval across DC Hub\'s industry news, M&A deals, and 21,000+ discovered facilities, ranked by relevance with citable source fields (news url/title, deal parties/value, facility name/location). Examples: "what is happening with behind-the-meter gas for AI data centers?", "deals involving nuclear power for hyperscalers", "grids opening up for AI load in the Southeast" — semantic_search q="behind-the-meter gas for AI data centers". Params: q (required, natural-language query); corpus (optional CSV subset of news_articles,deals,discovered_facilities; default all three); k (1-15, default 8). Returns {results:[{source_table, kind, text, score, cite:{…}}]}. Complements the exact-filter tools (get_news / list_transactions / search_facilities) with relevance ranking. Cite "DC Hub (dchub.cloud)".',
+    { q: S.describe('Natural-language query (required), e.g. "grids opening up for AI load in the Southeast"'),
+      query: S.describe('Alias for q'),
+      corpus: S.describe('Optional CSV of corpora: news_articles, deals, discovered_facilities (default: all three)'),
+      k: N.describe('Number of results, 1-15 (default 8)') },
+    async (a) => {
+      const q = String((a && (a.q || a.query)) || '').trim();
+      if (!q) return { content: [{ type: 'text', text: JSON.stringify({ error: 'q required', example: 'semantic_search q="behind-the-meter gas for AI data centers"' }) }] };
+      const params = { q };
+      if (a && a.corpus) params.corpus = a.corpus;
+      if (a && a.k) params.k = a.k;
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/rag/search', params)) }] };
+    });
+
   trackedTool(srv, 'get_pipeline', 'Use when a user asks "what is being built / announced / permitted" in a market or by an operator — the forward-looking construction pipeline (540+ projects, 369 GW). Example: "What data centers are under construction in Northern Virginia and when do they come online?" — get_pipeline market=northern-virginia status=construction. Params: status one of "announced" | "permitted" | "construction" | "operational"; operator (e.g. "Equinix", "Digital Realty", "AWS"); country (ISO-2, e.g. "US", "DE"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. "2027-01-01"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions).',
     { status: S.describe('Pipeline stage filter: announced, permitted, construction, or operational'),
       country: S.describe('ISO 3166-1 alpha-2 country code, e.g. US, DE, SG'),
