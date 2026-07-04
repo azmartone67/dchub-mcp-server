@@ -422,6 +422,18 @@ function detectPlatformFromInit(body, ua = '') {
     // truncated, alphanumeric-safe) so the citations endpoint can show
     // distinct platforms even before we add a rule for each.
     const safe = clientName.replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+    // r-junk-platform (2026-07-04): 1-2 char names ('v','p','t','w','c','fv')
+    // are ad-hoc curl/debug tags, and QA-family / known-scraper names
+    // ('clawith', verify/probe/test/…) are harness self-IDs — neither is a
+    // real platform. Tag them 'dchub-internal' (every backend read predicate
+    // already excludes %dchub%) instead of minting a distinct platform per
+    // tag. The Flask track endpoint applies the same rewrite at write time
+    // (mcp_calls_deloop.normalize_write_platform) — keep the two aligned.
+    if (safe && (safe.length <= 2
+        || /(dchub|verify|probe|audit|harness|test|check|diag|sweep|selfheal|canary|smoke|regression)/.test(safe)
+        || /^(clawith|value-harness|dbg|raw|full|f5r|fv|rev|final|vinline|qa|qa-mozilla|fix2-v2|mcp-vouch|capwall2|pipeline_mcp|dchubhealer)$/.test(safe))) {
+      return 'dchub-internal';
+    }
     if (safe) return safe;
   }
   return detectPlatform(ua);
