@@ -3089,6 +3089,12 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     if (!haveGrid) out._warning_grid = `Live EIA fuel-mix/demand feed unavailable for ${ISO} right now (Power Index scores still shown).`;
     if (!row)      out._warning_dcpi = `No DC Hub Power Index row for ${ISO}.`;
   }
+  // r-rag-tooldata (2026-07-04): pass through the RAG-grounded passages the backend
+  // attaches when get_grid_intelligence sends ?rag=1 — the shaper otherwise cherry-
+  // picks named fields and would silently drop related_intel.
+  if (gi && !gi.error && Array.isArray(gi.related_intel) && gi.related_intel.length) {
+    out.related_intel = gi.related_intel;
+  }
   return out;
 }
 
@@ -4346,7 +4352,10 @@ function createServer(descOverrides) {
       metric: S.describe('Optional single metric to focus on, e.g. vacancy, pricing, absorption, pipeline'),
       period: S.describe('Optional time window for the metric, e.g. ttm, 12mo, ytd'),
       compare_to: S.describe('Optional second market slug to compare against, e.g. dallas') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, {})) }] }));
+    // r-rag-tooldata (2026-07-04): ?rag=1 opts this tool into backend RAG grounding
+    // (cited related passages). The public market pages do NOT send it, so their hot
+    // path stays embed-free; only this agent tool pays the synchronous-embed cost.
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(`/api/v1/markets/${slugify(a.market) || 'list'}`, { rag: 1 })) }] }));
 
   // r41-dcpi-rank (2026-05-25): expose DCPI verdict + composite_score
   // as a first-class tool. Lets agents ask "should I build in
@@ -5317,7 +5326,9 @@ function createServer(descOverrides) {
         return withFreshness({ content: [{ type: 'text', text: JSON.stringify(dom) }], structuredContent: dom }, 'get_grid_intelligence');
       }
       const [gi, cmp, qsnap, ext] = await Promise.all([
-        callAPI(`/api/v1/grid/intelligence/${ISO}`, {}, { internal: true }),
+        // r-rag-tooldata (2026-07-04): ?rag=1 opts this flagship tool into backend
+        // RAG grounding; shapeGridIntelligence passes gi.related_intel through.
+        callAPI(`/api/v1/grid/intelligence/${ISO}`, { rag: 1 }, { internal: true }),
         callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true }),
         callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }),
         callAPI(`/api/v1/grid/extended/${ISO}`, {}, { internal: true }),
