@@ -19,7 +19,7 @@
     "io.modelcontextprotocol.registry/publisher-provided": {
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
-      "toolCount": 57,
+      "toolCount": 58,
       "license": "CC-BY-4.0",
       "freeTier": true
     }
