@@ -2384,8 +2384,13 @@ async function _getCredits(c) {
   if (cached && (now - cached.ts) < (cached.credits > 0 ? _CREDIT_TTL_MS : _CREDIT_ZERO_TTL_MS)) return { credits: cached.credits, had_pack: cached.had_pack };
   let credits = 0, had_pack = false;
   try {
+    // r-credits-timeout (2026-07-03): this lookup sits on the hot path of every
+    // credit-gated tool call and fail-opens (any error → credits:0 → normal
+    // trial gating). A slow backend was holding tool calls hostage for up to the
+    // 30s callAPI default — cap it at 2s; the 120s/10s cache absorbs the misses.
     const r = await callAPI('/api/v1/mcp/credits/balance',
-                            { key: c.api_key || '', session: c.session_id || '' });
+                            { key: c.api_key || '', session: c.session_id || '' },
+                            { timeout: 2000 });
     credits = (r && typeof r.credits === 'number') ? r.credits : 0;
     had_pack = !!(r && r.had_pack);   // ever bought a pack (even if depleted) → re-up nudge
   } catch (_) {}
@@ -4036,7 +4041,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 // caller — so a single process-wide cache is leak-safe: the first call warms it, all
 // subsequent calls across ALL sessions/replicas-process hit warm (~instant) for 90s
 // (well inside the EIA-hourly / 5-min-Elexon freshness window).
-const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null };
+// r-scoreboard-swr (2026-07-03): stale-while-revalidate. After every deploy
+// (5-6/day) the first caller paid the full fan-out inline (P95 3.7s+). Now a
+// stale entry is served IMMEDIATELY while ONE background rebuild (single-flight
+// via `refreshing`) refreshes it; only a truly cold process (no entry at all)
+// builds inline, and concurrent cold callers share that one in-flight build.
+const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null, refreshing: null };
 
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 // descOverrides: optional { tool_name: description } map from the per-platform
@@ -4301,284 +4311,307 @@ function createServer(descOverrides) {
       if (_SCOREBOARD_CACHE.out && (Date.now() - _SCOREBOARD_CACHE.at) < 90_000) {
         return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }], structuredContent: _SCOREBOARD_CACHE.obj || undefined };
       }
-      const _softErr = (e) => ({ error: String(e).slice(0, 120) });
-      const _p_uk  = callAPI('/api/v1/iso/uk/snapshot', {}).catch(_softErr);
-      const _p_au  = callAPI('/api/v1/iso/au/snapshot', {}).catch(_softErr);
-      const _p_tw  = callAPI('/api/v1/iso/tw/snapshot', {}).catch(_softErr);
-      const _p_eu  = callAPI('/api/v1/iso/eu/snapshot', {}).catch(_softErr);
-      const _p_cmp = callAPI('/api/v1/dcpi/iso-comparison').catch(() => null);
-      const _p_q   = callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }).catch(() => null);
-      const _p_gas = callAPI('/api/v1/gas/eu/snapshot').catch(() => null);
-      const results = await Promise.all(_US_ISOS.map(iso =>
-        // internal:true → ungated generation_mix (this is the free fuel-mix overview)
-        callAPI(`/api/v1/grid/intelligence/${iso}`, {}, { internal: true })
-          .then(d => ({ iso, d }))
-          .catch(e => ({ iso, err: String(e).slice(0, 120) }))));
-      const grids = [];
-      for (const { iso, d, err } of results) {
-        if (err || !d || !d.generation_mix) { grids.push({ iso, error: err || 'no generation_mix' }); continue; }
-        const gm = d.generation_mix;
-        // ROBUSTNESS (2026-06-19): the EIA feed now returns ALL fuels — sum the
-        // FULL non-storage generation (incl geothermal GEO + oil OIL the old
-        // 7-fuel sum dropped), clamp negatives (charging storage / artifacts),
-        // count GEO as renewable. Storage (BAT/PS) excluded from the denominator.
-        const _STOR = new Set(['BAT', 'PS']);
-        const _REN  = new Set(['WND', 'SUN', 'WAT', 'GEO']);
-        const posv = (k) => { const n = _num(gm[k] && gm[k].mw); return (Number.isFinite(n) && n > 0) ? n : 0; };
-        let total = 0, renew = 0;
-        for (const k of Object.keys(gm)) {
-          if (k === 'period') continue;
-          const p = posv(k);
-          if (!_STOR.has(k)) total += p;
-          if (_REN.has(k)) renew += p;
-        }
-        const ng = posv('NG'), nuc = posv('NUC'), col = posv('COL');
-        const sun = posv('SUN'), wnd = posv('WND'), wat = posv('WAT'), oth = posv('OTH');
-        const geo = posv('GEO'), oil = posv('OIL');
-        const pct = (x) => total > 0 ? Math.round((x / total) * 1000) / 10 : null;
-        grids.push({
-          iso,
-          region: d.region || iso,
-          country: 'US',
-          demand_mw: _num(d.demand_mw) || null,
-          renewable_share_pct: pct(renew),
-          gas_share_pct: pct(ng),
-          mix_period: gm.NG && gm.NG.period || null,
-          fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, geothermal: geo, oil: oil, other: oth },
-          fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
-        });
-      }
-
-      // --- LIVE international grids (#60, r65) ---
-      const partial = [];
-      // GB / NGESO — Elexon full fuel mix. The snapshot exposes gas/nuclear/
-      // wind/solar/hydro/biomass/coal + generation_total; "other" = the
-      // remainder (oil/pumped-storage/misc not separately exposed). Renewable
-      // recomputed as wind+solar+hydro / gen_total to MATCH the US definition
-      // (which excludes biomass), so the ranking is apples-to-apples.
-      const uk = await _p_uk;   // r78: kicked off in parallel above
-      const ukm = uk && uk.metrics;
-      if (ukm && _num(ukm.generation_total_mw) > 0) {
-        const gt = _num(ukm.generation_total_mw);
-        const pct = (x) => Math.round((x / gt) * 1000) / 10;
-        const gas = _num(ukm.fuel_gas_mw), wnd = _num(ukm.fuel_wind_mw),
-              sun = _num(ukm.fuel_solar_mw), wat = _num(ukm.fuel_hydro_mw),
-              nuc = _num(ukm.fuel_nuclear_mw), col = _num(ukm.fuel_coal_mw),
-              bio = _num(ukm.fuel_biomass_mw);
-        const other = Math.max(0, Math.round(gt - (gas + nuc + col + wnd + sun + wat + bio)));
-        grids.push({
-          iso: 'NGESO',
-          region: 'Great Britain (NESO)',
-          country: 'GB',
-          demand_mw: _num(ukm.demand_mw) || null,
-          renewable_share_pct: pct(sun + wnd + wat),  // wind+solar+hydro (US-comparable)
-          gas_share_pct: pct(gas),
-          mix_period: 'Elexon FUELINST (live, 5-min)',
-          fuel_mw: { gas, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, biomass: bio, other },
-          fuel_pct: { gas: pct(gas), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), biomass: pct(bio), other: pct(other) },
-          note: 'renewable_share_pct = wind+solar+hydro (matches the US definition; excludes biomass, shown separately). Live via Elexon Insights.',
-        });
-      } else {
-        grids.push({ iso: 'NGESO', region: 'Great Britain (NESO)', error: (uk && uk.error) || 'no live snapshot' });
-      }
-      // AU / AEMO — summary feed has NO full fuel split. Report demand, the
-      // utility-scale variable-renewable FLOOR (wind+solar; excludes hydro +
-      // rooftop), and live spot price. renewable_share_pct stays null because
-      // it is NOT comparable to the full-mix grids — kept honest, unranked.
-      const au = await _p_au;   // r78: kicked off in parallel above
-      const aum = au && au.metrics;
-      if (aum && _num(aum.generation_total_mw) > 0) {
-        partial.push({
-          iso: 'AEMO',
-          region: 'Australia NEM (AEMO)',
-          country: 'AU',
-          demand_mw: _num(aum.demand_mw) || null,
-          renewable_share_pct: null,
-          variable_renewable_pct: _num(aum.variable_renewable_pct),
-          gas_share_pct: null,
-          generation_total_mw: _num(aum.generation_total_mw) || null,
-          avg_price_usd_per_mwh: _num(aum.avg_price_usd_per_mwh) || null,
-          partial_feed: true,
-          note: 'AEMO NEM summary reports utility wind+solar only (no full fuel split). variable_renewable_pct is a FLOOR — it excludes hydro + rooftop solar — so it is NOT directly comparable to the full-mix renewable_share_pct and is listed unranked. Live via AEMO.',
-        });
-      } else {
-        grids.push({ iso: 'AEMO', region: 'Australia NEM (AEMO)', error: (au && au.error) || 'no live snapshot' });
-      }
-
-      // TW / TAIPOWER (#60, APAC #2) — full live fuel mix from Taipower's
-      // real-time generation. renewable = wind+solar+hydro (US/UK/EU definition),
-      // so Taiwan ranks apples-to-apples. Top APAC DC market (TSMC + hyperscalers).
-      const tw = await _p_tw;   // r78: kicked off in parallel above
-      const twm = tw && tw.metrics;
-      if (twm && _num(twm.generation_total_mw) > 0) {
-        grids.push({
-          iso: 'TAIPOWER',
-          region: 'Taiwan (Taipower)',
-          country: 'TW',
-          demand_mw: _num(twm.demand_mw) || null,
-          renewable_share_pct: _num(twm.renewable_pct),
-          gas_share_pct: _num(twm.gas_pct),
-          mix_period: 'Taipower genary (live)',
-          fuel_mw: {
-            gas: _num(twm.fuel_gas_mw), nuclear: _num(twm.fuel_nuclear_mw),
-            coal: _num(twm.fuel_coal_mw), wind: _num(twm.fuel_wind_mw),
-            solar: _num(twm.fuel_solar_mw), hydro: _num(twm.fuel_hydro_mw),
-            oil: _num(twm.fuel_oil_mw),
-          },
-          generation_total_mw: _num(twm.generation_total_mw),
-          note: 'renewable_share_pct = wind+solar+hydro (matches US/UK/EU). Live via Taipower.',
-        });
-      } else {
-        grids.push({ iso: 'TAIPOWER', region: 'Taiwan (Taipower)', error: (tw && tw.error) || 'no live snapshot' });
-      }
-
-      // --- LIVE EU grids (#60, ENTSO-E Transparency — ~25 bidding zones) ---
-      // One token unlocks many zones. /iso/eu/snapshot returns per-zone fuel
-      // mix with renewable_pct ALREADY computed as wind+solar+hydro (the same
-      // definition as the US/UK rows), so each European bidding zone ranks
-      // apples-to-apples alongside them. A data center sites in a specific
-      // zone (Frankfurt/Dublin/Amsterdam…), not "Europe" — so we surface the
-      // zones individually rather than the continent aggregate.
-      let euCount = 0;
-      const eu = await _p_eu;   // r78: kicked off in parallel above
-      const euZones = (eu && eu.zones) || null;
-      if (euZones && typeof euZones === 'object') {
-        for (const zc of Object.keys(euZones)) {
-          const z = euZones[zc] || {};
-          const gt = _num(z.generation_total_mw);
-          if (!(gt > 0)) continue;
+      // r-scoreboard-swr (2026-07-03): the full fan-out below is wrapped in
+      // _rebuild so a STALE entry can be served instantly while ONE background
+      // rebuild refreshes it (single-flight; see _SCOREBOARD_CACHE). The build
+      // body itself is unchanged. Note the background rebuild keeps this
+      // request's AsyncLocalStorage ctx (callAPI identity headers) — same
+      // behavior as the old inline build, and the data is caller-independent.
+      const _rebuild = async () => {
+        const _softErr = (e) => ({ error: String(e).slice(0, 120) });
+        const _p_uk  = callAPI('/api/v1/iso/uk/snapshot', {}).catch(_softErr);
+        const _p_au  = callAPI('/api/v1/iso/au/snapshot', {}).catch(_softErr);
+        const _p_tw  = callAPI('/api/v1/iso/tw/snapshot', {}).catch(_softErr);
+        const _p_eu  = callAPI('/api/v1/iso/eu/snapshot', {}).catch(_softErr);
+        const _p_cmp = callAPI('/api/v1/dcpi/iso-comparison').catch(() => null);
+        const _p_q   = callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }).catch(() => null);
+        const _p_gas = callAPI('/api/v1/gas/eu/snapshot').catch(() => null);
+        const results = await Promise.all(_US_ISOS.map(iso =>
+          // internal:true → ungated generation_mix (this is the free fuel-mix overview)
+          callAPI(`/api/v1/grid/intelligence/${iso}`, {}, { internal: true })
+            .then(d => ({ iso, d }))
+            .catch(e => ({ iso, err: String(e).slice(0, 120) }))));
+        const grids = [];
+        for (const { iso, d, err } of results) {
+          if (err || !d || !d.generation_mix) { grids.push({ iso, error: err || 'no generation_mix' }); continue; }
+          const gm = d.generation_mix;
+          // ROBUSTNESS (2026-06-19): the EIA feed now returns ALL fuels — sum the
+          // FULL non-storage generation (incl geothermal GEO + oil OIL the old
+          // 7-fuel sum dropped), clamp negatives (charging storage / artifacts),
+          // count GEO as renewable. Storage (BAT/PS) excluded from the denominator.
+          const _STOR = new Set(['BAT', 'PS']);
+          const _REN  = new Set(['WND', 'SUN', 'WAT', 'GEO']);
+          const posv = (k) => { const n = _num(gm[k] && gm[k].mw); return (Number.isFinite(n) && n > 0) ? n : 0; };
+          let total = 0, renew = 0;
+          for (const k of Object.keys(gm)) {
+            if (k === 'period') continue;
+            const p = posv(k);
+            if (!_STOR.has(k)) total += p;
+            if (_REN.has(k)) renew += p;
+          }
+          const ng = posv('NG'), nuc = posv('NUC'), col = posv('COL');
+          const sun = posv('SUN'), wnd = posv('WND'), wat = posv('WAT'), oth = posv('OTH');
+          const geo = posv('GEO'), oil = posv('OIL');
+          const pct = (x) => total > 0 ? Math.round((x / total) * 1000) / 10 : null;
           grids.push({
-            iso: 'EU_' + zc,
-            region: (z.name || zc) + (z.hub ? ' — ' + z.hub : ''),
-            country: 'EU',
-            demand_mw: null,
-            renewable_share_pct: _num(z.renewable_pct),  // wind+solar+hydro (comparable)
-            gas_share_pct: _num(z.gas_pct),
-            mix_period: 'ENTSO-E A75 (live, latest settled period)',
-            fuel_mw: {
-              gas: _num(z.fuel_gas_mw), nuclear: _num(z.fuel_nuclear_mw),
-              coal: _num(z.fuel_coal_mw), wind: _num(z.fuel_wind_mw),
-              solar: _num(z.fuel_solar_mw), hydro: _num(z.fuel_hydro_mw),
-              biomass: _num(z.fuel_biomass_mw),
-            },
-            generation_total_mw: gt,
-            note: 'renewable_share_pct = wind+solar+hydro (matches the US/UK definition; biomass separate). Live via ENTSO-E Transparency.',
+            iso,
+            region: d.region || iso,
+            country: 'US',
+            demand_mw: _num(d.demand_mw) || null,
+            renewable_share_pct: pct(renew),
+            gas_share_pct: pct(ng),
+            mix_period: gm.NG && gm.NG.period || null,
+            fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, geothermal: geo, oil: oil, other: oth },
+            fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
           });
-          euCount++;
         }
-      }
 
-      const ranked = grids.filter(g => g.renewable_share_pct != null)
-        .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
-      const errored = grids.filter(g => g.renewable_share_pct == null);
-      // r70b (2026-06-03): enrich each grid with the DCPI per-ISO intelligence
-      // — avg queue-wait, curtailment %, BUILD-rate, and 30-day grid emergencies
-      // — from the live, populated /api/v1/dcpi/iso-comparison. "More ISO detail"
-      // with zero new data source. (The interconnection-queue/snapshot by_iso is
-      // empty, so it is NOT used — no faking with nulls.) total_queue_capacity_mw
-      // is also empty there, so it is deliberately omitted.
-      try {
-        const _isoCmp = await _p_cmp;   // r78: kicked off in parallel above
-        const _rows = (_isoCmp && (_isoCmp.isos || _isoCmp.comparison || _isoCmp.data))
-                      || (Array.isArray(_isoCmp) ? _isoCmp : []);
-        // r70b (2026-06-03): normalize the join key (strip non-alphanumerics) so
-        // the grid iso 'ISO-NE' matches the DCPI row keyed 'ISONE' (and guards any
-        // future hyphen/underscore drift). Without this, ISO-NE silently missed
-        // its dcpi_detail enrichment (6/7 US grids enriched instead of 7/7).
-        const _normIso = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const _byIso = {};
-        for (const r of _rows) { if (r && r.iso) _byIso[_normIso(r.iso)] = r; }
-        for (const g of grids) {
-          const d = g && g.iso && _byIso[_normIso(g.iso)];
-          if (d) {
-            g.dcpi_detail = {
-              avg_queue_wait_months: _num(d.avg_queue_wait_months),
-              avg_curtailment_pct:   _num(d.avg_curtailment_pct),
-              build_markets:         _num(d.build_count),
-              total_markets:         _num(d.market_count),
-              build_rate_pct:        (d.market_count ? Math.round((d.build_count / d.market_count) * 1000) / 10 : null),
-              grid_emergencies_30d:  _num(d.sum_emergency_30d),
-              note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the DC Hub Power Index.',
-            };
+        // --- LIVE international grids (#60, r65) ---
+        const partial = [];
+        // GB / NGESO — Elexon full fuel mix. The snapshot exposes gas/nuclear/
+        // wind/solar/hydro/biomass/coal + generation_total; "other" = the
+        // remainder (oil/pumped-storage/misc not separately exposed). Renewable
+        // recomputed as wind+solar+hydro / gen_total to MATCH the US definition
+        // (which excludes biomass), so the ranking is apples-to-apples.
+        const uk = await _p_uk;   // r78: kicked off in parallel above
+        const ukm = uk && uk.metrics;
+        if (ukm && _num(ukm.generation_total_mw) > 0) {
+          const gt = _num(ukm.generation_total_mw);
+          const pct = (x) => Math.round((x / gt) * 1000) / 10;
+          const gas = _num(ukm.fuel_gas_mw), wnd = _num(ukm.fuel_wind_mw),
+                sun = _num(ukm.fuel_solar_mw), wat = _num(ukm.fuel_hydro_mw),
+                nuc = _num(ukm.fuel_nuclear_mw), col = _num(ukm.fuel_coal_mw),
+                bio = _num(ukm.fuel_biomass_mw);
+          const other = Math.max(0, Math.round(gt - (gas + nuc + col + wnd + sun + wat + bio)));
+          grids.push({
+            iso: 'NGESO',
+            region: 'Great Britain (NESO)',
+            country: 'GB',
+            demand_mw: _num(ukm.demand_mw) || null,
+            renewable_share_pct: pct(sun + wnd + wat),  // wind+solar+hydro (US-comparable)
+            gas_share_pct: pct(gas),
+            mix_period: 'Elexon FUELINST (live, 5-min)',
+            fuel_mw: { gas, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, biomass: bio, other },
+            fuel_pct: { gas: pct(gas), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), biomass: pct(bio), other: pct(other) },
+            note: 'renewable_share_pct = wind+solar+hydro (matches the US definition; excludes biomass, shown separately). Live via Elexon Insights.',
+          });
+        } else {
+          grids.push({ iso: 'NGESO', region: 'Great Britain (NESO)', error: (uk && uk.error) || 'no live snapshot' });
+        }
+        // AU / AEMO — summary feed has NO full fuel split. Report demand, the
+        // utility-scale variable-renewable FLOOR (wind+solar; excludes hydro +
+        // rooftop), and live spot price. renewable_share_pct stays null because
+        // it is NOT comparable to the full-mix grids — kept honest, unranked.
+        const au = await _p_au;   // r78: kicked off in parallel above
+        const aum = au && au.metrics;
+        if (aum && _num(aum.generation_total_mw) > 0) {
+          partial.push({
+            iso: 'AEMO',
+            region: 'Australia NEM (AEMO)',
+            country: 'AU',
+            demand_mw: _num(aum.demand_mw) || null,
+            renewable_share_pct: null,
+            variable_renewable_pct: _num(aum.variable_renewable_pct),
+            gas_share_pct: null,
+            generation_total_mw: _num(aum.generation_total_mw) || null,
+            avg_price_usd_per_mwh: _num(aum.avg_price_usd_per_mwh) || null,
+            partial_feed: true,
+            note: 'AEMO NEM summary reports utility wind+solar only (no full fuel split). variable_renewable_pct is a FLOOR — it excludes hydro + rooftop solar — so it is NOT directly comparable to the full-mix renewable_share_pct and is listed unranked. Live via AEMO.',
+          });
+        } else {
+          grids.push({ iso: 'AEMO', region: 'Australia NEM (AEMO)', error: (au && au.error) || 'no live snapshot' });
+        }
+
+        // TW / TAIPOWER (#60, APAC #2) — full live fuel mix from Taipower's
+        // real-time generation. renewable = wind+solar+hydro (US/UK/EU definition),
+        // so Taiwan ranks apples-to-apples. Top APAC DC market (TSMC + hyperscalers).
+        const tw = await _p_tw;   // r78: kicked off in parallel above
+        const twm = tw && tw.metrics;
+        if (twm && _num(twm.generation_total_mw) > 0) {
+          grids.push({
+            iso: 'TAIPOWER',
+            region: 'Taiwan (Taipower)',
+            country: 'TW',
+            demand_mw: _num(twm.demand_mw) || null,
+            renewable_share_pct: _num(twm.renewable_pct),
+            gas_share_pct: _num(twm.gas_pct),
+            mix_period: 'Taipower genary (live)',
+            fuel_mw: {
+              gas: _num(twm.fuel_gas_mw), nuclear: _num(twm.fuel_nuclear_mw),
+              coal: _num(twm.fuel_coal_mw), wind: _num(twm.fuel_wind_mw),
+              solar: _num(twm.fuel_solar_mw), hydro: _num(twm.fuel_hydro_mw),
+              oil: _num(twm.fuel_oil_mw),
+            },
+            generation_total_mw: _num(twm.generation_total_mw),
+            note: 'renewable_share_pct = wind+solar+hydro (matches US/UK/EU). Live via Taipower.',
+          });
+        } else {
+          grids.push({ iso: 'TAIPOWER', region: 'Taiwan (Taipower)', error: (tw && tw.error) || 'no live snapshot' });
+        }
+
+        // --- LIVE EU grids (#60, ENTSO-E Transparency — ~25 bidding zones) ---
+        // One token unlocks many zones. /iso/eu/snapshot returns per-zone fuel
+        // mix with renewable_pct ALREADY computed as wind+solar+hydro (the same
+        // definition as the US/UK rows), so each European bidding zone ranks
+        // apples-to-apples alongside them. A data center sites in a specific
+        // zone (Frankfurt/Dublin/Amsterdam…), not "Europe" — so we surface the
+        // zones individually rather than the continent aggregate.
+        let euCount = 0;
+        const eu = await _p_eu;   // r78: kicked off in parallel above
+        const euZones = (eu && eu.zones) || null;
+        if (euZones && typeof euZones === 'object') {
+          for (const zc of Object.keys(euZones)) {
+            const z = euZones[zc] || {};
+            const gt = _num(z.generation_total_mw);
+            if (!(gt > 0)) continue;
+            grids.push({
+              iso: 'EU_' + zc,
+              region: (z.name || zc) + (z.hub ? ' — ' + z.hub : ''),
+              country: 'EU',
+              demand_mw: null,
+              renewable_share_pct: _num(z.renewable_pct),  // wind+solar+hydro (comparable)
+              gas_share_pct: _num(z.gas_pct),
+              mix_period: 'ENTSO-E A75 (live, latest settled period)',
+              fuel_mw: {
+                gas: _num(z.fuel_gas_mw), nuclear: _num(z.fuel_nuclear_mw),
+                coal: _num(z.fuel_coal_mw), wind: _num(z.fuel_wind_mw),
+                solar: _num(z.fuel_solar_mw), hydro: _num(z.fuel_hydro_mw),
+                biomass: _num(z.fuel_biomass_mw),
+              },
+              generation_total_mw: gt,
+              note: 'renewable_share_pct = wind+solar+hydro (matches the US/UK definition; biomass separate). Live via ENTSO-E Transparency.',
+            });
+            euCount++;
           }
         }
-      } catch (_e) { /* best-effort enrichment; scoreboard works without it */ }
 
-      // r70b (2026-06-04): attach LIVE interconnection-queue depth per US grid.
-      // The snapshot is now POPULATED (the iso-queue ingest cron + 6 real parsers:
-      // MISO/SPP/CAISO/NYISO fresh today, ERCOT/PJM/ISO-NE seeded) — so the earlier
-      // "by_iso empty" reason no longer holds. Greenest-grid ranking + queue depth
-      // in ONE flagship view. Fail-soft; internal UA so the snapshot isn't gated.
-      let usQueueGw = null;
-      try {
-        const _qsnap = await _p_q;   // r78: kicked off in parallel above
-        const _qrows = (_qsnap && _qsnap.by_iso) || [];
-        const _qn = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const _qByIso = {};
-        for (const r of _qrows) { if (r && r.iso) _qByIso[_qn(r.iso)] = r; }
-        for (const g of grids) {
-          const q = g && g.iso && _qByIso[_qn(g.iso)];
-          if (q && _num(q.queued_load_total_gw) != null) {
-            g.interconnection_queue = {
-              queued_gw:    _num(q.queued_load_total_gw),
-              dc_share_pct: _num(q.queued_load_dc_share_pct),
-              as_of:        q.as_of || null,
-              note: 'Live ISO interconnection-queue depth (DC Hub iso-queue ingest). Pair renewable_share + queue depth for "greenest AND most buildable".',
+        const ranked = grids.filter(g => g.renewable_share_pct != null)
+          .sort((x, y) => y.renewable_share_pct - x.renewable_share_pct);
+        const errored = grids.filter(g => g.renewable_share_pct == null);
+        // r70b (2026-06-03): enrich each grid with the DCPI per-ISO intelligence
+        // — avg queue-wait, curtailment %, BUILD-rate, and 30-day grid emergencies
+        // — from the live, populated /api/v1/dcpi/iso-comparison. "More ISO detail"
+        // with zero new data source. (The interconnection-queue/snapshot by_iso is
+        // empty, so it is NOT used — no faking with nulls.) total_queue_capacity_mw
+        // is also empty there, so it is deliberately omitted.
+        try {
+          const _isoCmp = await _p_cmp;   // r78: kicked off in parallel above
+          const _rows = (_isoCmp && (_isoCmp.isos || _isoCmp.comparison || _isoCmp.data))
+                        || (Array.isArray(_isoCmp) ? _isoCmp : []);
+          // r70b (2026-06-03): normalize the join key (strip non-alphanumerics) so
+          // the grid iso 'ISO-NE' matches the DCPI row keyed 'ISONE' (and guards any
+          // future hyphen/underscore drift). Without this, ISO-NE silently missed
+          // its dcpi_detail enrichment (6/7 US grids enriched instead of 7/7).
+          const _normIso = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+          const _byIso = {};
+          for (const r of _rows) { if (r && r.iso) _byIso[_normIso(r.iso)] = r; }
+          for (const g of grids) {
+            const d = g && g.iso && _byIso[_normIso(g.iso)];
+            if (d) {
+              g.dcpi_detail = {
+                avg_queue_wait_months: _num(d.avg_queue_wait_months),
+                avg_curtailment_pct:   _num(d.avg_curtailment_pct),
+                build_markets:         _num(d.build_count),
+                total_markets:         _num(d.market_count),
+                build_rate_pct:        (d.market_count ? Math.round((d.build_count / d.market_count) * 1000) / 10 : null),
+                grid_emergencies_30d:  _num(d.sum_emergency_30d),
+                note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the DC Hub Power Index.',
+              };
+            }
+          }
+        } catch (_e) { /* best-effort enrichment; scoreboard works without it */ }
+
+        // r70b (2026-06-04): attach LIVE interconnection-queue depth per US grid.
+        // The snapshot is now POPULATED (the iso-queue ingest cron + 6 real parsers:
+        // MISO/SPP/CAISO/NYISO fresh today, ERCOT/PJM/ISO-NE seeded) — so the earlier
+        // "by_iso empty" reason no longer holds. Greenest-grid ranking + queue depth
+        // in ONE flagship view. Fail-soft; internal UA so the snapshot isn't gated.
+        let usQueueGw = null;
+        try {
+          const _qsnap = await _p_q;   // r78: kicked off in parallel above
+          const _qrows = (_qsnap && _qsnap.by_iso) || [];
+          const _qn = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+          const _qByIso = {};
+          for (const r of _qrows) { if (r && r.iso) _qByIso[_qn(r.iso)] = r; }
+          for (const g of grids) {
+            const q = g && g.iso && _qByIso[_qn(g.iso)];
+            if (q && _num(q.queued_load_total_gw) != null) {
+              g.interconnection_queue = {
+                queued_gw:    _num(q.queued_load_total_gw),
+                dc_share_pct: _num(q.queued_load_dc_share_pct),
+                as_of:        q.as_of || null,
+                note: 'Live ISO interconnection-queue depth (DC Hub iso-queue ingest). Pair renewable_share + queue depth for "greenest AND most buildable".',
+              };
+            }
+          }
+          if (_qsnap && _qsnap.totals) usQueueGw = _num(_qsnap.totals.queued_load_gw);
+        } catch (_e) { /* queue enrichment best-effort */ }
+
+        // r70 (2026-06-03): surface the live EU gas-transmission context (ENTSOG)
+        // on the flagship scoreboard too — it was only reachable at the
+        // low-discoverability /api/v1/gas/eu/snapshot. It's a CONTEXT layer (gas
+        // throughput, not a power-grid fuel mix), so it rides ALONGSIDE `grids`,
+        // never inside the renewable ranking — kept honest, not a faked peer.
+        let euGas = null;
+        try {
+          const _g = await _p_gas;   // r78: kicked off in parallel above
+          if (_g && !_g.error && (_g.active_countries || _g.countries)) {
+            euGas = {
+              active_countries: _g.active_countries,
+              total_throughput_gwh_per_day: _g.total_throughput_gwh_per_day,
+              unit: _g.unit || 'GWh/d',
+              source: _g.source || 'ENTSOG Transparency (live)',
+              note: 'EU gas-transmission throughput context (ENTSOG, live). NOT a power-grid peer — pipeline flow, not generation mix.',
             };
           }
-        }
-        if (_qsnap && _qsnap.totals) usQueueGw = _num(_qsnap.totals.queued_load_gw);
-      } catch (_e) { /* queue enrichment best-effort */ }
-
-      // r70 (2026-06-03): surface the live EU gas-transmission context (ENTSOG)
-      // on the flagship scoreboard too — it was only reachable at the
-      // low-discoverability /api/v1/gas/eu/snapshot. It's a CONTEXT layer (gas
-      // throughput, not a power-grid fuel mix), so it rides ALONGSIDE `grids`,
-      // never inside the renewable ranking — kept honest, not a faked peer.
-      let euGas = null;
-      try {
-        const _g = await _p_gas;   // r78: kicked off in parallel above
-        if (_g && !_g.error && (_g.active_countries || _g.countries)) {
-          euGas = {
-            active_countries: _g.active_countries,
-            total_throughput_gwh_per_day: _g.total_throughput_gwh_per_day,
-            unit: _g.unit || 'GWh/d',
-            source: _g.source || 'ENTSOG Transparency (live)',
-            note: 'EU gas-transmission throughput context (ENTSOG, live). NOT a power-grid peer — pipeline flow, not generation mix.',
-          };
-        }
-      } catch (_e) { /* gas context is best-effort; scoreboard works without it */ }
-      const out = {
-        ok: true,
-        count: ranked.length,
-        ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
-        coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO)' + (euGas ? ' + EU gas transmission (ENTSOG)' : ''),
-        source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency; TW: Taipower (all live); AU: AEMO NEM (live)',
-        grids: [...ranked, ...errored],
-        partial_grids: partial,
-        eu_gas_context: euGas,
-        us_interconnection_queue_gw: usQueueGw,
-        // r70 (2026-06-03): this free scoreboard answers "which grid is greenest
-        // RIGHT NOW" — the facts. The siting DECISION (how much headroom, how deep
-        // the interconnection queue, time-to-power, full multi-factor site score)
-        // is the paid layer. Honest signpost, not a paywall on the data above.
-        deep_intelligence: {
-          note: 'This is the live fuel-mix ranking (free). For the SITING DECISION — per-ISO grid headroom (MW available), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
-          per_iso_grid_headroom_queue_ttp: 'get_grid_intelligence (iso=…)',
-          score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)',
-          best_market_recommendation: 'get_dchub_recommendation',
-          attribution: 'Live grid data via DC Hub (dchub.cloud), CC-BY-4.0.',
-        },
+        } catch (_e) { /* gas context is best-effort; scoreboard works without it */ }
+        const out = {
+          ok: true,
+          count: ranked.length,
+          ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
+          coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Taiwan (Taipower) + Australia NEM (AEMO)' + (euGas ? ' + EU gas transmission (ENTSOG)' : ''),
+          source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency; TW: Taipower (all live); AU: AEMO NEM (live)',
+          grids: [...ranked, ...errored],
+          partial_grids: partial,
+          eu_gas_context: euGas,
+          us_interconnection_queue_gw: usQueueGw,
+          // r70 (2026-06-03): this free scoreboard answers "which grid is greenest
+          // RIGHT NOW" — the facts. The siting DECISION (how much headroom, how deep
+          // the interconnection queue, time-to-power, full multi-factor site score)
+          // is the paid layer. Honest signpost, not a paywall on the data above.
+          deep_intelligence: {
+            note: 'This is the live fuel-mix ranking (free). For the SITING DECISION — per-ISO grid headroom (MW available), interconnection-queue depth + time-to-power, and multi-factor site scoring — use the decision tools.',
+            per_iso_grid_headroom_queue_ttp: 'get_grid_intelligence (iso=…)',
+            score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)',
+            best_market_recommendation: 'get_dchub_recommendation',
+            attribution: 'Live grid data via DC Hub (dchub.cloud), CC-BY-4.0.',
+          },
+        };
+        const _outText = JSON.stringify(out, null, 2);
+        _SCOREBOARD_CACHE.at = Date.now();
+        _SCOREBOARD_CACHE.out = _outText;
+        _SCOREBOARD_CACHE.obj = out;
+        // r-structured (2026-06-19): structuredContent so agent/structured clients
+        // get the full ranking, not just the next_session envelope (_withNextSession
+        // was synthesizing an empty structuredContent={next_session} for this
+        // content-only return → "empty scoreboard" to Claude.ai/agents).
+        return { content: [{ type: 'text', text: _outText }], structuredContent: out };
       };
-      const _outText = JSON.stringify(out, null, 2);
-      _SCOREBOARD_CACHE.at = Date.now();
-      _SCOREBOARD_CACHE.out = _outText;
-      _SCOREBOARD_CACHE.obj = out;
-      // r-structured (2026-06-19): structuredContent so agent/structured clients
-      // get the full ranking, not just the next_session envelope (_withNextSession
-      // was synthesizing an empty structuredContent={next_session} for this
-      // content-only return → "empty scoreboard" to Claude.ai/agents).
-      return { content: [{ type: 'text', text: _outText }], structuredContent: out };
+      // Stale entry → serve it NOW, refresh behind the response.
+      if (_SCOREBOARD_CACHE.out) {
+        if (!_SCOREBOARD_CACHE.refreshing) {
+          _SCOREBOARD_CACHE.refreshing = _rebuild()
+            .catch((e) => console.error('[scoreboard] background refresh failed:', e?.message || e))
+            .finally(() => { _SCOREBOARD_CACHE.refreshing = null; });
+        }
+        return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }], structuredContent: _SCOREBOARD_CACHE.obj || undefined };
+      }
+      // Truly cold (first call in a fresh process): build inline, but share the
+      // single in-flight build across any concurrent cold callers.
+      if (!_SCOREBOARD_CACHE.refreshing) {
+        _SCOREBOARD_CACHE.refreshing = _rebuild().finally(() => { _SCOREBOARD_CACHE.refreshing = null; });
+      }
+      return await _SCOREBOARD_CACHE.refreshing;
     });
 
   // r41-compare-isos (2026-05-25; repointed r-compare-fix 2026-06-19):
@@ -5800,7 +5833,14 @@ app.post('/mcp', async (req, res) => {
     const _ciName = (req.body?.params?.clientInfo?.name || '').toString().trim().toLowerCase();
     const _isClaudeConnector = /Claude-User/i.test(userAgent) || _ciName === 'claude-ai';
     const _challengeDisabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_DISABLE || ''));
-    if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector
+    // r-challenge-method (2026-07-03): the challenge was METHOD-BLIND — it also
+    // 401'd tools/list from a Claude connector with no key or a stale/expired
+    // WorkOS JWT (verified live), so the public tool catalog failed to render in
+    // the connector UI. Discovery (tools/list, ping) is caller-independent and
+    // already served statelessly below — challenge only where identity actually
+    // matters: initialize (starts the OAuth handshake) and tools/call.
+    const _challengeMethod = req.body?.method === 'initialize' || req.body?.method === 'tools/call';
+    if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector && _challengeMethod
         && !req.headers['x-api-key'] && !_workosAuthed
         && !(sessionId && sessions.has(sessionId))) {
       // resource_metadata points at the FLASK-served document (not the stale CF
@@ -5957,6 +5997,21 @@ app.post('/mcp', async (req, res) => {
       });
     }
 
+    // r-session-404 (2026-07-03): a request bearing an mcp-session-id we do NOT
+    // recognize (in-process Map wiped by a deploy — 5-6/day — or 120-min idle
+    // eviction) MUST get HTTP 404 per the MCP streamable-HTTP spec, which tells
+    // the client to transparently re-initialize and retry. The old blanket 400
+    // (-32000) here reads as "bad request" → clients surfaced it as a hard error
+    // instead of re-initializing (12x 400s in one 20-min log window). 400 is kept
+    // ONLY for the true protocol misuse: a non-initialize request with no session
+    // id at all.
+    if (sessionId) {
+      return res.status(404).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'Session not found — it may have expired. Re-initialize to continue.' },
+        id: body?.id || null,
+      });
+    }
     res.status(400).json({
       jsonrpc: '2.0',
       error: { code: -32000, message: 'No session. Send initialize first.' },
@@ -5983,6 +6038,10 @@ app.get('/mcp', async (req, res) => {
       await sessions.get(sid).handleRequest(req, res);
     });
   }
+  // r-session-404 (2026-07-03): same spec contract as the POST fall-through —
+  // an unrecognized session id gets 404 (client re-initializes); only a
+  // session-less GET is a 400.
+  if (sid) return res.status(404).json({ error: 'Session not found — re-initialize.' });
   res.status(400).json({ error: 'No session. POST /mcp with initialize.' });
 });
 
