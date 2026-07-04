@@ -1,7 +1,7 @@
 // Offline unit tests for the next_session structuredContent fix.
 // Regression guard: structuredContent must never hide the content payload.
 import { describe, it, expect } from 'vitest';
-import { withNextSession, payloadObjFromContent, embedClaim } from '../lib/result-shaping.mjs';
+import { withNextSession, payloadObjFromContent, embedClaim, withQueryEcho } from '../lib/result-shaping.mjs';
 
 const NS = { tool: 'get_changes', call: 'get_changes since=24h' };
 const textResult = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
@@ -92,6 +92,67 @@ describe('embedClaim — in-context claim at the value moment (#1241)', () => {
     expect(embedClaim(err, CLAIM)).toBe(err);                              // isError → untouched
     const already = embedClaim(res(), CLAIM);
     expect(embedClaim(already, CLAIM).content[0].text).toBe(already.content[0].text); // idempotent
+  });
+});
+
+describe('withQueryEcho — the echoed query must match THIS call (concurrency guard)', () => {
+  // Shape the backend /api/v1/rag/search echo returns.
+  const ragResp = (query, results) => ({ ok: true, query, corpus: ['news_articles'], count: results.length, results });
+
+  it('overwrites a CROSSED echo with the caller\'s own query (THE BUG)', () => {
+    // Backend crossed the labels under a parallel batch: A got B\'s query echoed.
+    const crossed = ragResp('B: nuclear SMR for hyperscalers', [{ id: 'a-result' }]);
+    const fixed = withQueryEcho(crossed, 'A: behind-the-meter gas turbines');
+    expect(fixed.query).toBe('A: behind-the-meter gas turbines'); // label now authoritative
+    expect(fixed.results).toEqual([{ id: 'a-result' }]);          // results untouched
+    expect(fixed.count).toBe(1);
+  });
+
+  it('simulated parallel interleave: each response echoes its OWN query', () => {
+    // Two concurrent calls whose backend echoes came back swapped.
+    const aBackend = ragResp('query-B', [{ id: 'resA' }]); // A\'s fetch returned B\'s label
+    const bBackend = ragResp('query-A', [{ id: 'resB' }]); // B\'s fetch returned A\'s label
+    const aOut = withQueryEcho(aBackend, 'query-A');
+    const bOut = withQueryEcho(bBackend, 'query-B');
+    expect(aOut.query).toBe('query-A');
+    expect(bOut.query).toBe('query-B');
+    // and the on-topic results stay with their own call
+    expect(aOut.results[0].id).toBe('resA');
+    expect(bOut.results[0].id).toBe('resB');
+  });
+
+  it('is a no-op that returns the SAME query when the echo was already correct', () => {
+    const r = ragResp('grids opening for AI load', [{ id: 1 }]);
+    const out = withQueryEcho(r, 'grids opening for AI load');
+    expect(out.query).toBe('grids opening for AI load');
+  });
+
+  it('does not mutate the input object (returns a shallow copy)', () => {
+    const r = ragResp('wrong', [{ id: 1 }]);
+    const out = withQueryEcho(r, 'right');
+    expect(r.query).toBe('wrong');   // original untouched
+    expect(out.query).toBe('right');
+    expect(out).not.toBe(r);
+  });
+
+  it('adds the query even when the backend omitted it', () => {
+    expect(withQueryEcho({ ok: true, results: [] }, 'q').query).toBe('q');
+  });
+
+  it('no-ops on non-object / bare-array payloads and empty queries', () => {
+    expect(withQueryEcho([1, 2, 3], 'q')).toEqual([1, 2, 3]);   // error path returned an array
+    expect(withQueryEcho(null, 'q')).toBeNull();
+    expect(withQueryEcho('raw text', 'q')).toBe('raw text');
+    const r = { query: 'keep', results: [] };
+    expect(withQueryEcho(r, '')).toBe(r);      // empty query → untouched (same ref)
+    expect(withQueryEcho(r, null)).toBe(r);
+  });
+
+  it('leaves an error response readable, stamping the attempted query', () => {
+    const err = { error: 'API 500', detail: 'boom' };
+    const out = withQueryEcho(err, 'my query');
+    expect(out.error).toBe('API 500');
+    expect(out.query).toBe('my query');
   });
 });
 
