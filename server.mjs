@@ -32,7 +32,7 @@
  * a 'free' tier with capped result sizes and an upgrade nudge in responses.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 // MPP per-call rail (DARK unless MPP_ENABLED=1 + MPP_SIDECAR_URL). Pure hook (no
 // mppx in the gateway) — calls the isolated sidecar over HTTP. NOTE: the MCP SDK
@@ -1365,12 +1365,16 @@ const DEPTH_TEASE_TOOLS = new Set([
   'get_gas_index',             // Data Center Gas Index (DCGI) per-state synthesis score
   'get_gas_intelligence',      // r-gas-intel: full gas synthesizer above DCGI (same depth-tease)
   'grid_transition_radar',     // forward-looking ISO emergence synthesis
-  // RAG v1 (2026-07-03): the token-budgeted market context pack — the whole
-  // 9-section brief in one call is exactly the paid synthesis unit. Free tier
-  // gets the backend's _free_preview (~800 tok: hero+verdict+1 news) via the
-  // custom branch in buildDepthTease; Developer+/pack credits get full 4000.
+  // RAG v1 (2026-07-03): the token-budgeted context packs — the whole
+  // multi-section briefing in one call is exactly the paid synthesis unit.
+  // Free tier gets the backend's _free_preview (~800 tok) via the custom
+  // branch in buildDepthTease; Developer+/pack credits get the full budget.
   'get_market_context',
+  'get_iso_context',
 ]);
+// The context-pack tools share the backend-prebuilt `_free_preview` tease
+// shape (see buildDepthTease + the anon-trim branch in trackedTool).
+const CONTEXT_PACK_TOOLS = new Set(['get_market_context', 'get_iso_context']);
 // r-map-upsell (2026-06-18): the map-feeding tools. When a free/Starter agent
 // pulls this data, the depth-tease ALSO points to the live Land & Power map (the
 // visual payoff this data renders) + the Developer upgrade. Reaches the 180+/160+
@@ -1514,13 +1518,13 @@ function buildDepthTease(name, result, ctx, tier) {
   try { parsed = JSON.parse(result?.content?.[0]?.text ?? 'null'); } catch { return null; }
   if (parsed === null || typeof parsed !== 'object') return null;
   let teased;
-  if (name === 'get_market_context' && parsed._free_preview && Array.isArray(parsed._free_preview.sections)) {
+  if (CONTEXT_PACK_TOOLS.has(name) && parsed._free_preview && Array.isArray(parsed._free_preview.sections)) {
     // RAG v1: the backend pre-builds the exact free shape (~800 tok — score-
-    // masked hero + verdict + 1 news + named locked sections) server-side, so
-    // the tease never re-derives masking rules in JS. Generic _teaseDepth would
-    // leak the deep-dive prose (it keeps long strings).
+    // masked headline + 1 news + named locked sections) server-side, so the
+    // tease never re-derives masking rules in JS. Generic _teaseDepth would
+    // leak the deep-dive/synthesis prose (it keeps long strings).
     teased = {
-      ok: true, market: parsed.market, name: parsed.name, tier: 'free',
+      ok: true, market: parsed.market, iso: parsed.iso, name: parsed.name, tier: 'free',
       max_tokens: parsed._free_preview.used_tokens || 800,
       used_tokens: parsed._free_preview.used_tokens,
       sections: parsed._free_preview.sections,
@@ -2385,6 +2389,7 @@ const CREDIT_HEAVY = new Set([
   'get_intelligence_index', 'get_interconnection_queue', 'ai_capacity_index',
   'generate_site_analysis',
   'get_market_context',   // RAG v1 (2026-07-03): full 4000-token pack = heavy synthesis
+  'get_iso_context',      // RAG v1 part 2: grid-side context pack, same class
 ]);
 const _creditCost = (tool) => (CREDIT_HEAVY.has(tool) ? 5 : 1);
 const _creditCache = new Map();          // identity -> { credits, ts }
@@ -3108,7 +3113,7 @@ const _isoError = (raw, toolName) => {
   return { content: [{ type: 'text', text: JSON.stringify(payload) }],
            structuredContent: payload };
 };
-const STRICT_ISO_TOOLS = new Set(['get_grid_data', 'get_interconnection_queue']);
+const STRICT_ISO_TOOLS = new Set(['get_grid_data', 'get_interconnection_queue', 'get_iso_context']);
 function _validateToolArgs(name, args) {
   // Returns an MCP error-content object if the args are invalid, else null.
   if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
@@ -3844,11 +3849,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
-          // RAG v1: get_market_context carries a server-built _free_preview
-          // (score-masked hero + verdict + 1 news). Generic trimForTrial would
-          // keep the hero prose WITH the Pro-gated DCPI scores baked in — use
-          // the same custom tease the keyed-free path gets instead.
-          if (name === 'get_market_context' && parsed && parsed._free_preview) {
+          // RAG v1: the context-pack tools carry a server-built _free_preview
+          // (score-masked headline + 1 news). Generic trimForTrial would keep
+          // the prose WITH the Pro-gated DCPI scores baked in — use the same
+          // custom tease the keyed-free path gets instead.
+          if (CONTEXT_PACK_TOOLS.has(name) && parsed && parsed._free_preview) {
             const _t = buildDepthTease(name, result, c, 'anonymous');
             if (_t) { status = 'depth_teased'; return withBindHint(_t, name, c); }
           }
@@ -4791,6 +4796,89 @@ function createServer(descOverrides) {
       out.source = 'DC Hub — market context pack (dchub.cloud)';
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
+
+  // RAG v1 part 2 (2026-07-03): the grid-side twin — one call, one LLM-ready
+  // ISO briefing. Same gating shape as get_market_context (DEPTH_TEASE +
+  // CREDIT_HEAVY + _free_preview tease). Backend: /api/v1/context/iso/<iso>.
+  trackedTool(srv, 'get_iso_context',
+    'Use when an agent needs a WHOLE-grid briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a US ISO/RTO: live grid snapshot (demand, fuel-mix shares), DCPI verdict mix & grid economics across the ISO\'s tracked markets (queue wait, power cost, reserve margin), interconnection-queue depth with the largest projects, real-time benchmark LMP, the tracked DCPI market list, deep-dive narrative excerpts, and recent news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: "Brief me on ERCOT for data-center siting" — get_iso_context iso=ERCOT max_tokens=4000. Params: iso (required: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for raw single-ISO telemetry (use get_grid_data), the per-ISO decision brief with headroom/TTP (use get_grid_intelligence), multi-ISO scalar comparison (use compare_isos), or non-US grids (use get_grid_scoreboard); this is the narrative briefing pack. Cite "DC Hub (dchub.cloud)".',
+    { iso: S.describe('ISO/RTO grid region (required): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
+      max_tokens: N.describe('Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent') },
+    async (a) => {
+      const rawIso = String((a && a.iso) || '').trim();
+      if (!rawIso) return { content: [{ type: 'text', text: JSON.stringify({ error: 'iso required', valid_isos: US_ISOS, example: 'get_iso_context iso=ERCOT' }) }] };
+      if (!_isoValid(rawIso)) return _isoError(rawIso, 'get_iso_context');
+      const q = { format: 'json' };
+      const mt = Number(a && a.max_tokens);
+      if (Number.isFinite(mt) && mt > 0) q.max_tokens = Math.max(200, Math.min(8000, Math.round(mt)));
+      const d = await callAPI(`/api/v1/context/iso/${_normIso(rawIso)}`, q, { internal: true, timeout: 45000 });
+      const out = (d && typeof d === 'object' && !Array.isArray(d)) ? d : { data: d };
+      out.source = 'DC Hub — ISO context pack (dchub.cloud)';
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+    });
+
+  // ── RAG v1 part 2 (2026-07-03): MCP RESOURCES — the free GEO surface ──────
+  // dchub://markets/{slug} + dchub://isos/{iso} serve the FREE context pack as
+  // markdown (force_free=1 — an internal fetch must never ship the paid pack
+  // through the keyless resources surface). Resources cost the agent no tool
+  // call and no key: pure discovery/citation bait that points at
+  // get_market_context / get_iso_context for the full budgeted pack.
+  async function _fetchFreePackMd(path) {
+    const url = new URL(path, API_BASE);
+    url.searchParams.set('force_free', '1');
+    url.searchParams.set('format', 'md');
+    try {
+      const r = await fetch(url.toString(), {
+        headers: { 'X-Internal-Key': INTERNAL_KEY, 'Accept': 'text/markdown, text/plain' },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!r.ok) return `# Unavailable\n\nDC Hub context pack fetch failed (HTTP ${r.status}).`;
+      const md = await r.text();
+      return md + '\n\n---\n_Free preview. Full token-budgeted pack: call the `'
+        + (path.includes('/iso/') ? 'get_iso_context' : 'get_market_context')
+        + '` tool. Cite "DC Hub (dchub.cloud)"._\n';
+    } catch (e) {
+      return `# Unavailable\n\nDC Hub context pack fetch failed: ${String(e && e.message || e)}`;
+    }
+  }
+  srv.resource(
+    'market-context',
+    new ResourceTemplate('dchub://markets/{slug}', {
+      list: async () => {
+        const d = await callAPI('/api/v1/context/markets', {}, { internal: true }).catch(() => null);
+        const ms = ((d && d.markets) || []).slice(0, 60);
+        return { resources: ms.map(m => ({
+          uri: `dchub://markets/${m.slug}`,
+          name: `${m.name} — market context (free)`,
+          description: `DCPI verdict ${m.verdict || 'N/A'} — free DC Hub market context pack for ${m.name}`,
+          mimeType: 'text/markdown',
+        })) };
+      },
+    }),
+    { description: 'Free DC Hub market context pack (DCPI verdict + at-a-glance + latest headline) as markdown. Full pack: get_market_context tool.',
+      mimeType: 'text/markdown' },
+    async (uri, vars) => ({
+      contents: [{ uri: uri.href, mimeType: 'text/markdown',
+                   text: await _fetchFreePackMd(`/api/v1/context/market/${encodeURIComponent(String(vars.slug || ''))}`) }],
+    }));
+  srv.resource(
+    'iso-context',
+    new ResourceTemplate('dchub://isos/{iso}', {
+      list: async () => ({
+        resources: US_ISOS.map(i => ({
+          uri: `dchub://isos/${i}`,
+          name: `${i} — grid context (free)`,
+          description: `Free DC Hub grid context pack for ${i} (live demand, fuel mix, latest headline)`,
+          mimeType: 'text/markdown',
+        })),
+      }),
+    }),
+    { description: 'Free DC Hub ISO/grid context pack (live snapshot + latest headline) as markdown. Full pack: get_iso_context tool.',
+      mimeType: 'text/markdown' },
+    async (uri, vars) => ({
+      contents: [{ uri: uri.href, mimeType: 'text/markdown',
+                   text: await _fetchFreePackMd(`/api/v1/context/iso/${encodeURIComponent(String(vars.iso || ''))}`) }],
+    }));
 
   trackedTool(srv, 'get_pipeline', 'Use when a user asks "what is being built / announced / permitted" in a market or by an operator — the forward-looking construction pipeline (540+ projects, 369 GW). Example: "What data centers are under construction in Northern Virginia and when do they come online?" — get_pipeline market=northern-virginia status=construction. Params: status one of "announced" | "permitted" | "construction" | "operational"; operator (e.g. "Equinix", "Digital Realty", "AWS"); country (ISO-2, e.g. "US", "DE"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. "2027-01-01"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions).',
     { status: S.describe('Pipeline stage filter: announced, permitted, construction, or operational'),
