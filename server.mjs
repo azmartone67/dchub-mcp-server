@@ -803,10 +803,34 @@ async function buildHighIntentClaimBlock(claim, name) {
   // not a competing link. Variant keying unchanged so the A/B keeps measuring.
   let devUrl = DEVELOPER_URL + PROMO_PARAM;
   try { const _sid = (getCtx() && getCtx().session_id) || ''; if (_sid) devUrl = _stripeWithSession(devUrl, _sid); } catch (_) {}
+  // r-agent-redeem RESTORED (2026-07-04): the 07-03 pivot dropped the auto-redeem
+  // call, freezing claims_used at 2 (the metric that measures THIS cohort). But its
+  // own evidence only argued against RELAYING A LINK to an agent — auto-redeem does
+  // not relay a link, it binds a working key INLINE (structuredContent), exactly like
+  // buildAutoMintBlock already does on the anon path. That is friction-removal, not a
+  // competing CTA: it hands the highest-value cohort (repeat siting) a persistent key
+  // → drives repeat usage + retention → feeds the key-bound upgrade that IS converting,
+  // while the VISIBLE prose stays the consented-email ask. Fail-soft: redeemed=null
+  // leaves the block byte-for-byte unchanged.
+  const redeemed = await _autoRedeemClaim(claim.claim_token);
+  // Move #2 → #3 bridge: bind the upgrade link to the JUST-REDEEMED key so a payment
+  // flips THAT agent's own key in place (DCM- pair-code webhook) — the structural fix
+  // for claim_to_paid=0. The old block handed a generic $49/mo link with NO key binding,
+  // so payments never attached to a key and conversions were un-attributable.
+  const hiUpgradeUrl = redeemed && redeemed.api_key
+    ? ('https://dchub.cloud/upgrade?key=' + encodeURIComponent(redeemed.api_key) + (name ? '&tool=' + encodeURIComponent(name) : ''))
+    : devUrl;
   const text = renderer(name, claim, devUrl);
   const sc = {
     high_intent_claim_url:      claim.claim_url,     // fallback / machine consumers
     high_intent_claim_token:    claim.claim_token,
+    // r-agent-redeem RESTORED: the working key + how to persist it, in-band for
+    // machine consumers (null when the best-effort redeem failed → prose unchanged).
+    high_intent_api_key:        redeemed ? redeemed.api_key : null,
+    high_intent_persist_command: redeemed
+      ? ('claude mcp add dchub --transport http --header X-API-Key:' + redeemed.api_key + ' https://dchub.cloud/mcp')
+      : null,
+    high_intent_upgrade_url:    hiUpgradeUrl,
     high_intent_count:          claim.count,
     high_intent_threshold:      claim.threshold,
     high_intent_variant:        variant,
