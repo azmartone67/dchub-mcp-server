@@ -4738,6 +4738,40 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/rag/search', params)) }] };
     });
 
+  // 2026-07-03: search_intelligence — the agent-friendly alias over the same RAG
+  // layer as semantic_search, but with the {query, corpus, limit} shape and the
+  // human-friendly corpus names (news|deals|facilities|market_narratives) that
+  // most agents reach for. Maps those to the backend corpus tables and forwards
+  // the session X-API-Key (callAPI does this) so tiered results hydrate per key.
+  const _INTEL_CORPUS_MAP = {
+    news: 'news_articles', news_articles: 'news_articles',
+    deals: 'deals', deal: 'deals',
+    facilities: 'discovered_facilities', facility: 'discovered_facilities',
+    discovered_facilities: 'discovered_facilities',
+    market_narratives: 'market_narratives', markets: 'market_narratives',
+    market: 'market_narratives', narratives: 'market_narratives',
+  };
+  trackedTool(srv, 'search_intelligence',
+    'Semantic search over DC Hub live intelligence corpus — news, M&A deals, facilities, and market analysis narratives. Natural-language query returns the most relevant cited records.',
+    { query: S.describe('Natural-language query (required), e.g. "grids opening up for AI load in the Southeast"'),
+      q: S.describe('Alias for query'),
+      corpus: S.describe('Optional corpus to restrict to: news | deals | facilities | market_narratives. CSV of several is allowed; default searches all.'),
+      limit: N.describe('Max results to return, 1-15 (default 8)') },
+    async (a) => {
+      const query = String((a && (a.query || a.q)) || '').trim();
+      if (!query) return { content: [{ type: 'text', text: JSON.stringify({ error: 'query required', example: 'search_intelligence query="behind-the-meter gas for AI data centers"' }) }] };
+      const params = { q: query };
+      if (a && a.corpus) {
+        const mapped = String(a.corpus).split(',')
+          .map((x) => _INTEL_CORPUS_MAP[x.trim().toLowerCase()] || x.trim())
+          .filter(Boolean);
+        if (mapped.length) params.corpus = mapped.join(',');
+      }
+      const lim = Number(a && a.limit);
+      if (Number.isFinite(lim) && lim > 0) params.k = Math.max(1, Math.min(15, Math.round(lim)));
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/rag/search', params)) }] };
+    });
+
   // RAG v1 (2026-07-03): the token-budgeted market context pack — one call, one
   // LLM-ready briefing with per-section as_of + citation. Free tier is teased to
   // the ~800-token hero/verdict/news preview (buildDepthTease custom branch);
