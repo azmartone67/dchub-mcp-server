@@ -1137,6 +1137,24 @@ function _getWorkosJwks() {
   }
   return _workosJwks;
 }
+// Last forced JWKS re-fetch (rotation recovery below) — rate-limited to once a
+// minute so a stream of foreign JWTs can't turn us into a JWKS-endpoint hammer.
+let _workosJwksForcedAt = 0;
+// Decode header/payload WITHOUT verifying — diagnostics only, never for auth
+// decisions. Values are attacker-controlled: bound their length, and never log
+// the signature or full sub.
+function _jwtPeek(token) {
+  try {
+    const [h, p] = token.split('.');
+    const dec = (s) => JSON.parse(Buffer.from(s, 'base64url').toString('utf8'));
+    const hdr = dec(h) || {}, pay = dec(p) || {};
+    const trunc = (v) => String(v ?? '').slice(0, 80);
+    return {
+      kid: trunc(hdr.kid), alg: trunc(hdr.alg),
+      iss: trunc(pay.iss), aud: trunc(JSON.stringify(pay.aud)), exp: pay.exp,
+    };
+  } catch (_) { return null; }
+}
 const _workosTokenCache = new Map();   // jwt → { api_key, tier, exp }
 const _WORKOS_CACHE_TTL = 300_000;     // 5 min positive cache (mirrors validateKey)
 const _WORKOS_NEG_TTL   = 60_000;      // 1 min negative cache (bad/expired tokens)
@@ -1184,9 +1202,33 @@ async function resolveWorkosBearer(token) {
     // jose checks signature against the JWKS, the issuer, and exp/nbf.
     ({ payload } = await jwtVerify(token, jwks, { issuer: _WORKOS_DOMAIN }));
   } catch (e) {
-    console.log(`[oauth] workos jwt verify failed: ${e && (e.code || e.message)}`);
-    _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
-    return null;
+    // ERR_JWKS_NO_MATCHING_KEY = the token's kid isn't in the cached JWKS. If
+    // WorkOS just rotated signing keys, jose's cooldown can pin the stale set —
+    // drop the cached instance (fresh fetch, no cooldown) and retry ONCE. A
+    // genuine post-rotation token then verifies instead of silently downgrading
+    // a logged-in connector user to anonymous.
+    let recovered = false;
+    if (e && e.code === 'ERR_JWKS_NO_MATCHING_KEY'
+        && Date.now() - _workosJwksForcedAt > 60_000) {
+      _workosJwksForcedAt = Date.now();
+      _workosJwks = null;
+      const fresh = _getWorkosJwks();
+      if (fresh) {
+        try {
+          ({ payload } = await jwtVerify(token, fresh, { issuer: _WORKOS_DOMAIN }));
+          recovered = true;
+          console.log('[oauth] workos jwks force-refresh recovered token after key rotation');
+        } catch (e2) { e = e2; }
+      }
+    }
+    if (!recovered) {
+      const peek = _jwtPeek(token);
+      console.log(`[oauth] workos jwt verify failed: ${e && (e.code || e.message)}`
+        + (peek ? ` kid=${peek.kid} alg=${peek.alg} iss=${peek.iss} aud=${peek.aud} exp=${peek.exp}`
+                : ' (unparseable jwt)'));
+      _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
+      return null;
+    }
   }
   // Audience binding — the token must be issued FOR this resource.
   const auds = Array.isArray(payload.aud) ? payload.aud : (payload.aud ? [payload.aud] : []);
