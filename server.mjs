@@ -4948,7 +4948,9 @@ function createServer(descOverrides) {
       // collecting but not serving.
       if (ext && ext.available) {
         for (const k of ['forward_load_mw', 'committed_capacity_mw', 'operating_reserve_mw',
-                         'operating_margin_mw', 'grid_carbon_intensity_lb_mwh', 'zone_lmp_usd_mwh']) {
+                         'operating_margin_mw', 'grid_carbon_intensity_lb_mwh', 'zone_lmp_usd_mwh',
+                         'capacity_auction_price_usd_mw_day', 'capacity_auction_delivery_year',
+                         'capacity_auction_source']) {
           if (ext[k] != null) out[k] = ext[k];
         }
       }
