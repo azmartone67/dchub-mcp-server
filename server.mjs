@@ -732,10 +732,52 @@ async function _autoRedeemClaim(claimToken) {
   }
 }
 
+// ── qa-0704: URL-elicitation human handoff experiment ──────────────────────
+// The claude-platform claim funnel's terminal gap is the RELAY: a claim URL
+// buried in agent-facing text depends on the agent quoting it AND the human
+// noticing (48 Claude callers / 0 redemptions in 30d). MCP URL elicitation
+// (SDK ≥1.28, spec mode:'url') asks the HOST to render the link as native UI
+// to the human — no agent relay involved. Fired at most once per session, only
+// when the client declared the elicitation capability, fire-and-forget (the
+// tool result is never delayed), and never throws. The capability-skip log
+// line doubles as telemetry for which platforms could support this at all.
+// Kill switch: DCHUB_URL_ELICIT_DISABLE=1. Watch: `[url-elicit]` in logs.
+const _urlElicitSent = new Set(); // sessionIds already elicited (cleared on session close)
+function maybeUrlElicitClaim(claim, toolName) {
+  try {
+    if (process.env.DCHUB_URL_ELICIT_DISABLE === '1') return;
+    if (!claim || !claim.claim_url) return;
+    const c = getCtx();
+    const sid = (c && c.session_id) || '';
+    const platform = (c && c.platform) || '?';
+    if (!sid || _urlElicitSent.has(sid)) return;
+    const srv = sessionSrv.get(sid);
+    if (!srv || !srv.server) return;
+    const caps = srv.server.getClientCapabilities ? srv.server.getClientCapabilities() : null;
+    if (!caps || !caps.elicitation) {
+      console.log(`[url-elicit] skip sid=${sid.slice(0, 8)} no-elicitation-cap platform=${platform}`);
+      return;
+    }
+    _urlElicitSent.add(sid);
+    srv.server.elicitInput({
+      mode: 'url',
+      elicitationId: randomUUID(),
+      url: claim.claim_url,
+      message: `Unlock the full ${toolName} result on DC Hub — open this link to claim instant access (one click, no signup).`,
+    }, { timeout: 120000 })
+      .then((r) => console.log(`[url-elicit] result sid=${sid.slice(0, 8)} tool=${toolName} platform=${platform} action=${(r && r.action) || '?'}`))
+      .catch((e) => console.log(`[url-elicit] failed sid=${sid.slice(0, 8)} tool=${toolName} platform=${platform}: ${String((e && e.message) || e).slice(0, 140)}`));
+    console.log(`[url-elicit] sent sid=${sid.slice(0, 8)} tool=${toolName} platform=${platform}`);
+  } catch (e) {
+    try { console.log(`[url-elicit] error: ${String((e && e.message) || e).slice(0, 140)}`); } catch (_) {}
+  }
+}
+
 // Round 2 (2026-06-07): picks the per-variant copy from VARIANT_COPY based on
 // the LOCKED variant the backend returned. ASYNC since r-agent-redeem.
 async function buildHighIntentClaimBlock(claim, name) {
   if (!claim || !claim.claim_url) return { text: '', sc: {} };
+  maybeUrlElicitClaim(claim, name);  // qa-0704: host-rendered human handoff (fire-and-forget)
   const variant = (claim.variant || 'generic').toLowerCase();
   const renderer = VARIANT_COPY[variant] || VARIANT_COPY.generic;
   // PIVOT 2026-07-03 (funnel data): the agent-relay CLAIM funnel converted 0/36
@@ -5849,6 +5891,7 @@ app.use((req, res, next) => {
 
 const sessions          = new Map(); // sessionId → transport
 const sessionMeta       = new Map(); // sessionId → { api_key, platform, tier, developer_id }
+const sessionSrv        = new Map(); // sessionId → McpServer (qa-0704 url-elicit: elicitInput needs the per-session server instance)
 
 // r41-upgrade-stats (2026-05-25): session-upgrade counters so we can
 // see in logs whether the redeem→session-upgrade flow is actually
@@ -6137,6 +6180,9 @@ app.post('/mcp', async (req, res) => {
             client_ip: clientIp,
           });
           touchSession(sid);  // r41: track creation as activity
+          // qa-0704: mcpServer is initialized by the time this hook fires
+          // (during handleRequest, after connect) — safe to capture here.
+          sessionSrv.set(sid, mcpServer);
           console.log(`[MCP] init sid=${sid.slice(0,8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0,6) + '…' : 'none'} active=${sessions.size}`);
         },
       });
@@ -6146,6 +6192,8 @@ app.post('/mcp', async (req, res) => {
           sessions.delete(sid);
           sessionMeta.delete(sid);
           sessionLastActive.delete(sid);  // r41
+          sessionSrv.delete(sid);         // qa-0704
+          _urlElicitSent.delete(sid);     // qa-0704
         }
       };
 
