@@ -4935,12 +4935,23 @@ function createServer(descOverrides) {
         const dom = await callAPI('/api/v1/grid/intelligence/PJM-DOM', {}, { internal: true });
         return withFreshness({ content: [{ type: 'text', text: JSON.stringify(dom) }], structuredContent: dom }, 'get_grid_intelligence');
       }
-      const [gi, cmp, qsnap] = await Promise.all([
+      const [gi, cmp, qsnap, ext] = await Promise.all([
         callAPI(`/api/v1/grid/intelligence/${ISO}`, {}, { internal: true }),
         callAPI('/api/v1/dcpi/iso-comparison', {}, { internal: true }),
         callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }),
+        callAPI(`/api/v1/grid/extended/${ISO}`, {}, { internal: true }),
       ]);
       const out = shapeGridIntelligence(ISO, gi, cmp, qsnap);
+      // r-extended (2026-07-03): merge the forward/supply signals the grid-data
+      // master shell absorbs from gridstatus (forward load, committed capacity,
+      // operating reserve/margin, grid carbon intensity, zone LMP) — data we were
+      // collecting but not serving.
+      if (ext && ext.available) {
+        for (const k of ['forward_load_mw', 'committed_capacity_mw', 'operating_reserve_mw',
+                         'operating_margin_mw', 'grid_carbon_intensity_lb_mwh', 'zone_lmp_usd_mwh']) {
+          if (ext[k] != null) out[k] = ext[k];
+        }
+      }
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out }, 'get_grid_intelligence');
     });
 
