@@ -1365,6 +1365,11 @@ const DEPTH_TEASE_TOOLS = new Set([
   'get_gas_index',             // Data Center Gas Index (DCGI) per-state synthesis score
   'get_gas_intelligence',      // r-gas-intel: full gas synthesizer above DCGI (same depth-tease)
   'grid_transition_radar',     // forward-looking ISO emergence synthesis
+  // RAG v1 (2026-07-03): the token-budgeted market context pack — the whole
+  // 9-section brief in one call is exactly the paid synthesis unit. Free tier
+  // gets the backend's _free_preview (~800 tok: hero+verdict+1 news) via the
+  // custom branch in buildDepthTease; Developer+/pack credits get full 4000.
+  'get_market_context',
 ]);
 // r-map-upsell (2026-06-18): the map-feeding tools. When a free/Starter agent
 // pulls this data, the depth-tease ALSO points to the live Land & Power map (the
@@ -1508,7 +1513,24 @@ function buildDepthTease(name, result, ctx, tier) {
   let parsed;
   try { parsed = JSON.parse(result?.content?.[0]?.text ?? 'null'); } catch { return null; }
   if (parsed === null || typeof parsed !== 'object') return null;
-  const teased = _teaseDepth(parsed, DEPTH_TEASE_KEEP);
+  let teased;
+  if (name === 'get_market_context' && parsed._free_preview && Array.isArray(parsed._free_preview.sections)) {
+    // RAG v1: the backend pre-builds the exact free shape (~800 tok — score-
+    // masked hero + verdict + 1 news + named locked sections) server-side, so
+    // the tease never re-derives masking rules in JS. Generic _teaseDepth would
+    // leak the deep-dive prose (it keeps long strings).
+    teased = {
+      ok: true, market: parsed.market, name: parsed.name, tier: 'free',
+      max_tokens: parsed._free_preview.used_tokens || 800,
+      used_tokens: parsed._free_preview.used_tokens,
+      sections: parsed._free_preview.sections,
+      locked_sections: parsed._free_preview.locked_sections,
+      _sections_total_in_developer: (parsed.sections || []).length,  // names the locked depth in the pitch
+      _cite: parsed._cite,
+    };
+  } else {
+    teased = _teaseDepth(parsed, DEPTH_TEASE_KEEP);
+  }
   // Name the single largest locked list so the pitch is concrete ("Full 14 …").
   let lockedField = null, lockedN = 0;
   for (const [k, v] of Object.entries(teased)) {
@@ -2362,6 +2384,7 @@ const CREDIT_HEAVY = new Set([
   'get_dchub_recommendation', 'get_market_intel', 'rank_markets',
   'get_intelligence_index', 'get_interconnection_queue', 'ai_capacity_index',
   'generate_site_analysis',
+  'get_market_context',   // RAG v1 (2026-07-03): full 4000-token pack = heavy synthesis
 ]);
 const _creditCost = (tool) => (CREDIT_HEAVY.has(tool) ? 5 : 1);
 const _creditCache = new Map();          // identity -> { credits, ts }
@@ -3821,6 +3844,14 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
+          // RAG v1: get_market_context carries a server-built _free_preview
+          // (score-masked hero + verdict + 1 news). Generic trimForTrial would
+          // keep the hero prose WITH the Pro-gated DCPI scores baked in — use
+          // the same custom tease the keyed-free path gets instead.
+          if (name === 'get_market_context' && parsed && parsed._free_preview) {
+            const _t = buildDepthTease(name, result, c, 'anonymous');
+            if (_t) { status = 'depth_teased'; return withBindHint(_t, name, c); }
+          }
           if (parsed && typeof parsed === 'object') {
             const trimmed = trimForTrial(parsed);
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
@@ -4693,10 +4724,10 @@ function createServer(descOverrides) {
   // facilities via the RAG layer (Cohere embeddings + pgvector). For fuzzy /
   // conceptual queries that keyword filters miss. Free — an agent magnet.
   trackedTool(srv, 'semantic_search',
-    'Use for CONCEPTUAL / fuzzy questions where keyword filters fall short — semantic (meaning-based) retrieval across DC Hub\'s industry news, M&A deals, and 21,000+ discovered facilities, ranked by relevance with citable source fields (news url/title, deal parties/value, facility name/location). Examples: "what is happening with behind-the-meter gas for AI data centers?", "deals involving nuclear power for hyperscalers", "grids opening up for AI load in the Southeast" — semantic_search q="behind-the-meter gas for AI data centers". Params: q (required, natural-language query); corpus (optional CSV subset of news_articles,deals,discovered_facilities; default all three); k (1-15, default 8). Returns {results:[{source_table, kind, text, score, cite:{…}}]}. Complements the exact-filter tools (get_news / list_transactions / search_facilities) with relevance ranking. Cite "DC Hub (dchub.cloud)".',
+    'Use for CONCEPTUAL / fuzzy questions where keyword filters fall short — semantic (meaning-based) retrieval across DC Hub\'s industry news, M&A deals, 21,000+ discovered facilities, and per-market DCPI deep-dive analysis narratives, ranked by relevance with citable source fields (news url/title, deal parties/value, facility name/location, deep-dive market/url). Examples: "what is happening with behind-the-meter gas for AI data centers?", "deals involving nuclear power for hyperscalers", "why is Northern Virginia constrained?" — semantic_search q="behind-the-meter gas for AI data centers". Params: q (required, natural-language query); corpus (optional CSV subset of news_articles,deals,discovered_facilities,market_narratives; default all); k (1-15, default 8). Returns {results:[{source_table, kind, text, score, cite:{…}}]}. Complements the exact-filter tools (get_news / list_transactions / search_facilities) with relevance ranking; for a full token-budgeted market briefing use get_market_context. Cite "DC Hub (dchub.cloud)".',
     { q: S.describe('Natural-language query (required), e.g. "grids opening up for AI load in the Southeast"'),
       query: S.describe('Alias for q'),
-      corpus: S.describe('Optional CSV of corpora: news_articles, deals, discovered_facilities (default: all three)'),
+      corpus: S.describe('Optional CSV of corpora: news_articles, deals, discovered_facilities, market_narratives (default: all)'),
       k: N.describe('Number of results, 1-15 (default 8)') },
     async (a) => {
       const q = String((a && (a.q || a.query)) || '').trim();
@@ -4705,6 +4736,26 @@ function createServer(descOverrides) {
       if (a && a.corpus) params.corpus = a.corpus;
       if (a && a.k) params.k = a.k;
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/rag/search', params)) }] };
+    });
+
+  // RAG v1 (2026-07-03): the token-budgeted market context pack — one call, one
+  // LLM-ready briefing with per-section as_of + citation. Free tier is teased to
+  // the ~800-token hero/verdict/news preview (buildDepthTease custom branch);
+  // Developer+/pack credits get the full budget. Backend: routes/context_packs.py.
+  trackedTool(srv, 'get_market_context',
+    'Use when an agent needs a WHOLE-market briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a data-center market: DCPI verdict, power & grid facts, the Claude-written 12-month outlook, M&A deals, construction pipeline, operator footprint, transaction comps, risk factors, and top news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: "Brief me on the Columbus data-center market" — get_market_context market=columbus max_tokens=4000. Params: market (required, market slug e.g. northern-virginia — valid slugs come from rank_markets); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for a single metric (use get_market_dcpi_rank), the raw structured metric set (use get_market_intel), or cross-market ranking (use rank_markets); this is the narrative briefing pack. Cite "DC Hub (dchub.cloud)".',
+    { market: S.describe('Market slug (required), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
+      max_tokens: N.describe('Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent') },
+    async (a) => {
+      const slug = String((a && (a.market || a.slug)) || '').trim().toLowerCase().replace(/\s+/g, '-');
+      if (!slug) return { content: [{ type: 'text', text: JSON.stringify({ error: 'market required', example: 'get_market_context market=northern-virginia' }) }] };
+      const q = { format: 'json' };
+      const mt = Number(a && a.max_tokens);
+      if (Number.isFinite(mt) && mt > 0) q.max_tokens = Math.max(200, Math.min(8000, Math.round(mt)));
+      const d = await callAPI(`/api/v1/context/market/${encodeURIComponent(slug)}`, q, { internal: true });
+      const out = (d && typeof d === 'object' && !Array.isArray(d)) ? d : { data: d };
+      out.source = 'DC Hub — market context pack (dchub.cloud)';
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
   trackedTool(srv, 'get_pipeline', 'Use when a user asks "what is being built / announced / permitted" in a market or by an operator — the forward-looking construction pipeline (540+ projects, 369 GW). Example: "What data centers are under construction in Northern Virginia and when do they come online?" — get_pipeline market=northern-virginia status=construction. Params: status one of "announced" | "permitted" | "construction" | "operational"; operator (e.g. "Equinix", "Digital Realty", "AWS"); country (ISO-2, e.g. "US", "DE"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. "2027-01-01"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions).',
