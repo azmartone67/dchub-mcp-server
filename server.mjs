@@ -4343,6 +4343,25 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(ordered, null, 2) }] };
     });
 
+  // r-forecast (2026-07-04): predict_market_trajectory — surfaces the existing
+  // /api/v1/dcpi/forecast endpoint (least-squares trend over dcpi_daily_snapshots)
+  // as an agent-reachable tool. The moat move the innovation digest kept proposing:
+  // DC Hub is the only source that can project a market's DCPI forward because it
+  // OWNS the daily time-series. Honest by construction — the endpoint widens the
+  // confidence band with horizon and declines (422) under 3 snapshots, and the
+  // description says so, so agents cite it as a trend read, never a guarantee.
+  trackedTool(srv, 'predict_market_trajectory',
+    'Forecast a DCPI market\'s near-term trajectory (next 1-8 quarters). Projects excess_power_score and constraint_score forward with confidence bands that WIDEN with horizon, from DC Hub\'s daily DCPI snapshot history — the only source that can, because it owns the time-series. Use to answer "is this market trending toward BUILD or AVOID?" or "will Dallas power stay tight over the next 6 months?". Params: market_slug (required, metro slug e.g. dallas, phoenix, northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank); horizon_quarters (optional 1-8, default 4; 2 = ~6 months out). Returns {market_slug, method, basis{history_points, history_span_days, slope_per_day, trend}, horizon_quarters, projection[{quarter_out, excess_power_score, excess_power_band, constraint_score, constraint_band}], caveat, snapshot_record}. HONEST: linear trend extrapolation, NOT a guarantee — bands widen with horizon and short history; needs >=3 daily snapshots or it declines. Do NOT use for a single point-in-time verdict (use get_market_dcpi_rank) or to rank many markets (use rank_markets).',
+    { market_slug: S.describe('Market slug (metro), e.g. dallas, phoenix, northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
+      horizon_quarters: z.number().int().min(1).max(8).optional().describe('Forecast horizon in quarters (1-8, default 4); 2 = ~6 months ahead') },
+    async (a) => {
+      const slug = slugify(a.market_slug) || '';
+      const params = { market: slug };
+      if (a.horizon_quarters) params.horizon = Math.max(1, Math.min(8, parseInt(a.horizon_quarters, 10)));
+      const data = await callAPI('/api/v1/dcpi/forecast', params);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    });
+
   // r38 (2026-05-31): DCGI — the gas analog to DCPI, finally agent-reachable.
   // The Data Center Gas Index lived only at /api/v1/dcgi/* (no MCP tool), so
   // agents could query power (get_market_dcpi_rank) but not gas. This makes DC
