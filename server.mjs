@@ -4965,8 +4965,44 @@ function createServer(descOverrides) {
     }, { timeout: 60000 })) }] }));
 
   trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker — grid headroom, fiber, water, tax, climate — with a recommended pick and the reason. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load (e.g. 50-500). Returns: {sites:[{lat, lon, composite_score, verdict, grid_headroom_mw, nearest_substation_km, fiber_carrier_count, water_stress_score, tax_incentive_value_usd, biggest_risk}], winner:{lat, lon, why}, decision_rationale}. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
-    { locations: S.describe('Semicolon-separated list of 2-4 "lat,lon" pairs to compare, e.g. "33.45,-112.07;39.04,-77.48"') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', { locations: a.locations })) }] }));
+    { locations: S.describe('Semicolon-separated list of 2-4 "lat,lon" pairs to compare, e.g. "33.45,-112.07;39.04,-77.48"'),
+      capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)') },
+    async (a) => {
+      // r-compare-fix (2026-07-04): /api/site-score has NO multi-site mode — it
+      // requires lat+lon, so forwarding `locations` returned 400 for EVERY call
+      // (69 calls / 22 users, all errors). Fan out one scored call per pair and
+      // compose the documented {sites, winner, decision_rationale} shape here.
+      // Accept the common LLM slip of a `sites` array too.
+      let pairs = [];
+      if (typeof a.locations === 'string' && a.locations.trim()) {
+        pairs = a.locations.split(';').map(s => {
+          const [lat, lon] = s.split(',').map(x => parseFloat(x));
+          return { lat, lon };
+        });
+      } else if (Array.isArray(a.sites)) {
+        pairs = a.sites.map(s => ({ lat: parseFloat(s.lat), lon: parseFloat(s.lon ?? s.lng) }));
+      }
+      pairs = pairs.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon)).slice(0, 4);
+      if (pairs.length < 2) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'compare_sites needs 2-4 "lat,lon" pairs in `locations`, e.g. "33.45,-112.07;39.04,-77.48"' }) }] };
+      }
+      const scored = await Promise.all(pairs.map(p =>
+        callAPI('/api/site-score', a.capacity_mw ? { ...p, capacity_mw: a.capacity_mw } : p)
+          .then(r => ({ lat: p.lat, lon: p.lon, ...(r && typeof r === 'object' ? r : { raw: r }) }))
+          .catch(e => ({ lat: p.lat, lon: p.lon, error: String(e?.message || e) }))));
+      const ok = scored.filter(s => !s.error && Number.isFinite(parseFloat(s.composite_score)));
+      const winner = ok.length
+        ? ok.reduce((b, s) => (parseFloat(s.composite_score) > parseFloat(b.composite_score) ? s : b))
+        : null;
+      return { content: [{ type: 'text', text: JSON.stringify({
+        sites: scored,
+        winner: winner ? { lat: winner.lat, lon: winner.lon, composite_score: winner.composite_score,
+                           why: `Highest composite score (${winner.composite_score}) — verdict ${winner.verdict || 'n/a'}` } : null,
+        decision_rationale: winner
+          ? `Ranked ${ok.length} scored site(s) by composite_score; winner leads on the blended grid/fiber/water/tax/climate read.`
+          : 'No site returned a usable composite_score — see per-site errors.',
+      }) }] };
+    });
 
   trackedTool(srv, 'get_infrastructure', 'Nearby infrastructure for a location — substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site).',
     { lat: N.describe('Center latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
