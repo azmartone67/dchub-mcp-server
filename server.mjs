@@ -6370,6 +6370,56 @@ app.post('/mcp', async (req, res) => {
       });
     }
 
+    // r-stateless-call (2026-07-04): a tools/call bearing an mcp-session-id we no
+    // longer recognize (in-process Map wiped by a deploy — 5-6/day — or the 120-min
+    // idle eviction at SESSION_IDLE_MS) previously fell through to the r-session-404
+    // below. The MCP streamable-HTTP spec says a spec-clean client re-initializes on
+    // that 404 — but the Smithery gateway (and other mcp-remote-based hosts) do NOT:
+    // they keep firing tools/call with the dead id, so ~2/3 of gateway tool calls
+    // 404'd before ever reaching a handler (the #1 activation leak). A tools/call
+    // needs NO in-process session: EVERY gate (validateKey, trial-check, scraper-
+    // detect) and the high-intent claim funnel (trackPaidHit / shouldMintClaim) key
+    // off api_key + the BACKEND-stored session_id, not the local Map. Serve it from a
+    // fresh STATELESS transport — the same proven pattern as r-stateless-list above —
+    // so ANY replica answers regardless of the Map. Two deltas vs the tools/list
+    // branch:
+    //   (1) resolve the REAL tier via validateKey — a paying key whose session was
+    //       wiped must NOT be silently downgraded to free for this call.
+    //   (2) THREAD the client-supplied (now-stale) session_id into ctx, NOT null:
+    //       that id is still a valid backend key, so the high-intent cadence,
+    //       scraper-detection and telemetry attribution CONTINUE across the wipe —
+    //       the conversion + gating the funnel depends on survive. Every in-process-
+    //       session-dependent path (maybeUrlElicitClaim → sessionSrv, in-memory
+    //       sessionMeta upgrades) is already guarded on Map presence and no-ops for
+    //       an unknown id, so nothing crashes; the one-shot stateless transport just
+    //       can't do server→client elicitation (that guard skips it by design).
+    // Kill switch: DCHUB_STATELESS_CALL_DISABLE=1 → falls back to the r-session-404.
+    if (body?.method === 'tools/call'
+        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
+      const platform   = detectPlatformFromInit(body, userAgent);
+      const validation = await validateKey(apiKey);
+      const tier       = validation.valid ? validation.tier : 'free';
+      let _descOverrides = null;
+      try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
+      const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const ephServer = createServer(_descOverrides);
+      await ephServer.connect(ephTransport);
+      console.log(`[MCP] stateless tools/call sid=${(sessionId || '').slice(0, 8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0, 6) + '…' : 'none'}`);
+      // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
+      // to clean up); GC reclaims both objects once the response is written.
+      return ctx.run({
+        api_key: apiKey, platform, tier,
+        is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
+        developer_id: validation.developer_id || null,
+        email: validation.email || null,
+        session_id: sessionId || null,               // stale id → still the backend funnel key
+        referer: req.headers.referer || req.headers.referrer || null,
+        user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+      }, async () => {
+        await ephTransport.handleRequest(req, res, body);
+      });
+    }
+
     // r-session-404 (2026-07-03): a request bearing an mcp-session-id we do NOT
     // recognize (in-process Map wiped by a deploy — 5-6/day — or 120-min idle
     // eviction) MUST get HTTP 404 per the MCP streamable-HTTP spec, which tells
