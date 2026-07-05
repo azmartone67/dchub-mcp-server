@@ -47,7 +47,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim } from './lib/result-shaping.mjs';
+import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, withQueryEcho } from './lib/result-shaping.mjs';
 
 
 // phase39_human_message — paywall response enrichment for higher conversion
@@ -4888,7 +4888,11 @@ function createServer(descOverrides) {
       const params = { q };
       if (a && a.corpus) params.corpus = a.corpus;
       if (a && a.k) params.k = a.k;
-      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/rag/search', params)) }] };
+      // withQueryEcho: re-stamp the echoed `query` with THIS call's local q so a
+      // parallel semantic_search + search_intelligence batch can never cross the
+      // label (see lib/result-shaping.mjs — the backend echo can interleave).
+      const d = await callAPI('/api/v1/rag/search', params);
+      return { content: [{ type: 'text', text: JSON.stringify(withQueryEcho(d, q)) }] };
     });
 
   // 2026-07-03: search_intelligence — the agent-friendly alias over the same RAG
@@ -4922,7 +4926,11 @@ function createServer(descOverrides) {
       }
       const lim = Number(a && a.limit);
       if (Number.isFinite(lim) && lim > 0) params.k = Math.max(1, Math.min(15, Math.round(lim)));
-      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/rag/search', params)) }] };
+      // withQueryEcho: re-stamp the echoed `query` with THIS call's local query so
+      // a parallel search_intelligence + semantic_search batch can never cross the
+      // label (see lib/result-shaping.mjs — the backend echo can interleave).
+      const d = await callAPI('/api/v1/rag/search', params);
+      return { content: [{ type: 'text', text: JSON.stringify(withQueryEcho(d, query)) }] };
     });
 
   // RAG v1 (2026-07-03): the token-budgeted market context pack — one call, one
