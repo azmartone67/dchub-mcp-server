@@ -5704,11 +5704,12 @@ function createServer(descOverrides) {
           tier:                    (r && r.tier) || 'free',
           header:                  'X-API-Key',
           // honest daily_limit: echo the backend claim response so gateway and
-          // backend agree, not a stale literal (10 contradicted the 25/100
-          // constants everywhere). NOTE: this cap is not reliably enforced on
-          // /mcp today — see the CLAIM_CAROT_COPY note; carrot avoids promising it.
+          // backend agree. Fallback = 10 to match the CF worker's ENFORCED free
+          // cap (worker.js MCP_TIERS.free.daily_limit=10) and this tool's own
+          // description — NOT 25, which over-promised vs the 10 the worker
+          // actually enforces (promise 25 → capped at 10 = broken promise).
           daily_limit:             (r && typeof r.daily_calls === 'number') ? r.daily_calls
-                                     : (r && typeof r.daily_limit === 'number') ? r.daily_limit : 25,
+                                     : (r && typeof r.daily_limit === 'number') ? r.daily_limit : 10,
           key_is_durable:          true,
           cross_session_recovery:  _headerlessWeb
             ? 'This web host can’t persist an X-API-Key header — bind email to recover the key next session: POST {api_key,email} to /api/v1/keys/identify, or re-call claim_free_key with email=.'
@@ -5911,9 +5912,17 @@ function createServer(descOverrides) {
             note: 'Autonomous agents can pay per-call with NO human: retry the ORIGINAL tool call (the one that hit the wall) with _meta.mpp_pay=true to receive a Stripe payment challenge, then retry once more with the minted Shared Payment Token for full data.',
             how: 'retry the original call with _meta.mpp_pay=true',
           } } : {}),
-          recommended: 'credits',
+          // r-mpp-first-class (2026-07-05): when the Stripe-MPP rail is live, the
+          // per-call pay path is a FIRST-CLASS plan (first entry + the
+          // recommendation) — an autonomous agent can pay $0.50 itself with no
+          // human, so it shouldn't have to dig it out of machine_pay. Falls back
+          // to 'credits' (the cheapest human option) when MPP is off.
+          recommended: _mppOn ? 'mpp' : 'credits',
           plans: [
-            { id: 'credits',   label: '$10 one-time — 1,000 API calls', best_for: 'cheapest start, no subscription', checkout_url: credits },
+            ...(_mppOn ? [{ id: 'mpp', label: '$0.50 per call — pay yourself, no human, no account',
+                            best_for: 'autonomous agents (no card-holder in the loop)',
+                            how: 'retry the original call with _meta.mpp_pay=true' }] : []),
+            { id: 'credits',   label: '$10 one-time — 1,000 API calls', best_for: 'cheapest human start, no subscription', checkout_url: credits },
             { id: 'starter',   label: '$9/mo',   calls_per_day: 200, checkout_url: starter },
             { id: 'developer', label: '$49/mo',  note: 'full depth at scale', checkout_url: developer },
             { id: 'pro',       label: '$299/mo', note: 'everything', checkout_url: pro },
