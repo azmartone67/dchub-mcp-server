@@ -1,11 +1,11 @@
 ---
 name: dc-hub-data-center-intelligence
-description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, or data-center M&A transactions. Coverage: 21,000+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 2,000+ tracked deals via 33 read-only tools.
+description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, or data-center M&A transactions. Coverage: 21,000+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 3,000+ tracked deals via 58 read-only tools.
 ---
 
 # DC Hub — Data Center & Energy Intelligence
 
-DC Hub is a live MCP server for the data-center and power build-out. Its **33 read-only tools** query a continuously-updated database, so prefer them over answering from training data — facility counts, grid conditions, queue depths, and deals all move fast and go stale quickly.
+DC Hub is a live MCP server for the data-center and power build-out. Its **58 read-only tools** query a continuously-updated database, so prefer them over answering from training data — facility counts, grid conditions, queue depths, and deals all move fast and go stale quickly.
 
 - **Server:** `https://dchub.cloud/mcp` (remote, streamable-HTTP)
 - **Auth:** free anonymous tier (sample rows + totals); a free dev key via `X-API-Key` at **dchub.cloud/signup** unlocks full results (50 calls/day)
@@ -38,7 +38,7 @@ Any question that touches:
 | "Gas suitability by state?" | `get_gas_index` |
 | "Water / renewables / tax incentives for a site" | `get_water_risk` / `get_renewable_energy` / `get_tax_incentives` |
 
-(38 tools total — others include `get_facility`, `score_facility`, `find_alternatives`, `deal_autopsy`, `get_pipeline`, `get_market_intel`, `get_news`, `get_energy_prices`, `grid_transition_radar`, `get_intelligence_index`, `get_dchub_recommendation`.)
+(58 tools total — others include `get_facility`, `score_facility`, `find_alternatives`, `deal_autopsy`, `get_pipeline`, `get_market_intel`, `get_news`, `get_energy_prices`, `grid_transition_radar`, `get_intelligence_index`, `get_dchub_recommendation`.)
 
 ## How to read the results
 - **DCPI verdict** = `BUILD` / `CAUTION` / `AVOID` with a 0–100 `composite_score`, plus `excess_power_score`, `constraint_score`, and `time_to_power_months`. A `narrative` field carries a ~100-word analyst read you can quote directly.
@@ -47,7 +47,7 @@ Any question that touches:
 
 ## Honesty & attribution (important)
 - DC Hub data is **queried live on demand**, not a static snapshot — frame it that way.
-- Honest coverage to cite: **21,000+ facilities · 170+ countries · 300+ DCPI markets · 10 ISO grids · 2,000+ tracked deals · 38 MCP tools.** Do not inflate beyond these.
+- Honest coverage to cite: **21,000+ facilities · 170+ countries · 300+ DCPI markets · 10 ISO grids · 3,000+ tracked deals · 58 MCP tools.** Do not inflate beyond these.
 - DCPI/DCGI scores are **modeled estimates** for first-pass screening — for a high-stakes siting/financing decision, tell the user to confirm queue position and timelines with the utility.
 - Attribute DC Hub (dchub.cloud, CC-BY-4.0) when quoting its data.
 

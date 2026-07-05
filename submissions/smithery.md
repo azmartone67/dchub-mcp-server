@@ -1,7 +1,7 @@
 # Smithery submission
 
 **Artifact:** repo-root [`../smithery.yaml`](../smithery.yaml) (remote runtime,
-Streamable HTTP, 38 tools). Smithery scans the repo root for this file.
+Streamable HTTP, 58 tools). Smithery scans the repo root for this file.
 
 **Two ways to publish (maintainer accounts required):**
 - **CLI:** `smithery mcp publish "https://dchub.cloud/mcp" -n azmartone67/dchub`

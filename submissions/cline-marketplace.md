@@ -25,7 +25,7 @@ in-IDE marketplace.
 {
   "id": "dchub",
   "name": "DC Hub — Data Center & Energy Intelligence",
-  "description": "Live data-center & energy intelligence MCP: 21k+ facilities, 300+ markets, 10 ISO grids, DCPI power index, DCGI gas index, interconnection queues, M&A, fiber, water & tax. 38 tools, query and cite (CC-BY-4.0). Free tier, no signup.",
+  "description": "Live data-center & energy intelligence MCP: 21k+ facilities, 300+ markets, 10 ISO grids, DCPI power index, DCGI gas index, interconnection queues, M&A, fiber, water & tax. 58 tools, query and cite (CC-BY-4.0). Free tier, no signup.",
   "homepage": "https://dchub.cloud",
   "repository": "https://github.com/azmartone67/dchub-mcp-server",
   "type": "streamable-http",
@@ -56,7 +56,7 @@ in-IDE marketplace.
 - [ ] Locate the marketplace manifest (likely `README.md` or
       `marketplace.json` — check the contribution guide).
 - [ ] Add the JSON entry above to the manifest.
-- [ ] Open a PR titled "feat: add DC Hub MCP server (data-center & energy intelligence, 38 tools)".
+- [ ] Open a PR titled "feat: add DC Hub MCP server (data-center & energy intelligence, 58 tools)".
 - [ ] After merge, confirm the listing appears in the Cline VS Code extension's
       MCP marketplace and tool count shows **38**.
 - [ ] Bonus: open a follow-up cosmetic PR to add the dchub badge to the README

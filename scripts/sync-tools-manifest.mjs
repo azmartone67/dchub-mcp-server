@@ -87,8 +87,8 @@ for (const f of ['package.json', 'smithery.yaml']) {
   if (!txt.includes(VERSION)) problems.push(`${f} does not contain canonical version ${VERSION}`);
 }
 
-// smithery tool-count comments + README "N tools"
-for (const f of ['smithery.yaml', 'README.md']) {
+// smithery tool-count comments + README/llms-install "N tools"
+for (const f of ['smithery.yaml', 'README.md', 'llms-install.md']) {
   const txt = read(f);
   // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
   // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
@@ -104,6 +104,62 @@ for (const f of ['smithery.yaml', 'README.md']) {
       .replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
       .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))]);
   }
+}
+
+// ---- glama.json + registry-listing COVERAGE drift-guard --------------------
+// QA 2026-07-04: the public Glama listing (glama.ai/api/mcp/v1/servers/…) rotted
+// to "33 tools · 232 US power markets · 2,000+ deals · tools:[]" while the live
+// server was v2.4.4 / 58 tools / 311 markets. Root cause: nothing scanned (a)
+// glama.json, (b) the human-facing COVERAGE prose (market + deal counts) that the
+// registries echo, or (c) server.json's evergreen description. This block locks
+// all three so the listing can't silently drift again (CHECK-only — coverage
+// prose is not auto-rewritten because these strings carry sentence context).
+//
+// glama.json's schema (https://glama.ai/mcp/schemas/server.json) permits ONLY
+// `maintainers` — it CANNOT hold a description or a static tool list. So the Glama
+// listing's DESCRIPTION is re-derived by Glama from the GitHub repo "About" + README
+// on re-crawl, and its tools[] from live `node server.mjs --stdio` introspection
+// (verified working, emits all 58). We therefore (1) assert glama.json stays
+// schema-valid, (2) keep server.json's positioning intact, and (3) lock the
+// coverage prose Glama re-derives from.
+const CANON = { markets: 311, dealsFloor: '3,000+' };
+{
+  // (1) glama.json must stay schema-valid — an invalid manifest makes Glama drop the listing
+  try {
+    const g = readJSON('glama.json');
+    if (!Array.isArray(g.maintainers) || g.maintainers.length === 0)
+      problems.push('glama.json: maintainers[] missing/empty — Glama rejects the manifest');
+  } catch (e) { problems.push('glama.json: invalid JSON — ' + e.message); }
+
+  // (2) server.json evergreen description must keep the canonical positioning
+  const sjDesc = (readJSON('server.json').description || '');
+  if (!/query and cite/i.test(sjDesc))
+    problems.push('server.json: description lost canonical positioning ("… query and cite")');
+
+  // (3) COVERAGE prose: no stale market (2xx) or deal (2,000+) counts. Canonical:
+  // 311 markets · 3,000+ tracked deals. Scans HAND-AUTHORED prose ONLY — never
+  // server.mjs (operator-owned SoT for tool descriptions) and never mcp-server.json's
+  // derived tools[] (regenerated from server.mjs by --fix); for mcp-server.json we
+  // check the top-level .description field only. Tool-count drift in submission/
+  // integration docs is out of scope here (those files intermix changelog history);
+  // the canonical manifests' counts are locked by the smithery/README loop above.
+  const STALE = [
+    { rx: /\b2\d{2}\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
+    { rx: /\b2[,.]?000\+/,                                                            why: `stale deal count (canonical ${CANON.dealsFloor})` },
+  ];
+  const COVERAGE = [
+    'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
+    'server.json', 'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
+    'scripts/tier3_presence.sh', 'skills/README.md',
+    'skills/dc-hub-data-center-intelligence/SKILL.md',
+  ];
+  for (const f of COVERAGE) {
+    let txt; try { txt = read(f); } catch { continue; }
+    for (const { rx, why } of STALE) { const m = txt.match(rx); if (m) problems.push(`${f}: "${m[0].trim()}" — ${why}`); }
+  }
+  // mcp-server.json: top-level description only (tools[] descriptions derive from server.mjs)
+  const mDesc = (readJSON('mcp-server.json').description || '');
+  for (const { rx, why } of STALE) { const m = mDesc.match(rx); if (m) problems.push(`mcp-server.json (top-level description): "${m[0].trim()}" — ${why}`); }
 }
 
 // ---- canonical FACTS drift-guard (pricing / coverage) ----------------------

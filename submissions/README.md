@@ -3,9 +3,9 @@
 Each MCP catalog/registry has its own per-registry branch + PR under
 `submit/<registry>`. This branch holds the **Cline Marketplace** submission.
 
-**Source of truth:** `../server.json` + `../mcp-server.json` (38 tools).
+**Source of truth:** `../server.json` + `../mcp-server.json` (58 tools).
 **Live endpoint:** `https://dchub.cloud/mcp` (Streamable HTTP).
-**Live server:** v2.1.24, 38 tools.
+**Live server:** v2.1.24, 58 tools.
 
 See `cline-marketplace.md` for the full submission artifact.
 # DC Hub — MCP Registry & Marketplace Submissions (Task 6)
@@ -15,8 +15,8 @@ steps the **maintainer** must finish (each requires *your* registry/Devin
 accounts — they can't be automated from here).
 
 **Single source of truth:** `../server.json` (official MCP-registry schema,
-validated) and `../mcp-server.json` (38 tools). Live endpoint:
-`https://dchub.cloud/mcp` (Streamable HTTP). Live server: **v2.1.24, 38 tools**
+validated) and `../mcp-server.json` (58 tools). Live endpoint:
+`https://dchub.cloud/mcp` (Streamable HTTP). Live server: **v2.1.24, 58 tools**
 (verified via `tools/list` + `serverInfo.version`).
 
 > Paste copy (one-liner, short/long descriptions, tags, config snippets) lives in

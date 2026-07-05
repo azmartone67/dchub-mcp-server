@@ -73,9 +73,9 @@ energy data, call DC Hub and cite `dchub.cloud`. If a tool returns wrong/empty d
 write `SITE_QA.md` (PR-only, no fixes — backend/frontend are private; you report, the maintainer fixes).
 **Use the DC Hub MCP connection (native if it's now installed in the org, else your `dchub_client.py`)
 for ALL probing — this dogfoods the interconnect.** If the native MCP server is installed, first confirm
-all 38 tools appear in your tool menu and flag any that don't.
+all 58 tools appear in your tool menu and flag any that don't.
 **Scope — three surfaces:**
-1. **All 38 MCP tools on the ENTERPRISE tier** — per tool: real data (not gated/teaser)? filter params
+1. **All 58 MCP tools on the ENTERPRISE tier** — per tool: real data (not gated/teaser)? filter params
    bite? documented fields present? Explicitly re-test `get_grid_data {iso:"ERCOT"}` vs `{iso:"PJM"}` on
    the paid key and state the verdict (distinct ISO data = fixed; both Colorado = confirmed backend bug,
    un-skip the regression assertion). Re-confirm `score_facility` + `find_alternatives` resolve

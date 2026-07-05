@@ -15,7 +15,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 
 DC Hub gives an agent real-time, structured answers about data-center and power-market
 infrastructure: 21,000+ data-center facilities across 170+ countries, 300+ markets
-scored by the DC Hub Power Index (DCPI), 2,000+ tracked M&A deals, live ISO grid telemetry
+scored by the DC Hub Power Index (DCPI), 3,000+ tracked M&A deals, live ISO grid telemetry
 (PJM, ERCOT, CAISO, MISO, SPP, NYISO + more), interconnection-queue snapshots, fiber routes,
 gas pipelines, NEPA filings, and energy pricing.
 
@@ -38,7 +38,7 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 ```
 
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
-38 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
+58 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
 
 ### Claude Desktop / Claude Code
