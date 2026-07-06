@@ -2844,6 +2844,30 @@ const _ENTITY_MAP = {
 };
 function _entityType(name) { return _ENTITY_MAP[name] || (name || 'record'); }
 
+// r-quota-hint (2026-07-06): optional, additive per-tool quota so agents can
+// self-govern before hammering (Grok's explicit ask — it went conservative on DC
+// Hub because it couldn't tell if it had already burned its daily budget). CHEAP:
+// getCtx() is AsyncLocalStorage and _trialFullRemaining is an in-memory Map read —
+// no DB, no network, no added latency (Grok's #1 complaint). Reports the per-tool
+// full-answer budget for the cap-governed tools (the ones that serve a full answer
+// then previews); for other tools it reports tier only. We deliberately DO NOT emit
+// an overall calls_remaining_today — that counter lives in a different layer and a
+// guessed number is worse than none. Gated by DCHUB_QUOTA_HINT (default off) so the
+// PR ships as a pure no-op until the operator opts in.
+const QUOTA_HINT = ['1', 'true', 'on', 'yes'].includes(
+  String(process.env.DCHUB_QUOTA_HINT || '').trim().toLowerCase());
+function _buildQuotaHint(toolName) {
+  try {
+    const c = getCtx();
+    const q = { tier: (c && c.tier) || 'free', resets_at: 'next 00:00 UTC' };
+    if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
+      q.full_answers_cap_today = ANON_FULL_CAP;
+      q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP);
+    }
+    return q;
+  } catch (_) { return null; }
+}
+
 // Wrap a tool callback so EVERY return path (data, gated preview, error) stamps
 // a `_entity` type discriminator onto its structuredContent — universal coverage
 // that withCitation (keyed-path only) can't give. Additive, guarded, idempotent.
@@ -2854,14 +2878,20 @@ function _stampEntityCb(toolName, fn) {
       if (r && Array.isArray(r.content)) {
         const sc = (r.structuredContent && typeof r.structuredContent === 'object'
                     && !Array.isArray(r.structuredContent)) ? r.structuredContent : null;
+        const _q = QUOTA_HINT ? _buildQuotaHint(toolName) : null;
         if (sc) {
-          if (!sc._entity) {
-            return { ...r, structuredContent: { _entity: _entityType(toolName), ...sc } };
+          const _add = {};
+          if (!sc._entity) _add._entity = _entityType(toolName);
+          if (_q && sc.quota === undefined) _add.quota = _q;
+          if (Object.keys(_add).length) {
+            return { ...r, structuredContent: { ..._add, ...sc } };
           }
         } else {
           // content-only tool → add a minimal discriminator (no data dup) so an
           // agent can branch on the payload class before parsing content[0].
-          return { ...r, structuredContent: { _entity: _entityType(toolName) } };
+          const _base = { _entity: _entityType(toolName) };
+          if (_q) _base.quota = _q;
+          return { ...r, structuredContent: _base };
         }
       }
     } catch (_) { /* never break a response over a metadata stamp */ }
