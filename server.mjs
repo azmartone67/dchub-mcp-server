@@ -5220,7 +5220,7 @@ function createServer(descOverrides) {
       iso: S.describe('Restrict to one or more ISOs, comma-separated for a union: PJM, ERCOT, MISO, CAISO, SPP, NYISO, ISONE (ISO-NE). e.g. iso=ERCOT,PJM. Omit for all; combines with max_ttp_months as an intersection'),
       baseload_only: B.describe('Keep only firm/dispatchable fuel (nuclear, gas, steam, geothermal, hydro, coal); exclude wind/solar/storage. Firm-vs-intermittent split only — does NOT sub-divide peaker vs combined-cycle gas (no duty-cycle field in the queue). Default false'),
       fuel_type: S.describe("Isolate a fuel by inclusive substring match on the raw label; comma/semicolon-separated for a union, e.g. 'gas' hits GAS/Natural Gas, 'nuclear,hydro' unions both. Runs the fuel filter server-side instead of post-filtering survivors in context"),
-      status: S.describe("Queue status filter, default 'active'; pass 'all' for every status"),
+      status: S.describe("Queue status filter. Default 'active' = still progressing (excludes withdrawn/cancelled/suspended/in-commercial-operation) — cross-ISO safe (SPP labels live projects 'IA FULLY EXECUTED/ON SCHEDULE' not 'active'). Pass 'all' for every status, or a literal label to substring-match"),
       limit: LIMIT },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
