@@ -583,3 +583,25 @@ describe('MCP regression suite', () => {
     }, 40000);
   });
 });
+
+// ── Funnel invariants guard (r-peace 2026-07-05) ───────────────────────────
+// Pin the anon→free→$10→metered fixes so a later edit can't silently revert:
+//   (1) claim_free_key's daily_limit fallback is 10 (matches the CF worker's
+//       enforced free cap) — NOT 25, which over-promised vs the 10 enforced.
+//   (2) The Stripe-MPP per-call path is FIRST-CLASS in unlock_more_data — the
+//       recommendation is 'mpp' when the rail is on, and an 'mpp' plan entry
+//       exists — so agents that can pay $0.50 themselves aren't sent to buy
+//       the $10 human pack. Pure local source read, no network.
+describe('funnel invariants (peace 2026-07-05)', () => {
+  const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+
+  it('claim_free_key daily_limit fallback is 10, not 25', () => {
+    expect(src).toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 10\b/);
+    expect(src).not.toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 25\b/);
+  });
+
+  it('unlock_more_data makes MPP first-class (recommended + plan entry)', () => {
+    expect(src).toMatch(/recommended:\s*_mppOn\s*\?\s*'mpp'\s*:\s*'credits'/);
+    expect(src).toMatch(/id:\s*'mpp'/);
+  });
+});
