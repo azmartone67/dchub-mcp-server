@@ -3297,6 +3297,36 @@ function _validateToolArgs(name, args) {
 // output schemas (so /mcp tools/list advertises each tool's return shape) needs
 // a signature change here (thread an optional outputSchema into srv.tool's 5-arg
 // form) + per-tool schema objects. Deferred as a separate legibility pass.
+// r-return-nudge (2026-07-06): the single biggest day-2-retention gap is that a
+// SUCCESSFUL full answer gives an identified agent no reason to call DC Hub again
+// tomorrow. Append a 1-line get_changes re-entry loop to full-data responses for
+// KEYED/identified callers only (anon callers get the claim/bind nudges instead;
+// get_changes is FREE so this never hits a paywall). Mirrors withCitation/
+// withBindHint: append-only (content[0] preserved for downstream JSON.parse),
+// idempotent, fully wrapped, fail-soft — must never break a tool response.
+const _RETURN_NUDGE_SKIP = new Set([
+  'get_changes', 'claim_free_key', 'bind_email', 'recover_my_key',
+  'unlock_more_data', 'subscribe_digest', 'set_market_alert', 'set_site_alert',
+  'save_site', 'list_saved_sites', 'why_dchub', 'get_dchub_recommendation',
+  'get_agent_registry', 'get_backup_status', 'search', 'fetch',
+]);
+function withReturnNudge(result, toolName, c) {
+  try {
+    if (!c || !c.api_key) return result;                       // identified callers only
+    if (_RETURN_NUDGE_SKIP.has(toolName)) return result;
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (result.content.some((it) => typeof it?.text === 'string'
+        && it.text.includes('get_changes since=24h'))) return result;   // idempotent
+    result.content.push({ type: 'text', text:
+      '🔁 DC Hub data moves daily — next session call `get_changes since=24h` (free) to pull only what shifted in the markets/ISOs you queried, instead of re-running everything.' });
+    if (result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent)) {
+      result.structuredContent._return_loop = { next_tool: 'get_changes', hint: 'get_changes since=24h for the delta next session' };
+    }
+  } catch (_e) { /* never break a response */ }
+  return result;
+}
+
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
   // 5-arg form: (name, description, paramsSchema, annotations, cb). Most DC Hub
@@ -4212,7 +4242,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // #1241: embed an in-context claim at the value moment (grid/fiber, flag-gated).
       const _valued = await _maybeEmbedValueClaim(result, name, c);
       // r-appstore-clean: strip signpost/meta for ChatGPT so the DATA renders (no-op elsewhere).
-      return _leanForClean(withCitation(withBindHint(_valued, name, c), name), name);
+      // r-return-nudge: append the get_changes re-entry loop for identified callers
+      return withReturnNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c);
     } catch (err) {
       status = 'error';
       throw err;
