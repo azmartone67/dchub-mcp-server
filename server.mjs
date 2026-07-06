@@ -2827,6 +2827,7 @@ const _ENTITY_MAP = {
   get_facility: 'facility', score_facility: 'facility', find_alternatives: 'facility',
   get_market_intel: 'market', rank_markets: 'market', get_market_dcpi_rank: 'market',
   get_grid_data: 'grid', get_grid_intelligence: 'grid', get_interconnection_queue: 'grid',
+  get_refined_queue: 'queue_results',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5208,6 +5209,21 @@ function createServer(descOverrides) {
       const data = await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a);
       // r-structured (2026-06-19): structuredContent so agent clients get the
       // queue payload, not just the next_session envelope.
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'get_refined_queue',
+    'Server-side SET-REDUCTION over the US ISO interconnection queue (~5,300 projects, 7 ISOs, ~1,744 GW). Instead of pulling the raw queue into context to filter (token-expensive, error-prone), push the predicates to the data layer and get back ONLY the survivors. Filter by min_mw, max_ttp_months (ISO-level avg interconnection wait), iso, and baseload_only (firm/dispatchable fuel — nuclear/gas/steam/geothermal/hydro/coal, excluding wind/solar/storage). Returns _entity=queue_results: per-project name, ISO, state/county, fuel_type, capacity_mw, queue_status, estimated_ttp_months, fuel_class + a by_iso/by_fuel summary. Try: get_refined_queue min_mw=1000 baseload_only=true max_ttp_months=30 — "1 GW+ firm power in ISOs under 30-month time-to-power." Use for high-cardinality siting/arbitrage scans; do NOT use for the ISO-level GW aggregate (use get_interconnection_queue) or a single-site read (use analyze_site). Phase 1: a fiber_km predicate + a per-survivor site_evaluation_handoff land once the queue is geocoded.',
+    { min_mw: N.describe('Minimum project capacity in MW, e.g. 1000 for 1 GW+'),
+      max_ttp_months: I.describe('Max time-to-power in months (ISO-level avg interconnection wait; keeps projects in ISOs at/under this — PJM ~51, CAISO ~40, ISO-NE/MISO ~34, ERCOT ~33, NYISO ~31, SPP ~24)'),
+      iso: S.describe('Restrict to one ISO: PJM, ERCOT, MISO, CAISO, SPP, NYISO, ISONE; omit for all'),
+      baseload_only: B.describe('Keep only firm/dispatchable fuel (nuclear, gas, steam, geothermal, hydro, coal); exclude wind/solar/storage. Default false'),
+      status: S.describe("Queue status filter, default 'active'; pass 'all' for every status"),
+      limit: LIMIT },
+    async (a) => {
+      if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
+      const data = await callAPI('/api/v1/interconnection-queue/refined', a);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
