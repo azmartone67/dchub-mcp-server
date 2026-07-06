@@ -2871,6 +2871,42 @@ function _buildQuotaHint(toolName) {
 // Wrap a tool callback so EVERY return path (data, gated preview, error) stamps
 // a `_entity` type discriminator onto its structuredContent — universal coverage
 // that withCitation (keyed-path only) can't give. Additive, guarded, idempotent.
+// ── r-coord-handoff (2026-07-06) — cross-domain coordinate hand-off ─────────
+// Gemini's 1-GW arbitrage autopsy: the polymorphic envelope held flawlessly
+// across gas->site entity jumps, but the deterministic rail thinned exactly at
+// the baseload-discovery -> coordinate hand-off — the agent had to infer that
+// it held lat/lon and manually construct the site-eval call. Fix: when a
+// discovery result carries coordinates, pre-populate the site-viability jump so
+// multi-domain synthesis is a single-shot execution, not an inferential leap.
+function _extractCoord(sc) {
+  const pick = (o) => {
+    if (!o || typeof o !== 'object') return null;
+    const lat = o.lat ?? o.latitude ?? o.center_lat;
+    const lon = o.lon ?? o.lng ?? o.longitude ?? o.center_lng;
+    if (typeof lat !== 'number' || typeof lon !== 'number') return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return null;
+    const mw = o.capacity_mw ?? o.mw ?? o.nameplate_mw ?? o.capacity;
+    return { lat, lon, mw: (typeof mw === 'number' && mw > 0) ? mw : null };
+  };
+  let c = pick(sc);
+  if (c) return c;
+  for (const k of ['facilities', 'results', 'data', 'deals', 'items', 'sites', 'plants', 'hubs', 'stations']) {
+    const arr = sc && sc[k];
+    if (Array.isArray(arr) && arr.length) { c = pick(arr[0]); if (c) return c; }
+  }
+  return null;
+}
+function _siteHandoff(co) {
+  const p = { lat: co.lat, lon: co.lon };
+  const params = co.mw ? { lat: co.lat, lon: co.lon, capacity_mw: co.mw } : { lat: co.lat, lon: co.lon };
+  return [
+    { tool: 'analyze_site', parameters: params,
+      why: 'Composite site viability at these coordinates in ONE call — grid headroom, nearest substation + voltage, fiber carrier count, water stress, disaster/climate risk, tax, and a BUILD/CAUTION/AVOID verdict. Set capacity_mw to your target load (e.g. 1000 for a 1 GW cluster).' },
+    { tool: 'get_water_risk', parameters: p,
+      why: 'Standalone water-basin stress for the site — the constraint that most often kills an otherwise-viable power+fiber location.' },
+  ];
+}
+
 function _stampEntityCb(toolName, fn) {
   return async (args, extra) => {
     const r = await fn(args, extra);
@@ -2883,6 +2919,12 @@ function _stampEntityCb(toolName, fn) {
           const _add = {};
           if (!sc._entity) _add._entity = _entityType(toolName);
           if (_q && sc.quota === undefined) _add.quota = _q;
+          // r-coord-handoff: if the result carries coordinates, pre-populate the
+          // "power source found -> verify site viability" jump (Gemini 2026-07-06).
+          if (sc.site_evaluation_handoff === undefined) {
+            const _co = _extractCoord(sc);
+            if (_co) _add.site_evaluation_handoff = _siteHandoff(_co);
+          }
           if (Object.keys(_add).length) {
             return { ...r, structuredContent: { ..._add, ...sc } };
           }
