@@ -247,6 +247,19 @@ const UPGRADE_URL   = process.env.DCHUB_UPGRADE_URL   || 'https://dchub.cloud/ai
 const SIGNUP_URL    = process.env.DCHUB_SIGNUP_URL    || 'https://dchub.cloud/ai';
 const KEY_CACHE_TTL = parseInt(process.env.DCHUB_KEY_CACHE_TTL_MS || '300000', 10); // 5 min
 
+// r-agent-friendly-preview (2026-07-05): depth-limited PREVIEWS (the depth-tease
+// wrapper + the dominant trial_preview branch) are successful-but-trimmed HTTP 200s.
+// r51/c334511 deliberately stamped them isError:true so header-rendering clients
+// (Claude/Cursor/Cline) surface the upgrade nudge verbatim — that lifted trial
+// conversion off 0%. But clients that treat isError as a HARD failure (Grok, Mistral
+// Le Chat) read a served preview as "tool failed" and bail, which sabotages the exact
+// agent ecosystems we're courting. This flag lets the operator deliver previews on the
+// SUCCESS channel WITHOUT a redeploy. Default '1' PRESERVES r51 behavior; set
+// DCHUB_PREVIEW_ISERROR=0 to make previews agent-friendly. ONLY the transport flag
+// changes — trim depth, _upgrade content and paywall economics are untouched. Hard
+// blocks (blocked_paid_only, daily-cap) keep isError:true regardless.
+const PREVIEW_ISERROR = (process.env.DCHUB_PREVIEW_ISERROR ?? '1') !== '0';
+
 // ── Launch promo (DCMCP50_LAUNCH) ──────────────────────────────────────────
 // 50% off first 3 months on Stripe Payment Links (Starter $9, Developer $49).
 // Stripe documented param `prefilled_promo_code` pre-fills the coupon at
@@ -1781,7 +1794,7 @@ function buildDepthTease(name, result, ctx, tier) {
   const _content = _embedSourceInContent0([{ type: 'text', text: JSON.stringify(teased) }]);
   return {
     content: _content,
-    isError: true,
+    isError: PREVIEW_ISERROR,   // r-agent-friendly-preview: served preview, not a failure — gated by DCHUB_PREVIEW_ISERROR (default preserves r51)
     structuredContent: { tease: true, tool: name, upgrade: teased._upgrade, next_session: _NEXT_SESSION },
   };
 }
@@ -3745,7 +3758,7 @@ function trackedTool(srv, name, description, schema, handler) {
             _dropCreditCache(c);
             return {
               content: [{ type: 'text', text: phase9L_clean_preview(_gapLine + _upgradeHeader, _trialText) + _autoMintText + _hiText + promoText() }],
-              isError: true,
+              isError: PREVIEW_ISERROR,   // r-agent-friendly-preview: served trial_preview, not a failure — gated by DCHUB_PREVIEW_ISERROR (default preserves r51)
               structuredContent: {
                 trial_preview: true,
                 tool: name,
