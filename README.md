@@ -1,7 +1,7 @@
 <!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
-**Real-time data-center, power & energy intelligence for AI agents.**
+**Real-time data-center, power, energy & hyperscale infrastructure intelligence for AI agents.**
 
 👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against 21,000+ facilities, 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
 
