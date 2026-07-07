@@ -38,7 +38,7 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 ```
 
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
-66 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
+67 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
 
 ### Claude Desktop / Claude Code

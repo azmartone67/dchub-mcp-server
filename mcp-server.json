@@ -124,6 +124,10 @@
       "description": "Set a DRIFT ALERT on a saved shortlist so you can stop polling and be notified when a site's national standing moves materially (Phase 5). Fires when any site in the shortlist has current percentile score < percentile_below OR score_delta_since_saved < delta_below (e.g. -8 = dropped 8 points vs when saved). Evaluated after each daily baseline refresh; delivers via webhook and/or email. This is the \"wake me when it matters\" loop for long-running siting campaigns. Scoped to your API key."
     },
     {
+      "name": "suggest_reallocation",
+      "description": "When a saved site DRIFTS (its national standing dropped — surfaced by get_shortlist refresh or a set_shortlist_alert firing), get replacement candidates from the rest of that shortlist so the alert becomes an action, not just a warning (Phase 5). Returns TWO tiers — tier_1_same_region (a near-in tactical swap) and tier_2_cross_region (a different-region arbitrage) — each re-scored against the DRIFTED slot's own objectives, PLUS drift_is_systemic: if the rest of your shortlist also slipped, the drop is region/baseline-wide and a same-region swap will inherit it (prefer cross_region); if peers held, it's idiosyncratic (tactical_ok). DC Hub does the reduction; the final weighted pick is yours. Candidates come from THIS shortlist only (save more via save_to_shortlist to widen the pool). Scoped to your API key."
+    },
+    {
       "name": "get_grid_data",
       "description": "Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard."
     },

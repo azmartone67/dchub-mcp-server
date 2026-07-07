@@ -2850,6 +2850,7 @@ const _ENTITY_MAP = {
   save_to_shortlist: 'shortlist_saved',
   get_shortlist: 'shortlist',
   set_shortlist_alert: 'shortlist_alert_set',
+  suggest_reallocation: 'reallocation_suggestion',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5344,6 +5345,16 @@ function createServer(descOverrides) {
       notify: z.any().describe('Delivery: {"webhook":"https://..."} and/or {"email":"you@co.com"} — at least one required') },
     async (a) => {
       const data = await callAPI('/api/v1/shortlist/alert', {}, { method: 'POST', body: { shortlist_name: a.shortlist_name, percentile_below: a.percentile_below, delta_below: a.delta_below, notify: a.notify } });
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'suggest_reallocation',
+    'When a saved site DRIFTS (its national standing dropped — surfaced by get_shortlist refresh or a set_shortlist_alert firing), get replacement candidates from the rest of that shortlist so the alert becomes an action, not just a warning (Phase 5). Returns TWO tiers — tier_1_same_region (a near-in tactical swap) and tier_2_cross_region (a different-region arbitrage) — each re-scored against the DRIFTED slot\'s own objectives, PLUS drift_is_systemic: if the rest of your shortlist also slipped, the drop is region/baseline-wide and a same-region swap will inherit it (prefer cross_region); if peers held, it\'s idiosyncratic (tactical_ok). DC Hub does the reduction; the final weighted pick is yours. Candidates come from THIS shortlist only (save more via save_to_shortlist to widen the pool). Scoped to your API key.',
+    { shortlist_name: S.describe('The shortlist to re-allocate within (created via save_to_shortlist)'),
+      drifted_site_ref: S.describe('Optional site_ref of the drifted slot to replace; if omitted, the current lowest-scoring site is treated as the drifted one') },
+    async (a) => {
+      const data = await callAPI('/api/v1/shortlist/reallocate', {}, { method: 'POST', body: { shortlist_name: a.shortlist_name, drifted_site_ref: a.drifted_site_ref } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
