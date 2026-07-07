@@ -5858,14 +5858,14 @@ function createServer(descOverrides) {
     }));
 
   trackedTool(srv, 'deal_autopsy',
-    'Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — "what is the real play?". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). By default each read ships a COMPACT comparables summary (count + top signals) to keep the payload cheap; pass comparables="full" to expand the complete cited set for a deal you\'re drilling into. Try: deal_autopsy limit=15.',
+    'Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — "what is the real play?". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). Progressive disclosure to keep the default cheap: by default each read ships only a comparables COUNT (the verdict text is always included); pass comparables="summary" for the top-2 grounding signals, or comparables="full" to expand the complete cited set for a deal you\'re drilling into. Try: deal_autopsy limit=15.',
     { limit: LIMIT.describe('Number of recent deals to return (default ~15)'),
-      comparables: S.describe('Comparables detail: "summary" (default — count + top signals, cheap) or "full" (the complete cited set). Use "full" only when drilling into specific deals.') },
+      comparables: S.describe('Comparables detail: "none" (default — count only, cheapest), "summary" (top-2 grounding signals), or "full" (the complete cited set). Escalate only for deals you\'re drilling into.') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/deal-autopsy', {
           limit: a.limit || 15,
-          comparables: a.comparables || 'summary',
+          comparables: a.comparables || 'none',
         }))
       }]
     }));
