@@ -2849,6 +2849,7 @@ const _ENTITY_MAP = {
   discover_tools: 'tool_families',
   save_to_shortlist: 'shortlist_saved',
   get_shortlist: 'shortlist',
+  set_shortlist_alert: 'shortlist_alert_set',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5331,6 +5332,18 @@ function createServer(descOverrides) {
       refresh: B.describe('true (default) = re-score every site against the CURRENT baseline + return drift deltas; false = return the saved snapshots only') },
     async (a) => {
       const data = await callAPI('/api/v1/shortlist/get', { name: a.name, refresh: a.refresh });
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'set_shortlist_alert',
+    'Set a DRIFT ALERT on a saved shortlist so you can stop polling and be notified when a site\'s national standing moves materially (Phase 5). Fires when any site in the shortlist has current percentile score < percentile_below OR score_delta_since_saved < delta_below (e.g. -8 = dropped 8 points vs when saved). Evaluated after each daily baseline refresh; delivers via webhook and/or email. This is the "wake me when it matters" loop for long-running siting campaigns. Scoped to your API key.',
+    { shortlist_name: S.describe('The shortlist to monitor (created via save_to_shortlist)'),
+      percentile_below: N.describe('Fire if any site\'s current percentile objective_score drops below this (e.g. 70)'),
+      delta_below: N.describe('Fire if any site\'s score_delta_since_saved drops below this — pass a NEGATIVE number, e.g. -8 (dropped 8+ points since saved)'),
+      notify: z.any().describe('Delivery: {"webhook":"https://..."} and/or {"email":"you@co.com"} — at least one required') },
+    async (a) => {
+      const data = await callAPI('/api/v1/shortlist/alert', {}, { method: 'POST', body: { shortlist_name: a.shortlist_name, percentile_below: a.percentile_below, delta_below: a.delta_below, notify: a.notify } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });

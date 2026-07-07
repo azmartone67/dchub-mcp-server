@@ -120,6 +120,10 @@
       "description": "Retrieve a saved shortlist (Phase 5). With refresh=true (default) each site is RE-SCORED against the current national percentile baseline and returns saved_score, current_score, and score_delta_since_saved — so you see whether a site slipped because IT changed or the POPULATION did. The reliable way to maintain a siting campaign across days/weeks. Scoped to your API key."
     },
     {
+      "name": "set_shortlist_alert",
+      "description": "Set a DRIFT ALERT on a saved shortlist so you can stop polling and be notified when a site's national standing moves materially (Phase 5). Fires when any site in the shortlist has current percentile score < percentile_below OR score_delta_since_saved < delta_below (e.g. -8 = dropped 8 points vs when saved). Evaluated after each daily baseline refresh; delivers via webhook and/or email. This is the \"wake me when it matters\" loop for long-running siting campaigns. Scoped to your API key."
+    },
+    {
       "name": "get_grid_data",
       "description": "Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard."
     },
