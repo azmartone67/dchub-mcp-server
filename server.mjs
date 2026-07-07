@@ -1133,6 +1133,14 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   if (c.api_key)    headers['X-API-Key']     = c.api_key;
   if (c.platform)   headers['X-MCP-Platform'] = c.platform;
   if (c.session_id) headers['X-MCP-Session']  = c.session_id;
+  // r-durable-key (2026-07-06): forward the REAL caller IP on writes so the
+  // backend's /keys/claim dedupe ( metadata->>'ip', flask_mcp_endpoints.py )
+  // keys on the actual agent — not this MCP server's shared proxy egress, which
+  // is identical for every caller and made every fresh session re-mint a new
+  // dch_live_ key (mature key-reuse stuck ~1.7%). Backend trusts XFF first-hop
+  // (split(',')[0]); a later proxy hop only APPENDS, so the agent IP stays first.
+  // Fail-safe: if absent/wrong, dedupe falls back to today's egress behaviour.
+  if (c.client_ip)  headers['X-Forwarded-For'] = c.client_ip;
   try {
     const resp = await fetch(url.toString(), {
       method: opts.method || 'POST',
