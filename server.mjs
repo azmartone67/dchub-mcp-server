@@ -2846,6 +2846,7 @@ const _ENTITY_MAP = {
   get_refined_queue: 'queue_results',
   analyze_parcel: 'parcel_analysis',
   rank_sites: 'ranked_sites',
+  discover_tools: 'tool_families',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5264,11 +5265,48 @@ function createServer(descOverrides) {
     { candidates: z.any().describe('Array of candidate objects, each {id?, lat?, lng?, <metric fields>} — pre-enriched from analyze_site/get_refined_queue; carry site_evaluation_handoff through so the winners stay pipeable'),
       constraints: z.any().describe('Hard filters {field: {min?, max?}} — a candidate missing a constrained field is dropped (fail-closed). e.g. {"risk_resilience": {"min": 70}, "estimated_ttp_months": {"max": 34}}'),
       objectives: z.any().describe('Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {"water_stress": -0.6, "fiber_km": -0.4}'),
+      absolute: B.describe('false (default) = min-max normalize within THIS batch (best-in-set, NOT stable across runs). true = score on a FIXED 0-100 scale for CROSS-RUN-STABLE, auditable scores — use ONLY when the objective fields are already 0-100 (analyze_site scores like risk_resilience/fiber_connectivity), not raw distances like fiber_km'),
       top_k: I.describe('How many top-ranked sites to return (default 3)') },
     async (a) => {
-      const data = await callAPI('/api/v1/rank-sites', {}, { method: 'POST', body: { candidates: a.candidates, constraints: a.constraints, objectives: a.objectives, top_k: a.top_k } });
+      const data = await callAPI('/api/v1/rank-sites', {}, { method: 'POST', body: { candidates: a.candidates, constraints: a.constraints, objectives: a.objectives, top_k: a.top_k, absolute: a.absolute } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  const _TOOL_FAMILIES = [
+    { family: 'facility', when: 'Find, profile, or score a specific data-center facility.', keywords: ['facility','operator','tenant','colo','building'],
+      tools: ['search_facilities','get_facility','find_alternatives','score_facility'] },
+    { family: 'market', when: 'Compare or rank the 300+ metro markets (DC Hub Power Index / DCPI).', keywords: ['market','metro','dcpi','rank','vacancy','pricing'],
+      tools: ['rank_markets','get_market_intel','get_market_dcpi_rank','ai_capacity_index','get_intelligence_index'] },
+    { family: 'grid_power', when: 'Grid headroom, interconnection queue, power generation pipeline, energy pricing.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp'],
+      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_power_pipeline','grid_transition_radar','get_energy_prices'] },
+    { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
+      tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
+    { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+risk+tax+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select'],
+      tools: ['analyze_site','analyze_parcel','rank_sites','compare_sites','get_water_risk','get_tax_incentives','get_dchub_recommendation','site_selection_canvas','generate_site_analysis','get_infrastructure','get_renewable_energy'] },
+    { family: 'fiber', when: 'Fiber routes, carrier connectivity, lead-in planning.', keywords: ['fiber','carrier','connectivity','dark fiber','lead-in','longhaul'],
+      tools: ['get_fiber_intel','get_fiber_readiness','plan_fiber_leadin'] },
+    { family: 'deals_news', when: 'M&A transactions, hyperscaler capex, industry news.', keywords: ['deal','m&a','acquisition','transaction','hyperscaler','capex','news'],
+      tools: ['list_transactions','deal_autopsy','hyperscaler_deals','get_news'] },
+    { family: 'account_meta', when: 'Keys/access, semantic search across DC Hub, and why-use meta.', keywords: ['key','access','unlock','billing','semantic','search','why'],
+      tools: ['claim_free_key','unlock_more_data','semantic_search','why_dchub','get_agent_registry'] },
+  ];
+
+  trackedTool(srv, 'discover_tools',
+    'Meta-tool: navigate DC Hub\'s 60+ tools by FAMILY instead of scanning the whole list. Returns _entity=tool_families — each family has a when-to-use note + its flagship tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, account_meta), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical.',
+    { query: S.describe('Optional keyword to filter families/tools, e.g. "site selection", "grid queue", "fiber", "deals", "market"') },
+    async (a) => {
+      const q = (a.query || '').toLowerCase().trim();
+      const match = (fam) => !q || fam.family.toLowerCase().includes(q) || fam.when.toLowerCase().includes(q)
+        || fam.tools.some(t => t.toLowerCase().includes(q)) || (fam.keywords || []).some(k => q.includes(k) || k.includes(q));
+      const hits = _TOOL_FAMILIES.filter(match);
+      const sc = { _entity: 'tool_families', ok: true,
+        query: a.query || null,
+        count: (hits.length ? hits : _TOOL_FAMILIES).length,
+        families: hits.length ? hits : _TOOL_FAMILIES,
+        note: 'Flagship tools per family are the front door for planners; call tools/list for the complete, always-current catalog + full schemas. If nothing matched your query, all families are returned.',
+        _source: 'DC Hub — dchub.cloud' };
+      return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
     });
 
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard.',

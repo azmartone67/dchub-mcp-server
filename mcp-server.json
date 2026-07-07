@@ -108,6 +108,10 @@
       "description": "Deterministic multi-site ranking/optimization under constraints — the normalization contract that lets you compare sites across separate analyze_site calls WITHOUT dropping into code. Pass candidates you already enriched (each an object with lat/lng + metric fields like risk_resilience, water_stress, fiber_km — pull these from analyze_site + get_refined_queue and pass site_evaluation_handoff through untouched), hard constraints, and weighted objectives; get back _entity=ranked_sites: top_k ranked with rank, objective_score, per-field normalized{} (0-100 relative to the set), and normalization_basis. objectives use SIGNED weights: +weight maximizes a field (e.g. risk_resilience:1), -weight minimizes it (e.g. water_stress:-0.6, fiber_km:-0.4). constraints are hard filters, fail-closed on a missing field. Use for \"pick the best N sites under constraints\"; for one site use analyze_site; to get the candidate set first use get_refined_queue."
     },
     {
+      "name": "discover_tools",
+      "description": "Meta-tool: navigate DC Hub's 60+ tools by FAMILY instead of scanning the whole list. Returns _entity=tool_families — each family has a when-to-use note + its flagship tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, account_meta), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical."
+    },
+    {
       "name": "get_grid_data",
       "description": "Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard."
     },
