@@ -257,7 +257,7 @@
     },
     {
       "name": "deal_autopsy",
-      "description": "Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — \"what is the real play?\". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). Try: deal_autopsy limit=15."
+      "description": "Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — \"what is the real play?\". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). By default each read ships a COMPACT comparables summary (count + top signals) to keep the payload cheap; pass comparables=\"full\" to expand the complete cited set for a deal you're drilling into. Try: deal_autopsy limit=15."
     },
     {
       "name": "plan_fiber_leadin",

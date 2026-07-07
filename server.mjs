@@ -5011,7 +5011,21 @@ function createServer(descOverrides) {
       date_to: S.describe('Latest deal date, ISO-8601 (YYYY-MM-DD)'),
       region: S.describe('Geographic region filter, e.g. us, eu, apac, americas'),
       limit: LIMIT, offset: OFFSET },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/deals', a)) }] }));
+    async (a) => {
+      const d = await callAPI('/api/v1/deals', a);
+      // Payload dedup (2026-07-07, ChatGPT/Perplexity pressure-test): the deals
+      // endpoint ships the record set TWICE — `transactions` and a byte-identical
+      // `data` — to satisfy mixed frontend fallbacks. Agents pay for both in context
+      // (~48% of this payload). Keep the semantic `transactions` key; drop the
+      // duplicate `data` on the AGENT surface only. The REST response the frontend
+      // reads (data.transactions || data.data) is untouched.
+      if (d && typeof d === 'object' && !Array.isArray(d)
+          && Array.isArray(d.data) && Array.isArray(d.transactions)
+          && d.data.length === d.transactions.length) {
+        delete d.data;
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(d) }] };
+    });
 
   trackedTool(srv, 'get_news', 'Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by topic (deals/permits/outages/policy/AI). Try: get_news topic=AI limit=10. Industry news only; do NOT use for structured M&A deal data (use list_transactions) or the construction pipeline (use get_pipeline).',
     { query: S.describe('Free-text keyword to filter news, e.g. "Stargate" or "interconnection queue"'),
@@ -5844,12 +5858,14 @@ function createServer(descOverrides) {
     }));
 
   trackedTool(srv, 'deal_autopsy',
-    'Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — "what is the real play?". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). Try: deal_autopsy limit=15.',
-    { limit: LIMIT.describe('Number of recent deals to return (default ~15)') },
+    'Tracked data-center M&A / capex deal flow with the DCPI grid-reality verdict overlaid on each deal market — "what is the real play?". Returns recent deals (buyer, seller, value, market) + each market DCPI verdict and time-to-power; with a paid key, the per-deal autopsy read (long-dated land/power option vs near-term build vs queue gamble). By default each read ships a COMPACT comparables summary (count + top signals) to keep the payload cheap; pass comparables="full" to expand the complete cited set for a deal you\'re drilling into. Try: deal_autopsy limit=15.',
+    { limit: LIMIT.describe('Number of recent deals to return (default ~15)'),
+      comparables: S.describe('Comparables detail: "summary" (default — count + top signals, cheap) or "full" (the complete cited set). Use "full" only when drilling into specific deals.') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/deal-autopsy', {
           limit: a.limit || 15,
+          comparables: a.comparables || 'summary',
         }))
       }]
     }));
