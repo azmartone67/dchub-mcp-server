@@ -5266,9 +5266,10 @@ function createServer(descOverrides) {
       constraints: z.any().describe('Hard filters {field: {min?, max?}} — a candidate missing a constrained field is dropped (fail-closed). e.g. {"risk_resilience": {"min": 70}, "estimated_ttp_months": {"max": 34}}'),
       objectives: z.any().describe('Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {"water_stress": -0.6, "fiber_km": -0.4}'),
       absolute: B.describe('false (default) = min-max normalize within THIS batch (best-in-set, NOT stable across runs). true = score on a FIXED 0-100 scale for CROSS-RUN-STABLE, auditable scores — use ONLY when the objective fields are already 0-100 (analyze_site scores like risk_resilience/fiber_connectivity), not raw distances like fiber_km'),
+      percentile: B.describe('true = score each objective as its PERCENTILE against the viable-site POPULATION ("better than X% of viable sites") — the strongest cross-run + cross-region comparability. Works for fields with a maintained baseline (analyze_site metrics: overall_score, risk_resilience, fiber_connectivity, power_infrastructure, market_conditions, gas_pipeline_access, fiber_km, power_cost); other fields fall back to absolute (listed in unbaselined_fields). Takes precedence over absolute'),
       top_k: I.describe('How many top-ranked sites to return (default 3)') },
     async (a) => {
-      const data = await callAPI('/api/v1/rank-sites', {}, { method: 'POST', body: { candidates: a.candidates, constraints: a.constraints, objectives: a.objectives, top_k: a.top_k, absolute: a.absolute } });
+      const data = await callAPI('/api/v1/rank-sites', {}, { method: 'POST', body: { candidates: a.candidates, constraints: a.constraints, objectives: a.objectives, top_k: a.top_k, absolute: a.absolute, percentile: a.percentile } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
