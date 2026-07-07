@@ -2837,6 +2837,7 @@ const _ENTITY_MAP = {
   get_grid_data: 'grid', get_grid_intelligence: 'grid', get_interconnection_queue: 'grid',
   get_refined_queue: 'queue_results',
   analyze_parcel: 'parcel_analysis',
+  rank_sites: 'ranked_sites',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5246,6 +5247,18 @@ function createServer(descOverrides) {
       capacity_mw: N.describe('Optional target load in MW to pass through into the site_evaluation_handoff') },
     async (a) => {
       const data = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body: { geometry: a.geometry, capacity_mw: a.capacity_mw } });
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'rank_sites',
+    'Deterministic multi-site ranking/optimization under constraints — the normalization contract that lets you compare sites across separate analyze_site calls WITHOUT dropping into code. Pass candidates you already enriched (each an object with lat/lng + metric fields like risk_resilience, water_stress, fiber_km — pull these from analyze_site + get_refined_queue and pass site_evaluation_handoff through untouched), hard constraints, and weighted objectives; get back _entity=ranked_sites: top_k ranked with rank, objective_score, per-field normalized{} (0-100 relative to the set), and normalization_basis. objectives use SIGNED weights: +weight maximizes a field (e.g. risk_resilience:1), -weight minimizes it (e.g. water_stress:-0.6, fiber_km:-0.4). constraints are hard filters, fail-closed on a missing field. Use for "pick the best N sites under constraints"; for one site use analyze_site; to get the candidate set first use get_refined_queue.',
+    { candidates: z.any().describe('Array of candidate objects, each {id?, lat?, lng?, <metric fields>} — pre-enriched from analyze_site/get_refined_queue; carry site_evaluation_handoff through so the winners stay pipeable'),
+      constraints: z.any().describe('Hard filters {field: {min?, max?}} — a candidate missing a constrained field is dropped (fail-closed). e.g. {"risk_resilience": {"min": 70}, "estimated_ttp_months": {"max": 34}}'),
+      objectives: z.any().describe('Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {"water_stress": -0.6, "fiber_km": -0.4}'),
+      top_k: I.describe('How many top-ranked sites to return (default 3)') },
+    async (a) => {
+      const data = await callAPI('/api/v1/rank-sites', {}, { method: 'POST', body: { candidates: a.candidates, constraints: a.constraints, objectives: a.objectives, top_k: a.top_k } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
