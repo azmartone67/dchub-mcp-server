@@ -1103,8 +1103,16 @@ async function callAPI(path, params = {}, opts = {}) {
   // isn't gated down to a 2-grid stub. Paid TOOLS are still gated per-caller at the
   // MCP layer (applyTierGate) — this flag only affects the internal data fetch.
   if (opts && opts.internal) headers['User-Agent'] = 'dchub-mcp-server/1.0';
+  const fetchOpts = { headers, signal: AbortSignal.timeout(opts.timeout || 30000) };
+  // POST support (opts.method='POST' + opts.body) — needed for endpoints that take
+  // a JSON body too large for a query string, e.g. analyze_parcel's GeoJSON geometry.
+  if (opts && opts.method === 'POST') {
+    fetchOpts.method = 'POST';
+    headers['Content-Type'] = 'application/json';
+    fetchOpts.body = JSON.stringify(opts.body || {});
+  }
   try {
-    const resp = await fetch(url.toString(), { headers, signal: AbortSignal.timeout(opts.timeout || 30000) });
+    const resp = await fetch(url.toString(), fetchOpts);
     const text = await resp.text();
     if (!resp.ok) return { error: `API ${resp.status}`, detail: text.slice(0, 500) };
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
@@ -2828,6 +2836,7 @@ const _ENTITY_MAP = {
   get_market_intel: 'market', rank_markets: 'market', get_market_dcpi_rank: 'market',
   get_grid_data: 'grid', get_grid_intelligence: 'grid', get_interconnection_queue: 'grid',
   get_refined_queue: 'queue_results',
+  analyze_parcel: 'parcel_analysis',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5227,6 +5236,16 @@ function createServer(descOverrides) {
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
       const data = await callAPI('/api/v1/interconnection-queue/refined', a);
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'analyze_parcel',
+    'Structured read of a parcel BOUNDARY you already have (GeoJSON Polygon/MultiPolygon). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, and representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read). Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary (a GIS/Regrid export, a drawn parcel, an assessor polygon) and want it anchored + sized; for a single lat/lon with no boundary use analyze_site; for the interconnection-queue survivor set use get_refined_queue. NOTE: this reads any polygon you pass — DC Hub does not yet own a parcel-boundary dataset, so get_refined_queue survivors do not auto-carry `geometry` until a parcel GIS layer is sourced.',
+    { geometry: z.any().describe('GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {"type":"Polygon","coordinates":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope'),
+      capacity_mw: N.describe('Optional target load in MW to pass through into the site_evaluation_handoff') },
+    async (a) => {
+      const data = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body: { geometry: a.geometry, capacity_mw: a.capacity_mw } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
