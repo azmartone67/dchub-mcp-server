@@ -2847,6 +2847,8 @@ const _ENTITY_MAP = {
   analyze_parcel: 'parcel_analysis',
   rank_sites: 'ranked_sites',
   discover_tools: 'tool_families',
+  save_to_shortlist: 'shortlist_saved',
+  get_shortlist: 'shortlist',
   compare_isos: 'grid', get_grid_scoreboard: 'grid', grid_transition_radar: 'grid',
   get_fiber_intel: 'fiber', get_fiber_readiness: 'fiber', plan_fiber_leadin: 'fiber',
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
@@ -5308,6 +5310,28 @@ function createServer(descOverrides) {
         note: 'Flagship tools per family are the front door for planners; call tools/list for the complete, always-current catalog + full schemas. If nothing matched your query, all families are returned.',
         _source: 'DC Hub — dchub.cloud' };
       return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'save_to_shortlist',
+    'Save a site into a PERSISTENT, named shortlist that survives across conversations (Phase 5 statefulness). Snapshots the site\'s objectives + its current percentile objective_score, so you can re-score it later against the evolving national baseline. Use to build a durable siting shortlist across days/weeks; the list is scoped to your API key. Pair with get_shortlist to re-score + see drift. site should carry lat/lng/capacity_mw + the analyze_site metric fields (risk_resilience, fiber_connectivity, water score, etc.) you ranked on.',
+    { shortlist_name: S.describe('Name of the shortlist, e.g. "Q3-2026-1GW-targets" — created if new'),
+      site: z.any().describe('Site object: {site_ref?, lat, lng, capacity_mw, <metric fields from analyze_site>} — the metrics are what get re-scored later'),
+      objectives: z.any().describe('The {field: signedWeight} objectives this site was ranked under (+maximize/-minimize) — stored so re-scoring uses the same criteria'),
+      notes: S.describe('Optional free-text note, e.g. "strong fiber, acceptable water"') },
+    async (a) => {
+      const data = await callAPI('/api/v1/shortlist/save', {}, { method: 'POST', body: { shortlist_name: a.shortlist_name, site: a.site, objectives: a.objectives, notes: a.notes } });
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
+  trackedTool(srv, 'get_shortlist',
+    'Retrieve a saved shortlist (Phase 5). With refresh=true (default) each site is RE-SCORED against the current national percentile baseline and returns saved_score, current_score, and score_delta_since_saved — so you see whether a site slipped because IT changed or the POPULATION did. The reliable way to maintain a siting campaign across days/weeks. Scoped to your API key.',
+    { name: S.describe('The shortlist name to fetch'),
+      refresh: B.describe('true (default) = re-score every site against the CURRENT baseline + return drift deltas; false = return the saved snapshots only') },
+    async (a) => {
+      const data = await callAPI('/api/v1/shortlist/get', { name: a.name, refresh: a.refresh });
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
   trackedTool(srv, 'get_grid_data', 'Real-time electricity grid data for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard.',
