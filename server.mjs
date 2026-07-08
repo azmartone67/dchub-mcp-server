@@ -2391,6 +2391,24 @@ function _maskFacilityFieldsForFree(parsed) {
   return parsed;
 }
 
+// 2026-07-08: grid-headroom premium tier (default OFF, DCHUB_GRID_HEADROOM_TIER).
+// When armed, the grid HEADROOM / time-to-power / capacity-margin fields — the
+// siting DECISION layer, our #1-demanded + least-substitutable grid data — gate
+// for trial callers, turning them into the paid value-moment. Headline demand and
+// the `headroom_preview` estimate stay FREE (the hook that wins citations). Off =
+// zero behavior change. See routes/deepdive_master_shell (product-build lane).
+const GRID_HEADROOM_TIER = ['1', 'true', 'on', 'yes'].includes(
+  String(process.env.DCHUB_GRID_HEADROOM_TIER || '').trim().toLowerCase());
+const _HEADROOM_GATE_KEYS = new Set(['headroom', 'data_center_load']);
+const _HEADROOM_GATE_RE = /(^headroom|_headroom|time_to_power|_months$|operating_margin_mw|operating_reserve_mw|committed_capacity_mw|forward_load_mw|queue_depth_gw)/i;
+function _gatesHeadroom(k) {
+  if (!GRID_HEADROOM_TIER) return false;
+  const lk = String(k).toLowerCase();
+  if (lk.endsWith('_preview') || lk.endsWith('_note')) return false;  // keep the free estimate/teaser
+  if (_HEADROOM_GATE_KEYS.has(k)) return true;
+  return _HEADROOM_GATE_RE.test(lk);
+}
+
 function trimForTrial(parsed) {
   if (parsed === null || parsed === undefined) return parsed;
   if (Array.isArray(parsed)) {
@@ -2407,7 +2425,10 @@ function trimForTrial(parsed) {
   if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
-    if (Array.isArray(v) && v.length > 1) {
+    if (_gatesHeadroom(k)) {
+      out[k] = null;                          // grid decision-layer field → Pro
+      out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
+    } else if (Array.isArray(v) && v.length > 1) {
       out[k] = [trimForTrial(v[0])];          // clean — no inline _gated promo object
       out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
     } else if (_isMetricKey(k) && typeof v === 'number') {
@@ -2466,6 +2487,10 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   // hook that wins agent citations + eyeballs); the decision/synthesis layer
   // is the paid line that justifies the upgrade.
   const _DECISION_TOOLS = new Set(['rank_markets', 'get_dchub_recommendation', 'analyze_site', 'compare_sites', 'score_facility', 'get_market_dcpi_rank', 'ai_capacity_index', 'find_alternatives', 'generate_site_analysis']);
+  // 2026-07-08: when the grid-headroom tier is armed, grid intelligence IS a
+  // decision-layer answer (headroom + time-to-power = the siting call) — name the
+  // locked value so it converts like the other decision tools.
+  if (GRID_HEADROOM_TIER) { _DECISION_TOOLS.add('get_grid_intelligence'); _DECISION_TOOLS.add('get_grid_data'); }
   let decisionLine = '';
   try {
     const blob = JSON.stringify(parsed || {}).toLowerCase();
@@ -2839,7 +2864,48 @@ async function _maybeEmbedValueClaim(result, name, c) {
 // so structuredContent-preferring clients (Claude Desktop/.ai) saw ONLY the
 // retention nudge and the real payload was hidden. See lib/result-shaping.mjs.
 function _withNextSession(result) {
-  return _withNextSessionImpl(result, _NEXT_SESSION);
+  let out = _withNextSessionImpl(result, _NEXT_SESSION);
+  try { if (RETENTION_PITCH) out = _withFirstSessionResume(out); } catch (_) {}
+  return out;
+}
+
+// 2026-07-08: first-call "resume" marker (default OFF, DCHUB_RETENTION_PITCH_ENABLED).
+// Retention is the binding constraint (agents arrive, ~1 returns/wk). The lesson
+// already encoded above (r-return reach) is that LOUDER reminders don't move it —
+// mechanical discoverability of the value-laden return path does. So this stays
+// structuredContent-ONLY (no prose, no new content block), fires ONCE per session
+// (the first full-data response), and operationalizes the return loop: cache this
+// generated_at → get_changes the delta next session. Additive, idempotent,
+// memory-bounded, fully wrapped — never breaks a response. Off = byte-identical.
+const RETENTION_PITCH = ['1', 'true', 'on', 'yes'].includes(
+  String(process.env.DCHUB_RETENTION_PITCH_ENABLED || '').trim().toLowerCase());
+const _sessionsSeen = new Set();
+const _SESSIONS_SEEN_CAP = 50000;
+function _withFirstSessionResume(result) {
+  try {
+    const c = (typeof getCtx === 'function') ? getCtx() : null;
+    const sid = c && c.session_id;
+    if (!sid) return result;
+    if (_sessionsSeen.has(sid)) return result;          // FIRST response per session only
+    if (_sessionsSeen.size >= _SESSIONS_SEEN_CAP) _sessionsSeen.clear();  // bound process memory
+    _sessionsSeen.add(sid);
+    const sc = (result && result.structuredContent && typeof result.structuredContent === 'object'
+                && !Array.isArray(result.structuredContent)) ? { ...result.structuredContent } : null;
+    if (!sc || sc.resume) return result;                // structuredContent-only + idempotent
+    sc.resume = {
+      first_session: true,
+      tool: 'get_changes',
+      call: 'get_changes since=24h',
+      why: "First call this session — cache this response's generated_at and, next session, call "
+           + 'get_changes since=<that> to pull ONLY what moved (DCPI movers, new facilities/deals/news) '
+           + 'instead of re-querying everything.',
+      persist: 'save_site (persist a scored site) · set_site_alert / set_market_alert (get pinged when it '
+               + 'moves). The return path IS the value — not a reminder.',
+    };
+    return { ...result, structuredContent: sc };
+  } catch (_) {
+    return result;
+  }
 }
 // ── r-outputschema (2026-07-02): entity-type envelope. Gemini's agent-legibility
 // recommendation — instead of a strict per-tool outputSchema (unworkable here:
