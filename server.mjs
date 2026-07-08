@@ -5544,6 +5544,23 @@ function createServer(descOverrides) {
       include_fiber: B.describe('Include fiber-connectivity analysis (default true)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', a)) }] }));
 
+  // 2026-07-08: the HONEST composite. Unlike analyze_site (full raw data + a
+  // composite that silently includes placeholder factors), this scores ONLY over
+  // factors whose data is actually sourced and DECLARES the rest unavailable —
+  // water stays out until real WRI data lands, so the number never overstates
+  // confidence. The integrity-first answer to "give me one risk score".
+  trackedTool(srv, 'get_composite_site_score', 'Use when a user wants ONE honest 0-100 site suitability/risk verdict for a lat/lon WITH an explicit per-factor coverage map — which factors are actually measured vs. declared unavailable. Unlike analyze_site (full raw data dump), this scores ONLY over VALIDATED factors and never imputes a missing one: power/grid, fiber and natural-hazard risk are live; water is declared "unavailable" until real WRI Aqueduct data lands (the number never fakes water); market/DCPI is v1-unavailable (use rank_markets). Example: get_composite_site_score lat=33.45 lon=-112.07 state=AZ. Returns {composite_score (0-100 over validated factors), verdict (BUILD/CAUTION/AVOID), confidence (complete|conditional), coverage {power_grid|fiber|water|risk_resilience|market_dcpi: validated|unavailable}, coverage_ratio, sub_scores, caveats}. Use analyze_site for full data, compare_sites for 2-4 sites, rank_markets for whole-market ranking.',
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      state: S.describe('US state abbreviation (optional) — improves water/context lookups, e.g. AZ') },
+    async (a) => {
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/composite-score', {
+        lat: a.lat, lng: a.lon, state: a.state || '',
+      })) }] };
+    });
+
   // r-sitestudy (2026-06-26): the branded, shareable DELIVERABLE (PDF), distinct
   // from analyze_site's numeric score. Returns the structured summary + a signed
   // pdf_report_url the human can open with no login (PRO-gated; HMAC-signed link).
