@@ -15,6 +15,14 @@ UA="${DCHUB_MCP_UA:-dchub-value-harness/1.0}"
 FAILED=0
 
 # Each line: tool|json-args|required-key (a key that MUST exist & be non-empty in the payload)
+# NB (2026-07-09): the required-key is the tool's OWN top-level array key — it is
+# NOT uniform across tools. list_transactions returns its rows under `transactions`
+# (+ `count`), not `data`: when it moved from a REST proxy to a Neon-direct query
+# (dchub_mcp_server.py) it stopped emitting the `data` alias the REST path had, so
+# asserting `data` false-flagged a HEALTHY tool as an empty-payload regression.
+# Assert the key the tool actually returns; also dropped a bogus `year` arg (the
+# tool has no `year` param — it was silently ignored). Bare limit=3 returns the
+# newest deals (ORDER BY date DESC), the most robust non-empty smoke test.
 CHECKS=$(cat <<'EOF'
 get_grid_intelligence|{"region_id":"PJM"}|demand_mw
 get_market_intel|{"market":"northern-virginia"}|market
@@ -23,7 +31,7 @@ search_facilities|{"country":"US","state":"VA","limit":2}|data
 hyperscaler_deals|{"limit":3}|deals
 get_fiber_intel|{"carrier":"Zayo"}|features
 get_grid_scoreboard|{}|grids
-list_transactions|{"year":2026,"limit":3}|data
+list_transactions|{"limit":3}|transactions
 get_interconnection_queue|{"iso":"PJM"}|project_count
 get_pipeline|{"market":"northern-virginia","limit":3}|data
 EOF
