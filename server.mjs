@@ -3068,7 +3068,7 @@ function withCitation(result, toolName) {
     const sc = (result.structuredContent && typeof result.structuredContent === 'object')
       ? { ...result.structuredContent } : null;
     if (sc && !sc.citation) {
-      sc.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud' };
+      sc.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString() };
       out.structuredContent = sc;
     }
     return _withNextSession(out);
