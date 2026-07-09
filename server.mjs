@@ -5576,6 +5576,22 @@ function createServer(descOverrides) {
       })) }] };
     });
 
+  // 2026-07-08: get_climate_intel — seismic (USGS ASCE 7) + climate normals (NOAA
+  // via ACIS), the DC-cooling + structural-bracing layer. Spec'd with Gemini/Grok;
+  // every number traces to a federal source, missing data → status unavailable
+  // (incl. NOAA 'exceeds_radius' + wet-bulb null when the source lacks it).
+  trackedTool(srv, 'get_climate_intel', 'Use when a user wants seismic + climate intel for a lat/lon — the layer that drives data-center structural bracing cost (seismic) and cooling design (cooling degree-days, extreme temps). Grounded STRICTLY in USGS ASCE 7 (seismic) + NOAA climate normals via ACIS; every value traces to a federal source and missing data is declared unavailable, never estimated. Example: get_climate_intel lat=33.45 lon=-112.07. Returns {seismic_hazard_usgs:{status, peak_ground_acceleration_g, ss, s1, seismic_design_category, hazard_class}, climate_normals_noaa:{status, reference_station:{id,name,distance_km}, cooling_design_metrics:{cooling_degree_days_annual, extreme_max_dry_bulb_f, extreme_max_wet_bulb_f (null if source lacks it), data_vintage}}, overall_climate_summary, data_availability, sources}. radius_km (optional, default 25) snaps to the nearest NOAA station; beyond it climate returns unavailable_exceeds_radius. Seismic is US (ASCE 7); non-US → seismic unavailable. For natural-hazard ratings use get_disaster_risk; for one blended verdict use get_composite_site_score.',
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      radius_km: N.describe('Max distance (km) to snap to the nearest NOAA station (optional, default 25)') },
+    async (a) => {
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/climate-intel', {
+        lat: a.lat, lng: a.lon, radius_km: a.radius_km,
+      })) }] };
+    });
+
   // r-sitestudy (2026-06-26): the branded, shareable DELIVERABLE (PDF), distinct
   // from analyze_site's numeric score. Returns the structured summary + a signed
   // pdf_report_url the human can open with no login (PRO-gated; HMAC-signed link).
