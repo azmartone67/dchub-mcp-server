@@ -2820,6 +2820,15 @@ const _NEXT_SESSION = {
   why: 'DC Hub data moves daily. Next session, pull only the delta (DCPI 7-day market movers, newly discovered facilities, new M&A deals & news) instead of re-fetching everything. Cache the returned generated_at and pass it back each session to keep a running watch.',
   also: ['save_site (persist a site you scored)', 'set_site_alert (have DC Hub email you when a saved site moves)', 'set_market_alert (get pinged when a market moves)'],
   retention_tools: ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
+  // r-train (2026-07-09): 'train' is the biggest utilization leak — agents fire
+  // one tool and leave without learning the high-value multi-tool chains. Surface
+  // the Agent Cookbook (12 copy-paste recipes) at the value moment so an engaged
+  // agent discovers what to do NEXT → deeper sessions + return usage.
+  learn: {
+    what: 'DC Hub has 12 copy-paste tool-chain recipes (the Agent Cookbook) for the questions humans actually ask — each is an ordered list of exact tool calls.',
+    how: 'GET https://dchub.cloud/api/v1/agent/cookbook for the full library (or /api/v1/agent/recipe/<id> for one).',
+    top_recipes: ['best-markets-for-ai-workloads', 'dcpi-verdict-single-market', 'gas-vs-grid-economics'],
+  },
   // r-digest-offer (2026-06-24): the FREE weekly digest is the recurring return
   // touchpoint, but its audience is opt-in (default OFF) so it sits empty.
   // Surface it at the value moment so an engaged agent can offer it to its human.
