@@ -8,8 +8,8 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
 - **Auth:** none required for the free anonymous tier (10 calls/day). For higher limits,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
-- **Tools exposed:** 33 (facility search, market intelligence, grid + interconnection,
-  site analysis, M&A deals, infrastructure).
+- **Tools exposed:** 70 (facility search, market intelligence, grid + interconnection,
+  site analysis + board-ready site-risk scoring, M&A deals, infrastructure).
 
 ## What it does
 
@@ -138,7 +138,7 @@ curl -s -D - -X POST https://dchub.cloud/mcp \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}'
 
-# 2) using the Mcp-Session-Id from step 1, list tools (expect 33)
+# 2) using the Mcp-Session-Id from step 1, list tools (expect 70)
 curl -s -X POST https://dchub.cloud/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
