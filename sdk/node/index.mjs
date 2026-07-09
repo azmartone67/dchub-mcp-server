@@ -139,6 +139,27 @@ export class DCHub {
   grid(iso) {
     return this.call("get_grid_data", { iso });
   }
+
+  /** Honest 0-100 composite site score + explicit per-factor coverage map. */
+  compositeSiteScore(lat, lon, state = "") {
+    return this.call("get_composite_site_score", { lat, lon, state });
+  }
+
+  /** Natural-hazard risk from the FEMA National Risk Index. */
+  disasterRisk(lat, lon) {
+    return this.call("get_disaster_risk", { lat, lon });
+  }
+
+  /** Seismic (USGS ASCE 7) + climate normals (NOAA). */
+  climateIntel(lat, lon, radius_km = 25) {
+    return this.call("get_climate_intel", { lat, lon, radius_km });
+  }
+
+  /** Provenance from any result: {source, retrieved_at, license}. */
+  static provenance(result) {
+    const c = (result && result.citation) || {};
+    return { source: c.source || (result && result._source), retrieved_at: c.retrieved_at, license: c.license };
+  }
 }
 
 export { clean as _clean };

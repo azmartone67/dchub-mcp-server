@@ -152,3 +152,23 @@ class DCHub:
     def grid(self, iso: str):
         """Live grid intelligence for an ISO, e.g. 'ERCOT', 'PJM'."""
         return self.call("get_grid_data", iso=iso)
+
+    def composite_site_score(self, lat: float, lon: float, state: str = ""):
+        """Honest 0-100 composite site score with an explicit per-factor
+        coverage map. Treat coverage 'unavailable' as unknown, never estimate."""
+        return self.call("get_composite_site_score", lat=lat, lon=lon, state=state)
+
+    def disaster_risk(self, lat: float, lon: float):
+        """Natural-hazard risk from the FEMA National Risk Index."""
+        return self.call("get_disaster_risk", lat=lat, lon=lon)
+
+    def climate_intel(self, lat: float, lon: float, radius_km: int = 25):
+        """Seismic (USGS ASCE 7) + climate normals (NOAA)."""
+        return self.call("get_climate_intel", lat=lat, lon=lon, radius_km=radius_km)
+
+    @staticmethod
+    def provenance(result: dict) -> dict:
+        """Provenance from any result: {source, retrieved_at, license}."""
+        c = (result or {}).get("citation") or {}
+        return {"source": c.get("source") or (result or {}).get("_source"),
+                "retrieved_at": c.get("retrieved_at"), "license": c.get("license")}
