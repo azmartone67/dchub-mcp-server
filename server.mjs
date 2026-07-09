@@ -5549,7 +5549,7 @@ function createServer(descOverrides) {
   // factors whose data is actually sourced and DECLARES the rest unavailable —
   // water stays out until real WRI data lands, so the number never overstates
   // confidence. The integrity-first answer to "give me one risk score".
-  trackedTool(srv, 'get_composite_site_score', 'Use when a user wants ONE honest 0-100 site suitability/risk verdict for a lat/lon WITH an explicit per-factor coverage map — which factors are actually measured vs. declared unavailable. Unlike analyze_site (full raw data dump), this scores ONLY over VALIDATED factors and never imputes a missing one: power/grid, fiber and natural-hazard risk are live; water is declared "unavailable" until real WRI Aqueduct data lands (the number never fakes water); market/DCPI is v1-unavailable (use rank_markets). Example: get_composite_site_score lat=33.45 lon=-112.07 state=AZ. Returns {composite_score (0-100 over validated factors), verdict (BUILD/CAUTION/AVOID), confidence (complete|conditional), coverage {power_grid|fiber|water|risk_resilience|market_dcpi: validated|unavailable}, coverage_ratio, sub_scores, caveats}. Use analyze_site for full data, compare_sites for 2-4 sites, rank_markets for whole-market ranking.',
+  trackedTool(srv, 'get_composite_site_score', 'Use when a user wants ONE honest 0-100 site suitability/risk verdict for a lat/lon WITH an explicit per-factor coverage map — which factors are actually measured vs. declared unavailable. Unlike analyze_site (full raw data dump), this scores ONLY over VALIDATED factors and never imputes a missing one: power/grid, fiber, natural-hazard risk (FEMA NRI) and water (live WRI Aqueduct 4.0 baseline water stress) are all live; water is "unavailable" only outside basin coverage (never faked); market/DCPI is v1-unavailable (use rank_markets). Example: get_composite_site_score lat=33.45 lon=-112.07 state=AZ. Returns {composite_score (0-100 over validated factors), verdict (BUILD/CAUTION/AVOID), confidence (complete|conditional), coverage {power_grid|fiber|water|risk_resilience|market_dcpi: validated|unavailable}, coverage_ratio, sub_scores, caveats}. Use analyze_site for full data, compare_sites for 2-4 sites, rank_markets for whole-market ranking.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
       state: S.describe('US state abbreviation (optional) — improves water/context lookups, e.g. AZ') },
@@ -5558,6 +5558,37 @@ function createServer(descOverrides) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/composite-score', {
         lat: a.lat, lng: a.lon, state: a.state || '',
+      })) }] };
+    });
+
+  // 2026-07-08: get_disaster_risk — grounded STRICTLY in the FEMA National Risk
+  // Index (authoritative US county-level hazard data). Live query, never fabricated;
+  // points outside US NRI coverage return coverage='unavailable' (Gemini/Grok/ChatGPT
+  // all endorsed: authoritative sources + explicit 'unavailable' over invented precision).
+  trackedTool(srv, 'get_disaster_risk', 'Use when a user wants the natural-hazard / disaster risk for a lat/lon — flood, wildfire, hurricane, earthquake, heat, drought, tornado, etc. Grounded in the FEMA National Risk Index (NRI), the authoritative US county-level hazard dataset (live query, never estimated; points outside US NRI coverage return coverage=unavailable). Example: get_disaster_risk lat=33.45 lon=-112.07. Returns {disaster_risk:{composite_score (0-100, higher=worse), rating (Very Low..Very High), national_percentile}, hazards:{Wildfire, Hurricane, Earthquake, Heat Wave, ...: rating}, top_hazards:[{hazard, rating}], coverage (validated|unavailable), source, caveats}. County-level resolution. For chronic water stress use get_water_risk; for one blended site verdict use get_composite_site_score.',
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07') },
+    async (a) => {
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/disaster-risk', {
+        lat: a.lat, lng: a.lon,
+      })) }] };
+    });
+
+  // 2026-07-08: get_climate_intel — seismic (USGS ASCE 7) + climate normals (NOAA
+  // via ACIS), the DC-cooling + structural-bracing layer. Spec'd with Gemini/Grok;
+  // every number traces to a federal source, missing data → status unavailable
+  // (incl. NOAA 'exceeds_radius' + wet-bulb null when the source lacks it).
+  trackedTool(srv, 'get_climate_intel', 'Use when a user wants seismic + climate intel for a lat/lon — the layer that drives data-center structural bracing cost (seismic) and cooling design (cooling degree-days, extreme temps). Grounded STRICTLY in USGS ASCE 7 (seismic) + NOAA climate normals via ACIS; every value traces to a federal source and missing data is declared unavailable, never estimated. Example: get_climate_intel lat=33.45 lon=-112.07. Returns {seismic_hazard_usgs:{status, peak_ground_acceleration_g, ss, s1, seismic_design_category, hazard_class}, climate_normals_noaa:{status, reference_station:{id,name,distance_km}, cooling_design_metrics:{cooling_degree_days_annual, extreme_max_dry_bulb_f, extreme_max_wet_bulb_f (null if source lacks it), data_vintage}}, overall_climate_summary, data_availability, sources}. radius_km (optional, default 25) snaps to the nearest NOAA station; beyond it climate returns unavailable_exceeds_radius. Seismic is US (ASCE 7); non-US → seismic unavailable. For natural-hazard ratings use get_disaster_risk; for one blended verdict use get_composite_site_score.',
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      radius_km: N.describe('Max distance (km) to snap to the nearest NOAA station (optional, default 25)') },
+    async (a) => {
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/climate-intel', {
+        lat: a.lat, lng: a.lon, radius_km: a.radius_km,
       })) }] };
     });
 
