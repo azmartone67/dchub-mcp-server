@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DC Hub — Agent Trust & Discovery</title>
+<meta name="description" content="Live trust signals for the DC Hub MCP server: tool count, manifest sync, provenance guarantee, honest-unknowns policy, and authoritative data sources.">
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020617;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;max-width:900px;margin:0 auto;padding:32px 20px}
+  .eyebrow{color:#818cf8;font-size:.75rem;letter-spacing:.16em;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+  h1{font-size:2rem;letter-spacing:-.02em;margin-bottom:8px}
+  .lead{color:#94a3b8;margin-bottom:24px;max-width:640px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:20px 0}
+  .stat{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:18px}
+  .stat .k{color:#64748b;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+  .stat .v{font-size:1.7rem;font-weight:700;margin-top:4px}
+  .stat .v.ok{color:#22c55e}.stat .v.warn{color:#eab308}.stat .v.pending{color:#64748b}
+  .stat small{color:#64748b;font-size:.78rem}
+  .pane{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:20px;margin:16px 0}
+  .pane h2{font-size:1.05rem;margin-bottom:10px;color:#c7d2fe}
+  .pill{display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:3px 10px;margin:3px 4px 3px 0;font-size:.82rem}
+  code{background:#020617;border:1px solid #1e293b;border-radius:5px;padding:2px 7px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.85em}
+  pre{background:#020617;border:1px solid #1e293b;border-radius:8px;padding:12px 14px;overflow-x:auto;font-family:ui-monospace,monospace;font-size:.8rem;margin-top:8px}
+  a{color:#818cf8;text-decoration:none}a:hover{text-decoration:underline}
+  ul{margin:6px 0 0 20px}li{margin:4px 0}
+  footer{color:#475569;font-size:.8rem;margin-top:28px;border-top:1px solid #1e293b;padding-top:16px}
+</style>
+</head><body>
+<div class="eyebrow">DC Hub · MCP Trust & Discovery</div>
+<h1>Live, authoritative, honest about the unknowns.</h1>
+<p class="lead">DC Hub is a remote MCP server for data-center &amp; power infrastructure. This page reads the <em>live</em> surface so you can verify what you're routing to before you route to it.</p>
+
+<div class="grid">
+  <div class="stat"><div class="k">Live tools</div><div class="v pending" id="liveTools">…</div><small id="liveToolsNote">querying tools/list</small></div>
+  <div class="stat"><div class="k">Manifest sync</div><div class="v pending" id="sync">…</div><small id="syncNote">.well-known/mcp.json vs live</small></div>
+  <div class="stat"><div class="k">Version</div><div class="v pending" id="ver" style="font-size:1.2rem">…</div><small>server_info</small></div>
+  <div class="stat"><div class="k">Transport</div><div class="v ok" style="font-size:1.1rem">HTTP</div><small>zero-install, remote</small></div>
+</div>
+
+<div class="pane">
+  <h2>The two guarantees</h2>
+  <p><b>Provenance on every response.</b> Each result carries <code>citation</code> — <code>source</code>, <code>url</code>, <code>license</code> (CC-BY-4.0), and <code>retrieved_at</code>. Every number traces back to a definitive source.</p>
+  <p style="margin-top:10px"><b>Honest unknowns.</b> The site-diligence tools return each factor with <code>coverage: validated | unavailable</code>. When data isn't sourced, the tool returns <code>unavailable</code> — <b>never a fabricated number</b>. For institutional diligence, an explicit "unknown" beats invented precision.</p>
+</div>
+
+<div class="pane">
+  <h2>Authoritative data sources</h2>
+  <div>
+    <span class="pill">FEMA National Risk Index</span><span class="pill">USGS ASCE 7 seismic</span>
+    <span class="pill">NOAA climate normals</span><span class="pill">WRI Aqueduct 4.0</span>
+    <span class="pill">EIA hourly RTO</span><span class="pill">ENTSO-E</span><span class="pill">Elexon (GB)</span>
+    <span class="pill">HIFLD</span><span class="pill">FCC fiber</span><span class="pill">EIA-860M</span>
+  </div>
+</div>
+
+<div class="pane">
+  <h2>Discovery surfaces</h2>
+  <ul>
+    <li>MCP endpoint: <a href="https://dchub.cloud/mcp">dchub.cloud/mcp</a></li>
+    <li>Manifest: <a href="https://dchub.cloud/.well-known/mcp.json">/.well-known/mcp.json</a> · Server card: <a href="https://dchub.cloud/.well-known/mcp/server-card.json">/server-card.json</a></li>
+    <li>OpenAPI (REST mirror): <a href="https://dchub.cloud/openapi.json">/openapi.json</a></li>
+    <li>One-click install + prompt pack + SDKs: see the <a href="https://github.com/azmartone67/dchub-mcp-server">repo docs</a></li>
+  </ul>
+</div>
+
+<div class="pane">
+  <h2>Verify it yourself</h2>
+  <pre># live tool count (expect 70)
+curl -s https://dchub.cloud/.well-known/mcp.json | python3 -c "import sys,json;print(json.load(sys.stdin)['tools_count'])"
+
+# full tool schemas
+curl -s -X POST https://dchub.cloud/mcp -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
+</div>
+
+<footer>DC Hub · dchub.cloud · CC-BY-4.0 · cite as "DC Hub, dchub.cloud". This page reads live data client-side; if a stat shows "—" the endpoint was briefly unreachable.</footer>
+
+<script>
+(async () => {
+  const set = (id, val, cls, note) => {
+    const el = document.getElementById(id); if (!el) return;
+    el.textContent = val; if (cls){ el.className = 'v ' + cls; }
+    if (note){ const n = document.getElementById(id+'Note'); if (n) n.textContent = note; }
+  };
+  let liveCount = null, manifestCount = null, version = null;
+  // live tools/list
+  try {
+    const r = await fetch('https://dchub.cloud/mcp', { method:'POST',
+      headers:{'content-type':'application/json','accept':'application/json, text/event-stream'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'}) });
+    const raw = await r.text();
+    let obj = null;
+    for (let line of raw.split(/\r?\n/)) { if (line.startsWith('data: ')) line = line.slice(6); line=line.trim(); if(!line) continue; try{ obj = JSON.parse(line); break; }catch(e){} }
+    liveCount = obj && obj.result && (obj.result.tools||[]).length;
+    set('liveTools', liveCount ?? '—', liveCount ? 'ok':'warn', liveCount ? 'via tools/list':'unreachable');
+  } catch(e){ set('liveTools','—','warn','unreachable'); }
+  // manifest
+  try {
+    const m = await (await fetch('https://dchub.cloud/.well-known/mcp.json')).json();
+    manifestCount = m.tools_count; version = m.version;
+    set('ver', version || '—', 'ok');
+  } catch(e){ set('ver','—','warn'); }
+  // sync check
+  if (liveCount != null && manifestCount != null) {
+    const inSync = liveCount === manifestCount;
+    set('sync', inSync ? 'in sync' : 'drift', inSync ? 'ok':'warn',
+        inSync ? (liveCount+' = '+manifestCount) : ('live '+liveCount+' vs manifest '+manifestCount));
+  } else { set('sync','—','warn','could not compare'); }
+})();
+</script>
+</body></html>
