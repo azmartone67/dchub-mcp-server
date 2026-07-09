@@ -5479,6 +5479,17 @@ function createServer(descOverrides) {
       limit: LIMIT },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
 
+  // 2026-07-09: temporal risk intelligence — what CHANGED in a facility's risk
+  // context. Only DCPI market-health has a real short-term series; hazard dims are
+  // declared static (never a fabricated delta). Honest counterpart to the brain's proposal.
+  trackedTool(srv, 'get_facility_risk_delta', 'Use when a user asks what has CHANGED in a facility\'s (or its market\'s) risk profile recently — "has this site gotten riskier lately?", "which way is this market moving?" — a temporal question static-trained models can\'t answer. Returns the REAL DCPI market-health delta (excess-power score change over the window, direction improving/worsening/flat) from DC Hub\'s history-preserving daily snapshots. INTEGRITY: only DCPI market-health has a short-term temporal series; the site-hazard dimensions (FEMA disaster / USGS seismic / NOAA climate / WRI water) are DECLARED static (they don\'t change week-to-week) with a pointer to the point-in-time tool — never a fabricated week-over-week delta; no snapshot history → coverage:unavailable. Params: facility_id (a discovered-facility id or slug) OR market (a market name/slug), since (e.g. "7d"/"30d", default 7d). Returns {facility, dcpi_market_health:{delta, now, direction, coverage}, static_dimensions{...}, summary}. For the current point-in-time risk (not the change) use get_composite_site_score / get_disaster_risk / get_climate_intel.',
+    { facility_id: S.describe('A DC Hub facility id or canonical slug to resolve the market context'),
+      market: S.describe('Alternatively, a market name or slug (e.g. "northern-virginia")'),
+      since: S.describe('Look-back window, e.g. "7d" or "30d" (default 7d)') },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/facility-risk-delta', {
+      facility_id: a.facility_id, market: a.market, since: a.since,
+    })) }] }));
+
   trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don\'t have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90), e.g. 39.04'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -77.48'),
