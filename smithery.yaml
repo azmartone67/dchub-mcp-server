@@ -6,7 +6,7 @@
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
-# Tool list reflects the live tools/list: 68 tools, all registered in
+# Tool list reflects the live tools/list: 69 tools, all registered in
 # server.mjs (verified against tools/list on https://dchub.cloud/mcp).
 
 name: dchub
@@ -56,7 +56,7 @@ remote:
   url: "https://dchub.cloud/mcp"
 
 # Tool surface for discovery — matches `tools/list` on the live MCP server:
-# 68 tools, all registered in server.mjs.
+# 69 tools, all registered in server.mjs.
 tools:
   - search_facilities
   - get_facility
@@ -111,9 +111,9 @@ tools:
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
   anonymous: "10 calls/day, no signup, 2 results per query"
-  free: "Free dev key (email signup) — 50 calls/day, all 68 tools"
+  free: "Free dev key (email signup) — 50 calls/day, all 69 tools"
   starter: "$9/mo — 200 calls/day, unlocks paid tools"
-  developer: "$49/mo — 500 calls/day, all 68 tools, full results"
+  developer: "$49/mo — 500 calls/day, all 69 tools, full results"
   pro: "$299/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
   enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
 

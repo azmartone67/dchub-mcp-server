@@ -5561,6 +5561,21 @@ function createServer(descOverrides) {
       })) }] };
     });
 
+  // 2026-07-08: get_disaster_risk — grounded STRICTLY in the FEMA National Risk
+  // Index (authoritative US county-level hazard data). Live query, never fabricated;
+  // points outside US NRI coverage return coverage='unavailable' (Gemini/Grok/ChatGPT
+  // all endorsed: authoritative sources + explicit 'unavailable' over invented precision).
+  trackedTool(srv, 'get_disaster_risk', 'Use when a user wants the natural-hazard / disaster risk for a lat/lon — flood, wildfire, hurricane, earthquake, heat, drought, tornado, etc. Grounded in the FEMA National Risk Index (NRI), the authoritative US county-level hazard dataset (live query, never estimated; points outside US NRI coverage return coverage=unavailable). Example: get_disaster_risk lat=33.45 lon=-112.07. Returns {disaster_risk:{composite_score (0-100, higher=worse), rating (Very Low..Very High), national_percentile}, hazards:{Wildfire, Hurricane, Earthquake, Heat Wave, ...: rating}, top_hazards:[{hazard, rating}], coverage (validated|unavailable), source, caveats}. County-level resolution. For chronic water stress use get_water_risk; for one blended site verdict use get_composite_site_score.',
+    { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07') },
+    async (a) => {
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/disaster-risk', {
+        lat: a.lat, lng: a.lon,
+      })) }] };
+    });
+
   // r-sitestudy (2026-06-26): the branded, shareable DELIVERABLE (PDF), distinct
   // from analyze_site's numeric score. Returns the structured summary + a signed
   // pdf_report_url the human can open with no login (PRO-gated; HMAC-signed link).
