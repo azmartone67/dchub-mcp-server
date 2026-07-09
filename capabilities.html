@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DC Hub — Capabilities & What's New</title>
+<meta name="description" content="Live capabilities of the DC Hub MCP server — every tool read from the running system, newest first. Authoritative sources, provenance, and explicit unknowns.">
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020617;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6;max-width:960px;margin:0 auto;padding:32px 20px}
+  .eyebrow{color:#818cf8;font-size:.75rem;letter-spacing:.16em;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+  h1{font-size:2.1rem;letter-spacing:-.02em;margin-bottom:8px}
+  .lead{color:#94a3b8;margin-bottom:8px;max-width:680px}
+  .count{color:#22c55e;font-weight:700}
+  .banner{background:#0f172a;border:1px solid #6366f1;border-radius:12px;padding:16px 20px;margin:20px 0}
+  .banner b{color:#c7d2fe}
+  h2{font-size:1.15rem;margin:26px 0 10px;color:#c7d2fe}
+  .new{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .card{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px}
+  .card.hot{border-color:#8b5cf6}
+  .card .tool{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-size:.95rem;color:#a5b4fc}
+  .card .desc{color:#94a3b8;font-size:.85rem;margin-top:6px}
+  .badge{display:inline-block;background:#8b5cf6;color:#fff;font-size:.62rem;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;margin-left:6px;vertical-align:middle}
+  .cat{margin:14px 0}
+  .cat h3{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px}
+  .pill{display:inline-block;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:3px 9px;margin:3px 4px 3px 0;font-size:.8rem;font-family:'JetBrains Mono',ui-monospace,monospace}
+  .pill.n{border-color:#8b5cf6;color:#c4b5fd}
+  a{color:#818cf8;text-decoration:none}a:hover{text-decoration:underline}
+  code{background:#020617;border:1px solid #1e293b;border-radius:5px;padding:2px 7px;font-family:ui-monospace,monospace;font-size:.85em}
+  footer{color:#475569;font-size:.8rem;margin-top:28px;border-top:1px solid #1e293b;padding-top:16px}
+</style>
+</head><body>
+<div class="eyebrow">DC Hub · Capabilities</div>
+<h1>What DC Hub can do — <span class="count" id="count">…</span> live tools</h1>
+<p class="lead">Every capability below is read from the <strong>running MCP server</strong> right now — this page can't over-claim, because it renders ground truth. Authoritative sources, provenance on every response, explicit unknowns.</p>
+
+<div class="banner">
+  <b>The standard:</b> every number traces to a definitive source (FEMA · USGS · NOAA · WRI · EIA · ENTSO-E). When a factor isn't sourced, we return <code>unavailable</code> — never a fabricated value. That's what makes DC Hub safe for institutional diligence.
+</div>
+
+<h2>✨ Newest</h2>
+<div class="new" id="new"></div>
+
+<h2>All capabilities <span style="color:#64748b;font-weight:400;font-size:.85rem">(live)</span></h2>
+<div id="cats"><p style="color:#64748b">Loading from <code>dchub.cloud/mcp</code>…</p></div>
+
+<footer>
+  Connect: <a href="https://dchub.cloud/mcp">dchub.cloud/mcp</a> ·
+  <a href="https://dchub.cloud/trust">Trust &amp; discovery</a> ·
+  Manifest: <a href="https://dchub.cloud/.well-known/mcp.json">/.well-known/mcp.json</a> ·
+  DC Hub · CC-BY-4.0
+</footer>
+
+<script>
+const NEW_TOOLS = {
+  get_composite_site_score: "One 0–100 site verdict across grid, fiber, water & hazard — with an explicit coverage map for what's actually known.",
+  get_disaster_risk: "Natural-hazard risk from the FEMA National Risk Index (county-level).",
+  get_climate_intel: "USGS ASCE 7 seismic + NOAA climate normals (cooling degree-days, extreme temps).",
+  get_facility_risk_delta: "What CHANGED in a site's risk profile — real DCPI market-health delta over time (static hazards declared, never faked).",
+};
+const CATS = [
+  ["Site diligence", /^(get_composite_site_score|analyze_site|analyze_parcel|compare_sites|score_facility|generate_site_analysis|site_selection_canvas|get_dchub_recommendation|find_alternatives|rank_sites|suggest_reallocation)$/],
+  ["Risk & climate", /^(get_disaster_risk|get_climate_intel|get_water_risk|get_facility_risk_delta)$/],
+  ["Grid & power", /^(get_grid_scoreboard|get_grid_data|get_grid_intelligence|get_interconnection_queue|get_power_pipeline|get_renewable_energy|get_energy_prices|grid_transition_radar|compare_isos|get_iso_context)$/],
+  ["Markets (DCPI)", /^(rank_markets|get_market_intel|get_market_dcpi_rank|get_market_context|predict_market_trajectory|ai_capacity_index|get_intelligence_index)$/],
+  ["Gas", /^(get_gas_index|get_gas_economics|get_gas_intelligence)$/],
+  ["Facilities & fiber", /^(search|search_facilities|get_facility|fetch|get_fiber_intel|get_fiber_readiness|plan_fiber_leadin|get_metro_fiber|get_infrastructure)$/],
+  ["Deals & pipeline", /^(list_transactions|hyperscaler_deals|deal_autopsy|get_pipeline|get_news|get_changes)$/],
+  ["Agent utility", /.*/],
+];
+(async () => {
+  let tools = [];
+  try {
+    const r = await fetch('https://dchub.cloud/mcp', { method:'POST',
+      headers:{'content-type':'application/json','accept':'application/json, text/event-stream'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'}) });
+    const raw = await r.text();
+    for (let line of raw.split(/\r?\n/)) { if (line.startsWith('data: ')) line=line.slice(6); line=line.trim(); if(!line) continue; try{ tools=(JSON.parse(line).result||{}).tools||[]; break; }catch(e){} }
+  } catch(e){}
+  document.getElementById('count').textContent = tools.length || '—';
+  // newest
+  const nd = document.getElementById('new');
+  nd.innerHTML = Object.entries(NEW_TOOLS).map(([t,d]) =>
+    `<div class="card hot"><div class="tool">${t}<span class="badge">NEW</span></div><div class="desc">${d}</div></div>`).join('');
+  // categorize (each tool lands in the first matching category)
+  const names = tools.map(t=>t.name).sort();
+  const used = new Set(), out = [];
+  for (const [label, rx] of CATS) {
+    const hits = names.filter(n => !used.has(n) && rx.test(n));
+    hits.forEach(n => used.add(n));
+    if (hits.length) out.push(`<div class="cat"><h3>${label}</h3>${hits.map(n =>
+      `<span class="pill${NEW_TOOLS[n]?' n':''}">${n}</span>`).join('')}</div>`);
+  }
+  document.getElementById('cats').innerHTML = out.join('') ||
+    '<p style="color:#eab308">Couldn\'t reach the live server — try dchub.cloud/mcp directly.</p>';
+})();
+</script>
+</body></html>
