@@ -96,37 +96,66 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function openPR(t, newContent) {
   const me = (await gh('GET', '/user')).json.login;
   if (!me) throw new Error('PAT /user failed');
-  const fork = `${me}/${t.upstream.split('/')[1]}`;
-  // 1) fork (idempotent)
-  await gh('POST', `/repos/${t.upstream}/forks`);
-  for (let k = 0; k < 10; k++) { if ((await gh('GET', `/repos/${fork}`)).ok) break; await sleep(3000); }
-  // 2) idempotency: open PR from our head already?
-  const existing = await gh('GET', `/repos/${t.upstream}/pulls?head=${me}:${HEAD_BRANCH}&state=open`);
+  const headBranch = `add-dchub-${t.key}`;   // per-target so branches never collide across forks
+  // 1) fork (idempotent). ★ Use the RETURNED full_name — you can only have one
+  // fork of a repo per account, and when the basename collides GitHub renames
+  // it (awesome-mcp-servers-1), so never assume {me}/{basename}.
+  const forkRes = await gh('POST', `/repos/${t.upstream}/forks`);
+  const fork = forkRes.json?.full_name;
+  if (!fork) throw new Error(`fork failed ${forkRes.status}: ${JSON.stringify(forkRes.json).slice(0, 120)}`);
+  console.log(`      fork=${fork} head=${me}:${headBranch}`);
+  // 2) wait for the fork's base branch to be ready (fork copy is async)
+  const readBase = async () => {
+    for (let k = 0; k < 15; k++) {
+      const r = await gh('GET', `/repos/${fork}/git/ref/heads/${t.base}`);
+      if (r.ok && r.json?.object?.sha) return r.json.object.sha;
+      await sleep(3000);
+    }
+    return null;
+  };
+  if (!(await readBase())) throw new Error(`fork ${fork} base '${t.base}' not ready`);
+  // ★ sync the fork's base with upstream FIRST — a stale fork (e.g. left over
+  // from a prior attempt) would otherwise make the PR diff show every upstream
+  // change since the fork, not just our one line. merge-upstream fast-forwards.
+  await gh('POST', `/repos/${fork}/merge-upstream`, { branch: t.base });
+  const baseSha = await readBase();
+  if (!baseSha) throw new Error(`fork ${fork} base '${t.base}' not readable after sync`);
+  // 3) idempotency: open PR from our head already?
+  const existing = await gh('GET', `/repos/${t.upstream}/pulls?head=${me}:${headBranch}&state=open`);
   if (existing.ok && Array.isArray(existing.json) && existing.json.length) {
     return { skipped: `open PR already exists: ${existing.json[0].html_url}` };
   }
-  // 3) branch off the fork's base
-  const baseRef = await gh('GET', `/repos/${fork}/git/ref/heads/${t.base}`);
-  const baseSha = baseRef.json?.object?.sha;
-  if (!baseSha) throw new Error(`no base sha for ${fork}`);
-  const mkRef = await gh('POST', `/repos/${fork}/git/refs`, { ref: `refs/heads/${HEAD_BRANCH}`, sha: baseSha });
+  // 4) branch off the fork's base (idempotent — 422 = already exists)
+  const mkRef = await gh('POST', `/repos/${fork}/git/refs`, { ref: `refs/heads/${headBranch}`, sha: baseSha });
   if (!mkRef.ok && mkRef.status !== 422) throw new Error(`branch create failed ${mkRef.status}`);
-  // 4) write the file on our branch
-  const cur = await gh('GET', `/repos/${fork}/contents/${t.path}?ref=${HEAD_BRANCH}`);
+  // 5) write the file on our branch
+  const cur = await gh('GET', `/repos/${fork}/contents/${t.path}?ref=${headBranch}`);
   const putRes = await gh('PUT', `/repos/${fork}/contents/${t.path}`, {
     message: `Add DC Hub MCP server`,
     content: Buffer.from(newContent, 'utf8').toString('base64'),
-    branch: HEAD_BRANCH,
+    branch: headBranch,
     sha: cur.json?.sha,
   });
   if (!putRes.ok) throw new Error(`contents PUT failed ${putRes.status}: ${JSON.stringify(putRes.json).slice(0, 160)}`);
-  // 5) open the PR
+  // 6) open the PR (retry once — cross-fork head can lag a beat after the push)
   const body = `Adds **DC Hub** — a remote MCP server (streamable-http at ${HOMEPAGE}).\n\n${DESC}\n\nRepo: ${REPO_URL} · License CC-BY-4.0 · In the official MCP registry.`;
-  const pr = await gh('POST', `/repos/${t.upstream}/pulls`, {
-    title: `Add DC Hub MCP server`, head: `${me}:${HEAD_BRANCH}`, base: t.base, body, maintainer_can_modify: true,
-  });
-  if (!pr.ok) throw new Error(`PR create failed ${pr.status}: ${JSON.stringify(pr.json).slice(0, 200)}`);
-  return { url: pr.json.html_url };
+  let pr;
+  for (let a = 0; a < 2; a++) {
+    pr = await gh('POST', `/repos/${t.upstream}/pulls`, {
+      title: `Add DC Hub MCP server`, head: `${me}:${headBranch}`, base: t.base, body, maintainer_can_modify: true,
+    });
+    if (pr.ok) break;
+    if (pr.status === 422 && /already exists/i.test(JSON.stringify(pr.json))) {
+      return { skipped: 'PR already exists (422)' };
+    }
+    await sleep(4000);
+  }
+  if (pr.ok) return { url: pr.json.html_url };
+  // GitHub sometimes blocks API-created PRs to popular repos (anti-spam) or the
+  // token type can't createPullRequest on a non-owned repo. The fork+branch+entry
+  // are READY — hand back the one-click compare URL so a human opens it in 1 click.
+  const compare = `https://github.com/${t.upstream}/compare/${encodeURIComponent(t.base)}...${me}:${encodeURIComponent(headBranch)}?expand=1`;
+  return { blocked: `${pr.status} ${JSON.stringify(pr.json).slice(0, 90)}`, compare };
 }
 
 (async () => {
@@ -147,6 +176,7 @@ async function openPR(t, newContent) {
     try {
       const r = await openPR(t, updated);
       if (r.skipped) console.log(`      skip: ${r.skipped}`);
+      else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked})`); console.log(`      → branch is READY — open the PR in 1 click:\n        ${r.compare}`); }
       else { console.log(`      ✅ PR opened: ${r.url}`); opened++; }
     } catch (e) { console.log(`      ❌ ${e.message}`); }
   }
