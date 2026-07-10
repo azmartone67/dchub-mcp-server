@@ -6637,6 +6637,21 @@ app.post('/mcp', async (req, res) => {
   try {
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
+    // r-alias (2026-07-10): normalize a GUESSED tool name to the real one here —
+    // BEFORE the session/stateless branch — so it applies on EVERY tools/call
+    // path (a session-bearing call routes at the `sessions.has(sid)` branch below
+    // and never reaches the stateless handler). `req.body` is the same object the
+    // downstream `const body = req.body` points at, so this one mutation covers all.
+    try {
+      if (req.body && req.body.method === 'tools/call' && req.body.params && req.body.params.name) {
+        const _canon = Object.prototype.hasOwnProperty.call(TOOL_ALIASES, req.body.params.name)
+          ? TOOL_ALIASES[req.body.params.name] : null;
+        if (_canon) {
+          console.log(`[alias] ${req.body.params.name} → ${_canon} sid=${(sessionId || '').slice(0, 8)}`);
+          req.body.params.name = _canon;
+        }
+      }
+    } catch (_) {}
     let apiKey      = req.headers['x-api-key']
                    || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
                    || null;
@@ -6890,16 +6905,6 @@ app.post('/mcp', async (req, res) => {
     if (body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
       const platform   = detectPlatformFromInit(body, userAgent);
-      // r-alias: rewrite a guessed tool name to the real one before dispatch.
-      try {
-        const _reqName = body?.params?.name;
-        const _canon = _reqName && Object.prototype.hasOwnProperty.call(TOOL_ALIASES, _reqName)
-          ? TOOL_ALIASES[_reqName] : null;
-        if (_canon) {
-          console.log(`[alias] ${_reqName} → ${_canon} sid=${(sessionId || '').slice(0, 8)} platform=${platform}`);
-          body.params.name = _canon;
-        }
-      } catch (_) {}
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
       let _descOverrides = null;
