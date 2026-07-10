@@ -46,6 +46,15 @@ const TARGETS = [
     alphabetical: false,               // MobinX categories aren't sorted — append at end
     entry: `-   **[DC Hub](${REPO_URL})** [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=social)](${REPO_URL}): ${DESC}`,
   },
+  {
+    // TensorBlock keeps entries in per-category docs/<cat>.md pages (not the README).
+    key: 'tensorblock', upstream: 'TensorBlock/awesome-mcp-servers', base: 'main',
+    path: 'docs/data-analysis--business-intelligence.md',
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: 'Data Analysis & Business Intelligence',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (300+ US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 2,000+ M&A deals; 70 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
+  },
 ];
 
 const raw = (repo, br, path) => `https://raw.githubusercontent.com/${repo}/${br}/${path}`;
