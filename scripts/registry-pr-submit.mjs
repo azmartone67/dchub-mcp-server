@@ -18,6 +18,8 @@
 //     no auto-guessed categories.
 // ============================================================================
 
+import { appendFileSync } from 'node:fs';
+
 const NAME = 'DC Hub';
 const HOMEPAGE = 'https://dchub.cloud/mcp';
 const REPO_URL = 'https://github.com/azmartone67/dchub-mcp-server';
@@ -161,6 +163,7 @@ async function openPR(t, newContent) {
 (async () => {
   console.log(`▶ registry-pr-submit — mode=${DRY ? 'DRY-RUN' : 'LIVE'} (PAT=${PAT ? 'set' : 'absent'}, LIVE=${LIVE}), max ${MAX_PR_PER_RUN}/run\n`);
   let opened = 0;
+  const readyLinks = [];   // blocked-but-ready: {key, compare} for the run summary
   for (const t of TARGETS) {
     const res = await fetch(raw(t.upstream, t.base, t.path));
     if (!res.ok) { console.log(`  ~ ${t.key}: README fetch ${res.status} — skip`); continue; }
@@ -176,9 +179,18 @@ async function openPR(t, newContent) {
     try {
       const r = await openPR(t, updated);
       if (r.skipped) console.log(`      skip: ${r.skipped}`);
-      else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked})`); console.log(`      → branch is READY — open the PR in 1 click:\n        ${r.compare}`); }
+      else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked})`); console.log(`      → branch is READY — open the PR in 1 click:\n        ${r.compare}`); readyLinks.push({ key: t.key, compare: r.compare }); }
       else { console.log(`      ✅ PR opened: ${r.url}`); opened++; }
     } catch (e) { console.log(`      ❌ ${e.message}`); }
   }
   console.log(`\n${DRY ? 'DRY-RUN complete (no PRs opened).' : `Done — ${opened} PR(s) opened.`}`);
+  // Surface blocked-but-ready PRs on the run's Summary page so they're one click
+  // away (GitHub anti-spam blocks API PR-create on this account; human-initiated
+  // PRs aren't blocked). Once the account flag clears, these auto-open instead.
+  if (readyLinks.length && process.env.GITHUB_STEP_SUMMARY) {
+    const md = ['## 🔗 Registry PRs ready to open (1 click each)\n',
+      'Auto-PR is blocked by a GitHub account-level restriction; each branch is prepared with a clean +1 diff — click to open:\n',
+      ...readyLinks.map((l) => `- **${l.key}** → [open PR](${l.compare})`), ''].join('\n');
+    try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, md); } catch (_) {}
+  }
 })().catch((e) => { console.error('fatal:', e.message); process.exit(1); });
