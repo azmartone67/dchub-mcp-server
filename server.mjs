@@ -6675,7 +6675,14 @@ app.post('/mcp', async (req, res) => {
     // The true client IP rides in X-Forwarded-For (first hop). Capture it once
     // here and thread it through ctx → trackToolCall so telemetry attributes
     // the real origin. Falls back to the socket peer when XFF is absent.
-    const clientIp  = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    // r-clientip (2026-07-10): CF strips X-Forwarded-For on worker
+    // subrequests, so XFF's first token here was the CF egress POP, not the
+    // caller — mcp_calls_identity's agent_id (md5 of that token) was counting
+    // Cloudflare POPs as "agents". The dchubapiproxy worker (v4.9.28) now
+    // forwards the real caller IP in X-DC-Client-IP; prefer it, keep the XFF
+    // first-token as the fallback for direct (non-worker) callers.
+    const clientIp  = (req.headers['x-dc-client-ip'] || '').trim()
+                   || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
                    || req.socket?.remoteAddress
                    || null;
     // r-x402-honor (2026-06-22): the per-call x402 payment proof rides as an
