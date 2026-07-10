@@ -32,20 +32,19 @@ const DRY = !LIVE;
 // display-name used for the alphabetical guard + PR title
 const DESC = 'Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (300+ markets), ISO grid telemetry, fiber routes, 70 tools. Remote MCP at ' + HOMEPAGE + ' — query and cite.';
 
+// PR-accepting, README-based awesome-mcp lists we're missing from. NB: wong2 +
+// appcypher were dropped 2026-07-10 — their owners DISABLED pull requests (the
+// pulls API 404s), so no one can submit there; the prCheck() guard below also
+// auto-skips any future repo that disables PRs. TensorBlock (docs/<cat>.md
+// subfiles + its own indexer) and toolsdk-ai (JSON registry) use different
+// submission mechanisms — add them with bespoke handling later.
 const TARGETS = [
   {
-    key: 'wong2', upstream: 'wong2/awesome-mcp-servers', base: 'main', path: 'README.md',
+    key: 'mobinx', upstream: 'MobinX/awesome-mcp-list', base: 'main', path: 'README.md',
     listedRe: /dchub|dc[\s-]?hub/i,
-    section: '## Community Servers',
-    alphabetical: true,
-    entry: `- **[DC Hub](${REPO_URL})** - ${DESC}`,
-  },
-  {
-    key: 'appcypher', upstream: 'appcypher/awesome-mcp-servers', base: 'main', path: 'README.md',
-    listedRe: /dchub|dc[\s-]?hub/i,
-    section: 'name="research-data"',   // match the Research & Data header line
-    alphabetical: false,               // append at end of the category
-    entry: `- [DC Hub](${REPO_URL}) - ${DESC}`,
+    section: '### 🧮 Data Science Tools',
+    alphabetical: false,               // MobinX categories aren't sorted — append at end
+    entry: `-   **[DC Hub](${REPO_URL})** [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=social)](${REPO_URL}): ${DESC}`,
   },
 ];
 
@@ -98,6 +97,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function openPR(t, newContent) {
   const me = (await gh('GET', '/user')).json.login;
   if (!me) throw new Error('PAT /user failed');
+  // Skip repos whose owner DISABLED pull requests — the pulls API 404s (wong2 +
+  // appcypher do exactly this). No fork/PR is possible there by anyone.
+  const prCheck = await gh('GET', `/repos/${t.upstream}/pulls?per_page=1`);
+  if (prCheck.status === 404) return { skipped: 'PRs disabled on this repo (owner setting) — cannot submit' };
   const headBranch = `add-dchub-${t.key}`;   // per-target so branches never collide across forks
   // 1) fork (idempotent). ★ Use the RETURNED full_name — you can only have one
   // fork of a repo per account, and when the basename collides GitHub renames
