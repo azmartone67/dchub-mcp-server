@@ -49,6 +49,42 @@ import { readFileSync } from 'node:fs';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, withQueryEcho } from './lib/result-shaping.mjs';
 
+// r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
+// tool surface and invent plausible-but-wrong names. A live cross-platform test
+// showed Copilot inventing `create_alert` / `get_market_universe` /
+// `rank_markets_for_ai_workloads`, Grok reaching for `get_transactions` /
+// `list_recent_deals` and wrongly assuming there is no digest tool. Route those
+// guesses to the REAL tool so a guessing agent SUCCEEDS instead of getting
+// "tool not found". Call-time only — aliases NEVER appear in tools/list, and
+// every hit is logged so we can grow this map from what agents actually type.
+// (Keys must NOT collide with a real tool name; values MUST be real tools.)
+const TOOL_ALIASES = {
+  // alerts / watches
+  create_alert: 'set_market_alert', set_alert: 'set_market_alert',
+  watch_market: 'set_market_alert', watch_market_dcpi: 'set_market_alert',
+  create_market_alert: 'set_market_alert', watch_site: 'set_site_alert',
+  // market ranking / universe
+  get_market_universe: 'rank_markets', rank_markets_for_ai_workloads: 'rank_markets',
+  rank_markets_for_ai: 'rank_markets', best_markets: 'rank_markets',
+  get_market_stats: 'get_market_context', get_market_rankings: 'rank_markets',
+  // deals / transactions
+  get_transactions: 'list_transactions', list_recent_deals: 'list_transactions',
+  list_deals: 'list_transactions', get_deals: 'list_transactions',
+  recent_deals: 'list_transactions',
+  // prices / grid
+  get_capacity_prices: 'get_energy_prices', get_power_prices: 'get_energy_prices',
+  get_grid: 'get_grid_scoreboard', grid_scoreboard: 'get_grid_scoreboard',
+  // risk / site
+  get_water_status: 'get_water_risk',
+  get_composite_site: 'get_composite_site_score', get_climate: 'get_climate_intel',
+  get_disaster: 'get_disaster_risk',
+  // digest / key
+  subscribe_weekly_digest: 'subscribe_digest', subscribe_to_digest: 'subscribe_digest',
+  get_free_key: 'claim_free_key', claim_key: 'claim_free_key',
+  // discovery
+  list_tools: 'discover_tools', get_tools: 'discover_tools',
+};
+
 
 // phase39_human_message — paywall response enrichment for higher conversion
 // Adds a literal markdown string that AI clients (Claude/Cursor/Cline)
@@ -6854,6 +6890,16 @@ app.post('/mcp', async (req, res) => {
     if (body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
       const platform   = detectPlatformFromInit(body, userAgent);
+      // r-alias: rewrite a guessed tool name to the real one before dispatch.
+      try {
+        const _reqName = body?.params?.name;
+        const _canon = _reqName && Object.prototype.hasOwnProperty.call(TOOL_ALIASES, _reqName)
+          ? TOOL_ALIASES[_reqName] : null;
+        if (_canon) {
+          console.log(`[alias] ${_reqName} → ${_canon} sid=${(sessionId || '').slice(0, 8)} platform=${platform}`);
+          body.params.name = _canon;
+        }
+      } catch (_) {}
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
       let _descOverrides = null;
