@@ -1,0 +1,50 @@
+name: registry PR auto-submit
+
+# 2026-07-09 — the one automatable "onboard a NEW MCP partner" path.
+# Most registries require an owner login / have no API, but the GitHub
+# awesome-mcp-servers curated lists accept PRs. This opens a well-formatted,
+# idempotent PR to each configured list DC Hub is MISSING from.
+#
+# SAFE BY DEFAULT: dry-run unless BOTH secrets.REGISTRY_PR_PAT is set AND
+# repo variable REGISTRY_PR_LIVE=1. Manual dispatch defaults to dry-run.
+#   - REGISTRY_PR_PAT: a fine-grained PAT with `public_repo` (fork + PR) scope,
+#     owned by the account that should author the PRs (azmartone67).
+#   - vars.REGISTRY_PR_LIVE=1: flips scheduled runs from dry-run to live.
+# Idempotent (skips if already listed or an open PR exists) + rate-limited
+# (REGISTRY_PR_MAX, default 1 PR/run) so it never spams maintainers.
+
+on:
+  schedule:
+    - cron: '30 7 * * 1'    # weekly, Monday 07:30 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Force dry-run (detect gaps, open nothing)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-pr-submit
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Detect gaps / open PRs
+        env:
+          REGISTRY_PR_PAT: ${{ secrets.REGISTRY_PR_PAT }}
+          REGISTRY_PR_MAX: '1'
+        run: |
+          # A manual dispatch with dry_run=true (the default) forces dry-run
+          # regardless of the REGISTRY_PR_LIVE variable, so you can preview
+          # exactly what it would submit before ever going live.
+          LIVE_FLAG="${{ vars.REGISTRY_PR_LIVE }}"
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then LIVE_FLAG=""; fi
+          env REGISTRY_PR_LIVE="$LIVE_FLAG" node scripts/registry-pr-submit.mjs
