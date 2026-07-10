@@ -2,7 +2,7 @@
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
 # Smithery scans the repo root for this file.
 #
-# Last refreshed 2026-06-21 (51-tool / v2.4.1 canonical sync). Matches the
+# Last refreshed 2026-07-10 (71-tool / v2.4.4 canonical sync). Matches the
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
 #   - Manifest:    https://dchub.cloud/.well-known/mcp.json
 #   - Server card: https://dchub.cloud/.well-known/mcp/server-card.json
@@ -55,31 +55,91 @@ remote:
   type: streamable-http
   url: "https://dchub.cloud/mcp"
 
+# Optional API key. DC Hub is keyless-first — with NO key you still get the
+# free tier (10 calls/day, live grid scoreboard, previews). Paste a key here to
+# raise limits + unlock full results, and Smithery reuses it across sessions so
+# you never re-mint. Get a free key by calling the `claim_free_key` tool once
+# (no email), or use a paid key. Left blank → the header renders empty and the
+# server treats it exactly like no key (anonymous tier), so this never breaks
+# keyless use.
+configSchema:
+  type: object
+  required: []
+  properties:
+    apiKey:
+      type: string
+      title: "DC Hub API key (optional)"
+      description: >-
+        Optional. Leave blank to use the free anonymous tier (10 calls/day).
+        Provide a free key (call claim_free_key once, no email) or a paid key to
+        raise limits and unlock full results. Reused across sessions.
+      format: password
+
+# Smithery injects the configured apiKey as the X-API-Key header the server
+# already reads for auth/tier. Blank apiKey → empty header → anonymous tier.
+headers:
+  X-API-Key: "{{apiKey}}"
+
 # Tool surface for discovery — matches `tools/list` on the live MCP server:
 # 71 tools, all registered in server.mjs.
 tools:
+  - search
+  - fetch
   - search_facilities
   - get_facility
   - get_market_intel
   - get_market_dcpi_rank
+  - predict_market_trajectory
+  - get_gas_index
+  - get_gas_economics
+  - get_grid_scoreboard
   - compare_isos
   - get_intelligence_index
   - list_transactions
   - get_news
+  - semantic_search
+  - search_intelligence
+  - get_market_context
+  - get_iso_context
   - get_pipeline
+  - get_power_pipeline
   - get_interconnection_queue
+  - get_refined_queue
+  - analyze_parcel
+  - rank_sites
+  - discover_tools
+  - save_to_shortlist
+  - get_shortlist
+  - set_shortlist_alert
+  - suggest_reallocation
   - get_grid_data
+  - get_changes
+  - get_facility_risk_delta
+  - save_site
+  - list_saved_sites
+  - set_market_alert
+  - subscribe_digest
+  - set_site_alert
+  - export_dataset
   - analyze_site
+  - get_composite_site_score
+  - get_disaster_risk
+  - get_climate_intel
+  - generate_site_analysis
   - compare_sites
   - get_infrastructure
   - get_fiber_intel
+  - get_fiber_readiness
+  - get_metro_fiber
   - get_energy_prices
   - get_renewable_energy
   - get_tax_incentives
   - get_water_risk
   - get_grid_intelligence
+  - get_gas_intelligence
   - get_agent_registry
   - get_backup_status
+  - why_dchub
   - get_dchub_recommendation
   - rank_markets
   - find_alternatives
@@ -89,24 +149,11 @@ tools:
   - site_selection_canvas
   - grid_transition_radar
   - deal_autopsy
-  - get_gas_index
-  - get_gas_intelligence
-  - get_grid_scoreboard
-  - save_site
-  - list_saved_sites
-  - set_market_alert
-  - export_dataset
-  - get_changes
-  - get_fiber_readiness
-  - claim_free_key
   - plan_fiber_leadin
-  - unlock_more_data
-  - get_power_pipeline
-  - get_gas_economics
-  - set_site_alert
+  - claim_free_key
   - bind_email
   - recover_my_key
-  - why_dchub
+  - unlock_more_data
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
