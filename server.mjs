@@ -3202,6 +3202,18 @@ function withCitation(result, toolName) {
       // content[0]-embedded version (idempotent on _source/_cite) so older
       // already-stamped responses also gain the in-payload citation.
       const base = embedded === result.content ? result : { ...result, content: embedded };
+      // r-cite-object (2026-07-11): the monetize shell's contract canary caught
+      // this on its FIRST tick — tools whose content was already attribution-
+      // stamped returned here and never gained the machine-readable
+      // structuredContent.citation object (get_gas_index/why_dchub had none
+      // while get_grid_scoreboard did). The object is data fidelity, not a
+      // nudge — stamp it on this branch too, same rule as the provenance mirror.
+      const sc0 = (base.structuredContent && typeof base.structuredContent === 'object'
+                   && !Array.isArray(base.structuredContent)) ? { ...base.structuredContent } : null;
+      if (sc0 && !sc0.citation) {
+        sc0.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString() };
+        return _withNextSession(_withProvenance({ ...base, structuredContent: sc0 }, toolName));
+      }
       return _withNextSession(_withProvenance(base, toolName));
     }
     const ATTR = 'Source: DC Hub (dchub.cloud) — live data-center & energy intelligence. '
