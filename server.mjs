@@ -3025,6 +3025,7 @@ const _ENTITY_MAP = {
   get_market_intel: 'market', rank_markets: 'market', get_market_dcpi_rank: 'market',
   get_grid_data: 'grid', get_grid_intelligence: 'grid', get_interconnection_queue: 'grid',
   get_refined_queue: 'queue_results',
+  get_retirement_headroom: 'retirement_headroom_results',
   analyze_parcel: 'parcel_analysis',
   rank_sites: 'ranked_sites',
   discover_tools: 'tool_families',
@@ -5596,6 +5597,23 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
+  // r-retirement-headroom (2026-07-11, Gemini co-design r3): tool #72. Filed
+  // EIA-860M retirements = concrete near-term headroom events. region_iso
+  // filters on the generator's own EIA balancing_authority_code — real market
+  // boundaries, not state lines.
+  trackedTool(srv, 'get_retirement_headroom',
+    'Scans scheduled EIA-860M generator retirements to find near-term transmission grid headroom — a retiring plant is a CONCRETE headroom event (its POI frees injection capacity), from FILED data, not forecasts. Returns _entity=retirement_headroom_results: retiring generators inside your horizon (name, MW, fuel, prime mover, retirement_date), representative_point, nearest substations with distance_km + count within 25 km, county-level queue_pressure (competing in-progress MW), iso_context (the generator\'s own EIA balancing-authority code), and a pre-filled site_evaluation_handoff (analyze_site + get_water_risk args, capacity_mw = YOUR target load). Try: get_retirement_headroom target_mw=50 horizon_months=18 region_iso=MISO — "50 MW opening near a substation inside 18 months, sidestepping the 4-7yr mega-queue." Honesty: meta.caveat flags that filed dates are subject to ISO reliability reviews (RMR extensions). Use to find WHERE capacity opens next; for what\'s already queued use get_refined_queue; for one site use analyze_site.',
+    { target_mw: z.number().describe('Minimum required headroom in megawatts (MW) — filters to retiring generators at/above this size. Also passed through as the handoff\'s analyze_site capacity_mw (the DC you are siting).'),
+      horizon_months: z.number().int().describe('Time horizon to look ahead for planned retirements (e.g., 12, 18, 36).'),
+      region_iso: S.describe("Optional target region or ISO (e.g., 'MISO', 'PJM', 'ERCOT', 'SPP', 'CAISO', 'NYISO', 'ISONE'). Matches the generator's own EIA balancing-authority code — real market boundaries, not state lines. Comma-separated for a union."),
+      fuel_filter: S.describe("Optional filter for retiring fuel categories, substring-matched (e.g., 'Coal', 'Natural Gas', 'Petroleum')."),
+      limit: LIMIT },
+    async (a) => {
+      const data = await callAPI('/api/v1/retirement-headroom', a);
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+    });
+
   trackedTool(srv, 'analyze_parcel',
     'Structured read of a parcel BOUNDARY you already have (GeoJSON Polygon/MultiPolygon). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, and representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read). Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary (a GIS/Regrid export, a drawn parcel, an assessor polygon) and want it anchored + sized; for a single lat/lon with no boundary use analyze_site; for the interconnection-queue survivor set use get_refined_queue. NOTE: this reads any polygon you pass — DC Hub does not yet own a parcel-boundary dataset, so get_refined_queue survivors do not auto-carry `geometry` until a parcel GIS layer is sourced.',
     { geometry: z.any().describe('GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {"type":"Polygon","coordinates":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope'),
@@ -5627,7 +5645,7 @@ function createServer(descOverrides) {
     { family: 'market', when: 'Compare or rank the 300+ metro markets (DC Hub Power Index / DCPI).', keywords: ['market','metro','dcpi','rank','vacancy','pricing'],
       tools: ['rank_markets','get_market_intel','get_market_dcpi_rank','ai_capacity_index','get_intelligence_index'] },
     { family: 'grid_power', when: 'Grid headroom, interconnection queue, power generation pipeline, energy pricing.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp'],
-      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_power_pipeline','grid_transition_radar','get_energy_prices'] },
+      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_power_pipeline','grid_transition_radar','get_energy_prices'] },
     { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
       tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
     { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+risk+tax+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select'],
