@@ -4,7 +4,7 @@
   "title": "DC Hub — Data Center & Power Intelligence",
   "description": "Live data-center, power-grid, hyperscale, fiber, gas & M&A intelligence for AI agents — query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.4.4",
+  "version": "2.4.6",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
