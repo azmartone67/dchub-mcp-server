@@ -2893,10 +2893,21 @@ function _embedSourceInContent0(content) {
     let obj;
     try { obj = JSON.parse(first.text); } catch { return content; } // not JSON → leave intact
     if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return content;
-    if ('_source' in obj && '_cite' in obj) return content; // already embedded
+    if ('_source' in obj && '_cite' in obj && 'citation' in obj) return content; // already embedded
     // Inject without disturbing existing keys/values.
     if (!('_source' in obj)) obj._source = _CITE_SOURCE;
     if (!('_cite' in obj))   obj._cite   = _CITE_LINE;
+    // r-cite-object (2026-07-11): the machine-readable citation OBJECT rides in
+    // content[0] too — many handlers return content-only, and their
+    // structuredContent is SYNTHESIZED later from this JSON, so an sc-only
+    // stamp (withCitation) never reached them (the monetize shell's contract
+    // canary caught get_gas_index/why_dchub bare while get_grid_scoreboard —
+    // whose handler builds its own sc — carried it). Additive key; the
+    // envelope is additionalProperties:true.
+    if (!('citation' in obj)) {
+      obj.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0',
+                       cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString() };
+    }
     // Re-serialize with the same producer the tools use → still JSON.parses.
     const rebuilt = { ...first, text: JSON.stringify(obj) };
     return [rebuilt, ...content.slice(1)];
