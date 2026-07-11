@@ -1,7 +1,7 @@
 // Offline unit tests for the next_session structuredContent fix.
 // Regression guard: structuredContent must never hide the content payload.
 import { describe, it, expect } from 'vitest';
-import { withNextSession, payloadObjFromContent, embedClaim, withQueryEcho } from '../lib/result-shaping.mjs';
+import { withNextSession, payloadObjFromContent, embedClaim, withQueryEcho, withProvenance, provenanceFooterLine } from '../lib/result-shaping.mjs';
 
 const NS = { tool: 'get_changes', call: 'get_changes since=24h' };
 const textResult = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
@@ -153,6 +153,108 @@ describe('withQueryEcho — the echoed query must match THIS call (concurrency g
     const out = withQueryEcho(err, 'my query');
     expect(out.error).toBe('API 500');
     expect(out.query).toBe('my query');
+  });
+});
+
+describe('withProvenance — backend PROVENANCE ENVELOPE mirror (fail-soft)', () => {
+  const PROV = {
+    source: 'DC Hub analyst desk + registry feeds',
+    method: 'analyst-verified sample over tracked registry',
+    as_of: '2026-07-10',
+    verification_counts: { verified: 4903, tracked: 21900 },
+    cite_url_template: 'https://dchub.cloud/facility/{slug}',
+    license: 'CC-BY-4.0',
+    cite_as: 'DC Hub, dchub.cloud',
+  };
+  const withBlock = (extra = {}) => ({
+    content: [{ type: 'text', text: JSON.stringify({ facilities: [{ id: 1, v: 'verified' }], provenance: PROV }) }],
+    ...extra,
+  });
+
+  it('mirrors the block into an existing structuredContent', () => {
+    const out = withProvenance(withBlock({ structuredContent: { freshness: { live: true } } }));
+    expect(out.structuredContent.provenance).toEqual(PROV);
+    expect(out.structuredContent.freshness.live).toBe(true);   // existing keys kept
+  });
+
+  it('never fabricates when the backend block is ABSENT (byte-identical, same ref)', () => {
+    const res = { content: [{ type: 'text', text: '{"facilities":[{"id":1}]}' }] };
+    expect(withProvenance(res)).toBe(res);
+  });
+
+  it('ignores a malformed provenance value (string / array) — tolerant rollout', () => {
+    const s = { content: [{ type: 'text', text: '{"provenance":"soon"}' }] };
+    expect(withProvenance(s)).toBe(s);
+    const a = { content: [{ type: 'text', text: '{"provenance":[1]}' }] };
+    expect(withProvenance(a)).toBe(a);
+  });
+
+  it('appends ONE compact line to the existing citation footer when present', () => {
+    const res = {
+      content: [
+        { type: 'text', text: JSON.stringify({ facilities: [], provenance: PROV }) },
+        { type: 'text', text: 'Source: DC Hub (dchub.cloud) — live …' },
+      ],
+    };
+    const out = withProvenance(res);
+    expect(out.content).toHaveLength(2);                        // no NEW block — appended to the footer
+    expect(out.content[1].text.startsWith('Source: DC Hub')).toBe(true); // withCitation idempotency preserved
+    expect(out.content[1].text).toContain('📎 provenance: 4,903/21,900 verified · as_of 2026-07-10 · cite DC Hub, dchub.cloud');
+    expect(out.content[0].text).toBe(res.content[0].text);      // payload byte-identical
+  });
+
+  it('falls back to its own trailing line when no citation footer exists', () => {
+    const out = withProvenance(withBlock());
+    expect(out.content).toHaveLength(2);
+    expect(out.content[1].text).toContain('📎 provenance:');
+  });
+
+  it('is idempotent — footer never stamped twice, existing sc.provenance wins', () => {
+    const once = withProvenance(withBlock({ structuredContent: { x: 1 } }));
+    const twice = withProvenance(once);
+    expect(twice.content.filter((it) => it.text.includes('📎 provenance:')).length).toBe(1);
+    const preSet = withProvenance(withBlock({ structuredContent: { provenance: { as_of: 'keep-me' } } }));
+    expect(preSet.structuredContent.provenance).toEqual({ as_of: 'keep-me' });
+  });
+
+  it('appendFooter:false → mirror only, no content change (nudge skip-set path)', () => {
+    const out = withProvenance(withBlock({ structuredContent: { x: 1 } }), { appendFooter: false });
+    expect(out.structuredContent.provenance).toEqual(PROV);
+    expect(out.content).toEqual(withBlock().content);
+  });
+
+  it('does NOT invent a structuredContent when the handler set none (withNextSession mirrors it later)', () => {
+    const out = withProvenance(withBlock());
+    expect(out.structuredContent).toBeUndefined();
+    // …and the downstream withNextSession mirror carries the block into sc:
+    const chained = withNextSession(out, NS);
+    expect(chained.structuredContent.provenance).toEqual(PROV);
+  });
+
+  it('leaves isError / malformed results untouched', () => {
+    const err = { isError: true, content: [{ type: 'text', text: JSON.stringify({ provenance: PROV }) }] };
+    expect(withProvenance(err)).toBe(err);
+    expect(withProvenance(null)).toBe(null);
+    expect(withProvenance({ content: 'nope' })).toEqual({ content: 'nope' });
+  });
+});
+
+describe('provenanceFooterLine', () => {
+  it('formats counts / as_of / cite_as compactly', () => {
+    expect(provenanceFooterLine({
+      verification_counts: { verified: 4903, tracked: 21900 }, as_of: '2026-07-10', cite_as: 'DC Hub, dchub.cloud',
+    })).toBe('📎 provenance: 4,903/21,900 verified · as_of 2026-07-10 · cite DC Hub, dchub.cloud');
+  });
+  it('degrades gracefully on partial blocks', () => {
+    expect(provenanceFooterLine({ verification_counts: { verified: 12 } })).toBe('📎 provenance: 12 verified');
+    expect(provenanceFooterLine({ verification_counts: { tracked: 7 } })).toBe('📎 provenance: 7 tracked');
+    expect(provenanceFooterLine({ as_of: '2026-07-10' })).toBe('📎 provenance: as_of 2026-07-10');
+  });
+  it('returns null when there is nothing honest to print (never fabricate)', () => {
+    expect(provenanceFooterLine({})).toBeNull();
+    expect(provenanceFooterLine({ verification_counts: { verified: 'lots' } })).toBeNull(); // non-numeric
+    expect(provenanceFooterLine(null)).toBeNull();
+    expect(provenanceFooterLine([1])).toBeNull();
   });
 });
 
