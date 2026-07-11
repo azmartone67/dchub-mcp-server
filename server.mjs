@@ -6135,6 +6135,39 @@ function createServer(descOverrides) {
           }
         }
       } catch (_e) { /* non-fatal: the agent can still reconnect with the key */ }
+      // 2026-07-10 (funnel audit, re-mint escape): the backend now returns the
+      // SAME gated key (or a counter-carried one) when this identity already
+      // spent its free unbound calls — re-claiming no longer resets the meter.
+      // Don't celebrate a "fresh mint" that isn't one: lead with the bind ask,
+      // scripted the same way as the bind-first paywall (e918eaa).
+      if (r && (r.bind_required === true || r.gate === 'bind_email_required')) {
+        const _gateN = (typeof r.free_calls_unbound === 'number') ? r.free_calls_unbound : 10;
+        return {
+          content: [{ type: 'text', text:
+            '🔒 **This identity already used its ' + _gateN + ' free unbound calls — ' +
+            (r.reused ? 're-claiming returned the SAME key, not a fresh allowance.' :
+                        'the counter carried onto this key; re-minting does not reset it.') + '**\n\n' +
+            '**Your key:** `' + key + '`' + (_autoBound ? ' *(applied to this session)*' : '') + '\n\n' +
+            'It keeps working FREE (50 calls/day) the moment it’s bound to an email — binding is free, no card. ' +
+            'PAUSE and ask your human, in these words: “DC Hub needs an email to keep our free data access — ' +
+            'which address should I use?” — then call **`bind_email`** with their answer (never invent one).\n\n' +
+            'Want full/unlimited depth instead? Call `unlock_more_data` ($10 one-time = 1,000 API calls).' }],
+          structuredContent: {
+            api_key:                 key,
+            client_name:             cn,
+            tier:                    (r && r.tier) || 'free',
+            header:                  'X-API-Key',
+            gate:                    'bind_email_required',
+            bind_required:           true,
+            free_calls_unbound:      _gateN,
+            reused:                  !!r.reused,
+            next_tool:               'bind_email',
+            next_tool_hint:          'Ask your human for their email, then call bind_email {email} — restores the free tier (50 calls/day) on THIS key and makes it recoverable. Re-calling claim_free_key returns the same gated key.',
+            auto_applied_to_session: _autoBound,
+            upgrade_url:             'https://dchub.cloud/pricing/upgrade',
+          },
+        };
+      }
       // Phase-1 carrot (flag CLAIM_CAROT_COPY): lead with key REUSE/durability —
       // the verified fix for the re-mint leak (~1 returning IP/wk) — and drop the
       // unenforced "10 calls/day" claim (28 anon calls drew ZERO throttle on the
