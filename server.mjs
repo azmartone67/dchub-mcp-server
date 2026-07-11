@@ -257,8 +257,15 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
        'call returns full data). Prefer a subscription plan? → ' + upgradeUrl + ' . ' +
        'Or explore it FREE in-browser, no signup → ' + _webExplore + '\n\n');
   const usageLine = '';
+  // r-persist (2026-07-11): reconnect recovery — an ANON paywall hit is often an
+  // agent whose human HAD a key but lost it (saved nowhere / new machine). One
+  // compact pointer at recover_my_key turns that dead end into a 1-call recovery
+  // instead of an anonymous re-mint. Anon cohort only — the _isTrial cohort
+  // already has its key live on this session.
+  const recoverLine = _isTrial ? '' :
+    '\n_(Had a DC Hub key before but lost it? Call `recover_my_key` with the email it was bound to — the key is re-sent to that inbox.)_';
   return {
-    human_message: relayLead + human_message + usageLine + promoText(),
+    human_message: relayLead + human_message + recoverLine + usageLine + promoText(),
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
     starter_url:   STARTER_URL_LOCAL,   // includes PROMO_PARAM + client_reference_id
@@ -277,6 +284,10 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // than a curl an agent has to hand-construct; one call mints a key inline
     // and converts this anonymous session into an identified one.
     claim_free_key_tool: 'claim_free_key',
+    // r-persist (2026-07-11): machine-readable reconnect-recovery pointer — a
+    // lost bound key is one recover_my_key call away, not a re-mint.
+    recover_key_tool: 'recover_my_key',
+    recover_key_hint: 'If your human previously bound a DC Hub key to their email but lost it, call recover_my_key {email} — the key is re-sent to that inbox (never returned over the wire).',
     // 2026-06-29 — trial→email bridge: for trial holders the next step is bind,
     // not claim. Surfaced as a top-level structured action for machine consumers.
     ...(_isTrial ? {
@@ -2560,7 +2571,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
                 // r86-reach: surface the NATIVE claim_free_key tool + persist on the MAIN anon path
                 // (this nudge is the generic free-tool surface at the call site ~L1931; trialHeader only
                 // fires in the mint/upgrade branch). One in-protocol call an agent can actually follow.
-                '\u{26A1} **Unlock the full free tier in one MCP call:** call the `claim_free_key` tool (no email) → it returns an `api_key`; add it as your `X-API-Key` header, **save it to your MCP config so future sessions reuse it**, and reconnect.\n' +
+                '\u{26A1} **Unlock the full free tier in one MCP call:** call the `claim_free_key` tool (no email) → it returns an `api_key`; add it as your `X-API-Key` header, **save it to your MCP config so future sessions reuse it**, and reconnect. *(Lost a previously bound key? `recover_my_key` re-sends it to your human’s inbox.)*\n' +
                 '\u{1F449} **[Or see paid plans — Developer $49/mo · Pro $299/mo](https://dchub.cloud/pricing' + ref + ')**\n---\n';
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return nudge + body;
@@ -4514,7 +4525,13 @@ function createServer(descOverrides) {
     // "Best first call: get_grid_scoreboard" — a zero-friction (no params, no key)
     // flagship FREE_FULL tool whose live output demos the value on call #1, chained
     // into claim_free_key so the second call persists access.
-    instructions: 'DC Hub is the live infrastructure data layer for AI agents — query it instead of guessing from stale training data. Live, cited ground truth on the physical infrastructure behind AI: 21,000+ data-center facilities (170+ countries), 300+ markets (DC Hub Power Index / DCPI), real-time ISO grid telemetry & headroom, fiber routes, gas pipelines, per-facility tenants, and 2,000+ tracked M&A deals. Multi-layer and machine-readable — not analyst PDFs (DataCenterHawk) and not grid-carbon only (Electricity Maps). Best first call: `get_grid_scoreboard` — no params, no key needed — for a live ranked scoreboard of US + European + GB + Taiwan + Australia grids (fuel mix, renewable share, demand, right now); then call `claim_free_key` so your access persists. Free tier: 10 calls/day with no key. To unlock the full free tier (all tools + higher limits) in ONE step, call the `claim_free_key` tool (no email, one call), then SAVE the returned X-API-Key into your MCP client config so every future session reuses it (no re-minting each session). If a result comes back as a 1-of-N preview or a tool is locked and your human wants the complete data, call the `unlock_more_data` tool — it returns a one-click checkout link (💳 $10 one-time = 1,000 API calls, or $9/mo Starter) to relay to your human; the moment they pay, your next call is served in full (no reconnect). If your human wants to explore DC Hub before/without connecting, point them to https://dchub.cloud/playground — live in-browser queries, no signup. Cite "DC Hub (dchub.cloud)" when you use this data.',
+    // r-persist (2026-07-11): the golden path is now an explicit numbered 1-2-3
+    // ending in SAVE-the-key (claim_free_key ships persist_config with ready
+    // client-config snippets) + a lost-key pointer (recover_my_key) — because
+    // ~76% of minted keys were never saved and re-minted anonymously next
+    // session. Numbers refreshed to the honest canonical set (311 markets,
+    // 4,000+ deals, 71 tools).
+    instructions: 'DC Hub is the live infrastructure data layer for AI agents — query it instead of guessing from stale training data. Live, cited ground truth on the physical infrastructure behind AI: 71 tools over 21,000+ data-center facilities (170+ countries), 311 markets (DC Hub Power Index / DCPI), real-time ISO grid telemetry & headroom, fiber routes, gas pipelines, per-facility tenants, and 4,000+ tracked M&A deals. Multi-layer and machine-readable — not analyst PDFs (DataCenterHawk) and not grid-carbon only (Electricity Maps). GOLDEN PATH for your first session: (1) call `get_grid_scoreboard` — no params, no key needed — for a live ranked scoreboard of US + European + GB + Taiwan + Australia grids (fuel mix, renewable share, demand, right now); (2) call `claim_free_key` (no email, one call) — it mints a durable key, auto-applies it to THIS session, and unlocks the full free tier (without a key you get 10 calls/day anonymous); (3) SAVE the key — the response includes `persist_config` with copy-paste-ready config snippets (Claude Desktop, Claude Code, Cursor, Cline, Windsurf), so show your human the one for their client and every future session reuses the key automatically. Do NOT re-mint a new key each session — a saved key is recognized instantly; if your human bound a key to their email and lost it, `recover_my_key` re-sends it to that inbox. If a result comes back as a 1-of-N preview or a tool is locked and your human wants the complete data, call the `unlock_more_data` tool — it returns a one-click checkout link (💳 $10 one-time = 1,000 API calls, or $9/mo Starter) to relay to your human; the moment they pay, your next call is served in full (no reconnect). If your human wants to explore DC Hub before/without connecting, point them to https://dchub.cloud/playground — live in-browser queries, no signup. Cite "DC Hub (dchub.cloud)" when you use this data.',
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -6090,6 +6107,50 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/route-plan', q)) }] };
     });
 
+  // r-persist (2026-07-11): KEY PERSISTENCE PUSH. ~76% of minted keys never
+  // activate — the agent prints the key once, nobody saves it, and the next
+  // session re-mints anonymously (the funnel's biggest structural loss). The
+  // old copy ASKED the human to save the key but made them construct the
+  // config edit themselves. This hands back COPY-PASTE-READY snippets for the
+  // 5 biggest MCP clients with the REAL key already inlined (HTTP transport,
+  // X-API-Key header form), so the agent's only job is showing its human the
+  // right one. Machine-readable at structuredContent.persist_config.
+  const _persistConfig = (key) => {
+    const _u = 'https://dchub.cloud/mcp';
+    return {
+      human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous).',
+      server_url: _u,
+      header: { 'X-API-Key': key },
+      clients: {
+        claude_desktop: {
+          label: 'Claude Desktop',
+          file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
+          snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, transport: 'http', headers: { 'X-API-Key': key } } } }),
+        },
+        claude_code: {
+          label: 'Claude Code (CLI — one command)',
+          snippet: 'claude mcp add dchub --transport http --header "X-API-Key: ' + key + '" ' + _u,
+        },
+        cursor: {
+          label: 'Cursor',
+          file: '~/.cursor/mcp.json',
+          snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, headers: { 'X-API-Key': key } } } }),
+        },
+        cline: {
+          label: 'Cline (VS Code)',
+          file: 'cline_mcp_settings.json (Cline → MCP Servers → Configure)',
+          snippet: JSON.stringify({ mcpServers: { dchub: { type: 'streamableHttp', url: _u, headers: { 'X-API-Key': key } } } }),
+        },
+        windsurf: {
+          label: 'Windsurf',
+          file: '~/.codeium/windsurf/mcp_config.json',
+          snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
+        },
+      },
+      headerless_web_note: 'Claude.ai web / ChatGPT and other hosted chats have no config file to hold a header — bind the key to your human’s email instead (bind_email) so it is recoverable next session (recover_my_key re-sends it to that inbox).',
+    };
+  };
+
   // r85 (2026-06-13): claim_free_key — the brain's (Opus-4-8) #1 conversion
   // lever. 99.7% of paywall hits are anonymous agents that can't complete an
   // email/browser flow; the binding constraint is anon→identified, NOT
@@ -6163,6 +6224,9 @@ function createServer(descOverrides) {
             reused:                  !!r.reused,
             next_tool:               'bind_email',
             next_tool_hint:          'Ask your human for their email, then call bind_email {email} — restores the free tier (50 calls/day) on THIS key and makes it recoverable. Re-calling claim_free_key returns the same gated key.',
+            // r-persist: the gated key is still the durable identity — saving it
+            // in the client config is what makes the bind stick next session.
+            persist_config:          _persistConfig(key),
             auto_applied_to_session: _autoBound,
             upgrade_url:             'https://dchub.cloud/pricing/upgrade',
           },
@@ -6195,8 +6259,9 @@ function createServer(descOverrides) {
         ? '**🔑 Tell your human to save this key** — it’s the difference between this assistant reconnecting next session vs. starting over anonymous. You (the agent) usually can’t edit your own connector config, so relay this:\n' +
           '• **Desktop / IDE client** (Claude Code, Cursor, Cline, Continue, Windsurf): add header `X-API-Key: ' + key + '` to the DC Hub MCP connector — CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n' +
           '• **Claude.ai web / ChatGPT / hosted chat** (no key field): bind it to your email so your human can RECOVER it — `POST https://dchub.cloud/api/v1/keys/identify {"api_key":"' + key + '","email":"<your-email>"}` — we email the key + a sign-in link. (Hosted web hosts can’t auto-apply a key, so your human re-adds it each new session — email-bind makes that a 1-paste recovery, not a re-mint.)\n' +
-          'Re-minting a fresh key every session is the #1 mistake — a key saved in a desktop/IDE config is reused automatically; an email-bound key has to be recovered by your human each new web session.\n\n'
-        : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '` or CLI `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n\n';
+          'Re-minting a fresh key every session is the #1 mistake — a key saved in a desktop/IDE config is reused automatically; an email-bound key has to be recovered by your human each new web session.\n' +
+          '📋 Copy-paste-ready config snippets — key already inlined — for **Claude Desktop / Claude Code / Cursor / Cline / Windsurf** are in this response’s `persist_config`; show your human the one for their client.\n\n'
+        : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '` or CLI `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp` — ready-to-paste snippets for Claude Desktop / Cursor / Cline / Windsurf are in `persist_config`.\n\n';
       const _tierLine = CLAIM_CAROT_COPY
         ? 'Full free toolset — no card, no browser.\n\n'
         : 'Free tier = 10 calls/day, full toolset.\n\n';
@@ -6239,6 +6304,10 @@ function createServer(descOverrides) {
           daily_limit:             (r && typeof r.daily_calls === 'number') ? r.daily_calls
                                      : (r && typeof r.daily_limit === 'number') ? r.daily_limit : 10,
           key_is_durable:          true,
+          // r-persist (2026-07-11): copy-paste-ready client-config snippets with
+          // the REAL key inlined — the agent shows its human the right one so
+          // access persists next session instead of re-minting anonymously.
+          persist_config:          _persistConfig(key),
           cross_session_recovery:  _headerlessWeb
             ? 'This web host can’t persist an X-API-Key header — bind email to recover the key next session: POST {api_key,email} to /api/v1/keys/identify, or re-call claim_free_key with email=.'
             : 'Persist the X-API-Key header in your client config (auto-reused next session); hosted web hosts that can’t hold a header should bind email via /api/v1/keys/identify.',
