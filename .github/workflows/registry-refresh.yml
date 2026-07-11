@@ -29,7 +29,7 @@ jobs:
     name: honest-numbers drift guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Grep source files for forbidden stale numbers
         run: |
           set -e
@@ -76,7 +76,7 @@ jobs:
     env:
       MCP_REGISTRY_DNS_KEY: ${{ secrets.MCP_REGISTRY_DNS_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Publish server.json to the official MCP registry (DNS-auth)
         run: |
           if [ ! -f server.json ]; then

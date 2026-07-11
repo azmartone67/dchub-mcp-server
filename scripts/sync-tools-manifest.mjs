@@ -51,7 +51,12 @@ const names = new Set(tools.map((t) => t.name));
 
 // ---- surfaces to keep in sync ---------------------------------------------
 const problems = [];
-const writes = [];
+// Pending fixes keyed by file so multiple fixes to the SAME file chain instead
+// of clobbering each other (e.g. smithery.yaml gets both a version rewrite and
+// a tool-count rewrite). readCur() sees earlier pending fixes.
+const pending = new Map();
+const readCur = (f) => pending.get(f) ?? read(f);
+const pend = (f, content) => pending.set(f, content);
 
 // server.json — the OFFICIAL-registry publish source (cascades to the GitHub MCP
 // Registry mirror). Its description is evergreen (no tool count to drift); the only
@@ -64,7 +69,7 @@ const writes = [];
   const meta = sj._meta && sj._meta['io.modelcontextprotocol.registry/publisher-provided'];
   if (meta && meta.toolCount !== COUNT) {
     problems.push(`server.json _meta.toolCount ${meta.toolCount} != ${COUNT}`);
-    if (FIX) { meta.toolCount = COUNT; writes.push(['server.json', JSON.stringify(sj, null, 2) + '\n']); }
+    if (FIX) { meta.toolCount = COUNT; pend('server.json', JSON.stringify(sj, null, 2) + '\n'); }
   }
 }
 
@@ -78,18 +83,30 @@ const writes = [];
   if (missing.length) problems.push(`mcp-server.json MISSING ${missing.length} tools: ${missing.join(', ')}`);
   if (extra.length) problems.push(`mcp-server.json has ${extra.length} STALE tools: ${extra.join(', ')}`);
   if (FIX) { m.version = VERSION; m.tools = tools; if ('tools_count' in m) m.tools_count = COUNT;
-    writes.push(['mcp-server.json', JSON.stringify(m, null, 2) + '\n']); }
+    pend('mcp-server.json', JSON.stringify(m, null, 2) + '\n'); }
 }
 
-// version strings in the other registry-facing files
-for (const f of ['package.json', 'smithery.yaml']) {
-  const txt = read(f);
-  if (!txt.includes(VERSION)) problems.push(`${f} does not contain canonical version ${VERSION}`);
+// version strings in the other registry-facing files. --fix REWRITES them:
+// before 2026-07-11 this was check-only, so every operator version bump of
+// server.json (the canonical version source) broke CI until package.json +
+// smithery.yaml were hand-edited — the v2.4.6 republish failed two runs in a
+// row exactly this way.
+{
+  const pj = JSON.parse(readCur('package.json'));
+  if (pj.version !== VERSION) {
+    problems.push(`package.json version ${pj.version} != ${VERSION}`);
+    if (FIX) { pj.version = VERSION; pend('package.json', JSON.stringify(pj, null, 2) + '\n'); }
+  }
+  const sy = readCur('smithery.yaml');
+  if (!sy.includes(VERSION)) {
+    problems.push(`smithery.yaml does not contain canonical version ${VERSION}`);
+    if (FIX) pend('smithery.yaml', sy.replace(/^version:\s*.*$/m, `version: "${VERSION}"`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
 for (const f of ['smithery.yaml', 'README.md', 'llms-install.md']) {
-  const txt = read(f);
+  const txt = readCur(f);
   // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
   // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
   // separately the Tools badge said tools-48 while the body said 49 (2026-06-26).
@@ -100,9 +117,9 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md']) {
   const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
   if (wrong.length) {
     problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
-    if (FIX) writes.push([f, txt
+    if (FIX) pend(f, txt
       .replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
-      .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))]);
+      .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s)));
   }
 }
 
@@ -143,9 +160,13 @@ const CANON = { markets: 311, dealsFloor: '4,000+' };
   // check the top-level .description field only. Tool-count drift in submission/
   // integration docs is out of scope here (those files intermix changelog history);
   // the canonical manifests' counts are locked by the smithery/README loop above.
+  // 2026-07-11: widened — "300+ markets" and "3,000+ deals" slipped through
+  // (the 07-10 honest-numbers pass moved canon to 311 / 4,000+ but these
+  // regexes only caught 2xx / 2,000+, so half the surfaces kept the old
+  // floors). 311 itself must NOT match.
   const STALE = [
-    { rx: /\b2\d{2}\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
-    { rx: /\b2[,.]?000\+/,                                                            why: `stale deal count (canonical ${CANON.dealsFloor})` },
+    { rx: /\b(?:2\d{2}|300)\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
+    { rx: /\b[23][,.]?000\+/,                                                                  why: `stale deal count (canonical ${CANON.dealsFloor})` },
   ];
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
@@ -186,8 +207,8 @@ if (facts) {
 
 // ---- apply / report --------------------------------------------------------
 if (FIX) {
-  for (const [f, content] of writes) fs.writeFileSync(path.join(ROOT, f), content);
-  console.log(`✓ synced to v${VERSION} / ${COUNT} tools — wrote: ${writes.map((w) => w[0]).join(', ') || '(nothing)'}`);
+  for (const [f, content] of pending) fs.writeFileSync(path.join(ROOT, f), content);
+  console.log(`✓ synced to v${VERSION} / ${COUNT} tools — wrote: ${[...pending.keys()].join(', ') || '(nothing)'}`);
   if (factProblems.length) console.warn('⚠ FACTS DRIFT (not auto-fixable — re-run dchub-backend/mcp_facts_export.py, then edit the surface):\n  - ' + factProblems.join('\n  - '));
   process.exit(0);
 }

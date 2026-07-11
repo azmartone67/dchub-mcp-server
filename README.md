@@ -3,7 +3,7 @@
 
 **Real-time data-center, power, energy & hyperscale infrastructure intelligence for AI agents.**
 
-👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against 21,000+ facilities, 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
+👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against 21,000+ facilities, 311 markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Cline, Continue, and any AI assistant doing data center site selection, energy analysis, or market research.
 
@@ -34,11 +34,11 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **126,427 substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (e.g. ERCOT ~225 GW of data-center load in the interconnection queue)
-- **3,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
+- **4,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
-- **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
+- **Market intelligence** — 311 markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
 
 **71 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
