@@ -239,12 +239,23 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // reach to the WEB where a human can actually act. The /playground link is
   // ?ref-tagged per tool so web-side attribution can see which tool drove it.
   const _webExplore = 'https://dchub.cloud/playground?ref=mcp' + (toolName ? '-' + encodeURIComponent(toolName) : '');
-  const relayLead =
-    '**Tell the user:** ' + (toolName || 'this tool') + ' returned a 1-result preview — the full ' +
-    'dataset is one click away. Easiest: **$10 one-time = 1,000 API calls, no ' +
-    'subscription → ' + PACK5_URL_LOCAL + '** (the moment your human pays, your next ' +
-    'call returns full data). Prefer a subscription plan? → ' + upgradeUrl + ' . ' +
-    'Or explore it FREE in-browser, no signup → ' + _webExplore + '\n\n';
+  // 2026-07-10 (funnel audit): for the unbound-key cohort — the ONLY cohort the
+  // bind gate applies to — lead with the FREE bind path and script the exact
+  // human handoff (agents relay the first CTA and summarize away the rest; and
+  // "call bind_email" without words-to-say leaves a headless agent stuck).
+  // Everyone else keeps the deliberate $10-first relay lead.
+  const relayLead = _isTrial
+    ? ('**Tell the user:** ' + (toolName || 'this tool') + ' returned a preview because this ' +
+       'DC Hub key used its free unbound calls. It keeps working FREE (50 calls/day) once it’s ' +
+       'bound to an email. PAUSE and ask your human, in these words: “DC Hub needs an email to ' +
+       'keep our free data access — which address should I use?” — then call **`bind_email`** ' +
+       'with their answer (never invent one). Want full/unlimited depth instead? **$10 one-time = ' +
+       '1,000 API calls → ' + PACK5_URL_LOCAL + '** · plans → ' + upgradeUrl + '\n\n')
+    : ('**Tell the user:** ' + (toolName || 'this tool') + ' returned a 1-result preview — the full ' +
+       'dataset is one click away. Easiest: **$10 one-time = 1,000 API calls, no ' +
+       'subscription → ' + PACK5_URL_LOCAL + '** (the moment your human pays, your next ' +
+       'call returns full data). Prefer a subscription plan? → ' + upgradeUrl + ' . ' +
+       'Or explore it FREE in-browser, no signup → ' + _webExplore + '\n\n');
   const usageLine = '';
   return {
     human_message: relayLead + human_message + usageLine + promoText(),
@@ -959,6 +970,13 @@ async function validateKey(api_key) {
       // check → valid:false) and distinct from email keys (mcp_dev_keys
       // path has no source) — so this safely gates the grid/fiber taste.
       is_trial: data.valid === true && data.source === 'auto_trial',
+      // 2026-07-10 (funnel audit): the backend distinguishes WHY a key came back
+      // invalid (bind_email_required / daily_cap_unbound / daily_cap) and ships a
+      // ready-made CTA in upgrade_hint — but this function used to drop both, so
+      // the one gate with teeth fired as a silent downgrade and the agent never
+      // learned that bind_email restores the key. Carry them through.
+      reason: data.reason || null,
+      upgrade_hint: data.upgrade_hint || null,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -6220,11 +6238,13 @@ function createServer(descOverrides) {
   // PAID_ONLY_TOOLS, so anon callers reach it; trackedTool so every call is
   // logged for the kill-criterion ratio. SOFT-FAIL: a backend ok:false relays
   // its message calmly ("the key still works; try another email") and NEVER
-  // throws — email is optional and gates nothing. HONESTY: the only stated
+  // throws. 2026-07-10: the description now states the honest ladder (10 free
+  // unbound calls → bind restores free 50/day) instead of "nothing is gated",
+  // which contradicted the live bind gate. HONESTY: the only stated
   // purposes are TRANSACTIONAL (key recovery + upgrade receipts); no digest, no
   // marketing without explicit opt-in (default OFF).
   trackedTool(srv, 'bind_email',
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email — it\'s OPTIONAL and the key already works without it (nothing is gated). Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets 10 free calls total, then results drop to previews until it\'s bound; binding restores the FREE tier at 50 calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
     { email: S.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
