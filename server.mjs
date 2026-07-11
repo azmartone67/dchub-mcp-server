@@ -34,6 +34,12 @@
 
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+// r-list-swr (2026-07-11): Client + InMemoryTransport are used ONLY to build the
+// per-platform tools/list cache — a one-shot in-process MCP handshake against the
+// same createServer() the live path uses, so the cached result is byte-identical
+// to what the SDK would serve. No network, pure public SDK API.
+import { Client as McpProbeClient } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 // MPP per-call rail (DARK unless MPP_ENABLED=1 + MPP_SIDECAR_URL). Pure hook (no
 // mppx in the gateway) — calls the isolated sidecar over HTTP. NOTE: the MCP SDK
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
@@ -944,10 +950,26 @@ async function buildHighIntentClaimBlock(claim, name) {
 // re-validate via the 5-min keyCache (KEY_CACHE_TTL). When the backend
 // is healthy, requests still cache-hit in <50ms.
 const keyCache = new Map(); // api_key → { valid, tier, exp }
+// r-validate-singleflight (2026-07-11): concurrent calls carrying the SAME key
+// (Smithery gateway bursts; agents fanning out tool calls) each paid a separate
+// backend /keys/validate hop — and when the backend web pool saturates (95-98%
+// observed) each of those hops burns the full 3s timeout, stacking latency onto
+// every call in the burst. Collapse them: one in-flight validation per key, all
+// concurrent callers await the same promise. Success caching (keyCache, 5 min)
+// and the NEVER-cache-a-downgrade rule below are unchanged.
+const _keyValidateInflight = new Map();      // api_key → Promise<validation>
 async function validateKey(api_key) {
   if (!api_key) return { valid: false, tier: 'free' };
   const hit = keyCache.get(api_key);
   if (hit && hit.exp > Date.now()) return hit;
+  const inflight = _keyValidateInflight.get(api_key);
+  if (inflight) return inflight;
+  const p = _validateKeyUncached(api_key)
+    .finally(() => _keyValidateInflight.delete(api_key));
+  _keyValidateInflight.set(api_key, p);
+  return p;
+}
+async function _validateKeyUncached(api_key) {
   try {
     const resp = await fetch(new URL('/api/v1/keys/validate', API_BASE).toString(), {
       method: 'POST',
@@ -3435,7 +3457,15 @@ async function _refreshPlatformDescriptions() {
           headers: { 'User-Agent': 'dchub-mcp-server/desc-tuner' }, signal: ctl.signal });
         if (r.ok) {
           const j = await r.json();
-          if (j && j.overrides && typeof j.overrides === 'object') _DESC_BY_PLATFORM.set(p, j.overrides);
+          if (j && j.overrides && typeof j.overrides === 'object') {
+            // r-list-swr (2026-07-11): invalidate the cached tools/list for this
+            // platform ONLY when the tuner actually changed a description — the
+            // next tools/list for it rebuilds once, off everyone else's hot path.
+            let _changed = true;
+            try { _changed = JSON.stringify(_DESC_BY_PLATFORM.get(p) || null) !== JSON.stringify(j.overrides); } catch (_) {}
+            _DESC_BY_PLATFORM.set(p, j.overrides);
+            if (_changed) _TOOLSLIST_CACHE.delete(p);
+          }
         }
       } finally { clearTimeout(timer); }
     } catch (_) { /* keep any previously-cached value; never throw into init */ }
@@ -3453,6 +3483,97 @@ function _platformOverrides(platform) {
   // SYNCHRONOUS — reads the warm in-process map only. NO backend call here.
   if (!platform || _perPlatformDescDisabled()) return null;
   return _DESC_BY_PLATFORM.get(platform) || null;
+}
+
+// ── r-list-swr (2026-07-11): per-platform tools/list result cache ───────────
+// WHY: the stateless tools/list path (r-stateless-list) built a FULL McpServer —
+// 71 trackedTool registrations + prompts + resources — plus an SSE transport on
+// EVERY request, and the SDK then ran zod→JSON-schema conversion for all 71 input
+// schemas per request. All of it synchronous CPU on the event loop, per hit.
+// Under concurrency (Smithery's scanner probes in bursts) and alongside the
+// documented multi-MB JSON.parse stalls (see r-fiber-taste-cap), those requests
+// queue → Smithery's 30d P95 for tools/list hit 709ms, and anything thrown en
+// route surfaced as a transport 500 (part of the 8.79% server-error rate).
+//
+// FIX: build the ListToolsResult ONCE per (platform-override) identity via an
+// in-process InMemoryTransport handshake against the SAME createServer() —
+// byte-identical output — then serve every request from the warm cache with a
+// hand-written JSON/SSE response (~zero CPU). Stale-while-revalidate: after
+// _TOOLSLIST_TTL_MS a hit serves the stale copy instantly and ONE background
+// rebuild (single-flight) refreshes it. The tuner refresh above deletes a
+// platform's entry only when its descriptions actually changed. Cold miss =
+// one inline build (tens of ms — the same cost as ONE request on the old path),
+// shared by all concurrent cold callers. Any cache failure falls back to the
+// old ephemeral-SDK path, so this is strictly fail-soft.
+const _TOOLSLIST_CACHE = new Map();          // key → { at, result, refreshing }
+const _TOOLSLIST_TTL_MS = 10 * 60 * 1000;    // SWR window (tuner cadence is 30 min)
+
+async function _buildToolsListResult(descOverrides) {
+  const t0 = Date.now();
+  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
+  const srv = createServer(descOverrides);
+  const probe = new McpProbeClient({ name: 'dchub-toolslist-cache', version: SERVER_VERSION });
+  await srv.connect(serverT);
+  await probe.connect(clientT);
+  try {
+    const r = await probe.listTools();
+    if (!r || !Array.isArray(r.tools) || r.tools.length === 0) {
+      throw new Error(`probe returned ${r && r.tools ? r.tools.length : 'no'} tools`);
+    }
+    console.log(`[tools-list-cache] built ${r.tools.length} tools in ${Date.now() - t0}ms`);
+    return { tools: r.tools };
+  } finally {
+    try { await probe.close(); } catch (_) {}
+    try { await srv.close(); } catch (_) {}
+  }
+}
+
+function _toolsListCacheKey(platform, descOverrides) {
+  return descOverrides ? String(platform) : '__generic__';
+}
+
+async function _toolsListCached(platform, descOverrides) {
+  const key = _toolsListCacheKey(platform, descOverrides);
+  let e = _TOOLSLIST_CACHE.get(key);
+  if (e && e.result) {
+    if (Date.now() - e.at > _TOOLSLIST_TTL_MS && !e.refreshing) {
+      // Stale: serve it NOW, refresh in the background (single-flight).
+      e.refreshing = _buildToolsListResult(descOverrides)
+        .then((r) => { e.result = r; e.at = Date.now(); })
+        .catch((err) => console.error('[tools-list-cache] bg refresh failed (serving stale):', err.message))
+        .finally(() => { e.refreshing = null; });
+    }
+    return e.result;
+  }
+  // Cold: one inline build shared by every concurrent cold caller.
+  if (!e) { e = { at: 0, result: null, refreshing: null }; _TOOLSLIST_CACHE.set(key, e); }
+  if (!e.refreshing) {
+    e.refreshing = _buildToolsListResult(descOverrides)
+      .then((r) => { e.result = r; e.at = Date.now(); return r; })
+      .finally(() => { e.refreshing = null; });
+  }
+  return e.refreshing;   // rejection → caller falls back to the ephemeral SDK path
+}
+
+// Minimal streamable-HTTP response writer for CACHED single-request replies.
+// Mirrors the SDK's stateless behavior exactly (SSE: `event: message` + one
+// data frame, then close; headers per webStandardStreamableHttp.js) but is
+// LENIENT on Accept: a JSON-only client gets application/json instead of the
+// SDK's 406 — strictly more compatible, never worse.
+function _writeRpcResult(req, res, id, result) {
+  const msg = JSON.stringify({ result, jsonrpc: '2.0', id });
+  const accept = String(req.headers['accept'] || '');
+  if (accept.includes('text/event-stream')) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    res.end(`event: message\ndata: ${msg}\n\n`);
+  } else {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(msg);
+  }
 }
 
 // State-mutating MCP tools — these create/update server-side state or trigger a
@@ -4471,7 +4592,29 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       return withReturnNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c);
     } catch (err) {
       status = 'error';
-      throw err;
+      // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
+      // error into a bare `isError` text blob — no structure, no retry hint —
+      // and the raw err.message (often an internal fetch/parse detail) leaked
+      // to the caller. Return a structured tool result instead: agents get a
+      // parseable, self-correcting error; the transport always answers 200.
+      // The backend web pool saturating (5xx/timeouts upstream) lands HERE —
+      // this is the resilience boundary for it. UrlElicitationRequired
+      // (-32042) is the one SDK contract that must keep propagating.
+      if (err && err.code === -32042) throw err;
+      console.error(`[tool-error] ${name}:`, (err && err.stack) || err);
+      const _detail = String((err && err.message) || err || 'internal error').slice(0, 300);
+      const _payload = {
+        error: 'tool_execution_failed',
+        tool: name,
+        detail: _detail,
+        hint: 'Transient upstream error — retry once. If it persists, the live status is at https://dchub.cloud/health.',
+        _source: 'DC Hub — dchub.cloud',
+      };
+      return {
+        isError: true,
+        content: [{ type: 'text', text: JSON.stringify(_payload) }],
+        structuredContent: _payload,
+      };
     } finally {
       // Fire-and-forget telemetry — never block the user response on it
       trackToolCall({
@@ -6985,6 +7128,29 @@ app.post('/mcp', async (req, res) => {
       const platform = detectPlatformFromInit(body, userAgent);
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
+      // r-list-swr (2026-07-11): serve BOTH of these caller-independent methods
+      // without constructing a per-request McpServer + SSE transport (the old
+      // path re-registered all 71 tools and re-ran zod→JSON-schema per request
+      // — the tools/list P95 tail and, when anything threw, part of the 5xx
+      // rate Smithery counts against us).
+      //   • ping → constant {} result, answered inline.
+      //   • tools/list → per-platform SWR cache (see _toolsListCached); a stale
+      //     entry is served instantly while one background rebuild refreshes it.
+      // Fail-soft ladder: cache → inline single-flight build → (on ANY cache
+      // failure) the original ephemeral-SDK path below → outer catch.
+      // Notifications (no id) get 202 exactly like the SDK's handlePostRequest.
+      // Kill switch: DCHUB_TOOLSLIST_CACHE_DISABLE=1 → original SDK path only.
+      const _listCacheOff = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_TOOLSLIST_CACHE_DISABLE || ''));
+      if (!_listCacheOff) {
+        if (body.id === undefined) return res.status(202).end();
+        if (body.method === 'ping') return _writeRpcResult(req, res, body.id, {});
+        try {
+          const _cachedList = await _toolsListCached(platform, _descOverrides);
+          if (_cachedList) return _writeRpcResult(req, res, body.id, _cachedList);
+        } catch (e) {
+          console.error('[tools-list-cache] fast path failed — falling back to SDK path:', e.message);
+        }
+      }
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       const ephServer = createServer(_descOverrides);
       await ephServer.connect(ephTransport);
@@ -7071,13 +7237,25 @@ app.post('/mcp', async (req, res) => {
       id: body?.id || null,
     });
   } catch (err) {
-    console.error('[MCP] Error:', err);
+    console.error('[MCP] Error:', (err && err.stack) || err);
     if (!res.headersSent) {
-      res.status(500).json({
+      // r-failsoft (2026-07-11): for a well-formed JSON-RPC REQUEST (it has an
+      // id + method), answer IN-BAND — HTTP 200 with a JSON-RPC error object —
+      // instead of a transport 500. Gateways/scanners (Smithery among them)
+      // treat a 5xx as "server down" and abandon the session; a JSON-RPC error
+      // is a valid, parseable response the client can surface and retry. The
+      // 500 is kept only for non-JSON-RPC-shaped bodies (a true transport
+      // failure). Still logged loudly above either way.
+      const _isRpcRequest = req.body && typeof req.body.method === 'string' && req.body.id !== undefined;
+      res.status(_isRpcRequest ? 200 : 500).json({
         jsonrpc: '2.0',
-        error: { code: -32603, message: err.message },
-        id: req.body?.id || null,
+        error: { code: -32603, message: 'Internal error handling ' + (req.body?.method || 'request') + ' — retry once. (' + String(err && err.message).slice(0, 200) + ')' },
+        id: req.body?.id ?? null,
       });
+    } else {
+      // Headers already sent (mid-SSE) — nothing valid can be written; just
+      // make sure the socket doesn't hang open.
+      try { res.end(); } catch (_) {}
     }
   }
 });
@@ -7127,14 +7305,61 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
   await stdioServer.connect(new StdioServerTransport());
   console.error('DC Hub MCP Server — stdio mode ready (Glama/local introspection)');
 } else if (!process.env.VITEST) {
-  app.listen(PORT, '0.0.0.0', () => {
+  // r-crashguard (2026-07-11): Node ≥15 KILLS the process on any unhandled
+  // promise rejection — in a 7k-line gateway with dozens of fire-and-forget
+  // backend hops, one missed .catch() (most likely exactly when the backend
+  // pool saturates and fetches start failing in rare paths) took down EVERY
+  // in-flight request as edge 502s and forced a cold restart. Log-and-continue:
+  // this server is stateless per-request, so surviving beats mass-5xx. Loudly
+  // logged so the offending path still gets found and fixed.
+  process.on('unhandledRejection', (reason) => {
+    console.error('[unhandledRejection] kept alive:', (reason && reason.stack) || reason);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[uncaughtException] kept alive:', (err && err.stack) || err);
+  });
+
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`DC Hub MCP Server v${SERVER_VERSION} on port ${PORT}`);
     console.log(`  MCP:     http://0.0.0.0:${PORT}/mcp`);
     console.log(`  Health:  http://0.0.0.0:${PORT}/health`);
     console.log(`  Backend: ${API_BASE}`);
     console.log(`  Telemetry: ${API_BASE}/api/v1/mcp/track`);
     console.log(`  Key validation: ${API_BASE}/api/v1/keys/validate`);
+    // r-list-swr: warm the generic tools/list cache at boot so the FIRST
+    // scanner probe after a deploy (5-7 deploys/day) is already served warm.
+    _toolsListCached('__warmup__', null)
+      .then((r) => console.log(`[tools-list-cache] warm at boot (${r.tools.length} tools)`))
+      .catch((e) => console.error('[tools-list-cache] boot warmup failed (will build on first request):', e.message));
   });
+
+  // r-keepalive (2026-07-11): Node's default keepAliveTimeout is 5s — SHORTER
+  // than the idle-socket reuse window of the proxies in front of us (Railway
+  // edge / CF). The origin closes an idle keep-alive socket at exactly the
+  // moment the proxy reuses it → connection reset → intermittent, unlogged 502
+  // at the edge (a classic; and a direct contributor to the Smithery
+  // server-error rate). Keep the origin's keep-alive LONGER than every
+  // upstream hop, and headersTimeout above keepAliveTimeout per Node docs.
+  httpServer.keepAliveTimeout = 75_000;
+  httpServer.headersTimeout   = 80_000;
+
+  // r-drain (2026-07-11): graceful shutdown. Railway sends SIGTERM on every
+  // deploy (5-7/day); the default handler exits IMMEDIATELY, resetting every
+  // in-flight request and open SSE stream — each deploy sprayed 5xx at exactly
+  // the clients (Smithery gateway) we're measured on. Stop accepting new
+  // connections, let in-flight requests finish (8s grace — tool calls are
+  // sub-3s p95 plus headroom), close idle keep-alive sockets, then exit 0.
+  let _draining = false;
+  const _shutdown = (sig) => {
+    if (_draining) return;
+    _draining = true;
+    console.log(`[shutdown] ${sig} — draining in-flight requests (grace 8s)`);
+    httpServer.close(() => { console.log('[shutdown] drained cleanly'); process.exit(0); });
+    if (typeof httpServer.closeIdleConnections === 'function') httpServer.closeIdleConnections();
+    setTimeout(() => { console.log('[shutdown] grace elapsed — exiting'); process.exit(0); }, 8000).unref();
+  };
+  process.on('SIGTERM', () => _shutdown('SIGTERM'));
+  process.on('SIGINT',  () => _shutdown('SIGINT'));
 }
 
 // Test-only exports (ignored when run as the entrypoint — no effect on the
