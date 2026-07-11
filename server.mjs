@@ -53,7 +53,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, withQueryEcho, withProvenance as _withProvenanceImpl } from './lib/result-shaping.mjs';
+import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, withQueryEcho, withProvenance as _withProvenanceImpl, personalizeNextSession as _personalizeNextSession } from './lib/result-shaping.mjs';
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
 // tool surface and invent plausible-but-wrong names. A live cross-platform test
@@ -2969,7 +2969,11 @@ async function _maybeEmbedValueClaim(result, name, c) {
 // so structuredContent-preferring clients (Claude Desktop/.ai) saw ONLY the
 // retention nudge and the real payload was hidden. See lib/result-shaping.mjs.
 function _withNextSession(result) {
-  let out = _withNextSessionImpl(result, _NEXT_SESSION);
+  // r-portfolio (2026-07-11): factory form — when the payload carries the
+  // backend's `portfolio` block (get_changes / list_saved_sites, keyed
+  // callers), the nudge references the agent's ACTUAL saved state ("you have
+  // 3 saved sites — 1 moved since last visit") instead of generic copy.
+  let out = _withNextSessionImpl(result, (sc) => _personalizeNextSession(sc, _NEXT_SESSION));
   try { if (RETENTION_PITCH) out = _withFirstSessionResume(out); } catch (_) {}
   return out;
 }
@@ -5746,7 +5750,7 @@ function createServer(descOverrides) {
   // Turns DC Hub from a stateless lookup into agent state. get_changes wraps
   // the public delta feed (free hook); the rest wrap PRO-gated persistence /
   // monitoring endpoints (backend enforces the tier gate; listed PRO_ONLY).
-  trackedTool(srv, 'get_changes', 'Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d.',
+  trackedTool(srv, 'get_changes', 'Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news — PLUS, for keyed callers with saved sites, a `portfolio` block answering "did MY sites move?": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand "24h"/"7d" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d.',
     { since: S.describe('Return changes since this ISO-8601 timestamp (YYYY-MM-DD or full datetime) or shorthand "24h"/"7d"; default 24h'),
       limit: LIMIT },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/changes/since', { since: a.since, limit: a.limit })) }] }));
@@ -5762,7 +5766,7 @@ function createServer(descOverrides) {
       facility_id: a.facility_id, market: a.market, since: a.since,
     })) }] }));
 
-  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don\'t have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
+  trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don\'t have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Pass `market` and DC Hub snapshots the site\'s DCPI baseline at save time, so every later list_saved_sites / get_changes shows how ITS score and verdict moved since you saved it. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" market=northern-virginia target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90), e.g. 39.04'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -77.48'),
       name: S.describe('Optional label for the saved site, e.g. "Ashburn parcel"'),
@@ -5772,9 +5776,9 @@ function createServer(descOverrides) {
       notes: S.describe('Optional free-text notes to store with the saved site') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
 
-  trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key). Example: "What sites have I saved?" / "Show my shortlist." — list_saved_sites. Params: none. Returns: an array of saved sites, each with name, market, lat/lon, saved DCPI score, target MW, and notes — the persistent shortlist built by save_site. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
-    {},
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', {})) }] }));
+  trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key), or wants to know what moved on it. Example: "What sites have I saved?" / "Did any of my saved sites move?" — list_saved_sites. Params: since (optional — "24h"/"7d"/ISO, default 7d — the delta window). Returns: each saved site with name, market, lat/lon, saved DCPI score, target MW, notes — PLUS live deltas: verdict_was/verdict_now (e.g. CAUTION → BUILD), excess-power move over the window, current vs at-save DCPI, alerts armed/fired, new facilities nearby, and a `portfolio` summary flagging which sites moved and which have no alert armed. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
+    { since: S.describe('Delta window for per-site movement: "24h", "7d" (default) or an ISO-8601 timestamp — pass your cached generated_at from last session') },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', { since: a.since })) }] }));
 
   trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (FREE with a key) — get notified when its Excess-Power / Constraint score moves. On the free tier, email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel="email". Webhook delivery (channel="webhook" + destination=<https URL>) is Pro. Lets an agent MONITOR markets, not just query them. Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
     { market: S.describe('Market slug (metro) to watch, e.g. northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),

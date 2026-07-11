@@ -137,7 +137,7 @@
     },
     {
       "name": "get_changes",
-      "description": "Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news. Pass since=<ISO-8601> or shorthand \"24h\"/\"7d\" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d."
+      "description": "Incremental sync — what changed in DC Hub since a timestamp, so an agent pulls only the delta instead of re-fetching everything. Returns DCPI 7-day market movers, newly discovered facilities, new M&A deals + news — PLUS, for keyed callers with saved sites, a `portfolio` block answering \"did MY sites move?\": per-saved-site verdict flips (CAUTION → BUILD), excess-power deltas, alerts fired, and new facilities near each site since your last check. Pass since=<ISO-8601> or shorthand \"24h\"/\"7d\" (default 24h); cache the response generated_at and pass it back next call. Try: get_changes since=7d."
     },
     {
       "name": "get_facility_risk_delta",
@@ -145,11 +145,11 @@
     },
     {
       "name": "save_site",
-      "description": "Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don't have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name=\"Ashburn parcel\" target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account."
+      "description": "Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don't have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Pass `market` and DC Hub snapshots the site's DCPI baseline at save time, so every later list_saved_sites / get_changes shows how ITS score and verdict moved since you saved it. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name=\"Ashburn parcel\" market=northern-virginia target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account."
     },
     {
       "name": "list_saved_sites",
-      "description": "Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key). Example: \"What sites have I saved?\" / \"Show my shortlist.\" — list_saved_sites. Params: none. Returns: an array of saved sites, each with name, market, lat/lon, saved DCPI score, target MW, and notes — the persistent shortlist built by save_site. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back."
+      "description": "Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key), or wants to know what moved on it. Example: \"What sites have I saved?\" / \"Did any of my saved sites move?\" — list_saved_sites. Params: since (optional — \"24h\"/\"7d\"/ISO, default 7d — the delta window). Returns: each saved site with name, market, lat/lon, saved DCPI score, target MW, notes — PLUS live deltas: verdict_was/verdict_now (e.g. CAUTION → BUILD), excess-power move over the window, current vs at-save DCPI, alerts armed/fired, new facilities nearby, and a `portfolio` summary flagging which sites moved and which have no alert armed. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back."
     },
     {
       "name": "set_market_alert",
