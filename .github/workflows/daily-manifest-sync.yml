@@ -85,3 +85,28 @@ jobs:
           else
             echo "::warning::publish did not confirm success — review the log above."
           fi
+      - name: Sync GitHub About tool count (Glama & other About-mirroring aggregators)
+        # The GitHub repo 'About' field is scraped by Glama (and other listings) but no
+        # manifest file owns it — so it silently drifted to a stale "58 tools" while
+        # README/server.json stayed correct, and Glama mirrored an even-older 33. This keeps
+        # just the "<N> tools" phrase honest from server.mjs (the single source of truth).
+        # Needs a PAT: the workflow GITHUB_TOKEN cannot edit repo metadata (no 'administration'
+        # permission is grantable to it), so this is best-effort — warns, never fails, if unset.
+        env:
+          GH_TOKEN: ${{ secrets.REPO_METADATA_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::REPO_METADATA_TOKEN not set — GitHub About sync skipped. Add a PAT with 'Administration: write' (fine-grained) or 'repo' scope (classic) so Glama re-crawls the correct tool count."
+            exit 0
+          fi
+          N=$(node scripts/sync-tools-manifest.mjs --print-count)
+          CUR=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .description)
+          NEW=$(printf '%s' "$CUR" | N="$N" perl -pe 's/\b\d+(?: MCP)? tools\b/$ENV{N}." tools"/e')
+          if [ "$CUR" = "$NEW" ]; then
+            echo "✓ GitHub About already states ${N} tools — no drift"
+            exit 0
+          fi
+          echo "About drifted — healing:"; echo "  was: $CUR"; echo "  now: $NEW"
+          gh repo edit "${GITHUB_REPOSITORY}" --description "$NEW"
+          echo "::notice::✅ GitHub About synced to ${N} tools — Glama & other About-mirroring listings will re-scan on their own cadence."

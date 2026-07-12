@@ -49,6 +49,11 @@ const tools = canonicalTools();
 const COUNT = tools.length;
 const names = new Set(tools.map((t) => t.name));
 
+// --print-count: emit the live tool count (from server.mjs) and exit. Lets the
+// daily-manifest-sync workflow feed the SAME source-of-truth number into the
+// GitHub About field, which aggregators (Glama) mirror but no manifest file owns.
+if (process.argv.includes('--print-count')) { console.log(COUNT); process.exit(0); }
+
 // ---- surfaces to keep in sync ---------------------------------------------
 const problems = [];
 // Pending fixes keyed by file so multiple fixes to the SAME file chain instead
