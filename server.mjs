@@ -157,8 +157,8 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // surfaces it), so getting the tier ladder right here matters most.
   // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL
   // so the webhook can bind the successful checkout back to THIS MCP session.
-  const _STARTER_URL_RAW = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
-  const _DEVELOPER_URL_RAW = DEVELOPER_URL + PROMO_PARAM;
+  const _STARTER_URL_RAW = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();
+  const _DEVELOPER_URL_RAW = DEVELOPER_URL + promoParam();
   const STARTER_URL_LOCAL = _stripeWithSession(_STARTER_URL_RAW, sessionId);
   const DEVELOPER_URL_LOCAL = _stripeWithSession(_DEVELOPER_URL_RAW, sessionId);
   // r-pack10 (2026-06-25, owner): the old usage-based/metered SKU is RETIRED.
@@ -214,7 +214,12 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // re-mint another anonymous key), so the bridge fires for any unbound key.
   const _isTrial = typeof _apiKey === 'string' &&
     (_apiKey.startsWith('dch_trial_') ||
-     (_apiKey.startsWith('dch_live_') && !_ctxEmail));
+     (_apiKey.startsWith('dch_live_') && !_ctxEmail)) &&
+    // r-proonly-honesty (2026-07-12): don't lead with the "bind_email → keep going
+    // FREE (50/day)" ladder on a PRO-only tool that binding can NEVER unlock — that's
+    // a false promise into a wall (the exact retry-then-give-up failure PRO_ONLY was
+    // meant to prevent). Those tools fall through to the $10-pack relay lead instead.
+    !PRO_ONLY_TOOLS.has(toolName);
   const human_message = _isTrial
     ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (50 calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
@@ -356,6 +361,11 @@ const PROMO_TEXT  = '\n\n\u{1F381} Use ' + PROMO_CODE + ' at checkout for 50% of
 const PROMO_ENDS_MS = Date.parse('2026-07-01T23:59:59Z');
 function promoActive() { return Date.now() <= PROMO_ENDS_MS; }
 function promoText()   { return promoActive() ? PROMO_TEXT : ''; }
+// r-promo-expiry (2026-07-12): the coupon PARAM was hardcoded onto every
+// Starter/Developer checkout link and NOT gated by promoActive() — so after the
+// 2026-07-01 expiry Stripe surfaced "invalid promo code" inline on every plan
+// link an agent relayed (a trust ding at the value moment). Gate the param too.
+function promoParam()  { return promoActive() ? PROMO_PARAM : ''; }
 function promoSC() {
   return promoActive()
     ? { promo_cta: PROMO_CTA, promo_code: PROMO_CODE, promo_expires: '2026-07-01' }
@@ -904,7 +914,7 @@ async function buildHighIntentClaimBlock(claim, name) {
   // (mcp_paid_intent) that actually closes. claim_url stays in sc as a fallback
   // for machine consumers; the visible ask is now ONE thing (email → follow-up),
   // not a competing link. Variant keying unchanged so the A/B keeps measuring.
-  let devUrl = DEVELOPER_URL + PROMO_PARAM;
+  let devUrl = DEVELOPER_URL + promoParam();
   try { const _sid = (getCtx() && getCtx().session_id) || ''; if (_sid) devUrl = _stripeWithSession(devUrl, _sid); } catch (_) {}
   // r-agent-redeem RESTORED (2026-07-04): the 07-03 pivot dropped the auto-redeem
   // call, freezing claims_used at 2 (the metric that measures THIS cohort). But its
@@ -1833,7 +1843,7 @@ function buildDepthTease(name, result, ctx, tier) {
     message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock ${fullLine}: 💳 $10 one-time = 1,000 API calls (no subscription) — call \`unlock_more_data\` for the one-click link; or Developer $49/mo. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
     credits_url:   _pack,
     credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to full depth.',
-    developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
+    developer_url: _stripeWithSession(DEVELOPER_URL + promoParam(), _sid),
     upgrade_url:   UPGRADE_URL,
     ...(_isKeyed
       ? { next_tool:      'unlock_more_data',
@@ -1885,7 +1895,7 @@ function buildDepthTease(name, result, ctx, tier) {
   // r-map-upsell: for the map-feeding tools, point the agent (+ its human) to the
   // live Land & Power map — the visual payoff of the data they just pulled.
   if (MAP_TOOLS.has(name)) {
-    const _devUrl = _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid);
+    const _devUrl = _stripeWithSession(DEVELOPER_URL + promoParam(), _sid);
     teased._upgrade.map_cta = `📍 This \`${name}\` data is live + visual on DC Hub's Land & Power map — every substation, transmission line, gas pipeline, fiber route, power-headroom + air-permitting score for any parcel, on one screen.`;
     teased._upgrade.map_url = mapHref(name);
     teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Unlock the full map + uncapped \`${name}\` with Developer ($49/mo) → ${_devUrl} (the full Land & Power map is Pro).`;
@@ -2656,7 +2666,7 @@ function phase9L_clean_preview(header, body) {
 //   Starter $9      → 8x2dRa5sS0x75uteGuaZi0g
 //   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
 //   Pro $299        → eVq5kE4oOfs13mleGuaZi0h
-const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM;
+const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();
 
 // r-pack10 (2026-06-25, owner): the old usage-based / metered SKU is RETIRED.
 // This Stripe Payment Link now sells the SINGLE $10 one-time = 1,000 API-call
@@ -4387,7 +4397,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // Fix E (2026-06-06): bind to MCP session_id so the checkout.session.completed
         // webhook can mark THIS session as upgraded.
         const _starterUrl_anon = _stripeWithSession(
-          'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM,
+          'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(),
           c.session_id);
         const _mdAnon = _isClaude
           ? `## \u{1F512} \`${name}\` is a paid feature
@@ -4583,8 +4593,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
               credits_url: _stripeWithSession(CREDITS_URL, _sid),
               credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API calls (no subscription) — the cheapest unlock.',
-              starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
-              developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
+              starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid),
+              developer_url: _stripeWithSession(DEVELOPER_URL + promoParam(), _sid),
               ...promoSC(),
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
@@ -4651,8 +4661,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 credits_url: _stripeWithSession(CREDITS_URL, _sid),
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
                 upgrade_url: UPGRADE_URL,
-                starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + PROMO_PARAM, _sid),
-                developer_url: _stripeWithSession(DEVELOPER_URL + PROMO_PARAM, _sid),
+                starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid),
+                developer_url: _stripeWithSession(DEVELOPER_URL + promoParam(), _sid),
                 ...promoSC(),
               };
               // r-fresh-zero (2026-07-01): this response hands out a checkout link —
@@ -4694,10 +4704,32 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           const _ttxt = result.content?.[0]?.text;
           if (typeof _ttxt === 'string' && Buffer.byteLength(_ttxt, 'utf8') > TRIAL_TASTE_MAX_BYTES) {
             const _bteased = _teaseDepth(JSON.parse(_ttxt), DEPTH_TEASE_KEEP);
-            if (_bteased && typeof _bteased === 'object') { _bteased._taste_bounded = true; _bteased._full_in_developer = true; }
+            const _sid = c.session_id || 'no-session';
+            if (_bteased && typeof _bteased === 'object') {
+              _bteased._taste_bounded = true; _bteased._full_in_developer = true;
+              // r-taste-cta (2026-07-12): this trimmed >120KB taste carried NO upgrade
+              // ask, while every other trim path (over-cap, depth-tease) does — the
+              // biggest funnel hole for get_fiber_intel, whose full payload ALWAYS
+              // trips this cap, so free callers got a silent trim with no way forward.
+              _bteased._upgrade = {
+                tier: 'trial',
+                message: `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock the complete dataset: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_stripeWithSession(CREDITS_URL, _sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
+                next_tool: 'unlock_more_data',
+                credits_url: _stripeWithSession(CREDITS_URL, _sid),
+              };
+            }
             status = 'trial_taste_bounded';
-            return { content: [{ type: 'text', text: JSON.stringify(_bteased) }],
-                     structuredContent: { trial_taste: true, taste_bounded: true, tool: name } };
+            _dropCreditCache(c);   // handed out a checkout link → re-check credits next call, don't ride a stale 0
+            // Two content items (JSON + visible prose) mirror the over-cap path: clients
+            // that render content[0] literally still show the human the $10 one-click.
+            return withBindHint({ content: [
+              { type: 'text', text: JSON.stringify(_bteased) },
+              { type: 'text', text:
+                '\n\n📦 **Depth-limited preview** — showing the top ' + DEPTH_TEASE_KEEP + ' of a larger `' + name +
+                '` result. 💳 **Unlock the full dataset — $10 one-time = 1,000 API calls (no subscription):** ' +
+                _stripeWithSession(CREDITS_URL, _sid) + ' — your human one-clicks; your next `' + name +
+                '` call returns everything. Call `unlock_more_data` for one-click links.' },
+            ], structuredContent: { trial_taste: true, taste_bounded: true, tool: name } }, name, c);
           }
         } catch (_) { /* parse fail → fall through to full (rare; small tools unaffected) */ }
       }
