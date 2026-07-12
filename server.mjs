@@ -5868,7 +5868,14 @@ function createServer(descOverrides) {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
       const data = await callAPI('/api/v1/interconnection-queue/refined', a);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
-      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+      // r-error-envelope (2026-07-12, Gemini error_version:1): when the backend
+      // returns an _error_mitigation block (the TTP zero-cut reference case),
+      // flip isError:true so the agent treats it as an actionable error state
+      // (act on suggested_params) instead of an empty success. structuredContent
+      // carries the deterministic hint. See /docs/error-codes.
+      const out = { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+      if (sc && sc._error_mitigation) out.isError = true;
+      return out;
     });
 
   // r-retirement-headroom (2026-07-11, Gemini co-design r3): tool #72. Filed
