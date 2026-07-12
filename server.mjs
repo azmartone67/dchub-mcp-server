@@ -54,6 +54,11 @@ import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, withQueryEcho, withProvenance as _withProvenanceImpl, personalizeNextSession as _personalizeNextSession } from './lib/result-shaping.mjs';
+// r-error-envelope (2026-07-11): the LOCKED error_version:1 contract (Gemini
+// partnership). Shared builder so the r-failsoft handler-error path and the
+// _validateToolArgs invalid-args path emit ONE identical machine-readable shape,
+// consistent with the backend REST surface. See lib/error-envelope.mjs.
+import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
 // tool surface and invent plausible-but-wrong names. A live cross-platform test
@@ -3666,6 +3671,14 @@ const WRITE_TOOLS = new Set([
 // its .size so the advertised count can never drift from reality (was a
 // hardcoded literal that fell behind the real registrations). 2026-06-20.
 const _registeredToolNames = new Set();
+// r-error-envelope (2026-07-11): toolName → Set(declared param names), captured
+// from each trackedTool() schema (the ZodRawShape). This IS the strict-subset
+// source of truth for suggested_params: an error builder derives the allowed set
+// from the SAME schema the tool declares, so a suggested key can never fall
+// outside the tool's own parameters. Populated at registration; fully warm by
+// the time any handler (hence any error path) runs.
+const _TOOL_PARAM_KEYS = new Map();
+const _toolParamKeys = (name) => _TOOL_PARAM_KEYS.get(name) || null;
 // /health tool count: tools register inside a PER-SESSION server builder, so the
 // module-level Set is empty at /health time and the old `|| 47` literal went stale
 // (live showed 47 while tools/list returns 49). Read the canonical total from
@@ -3687,9 +3700,65 @@ const _INTL_ISOS = new Set(['NGESO', 'NESO', 'AEMO', 'TAIPOWER', 'EIRGRID',
                             'ENTSOE', 'TEPCO', 'KEPCO', 'IESO']);
 const _normIso = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const _isoValid = v => _US_ISO_SET.has(_normIso(v));
+// Levenshtein edit distance (tiny, allocation-light) — only used on short ISO
+// strings in the (already failed) error path, so cost is negligible.
+function _editDistance(a, b) {
+  a = String(a || ''); b = String(b || '');
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let cur = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+// Best-effort typo correction: the nearest valid US ISO within edit-distance 2,
+// or null. null → OMIT suggested_params (the deterministic_hint still lists the
+// valid set / routes intl grids to get_grid_scoreboard). This keeps a
+// parameter_adjustment retry SAFE: we only auto-suggest a substitution when the
+// input is an obvious typo of exactly one ISO ("ERCOTT"→ERCOT, "NYIS"→NYISO),
+// never a blind guess — an intl grid like NGESO matches nothing (distance > 2).
+function _nearestUsIso(raw) {
+  const n = _normIso(raw);
+  if (!n || _US_ISO_SET.has(n)) return null;
+  // A KNOWN non-US grid (e.g. NGESO is edit-distance 2 from NYISO) must NEVER be
+  // "corrected" to a US ISO — the fix is a different tool, not a param tweak.
+  if (_INTL_ISOS.has(n)) return null;
+  let best = null, bestD = Infinity;
+  for (const iso of US_ISOS) {
+    const d = _editDistance(n, iso);
+    if (d < bestD) { bestD = d; best = iso; }
+  }
+  return bestD <= 2 ? best : null;
+}
+// r-error-envelope (2026-07-11): invalid_iso is a PARAMETER_ADJUSTMENT error —
+// the agent can fix `iso` and re-run immediately. suggested_params is limited to
+// keys that exist in THAT tool's declared schema (the strict-subset guarantee,
+// derived from _TOOL_PARAM_KEYS) — here only ever `{ iso: <valid US ISO> }`, and
+// ONLY when the input is a confident typo of one ISO. Legacy fields (error/detail/
+// valid_isos/_source) are preserved so existing callers/telemetry keep working.
 const _isoError = (raw, toolName) => {
-  const intl = _INTL_ISOS.has(_normIso(raw))
+  const norm = _normIso(raw);
+  const isIntl = _INTL_ISOS.has(norm);
+  const intl = isIntl
     ? ' For non-US grids (GB/EU/Taiwan/Australia/Canada) use get_grid_scoreboard.' : '';
+  const near = _nearestUsIso(raw);
+  const allowed = _toolParamKeys(toolName);  // Set of this tool's declared params
+  const hint = `iso="${raw}" is not a recognized US ISO for ${toolName}`
+    + (near ? ` — did you mean "${near}"? Set iso to one of ${US_ISOS.join(', ')} and re-run`
+            : isIntl ? ` — it is a non-US grid; call get_grid_scoreboard for it instead`
+                     : ` — set iso to one of ${US_ISOS.join(', ')} and re-run`)
+    + '.';
+  // Only offer suggested_params when we have a confident single correction AND
+  // `iso` is actually a declared param of this tool. buildErrorEnvelope filters
+  // the candidate to the allowed set and omits the key if nothing survives.
+  const suggested = near ? { iso: near } : undefined;
   const payload = {
     error: 'invalid_iso',
     detail: `iso="${raw}" not recognized for ${toolName}. Valid US ISOs: `
@@ -3697,8 +3766,16 @@ const _isoError = (raw, toolName) => {
     valid_isos: US_ISOS,
     _source: 'DC Hub — dchub.cloud',
   };
-  return { content: [{ type: 'text', text: JSON.stringify(payload) }],
-           structuredContent: payload };
+  const enriched = _withErrorEnvelope(payload, {
+    error_code: 'invalid_iso',
+    severity: 'parameter_adjustment',
+    deterministic_hint: hint,
+    suggested_params: suggested,
+    allowed_params: allowed,
+  });
+  return { isError: true,
+           content: [{ type: 'text', text: JSON.stringify(enriched) }],
+           structuredContent: enriched };
 };
 const STRICT_ISO_TOOLS = new Set(['get_grid_data', 'get_interconnection_queue', 'get_iso_context']);
 function _validateToolArgs(name, args) {
@@ -3747,6 +3824,15 @@ function withReturnNudge(result, toolName, c) {
 
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
+  // r-error-envelope: capture this tool's declared param names (ZodRawShape keys)
+  // so the error builder can validate suggested_params to a STRICT SUBSET of them.
+  try {
+    if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
+      _TOOL_PARAM_KEYS.set(name, new Set(Object.keys(schema)));
+    } else if (!_TOOL_PARAM_KEYS.has(name)) {
+      _TOOL_PARAM_KEYS.set(name, new Set());
+    }
+  } catch (_e) { if (!_TOOL_PARAM_KEYS.has(name)) _TOOL_PARAM_KEYS.set(name, new Set()); }
   // 5-arg form: (name, description, paramsSchema, annotations, cb). Most DC Hub
   // tools are read-only data queries → readOnlyHint:true; the WRITE_TOOLS above
   // are state-mutating → readOnlyHint:false + destructiveHint:false.
@@ -4682,10 +4768,24 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         hint: 'Transient upstream error — retry once. If it persists, the live status is at https://dchub.cloud/health.',
         _source: 'DC Hub — dchub.cloud',
       };
+      // r-error-envelope (2026-07-11): emit the FULL error_version:1 shape. A
+      // handler failure is almost always backend pressure (web-pool saturation /
+      // upstream 5xx/timeout) → transient_backoff: the agent waits ~500ms and
+      // retries the SAME params. NO suggested_params — the args were valid; there
+      // is nothing to adjust. Legacy fields (error/tool/detail/hint/_source) are
+      // preserved so existing telemetry & clients keep working.
+      const _enriched = _withErrorEnvelope(_payload, {
+        error_code: 'tool_execution_failed',
+        severity: 'transient_backoff',
+        deterministic_hint: 'Transient upstream error (likely backend pool pressure) — '
+          + 'wait ~500ms and retry the same call once; if it persists, live status is at '
+          + 'https://dchub.cloud/health.',
+        // suggested_params intentionally omitted (valid args; nothing to adjust)
+      });
       return {
         isError: true,
-        content: [{ type: 'text', text: JSON.stringify(_payload) }],
-        structuredContent: _payload,
+        content: [{ type: 'text', text: JSON.stringify(_enriched) }],
+        structuredContent: _enriched,
       };
     } finally {
       // Fire-and-forget telemetry — never block the user response on it
