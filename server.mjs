@@ -1586,6 +1586,16 @@ const FREE_FULL_TOOLS = new Set([
   // Safe by construction: the handlers project to public fields, so "full" leaks nothing.
   'search',
   'fetch',
+  // r-cluster-open (2026-07-11): cluster_sites_by_latency is OPEN by design
+  // (Gemini partnership spec, adoption-first) — its backend endpoint
+  // /api/v1/fiber/cluster-latency sits on free_tier_gate's open-exemption list,
+  // and the payload is derived math (haversine + physics floors + route_factor
+  // inference), not proprietary $-aggregates. Without this exemption the anon
+  // trim gutted it to 1-of-N pairs with max_latency_us nulled (_isMetricKey
+  // caught the µs fields) — a physics screen with 2 of 3 pairs missing is
+  // useless, so the trim destroyed the adoption hook without protecting
+  // anything paid. Same class as the scoreboard: value IS the complete picture.
+  'cluster_sites_by_latency',
 ]);
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────

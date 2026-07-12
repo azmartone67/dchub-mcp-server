@@ -125,6 +125,10 @@ describe('FREE_FULL_TOOLS — flagship hook exemption (regression guard: 2/22 gr
     expect(FREE_FULL_TOOLS.has('get_grid_intelligence')).toBe(false);
     expect(PAID_ONLY_TOOLS.has('get_grid_intelligence')).toBe(true);
   });
+  it('cluster_sites_by_latency is a free-full hook (r-cluster-open: anon gets ALL pairs, not 1-of-N)', () => {
+    expect(FREE_FULL_TOOLS.has('cluster_sites_by_latency')).toBe(true);
+    expect(PAID_ONLY_TOOLS.has('cluster_sites_by_latency')).toBe(false);
+  });
 });
 
 describe('shapeGridIntelligence — non-empty per-ISO payload (regression guard: 2026-06-12 empty {freshness,citation})', () => {
