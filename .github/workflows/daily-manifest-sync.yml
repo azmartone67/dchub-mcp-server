@@ -92,12 +92,15 @@ jobs:
         # just the "<N> tools" phrase honest from server.mjs (the single source of truth).
         # Needs a PAT: the workflow GITHUB_TOKEN cannot edit repo metadata (no 'administration'
         # permission is grantable to it), so this is best-effort — warns, never fails, if unset.
+        # Reuses REGISTRY_PR_PAT (already present for registry PR work); prefers a dedicated
+        # REPO_METADATA_TOKEN if one is added later. The edit is non-fatal — a token lacking
+        # 'Administration: write'/'repo' scope warns instead of failing the whole sync job.
         env:
-          GH_TOKEN: ${{ secrets.REPO_METADATA_TOKEN }}
+          GH_TOKEN: ${{ secrets.REPO_METADATA_TOKEN || secrets.REGISTRY_PR_PAT }}
         run: |
           set -e
           if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::REPO_METADATA_TOKEN not set — GitHub About sync skipped. Add a PAT with 'Administration: write' (fine-grained) or 'repo' scope (classic) so Glama re-crawls the correct tool count."
+            echo "::warning::No PAT available (REPO_METADATA_TOKEN / REGISTRY_PR_PAT) — GitHub About sync skipped. Add a PAT with 'Administration: write' (fine-grained) or 'repo' scope (classic) so Glama re-crawls the correct tool count."
             exit 0
           fi
           N=$(node scripts/sync-tools-manifest.mjs --print-count)
@@ -108,5 +111,8 @@ jobs:
             exit 0
           fi
           echo "About drifted — healing:"; echo "  was: $CUR"; echo "  now: $NEW"
-          gh repo edit "${GITHUB_REPOSITORY}" --description "$NEW"
-          echo "::notice::✅ GitHub About synced to ${N} tools — Glama & other About-mirroring listings will re-scan on their own cadence."
+          if gh repo edit "${GITHUB_REPOSITORY}" --description "$NEW"; then
+            echo "::notice::✅ GitHub About synced to ${N} tools — Glama & other About-mirroring listings will re-scan on their own cadence."
+          else
+            echo "::warning::About edit failed — the PAT likely lacks repo 'Administration: write' / classic 'repo' scope. Grant it or add REPO_METADATA_TOKEN."
+          fi
