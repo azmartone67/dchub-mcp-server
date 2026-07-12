@@ -4777,6 +4777,26 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // idempotent — never alters content[] and never blocks the response.
       // #1241: embed an in-context claim at the value moment (grid/fiber, flag-gated).
       const _valued = await _maybeEmbedValueClaim(result, name, c);
+      // r-undercap-ask (2026-07-12, A/B via DCHUB_GRID_UNDERCAP_ASK, default on):
+      // the identified-free UNDER-cap grid/fiber "wow" call previously carried only a
+      // bind hint — while an ANON caller got the stronger $10 one-click (upstream
+      // _autoMintText). So the cohort that took our advice and claimed a key was
+      // monetized WEAKER than anon. Give identified-free ONE soft, non-blocking pay
+      // line too. Kept gentle ("no rush; current calls stay free") so it does NOT
+      // undercut the trial-taste wow lever. Fail-soft + additive; set the env to '0'
+      // to disable (the A/B off-arm).
+      try {
+        if ((process.env.DCHUB_GRID_UNDERCAP_ASK ?? '1') !== '0'
+            && gate && gate.trial_taste && MAP_TOOLS.has(name)
+            && !_isPaidDepthTier(_gateTier) && c && c.api_key
+            && _valued && Array.isArray(_valued.content)) {
+          const _sid = c.session_id || 'no-session';
+          _valued.content.push({ type: 'text', text:
+            '\n\n💡 Full `' + name + '` data delivered. To own it long-term — 💳 **$10 one-time = 1,000 API calls** (no subscription) → '
+            + _stripeWithSession(CREDITS_URL, _sid)
+            + ' · call `unlock_more_data` for options. No rush — your current calls stay free.' });
+        }
+      } catch (_) { /* additive only — never break the data path */ }
       // r-appstore-clean: strip signpost/meta for ChatGPT so the DATA renders (no-op elsewhere).
       // r-return-nudge: append the get_changes re-entry loop for identified callers
       return withReturnNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c);
