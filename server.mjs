@@ -1038,6 +1038,10 @@ async function _validateKeyUncached(api_key) {
       // learned that bind_email restores the key. Carry them through.
       reason: data.reason || null,
       upgrade_hint: data.upgrade_hint || null,
+      // r-metered-enforce (2026-07-12, DARK): backend flags a keyed FREE identity the
+      // daily monetize cron marked over the grid/fiber threshold. Only ever true while
+      // the backend MONETIZE_METERED_ENFORCE switch is on → the metered 402 gate below.
+      metered_enforce: data.metered_enforce === true,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -1667,6 +1671,17 @@ const CONTEXT_PACK_TOOLS = new Set(['get_market_context', 'get_iso_context']);
 const MAP_TOOLS = new Set([
   'get_grid_intelligence', 'get_fiber_intel', 'get_infrastructure',
   'get_pipeline', 'get_interconnection_queue',
+]);
+// r-metered-enforce (2026-07-12): the grid+fiber "paid-demand" tools the backend
+// monetize cron meters per identity (mirror of routes/monetization_master_shell.py
+// _DEFAULT_METERED_TOOLS). When the DARK MONETIZE_METERED_ENFORCE switch is on AND a
+// keyed FREE identity is over its 7-day threshold, these return the $10 402 gate.
+// The free acquisition hooks (get_grid_scoreboard/energy/renewable/power_pipeline)
+// are deliberately absent — the funnel top stays free.
+const METERED_ENFORCE_TOOLS = new Set([
+  'get_grid_intelligence', 'get_grid_data', 'compare_isos', 'get_interconnection_queue',
+  'get_refined_queue', 'get_retirement_headroom', 'grid_transition_radar',
+  'get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness', 'plan_fiber_leadin',
 ]);
 const MAP_URL = 'https://dchub.cloud/land-power-map';
 // x402 (2026-06-20): the flagship value-moment tools that advertise the
@@ -3961,6 +3976,50 @@ function trackedTool(srv, name, description, schema, handler) {
               structuredContent: { credits_depleted: true, tool: name, ..._trim._upgrade },
             };
           } catch (_) { /* fall through to normal gating on any error */ }
+        }
+      }
+      // r-metered-enforce (2026-07-12): DARK $10 metered wall. Fires ONLY when the
+      // backend (MONETIZE_METERED_ENFORCE=1) flagged this keyed FREE identity over its
+      // 7-day grid/fiber threshold — the enforcement teeth the daily monetize cron's
+      // leads were waiting for. Placed AFTER the credit cascade so a prepaid-pack buyer
+      // (still 'free' tier) is NEVER blocked; paid/enterprise short-circuit above; anon
+      // never carries the flag. One cached credit lookup guards the pack exemption.
+      // Fail-open throughout. Turn on only via the backend env switch.
+      if (c && c.metered_enforce === true && METERED_ENFORCE_TOOLS.has(name)
+          && !(_gateTier === 'paid' || _gateTier === 'enterprise')) {
+        let _mc = { credits: 0, had_pack: false };
+        try { _mc = await _getCredits(c); } catch (_) {}
+        if ((_mc.credits || 0) <= 0 && !_mc.had_pack) {
+          const _sidM = (c && c.session_id) || 'no-session';
+          try {
+            signalPaywall({
+              tool: name, args, signal_type: 'metered_grid_fiber_enforced',
+              session_id: _sidM, mcp_client: c.platform || 'mcp',
+              user_agent: c.client_ua || null, ip_address: c.client_ip || null,
+              api_key: c.api_key || null, tier_current: _gateTier || 'free',
+              tier_required: 'pack10', message_shown: 'metered_enforce',
+            });
+          } catch (_) {}
+          status = 'metered_enforced';
+          _dropCreditCache(c);
+          return {
+            content: [{ type: 'text', text:
+              '🔒 **You’ve used DC Hub’s free grid & fiber allowance** — heavy `' + name +
+              '` / grid / fiber use over the last 7 days. Keep going: 💳 **$10 one-time = 1,000 API ' +
+              'calls, no subscription** → ' + _stripeWithSession(CREDITS_URL, _sidM) +
+              ' — the moment your human pays, your next `' + name + '` call returns full data (no ' +
+              'reconnect). Call `unlock_more_data` for one-click links.' + promoText() }],
+            isError: true,
+            structuredContent: {
+              error: 'metered_over_threshold',
+              tool: name,
+              current_tier: _gateTier || 'free',
+              next_tool: 'unlock_more_data',
+              credits_url: _stripeWithSession(CREDITS_URL, _sidM),
+              ...buildPaywallExtras(name, 'free'),
+              ...promoSC(),
+            },
+          };
         }
       }
       // r-mpp (2026-06-21): MPP per-call rail — DARK unless MPP_ENABLED=1 +
@@ -7468,6 +7527,7 @@ app.post('/mcp', async (req, res) => {
             client_name_raw: (body?.params?.clientInfo?.name || '').toString().slice(0, 200) || null,
             tier,
             is_trial: validation.is_trial === true,  // r62c-conv: trial-taste gate
+            metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
             developer_id: validation.developer_id,
             email: validation.email,
             // r46 (2026-05-25): attribution for paywall blocks. Forwarded
@@ -7618,6 +7678,7 @@ app.post('/mcp', async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier,
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
+        metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
         developer_id: validation.developer_id || null,
         email: validation.email || null,
         session_id: sessionId || null,               // stale id → still the backend funnel key
