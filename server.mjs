@@ -6477,20 +6477,30 @@ function createServer(descOverrides) {
   // Wraps the OPEN /api/v1/fiber/cluster-latency (derived math, adoption-first;
   // routes/cluster_latency.py on the backend).
   trackedTool(srv, 'cluster_sites_by_latency',
-    'Physics-bounded latency clustering across 2-8 candidate sites — use when your human wants to know which of N candidate sites can form a synchronous / low-latency cluster (sync replication, active-active pairs, HPC pods): deterministic pruning BEFORE detailed routing. Per site pair: haversine distance, round-trip physics floor (km × 4.9 µs/km — light in SMF-28 fiber, n≈1.468 — then ×2), estimated real RTT (floor × route_factor 1.4, a stamped inference), viable vs physics_impossible against your budget, and confidence_v — the provenance tier of the supporting evidence (published | tracked | inferred). Also returns clusters: the largest site subsets whose ALL pairwise estimates fit the budget, plus each site\'s inferred dark-fiber screening level. Example: cluster_sites_by_latency sites="39.04,-77.48:ashburn;39.29,-76.61:baltimore;40.42,-79.99:pittsburgh" max_latency_us=2000. Params: sites — semicolon-separated "lat,lon" pairs, 2-8 (same format as compare_sites locations; optional per-site labels via "lat,lon:label"); max_latency_us — round-trip budget in microseconds (default 1000); min_confidence — "published"|"tracked"|"inferred" (default inferred = include all). Returns {pairs:[{from, to, distance_km, floor_rtt_us, est_rtt_us, viable, physics_impossible, confidence_v, endpoint_dark_screen}], clusters:[{sites, size, max_est_rtt_us}], viable_count, pruned_count, assumptions, provenance}. Do NOT treat this as an engineered latency quote — the floors are physics (no fiber path can beat them) but the estimates are inference (route_factor 1.4); always quote each pair\'s confidence_v when relaying results. For actual route corridors use plan_fiber_leadin; for a single-site connectivity score use get_fiber_readiness.',
-    { sites: S.describe('Semicolon-separated "lat,lon" pairs, 2-8 sites (same format as compare_sites locations); optional per-site labels via "lat,lon:label", e.g. "39.04,-77.48:ashburn;39.29,-76.61:baltimore"'),
+    'Physics-bounded latency clustering for 2-8 sites — returns viable low-latency clusters and pairwise RTT floors before any routing work. Use when your human wants to know which of N candidate sites can form a synchronous / low-latency cluster (sync replication, active-active pairs, HPC pods): deterministic pruning BEFORE detailed routing. Per site pair: haversine distance, round-trip physics floor (km × 4.9 µs/km — light in SMF-28 fiber, n≈1.468 — then ×2), estimated real RTT (floor × route_factor 1.4, a stamped inference), viable vs physics_impossible against your budget, and confidence_v — the provenance tier of the supporting evidence (published | tracked | inferred). Also returns clusters: the largest site subsets whose ALL pairwise estimates fit the budget, plus each site\'s inferred dark-fiber screening level. CANDIDATE CONTRACT: pass candidate_ids (from get_refined_queue) instead of raw coordinates — each resolves to its FROZEN mint coordinates (zero transposition), and cand_… tokens may also be mixed into the sites string; expired/unknown ids are dropped AND declared in candidate_contract (fail-closed). Example: cluster_sites_by_latency sites="39.04,-77.48:ashburn;39.29,-76.61:baltimore;40.42,-79.99:pittsburgh" max_latency_us=2000 — or cluster_sites_by_latency candidate_ids=["cand_…","cand_…"] max_latency_us=2000. Returns _entity=latency_clusters: {pairs:[{from, to, distance_km, floor_rtt_us, est_rtt_us, viable, physics_impossible, confidence_v, endpoint_dark_screen}], clusters:[{sites, size, max_est_rtt_us}], viable_count, pruned_count, assumptions, provenance}. Do NOT treat this as an engineered latency quote — the floors are physics (no fiber path can beat them) but the estimates are inference (route_factor 1.4); always quote each pair\'s confidence_v when relaying results. For actual route corridors use plan_fiber_leadin; for a single-site connectivity score use get_fiber_readiness.',
+    { sites: S.describe('Semicolon-separated "lat,lon" pairs, 2-8 sites (same format as compare_sites locations); optional per-site labels via "lat,lon:label", e.g. "39.04,-77.48:ashburn;39.29,-76.61:baltimore". cand_… tokens are also accepted here and resolve to frozen mint coordinates. Optional if candidate_ids is given'),
+      candidate_ids: z.any().describe('Array (or comma-separated string) of candidate_id values from get_refined_queue — each resolves to its FROZEN mint coordinates (zero transcription drift); expired/unknown are dropped and declared in candidate_contract. Use instead of, or alongside, sites'),
       max_latency_us: z.number().min(1).max(10000000).optional().describe('Round-trip latency budget in microseconds (default 1000 µs = 1 ms; sync replication is typically 1000-2000 µs)'),
       min_confidence: S.describe('Minimum evidence tier a pair must meet to count as viable: "published" | "tracked" | "inferred" (default inferred = include all)') },
     async (a) => {
       const sites = String(a.sites || '').trim();
-      if (!sites) return { content: [{ type: 'text', text: JSON.stringify({
-        error: 'sites required — semicolon-separated "lat,lon" pairs (2-8), optional labels via "lat,lon:label"',
+      const hasCand = a.candidate_ids && (Array.isArray(a.candidate_ids) ? a.candidate_ids.length : String(a.candidate_ids).trim());
+      if (!sites && !hasCand) return { content: [{ type: 'text', text: JSON.stringify({
+        error: 'sites or candidate_ids required — sites = semicolon-separated "lat,lon" pairs (2-8, optional labels via "lat,lon:label"); candidate_ids = cand_… values from get_refined_queue',
         example: 'cluster_sites_by_latency sites="39.04,-77.48:ashburn;39.29,-76.61:baltimore" max_latency_us=2000',
       }) }] };
-      const q = { sites };
+      const q = {};
+      if (sites) q.sites = sites;
+      if (hasCand) q.candidate_ids = a.candidate_ids;
       if (a.max_latency_us) q.max_latency_us = a.max_latency_us;
       if (a.min_confidence) q.min_confidence = String(a.min_confidence).toLowerCase();
-      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/fiber/cluster-latency', q)) }] };
+      // candidate_ids is an array → POST (JSON body; backend prefers get_json).
+      // Plain coordinate strings → GET (query params) as before.
+      const data = hasCand
+        ? await callAPI('/api/v1/fiber/cluster-latency', {}, { method: 'POST', body: q })
+        : await callAPI('/api/v1/fiber/cluster-latency', q);
+      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
   // r-persist (2026-07-11): KEY PERSISTENCE PUSH. ~76% of minted keys never
