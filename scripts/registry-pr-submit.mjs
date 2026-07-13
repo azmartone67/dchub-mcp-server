@@ -30,7 +30,9 @@ const LIVE = PAT && ['1', 'true', 'yes'].includes(String(process.env.REGISTRY_PR
 const DRY = !LIVE;
 
 // display-name used for the alphabetical guard + PR title
-const DESC = 'Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (300+ markets), ISO grid telemetry, fiber routes, 70 tools. Remote MCP at ' + HOMEPAGE + ' — query and cite.';
+// Counts kept current (was stale "70 tools / 300+ markets / 2,000+ deals" — the exact
+// pre-stale-entry bug the 07-13 audit flagged). Update alongside the honest-numbers.
+const DESC = 'Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — DC Hub Power Index (311 markets), ISO grid telemetry, fiber routes, 73 tools. Remote MCP at ' + HOMEPAGE + ' — query and cite.';
 
 // PR-accepting, README-based awesome-mcp lists we're missing from. NB: wong2 +
 // appcypher were dropped 2026-07-10 — their owners DISABLED pull requests (the
@@ -53,7 +55,7 @@ const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (300+ US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 2,000+ M&A deals; 70 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (311 US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 4,000+ M&A deals; 73 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
   },
 ];
 

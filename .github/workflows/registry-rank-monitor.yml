@@ -18,7 +18,6 @@ on:
 permissions:
   contents: read
   issues: write
-  actions: write   # fire registry-pr-submit on a CORE slip (the automatable relevance half)
 
 concurrency:
   group: registry-rank-monitor
@@ -51,14 +50,12 @@ jobs:
               || gh issue create --title "$TITLE" --body-file monitor_report.md
           fi
 
-      - name: Remediate — fire keyword auto-PR on a CORE slip (armed only)
-        if: steps.mon.outputs.remediate == 'true' && vars.REGISTRY_PR_LIVE == '1'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "CORE slip on: ${{ steps.mon.outputs.remediate_terms }} — firing registry-pr-submit (automatable half)."
-          echo "NOTE: the ONLY lever for Smithery's score is the owner-UI description; this PR covers the repo/keyword surfaces."
-          gh workflow run registry-pr-submit.yml || echo "registry-pr-submit dispatch failed (needs REGISTRY_PR_PAT) — owner UI action stands"
+      # (Removed 2026-07-13: the earlier "fire registry-pr-submit on a CORE slip" step
+      # was misguided — a Smithery relevance slip is NOT fixed by awesome-list PRs, and
+      # the dispatch was a no-op anyway (workflow_dispatch dry_run defaults true). The
+      # real remedy is the owner-UI description paste, which the local Rank Defense
+      # master shell already stages + escalates. registry-pr-submit stays on its own
+      # weekly cadence for genuine list ADDs.)
 
       - name: Auto-close alert issue when healthy again
         if: steps.mon.outputs.regression == 'false'
