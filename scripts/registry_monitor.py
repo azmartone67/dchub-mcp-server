@@ -225,6 +225,19 @@ def _update_streaks(core_ranks):
     return state, escalated
 
 
+def _write_status(core_one, remediate, escalated, regression):
+    """Machine-readable status the Rank Defense Master Shell consumes to decide
+    escalation/auto-PR without re-parsing stdout. Best-effort; never fatal."""
+    try:
+        os.makedirs("state", exist_ok=True)
+        json.dump({"core_one": core_one, "core_total": len(CORE),
+                   "remediate": remediate, "escalated": escalated,
+                   "regression": bool(regression)},
+                  open("state/rank_status.json", "w"), indent=1, sort_keys=True)
+    except Exception:
+        pass
+
+
 def _reflex_kick():
     """INSURANCE ONLY. Recency has ~0 rank weight (createdAt is frozen at first-publish),
     so this republish does NOT recover rank — it only keeps `verified`/deployment/tool-catalog
@@ -271,7 +284,7 @@ def main(probe=False):
     reclaim = {t: smithery_rank(t) for t in RECLAIM}
 
     if probe:
-        return _emit_probe(core, core_one, reclaim, reasons, remediate, reflex)
+        return _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated)
 
     can_ver, can_tools = canonical()
     live_tools = live_tool_count()
@@ -387,6 +400,7 @@ def main(probe=False):
 
     print(report)
     open("monitor_report.md", "w").write(report)
+    _write_status(core_one, remediate, escalated, regression)
 
     # GitHub Actions wiring (no-ops locally). `remediate` drives the workflow's
     # detect→republish→verify step; it is the machine-readable list of CORE slips.
@@ -401,9 +415,9 @@ def main(probe=False):
     return regression
 
 
-def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex):
+def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated):
     """Light mode (`--probe`): CORE + RECLAIM ranks only, no cross-registry/live/lobehub
-    calls. Fires every ~90 min from cloud.dchub.rank-probe.plist between the 6h CI cron,
+    calls. Fires every ~90 min via the Rank Defense Master Shell between the 6h CI cron,
     so a slip is caught (and the insurance reflex + escalation fire) within the hour."""
     L = [f"## rank probe — CORE {core_one}/{len(CORE)} at #1"]
     for t, (pos, _tot, leader) in core.items():
@@ -419,6 +433,7 @@ def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex):
         L.append(f"reflex: {reflex}")
     report = "\n".join(L)
     print(report)
+    _write_status(core_one, remediate, escalated, bool(reasons))
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"regression={'true' if reasons else 'false'}\n")

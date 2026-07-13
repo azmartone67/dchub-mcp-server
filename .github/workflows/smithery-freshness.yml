@@ -1,12 +1,15 @@
 name: smithery freshness heartbeat
 
-# PREVENTIVE freshness lever (durable / cloud). Re-publishes the Smithery listing
-# on a cadence so our recency signal never decays below a competitor's — Smithery
-# ranks partly on freshness, so a stale-but-better server gets passed by a merely-
-# fresher one (e.g. ByteAsk, an embedded-systems docs server, tied us on
-# "interconnection" on recency alone). registry_monitor.py DETECTS slips; this
-# PREVENTS them. Pairs with the local LaunchAgent (scripts/cloud.dchub.smithery-
-# freshness.plist, Mon/Thu) — this one runs whether or not the Mac is awake.
+# INSURANCE republish (durable / cloud). CORRECTION 2026-07-12: a 27-agent teardown
+# (Spearman over registry.smithery.ai ordering) proved Smithery rank is RELEVANCE-
+# driven, NOT recency — score[query-vs-displayName+description] 0.61-0.88 and verified
+# 0.80-0.88 drive order; createdAt[recency] ≈ 0.00 AND is frozen at first-publish, so
+# NO republish cadence moves rank. byteaskai beats us on "interconnection" by out-
+# SCORING + out-USING us, not by being fresher. This job is therefore INSURANCE only:
+# `smithery mcp publish` re-scans the live server so verified/deployment/tool-catalog
+# stay healthy — it is NOT a rank lever. The real fix for a slip is relevance (owner-UI
+# description; keywords) — see the Rank Defense Master Shell. Pairs with the local
+# daily LaunchAgent (scripts/cloud.dchub.smithery-freshness.plist).
 #
 # Auth: repo secret SMITHERY_API_KEY (the smithery CLI reads $SMITHERY_API_KEY).
 # `smithery mcp publish` re-scans the live server + refreshes freshness — no
@@ -15,7 +18,7 @@ name: smithery freshness heartbeat
 
 on:
   schedule:
-    - cron: '23 14 * * *'   # DAILY 14:23 UTC (r-daily-freshness 2026-06-24): Smithery ranks on recency + its re-scan refreshes the listing WITHOUT a version bump, so a daily re-publish keeps DC Hub fresh and #1. Local Mon/Thu LaunchAgent is now redundant backup.
+    - cron: '23 14 * * *'   # DAILY 14:23 UTC. INSURANCE re-publish (keeps verified/deploy/tool-catalog fresh); recency ≈ 0 for rank, so this does NOT hold #1 — relevance does. Local daily LaunchAgent is the redundant backup.
   workflow_dispatch:
 
 permissions:

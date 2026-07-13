@@ -27,9 +27,8 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
-    <string>scripts/registry_monitor.py</string>
-    <string>--probe</string>
+    <string>/bin/bash</string>
+    <string>scripts/rank_defense_master_shell.sh</string>
   </array>
 
   <key>WorkingDirectory</key>

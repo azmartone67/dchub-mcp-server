@@ -5,7 +5,10 @@ name: registry rank + drift monitor
 # cross-registry version/tool-count parity, and README drift; OPENS/REFRESHES a
 # GitHub issue when a CORE term falls out of #1, a rival contests 2+ CORE terms,
 # or the registry/README drifts stale. Read-only (public APIs) — no secrets.
-# Runs every 6h so a slip is caught in hours, not a day (freshness races are fast).
+# 6h CLOUD BACKSTOP: the local Rank Defense Master Shell (cloud.dchub.rank-probe, ~90
+# min) is the fast primary detector; this catches slips when the Mac is asleep. A slip
+# is a RELEVANCE loss (recency ≈ 0 for Smithery rank) — the monitor emits `remediate`
+# so this workflow can fire the automatable half (registry-pr-submit) when armed.
 
 on:
   schedule:
@@ -15,6 +18,7 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: write   # fire registry-pr-submit on a CORE slip (the automatable relevance half)
 
 concurrency:
   group: registry-rank-monitor
@@ -46,6 +50,15 @@ jobs:
               --label "registry,automated" 2>/dev/null \
               || gh issue create --title "$TITLE" --body-file monitor_report.md
           fi
+
+      - name: Remediate — fire keyword auto-PR on a CORE slip (armed only)
+        if: steps.mon.outputs.remediate == 'true' && vars.REGISTRY_PR_LIVE == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "CORE slip on: ${{ steps.mon.outputs.remediate_terms }} — firing registry-pr-submit (automatable half)."
+          echo "NOTE: the ONLY lever for Smithery's score is the owner-UI description; this PR covers the repo/keyword surfaces."
+          gh workflow run registry-pr-submit.yml || echo "registry-pr-submit dispatch failed (needs REGISTRY_PR_PAT) — owner UI action stands"
 
       - name: Auto-close alert issue when healthy again
         if: steps.mon.outputs.regression == 'false'
