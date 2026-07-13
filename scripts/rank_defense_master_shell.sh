@@ -80,10 +80,27 @@ if [ -z "$REMEDIATE_TERMS" ]; then
 fi
 
 # ---- STAGE 3: ESCALATE (a CORE term slipped) ----
+# The Smithery description has NO write API, so the fix is a human paste. We make it
+# a ZERO-THOUGHT paste: auto-stage the current canonical description (source of truth
+# scripts/smithery_description.txt, kept comprehensive + updated by the monthly
+# re-teardown) to a fixed Downloads file. Human action = open + Ctrl-A + paste.
 log "SLIP — CORE ${CORE_ONE}/9; remediate: ${REMEDIATE_TERMS}"
-log "REMEDY (relevance, not freshness): paste a term-front-loaded description into"
-log "  https://smithery.ai/servers/azmartone67/dchub → Edit  (the ONLY path to Smithery's score),"
-log "  then add the term to server.json.description + the live backend instructions."
+STAGED="$HOME/Downloads/smithery-description-CURRENT.txt"
+if [ -f scripts/smithery_description.txt ] && [ -f scripts/smithery_title.txt ]; then
+  {
+    echo "# Paste into https://smithery.ai/servers/azmartone67/dchub → Edit"
+    echo "# (the ONLY path to Smithery's rank score — no CLI/API reaches it)"
+    echo; echo "TITLE:"; cat scripts/smithery_title.txt
+    echo; echo "DESCRIPTION:"; cat scripts/smithery_description.txt
+  } > "$STAGED" 2>/dev/null \
+    && log "REMEDY staged → $STAGED  (open, select-all, paste into the Smithery Edit form)"
+  # sanity: warn if a slipped term isn't even in the canonical text (needs adding there first)
+  for t in ${REMEDIATE_TERMS//,/ }; do
+    grep -qi "$t" scripts/smithery_description.txt || log "  ⚠ '$t' NOT in canonical description — add it to scripts/smithery_description.txt first"
+  done
+else
+  log "REMEDY: paste a term-front-loaded description into smithery.ai/servers/azmartone67/dchub → Edit"
+fi
 
 # ---- STAGE 4: AUTO-PR (armed, ≥2-check streak only) ----
 if [ -n "$ESCALATED" ]; then

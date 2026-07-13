@@ -290,10 +290,11 @@ def main(probe=False):
     if remediate:
         reflex = _reflex_kick()
         for t in escalated:
-            reasons.append(f"🚨 ESCALATE: CORE term **{t}** has slipped ≥2 consecutive checks — this is a "
-                           f"RELEVANCE loss, not freshness. FIX: paste a **{t}**-front-loaded description into "
-                           f"smithery.ai/servers/{SMITHERY_SLUG} → Edit (the only path to Smithery's `score`), "
-                           f"and add '{t}' to server.json.description + the live backend instructions.")
+            reasons.append(f"🚨 ESCALATE: CORE term **{t}** slipped ≥2 checks — a RELEVANCE loss. FIX: paste the "
+                           f"canonical listing (source of truth scripts/smithery_description.txt; the local loop "
+                           f"also stages it to ~/Downloads/smithery-description-CURRENT.txt) into "
+                           f"smithery.ai/servers/{SMITHERY_SLUG} → Edit — the ONLY path to Smithery's `score`. "
+                           f"If '{t}' is missing from that file, add it there first (it's the source of truth).")
 
     # VERIFIED tripwire (both modes): the `verified` badge is a large fixed rank
     # boost that ONLY the owner can restore — a drop pages loudly, but is NOT a
