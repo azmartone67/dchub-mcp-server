@@ -5,3 +5,6 @@ sdk/python/dist/
 upstream/
 .DS_Store
 monitor_report.md
+
+# local rank-probe streak state (regenerated each run)
+state/

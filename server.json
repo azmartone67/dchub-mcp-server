@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
   "title": "DC Hub — Data Center & Power Intelligence",
-  "description": "Live data-center, power-grid, fiber, gas and M&A intelligence for AI agents. Query and cite.",
+  "description": "Live data-center, power-grid, interconnection-queue, grid-capacity, transmission, fiber, natural-gas, electricity & hyperscaler infrastructure intelligence for AI agents — real-time telemetry across PJM, ERCOT, CAISO and every US ISO. Query and cite.",
   "websiteUrl": "https://dchub.cloud",
   "version": "2.5.0",
   "repository": {

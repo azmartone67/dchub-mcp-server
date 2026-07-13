@@ -353,6 +353,11 @@
     "grid interconnection",
     "ISO interconnection queue",
     "capacity",
-    "natural gas"
+    "grid capacity",
+    "grid headroom",
+    "power plant",
+    "electricity",
+    "natural gas",
+    "natural gas pipeline"
   ]
 }

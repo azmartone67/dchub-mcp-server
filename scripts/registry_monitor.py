@@ -20,9 +20,28 @@ SMITHERY_SLUG = "azmartone67/dchub"
 REPO_SLUG = "azmartone67/dchub-mcp-server"
 LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
 
-# CORE = must stay #1 (the defensible cluster). WATCH = track, don't alert.
-CORE = ["data center", "data centers", "power grid", "fiber", "interconnection", "capacity"]
-WATCH = ["grid", "power", "infrastructure", "renewables", "energy", "hyperscale"]
+# ── Term tiers (recalibrated 2026-07-12 from a Spearman teardown of registry.smithery.ai
+#    ordering: score[text-relevance]≈0.61-0.88 and verified≈0.80-0.88 DRIVE rank; useCount
+#    ≈0.53-0.66; createdAt[recency]≈0.00 == UNUSED. So a slip is a RELEVANCE loss to fix
+#    with description/keyword text, NOT a freshness problem — republishing barely moves rank.)
+#
+# CORE  = terms we VERIFIABLY hold #1 on and that are ours to defend → a slip PAGES.
+# RECLAIM = terms we do NOT hold #1 on for a STRUCTURAL reason (an off-topic server wins the
+#           bare token on exact-name/usage, or the token is simply absent from our surfaces).
+#           These must NOT page (they'd fire a permanent false regression); we TRACK them and,
+#           when one slips/stays lost, emit the specific relevance remedy — never a freshness kick.
+# WATCH = popularity/brand-capped opportunities (cloudflare/vercel/gce out-USE us). Informational.
+CORE = ["data center", "data centers", "power grid", "fiber", "capacity",
+        "grid interconnection", "energy", "renewables", "power"]
+RECLAIM = ["interconnection", "interconnection queue", "hyperscale",
+           "natural gas", "PJM", "ERCOT", "CAISO"]
+WATCH = ["grid", "infrastructure", "hyperscaler", "datacenter",
+         "electricity", "renewable energy", "site selection", "transmission"]
+
+# Per-CORE-term relevance remedy surfaced on a slip. The ONLY Smithery lever that moves the
+# top-level `score` is the UI-authored description (no CLI/registry write path reaches it —
+# confirmed 2026-07-12), so every remedy leads with that owner action.
+STATE_FILE = "state/rank_streak.json"
 
 
 def _get(url):
@@ -171,7 +190,89 @@ def live_tool_count():
         return None
 
 
-def main():
+def _load_streak():
+    try:
+        return json.load(open(STATE_FILE))
+    except Exception:
+        return {}
+
+
+def _save_streak(state):
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        json.dump(state, open(STATE_FILE, "w"), indent=1, sort_keys=True)
+    except Exception:
+        pass  # state is best-effort; never let it break the monitor
+
+
+def _update_streaks(core_ranks):
+    """Advance a per-CORE-term consecutive-slip counter so 'still slipped after N cycles'
+    is evaluable (the monitor was stateless before — it overwrote monitor_report.md each run).
+    Returns (state, list_of_terms_with_streak>=2)."""
+    state = _load_streak()
+    escalated = []
+    for term, (pos, _tot, leader) in core_ranks.items():
+        rec = state.get(term, {"streak": 0})
+        if pos == 1:
+            rec = {"streak": 0, "last_rank": 1, "leader": None}
+        else:
+            rec = {"streak": rec.get("streak", 0) + 1,
+                   "last_rank": pos, "leader": leader}
+            if rec["streak"] >= 2:
+                escalated.append(term)
+        state[term] = rec
+    _save_streak(state)
+    return state, escalated
+
+
+def _reflex_kick():
+    """INSURANCE ONLY. Recency has ~0 rank weight (createdAt is frozen at first-publish),
+    so this republish does NOT recover rank — it only keeps `verified`/deployment/tool-catalog
+    fresh so nothing structural rots while the real (relevance) remedy is applied. Local best-
+    effort; gated by RANK_AUTOHEAL_DISABLE. In CI, the workflow fires `gh workflow run` instead."""
+    if os.environ.get("RANK_AUTOHEAL_DISABLE"):
+        return "disabled (RANK_AUTOHEAL_DISABLE set)"
+    if os.environ.get("GITHUB_OUTPUT"):
+        return "ci (workflow fires gh workflow run smithery-freshness.yml)"
+    try:
+        import subprocess
+        uid = os.getuid()
+        subprocess.run(["launchctl", "kickstart", "-k",
+                        f"gui/{uid}/cloud.dchub.smithery-freshness"],
+                       check=False, capture_output=True, timeout=20)
+        return "kicked cloud.dchub.smithery-freshness (insurance; recency≈0 rank weight)"
+    except Exception as e:
+        return f"kick failed ({e})"
+
+
+def main(probe=False):
+    core = {t: smithery_rank(t) for t in CORE}
+    # --- CORE regression + streak + reflex (both modes) ---
+    reasons = []
+    core_one = 0
+    for t, (pos, _tot, leader) in core.items():
+        if pos == 1:
+            core_one += 1
+        else:
+            who = f" — **{leader}** leads" if leader and "dchub" not in (leader or "").lower() else ""
+            reasons.append(f"CORE term **{t}** at {('#'+str(pos)) if pos else '>50'} (expected #1){who}")
+    remediate = [t for t, (pos, _t, _l) in core.items() if pos != 1]
+    _state, escalated = _update_streaks(core)
+    reflex = None
+    if remediate:
+        reflex = _reflex_kick()
+        for t in escalated:
+            reasons.append(f"🚨 ESCALATE: CORE term **{t}** has slipped ≥2 consecutive checks — this is a "
+                           f"RELEVANCE loss, not freshness. FIX: paste a **{t}**-front-loaded description into "
+                           f"smithery.ai/servers/{SMITHERY_SLUG} → Edit (the only path to Smithery's `score`), "
+                           f"and add '{t}' to server.json.description + the live backend instructions.")
+
+    # RECLAIM tracking (never pages) — measure progress toward claiming these.
+    reclaim = {t: smithery_rank(t) for t in RECLAIM}
+
+    if probe:
+        return _emit_probe(core, core_one, reclaim, reasons, remediate, reflex)
+
     can_ver, can_tools = canonical()
     live_tools = live_tool_count()
     off_ver, off_tools = official_registry()
@@ -180,19 +281,10 @@ def main():
     readme_tools = readme_tool_count()
     lobe_status, lobe_tools = lobehub_presence()
 
-    core = {t: smithery_rank(t) for t in CORE}
     watch = {t: smithery_rank(t) for t in WATCH}
 
-    # --- regressions (the only things that page) ---
-    reasons = []
-    core_one = 0
-    for t, (pos, _tot, leader) in core.items():
-        if pos == 1:
-            core_one += 1
-        else:
-            who = f" — **{leader}** leads (beat them on relevance/freshness)" \
-                  if leader and "dchub" not in (leader or "").lower() else ""
-            reasons.append(f"CORE term **{t}** at {('#'+str(pos)) if pos else '>50'} (expected #1){who}")
+    # CORE regression, streak, remediate + reflex are computed at the top of main()
+    # (shared with --probe mode); here we only ADD the cross-registry parity gates.
     # PROACTIVE escalation: one rival leading 2+ CORE terms = a coordinated threat
     # contesting our cluster, not a one-off slip → call it out by name, loudly.
     core_set = set(CORE)
@@ -269,10 +361,21 @@ def main():
         lead = "**(us)**" if pos == 1 else (leader or "—")
         L.append(f"| {t} | {('#'+str(pos)) if pos else '>50'} | {lead} | {tot} |")
     L.append("")
+    # RECLAIM: terms not held for a structural reason — track progress, never page.
+    reclaim_one = sum(1 for (pos, _t, _l) in reclaim.values() if pos == 1)
+    L.append(f"### 🎯 Reclaim tier (relevance/keyword gaps — track, don't page) — {reclaim_one}/{len(RECLAIM)} at #1")
+    L.append("| Term | Our rank | Leader | of N |")
+    L.append("|---|---|---|---|")
+    for t, (pos, tot, leader) in reclaim.items():
+        lead = "**(us)**" if pos == 1 else (leader or "—")
+        L.append(f"| {t} | {('#'+str(pos)) if pos else '>50'} | {lead} | {tot} |")
+    L.append("")
     if regression:
         L.append("### 🔻 Regression detected")
         for r in reasons:
             L.append(f"- {r}")
+        if reflex:
+            L.append(f"- _auto-heal reflex: {reflex}_")
     else:
         L.append(f"### ✅ No regression — CORE cluster holding #1 ({core_one}/{len(CORE)}), registry record in sync.")
     if notes:
@@ -285,14 +388,45 @@ def main():
     print(report)
     open("monitor_report.md", "w").write(report)
 
-    # GitHub Actions wiring (no-ops locally)
+    # GitHub Actions wiring (no-ops locally). `remediate` drives the workflow's
+    # detect→republish→verify step; it is the machine-readable list of CORE slips.
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(report + "\n")
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"regression={'true' if regression else 'false'}\n")
             f.write(f"core_one={core_one}\n")
+            f.write(f"remediate={'true' if remediate else 'false'}\n")
+            f.write(f"remediate_terms={','.join(remediate)}\n")
+    return regression
+
+
+def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex):
+    """Light mode (`--probe`): CORE + RECLAIM ranks only, no cross-registry/live/lobehub
+    calls. Fires every ~90 min from cloud.dchub.rank-probe.plist between the 6h CI cron,
+    so a slip is caught (and the insurance reflex + escalation fire) within the hour."""
+    L = [f"## rank probe — CORE {core_one}/{len(CORE)} at #1"]
+    for t, (pos, _tot, leader) in core.items():
+        held = "✅" if pos == 1 else "🔻"
+        L.append(f"{held} {t}: {('#'+str(pos)) if pos else '>50'}"
+                 + ("" if pos == 1 else f"  (leader: {leader})"))
+    reclaim_one = sum(1 for (pos, _t, _l) in reclaim.values() if pos == 1)
+    L.append(f"— reclaim {reclaim_one}/{len(RECLAIM)} at #1")
+    if reasons:
+        L.append("REGRESSION:")
+        L.extend(f"  - {r}" for r in reasons)
+    if reflex:
+        L.append(f"reflex: {reflex}")
+    report = "\n".join(L)
+    print(report)
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"regression={'true' if reasons else 'false'}\n")
+            f.write(f"remediate={'true' if remediate else 'false'}\n")
+            f.write(f"remediate_terms={','.join(remediate)}\n")
+    return bool(reasons)
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(probe="--probe" in sys.argv)

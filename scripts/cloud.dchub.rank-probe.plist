@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  DC Hub MCP — Smithery rank PROBE (LaunchAgent).
+
+  Runs `registry_monitor.py --probe` (CORE + RECLAIM ranks only, ~16 HTTP calls,
+  no cross-registry/live/lobehub work) every ~90 min, as the fast local detector
+  BETWEEN the durable 6h CI cron (registry-rank-monitor.yml). On a CORE slip the
+  monitor advances the per-term slip streak (state/rank_streak.json), fires the
+  insurance reflex (kick the freshness agent — recency≈0 rank weight, so this is
+  only to keep verified/deployment fresh), and on a ≥2-check streak emits the
+  RELEVANCE remedy (owner: paste a term-front-loaded description into the Smithery
+  UI — the only path to Smithery's `score`).
+
+  Install:  cp scripts/cloud.dchub.rank-probe.plist ~/Library/LaunchAgents/
+            launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cloud.dchub.rank-probe.plist
+  Run now:  launchctl kickstart -k gui/$(id -u)/cloud.dchub.rank-probe
+  Stop:     launchctl bootout gui/$(id -u)/cloud.dchub.rank-probe
+
+  Kill-switch: set RANK_AUTOHEAL_DISABLE=1 in EnvironmentVariables to make the
+  reflex a no-op (detection + reporting still run).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cloud.dchub.rank-probe</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>scripts/registry_monitor.py</string>
+    <string>--probe</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/jonathanmartone/dchub-mcp-server</string>
+
+  <key>StartInterval</key>
+  <integer>5400</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/jonathanmartone/Library/Logs/dchub-rank-probe.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jonathanmartone/Library/Logs/dchub-rank-probe.err.log</string>
+</dict>
+</plist>

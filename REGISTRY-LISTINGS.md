@@ -24,7 +24,7 @@ Live server **58 tools** · official registry listing `cloud.dchub/mcp-server` *
 The data-center, power & energy intelligence layer for AI agents — query AND cite, live.
 
 ## Short description (≤ 300 chars)
-DC Hub is the live data-center, power & energy intelligence MCP: 21k+ facilities, 311 markets, 10 ISO grids, the DCPI power index + DCGI gas index, interconnection queues, renewables, fiber, hyperscaler deals, M&A, water & tax. 58 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
+DC Hub is the live data-center, power & energy intelligence MCP: 21k+ facilities, 311 markets, 10 ISO grids, live interconnection-queue depth, a 369 GW capacity pipeline, the DCPI power + DCGI gas index, renewables, fiber, hyperscaler deals & M&A. 73 tools an agent can query and cite (CC-BY-4.0). Free tier.
 
 ## Long description
 DC Hub is the neutral, real-time data layer for data-center infrastructure — built so AI agents can both **query** it (MCP + REST) and **cite** it (every full-data response carries `Source: DC Hub, CC-BY-4.0`).
@@ -126,14 +126,15 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 ## (b) Tuned long descriptions — per registry (paste-ready)
 
 ### Smithery — audience: agent builders / developers
-**Title:** DC Hub — Data Center & Energy Intelligence
+**Title:** DC Hub — Data Center, Interconnection & Capacity Intelligence
+> _(Title tweak 2026-07-12: added "Interconnection & Capacity" — these are the two search terms we lost #1 on; the displayName is the highest-weighted rank field on Smithery.)_
 **Description:**
-> Live data-center, power, energy & gas intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 58 tools, no signup to start.
+> Live **interconnection-queue**, grid-**capacity** & data-center power intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 73 tools, no signup to start.
 >
-> Built for agents that answer infrastructure, power and energy questions: search 21,000+ data centers, score any lat/lon for buildability across 7 dimensions, rank 311 markets by the DCPI power index (BUILD/CAUTION/AVOID), check the DCGI gas index per state, compare all 7 US ISO grids live (fuel mix, renewables, carbon, demand), track hyperscaler $1B+ deals, and pull interconnection-queue depth, renewable-energy mix, M&A, fiber, water-stress & tax incentives.
+> Built for agents answering power, siting and capacity questions: pull live **interconnection-queue** depth, wait times and per-ISO BUILD/CAUTION/AVOID verdicts across 10 North-American grids; track a **369 GW capacity pipeline** plus the AI Compute Capacity Index; rank 311 markets by the DCPI power index; search 21,000+ data centers across 170+ countries; score any lat/lon for buildability; compare US + European + GB + Taiwan + Japan + Korea + Brazil grids live (fuel mix, renewables, carbon, demand); and reach hyperscaler $1B+ deals, 4,000+ tracked M&A, gas-vs-grid economics, fiber routes, water-stress & tax incentives.
 >
-> Free tier works with no key. Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent can attribute cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
-**Try it:** `get_market_dcpi_rank market=northern-virginia` · `get_gas_index state=TX` · `get_grid_scoreboard`
+> Free tier works with no key (10 calls/day). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
+**Try it:** `get_interconnection_queue iso=PJM` · `get_power_pipeline` (369 GW capacity) · `get_grid_scoreboard` · `get_market_dcpi_rank market=northern-virginia`
 
 ### Glama — audience: quality-graded directory (rich copy lifts the grade)
 **Description:**

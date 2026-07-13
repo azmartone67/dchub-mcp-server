@@ -6447,7 +6447,7 @@ function createServer(descOverrides) {
       form: 'premium', format: 'json',
     }, { timeout: 60000 })) }] }));
 
-  trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker — grid headroom, fiber, water, tax, climate — with a recommended pick and the reason. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load (e.g. 50-500). Returns: {sites:[{lat, lon, composite_score, verdict, grid_headroom_mw, nearest_substation_km, fiber_carrier_count, water_stress_score, tax_incentive_value_usd, biggest_risk}], winner:{lat, lon, why}, decision_rationale}. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
+  trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker across power, gas, fiber, market & risk — with a recommended pick and the reason. Runs the analyze_site read on each parcel and ranks them by overall score. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load in MW (e.g. 50-500). Returns (full, paid): {sites:[{lat, lon, capacity_requested_mw, overall_score (0-100 composite), interpretation (verdict string, e.g. "Excellent site"), scores{power_infrastructure, gas_pipeline_access, fiber_connectivity, market_conditions, risk_resilience — each 0-100}, nearby{substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw}, fiber{connectivity_score, carrier_count, nearest_carrier_km, near_net_bucket, single_carrier_risk, top_carriers[{carrier, distance_km}]}, power_cost, location}], winner:{lat, lon, overall_score, why}, decision_rationale, citation}. Each site carries the same shape analyze_site returns. compare_sites is a paid/Pro tool — the free tier returns a locked preview, not the comparison. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
     { locations: S.describe('Semicolon-separated list of 2-4 "lat,lon" pairs to compare, e.g. "33.45,-112.07;39.04,-77.48"'),
       capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)') },
     async (a) => {
@@ -6473,17 +6473,23 @@ function createServer(descOverrides) {
         callAPI('/api/site-score', a.capacity_mw ? { ...p, capacity_mw: a.capacity_mw } : p)
           .then(r => ({ lat: p.lat, lon: p.lon, ...(r && typeof r === 'object' ? r : { raw: r }) }))
           .catch(e => ({ lat: p.lat, lon: p.lon, error: String(e?.message || e) }))));
-      const ok = scored.filter(s => !s.error && Number.isFinite(parseFloat(s.composite_score)));
+      // r-compare-winner-fix (2026-07-13): /api/site-score returns `overall_score`
+      // + `interpretation`, NOT `composite_score`/`verdict` — so the old filter
+      // matched nothing and `winner` was ALWAYS null ("No site returned a usable
+      // composite_score") even when every site scored fine. Key on the REAL fields,
+      // and describe the winner over the REAL sub-scores (power/gas/fiber/market/risk),
+      // not the fictional water/tax/climate the old rationale claimed.
+      const ok = scored.filter(s => !s.error && Number.isFinite(parseFloat(s.overall_score)));
       const winner = ok.length
-        ? ok.reduce((b, s) => (parseFloat(s.composite_score) > parseFloat(b.composite_score) ? s : b))
+        ? ok.reduce((b, s) => (parseFloat(s.overall_score) > parseFloat(b.overall_score) ? s : b))
         : null;
       return { content: [{ type: 'text', text: JSON.stringify({
         sites: scored,
-        winner: winner ? { lat: winner.lat, lon: winner.lon, composite_score: winner.composite_score,
-                           why: `Highest composite score (${winner.composite_score}) — verdict ${winner.verdict || 'n/a'}` } : null,
+        winner: winner ? { lat: winner.lat, lon: winner.lon, overall_score: winner.overall_score,
+                           why: `Highest overall suitability score (${winner.overall_score}) — verdict ${winner.interpretation || 'n/a'}` } : null,
         decision_rationale: winner
-          ? `Ranked ${ok.length} scored site(s) by composite_score; winner leads on the blended grid/fiber/water/tax/climate read.`
-          : 'No site returned a usable composite_score — see per-site errors.',
+          ? `Ranked ${ok.length} scored site(s) by overall_score; winner leads on the blended power/gas/fiber/market/risk read.`
+          : 'No site returned a usable overall_score — see per-site errors.',
       }) }] };
     });
 

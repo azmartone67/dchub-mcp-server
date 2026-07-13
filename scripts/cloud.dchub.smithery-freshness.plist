@@ -6,7 +6,10 @@
             launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cloud.dchub.smithery-freshness.plist
   Run now:  launchctl kickstart -k gui/$(id -u)/cloud.dchub.smithery-freshness
   Stop:     launchctl bootout gui/$(id -u)/cloud.dchub.smithery-freshness
-  Fires Mon + Thu 13:17 local (~2x/week); if the Mac is asleep, launchd runs it on next wake.
+  Fires DAILY 13:17 local; if the Mac is asleep, launchd runs it on next wake.
+  (Raised from Mon+Thu ~2x/week on 2026-07-12 after byteaskai/cloudscale-sim
+   stole #1 on `interconnection`/`capacity` purely on fresher timestamps —
+   daily republish keeps our freshness signal ahead of theirs.)
 -->
 <plist version="1.0">
 <dict>
@@ -22,12 +25,6 @@
   <key>StartCalendarInterval</key>
   <array>
     <dict>
-      <key>Weekday</key><integer>1</integer>
-      <key>Hour</key><integer>13</integer>
-      <key>Minute</key><integer>17</integer>
-    </dict>
-    <dict>
-      <key>Weekday</key><integer>4</integer>
       <key>Hour</key><integer>13</integer>
       <key>Minute</key><integer>17</integer>
     </dict>
