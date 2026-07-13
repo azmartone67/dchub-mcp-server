@@ -159,8 +159,8 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // so the webhook can bind the successful checkout back to THIS MCP session.
   const _STARTER_URL_RAW = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();
   const _DEVELOPER_URL_RAW = DEVELOPER_URL + promoParam();
-  const STARTER_URL_LOCAL = _stripeWithSession(_STARTER_URL_RAW, sessionId);
-  const DEVELOPER_URL_LOCAL = _stripeWithSession(_DEVELOPER_URL_RAW, sessionId);
+  const STARTER_URL_LOCAL = _subCheckoutUrl(_STARTER_URL_RAW, sessionId);
+  const DEVELOPER_URL_LOCAL = _subCheckoutUrl(_DEVELOPER_URL_RAW, sessionId);
   // r-pack10 (2026-06-25, owner): the old usage-based/metered SKU is RETIRED.
   // _USAGE_URL_LOCAL now resolves to the same $10/1,000-call pack link; kept only
   // for any residual references. The $10 pack is the single one-time front door.
@@ -433,6 +433,29 @@ function _packCheckoutUrl(sessionId) {
   let _k = '';
   try { _k = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
   return _k ? _stripeWithKey(CREDITS_URL, _k) : _stripeWithSession(CREDITS_URL, sessionId);
+}
+
+// r-durable-sub-key (2026-07-13): bind a keyed caller's SUBSCRIPTION checkout
+// (Starter/Developer/Pro) to their DURABLE key so the paid tier lands on the agent's
+// OWN key (survives session rotation) — the post-payment leak, same class the pk- pack
+// fix closed for credits. Keyed → client_reference_id='k-'+FULL sha256 hex of the key
+// (NEW prefix, parallel to pk-); the backend handle_checkout_completed k- branch
+// resolves the tier FROM the Stripe line item (never the ref) and stamps mcp_dev_keys.tier
+// for that key-hash. Keyless → byte-for-byte the previous session-bind. Takes the url as
+// an arg (subs have 3 different links). Reads api_key from AsyncLocalStorage. NEVER throws.
+function _subCheckoutUrl(url, sessionId) {
+  let _k = '';
+  try { _k = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
+  if (!_k) return _stripeWithSession(url, sessionId);
+  try {
+    if (!url) return url;
+    if (/[?&]client_reference_id=/.test(url)) return url;  // idempotent
+    const h = createHash('sha256').update(String(_k)).digest('hex');
+    const sep = url.includes('?') ? '&' : '?';
+    return url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h);
+  } catch (_) {
+    return _stripeWithSession(url, sessionId);
+  }
 }
 
 // ── Per-request context (api_key, platform, tier, session_id) ───────────────
@@ -947,7 +970,7 @@ async function buildHighIntentClaimBlock(claim, name) {
   // for machine consumers; the visible ask is now ONE thing (email → follow-up),
   // not a competing link. Variant keying unchanged so the A/B keeps measuring.
   let devUrl = DEVELOPER_URL + promoParam();
-  try { const _sid = (getCtx() && getCtx().session_id) || ''; if (_sid) devUrl = _stripeWithSession(devUrl, _sid); } catch (_) {}
+  try { const _sid = (getCtx() && getCtx().session_id) || ''; if (_sid) devUrl = _subCheckoutUrl(devUrl, _sid); } catch (_) {}
   // r-agent-redeem RESTORED (2026-07-04): the 07-03 pivot dropped the auto-redeem
   // call, freezing claims_used at 2 (the metric that measures THIS cohort). But its
   // own evidence only argued against RELAYING A LINK to an agent — auto-redeem does
@@ -1907,7 +1930,7 @@ function buildDepthTease(name, result, ctx, tier) {
     message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock ${fullLine}: 💳 $10 one-time = 1,000 API calls (no subscription) — call \`unlock_more_data\` for the one-click link; or Developer $49/mo. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
     credits_url:   _pack,
     credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to full depth.',
-    developer_url: _stripeWithSession(DEVELOPER_URL + promoParam(), _sid),
+    developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
     upgrade_url:   UPGRADE_URL,
     ...(_isKeyed
       ? { next_tool:      'unlock_more_data',
@@ -1959,7 +1982,7 @@ function buildDepthTease(name, result, ctx, tier) {
   // r-map-upsell: for the map-feeding tools, point the agent (+ its human) to the
   // live Land & Power map — the visual payoff of the data they just pulled.
   if (MAP_TOOLS.has(name)) {
-    const _devUrl = _stripeWithSession(DEVELOPER_URL + promoParam(), _sid);
+    const _devUrl = _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid);
     teased._upgrade.map_cta = `📍 This \`${name}\` data is live + visual on DC Hub's Land & Power map — every substation, transmission line, gas pipeline, fiber route, power-headroom + air-permitting score for any parcel, on one screen.`;
     teased._upgrade.map_url = mapHref(name);
     teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Unlock the full map + uncapped \`${name}\` with Developer ($49/mo) → ${_devUrl} (the full Land & Power map is Pro).`;
@@ -2831,7 +2854,7 @@ const TRIAL_HEADER_OVERRIDES = {
   get_market_intel: (sessionId, refUrlDeveloper) => {
     const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
     // Fix E (2026-06-06): bind Stripe URLs to the current MCP session_id.
-    const _starter = _stripeWithSession(STARTER_URL, sessionId);
+    const _starter = _subCheckoutUrl(STARTER_URL, sessionId);
     const _developer = _stripeWithSession(refUrlDeveloper, sessionId);
     const _pack = _packCheckoutUrl(sessionId);
     return [
@@ -2857,7 +2880,7 @@ function trialHeader(toolName, sessionId, refUrlDeveloper) {
   const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
   // Fix E (2026-06-06): bind Stripe URLs to the current MCP session_id so the
   // checkout.session.completed webhook can flip THIS session to upgraded.
-  const _starter = _stripeWithSession(STARTER_URL, sessionId);
+  const _starter = _subCheckoutUrl(STARTER_URL, sessionId);
   const _developer = _stripeWithSession(refUrlDeveloper, sessionId);
   const _pack = _packCheckoutUrl(sessionId);  // r-pack10: the $10 one-time pack leads
   // r56-conv (2026-05-31): surface the NO-EMAIL claim path on the most-hit
@@ -4114,7 +4137,7 @@ function trackedTool(srv, name, description, schema, handler) {
               next_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sid),
               usage_url:   _stripeWithSession(METERED_URL, _sid),
-              starter_url: _stripeWithSession(STARTER_URL, _sid),
+              starter_url: _subCheckoutUrl(STARTER_URL, _sid),
             };
             status = 'credits_depleted';
             // r-fresh-zero (2026-07-01): this response surfaces top-up checkout
@@ -4844,7 +4867,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_url: _packCheckoutUrl(_sid),
               credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API calls (no subscription) — the cheapest unlock.',
               starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid),
-              developer_url: _stripeWithSession(DEVELOPER_URL + promoParam(), _sid),
+              developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
               ...promoSC(),
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
@@ -4912,7 +4935,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
                 upgrade_url: UPGRADE_URL,
                 starter_url: _stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid),
-                developer_url: _stripeWithSession(DEVELOPER_URL + promoParam(), _sid),
+                developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
                 ...promoSC(),
               };
               // r-fresh-zero (2026-07-01): this response hands out a checkout link —
@@ -7284,9 +7307,9 @@ function createServer(descOverrides) {
       const _ctx = getCtx();
       const _sid = (_ctx && _ctx.session_id) || '';
       const credits   = _packCheckoutUrl(_sid);
-      const starter   = _stripeWithSession(STARTER_URL,   _sid);
-      const developer = _stripeWithSession(DEVELOPER_URL, _sid);
-      const pro       = _stripeWithSession(PRO_URL,       _sid);
+      const starter   = _subCheckoutUrl(STARTER_URL,   _sid);
+      const developer = _subCheckoutUrl(DEVELOPER_URL, _sid);
+      const pro       = _subCheckoutUrl(PRO_URL,       _sid);
       const reason = (a.reason || '').toString().trim().slice(0, 240);
       const _why = reason
         ? '\nYou asked me for: *' + reason + '* — that needs DC Hub’s full depth.\n'
