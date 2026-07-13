@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": [],
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "DC Hub API key (optional)",
+      "description": "Optional. Leave blank to use the free anonymous tier (10 calls/day). Provide a free key (call claim_free_key once, no email) or a paid key to raise limits and unlock full results. Reused across sessions.",
+      "format": "password"
+    }
+  }
+}

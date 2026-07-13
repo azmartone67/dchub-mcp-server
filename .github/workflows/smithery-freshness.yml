@@ -32,6 +32,7 @@ jobs:
   republish:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5   # need the repo for smithery-config-schema.json
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
@@ -44,4 +45,4 @@ jobs:
             echo "::warning::SMITHERY_API_KEY secret not set — skipping freshness heartbeat (add it to re-enable)."
             exit 0
           fi
-          npx -y @smithery/cli@latest mcp publish https://dchub.cloud/mcp -n azmartone67/dchub
+          npx -y @smithery/cli@latest mcp publish https://dchub.cloud/mcp -n azmartone67/dchub --config-schema smithery-config-schema.json

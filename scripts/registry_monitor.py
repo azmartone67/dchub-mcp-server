@@ -68,6 +68,21 @@ def smithery_rank(term):
     return None, total, leader
 
 
+def self_signals(term="data center"):
+    """Our OWN Smithery signals from the search index (the search entries carry
+    `verified`, `useCount`, `score`; the detail endpoint does not). `verified` is a
+    large fixed rank boost (0.80-0.88 corr) that ONLY the owner can restore — so a
+    drop to False is CORE-level alert-worthy. One cheap query on a term we hold #1 on."""
+    try:
+        d = _get("https://registry.smithery.ai/servers?" + urllib.parse.urlencode({"q": term, "pageSize": "50"}))
+    except Exception:
+        return None
+    for s in (d.get("servers") or []):
+        if "dchub" in (s.get("qualifiedName") or "").lower():
+            return {"verified": s.get("verified"), "useCount": s.get("useCount"), "score": s.get("score")}
+    return None
+
+
 def canonical():
     try:
         d = json.load(open("server.json"))
@@ -280,11 +295,19 @@ def main(probe=False):
                            f"smithery.ai/servers/{SMITHERY_SLUG} → Edit (the only path to Smithery's `score`), "
                            f"and add '{t}' to server.json.description + the live backend instructions.")
 
+    # VERIFIED tripwire (both modes): the `verified` badge is a large fixed rank
+    # boost that ONLY the owner can restore — a drop pages loudly, but is NOT a
+    # `remediate` item (no automation can fix it, so it must not trigger the auto-PR).
+    sig = self_signals()
+    if sig and sig.get("verified") is False:
+        reasons.append(f"🚨 VERIFIED badge LOST on Smithery — a large fixed rank boost only the OWNER can "
+                       f"restore; re-verify at smithery.ai/servers/{SMITHERY_SLUG} → Settings.")
+
     # RECLAIM tracking (never pages) — measure progress toward claiming these.
     reclaim = {t: smithery_rank(t) for t in RECLAIM}
 
     if probe:
-        return _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated)
+        return _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated, sig)
 
     can_ver, can_tools = canonical()
     live_tools = live_tool_count()
@@ -348,6 +371,10 @@ def main(probe=False):
     L.append("## DC Hub — registry rank + drift monitor\n")
     L.append(f"**Canonical (repo):** v{can_ver} · {can_tools} tools · **LIVE tools/list: {live_tools}** · "
              f"README states: {readme_tools} tools\n")
+    if sig is not None:
+        _vf = "✅ verified" if sig.get("verified") else "🚨 VERIFIED LOST"
+        L.append(f"**Smithery signals:** {_vf} · useCount {sig.get('useCount', '?')} · "
+                 f"score {sig.get('score', '?')}\n")
     L.append("### Cross-registry parity")
     L.append("| Registry | Version | Tools | Note |")
     L.append("|---|---|---|---|")
@@ -415,11 +442,13 @@ def main(probe=False):
     return regression
 
 
-def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated):
+def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated, sig=None):
     """Light mode (`--probe`): CORE + RECLAIM ranks only, no cross-registry/live/lobehub
     calls. Fires every ~90 min via the Rank Defense Master Shell between the 6h CI cron,
     so a slip is caught (and the insurance reflex + escalation fire) within the hour."""
-    L = [f"## rank probe — CORE {core_one}/{len(CORE)} at #1"]
+    _vf = "?" if not sig else ("✅" if sig.get("verified") else "🚨 LOST")
+    _uc = (sig or {}).get("useCount", "?")
+    L = [f"## rank probe — CORE {core_one}/{len(CORE)} at #1 · verified {_vf} · useCount {_uc}"]
     for t, (pos, _tot, leader) in core.items():
         held = "✅" if pos == 1 else "🔻"
         L.append(f"{held} {t}: {('#'+str(pos)) if pos else '>50'}"

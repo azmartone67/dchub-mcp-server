@@ -21,8 +21,14 @@ export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"   # launchd has a minimal PATH;
 LOG="$HOME/Library/Logs/dchub-smithery-freshness.log"
 TS="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-echo "[$TS] freshness heartbeat → smithery mcp publish https://dchub.cloud/mcp -n azmartone67/dchub" >> "$LOG"
-OUT="$(smithery mcp publish https://dchub.cloud/mcp -n azmartone67/dchub 2>&1)"
+# --config-schema advertises the optional apiKey field so Smithery stops warning
+# "No config schema provided" and offers users the (optional) key input. Guarded so
+# a missing file never breaks the publish.
+SCHEMA="/Users/jonathanmartone/dchub-mcp-server/smithery-config-schema.json"
+SCHEMA_FLAG=""; [ -f "$SCHEMA" ] && SCHEMA_FLAG="--config-schema $SCHEMA"
+
+echo "[$TS] freshness heartbeat → smithery mcp publish https://dchub.cloud/mcp -n azmartone67/dchub $SCHEMA_FLAG" >> "$LOG"
+OUT="$(smithery mcp publish https://dchub.cloud/mcp -n azmartone67/dchub $SCHEMA_FLAG 2>&1)"
 RC=$?
 echo "$OUT" >> "$LOG"
 echo "[$TS] exit=$RC" >> "$LOG"
