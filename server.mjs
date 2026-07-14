@@ -4038,9 +4038,12 @@ function trackedTool(srv, name, description, schema, handler) {
   // Per-platform override (ai_platform_tool_tuner) when present; else generic.
   const _ov = _activeDescOverrides && _activeDescOverrides[name];
   const _desc = (typeof _ov === 'string' && _ov.trim()) ? _ov : description;
+  // ChatGPT Apps directory requires ALL FOUR hints on every tool. openWorldHint:false
+  // — DC Hub tools query DC Hub's own curated dataset (closed world), not the open web;
+  // destructiveHint:false — read tools mutate nothing, write tools create/update, none DELETE.
   const _annot = WRITE_TOOLS.has(name)
-    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false }
-    : { title: _toolTitle(name), readOnlyHint: true };
+    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   srv.tool(name, _desc, schema, _annot, _stampEntityCb(name, async (args, extra) => {
     const c = getCtx();
     const t0 = Date.now();
