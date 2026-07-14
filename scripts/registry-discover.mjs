@@ -33,6 +33,8 @@ const LISTED_RE = /dchub|dc[\s-]?hub/i;
 //   live pr-submit targets ....... MobinX/awesome-mcp-list, TensorBlock/awesome-mcp-servers
 //   manual / owner-blocked ........ punkpeye (PR #8200), wong2, appcypher (PRs disabled)
 //   non-PR submission mechanism ... toolsdk-ai (JSON), lobehub / glama / smithery (owner UI)
+//   PR open, awaiting merge ....... jaw9c, sylviangth (2026-07-14, bespoke table/heading
+//                                    formats — self-drop once merged via listedRe)
 const KNOWN = new Set([
   'mobinx/awesome-mcp-list',
   'tensorblock/awesome-mcp-servers',
@@ -40,6 +42,8 @@ const KNOWN = new Set([
   'wong2/awesome-mcp-servers',
   'appcypher/awesome-mcp-servers',
   'toolsdk-ai/awesome-mcp-registry',
+  'jaw9c/awesome-remote-mcp-servers',
+  'sylviangth/awesome-remote-mcp-servers',
 ].map((s) => s.toLowerCase()));
 
 async function gh(path, opts = {}) {
