@@ -1,0 +1,46 @@
+name: registry discovery crawl
+
+# 2026-07-14 — the DISCOVERY half of auto-onboarding. registry-pr-submit.yml
+# only submits to a HARDCODED target list; nothing noticed when a NEW curated
+# MCP list launched. This crawls GitHub for awesome-mcp* lists, drops the ones
+# we already handle, and reports any that ACCEPT PRs + DON'T yet list DC Hub —
+# filing a single tracking issue so a human can vet + add them to TARGETS.
+#
+# Read-only against third parties (plain fetches). The only write is a tracking
+# issue on THIS repo, gated on DISCOVER_LIVE=1. Discovery PROPOSES; the curated
+# registry-pr-submit disposes. GITHUB_TOKEN (issues: write) is enough — no PAT.
+
+on:
+  schedule:
+    - cron: '40 7 * * 1'    # weekly, Monday 07:40 UTC (right after pr-submit)
+  workflow_dispatch:
+    inputs:
+      report_only:
+        description: 'Report candidates only, file no issue'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: registry-discover
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '22' }
+      - name: Crawl for new MCP registries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Scheduled runs go LIVE (file/refresh the tracking issue). A manual
+          # dispatch with report_only=true previews candidates without writing.
+          LIVE_FLAG="1"
+          if [ "${{ github.event.inputs.report_only }}" = "true" ]; then LIVE_FLAG=""; fi
+          env DISCOVER_LIVE="$LIVE_FLAG" node scripts/registry-discover.mjs
