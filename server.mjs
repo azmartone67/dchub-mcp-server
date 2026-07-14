@@ -3861,6 +3861,7 @@ function _writeRpcResult(req, res, id, result) {
 // and export_dataset are READS and correctly stay read-only.
 const WRITE_TOOLS = new Set([
   'save_site', 'set_market_alert', 'set_site_alert',
+  'save_to_shortlist', 'set_shortlist_alert',
   'bind_email', 'claim_free_key', 'recover_my_key', 'unlock_more_data',
   'subscribe_digest',
 ]);
