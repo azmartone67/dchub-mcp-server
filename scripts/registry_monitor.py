@@ -112,14 +112,42 @@ def smithery_record():
         return None, None
 
 
+def glama_page_tool_count():
+    """Tool count RENDERED on the public Glama page. Glama serves TWO counts that
+    drift independently: the human/browser-facing page re-crawls the README (fast),
+    while the API `description` blurb is a separately-cached auto-summary that lags
+    for weeks. Agents discover DC Hub via the rendered page + live badge, not the
+    blurb — so the page is the count that matters. FAIL-SAFE: any error → None so we
+    fall back to the API blurb rather than false-alerting."""
+    url = f"https://glama.ai/mcp/servers/{REPO_SLUG}"
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            html = r.read().decode("utf-8", "ignore")
+    except Exception:
+        return None
+    m = re.search(r"(\d+)\s*MCP\s*tools", html, re.I)
+    return int(m.group(1)) if m else None
+
+
 def glama_record():
+    """Prefer the page-rendered count (README re-crawl); the API `description` blurb
+    is a lagging cache and is reported only as a fallback / for context."""
+    page = glama_page_tool_count()
     try:
         d = _get(f"https://glama.ai/api/mcp/v1/servers/{REPO_SLUG}")
         desc = d.get("description") or ""
         m = re.search(r"(\d+)\s*tools", desc)
-        return (int(m.group(1)) if m else None), desc[:60]
+        blurb = int(m.group(1)) if m else None
     except Exception:
-        return None, None
+        blurb = None
+        desc = ""
+    if page is not None:
+        note = f"page {page} tools"
+        if blurb is not None and blurb != page:
+            note += f" (API blurb lags: {blurb})"
+        return page, note
+    return blurb, (desc[:60] or "unreachable")
 
 
 def readme_tool_count():
