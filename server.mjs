@@ -164,7 +164,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // r-pack10 (2026-06-25, owner): the old usage-based/metered SKU is RETIRED.
   // _USAGE_URL_LOCAL now resolves to the same $10/1,000-call pack link; kept only
   // for any residual references. The $10 pack is the single one-time front door.
-  const _USAGE_URL_LOCAL = _stripeWithSession(METERED_URL, sessionId);
+  const _USAGE_URL_LOCAL = _packCheckoutUrl(sessionId);  // r-durable-key: pk- when keyed, else session
   // r-pack10 (2026-06-25, owner): the SINGLE $10 / 1,000 API-call one-time PACK is
   // the "super cheap front end" — a fixed, knowable $10 a human approves in seconds,
   // no subscription. It is now the ONLY one-time option (the old $5 pack and the
@@ -2408,7 +2408,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   let _meteredUrl = METERED_URL;
   try {
     const _sid = (getCtx() && getCtx().session_id) || '';
-    if (_sid) _meteredUrl = _stripeWithSession(METERED_URL, _sid);
+    // r-durable-key (2026-07-15): bind the $10 pack to the caller's DURABLE key
+    // (pk-) when they hold one so the 1,000 credits survive session rotation;
+    // keyless falls back to the session bind. Was _stripeWithSession (session-only).
+    _meteredUrl = _packCheckoutUrl(_sid);
   } catch (_) {}
   // r78: the email ask now leads with the REAL incentive that was always
   // enforced server-side but never shown (unbound 15/day vs bound 50/day),
@@ -4140,7 +4143,7 @@ function trackedTool(srv, name, description, schema, handler) {
                      + "Call `unlock_more_data` for a one-click link.",
               next_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sid),
-              usage_url:   _stripeWithSession(METERED_URL, _sid),
+              usage_url:   _packCheckoutUrl(_sid),  // r-durable-key: was session-bound
               starter_url: _subCheckoutUrl(STARTER_URL, _sid),
             };
             status = 'credits_depleted';
@@ -4631,10 +4634,11 @@ function trackedTool(srv, name, description, schema, handler) {
         // Markdown-formatted response — renders as real prose in Claude/Cursor/most MCP UIs.
         const _isKeyed = !!c.api_key;
         // r-handoff (2026-06-28): hard-block branch now leads with the SINGLE
-        // $10 human CTA (session-bound so the webhook unlocks THIS key), same as
-        // the preview/taste paths — was a $49-led Pro pitch + tool-list bloat
-        // with no $10 one-time front door. Flat plans stay in the sc fields.
-        const _packUrl = _stripeWithSession(METERED_URL, c.session_id);
+        // $10 human CTA, same as the preview/taste paths — was a $49-led Pro pitch
+        // + tool-list bloat with no $10 one-time front door. Flat plans stay in sc.
+        // r-durable-key (2026-07-15): durable-key-bound (pk-) when keyed so the
+        // credits land on the agent's OWN key, not the ephemeral session.
+        const _packUrl = _packCheckoutUrl(c.session_id);
         const _mdKeyed = `## \u{1F512} \`${name}\` needs full access
 
 You're on **free tier** — \`${name}\` returns its full result on a paid plan.
