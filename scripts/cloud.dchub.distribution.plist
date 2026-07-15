@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  DC Hub — Distribution Master Shell (LaunchAgent).
+
+  Weekly local backstop for the distribution loop: detect served-manifest version
+  drift, run registry-pr-submit (add missing lists + refresh stale entries), and
+  surface pull-only stale surfaces (LobeHub/PulseMCP/Cursor) that need an owner
+  Refresh-Metadata click. Pairs with the CI registry-pr-submit.yml (weekly Mon 07:30
+  UTC, which does the live PRs when armed).
+
+  Install:  cp scripts/cloud.dchub.distribution.plist ~/Library/LaunchAgents/
+            launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/cloud.dchub.distribution.plist
+  Run now:  launchctl kickstart -k gui/$(id -u)/cloud.dchub.distribution
+  Kill:     set DIST_MASTER_DISABLE=1 in EnvironmentVariables (detect still runs, actions no-op).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cloud.dchub.distribution</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>scripts/distribution_master_shell.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/jonathanmartone/dchub-mcp-server</string>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>10</integer>
+    <key>Minute</key><integer>15</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/jonathanmartone/Library/Logs/dchub-distribution.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jonathanmartone/Library/Logs/dchub-distribution.err.log</string>
+</dict>
+</plist>

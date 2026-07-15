@@ -59,6 +59,31 @@ const TARGETS = [
   },
 ];
 
+// REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
+// (registry-pr-submit was ADD-only — the 07-14 audit found our biggest list, punkpeye
+// (~180K users), still reads "33 tools / 232 markets / 2,000 deals".) This refreshes
+// an existing entry IN PLACE. prCheck()/idempotency/blocked-fallback all still apply.
+const REFRESH_TARGETS = [
+  { key: 'punkpeye', upstream: 'punkpeye/awesome-mcp-servers', base: 'main', path: 'README.md' },
+];
+
+// Replace stale counts ONLY on lines that are our own entry (match the repo slug) so we
+// never touch another server's text. Current honest numbers: 73 tools / 311 markets / 4,000+.
+function refreshOurCounts(text) {
+  const lines = text.split('\n');
+  let changed = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/azmartone67\/dchub|dchub-mcp-server/i.test(lines[i])) continue;
+    const before = lines[i];
+    lines[i] = lines[i]
+      .replace(/\b\d{1,3}\s+tools\b/gi, '73 tools')
+      .replace(/\b\d{2,3}\+?\s+(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `311 ${a}${b}markets`)
+      .replace(/\b[\d,]+\+?\s+(tracked\s+)?M&A\s+deals\b/gi, (m, tr = '') => `4,000+ ${tr}M&A deals`);
+    if (lines[i] !== before) changed = true;
+  }
+  return changed ? lines.join('\n') : null;
+}
+
 const raw = (repo, br, path) => `https://raw.githubusercontent.com/${repo}/${br}/${path}`;
 const nameOf = (line) => { const m = line.match(/\[([^\]]+)\]/); return (m ? m[1] : '').toLowerCase(); };
 
@@ -105,14 +130,14 @@ async function gh(method, path, body) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function openPR(t, newContent) {
+async function openPR(t, newContent, opts = {}) {
   const me = (await gh('GET', '/user')).json.login;
   if (!me) throw new Error('PAT /user failed');
   // Skip repos whose owner DISABLED pull requests — the pulls API 404s (wong2 +
   // appcypher do exactly this). No fork/PR is possible there by anyone.
   const prCheck = await gh('GET', `/repos/${t.upstream}/pulls?per_page=1`);
   if (prCheck.status === 404) return { skipped: 'PRs disabled on this repo (owner setting) — cannot submit' };
-  const headBranch = `add-dchub-${t.key}`;   // per-target so branches never collide across forks
+  const headBranch = opts.branch || `add-dchub-${t.key}`;   // per-target so branches never collide across forks
   // 1) fork (idempotent). ★ Use the RETURNED full_name — you can only have one
   // fork of a repo per account, and when the basename collides GitHub renames
   // it (awesome-mcp-servers-1), so never assume {me}/{basename}.
@@ -147,18 +172,18 @@ async function openPR(t, newContent) {
   // 5) write the file on our branch
   const cur = await gh('GET', `/repos/${fork}/contents/${t.path}?ref=${headBranch}`);
   const putRes = await gh('PUT', `/repos/${fork}/contents/${t.path}`, {
-    message: `Add DC Hub MCP server`,
+    message: opts.message || `Add DC Hub MCP server`,
     content: Buffer.from(newContent, 'utf8').toString('base64'),
     branch: headBranch,
     sha: cur.json?.sha,
   });
   if (!putRes.ok) throw new Error(`contents PUT failed ${putRes.status}: ${JSON.stringify(putRes.json).slice(0, 160)}`);
   // 6) open the PR (retry once — cross-fork head can lag a beat after the push)
-  const body = `Adds **DC Hub** — a remote MCP server (streamable-http at ${HOMEPAGE}).\n\n${DESC}\n\nRepo: ${REPO_URL} · License CC-BY-4.0 · In the official MCP registry.`;
+  const body = opts.body || `Adds **DC Hub** — a remote MCP server (streamable-http at ${HOMEPAGE}).\n\n${DESC}\n\nRepo: ${REPO_URL} · License CC-BY-4.0 · In the official MCP registry.`;
   let pr;
   for (let a = 0; a < 2; a++) {
     pr = await gh('POST', `/repos/${t.upstream}/pulls`, {
-      title: `Add DC Hub MCP server`, head: `${me}:${headBranch}`, base: t.base, body, maintainer_can_modify: true,
+      title: opts.title || `Add DC Hub MCP server`, head: `${me}:${headBranch}`, base: t.base, body, maintainer_can_modify: true,
     });
     if (pr.ok) break;
     if (pr.status === 422 && /already exists/i.test(JSON.stringify(pr.json))) {
@@ -197,6 +222,29 @@ async function openPR(t, newContent) {
       else { console.log(`      ✅ PR opened: ${r.url}`); opened++; }
     } catch (e) { console.log(`      ❌ ${e.message}`); }
   }
+
+  // REFRESH pass — fix stale counts on lists we're ALREADY in (was ADD-only before).
+  for (const t of REFRESH_TARGETS) {
+    const res = await fetch(raw(t.upstream, t.base, t.path));
+    if (!res.ok) { console.log(`  ~ ${t.key} (refresh): fetch ${res.status} — skip`); continue; }
+    const refreshed = refreshOurCounts(await res.text());
+    if (!refreshed) { console.log(`  ✓ ${t.key} (refresh): our entry already current — skip`); continue; }
+    console.log(`  ● ${t.key} (refresh): STALE → 73 tools / 311 markets / 4,000+ deals`);
+    if (DRY) continue;
+    if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
+    try {
+      const r = await openPR(t, refreshed, {
+        branch: `refresh-dchub-${t.key}`,
+        title: 'Refresh DC Hub MCP entry (73 tools, 311 markets, 4,000+ deals)',
+        message: 'Refresh DC Hub stats',
+        body: `Updates the existing DC Hub entry to current stats: **73 tools**, **311 markets** (DC Hub Power Index), **4,000+ M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
+      });
+      if (r.skipped) console.log(`      skip: ${r.skipped}`);
+      else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }
+      else { console.log(`      ✅ refresh PR opened: ${r.url}`); opened++; }
+    } catch (e) { console.log(`      ❌ ${e.message}`); }
+  }
+
   console.log(`\n${DRY ? 'DRY-RUN complete (no PRs opened).' : `Done — ${opened} PR(s) opened.`}`);
   // Surface blocked-but-ready PRs on the run's Summary page so they're one click
   // away (GitHub anti-spam blocks API PR-create on this account; human-initiated
