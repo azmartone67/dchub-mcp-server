@@ -4043,31 +4043,69 @@ export function _extractCoordArgs(args) {
   return { lat, lon,
            missing: [lat == null && 'lat', lon == null && 'lon'].filter(Boolean) };
 }
+// r-coord-aliases (2026-07-16): the same trap existed in every point-keyed READ
+// tool (analyze_site, get_disaster_risk, …) — there a stripped `lng` didn't
+// poison a row, it silently computed the analysis at lon=0 (open ocean) and
+// returned it as the answer. This folds the aliases into canonical lat/lon and
+// DROPS the alias keys, so pass-`a`-through handlers never leak them upstream.
+export function _foldCoordArgs(args) {
+  const a = args || {};
+  const { lat, lon } = _extractCoordArgs(a);
+  const out = { ...a };
+  delete out.latitude; delete out.lng; delete out.longitude;
+  if (lat != null) out.lat = lat;
+  if (lon != null) out.lon = lon;
+  return out;
+}
+// Tools whose coordinates are UNCONDITIONALLY required — a coordinate-less call
+// is refused with the parameter_adjustment envelope instead of analyzing (0, 0).
+// NOT here: get_water_risk / get_renewable_energy (state/county fallbacks make
+// lat/lon genuinely optional — aliases fold, nothing is rejected) and the
+// conditional pair handled in _coordsRequired below.
+const COORD_REQUIRED_TOOLS = new Set([
+  'save_site', 'get_composite_site_score', 'get_disaster_risk',
+  'get_climate_intel', 'generate_site_analysis', 'get_infrastructure',
+  'get_fiber_readiness',
+]);
+const _COORD_ALT_HINT = {
+  analyze_site:   ' — or pass candidate_id from get_refined_queue instead',
+  analyze_parcel: ' — or pass a GeoJSON Polygon/MultiPolygon as geometry instead',
+};
+export function _coordsRequired(name, args) {
+  if (COORD_REQUIRED_TOOLS.has(name)) return true;
+  if (name === 'analyze_site') return !(args && args.candidate_id);
+  if (name === 'analyze_parcel') return !(args && args.geometry);
+  return false;
+}
 const _coordsError = (missing, toolName) => {
+  const tail = toolName === 'save_site'
+    ? 'Nothing was saved.'
+    : 'The call was refused rather than silently analyzed at (0, 0).';
   const payload = {
     error: 'missing_coordinates',
     detail: `${toolName} needs BOTH lat and lon in decimal degrees — `
-          + `${missing.join(' and ')} missing. Nothing was saved.`,
+          + `${missing.join(' and ')} missing. ${tail}`,
     _source: 'DC Hub — dchub.cloud',
   };
   const enriched = _withErrorEnvelope(payload, {
     error_code: 'missing_coordinates',
     severity: 'parameter_adjustment',
     deterministic_hint: `Re-run ${toolName} with numeric lat AND lon `
-      + `(aliases latitude/lng/longitude also accepted), e.g. lat=39.04 lon=-77.48.`,
+      + `(aliases latitude/lng/longitude also accepted), e.g. lat=39.04 lon=-77.48`
+      + (_COORD_ALT_HINT[toolName] || '') + '.',
     allowed_params: _toolParamKeys(toolName),
   });
   return { isError: true,
            content: [{ type: 'text', text: JSON.stringify(enriched) }],
            structuredContent: enriched };
 };
-function _validateToolArgs(name, args) {
+export function _validateToolArgs(name, args) {
   // Returns an MCP error-content object if the args are invalid, else null.
   if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
       && String(args.iso).trim() !== '' && !_isoValid(args.iso)) {
     return _isoError(args.iso, name);
   }
-  if (name === 'save_site') {
+  if (_coordsRequired(name, args)) {
     const { missing } = _extractCoordArgs(args);
     if (missing.length) return _coordsError(missing, name);
   }
@@ -5285,6 +5323,17 @@ function createServer(descOverrides) {
   const LIMIT  = z.number().int().min(1).max(500).optional().describe('Max results to return (1-500; default varies by tool)');
   const OFFSET = z.number().int().min(0).max(100000).optional().describe('Pagination offset, 0-based (skip this many results)');
   const TIER   = z.number().int().min(1).max(4).optional().describe('Uptime Institute tier filter (1-4)');
+  // r-coord-aliases (2026-07-16): coordinate aliases must be DECLARED in every
+  // point-keyed tool's schema — the SDK's zod parse strips undeclared keys
+  // SILENTLY, so a call sent with `lng`/`longitude`/`latitude` reached the
+  // handler coordinate-less and the tool analyzed (0, 0) in the open ocean
+  // (save_site's r-lonfix, generalized). Spread into the schema; the handler
+  // folds them back via _extractCoordArgs/_foldCoordArgs.
+  const COORD_ALIASES = {
+    latitude:  N.describe('Alias for lat — either name works'),
+    lng:       N.describe('Alias for lon — either name works'),
+    longitude: N.describe('Alias for lon — either name works'),
+  };
 
   const slugify = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
@@ -6321,9 +6370,11 @@ function createServer(descOverrides) {
     { geometry: z.any().describe('GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {"type":"Polygon","coordinates":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope. Omit to look up the hosted parcel containing lat/lon instead'),
       lat: N.describe('Latitude of a point ON the parcel — used with lon when geometry is omitted to look up the containing parcel from the hosted county/state GIS layer'),
       lon: N.describe('Longitude of a point ON the parcel (used with lat when geometry is omitted)'),
+      ...COORD_ALIASES,
       capacity_mw: N.describe('Optional target load in MW to pass through into the site_evaluation_handoff') },
     async (a) => {
-      const data = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body: { geometry: a.geometry, capacity_mw: a.capacity_mw, lat: a.lat, lng: a.lon } });
+      const { lat, lon } = _extractCoordArgs(a);
+      const data = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body: { geometry: a.geometry, capacity_mw: a.capacity_mw, lat, lng: lon } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
@@ -6473,9 +6524,7 @@ function createServer(descOverrides) {
       // r-lonfix (2026-07-16): aliases must be DECLARED — zod strips unknown
       // keys silently, which used to turn a `lng`/`longitude` save into a
       // (0, 0) row. _extractCoordArgs folds them back into lat/lon.
-      latitude: N.describe('Alias for lat — either name works'),
-      lng: N.describe('Alias for lon — either name works'),
-      longitude: N.describe('Alias for lon — either name works'),
+      ...COORD_ALIASES,
       name: S.describe('Optional label for the saved site, e.g. "Ashburn parcel"'),
       state: S.describe('US state abbreviation for the site, e.g. VA'),
       market: S.describe('Market slug (metro) the site belongs to, e.g. northern-virginia'),
@@ -6538,12 +6587,13 @@ function createServer(descOverrides) {
     { candidate_id: S.describe('PREFERRED for queue survivors: a cand_… id from get_refined_queue — coordinates come from the FROZEN mint (lat/lon args are ignored; zero transcription drift; expired ids fail closed with candidate_expired). See dchub.cloud/docs/candidate-lifecycle'),
       lat: N.describe('Site latitude in decimal degrees (-90 to 90; required unless candidate_id given), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180; required unless candidate_id given), e.g. -112.07'),
+      ...COORD_ALIASES,
       state: S.describe('US state abbreviation (optional) — improves the tax-incentive lookup, e.g. AZ'),
       capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 100 (typical 50-500)'),
       include_grid: B.describe('Include grid-headroom / substation analysis (default true)'),
       include_risk: B.describe('Include water/drought/climate risk analysis (default true)'),
       include_fiber: B.describe('Include fiber-connectivity analysis (default true)') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', _foldCoordArgs(a))) }] }));
 
   // 2026-07-08: the HONEST composite. Unlike analyze_site (full raw data + a
   // composite that silently includes placeholder factors), this scores ONLY over
@@ -6553,12 +6603,14 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_composite_site_score', 'Use when a user wants ONE honest 0-100 site suitability/risk verdict for a lat/lon WITH an explicit per-factor coverage map — which factors are actually measured vs. declared unavailable. Unlike analyze_site (full raw data dump), this scores ONLY over VALIDATED factors and never imputes a missing one: power/grid, fiber, natural-hazard risk (FEMA NRI) and water (live WRI Aqueduct 4.0 baseline water stress) are all live; water is "unavailable" only outside basin coverage (never faked); market/DCPI is v1-unavailable (use rank_markets). Example: get_composite_site_score lat=33.45 lon=-112.07 state=AZ. Returns {composite_score (0-100 over validated factors), verdict (BUILD/CAUTION/AVOID), confidence (complete|conditional), coverage {power_grid|fiber|water|risk_resilience|market_dcpi: validated|unavailable}, coverage_ratio, sub_scores, caveats}. Use analyze_site for full data, compare_sites for 2-4 sites, rank_markets for whole-market ranking.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      ...COORD_ALIASES,
       state: S.describe('US state abbreviation (optional) — improves water/context lookups, e.g. AZ') },
     async (a) => {
-      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+      const { lat, lon } = _extractCoordArgs(a);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon))
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/composite-score', {
-        lat: a.lat, lng: a.lon, state: a.state || '',
+        lat, lng: lon, state: a.state || '',
       })) }] };
     });
 
@@ -6568,12 +6620,14 @@ function createServer(descOverrides) {
   // all endorsed: authoritative sources + explicit 'unavailable' over invented precision).
   trackedTool(srv, 'get_disaster_risk', 'Use when a user wants the natural-hazard / disaster risk for a lat/lon — flood, wildfire, hurricane, earthquake, heat, drought, tornado, etc. Grounded in the FEMA National Risk Index (NRI), the authoritative US county-level hazard dataset (live query, never estimated; points outside US NRI coverage return coverage=unavailable). Example: get_disaster_risk lat=33.45 lon=-112.07. Returns {disaster_risk:{composite_score (0-100, higher=worse), rating (Very Low..Very High), national_percentile}, hazards:{Wildfire, Hurricane, Earthquake, Heat Wave, ...: rating}, top_hazards:[{hazard, rating}], coverage (validated|unavailable), source, caveats}. County-level resolution. For chronic water stress use get_water_risk; for one blended site verdict use get_composite_site_score.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
-      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07') },
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      ...COORD_ALIASES },
     async (a) => {
-      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+      const { lat, lon } = _extractCoordArgs(a);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon))
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/disaster-risk', {
-        lat: a.lat, lng: a.lon,
+        lat, lng: lon,
       })) }] };
     });
 
@@ -6584,12 +6638,14 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_climate_intel', 'Use when a user wants seismic + climate intel for a lat/lon — the layer that drives data-center structural bracing cost (seismic) and cooling design (cooling degree-days, extreme temps). Grounded STRICTLY in USGS ASCE 7 (seismic) + NOAA climate normals via ACIS; every value traces to a federal source and missing data is declared unavailable, never estimated. Example: get_climate_intel lat=33.45 lon=-112.07. Returns {seismic_hazard_usgs:{status, peak_ground_acceleration_g, ss, s1, seismic_design_category, hazard_class}, climate_normals_noaa:{status, reference_station:{id,name,distance_km}, cooling_design_metrics:{cooling_degree_days_annual, extreme_max_dry_bulb_f, extreme_max_wet_bulb_f (null if source lacks it), data_vintage}}, overall_climate_summary, data_availability, sources}. radius_km (optional, default 25) snaps to the nearest NOAA station; beyond it climate returns unavailable_exceeds_radius. Seismic is US (ASCE 7); non-US → seismic unavailable. For natural-hazard ratings use get_disaster_risk; for one blended verdict use get_composite_site_score.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      ...COORD_ALIASES,
       radius_km: N.describe('Max distance (km) to snap to the nearest NOAA station (optional, default 25)') },
     async (a) => {
-      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon))
+      const { lat, lon } = _extractCoordArgs(a);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon))
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'lat and lon are required numbers' }) }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-planner/climate-intel', {
-        lat: a.lat, lng: a.lon, radius_km: a.radius_km,
+        lat, lng: lon, radius_km: a.radius_km,
       })) }] };
     });
 
@@ -6599,19 +6655,27 @@ function createServer(descOverrides) {
   trackedTool(srv, 'generate_site_analysis', 'Use when a user wants a SHAREABLE, branded multi-page Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score. Example: "Make the Site Analysis PDF for this Carrier Mills parcel, 150 MW, for TON Infrastructure." — generate_site_analysis lat=37.694 lon=-88.65 capacity_mw=150 prepared_for="TON Infrastructure" prepared_by="Martone Advisors". Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load MW, e.g. 50-500), prepared_for (client name on the cover), prepared_by (your firm — brands the report; defaults to DC Hub), latency_target (optional metro override; default = nearest real carrier hotel). Returns: {survey:{verdict, power/transmission, gas, water, air-permitting, fiber carriers, latency-to-nearest-carrier-hotel, market, tax}, pdf_report_url}. pdf_report_url is a ready-to-open link to download the branded 5-page PDF — no login needed, valid ~7 days; hand it to your human. For just the numeric suitability score (no PDF), use analyze_site instead.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 37.694'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -88.65'),
+      ...COORD_ALIASES,
       capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 150 (typical 50-500)'),
       prepared_for: S.describe('Client name printed on the report cover, e.g. "TON Infrastructure"'),
       prepared_by: S.describe('Your firm name that brands the report; defaults to DC Hub, e.g. "Martone Advisors"'),
       latency_target: S.describe('Optional metro to measure latency against; default = nearest real carrier hotel'),
       use_case: S.describe('Optional workload descriptor to tailor the report, e.g. "AI training campus"') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-report', {
-      lat: a.lat, lon: a.lon, capacity_mw: a.capacity_mw, prepared_for: a.prepared_for,
-      prepared_by: a.prepared_by, latency_target: a.latency_target, use_case: a.use_case,
-      form: 'premium', format: 'json',
-    }, { timeout: 60000 })) }] }));
+    async (a) => {
+      const { lat, lon } = _extractCoordArgs(a);
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/site-report', {
+        lat, lon, capacity_mw: a.capacity_mw, prepared_for: a.prepared_for,
+        prepared_by: a.prepared_by, latency_target: a.latency_target, use_case: a.use_case,
+        form: 'premium', format: 'json',
+      }, { timeout: 60000 })) }] };
+    });
 
   trackedTool(srv, 'compare_sites', 'Use when a user has narrowed to 2-4 candidate parcels and wants a side-by-side winner picker across power, gas, fiber, market & risk — with a recommended pick and the reason. Runs the analyze_site read on each parcel and ranks them by overall score. Example: "Compare a Phoenix parcel and an Ashburn parcel for a 50MW build — which wins and why?" — compare_sites locations="33.45,-112.07;39.04,-77.48" capacity_mw=50. Params: locations is a semicolon-separated list of "lat,lon" pairs (2-4 max); capacity_mw is the target load in MW (e.g. 50-500). Returns (full, paid): {sites:[{lat, lon, capacity_requested_mw, overall_score (0-100 composite), interpretation (verdict string, e.g. "Excellent site"), scores{power_infrastructure, gas_pipeline_access, fiber_connectivity, market_conditions, risk_resilience — each 0-100}, nearby{substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw}, fiber{connectivity_score, carrier_count, nearest_carrier_km, near_net_bucket, single_carrier_risk, top_carriers[{carrier, distance_km}]}, power_cost, location}], winner:{lat, lon, overall_score, why}, decision_rationale, citation}. Each site carries the same shape analyze_site returns. compare_sites is a paid/Pro tool — the free tier returns a locked preview, not the comparison. Do NOT use for a single site (use analyze_site) or to rank entire markets (use rank_markets).',
     { locations: S.describe('Semicolon-separated list of 2-4 "lat,lon" pairs to compare, e.g. "33.45,-112.07;39.04,-77.48"'),
+      // r-coord-aliases (2026-07-16): the handler's `sites` array fallback was
+      // DEAD — zod silently stripped the undeclared key, so the "common LLM
+      // slip" path below never fired. Declared here so it actually works.
+      sites: z.any().optional().describe('Alternative to locations: an array of {lat, lon} (or {lat, lng}) objects, 2-4 sites'),
       capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)') },
     async (a) => {
       // r-compare-fix (2026-07-04): /api/site-score has NO multi-site mode — it
@@ -6659,11 +6723,12 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_infrastructure', 'Nearby infrastructure for a location — substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site).',
     { lat: N.describe('Center latitude in decimal degrees (-90 to 90, required), e.g. 33.45'),
       lon: N.describe('Center longitude in decimal degrees (-180 to 180, required), e.g. -112.07'),
+      ...COORD_ALIASES,
       radius_km: N.describe('Search radius in kilometers around the point, e.g. 25'),
       layer: S.describe('Optional single asset layer to return, e.g. substations, transmission, pipelines, power_plants'),
       min_voltage_kv: N.describe('Only include transmission/substations at or above this voltage in kV, e.g. 69'),
       limit: LIMIT },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/infrastructure', _foldCoordArgs(a))) }] }));
 
   trackedTool(srv, 'get_fiber_intel', 'Use when scoring a candidate site for fiber depth, mapping long-haul routes between metros, or assessing dark-fiber availability for a hyperscale build. Example: "Show all Zayo long-haul fiber routes through Northern Virginia I can put on a Leaflet map." — get_fiber_intel carrier=Zayo route_type=longhaul. Params: carrier one of "Zayo" | "Lumen" | "Cogent" | "Crown Castle" | "Windstream" | "GTT" | "Uniti" | "FiberLight" | "Segra" | "Arcadian Infracom" (omit for all carriers); route_type one of "metro" | "longhaul" | "dark" | "ix"; market a metro name or slug (e.g. "dallas", "ashburn", "northern-virginia") to return ONLY routes touching that metro (either endpoint near it) — pairs well with route_type=longhaul to map a metro\'s long-haul backbones. Returns: GeoJSON FeatureCollection {features:[{geometry, properties:{carrier, route_type, fiber_count, lit_capacity_gbps, capacity, distance_miles, distance_km}}]} ready to drop into Leaflet/Mapbox. Do NOT use to count fiber providers at a single facility (use get_facility) or for IX interconnection-density scores (use analyze_site).',
     { carrier: S.describe('Fiber carrier to filter on, e.g. Zayo, Lumen, Cogent, "Crown Castle", Windstream, GTT, Uniti; omit for all carriers'),
@@ -6681,8 +6746,9 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_fiber_readiness', 'Use when you need the FIBER-READINESS / connectivity verdict for ONE parcel or site (lat/lon): near-net distance to a carrier-served facility, how many distinct fiber carriers are reachable, and whether there is single-carrier risk (no path diversity). This is the parcel connectivity answer engineering site-selectors screen on. Example: "Is this Loudoun County parcel fiber-ready and how many carriers can serve it?" — get_fiber_readiness lat=39.04 lon=-77.48 radius_km=50. Params: lat (-90..90, required), lon (-180..180, required), radius_km (search radius in km, default 50, range 5-200). Returns: {score 0-100, near_net_bucket ("on-net"|"near-net"|"acceptable"|"build-required"), nearest_carrier_km, carrier_count, top_carriers:[{carrier, distance_km}], single_carrier_risk (bool), fiber_coverage_km, verdict_short}. Do NOT use to map carrier ROUTES between metros (use get_fiber_intel) or for a full multi-factor site suitability score (use analyze_site).',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90, required), e.g. 39.04'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180, required), e.g. -77.48'),
+      ...COORD_ALIASES,
       radius_km: N.describe('Search radius in km for reachable fiber carriers (default 50, range 5-200)') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', _foldCoordArgs(a))) }] }));
 
   trackedTool(srv, 'get_metro_fiber', 'Use when a user asks which US metro has the DEEPEST fiber, or wants the metro-level fiber profile of a market — carrier count, total route-miles, on-net buildings, a 0-100 fiber-density score, tier, key internet-exchange (IX) points and carrier hotels — across the tracked top US data-center metros (Northern Virginia, Dallas-Fort Worth, Silicon Valley, Chicago, Atlanta, Phoenix, and more). Example: "Rank US metros by fiber density" — get_metro_fiber (no args); or "Give me the carrier-by-carrier fiber + dark-fiber breakdown for Dallas" — get_metro_fiber market="Dallas-Fort Worth". Params: market (optional metro name OR slug, e.g. "Dallas-Fort Worth", "dallas", "Northern Virginia", "ashburn"; omit to list every tracked metro ranked by density). Returns: without market -> {markets:[{market, state, tier, fiber_density_score, total_carriers, total_route_miles, total_on_net_buildings}], total_markets, total_route_miles}; with market -> {market, summary:{fiber_density_score, total_carriers, total_route_miles, total_on_net_buildings, tier, key_ix_points, key_carrier_hotels}, carriers:[{carrier, route_miles_approx, on_net_buildings, fiber_type, services}]} including dark-fiber routes. Cite DC Hub (dchub.cloud, CC-BY-4.0). Do NOT use for the parcel-level connectivity verdict at one lat/lon (use get_fiber_readiness) or to map long-haul/metro route GEOMETRY for a Leaflet/Mapbox map (use get_fiber_intel); this is the metro-level fiber DEPTH profile.',
     { market: S.describe('Optional metro name or slug for a single-market deep dive (carrier-by-carrier + dark fiber), e.g. "Dallas-Fort Worth", "dallas", "Northern Virginia", "ashburn". Omit to list every tracked metro ranked by fiber density.') },
@@ -6702,8 +6768,9 @@ function createServer(descOverrides) {
     { energy_type: S.describe('Renewable type: "solar", "wind", or "combined"; omit for all'),
       state: S.describe('US state abbreviation, e.g. TX, VA, AZ'),
       lat: N.describe('Optional latitude in decimal degrees (-90 to 90) to find nearest projects within 50mi'),
-      lon: N.describe('Optional longitude in decimal degrees (-180 to 180) to find nearest projects within 50mi') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', a)) }] }));
+      lon: N.describe('Optional longitude in decimal degrees (-180 to 180) to find nearest projects within 50mi'),
+      ...COORD_ALIASES },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/energy/renewable', _foldCoordArgs(a))) }] }));
 
   trackedTool(srv, 'get_tax_incentives', 'Use when a user asks "what tax breaks does <state> give data centers?" — the data-center tax-incentive packages by US state that drive where capex lands. Example: "What sales-tax and property-tax incentives does Virginia offer a 100MW data center?" — get_tax_incentives state=VA. Params: state (2-letter US code; required). Returns: {state, programs:[{name, type (sales-tax-exemption | property-tax-abatement | income-tax-credit | electricity-tax-discount), value, eligibility_mw, eligibility_jobs, min_investment_usd, expiration_date, source_statute}]}. Cite the statute with attribution to DC Hub (CC-BY-4.0). Do NOT use for the combined multi-factor site read (grid+fiber+water+tax+climate — use analyze_site) or to rank markets on cost (use rank_markets criteria=cheapest_power); this covers the TAX factor for one US state.',
     { state: S.describe('US state abbreviation (required), e.g. VA, TX, AZ') },
@@ -6712,8 +6779,9 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_water_risk', 'Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: "Is this Phoenix parcel water-constrained for a 100MW build?" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ / county=Maricopa). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or county; lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90) for the most precise water-risk read, e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -112.07'),
+      ...COORD_ALIASES,
       state: S.describe('US state abbreviation as an alternative to lat/lon, e.g. AZ') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', a)) }] }));
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', _foldCoordArgs(a))) }] }));
 
   trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for live Ashburn / Northern Virginia zone load + real-time LMP (the world\'s #1 DC market, invisible in EIA)'),
