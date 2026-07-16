@@ -6367,7 +6367,10 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'analyze_parcel',
     'Structured read of a parcel BOUNDARY — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (free county/state GIS polygons, rolling out by data-center market — Loudoun County VA first; a point outside hosted coverage returns an honest 404 with the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary or a point on a specific parcel and want it anchored + sized; for a general lat/lon site score use analyze_site; for the interconnection-queue survivor set use get_refined_queue (queue rows carry NO parcel identity, so they never auto-join to hosted parcels).',
-    { geometry: z.any().describe('GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {"type":"Polygon","coordinates":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope. Omit to look up the hosted parcel containing lat/lon instead'),
+    // r-coord-aliases (2026-07-16): geometry was z.any() WITHOUT .optional() —
+    // the SDK required it, so the documented lat/lon-only hosted-parcel lookup
+    // was rejected at validation (-32602) before the handler ever ran.
+    { geometry: z.any().optional().describe('GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {"type":"Polygon","coordinates":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope. Omit to look up the hosted parcel containing lat/lon instead'),
       lat: N.describe('Latitude of a point ON the parcel — used with lon when geometry is omitted to look up the containing parcel from the hosted county/state GIS layer'),
       lon: N.describe('Longitude of a point ON the parcel (used with lat when geometry is omitted)'),
       ...COORD_ALIASES,
