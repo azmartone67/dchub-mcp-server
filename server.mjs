@@ -4025,11 +4025,51 @@ const _isoError = (raw, toolName) => {
            structuredContent: enriched };
 };
 const STRICT_ISO_TOOLS = new Set(['get_grid_data', 'get_interconnection_queue', 'get_iso_context']);
+// r-lonfix (2026-07-16): save_site coordinates arrive under every name in the
+// wild (lat/latitude, lon/lng/longitude) but the zod shape only declared
+// lat/lon — and the SDK's zod parse SILENTLY strips undeclared keys, so a save
+// sent with `lng`/`longitude` reached the backend coordinate-less and was
+// stored at (0, 0) while reporting "Saved!" (19 of the last 23 saved_lp_sites
+// rows had longitude=0), poisoning every downstream get_changes / site-alert
+// read. The aliases are now declared params (zod keeps them), this normalizer
+// folds them, and a coordinate-less save is refused with a
+// parameter_adjustment envelope instead of persisting a poisoned row. The
+// backend rejects missing coords too (lp_sites.py _extract_coords) — this
+// layer exists so the agent gets the legible error without a round-trip.
+export function _extractCoordArgs(args) {
+  const a = args || {};
+  const lat = a.lat ?? a.latitude;
+  const lon = a.lon ?? a.lng ?? a.longitude;
+  return { lat, lon,
+           missing: [lat == null && 'lat', lon == null && 'lon'].filter(Boolean) };
+}
+const _coordsError = (missing, toolName) => {
+  const payload = {
+    error: 'missing_coordinates',
+    detail: `${toolName} needs BOTH lat and lon in decimal degrees — `
+          + `${missing.join(' and ')} missing. Nothing was saved.`,
+    _source: 'DC Hub — dchub.cloud',
+  };
+  const enriched = _withErrorEnvelope(payload, {
+    error_code: 'missing_coordinates',
+    severity: 'parameter_adjustment',
+    deterministic_hint: `Re-run ${toolName} with numeric lat AND lon `
+      + `(aliases latitude/lng/longitude also accepted), e.g. lat=39.04 lon=-77.48.`,
+    allowed_params: _toolParamKeys(toolName),
+  });
+  return { isError: true,
+           content: [{ type: 'text', text: JSON.stringify(enriched) }],
+           structuredContent: enriched };
+};
 function _validateToolArgs(name, args) {
   // Returns an MCP error-content object if the args are invalid, else null.
   if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
       && String(args.iso).trim() !== '' && !_isoValid(args.iso)) {
     return _isoError(args.iso, name);
+  }
+  if (name === 'save_site') {
+    const { missing } = _extractCoordArgs(args);
+    if (missing.length) return _coordsError(missing, name);
   }
   return null;
 }
@@ -6430,12 +6470,24 @@ function createServer(descOverrides) {
   trackedTool(srv, 'save_site', 'Save a candidate data-center site to your DC Hub account to track it across sessions (FREE — just needs a key; call claim_free_key if you don\'t have one). Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Pass `market` and DC Hub snapshots the site\'s DCPI baseline at save time, so every later list_saved_sites / get_changes shows how ITS score and verdict moved since you saved it. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" market=northern-virginia target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90), e.g. 39.04'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -77.48'),
+      // r-lonfix (2026-07-16): aliases must be DECLARED — zod strips unknown
+      // keys silently, which used to turn a `lng`/`longitude` save into a
+      // (0, 0) row. _extractCoordArgs folds them back into lat/lon.
+      latitude: N.describe('Alias for lat — either name works'),
+      lng: N.describe('Alias for lon — either name works'),
+      longitude: N.describe('Alias for lon — either name works'),
       name: S.describe('Optional label for the saved site, e.g. "Ashburn parcel"'),
       state: S.describe('US state abbreviation for the site, e.g. VA'),
       market: S.describe('Market slug (metro) the site belongs to, e.g. northern-virginia'),
       target_mw: N.describe('Target power load for the planned build in megawatts (MW), e.g. 100'),
       notes: S.describe('Optional free-text notes to store with the saved site') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', a)) }] }));
+    async (a) => {
+      const { lat, lon } = _extractCoordArgs(a);
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/save', {
+        lat, lon, name: a.name, state: a.state, market: a.market,
+        target_mw: a.target_mw, notes: a.notes,
+      })) }] };
+    });
 
   trackedTool(srv, 'list_saved_sites', 'Use when a user asks to see or review their saved DC Hub shortlist in-chat (FREE with a key), or wants to know what moved on it. Example: "What sites have I saved?" / "Did any of my saved sites move?" — list_saved_sites. Params: since (optional — "24h"/"7d"/ISO, default 7d — the delta window). Returns: each saved site with name, market, lat/lon, saved DCPI score, target MW, notes — PLUS live deltas: verdict_was/verdict_now (e.g. CAUTION → BUILD), excess-power move over the window, current vs at-save DCPI, alerts armed/fired, new facilities nearby, and a `portfolio` summary flagging which sites moved and which have no alert armed. Do NOT use to add a site (use save_site) or to download the list as a file (use export_dataset); this is the in-chat read-back.',
     { since: S.describe('Delta window for per-site movement: "24h", "7d" (default) or an ISO-8601 timestamp — pass your cached generated_at from last session') },
