@@ -10,12 +10,12 @@ Create a Custom GPT powered by DC Hub's data center intelligence platform with d
 
 ### Step 2: Add Instructions
 1. Click the "Configure" tab
-2. Paste the contents of `dchub-custom-gpt-instructions.txt` into the Instructions field
+2. Paste the contents of `instructions.txt` into the Instructions field
 
 ### Step 3: Add Actions
 1. Scroll down to "Actions" and click "Create new action"
-2. Set Authentication to "None" (free tier endpoints require no auth)
-3. Paste the contents of `dchub-openapi-chatgpt-actions.json` into the Schema field
+2. Set Authentication to **API Key** → Header name `X-API-Key`, and paste a **durable** DC Hub key — mint one in a single message with `claim_free_key` (no email), or get one at https://dchub.cloud/signup. (Avoid "None": anonymous caps at 10 calls/day with no session continuity — the durable key is what keeps your GPT's users out of that trap.)
+3. Paste the contents of `openapi.json` into the Schema field
 4. Click "Test" to verify the connection
 
 ### Step 4: Configure Settings

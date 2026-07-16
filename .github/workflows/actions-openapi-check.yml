@@ -1,0 +1,20 @@
+name: actions-openapi-check
+# Enforces the ChatGPT Actions OpenAPI contract (ChatGPT integrator review, 2026-07-16):
+# valid schema, unique operationIds, concrete response schemas, shared PaidPreview on
+# every gated op, well-formed x-agent. Prevents interface drift as the tool surface grows.
+on:
+  push:
+    branches: [main]
+    paths: ['integrations/chatgpt/openapi.json', 'integrations/chatgpt/validate_actions_openapi.py']
+  pull_request:
+    paths: ['integrations/chatgpt/openapi.json', 'integrations/chatgpt/validate_actions_openapi.py']
+  workflow_dispatch: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Validate ChatGPT Actions OpenAPI contract
+        run: python3 integrations/chatgpt/validate_actions_openapi.py integrations/chatgpt/openapi.json
