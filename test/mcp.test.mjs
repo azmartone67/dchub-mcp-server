@@ -252,3 +252,49 @@ describe('dchub MCP smoke tests', () => {
     }
   }, 15000);
 });
+
+// r-late-key (2026-07-16) e2e regression — a key header attached AFTER an
+// anonymous initialize must take effect on the SAME session, no reconnect.
+// Live-verified defect: anon init → tools/call with X-API-Key on that
+// session-id → list_saved_sites still answered 'API 401 auth_required'.
+// Runs only when MCP_API_KEY is set (needs a real key to adopt).
+describe.runIf(!!process.env.MCP_API_KEY)('late key header on an anonymous session (r-late-key)', () => {
+  it('anon initialize → tools/call WITH key → keyed identity, not auth_required', async () => {
+    const ANON = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
+    const initResp = await fetch(MCP_URL, {
+      method: 'POST',
+      headers: ANON,   // deliberately NO X-API-Key at initialize
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: {
+          protocolVersion: PROTOCOL_VERSION,
+          clientInfo: { name: 'dchub-late-key-test', version: '1.0.0' },
+          capabilities: {},
+        },
+      }),
+    });
+    const sid = initResp.headers.get('Mcp-Session-Id') || initResp.headers.get('mcp-session-id');
+    await initResp.text();
+    expect(sid).toBeTruthy();
+    await fetch(MCP_URL, {
+      method: 'POST',
+      headers: { ...ANON, 'Mcp-Session-Id': sid },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+    });
+
+    // Now the key arrives mid-session, on the tool call itself.
+    const resp = await fetch(MCP_URL, {
+      method: 'POST',
+      headers: { ...ANON, 'Mcp-Session-Id': sid, 'X-API-Key': process.env.MCP_API_KEY },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 2, method: 'tools/call',
+        params: { name: 'list_saved_sites', arguments: {} },
+      }),
+    });
+    const text = await resp.text();
+    // Pre-fix, the session stayed anonymous and the backend answered 401
+    // auth_required; post-fix the key's identity applies without reconnect.
+    expect(text).not.toMatch(/auth_required/i);
+    expect(text).not.toMatch(/API 401/i);
+  }, 30000);
+});

@@ -1259,6 +1259,50 @@ function _autoBindTrialToSession(mint) {
   } catch (_e) { return false; }
 }
 
+// r-late-key (2026-07-16): an X-API-Key (or resolved Bearer) attached to a
+// request AFTER the session was initialized was IGNORED — the existing-session
+// branch reused sessionMeta verbatim, so an agent that connected anonymously,
+// hit the paywall, then added a key (or whose human pasted one mid-conversation)
+// stayed anonymous until a full reconnect (verified live 2026-07-16:
+// anon initialize → tools/call with a valid QA key on the same session-id →
+// list_saved_sites still answered 'API 401 auth_required'). That reconnect is
+// exactly the friction claim_free_key's session auto-bind (r86) removes for
+// MINTED keys — this is the same upgrade for HEADER-supplied keys. Pure
+// decision function (unit-tested in test/late-key.test.mjs); the POST /mcp
+// handler validates the key first and passes the result in.
+//   • validated key ≠ session key → persist:true — adopt the key's identity into
+//     sessionMeta (upgrade OR legitimate key swap, e.g. trial → paid).
+//   • unrecognized key on an ANONYMOUS session → persist:false — honor the key
+//     for THIS request only (mirrors initialize, which stores a raw key even
+//     when validation fails and lets the backend answer its own 401), but never
+//     write junk into sessionMeta: claim_free_key's auto-bind refuses keyed
+//     sessions, and a transient validate blip must not brick that path.
+//   • unrecognized key on a KEYED session → null — never downgrade a working
+//     identity on a junk header (Claude.ai connectors re-send Bearer JWTs that
+//     resolve to raw strings once expired).
+function _lateKeyResolve(meta, apiKey, validation) {
+  if (!apiKey || apiKey === meta.api_key) return null;
+  if (validation && validation.valid) {
+    return {
+      persist: true,
+      meta: {
+        ...meta,
+        api_key: apiKey,
+        tier: validation.tier || 'free',
+        is_trial: validation.is_trial === true,
+        metered_enforce: validation.metered_enforce === true,
+        developer_id: validation.developer_id || null,
+        email: validation.email || null,
+        late_key_bound: true,
+      },
+    };
+  }
+  if (!meta.api_key) {
+    return { persist: false, meta: { ...meta, api_key: apiKey, tier: 'free' } };
+  }
+  return null;
+}
+
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -7722,7 +7766,27 @@ app.post('/mcp', async (req, res) => {
     if (sessionId && sessions.has(sessionId)) {
       touchSession(sessionId);  // r41: mark active
       const transport = sessions.get(sessionId);
-      const meta = sessionMeta.get(sessionId) || {};
+      let meta = sessionMeta.get(sessionId) || {};
+      // r-late-key (2026-07-16): a key header on a request in an ALREADY-
+      // initialized session takes effect immediately — no reconnect. See
+      // _lateKeyResolve for the full decision table. validateKey is cached +
+      // single-flight, and the whole check only fires when a header key is
+      // present AND differs from the session's, so the hot path (keyless
+      // follow-up calls, unchanged key re-sent every request) pays nothing.
+      // Kill switch: DCHUB_LATE_KEY_DISABLE=1 → pre-fix behavior.
+      if (apiKey && apiKey !== meta.api_key
+          && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_LATE_KEY_DISABLE || ''))) {
+        const _v = await validateKey(apiKey);
+        const _r = _lateKeyResolve(meta, apiKey, _v);
+        if (_r) {
+          meta = _r.meta;
+          if (_r.persist) {
+            sessionMeta.set(sessionId, meta);
+            try { recordSessionUpgrade(meta.platform, meta.tier); } catch (_) {}
+            console.log(`[late-key] sid=${String(sessionId).slice(0, 8)} adopted header key ${String(apiKey).slice(0, 6)}… tier=${meta.tier}`);
+          }
+        }
+      }
       // item-3: stamp the live request's caller IP onto the reused ctx (the
       // stored meta carries the init-time IP; a returning request may come
       // from a different hop, so prefer the current one when present).
@@ -8071,5 +8135,5 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled };
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve };
 
