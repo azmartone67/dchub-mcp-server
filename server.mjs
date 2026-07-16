@@ -4045,9 +4045,13 @@ function trackedTool(srv, name, description, schema, handler) {
   // ChatGPT Apps directory requires ALL FOUR hints on every tool. openWorldHint:false
   // — DC Hub tools query DC Hub's own curated dataset (closed world), not the open web;
   // destructiveHint:false — read tools mutate nothing, write tools create/update, none DELETE.
+  // r-idempotent (2026-07-15): add the 4th hint. Read tools are idempotent (repeat calls
+  // with the same args return the same data, no side effect) → true; write tools mutate
+  // state (mint key, bind email, save/alert) → false. Completes the 4-hint set ChatGPT
+  // Apps review + Gemini Enterprise both read.
   const _annot = WRITE_TOOLS.has(name)
-    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, openWorldHint: false }
-    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   srv.tool(name, _desc, schema, _annot, _stampEntityCb(name, async (args, extra) => {
     const c = getCtx();
     const t0 = Date.now();
