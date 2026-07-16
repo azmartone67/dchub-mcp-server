@@ -6415,7 +6415,13 @@ function createServer(descOverrides) {
     { candidates: z.any().optional().describe('Array of candidate objects. PREFERRED: {candidate_id: "cand_…", <your metric fields>} using ids from get_refined_queue — frozen coordinates/capacity/fiber_km load from the mint (zero transcription drift), your enrichments (e.g. overall_score from analyze_site) overlay. Legacy: {id?, lat?, lng?, <metric fields>} flat objects also work. Omit if using shortlist_name'),
       shortlist_name: S.describe('Alternative to candidates: re-rank a SAVED shortlist (created via save_to_shortlist) in one shot — loads its sites (scoped to your API key) + reuses their saved objectives if you pass none, and re-scores against the current baseline'),
       constraints: z.any().optional().describe('Hard filters {field: {min?, max?}} — a candidate missing a constrained field is dropped (fail-closed). e.g. {"risk_resilience": {"min": 70}, "estimated_ttp_months": {"max": 34}}'),
-      objectives: z.any().describe('Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {"water_stress": -0.6, "fiber_km": -0.4}'),
+      // r-shortlist-rerank (2026-07-16): objectives was z.any() WITHOUT .optional()
+      // — the SDK required it, so the documented shortlist re-rank mode ("reuses
+      // their saved objectives if you pass none") was rejected at validation
+      // (-32602) before the handler ever ran. Same bug analyze_parcel's geometry
+      // had. The backend stays the enforcement point: candidates-mode without
+      // objectives gets its legible 400 ("objectives required: {field: weight}").
+      objectives: z.any().optional().describe('Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {"water_stress": -0.6, "fiber_km": -0.4}. Omit with shortlist_name to reuse the shortlist\'s saved objectives; required with candidates'),
       absolute: B.describe('false (default) = min-max normalize within THIS batch (best-in-set, NOT stable across runs). true = score on a FIXED 0-100 scale for CROSS-RUN-STABLE, auditable scores — use ONLY when the objective fields are already 0-100 (analyze_site scores like risk_resilience/fiber_connectivity), not raw distances like fiber_km'),
       percentile: B.describe('true = score each objective as its PERCENTILE against the viable-site POPULATION ("better than X% of viable sites") — the strongest cross-run + cross-region comparability. Works for fields with a maintained baseline (analyze_site metrics: overall_score, risk_resilience, fiber_connectivity, power_infrastructure, market_conditions, gas_pipeline_access, fiber_km, power_cost); other fields fall back to absolute (listed in unbaselined_fields). Takes precedence over absolute'),
       require_complete: B.describe('true = DROP any candidate missing one or more of your (validated) objectives — dropped candidates are DECLARED in excluded_incomplete, never silent. Default false keeps incomplete candidates ranked on their carried objectives with missing_objectives flagged. Recommended true for autonomous take-rank-1 workflows (an incomplete candidate can otherwise top the ranking on its single best metric).'),
@@ -8330,4 +8336,9 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
 export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible };
+// r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
+// zod-layer optionality of tool params — the analyze_parcel geometry and
+// rank_sites objectives bugs were both invisible to handler-level tests
+// because the SDK rejected the call (-32602) before any handler ran.
+export { createServer };
 
