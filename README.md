@@ -130,3 +130,5 @@ This MCP server's transport layer is open source. The data + business logic live
 ## Contact
 
 azmartone@gmail.com — Jonathan Martone — Martone Advisors LLC
+
+<!-- registry-rebuild: 2026-07-16 — Glama builder ECONNRESET x2 on 091afc4 (empty logs, infra-side); commit verified clean locally -->
