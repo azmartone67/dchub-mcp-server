@@ -6781,7 +6781,15 @@ function createServer(descOverrides) {
       lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -112.07'),
       ...COORD_ALIASES,
       state: S.describe('US state abbreviation as an alternative to lat/lon, e.g. AZ') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', _foldCoordArgs(a))) }] }));
+    async (a) => {
+      // The backend reads lat/LNG (water_drought_routes.py request.args.get('lng'))
+      // — sending `lon` 400'd "state parameter or lat/lng required", so the
+      // documented precise point read NEVER worked via MCP (verified live
+      // 2026-07-16). Fold aliases, then present lon under the backend's key.
+      const q = _foldCoordArgs(a);
+      if (q.lon != null) { q.lng = q.lon; delete q.lon; }
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', q)) }] };
+    });
 
   trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for live Ashburn / Northern Virginia zone load + real-time LMP (the world\'s #1 DC market, invisible in EIA)'),
