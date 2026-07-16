@@ -1303,6 +1303,34 @@ function _lateKeyResolve(meta, apiKey, validation) {
   return null;
 }
 
+// r-invalid-bearer-401 (2026-07-16): a request that PRESENTED an
+// `Authorization: Bearer` credential that is neither a valid DC Hub api key
+// (Bearer-as-X-API-Key is an accepted pattern) nor a valid AuthKit/WorkOS JWT
+// used to fall through to a SILENT anonymous 200 session (verified live).
+// Enterprise OAuth brokers (Gemini Custom-MCP, Copilot Studio consent, the
+// marketplace listing flows) only start their sign-in off a 401 +
+// WWW-Authenticate challenge — so the advertised OAuth on-ramp never fired
+// for them. Challenge exactly that cohort: Bearer PRESENT but unusable.
+//   • NO Authorization header → anonymous 200 free tier, UNCHANGED (the broad
+//     agent population never sees this).
+//   • X-API-Key callers → untouched, even with a junk Bearer alongside.
+//   • Discovery (tools/list, ping) stays open — same method scoping as the
+//     Claude-connector challenge (see r-challenge-method).
+//   • An ESTABLISHED session is never yanked mid-flight on a junk bearer
+//     (foreign JWTs riding anon sessions are observed in prod) — that path
+//     stays governed by _lateKeyResolve.
+// Pure decision function (unit-tested in test/invalid-bearer.test.mjs); the
+// POST /mcp handler pays the async validateKey() hop only when this passes,
+// and 401s only when that validation ALSO comes back invalid.
+function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, method, hasSession }) {
+  if (!/^Bearer\s+\S/i.test(String(authHeader || ''))) return false; // no Bearer credential presented
+  if (hasApiKeyHeader) return false;
+  if (bearerResolved) return false;   // proven DC-Hub AS token / AuthKit JWT → identified
+  if (method !== 'initialize' && method !== 'tools/call') return false;
+  if (hasSession) return false;
+  return true;
+}
+
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -7804,10 +7832,12 @@ app.post('/mcp', async (req, res) => {
     // X-API-Key, exactly as before). See oauth.mjs dormancy contract.
     const _bearer   = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
     let _workosAuthed = false;
+    let _bearerResolved = false;  // Bearer proven valid (DC-Hub AS token or WorkOS/AuthKit JWT)
     if (_bearer) {
       const _oauthId = await resolveOAuthToken(_bearer);
       if (_oauthId && _oauthId.api_key) {
         apiKey = _oauthId.api_key;
+        _bearerResolved = true;
       } else if (!req.headers['x-api-key']) {
         // Phase B (r-workos): the Bearer is a WorkOS OAuth JWT, not a DC-Hub AS
         // token. Validate it against the WorkOS JWKS and map to a durable key.
@@ -7815,7 +7845,7 @@ app.post('/mcp', async (req, res) => {
         // raw Bearer (treated as X-API-Key, exactly as before). X-API-Key wins
         // (this branch only runs when no x-api-key header was sent).
         const _wid = await resolveWorkosBearer(_bearer);
-        if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; }
+        if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; _bearerResolved = true; }
       }
     }
     // ── Phase B+ (r-workos-challenge): trigger the OAuth handshake ──────────
@@ -7872,6 +7902,39 @@ app.post('/mcp', async (req, res) => {
         error: { code: -32001, message: 'Authorization required — sign in to DC Hub to continue.' },
         id: (req.body && req.body.id) ?? null,
       });
+    }
+    // ── r-invalid-bearer-401 (2026-07-16): present-but-invalid Bearer → 401 ──
+    // See _invalidBearerEligible for the full decision table + rationale.
+    // resource_metadata = the RFC 9728 STANDARD path (CF worker dchub-oauth-meta,
+    // authorization_servers fixed 2026-07-15 — verified in agreement with the
+    // Flask /api/v1 doc the Claude-connector challenge above uses, same AS +
+    // same OIDC scopes). error="invalid_token" (RFC 6750 §3.1) tells the
+    // broker to refresh/re-consent rather than treat auth as unconfigured.
+    // Kill switch: DCHUB_INVALID_BEARER_401_DISABLE=1.
+    const _invalid401Disabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INVALID_BEARER_401_DISABLE || ''));
+    if (_workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
+          authHeader: req.headers['authorization'],
+          hasApiKeyHeader: !!req.headers['x-api-key'],
+          bearerResolved: _bearerResolved,
+          method: req.body?.method,
+          hasSession: !!(sessionId && sessions.has(sessionId)),
+        })) {
+      const _bv = await validateKey(_bearer);
+      if (!_bv.valid) {
+        res.set('WWW-Authenticate',
+          'Bearer error="invalid_token", '
+          + 'error_description="Token is not a valid DC Hub api key or AuthKit access token", '
+          + 'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
+        console.log(`[oauth] 401 invalid bearer (${String(_bearer).slice(0, 8)}… method=${req.body?.method}) — challenging via resource_metadata`);
+        return res.status(401).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32001,
+            message: 'Authorization required — the presented Bearer token is not valid. Complete the OAuth flow advertised in WWW-Authenticate (RFC 9728 resource_metadata), or send a DC Hub key in the X-API-Key header.',
+          },
+          id: (req.body && req.body.id) ?? null,
+        });
+      }
     }
     // item-3 (real caller IP): mcp_tool_calls.ip_address was logging the CF/
     // proxy egress IP (req.socket.remoteAddress), not the actual MCP caller.
@@ -8266,5 +8329,5 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve };
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible };
 
