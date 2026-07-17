@@ -2212,6 +2212,92 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
       .catch(() => {});  // never throw, never block — the counter is a nudge, not a wall
   } catch (_) { /* fire-and-forget */ }
 }
+// ── r-oauth-funnel (2026-07-16): count 401 OAuth challenges ISSUED ──────────
+// WHY: the oauth_durable cohort returns 40% vs 5.2% key_only (Fisher p=0.027),
+// but n=5 and it is confounded. Confirming/killing it needs ~21 mature
+// identities, which means managing adoption — and nothing counted how many
+// agents were ever ASKED. This supplies that denominator.
+//
+// ★ HOT-PATH CONTRACT: the request path does ONE Map integer bump. No fetch, no
+// await, no promise, no DB, no getCtx() (ctx.run is far below; the store is
+// EMPTY here, so callAPIWrite/trackToolCall would silently emit blank
+// attribution). Backend contact is collapsed to a FIXED WALL CLOCK (<=1
+// POST/60s/replica, 1/hour idle) per the r-tuner-warmcache rule at ~L3780:
+// "NEVER put a synchronous, DB-touching self-call in the init hot path" +
+// "collapse to a FIXED CADENCE independent of request volume." r-tuner was
+// blocking + DB-touching + VOLUME-COUPLED; this is none of the three.
+//
+// ★ CARDINALITY: kind and method are CLOSED WHITELISTS checked HERE, not
+// inherited from the upstream gates. Both challenge branches are
+// unauthenticated and fully client-controlled (`Authorization: Bearer x` + any
+// body, no key, no rate limit), so nothing attacker-supplied may ever enter
+// this Map key — notably NOT clientInfo.name. Max size: 2 kinds x 3 methods
+// (initialize | tools/call | the 'other' escape) = 6 keys, FOREVER — verified by
+// replaying 350k hostile bumps (attacker-chosen kinds/methods, __proto__,
+// throwing toString) through _chBump: the Map held 5 and Object.prototype stayed
+// clean. Flat backend work under any input is the whole outage argument.
+// Kill switch: DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 -> fully INERT.
+const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer']);
+const _CH_METHODS = new Set(['initialize', 'tools/call']);
+const _CH_BEAT_MS = 60 * 60 * 1000;          // idle heartbeat: 1 POST/hour/replica
+const _chCounts = new Map();                 // `${kind}:${method}` -> n  (<=6 keys, ever)
+let _chFlushStarted = false, _chFailStreak = 0, _chNextAt = 0, _chLastPostAt = 0;
+const _chDisabled = () =>
+  /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE || ''));
+
+function _chBump(kind, method) {
+  try {
+    if (_chDisabled()) return;                 // INERT-when-off: no map write at all
+    if (!_CH_KINDS.has(kind)) return;          // closed set — never trust the call site
+    const m = _CH_METHODS.has(method) ? method : 'other';   // 'other' = only escape value
+    const k = `${kind}:${m}`;
+    _chCounts.set(k, (_chCounts.get(k) || 0) + 1);
+  } catch (_) { /* a counter must NEVER affect the 401 response */ }
+}
+
+// Lazy-start on POST /mcp handler ENTRY (not on first challenge) so the flusher
+// exists even when DORMANT — that is what lets the hourly beat materialize the
+// table and make "zero challenges" distinguishable from "WorkOS off" / "gateway
+// not shipped". Without it, a dormant feature never writes and the retention
+// read reports an error, which reads as BROKEN when the truth is DORMANT.
+function _chEnsureFlusher() {
+  if (_chFlushStarted || _chDisabled()) return;
+  _chFlushStarted = true;
+  const t = setInterval(_chFlush, 60 * 1000);
+  if (t && typeof t.unref === 'function') t.unref();   // house convention: never hold the loop
+}
+
+function _chFlush() {
+  try {
+    if (_chDisabled()) return;
+    const now = Date.now();
+    if (now < _chNextAt) return;                            // breaker: backed off
+    const beatDue = (now - _chLastPostAt) >= _CH_BEAT_MS;
+    if (_chCounts.size === 0 && !beatDue) return;           // idle: ZERO fetches
+    const counts = Object.fromEntries(_chCounts);
+    _chCounts.clear();   // ★ clear BEFORE the POST: never retry, never re-merge.
+    // A dropped window is an UNDERCOUNT (one-directional bias, so the index can
+    // only ever flatter us). A retry against an additive upsert is an OVERCOUNT,
+    // the one bias that could manufacture a false success story.
+    _chLastPostAt = now;
+    const n = Object.values(counts).reduce((a, b) => a + b, 0);
+    const day = new Date().toISOString().slice(0, 10);   // ★ UTC day stamped at the SOURCE,
+    // so a flush crossing midnight or delayed by a backoff cannot smear counts.
+    if (n > 0) console.log(`[oauth] challenges_60s=${n} ${JSON.stringify(counts)}`);
+    fetch(new URL('/api/v1/mcp/oauth-challenge/emit', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify({ day, counts, workos_enabled: _workosEnabled() }),
+      signal: AbortSignal.timeout(5000),
+    })
+      .then((r) => { _chFailStreak = (r && r.ok) ? 0 : _chFailStreak + 1; _chArm(); })
+      .catch(() => { _chFailStreak += 1; _chArm(); });     // write-behind: never throws
+  } catch (_) { /* fire-and-forget */ }
+}
+function _chArm() {   // 3 consecutive failures -> back off 10 min; self-heals on any ok
+  _chNextAt = _chFailStreak >= 3 ? Date.now() + 10 * 60 * 1000 : 0;
+}
+
 function _fullCapConsume(identity, tool, cap) {
   try {
     fetch(new URL('/api/v1/mcp/full-cap/consume', API_BASE).toString(), {
@@ -7814,6 +7900,7 @@ app.post('/mcp', async (req, res) => {
   try {
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
+    try { _chEnsureFlusher(); } catch (_) { /* r-oauth-funnel: never affect the handler */ }
     // r-alias (2026-07-10): normalize a GUESSED tool name to the real one here —
     // BEFORE the session/stateless branch — so it applies on EVERY tools/call
     // path (a session-bearing call routes at the `sessions.has(sid)` branch below
@@ -7902,6 +7989,7 @@ app.post('/mcp', async (req, res) => {
       res.set('WWW-Authenticate',
         'Bearer resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource", '
         + 'scope="openid profile email offline_access"');
+      _chBump('claude_connector', req.body?.method);   // r-oauth-funnel: Map bump only
       console.log('[oauth] 401 challenge → Claude.ai connector (no token) — triggering WorkOS sign-in');
       return res.status(401).json({
         jsonrpc: '2.0',
@@ -7931,6 +8019,7 @@ app.post('/mcp', async (req, res) => {
           'Bearer error="invalid_token", '
           + 'error_description="Token is not a valid DC Hub api key or AuthKit access token", '
           + 'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
+        _chBump('invalid_bearer', req.body?.method);   // r-oauth-funnel: Map bump only
         console.log(`[oauth] 401 invalid bearer (${String(_bearer).slice(0, 8)}… method=${req.body?.method}) — challenging via resource_metadata`);
         return res.status(401).json({
           jsonrpc: '2.0',
