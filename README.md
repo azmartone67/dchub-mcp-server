@@ -34,7 +34,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **126,427 substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (e.g. ERCOT ~225 GW of data-center load in the interconnection queue)
-- **4,000+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
+- **1,400+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details

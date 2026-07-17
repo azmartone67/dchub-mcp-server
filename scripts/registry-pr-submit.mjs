@@ -55,7 +55,7 @@ const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (311 US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 4,000+ M&A deals; 73 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (311 US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 1,400+ M&A deals; 73 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
   },
 ];
 
@@ -68,7 +68,10 @@ const REFRESH_TARGETS = [
 ];
 
 // Replace stale counts ONLY on lines that are our own entry (match the repo slug) so we
-// never touch another server's text. Current honest numbers: 73 tools / 311 markets / 4,000+.
+// never touch another server's text. Current honest numbers: 73 tools / 311 markets / 1,400+.
+// 2026-07-17: 4,000+ was an over-claim — it counted duplicate ROWS (the AUTO id embeds
+// the ingest date, so one deal accrues a row per day). ~1,420 distinct. See
+// canonical_stats.deals_phrase in dchub-backend.
 function refreshOurCounts(text) {
   const lines = text.split('\n');
   let changed = false;
@@ -78,7 +81,7 @@ function refreshOurCounts(text) {
     lines[i] = lines[i]
       .replace(/\b\d{1,3}\s+tools\b/gi, '73 tools')
       .replace(/\b\d{2,3}\+?\s+(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `311 ${a}${b}markets`)
-      .replace(/\b[\d,]+\+?\s+(tracked\s+)?M&A\s+deals\b/gi, (m, tr = '') => `4,000+ ${tr}M&A deals`);
+      .replace(/\b[\d,]+\+?\s+(tracked\s+)?M&A\s+deals\b/gi, (m, tr = '') => `1,400+ ${tr}M&A deals`);
     if (lines[i] !== before) changed = true;
   }
   return changed ? lines.join('\n') : null;
@@ -229,15 +232,15 @@ async function openPR(t, newContent, opts = {}) {
     if (!res.ok) { console.log(`  ~ ${t.key} (refresh): fetch ${res.status} — skip`); continue; }
     const refreshed = refreshOurCounts(await res.text());
     if (!refreshed) { console.log(`  ✓ ${t.key} (refresh): our entry already current — skip`); continue; }
-    console.log(`  ● ${t.key} (refresh): STALE → 73 tools / 311 markets / 4,000+ deals`);
+    console.log(`  ● ${t.key} (refresh): STALE → 73 tools / 311 markets / 1,400+ deals`);
     if (DRY) continue;
     if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
     try {
       const r = await openPR(t, refreshed, {
         branch: `refresh-dchub-${t.key}`,
-        title: 'Refresh DC Hub MCP entry (73 tools, 311 markets, 4,000+ deals)',
+        title: 'Refresh DC Hub MCP entry (73 tools, 311 markets, 1,400+ deals)',
         message: 'Refresh DC Hub stats',
-        body: `Updates the existing DC Hub entry to current stats: **73 tools**, **311 markets** (DC Hub Power Index), **4,000+ M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
+        body: `Updates the existing DC Hub entry to current stats: **73 tools**, **311 markets** (DC Hub Power Index), **1,400+ M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
       });
       if (r.skipped) console.log(`      skip: ${r.skipped}`);
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }

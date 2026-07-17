@@ -144,7 +144,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md']) {
 // (verified working, emits all 58). We therefore (1) assert glama.json stays
 // schema-valid, (2) keep server.json's positioning intact, and (3) lock the
 // coverage prose Glama re-derives from.
-const CANON = { markets: 311, dealsFloor: '4,000+' };
+const CANON = { markets: 311, dealsFloor: '1,400+' };
 {
   // (1) glama.json must stay schema-valid — an invalid manifest makes Glama drop the listing
   try {
