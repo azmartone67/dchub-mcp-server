@@ -7968,8 +7968,20 @@ app.post('/mcp', async (req, res) => {
         }
       }
     } catch (_) {}
+    // r-smithery-config (2026-07-16): Smithery's remote-server gateway forwards
+    // a user's configSchema value (the optional apiKey) as a QUERY PARAM on the
+    // /mcp URL ("passes through all query params/headers as-is"), not always as
+    // a header. Accept ?apiKey=/?api_key=/?key= as a LAST-RESORT fallback so a
+    // key pasted in Smithery's connect UI actually reaches auth. Header + Bearer
+    // still win; a junk query key is validated + rejected like any other.
+    let _qKey = '';
+    try {
+      const _sp = new URL(req.url, 'http://_').searchParams;
+      _qKey = _sp.get('apiKey') || _sp.get('api_key') || _sp.get('key') || '';
+    } catch (_) {}
     let apiKey      = req.headers['x-api-key']
                    || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
+                   || _qKey
                    || null;
     // OAuth (Phase 1, DORMANT unless DCHUB_OAUTH_ENABLED): if the Bearer is an
     // issued OAuth access token, resolve it to its bound dev key. Flag off / not
