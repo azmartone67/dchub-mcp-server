@@ -4261,6 +4261,51 @@ function withReturnNudge(result, toolName, c) {
   return result;
 }
 
+// ── outputSchema (r-output-schema, 2026-07-17) ─────────────────────────────
+// Every tool now ADVERTISES its return shape in tools/list. The honest common
+// contract across all 73 tools is the DC Hub ENVELOPE: the full JSON payload
+// rides in content[0].text, and structuredContent mirrors it with the
+// tool-specific data at the top level alongside these envelope keys. The
+// schema is a LOOSE object (tool payloads pass through) with the universal
+// keys documented — this is what the agent-usefulness shell's
+// has_output_schemas component measures, and what lets an agent branch on
+// _entity / read provenance without guessing.
+//
+// SDK CONTRACT (verified in @modelcontextprotocol/sdk validateToolOutput):
+// once outputSchema is declared, every SUCCESS result MUST carry
+// structuredContent or the call errors. _stampEntityCb already guarantees it
+// on the normal path; _ensureStructured below is the belt-and-braces
+// finalizer so no fail-soft path can ever strip it.
+const _OUTPUT_ENVELOPE = z.looseObject({
+  _entity: z.string().optional().describe(
+    'Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) — branch on this before parsing the rest.'),
+  provenance: z.looseObject({}).optional().describe(
+    'Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.'),
+  quota: z.looseObject({}).optional().describe(
+    'Caller quota state (remaining calls, tier) when available.'),
+  citation: z.looseObject({}).optional().describe(
+    'Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload.'),
+  site_evaluation_handoff: z.looseObject({}).optional().describe(
+    'Pre-built follow-up call (analyze_site / get_water_risk args) when the payload carries coordinates.'),
+  _return_loop: z.looseObject({}).optional().describe(
+    'Suggested next-session delta call (get_changes since=24h) so you pull only what changed.'),
+}).describe(
+  'DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text — tool-specific data fields ride at the top level alongside these envelope keys.');
+
+function _ensureStructured(r) {
+  // outputSchema contract: a SUCCESS result must carry structuredContent.
+  // Normal path is stamped by _stampEntityCb; this catches any fail-soft
+  // return that skipped the stamp. Never throws.
+  try {
+    if (r && !r.isError && Array.isArray(r.content)
+        && (!r.structuredContent || typeof r.structuredContent !== 'object'
+            || Array.isArray(r.structuredContent))) {
+      return { ...r, structuredContent: { _entity: 'response' } };
+    }
+  } catch (_e) { /* never break a response */ }
+  return r;
+}
+
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
   // r-error-envelope: capture this tool's declared param names (ZodRawShape keys)
@@ -4288,7 +4333,7 @@ function trackedTool(srv, name, description, schema, handler) {
   const _annot = WRITE_TOOLS.has(name)
     ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
     : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-  srv.tool(name, _desc, schema, _annot, _stampEntityCb(name, async (args, extra) => {
+  const _stamped = _stampEntityCb(name, async (args, extra) => {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
@@ -5379,7 +5424,14 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ip_address:  c.client_ip || null,  // item-3: real XFF caller IP
       }).catch(() => {});
     }
-  }));
+  });
+  srv.registerTool(name, {
+    title: _toolTitle(name),
+    description: _desc,
+    inputSchema: schema,
+    outputSchema: _OUTPUT_ENVELOPE,
+    annotations: _annot,
+  }, async (args, extra) => _ensureStructured(await _stamped(args, extra)));
 }
 
 // r-scoreboard-cache-hoist (2026-06-27): MODULE-SCOPE cache for get_grid_scoreboard.
@@ -6440,7 +6492,7 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_refined_queue',
     'Server-side SET-REDUCTION over the US ISO interconnection queue (~5,300 projects, 7 ISOs, ~1,744 GW). Instead of pulling the raw queue into context to filter (token-expensive, error-prone), push the predicates to the data layer and get back ONLY the survivors. Filter by min_mw, max_ttp_months (ISO-level avg interconnection wait), iso (comma-union), baseload_only (firm/dispatchable — excludes wind/solar/storage), fuel_type (isolate a specific fuel, e.g. gas or nuclear), and the spatial predicates max_fiber_km + geocoded_only. Returns _entity=queue_results: per-project name, ISO, state/county, fuel_type, capacity_mw, queue_status, estimated_ttp_months, fuel_class, plus (~83% of rows) lat/lng, coordinate_precision, fiber_km, and a compact per-survivor site_evaluation_handoff (ready-to-pipe analyze_site + get_water_risk args) + a by_iso/by_fuel summary. Try: get_refined_queue min_mw=1000 fuel_type=gas max_ttp_months=34 — "1 GW+ gas in ISOs under 34-month time-to-power." NOTE max_ttp_months is a HARD ISO cut (SPP ~24 is the only ISO under 30, so <=30 can return nothing); use >=34 to include MISO/ERCOT/ISO-NE. Use for high-cardinality siting/arbitrage scans; do NOT use for the ISO-level GW aggregate (use get_interconnection_queue) or a single-site read (use analyze_site). Phase 2 LIVE: pipe a survivor\'s site_evaluation_handoff straight into analyze_site for a one-call composite viability read. CANDIDATE CONTRACT (2026-07-11): every survivor also mints a durable opaque candidate_id + snapshot_id (7-day TTL, deterministic candidate_expired on lapse — never a silent recompute). ZERO-DRIFT CHAINING: pass candidate_id to analyze_site / rank_sites instead of transposing coordinates — downstream reads the FROZEN mint, eliminating param-rename/rounding/lost-context drift. geocoded_only=true guarantees every survivor carries both the handoff AND frozen coordinates. Contract doc: dchub.cloud/docs/candidate-lifecycle.',
     { min_mw: N.describe('Minimum project capacity in MW, e.g. 1000 for 1 GW+'),
-      max_ttp_months: I.describe('Max time-to-power in months (ISO-level avg interconnection wait; HARD cut keeping projects in ISOs at/under this — PJM ~51, CAISO ~40, ISO-NE ~34, MISO ~34, ERCOT ~33, NYISO ~31, SPP ~24; <=30 leaves only SPP)'),
+      max_ttp_months: z.number().int().min(1).max(120).optional().describe('Max time-to-power in months (ISO-level avg interconnection wait; HARD cut keeping projects in ISOs at/under this — PJM ~51, CAISO ~40, ISO-NE ~34, MISO ~34, ERCOT ~33, NYISO ~31, SPP ~24; <=30 leaves only SPP)'),
       iso: S.describe('Restrict to one or more ISOs, comma-separated for a union: PJM, ERCOT, MISO, CAISO, SPP, NYISO, ISONE (ISO-NE). e.g. iso=ERCOT,PJM. Omit for all; combines with max_ttp_months as an intersection'),
       baseload_only: B.describe('Keep only firm/dispatchable fuel (nuclear, gas, steam, geothermal, hydro, coal); exclude wind/solar/storage. Firm-vs-intermittent split only — does NOT sub-divide peaker vs combined-cycle gas (no duty-cycle field in the queue). Default false'),
       fuel_type: S.describe("Isolate a fuel by inclusive substring match on the raw label; comma/semicolon-separated for a union, e.g. 'gas' hits GAS/Natural Gas, 'nuclear,hydro' unions both. Runs the fuel filter server-side instead of post-filtering survivors in context"),
@@ -6469,7 +6521,7 @@ function createServer(descOverrides) {
   trackedTool(srv, 'get_retirement_headroom',
     'Scans scheduled EIA-860M generator retirements to find near-term transmission grid headroom — a retiring plant is a CONCRETE headroom event (its POI frees injection capacity), from FILED data, not forecasts. Returns _entity=retirement_headroom_results: retiring generators inside your horizon (name, MW, fuel, prime mover, retirement_date), representative_point, nearest substations with distance_km + count within 25 km, county-level queue_pressure (competing in-progress MW), iso_context (the generator\'s own EIA balancing-authority code), and a pre-filled site_evaluation_handoff (analyze_site + get_water_risk args, capacity_mw = YOUR target load). Try: get_retirement_headroom target_mw=50 horizon_months=18 region_iso=MISO — "50 MW opening near a substation inside 18 months, sidestepping the 4-7yr mega-queue." Honesty: meta.caveat flags that filed dates are subject to ISO reliability reviews (RMR extensions). Use to find WHERE capacity opens next; for what\'s already queued use get_refined_queue; for one site use analyze_site.',
     { target_mw: z.number().describe('Minimum required headroom in megawatts (MW) — filters to retiring generators at/above this size. Also passed through as the handoff\'s analyze_site capacity_mw (the DC you are siting).'),
-      horizon_months: z.number().int().describe('Time horizon to look ahead for planned retirements (e.g., 12, 18, 36).'),
+      horizon_months: z.number().int().min(1).max(120).describe('Time horizon in months to look ahead for planned retirements, 1-120 (e.g., 12, 18, 36).'),
       region_iso: S.describe("Optional target region or ISO (e.g., 'MISO', 'PJM', 'ERCOT', 'SPP', 'CAISO', 'NYISO', 'ISONE'). Matches the generator's own EIA balancing-authority code — real market boundaries, not state lines. Comma-separated for a union."),
       fuel_filter: S.describe("Optional filter for retiring fuel categories, substring-matched (e.g., 'Coal', 'Natural Gas', 'Petroleum')."),
       limit: LIMIT },
@@ -6511,7 +6563,7 @@ function createServer(descOverrides) {
       absolute: B.describe('false (default) = min-max normalize within THIS batch (best-in-set, NOT stable across runs). true = score on a FIXED 0-100 scale for CROSS-RUN-STABLE, auditable scores — use ONLY when the objective fields are already 0-100 (analyze_site scores like risk_resilience/fiber_connectivity), not raw distances like fiber_km'),
       percentile: B.describe('true = score each objective as its PERCENTILE against the viable-site POPULATION ("better than X% of viable sites") — the strongest cross-run + cross-region comparability. Works for fields with a maintained baseline (analyze_site metrics: overall_score, risk_resilience, fiber_connectivity, power_infrastructure, market_conditions, gas_pipeline_access, fiber_km, power_cost); other fields fall back to absolute (listed in unbaselined_fields). Takes precedence over absolute'),
       require_complete: B.describe('true = DROP any candidate missing one or more of your (validated) objectives — dropped candidates are DECLARED in excluded_incomplete, never silent. Default false keeps incomplete candidates ranked on their carried objectives with missing_objectives flagged. Recommended true for autonomous take-rank-1 workflows (an incomplete candidate can otherwise top the ranking on its single best metric).'),
-      top_k: I.describe('How many top-ranked sites to return (default 3)') },
+      top_k: z.number().int().min(1).max(50).optional().describe('How many top-ranked sites to return (1-50, default 3)') },
     async (a) => {
       const data = await callAPI('/api/v1/rank-sites', {}, { method: 'POST', body: { candidates: a.candidates, shortlist_name: a.shortlist_name, constraints: a.constraints, objectives: a.objectives, top_k: a.top_k, absolute: a.absolute, percentile: a.percentile, require_complete: a.require_complete } });
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
