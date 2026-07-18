@@ -4642,17 +4642,27 @@ const _TOOL_OUTPUT_SCHEMAS = {
     intent: _oStr('The natural-language intent that was routed (echoed back)'),
     intent_class: _oStr('The matched intent class (market_ranking | grid_headroom | interconnection_queue | water_climate | site_analysis | deals_ma | fiber | price | changes_delta | facility_search | unknown)'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
-    confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives)'),
+    confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
+    intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
+    workflow_confidence: _oNum('How confident the router is that the plan can EXECUTE cleanly with the signals in hand (0-1, deterministic) — boosted by resolved context signals, docked for placeholder args the user must still supply; step-minted placeholders don\'t dock'),
+    workflow_confidence_basis: _oAny('The arithmetic behind workflow_confidence: {resolved_signals, minted_placeholders, user_supplied_placeholders}'),
     reason: _oStr('Why the router chose best_tool — the matched keywords / context signals'),
+    planner_rationale: _oStr('One sentence on why the PLAN has this shape (ordering / parallelism / what mints what) — distinct from reason, which covers intent routing'),
     recommended_sequence: _oArr(z.looseObject({
       step: _oNum('1-based step order'),
       tool: _oStr('Tool name (exact, from tools/list)'),
+      depends_on: _oAny('Step numbers this step has a HARD DATA dependency on (it consumes a value they mint — slug, candidate_id, chosen ISO). Empty = can start immediately; user-supplied placeholders are not dependencies.'),
+      estimated_calls: _oNum('Estimated API calls this step costs (fan-out steps like per-finalist reads are > 1)'),
       why: _oStr('What this step contributes to answering the intent'),
       args_hint: _oAny('Suggested arguments — values in <angle brackets> are produced by an earlier step (e.g. "<metro_slug from step 1>")'),
     }), 'Ordered tool sequence mirroring the DC Hub recipe for the matched intent class'),
+    estimated_calls: _oNum('Total estimated API calls for the whole plan (sum of per-step estimates)'),
+    parallelizable: _oBool('true when at least one execution wave holds 2+ steps — the plan is not purely sequential'),
+    execution_waves: _oAny('The execution graph as concurrency waves: array of arrays of step numbers; every step in a wave can run concurrently once earlier waves finish (derived from depends_on)'),
     alternatives: _oArr(z.looseObject({
       tool: _oStr('Alternative tool name'),
       when: _oStr('When to prefer this tool over the recommended sequence'),
+      rejected_because: _oStr('Why the planner did NOT make this the primary route — the deterministic rejection reason'),
     }), 'Adjacent tools for nearby intents, including runner-up intent classes'),
     coverage_notes: _oAny('Tier/coverage caveats for the recommended tools (free-tier previews, depth gates, honest-unknown semantics)'),
     matched_classes: _oAny('Every intent class that scored, with its score — the router\'s full deterministic trace'),
@@ -4693,6 +4703,17 @@ const _PLAN_COORD_RE = /(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/;
 // the highest-scoring class wins. `sequence`/`alternatives`/`coverage_notes`
 // mirror the recipe docs; args_hint values in <angle brackets> are produced by
 // an earlier step (the agent substitutes them, never invents them).
+//
+// r-planner-v2 (2026-07-18), per the ChatGPT orchestration feedback:
+//  · each step carries depends_on (hard DATA dependencies only: a step is a
+//    dependency iff a later step consumes a value it mints — slug, candidate_id,
+//    scoreboard-chosen ISO; user-supplied placeholders are NOT dependencies) and
+//    estimated_calls (fan-out steps > 1, e.g. per-finalist DCPI reads);
+//  · each class carries a one-sentence `rationale` (why the plan has this shape);
+//  · each alternative carries `rejected_because` (why the planner did NOT pick
+//    it as the primary route — `when` still says when to override).
+// The router derives execution_waves / parallelizable / total estimated_calls /
+// dual confidences from these declarations — all deterministic, no LLM.
 const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
@@ -4703,22 +4724,27 @@ const _PLAN_CLASSES = [
       [/\bmetros?\b/i, 1], [/\bdcpi\b/i, 2], [/\bbuild.*(campus|cluster|data\s*cent)/i, 1.5],
       [/\bsite\s+selection\b/i, 1.5], [/\bcompare\s+markets\b/i, 2],
     ],
+    rationale: 'Shortlist first so every deeper read is scoped to minted metro_slugs — then the per-finalist DCPI and grid reality-checks fan out from one cheap ranking call.',
     sequence: (d) => [
-      { step: 1, tool: 'rank_markets',
+      { step: 1, tool: 'rank_markets', depends_on: [], estimated_calls: 1,
         why: 'Shortlist the top DCPI markets by your criterion (recipe market_selection step 1) — each row carries a metro_slug.',
         args_hint: { criteria: 'best_overall', limit: 5, ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
-      { step: 2, tool: 'get_market_dcpi_rank',
-        why: 'Full DCPI breakdown (BUILD/CAUTION/AVOID verdict, composite_score, time-to-power) for each finalist (recipe market_selection step 2).',
+      { step: 2, tool: 'get_market_dcpi_rank', depends_on: [1], estimated_calls: 5,
+        why: 'Full DCPI breakdown (BUILD/CAUTION/AVOID verdict, composite_score, time-to-power) for each finalist (recipe market_selection step 2) — one call per step-1 finalist, all parallel.',
         args_hint: { market_slug: '<slug from a step-1 row>' } },
-      { step: 3, tool: 'get_grid_intelligence',
-        why: 'Grid headroom + time-to-power reality-check for the finalists\' ISOs (canonical 100MW-in-90-days workflow).',
+      { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 3,
+        why: 'Grid headroom + time-to-power reality-check for the finalists\' ISOs (canonical 100MW-in-90-days workflow)' + (d.iso ? '.' : ' — one call per distinct finalist ISO (est. ~3), all parallel.'),
         args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
     ],
     alternatives: [
-      { tool: 'ai_capacity_index', when: 'The question is "where can N MW land in ~90 days" — the pre-computed capacity-vs-time index.' },
-      { tool: 'get_dchub_recommendation', when: 'You want ONE call that returns a ready-to-quote siting answer instead of orchestrating steps yourself.' },
-      { tool: 'get_market_intel', when: 'You already know the ONE market and want its full vacancy/pricing/pipeline report.' },
-      { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.' },
+      { tool: 'ai_capacity_index', when: 'The question is "where can N MW land in ~90 days" — the pre-computed capacity-vs-time index.',
+        rejected_because: 'The intent read as an open market ranking, not a capacity-vs-time lookup — the index answers a narrower question than rank_markets.' },
+      { tool: 'get_dchub_recommendation', when: 'You want ONE call that returns a ready-to-quote siting answer instead of orchestrating steps yourself.',
+        rejected_because: 'One-call synthesis hides the per-factor evidence trail; a plan the agent executes itself keeps every number citable.' },
+      { tool: 'get_market_intel', when: 'You already know the ONE market and want its full vacancy/pricing/pipeline report.',
+        rejected_because: 'No single named market was detected in the intent — a one-market report needs a market to point at.' },
+      { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
+        rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
     coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel full depth is Developer+ (free tiers get a headline tease). Treat any factor returned as unavailable as unknown — never estimate it.',
   },
@@ -4731,32 +4757,37 @@ const _PLAN_CLASSES = [
       [/\brenewable\s+share\b/i, 2], [/\bgreenest\b/i, 2], [/\bdemand\b/i, 1],
       [/\bisos?\b/i, 1.5], [/\bmw\s+availab/i, 2.5],
     ],
+    rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the free scoreboard must run first to pick the ISO the deep reads depend on.',
     sequence: (d) => (d.iso ? [
-      { step: 1, tool: 'get_grid_intelligence',
+      { step: 1, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
         why: 'Deep single-ISO read: headroom, constraints, generation additions, time-to-power (recipe grid_and_queue).',
         args_hint: { iso: d.iso } },
-      { step: 2, tool: 'get_interconnection_queue',
-        why: 'Queue depth / GW aggregate for the same ISO — the leading indicator of where new power is coming online.',
+      { step: 2, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
+        why: 'Queue depth / GW aggregate for the same ISO — the leading indicator of where new power is coming online. Independent of step 1 — run in parallel.',
         args_hint: { iso: d.iso } },
-      { step: 3, tool: 'get_refined_queue',
-        why: 'De-duplicated, filterable queue survivors (min_mw / fuel_type / max_ttp_months) — each mints a durable candidate_id for zero-drift chaining into analyze_site.',
+      { step: 3, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
+        why: 'De-duplicated, filterable queue survivors (min_mw / fuel_type / max_ttp_months) — each mints a durable candidate_id for zero-drift chaining into analyze_site. Independent — run in parallel.',
         args_hint: { iso: d.iso, ...(d.mw ? { min_mw: d.mw } : {}) } },
     ] : [
-      { step: 1, tool: 'get_grid_scoreboard',
+      { step: 1, tool: 'get_grid_scoreboard', depends_on: [], estimated_calls: 1,
         why: 'Live cross-ISO scoreboard (free, no key): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
         args_hint: {} },
-      { step: 2, tool: 'get_grid_intelligence',
+      { step: 2, tool: 'get_grid_intelligence', depends_on: [1], estimated_calls: 1,
         why: 'Deep-dive the ISO the scoreboard surfaces: headroom, constraints, time-to-power.',
         args_hint: { iso: '<ISO chosen from the step-1 scoreboard>' } },
-      { step: 3, tool: 'get_interconnection_queue',
-        why: 'Queue depth / GW aggregate for that ISO.',
+      { step: 3, tool: 'get_interconnection_queue', depends_on: [1], estimated_calls: 1,
+        why: 'Queue depth / GW aggregate for that ISO — parallel with step 2 once the ISO is chosen.',
         args_hint: { iso: '<same ISO>' } },
     ]),
     alternatives: [
-      { tool: 'compare_isos', when: 'You want a side-by-side of 2+ named ISOs instead of one deep read.' },
-      { tool: 'get_grid_data', when: 'You only need raw real-time telemetry (fuel mix / demand curve) for one US ISO.' },
-      { tool: 'get_retirement_headroom', when: 'The question is headroom freed by plant RETIREMENTS specifically.' },
-      { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.' },
+      { tool: 'compare_isos', when: 'You want a side-by-side of 2+ named ISOs instead of one deep read.',
+        rejected_because: 'The intent named at most one ISO — a side-by-side needs 2+ named grids.' },
+      { tool: 'get_grid_data', when: 'You only need raw real-time telemetry (fuel mix / demand curve) for one US ISO.',
+        rejected_because: 'Raw telemetry alone answers less than the intent asked — headroom and queue context need the intelligence reads.' },
+      { tool: 'get_retirement_headroom', when: 'The question is headroom freed by plant RETIREMENTS specifically.',
+        rejected_because: 'The intent did not mention retirements — the general headroom read covers the broader question.' },
+      { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
+        rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
     coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence / get_interconnection_queue / get_refined_queue are depth-teased below Developer tier (headline + top rows free). iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
@@ -4766,20 +4797,23 @@ const _PLAN_CLASSES = [
       [/\binterconnection\b/i, 3], [/\bqueue(?:d|s)?\b/i, 3], [/\bbacklog\b/i, 2],
       [/\bqueue\s+depth\b/i, 3], [/\blarge[-\s]load\b/i, 2], [/\bqueued\s+capacity\b/i, 3],
     ],
+    rationale: 'The queue snapshot and the server-side refined reduction take the same filters and run in parallel; only the per-survivor site read must wait for the candidate_ids the reduction mints.',
     sequence: (d) => [
-      { step: 1, tool: 'get_interconnection_queue',
+      { step: 1, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
         why: 'ISO-level queue snapshot — queued GW by ISO/fuel/status (recipe grid_and_queue).',
         args_hint: d.iso ? { iso: d.iso } : {} },
-      { step: 2, tool: 'get_refined_queue',
-        why: 'Server-side set-reduction: de-duplicated survivors filtered by min_mw / fuel_type / max_ttp_months; every survivor mints a durable candidate_id + site_evaluation_handoff.',
+      { step: 2, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
+        why: 'Server-side set-reduction: de-duplicated survivors filtered by min_mw / fuel_type / max_ttp_months; every survivor mints a durable candidate_id + site_evaluation_handoff. Independent of step 1 — run in parallel.',
         args_hint: { ...(d.iso ? { iso: d.iso } : {}), ...(d.mw ? { min_mw: d.mw } : {}), geocoded_only: true } },
-      { step: 3, tool: 'analyze_site',
+      { step: 3, tool: 'analyze_site', depends_on: [2], estimated_calls: 1,
         why: 'Pipe a survivor straight into the composite site read — pass its candidate_id (NOT transposed coordinates) for zero-drift chaining.',
         args_hint: { candidate_id: '<cand_… from a step-2 survivor>' } },
     ],
     alternatives: [
-      { tool: 'rank_sites', when: 'You enriched multiple queue survivors and want a deterministic constrained ranking — candidate_id entries load frozen coordinates from the mint.' },
-      { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.' },
+      { tool: 'rank_sites', when: 'You enriched multiple queue survivors and want a deterministic constrained ranking — candidate_id entries load frozen coordinates from the mint.',
+        rejected_because: 'Ranking needs an enriched candidate set first — it is the step AFTER this plan, not a replacement for it.' },
+      { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
+        rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
     coverage_notes: 'get_interconnection_queue and get_refined_queue are depth-teased below Developer tier. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
@@ -4791,20 +4825,23 @@ const _PLAN_CLASSES = [
       [/\bdisaster\b/i, 2.5], [/\bflood|hurricane|wildfire|tornado|earthquake\b/i, 2.5],
       [/\bfema\b/i, 2.5], [/\brisk\b/i, 1],
     ],
+    rationale: 'The three hazard reads (water, seismic/climate, FEMA) key on the same point and share no data — one fully parallel wave completes the hazard triangle.',
     sequence: (d) => [
-      { step: 1, tool: 'get_water_risk',
+      { step: 1, tool: 'get_water_risk', depends_on: [], estimated_calls: 1,
         why: 'Water-availability read (U.S. Drought Monitor severity / WRI Aqueduct water stress) for the state, county, or point (recipe water_risk).',
         args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon } : { state: d.state || '<2-letter state>' } },
-      { step: 2, tool: 'get_climate_intel',
-        why: 'USGS seismic (PGA / design category) + NOAA cooling degree-days & extreme temps for the site.',
+      { step: 2, tool: 'get_climate_intel', depends_on: [], estimated_calls: 1,
+        why: 'USGS seismic (PGA / design category) + NOAA cooling degree-days & extreme temps for the site. Independent — run in parallel.',
         args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon } : { lat: '<site lat>', lon: '<site lon>' } },
-      { step: 3, tool: 'get_disaster_risk',
-        why: 'FEMA National Risk Index rating + top hazards — completes the hazard triangle.',
+      { step: 3, tool: 'get_disaster_risk', depends_on: [], estimated_calls: 1,
+        why: 'FEMA National Risk Index rating + top hazards — completes the hazard triangle. Independent — run in parallel.',
         args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon } : { lat: '<site lat>', lon: '<site lon>' } },
     ],
     alternatives: [
-      { tool: 'get_composite_site_score', when: 'You want ONE integrity-first 0-100 verdict with an explicit per-factor coverage map instead of the three dedicated reads.' },
-      { tool: 'get_facility_risk_delta', when: 'The question is what CHANGED in a site\'s risk profile recently, not where it stands.' },
+      { tool: 'get_composite_site_score', when: 'You want ONE integrity-first 0-100 verdict with an explicit per-factor coverage map instead of the three dedicated reads.',
+        rejected_because: 'The composite folds the three hazard reads into one number — the intent asked about the hazards themselves, so the dedicated reads keep each factor citable.' },
+      { tool: 'get_facility_risk_delta', when: 'The question is what CHANGED in a site\'s risk profile recently, not where it stands.',
+        rejected_because: 'The intent asked for current risk standing, not a recent-change delta.' },
     ],
     coverage_notes: 'These tools return coverage: validated | unavailable per factor and trace every number to FEMA NRI / USGS / NOAA / WRI — report unavailable as unknown, never estimate. Free-tier friendly citation hooks.',
   },
@@ -4850,20 +4887,23 @@ const _PLAN_CLASSES = [
       [/\btransactions?\b/i, 2.5], [/\b(?:bought|acquired|buying)\b/i, 2],
       [/\bopenai|microsoft|meta|amazon|aws|google|xai\b/i, 1.5], [/\bcommitments?\b/i, 1.5],
     ],
+    rationale: 'The three deal reads are independent server-side aggregates over the same deal corpus — one parallel wave covers commitments, M&A rows and the grid-reality overlay.',
     sequence: () => [
-      { step: 1, tool: 'hyperscaler_deals',
+      { step: 1, tool: 'hyperscaler_deals', depends_on: [], estimated_calls: 1,
         why: 'Latest hyperscaler / $1B+ commitments (Stargate, OpenAI, Meta, Microsoft, AWS, xAI…) (recipe hyperscaler_activity).',
         args_hint: { limit: 10 } },
-      { step: 2, tool: 'list_transactions',
-        why: 'Recent data-center M&A rows — buyer, seller, value, market (canonical deal-triage workflow).',
+      { step: 2, tool: 'list_transactions', depends_on: [], estimated_calls: 1,
+        why: 'Recent data-center M&A rows — buyer, seller, value, market (canonical deal-triage workflow). Independent — run in parallel.',
         args_hint: { limit: 10 } },
-      { step: 3, tool: 'deal_autopsy',
-        why: 'Overlay each deal\'s market with the DCPI grid-reality verdict + time-to-power — can the grid actually absorb the load?',
+      { step: 3, tool: 'deal_autopsy', depends_on: [], estimated_calls: 1,
+        why: 'Overlay each deal\'s market with the DCPI grid-reality verdict + time-to-power — can the grid actually absorb the load? Server-side overlay, independent — run in parallel.',
         args_hint: { limit: 10, comparables: 'summary' } },
     ],
     alternatives: [
-      { tool: 'get_news', when: 'You want industry NEWS coverage, not structured deal rows.' },
-      { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.' },
+      { tool: 'get_news', when: 'You want industry NEWS coverage, not structured deal rows.',
+        rejected_because: 'The intent asked for deals — structured rows with values beat narrative coverage for that.' },
+      { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.',
+        rejected_because: 'No single deal/market was named — the verdict overlay comes bundled in deal_autopsy anyway.' },
     ],
     coverage_notes: 'hyperscaler_deals is free-tier friendly; list_transactions full depth ($ aggregates) is Developer+ (teased below). Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
@@ -4874,20 +4914,23 @@ const _PLAN_CLASSES = [
       [/\blong[-\s]haul\b/i, 2.5], [/\blead[-\s]in\b/i, 2.5], [/\blatency\b/i, 2.5],
       [/\bconnectivity\b/i, 2], [/\broutes?\b/i, 1.5], [/\brtt\b/i, 2.5],
     ],
+    rationale: 'Map the carrier landscape and score the site in parallel, then plan lead-in routes to the POP the carrier map surfaces.',
     sequence: (d) => [
-      { step: 1, tool: 'get_fiber_intel',
+      { step: 1, tool: 'get_fiber_intel', depends_on: [], estimated_calls: 1,
         why: 'Long-haul / metro dark-fiber routes, carriers, and route density (GeoJSON) — optionally scoped to one metro.',
         args_hint: { route_type: 'longhaul', ...(d.market ? { market: d.market } : { market: '<metro name or slug, e.g. dallas>' }) } },
-      { step: 2, tool: 'get_fiber_readiness',
-        why: 'Point-level connectivity score + nearest-carrier distance for a specific site.',
+      { step: 2, tool: 'get_fiber_readiness', depends_on: [], estimated_calls: 1,
+        why: 'Point-level connectivity score + nearest-carrier distance for a specific site. Independent — run in parallel with step 1.',
         args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon } : { lat: '<site lat>', lon: '<site lon>' } },
-      { step: 3, tool: 'plan_fiber_leadin',
-        why: 'N diverse road-following lead-in routes from the site to a carrier hotel/POP, with indicative cost + diversity read.',
-        args_hint: { from: d.coords ? `${d.coords.lat},${d.coords.lon}` : '<site "lat,lng" or address>', to: '<carrier hotel / POP "lat,lng" or address>', n: 4 } },
+      { step: 3, tool: 'plan_fiber_leadin', depends_on: [1], estimated_calls: 1,
+        why: 'N diverse road-following lead-in routes from the site to a carrier hotel/POP, with indicative cost + diversity read — pick the POP from the step-1 carrier map.',
+        args_hint: { from: d.coords ? `${d.coords.lat},${d.coords.lon}` : '<site "lat,lng" or address>', to: '<carrier hotel / POP from the step-1 carrier map>', n: 4 } },
     ],
     alternatives: [
-      { tool: 'get_metro_fiber', when: 'You want the metro-level fiber map for a market rather than a state grid.' },
-      { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).' },
+      { tool: 'get_metro_fiber', when: 'You want the metro-level fiber map for a market rather than a state grid.',
+        rejected_because: 'The long-haul read covers the metro layer too — the dedicated metro map is a narrower view of the same data.' },
+      { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
+        rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
     coverage_notes: 'get_fiber_intel is depth-teased below Developer tier (free tier ~10 calls/day). cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
@@ -4899,18 +4942,22 @@ const _PLAN_CLASSES = [
       [/\bpower\s+costs?\b/i, 3], [/\benergy\s+prices?\b/i, 3], [/\btariffs?\b/i, 2],
       [/\bppas?\b/i, 2], [/\bgas\s+(?:price|econom)/i, 2.5],
     ],
+    rationale: 'Grid-power price and behind-the-meter gas economics are independent reads on the same cost question — run both in parallel and compare.',
     sequence: (d) => [
-      { step: 1, tool: 'get_energy_prices',
+      { step: 1, tool: 'get_energy_prices', depends_on: [], estimated_calls: 1,
         why: 'Live retail cents/kWh + wholesale + natural-gas context for the ISO/state.',
         args_hint: d.iso ? { iso: d.iso } : (d.state ? { state: d.state } : {}) },
-      { step: 2, tool: 'get_gas_economics',
-        why: 'Behind-the-meter gas-fired economics ($/MWh gas-to-grid scenarios) if grid power is the constraint.',
+      { step: 2, tool: 'get_gas_economics', depends_on: [], estimated_calls: 1,
+        why: 'Behind-the-meter gas-fired economics ($/MWh gas-to-grid scenarios) if grid power is the constraint. Independent — run in parallel.',
         args_hint: { market: d.market || '<market slug, e.g. dallas>' } },
     ],
     alternatives: [
-      { tool: 'get_market_intel', when: 'You want data-center capacity PRICING ($/MW-day, vacancy) for a market, not energy rates.' },
-      { tool: 'get_gas_index', when: 'You want the per-state DCGI gas-suitability score.' },
-      { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.' },
+      { tool: 'get_market_intel', when: 'You want data-center capacity PRICING ($/MW-day, vacancy) for a market, not energy rates.',
+        rejected_because: 'The intent read as energy price, not data-center capacity pricing.' },
+      { tool: 'get_gas_index', when: 'You want the per-state DCGI gas-suitability score.',
+        rejected_because: 'A suitability score answers "should I", not "what does it cost" — the economics read carries the $/MWh numbers.' },
+      { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
+        rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
     coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. Gas synthesis (get_gas_index / get_gas_economics / get_gas_intelligence) is depth-teased below Developer.',
   },
@@ -4922,18 +4969,22 @@ const _PLAN_CLASSES = [
       [/\bupdate\s+me\b/i, 2.5], [/\blast\s+(?:24h|week|check|session|pull)\b/i, 2.5],
       [/\bthis\s+week\b/i, 1.5], [/\bwhile\s+i\s+was\b/i, 2],
     ],
+    rationale: 'The global change feed and your saved-sites delta are independent reads — one parallel wave answers both "what moved" and "did MY sites move".',
     sequence: () => [
-      { step: 1, tool: 'get_changes',
+      { step: 1, tool: 'get_changes', depends_on: [], estimated_calls: 1,
         why: 'Only the delta since your last pull: DCPI movers, new facilities, new pipeline, new deals (recipe whats_changed; free). Cache generated_at and pass it back as since= next time.',
         args_hint: { since: '24h' } },
-      { step: 2, tool: 'list_saved_sites',
-        why: 'Did YOUR saved sites move? Per-site verdict flips, excess-power deltas, alerts fired (keyed callers).',
+      { step: 2, tool: 'list_saved_sites', depends_on: [], estimated_calls: 1,
+        why: 'Did YOUR saved sites move? Per-site verdict flips, excess-power deltas, alerts fired (keyed callers). Independent — run in parallel.',
         args_hint: { since: '7d' } },
     ],
     alternatives: [
-      { tool: 'get_facility_risk_delta', when: 'The question is one facility/market\'s RISK trajectory over a window.' },
-      { tool: 'set_market_alert', when: 'You want to be NOTIFIED of future movement instead of polling.' },
-      { tool: 'get_news', when: 'You want narrative news, not the structured change feed.' },
+      { tool: 'get_facility_risk_delta', when: 'The question is one facility/market\'s RISK trajectory over a window.',
+        rejected_because: 'No single facility/market was named — the global feed catches all movers.' },
+      { tool: 'set_market_alert', when: 'You want to be NOTIFIED of future movement instead of polling.',
+        rejected_because: 'The intent asked what already changed; alerts only cover the future.' },
+      { tool: 'get_news', when: 'You want narrative news, not the structured change feed.',
+        rejected_because: 'The structured delta is diffable and citable; news is narrative and unscoped.' },
     ],
     coverage_notes: 'get_changes is free for everyone — the canonical re-entry loop. The portfolio block in list_saved_sites needs an API key with saved sites.',
   },
@@ -4946,19 +4997,24 @@ const _PLAN_CLASSES = [
       [/\bequinix|digital\s+realty|ntt|vantage|qts|cyrusone|switch|stack\b/i, 2],
       [/\bunder\s+construction\b/i, 2], [/\boperational\b/i, 1.5],
     ],
+    rationale: 'Search first to mint facility slugs, then the full-profile read keys on whichever slug you pick.',
     sequence: (d) => [
-      { step: 1, tool: 'search_facilities',
+      { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
         why: 'Filter the 21,000+ facility dataset by location / capacity / operator / status — each row carries a slug.',
         args_hint: { ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
-      { step: 2, tool: 'get_facility',
+      { step: 2, tool: 'get_facility', depends_on: [1], estimated_calls: 1,
         why: 'Full profile for the facility you picked (power, cooling, fiber carriers, peers).',
         args_hint: { slug: '<slug from a step-1 row>' } },
     ],
     alternatives: [
-      { tool: 'semantic_search', when: 'The query is fuzzy natural language rather than structured filters.' },
-      { tool: 'find_alternatives', when: 'You have a reference facility and want similar ones.' },
-      { tool: 'score_facility', when: 'You want a 0-100 score for one existing facility.' },
-      { tool: 'get_pipeline', when: 'You want the forward CONSTRUCTION pipeline, not existing facilities.' },
+      { tool: 'semantic_search', when: 'The query is fuzzy natural language rather than structured filters.',
+        rejected_because: 'The intent carried structured filters (place/operator/status) — exact filtering beats fuzzy retrieval when filters exist.' },
+      { tool: 'find_alternatives', when: 'You have a reference facility and want similar ones.',
+        rejected_because: 'No reference facility was named to pivot from.' },
+      { tool: 'score_facility', when: 'You want a 0-100 score for one existing facility.',
+        rejected_because: 'The intent was discovery, not scoring one known facility.' },
+      { tool: 'get_pipeline', when: 'You want the forward CONSTRUCTION pipeline, not existing facilities.',
+        rejected_because: 'The intent read as existing facilities, not the forward pipeline.' },
     ],
     coverage_notes: 'Discovery is free (anon gets sample rows; a free key unlocks full discovery). Capacity MW / exact coordinates / deep specs are Developer+.',
   },
@@ -4998,6 +5054,57 @@ export function _planSignals(intent, context) {
   const since = (c.since && String(c.since).trim()) || null;
   return { iso, mw, coords, state, candidateId, market, since };
 }
+// r-planner-v2: derive execution waves from per-step depends_on (topological
+// layering — wave k holds every step whose dependencies all sit in waves <k).
+// Exported for unit tests. Deterministic; a malformed dependency (cycle /
+// unknown step) degrades to sequential order rather than throwing.
+export function _planWaves(seq) {
+  const placed = new Set();
+  const waves = [];
+  let remaining = seq.map((s) => s.step);
+  let guard = 0;
+  while (remaining.length && guard++ <= seq.length) {
+    const wave = remaining.filter((n) => {
+      const st = seq.find((s) => s.step === n);
+      const deps = Array.isArray(st && st.depends_on) ? st.depends_on : [];
+      return deps.every((dn) => placed.has(dn) || !seq.some((s) => s.step === dn));
+    });
+    if (!wave.length) { waves.push(...remaining.map((n) => [n])); break; } // cycle guard
+    waves.push(wave);
+    wave.forEach((n) => placed.add(n));
+    remaining = remaining.filter((n) => !placed.has(n));
+  }
+  return waves;
+}
+
+// r-planner-v2: dual-confidence + call-estimate derivation over a sequence.
+// workflow_confidence is DISTINCT from intent_confidence: intent asks "did we
+// read the question right", workflow asks "can this plan execute cleanly with
+// the signals in hand". Placeholders an EARLIER STEP mints (step has
+// depends_on) don't penalize — the plan itself produces them; placeholders the
+// USER must fill (no depends_on) do. All deterministic, all round-tripped in
+// workflow_confidence_basis so tests can pin the arithmetic.
+export function _planWorkflowConfidence(seq, d) {
+  const resolved = ['iso', 'mw', 'coords', 'state', 'candidateId', 'market', 'since']
+    .filter((k) => d && d[k] != null && d[k] !== '').length;
+  let minted = 0, userSupplied = 0;
+  for (const st of seq) {
+    const deps = Array.isArray(st.depends_on) ? st.depends_on : [];
+    for (const v of Object.values(st.args_hint || {})) {
+      if (typeof v === 'string' && v.includes('<')) {
+        if (deps.length) minted += 1; else userSupplied += 1;
+      }
+    }
+  }
+  const raw = 0.5 + 0.08 * resolved - 0.08 * userSupplied;
+  const workflow_confidence = Math.round(Math.min(0.95, Math.max(0.2, raw)) * 100) / 100;
+  return {
+    workflow_confidence,
+    basis: { resolved_signals: resolved, minted_placeholders: minted,
+             user_supplied_placeholders: userSupplied },
+  };
+}
+
 // The router core — exported for unit tests. Pure function: no ctx, no network.
 export function _planQuery(intent, context) {
   const text = String(intent || '').trim();
@@ -5029,16 +5136,29 @@ export function _planQuery(intent, context) {
   };
   if (!top || top.score <= 0) {
     // No class matched — honest fallback to the navigation layer, low confidence.
+    const fbSeq = [
+      { step: 1, tool: 'discover_tools', depends_on: [], estimated_calls: 1,
+        why: 'Browse the tool families for the closest fit.', args_hint: { query: text.slice(0, 80) } },
+      { step: 2, tool: 'get_dchub_recommendation', depends_on: [], estimated_calls: 1,
+        why: 'One-call server-side synthesis for open-ended siting questions. Independent — run in parallel.',
+        args_hint: { context: text.slice(0, 200) } },
+    ];
+    const fbWc = _planWorkflowConfidence(fbSeq, d);
     const sc = {
       _entity: 'query_plan', ok: true, intent: text, intent_class: 'unknown',
       best_tool: 'discover_tools',
       confidence: 0.2,
+      intent_confidence: 0.2,
+      workflow_confidence: fbWc.workflow_confidence,
+      workflow_confidence_basis: fbWc.basis,
       reason: 'No intent class matched deterministically — route through the tool-family navigator, or let get_dchub_recommendation synthesize an answer server-side.',
-      recommended_sequence: [
-        { step: 1, tool: 'discover_tools', why: 'Browse the tool families for the closest fit.', args_hint: { query: text.slice(0, 80) } },
-        { step: 2, tool: 'get_dchub_recommendation', why: 'One-call server-side synthesis for open-ended siting questions.', args_hint: { context: text.slice(0, 200) } },
-      ],
-      alternatives: [{ tool: 'semantic_search', when: 'Free-text search across DC Hub\'s intelligence corpus.' }],
+      planner_rationale: 'Both fallback tools take the raw intent verbatim, so navigation and server-side synthesis run as one parallel wave and whichever lands better leads.',
+      recommended_sequence: fbSeq,
+      estimated_calls: 2,
+      parallelizable: true,
+      execution_waves: _planWaves(fbSeq),
+      alternatives: [{ tool: 'semantic_search', when: 'Free-text search across DC Hub\'s intelligence corpus.',
+        rejected_because: 'Corpus search returns documents, not a tool route — the navigator narrows to callable tools first.' }],
       coverage_notes: 'Router is keyword-based and found no signal — the fallback tools are broad by design. tools/list stays canonical.',
       matched_classes,
       note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan.',
@@ -5047,13 +5167,18 @@ export function _planQuery(intent, context) {
     return sc;
   }
   const seq = top.cls.sequence(d).filter(Boolean);
-  // Confidence: deterministic function of the winning score + its margin.
+  // intent_confidence: deterministic function of the winning score + margin.
   // 0.35 base + 0.06/score-point, capped 0.95; ambiguous margins (<1) pay -0.1.
-  let confidence = Math.min(0.95, 0.35 + 0.06 * top.score);
-  if (second && second.score > 0 && (top.score - second.score) < 1) confidence = Math.max(0.25, confidence - 0.1);
-  confidence = Math.round(confidence * 100) / 100;
+  // (v1 exposed this as `confidence` — kept as an alias for back-compat.)
+  let intentConfidence = Math.min(0.95, 0.35 + 0.06 * top.score);
+  if (second && second.score > 0 && (top.score - second.score) < 1) intentConfidence = Math.max(0.25, intentConfidence - 0.1);
+  intentConfidence = Math.round(intentConfidence * 100) / 100;
+  const wc = _planWorkflowConfidence(seq, d);
+  const waves = _planWaves(seq);
+  const estimatedCalls = seq.reduce((n, s) => n + (Number.isFinite(s.estimated_calls) ? s.estimated_calls : 1), 0);
   const runnerUp = (second && second.score > 0)
-    ? [{ tool: second.cls.sequence(d)[0].tool, when: `Runner-up intent class "${second.cls.id}" (score ${Math.round(second.score * 100) / 100}) — start here if the intent was really about ${second.cls.id.replace(/_/g, ' ')}.` }]
+    ? [{ tool: second.cls.sequence(d)[0].tool, when: `Runner-up intent class "${second.cls.id}" (score ${Math.round(second.score * 100) / 100}) — start here if the intent was really about ${second.cls.id.replace(/_/g, ' ')}.`,
+        rejected_because: `Scored ${Math.round(second.score * 100) / 100} vs ${Math.round(top.score * 100) / 100} — the deterministic margin favored "${top.cls.id}".` }]
     : [];
   const usesCandidates = seq.some((s) => s.tool === 'get_refined_queue' || s.tool === 'analyze_site' || s.tool === 'rank_sites');
   const sc = {
@@ -5061,17 +5186,24 @@ export function _planQuery(intent, context) {
     intent_class: top.cls.id,
     recipe: top.cls.recipe,
     best_tool: seq[0].tool,
-    confidence,
+    confidence: intentConfidence,
+    intent_confidence: intentConfidence,
+    workflow_confidence: wc.workflow_confidence,
+    workflow_confidence_basis: wc.basis,
     reason: `Matched intent class "${top.cls.id}" (score ${Math.round(top.score * 100) / 100}) on: ${top.hits.slice(0, 5).join(', ') || 'context signals'}`
       + (d.iso ? `; ISO detected: ${d.iso}` : '') + (d.mw ? `; capacity detected: ${d.mw} MW` : '')
       + (d.coords ? `; coordinates detected: ${d.coords.lat},${d.coords.lon}` : '')
       + (d.candidateId ? `; candidate_id supplied` : ''),
+    planner_rationale: top.cls.rationale,
     recommended_sequence: seq,
+    estimated_calls: estimatedCalls,
+    parallelizable: waves.some((w) => w.length > 1),
+    execution_waves: waves,
     alternatives: [...top.cls.alternatives, ...runnerUp],
     coverage_notes: top.cls.coverage_notes,
     matched_classes,
     ...(usesCandidates ? { chaining: chainNote } : {}),
-    note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step. tools/list stays canonical for schemas.',
+    note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas.',
     _source: 'DC Hub — dchub.cloud',
   };
   return sc;
@@ -7383,7 +7515,7 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'plan_query',
-    'ORCHESTRATION meta-tool: turn a natural-language intent into an ordered DC Hub tool plan BEFORE burning calls. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan: {best_tool, confidence (0-1), reason, recommended_sequence:[{step, tool, why, args_hint}], alternatives, coverage_notes, matched_classes} — the sequences mirror the shipped recipes (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity) plus fiber/price/facility-search routes, including the zero-drift candidate_id chaining contract where a plan crosses get_refined_queue → analyze_site/rank_sites. args_hint values in <angle brackets> come from the named earlier step — substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. Try: plan_query intent="rank markets for a 200MW AI campus". Use FIRST for multi-step questions when you are unsure which tools to chain; for a family-level browse use discover_tools; for a one-call server-side ANSWER (not a plan) use get_dchub_recommendation. This tool plans — it never executes; tools/list stays canonical for schemas.',
+    'ORCHESTRATION meta-tool: turn a natural-language intent into an ordered DC Hub tool plan BEFORE burning calls. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan: {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves — run a wave\'s steps in parallel), parallelizable, estimated_calls (plan total), alternatives (each with when + rejected_because), coverage_notes, matched_classes} — the sequences mirror the shipped recipes (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity) plus fiber/price/facility-search routes, including the zero-drift candidate_id chaining contract where a plan crosses get_refined_queue → analyze_site/rank_sites. args_hint values in <angle brackets> come from the named earlier step — substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. Try: plan_query intent="rank markets for a 200MW AI campus". Use FIRST for multi-step questions when you are unsure which tools to chain; for a family-level browse use discover_tools; for a one-call server-side ANSWER (not a plan) use get_dchub_recommendation. This tool plans — it never executes; tools/list stays canonical for schemas.',
     { intent: z.string().describe('Natural-language description of what you are trying to find out, e.g. "rank markets for a 200MW AI campus" or "how much power is available in ERCOT"'),
       context: z.any().optional().describe('Optional structured hints: {lat, lon, iso, market, capacity_mw, candidate_id, state (2-letter), since} — sharpens args_hint values and routing (e.g. lat/lon boosts the site-analysis route)') },
     async (a) => {
