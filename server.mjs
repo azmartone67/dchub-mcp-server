@@ -4240,10 +4240,10 @@ export function _validateToolArgs(name, args) {
 }
 
 // ── trackedTool: wrap each srv.tool registration ───────────────────────────
-// TODO(outputSchema): trackedTool has no outputSchema arg. Adding structured
-// output schemas (so /mcp tools/list advertises each tool's return shape) needs
-// a signature change here (thread an optional outputSchema into srv.tool's 5-arg
-// form) + per-tool schema objects. Deferred as a separate legibility pass.
+// outputSchema: every tool advertises its return shape via _OUTPUT_ENVELOPE;
+// the 10 flagship tools advertise TYPED shapes via _TOOL_OUTPUT_SCHEMAS
+// (see r-output-schema / r-output-schema-typed below) — no per-registration
+// outputSchema arg needed, the map is keyed by tool name.
 // r-return-nudge (2026-07-06): the single biggest day-2-retention gap is that a
 // SUCCESSFUL full answer gives an identified agent no reason to call DC Hub again
 // tomorrow. Append a 1-line get_changes re-entry loop to full-data responses for
@@ -4289,7 +4289,17 @@ function withReturnNudge(result, toolName, c) {
 // structuredContent or the call errors. _stampEntityCb already guarantees it
 // on the normal path; _ensureStructured below is the belt-and-braces
 // finalizer so no fail-soft path can ever strip it.
-const _OUTPUT_ENVELOPE = z.looseObject({
+// _ENVELOPE_SHAPE is the shared raw shape: spread into the generic envelope AND
+// into every typed per-tool schema in _TOOL_OUTPUT_SCHEMAS below, so the 6
+// universal keys are documented identically everywhere.
+// site_evaluation_handoff FIX (2026-07-17, verified against live dchub.cloud/mcp):
+// _siteHandoff() emits an ARRAY of {tool, parameters, why} entries, but this key
+// was declared z.looseObject → the SDK's output validation rejected every real
+// coordinate-carrying payload (live repro: get_market_dcpi_rank returned
+// "MCP error -32602: Output validation error … site_evaluation_handoff …
+// expected object, received array"). Accept BOTH shapes — a schema that can
+// reject a real payload is a production outage.
+const _ENVELOPE_SHAPE = {
   _entity: z.string().optional().describe(
     'Payload class discriminator (e.g. facility|market|iso_grid|queue_results|deal|report|response) — branch on this before parsing the rest.'),
   provenance: z.looseObject({}).optional().describe(
@@ -4298,12 +4308,321 @@ const _OUTPUT_ENVELOPE = z.looseObject({
     'Caller quota state (remaining calls, tier) when available.'),
   citation: z.looseObject({}).optional().describe(
     'Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload.'),
-  site_evaluation_handoff: z.looseObject({}).optional().describe(
-    'Pre-built follow-up call (analyze_site / get_water_risk args) when the payload carries coordinates.'),
+  site_evaluation_handoff: z.union([
+    z.array(z.looseObject({})),
+    z.looseObject({}),
+  ]).optional().describe(
+    'Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates — an array of {tool, parameters, why} entries.'),
   _return_loop: z.looseObject({}).optional().describe(
     'Suggested next-session delta call (get_changes since=24h) so you pull only what changed.'),
-}).describe(
+};
+const _OUTPUT_ENVELOPE = z.looseObject(_ENVELOPE_SHAPE).describe(
   'DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text — tool-specific data fields ride at the top level alongside these envelope keys.');
+
+// ── _TOOL_OUTPUT_SCHEMAS (r-output-schema-typed, 2026-07-17) ───────────────
+// The 10 flagship tools advertise TYPED outputSchemas: the same 6 envelope keys
+// PLUS their documented top-level data fields, so an agent knows the actual
+// return shape from tools/list without a probe call. Field inventory derived
+// from LIVE keyless calls to dchub.cloud/mcp + the backing REST endpoints
+// (2026-07-17); free/anon tiers substitute teaser/upsell payloads, so EVERY
+// field is optional and the object stays LOOSE — these schemas document, they
+// must never reject a real payload (SDK validates structuredContent against
+// outputSchema on every success result).
+// Leniency contract: live payloads null scalars freely and serve numeric-ish
+// fields as strings (e.g. avg_kwh_cents "13.03", regex-extracted deal values),
+// so every leaf tolerates null and numbers tolerate strings.
+const _oStr  = (d) => z.string().nullable().optional().describe(d);
+const _oNum  = (d) => z.union([z.number(), z.string()]).nullable().optional().describe(d);
+const _oBool = (d) => z.boolean().nullable().optional().describe(d);
+const _oObj  = (shape, d) => z.looseObject(shape).nullable().optional().describe(d);
+const _oArr  = (item, d) => z.array(item).nullable().optional().describe(d);
+const _oAny  = (d) => z.any().optional().describe(d);
+
+// One grid row serves both `grids` (fully ranked) and `partial_grids` (AU/SG
+// partial feeds) — the partial rows carry a few extra fields, all optional.
+const _GRID_ROW = z.looseObject({
+  iso: _oStr('Grid operator / bidding-zone code, e.g. PJM, ERCOT, NESO, DE, JP-TOKYO'),
+  region: _oStr('Human-readable region name'),
+  country: _oStr('Country (code or name)'),
+  demand_mw: _oNum('Current demand in MW'),
+  renewable_share_pct: _oNum('Wind+solar+hydro share of generation, % (the ranking key)'),
+  variable_renewable_pct: _oNum('Wind+solar-only share, % (partial feeds)'),
+  gas_share_pct: _oNum('Gas share of generation, % (null where the feed cannot honestly split gas out, e.g. Brazil ONS thermal)'),
+  mix_period: _oStr('Timestamp / period of the fuel-mix reading'),
+  fuel_mw: _oObj({}, 'Fuel mix in MW, e.g. {gas, nuclear, coal, wind, solar, hydro, …}'),
+  generation_total_mw: _oNum('Total generation in MW'),
+  avg_price_usd_per_mwh: _oNum('Average wholesale price in USD/MWh (where the feed carries price)'),
+  partial_feed: _oAny('Set when the feed is partial (no full fuel split) — why the grid is unranked'),
+  note: _oStr('Per-grid caveat'),
+});
+
+const _TOOL_OUTPUT_SCHEMAS = {
+  get_grid_scoreboard: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    ok: _oBool('true when the scoreboard build succeeded'),
+    count: _oNum('Number of fully-ranked grids in `grids`'),
+    ranked_by: _oStr('Ranking criterion (renewable share = wind+solar+hydro, greenest first)'),
+    coverage: _oStr('Human-readable coverage line — which countries/grids are included'),
+    source: _oStr('Upstream feeds (EIA hourly RTO, Elexon, ENTSO-E, Taipower, OCCTO, KPX, ONS, AEMO, EMA)'),
+    grids: _oArr(_GRID_ROW, 'Fully-ranked grids, greenest (highest renewable share) first — US ISOs + GB + EU zones + TW + JP + KR + BR'),
+    partial_grids: _oArr(_GRID_ROW, 'Grids listed UNRANKED because the feed has no full fuel split (Australia NEM, Singapore EMA)'),
+    eu_gas_context: _oObj({}, 'EU gas-flow context: {active_countries, total_throughput_gwh_per_day, unit, source, note}'),
+    us_interconnection_queue_gw: _oNum('Total queued generation across the 7 US ISO interconnection queues, GW'),
+    deep_intelligence: _oObj({}, 'Pointers to the deeper per-ISO / per-site tools to call next'),
+  }).describe('Live global grid scoreboard: ranked `grids` + unranked `partial_grids`, fuel mix + demand right now, alongside the DC Hub envelope keys.'),
+
+  search_facilities: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the search executed'),
+    count: _oNum('Rows returned in THIS response (null on some gated tiers)'),
+    total_matching: _oNum('Total rows matching the filter across the dataset (null when withheld by tier)'),
+    data: _oArr(z.looseObject({
+      id: _oNum('Facility id'),
+      slug: _oStr('URL slug — feed to get_facility for the full profile'),
+      name: _oStr('Facility name'),
+      provider: _oStr('Operator / provider company'),
+      city: _oStr('City'),
+      state: _oStr('State/region code'),
+      state_name: _oStr('State/region full name'),
+      country: _oStr('ISO-2 country code'),
+      country_name: _oStr('Country full name'),
+      location_display: _oStr('Pre-formatted "City, State, Country" line'),
+      lat: _oNum('Latitude (fuller tiers)'),
+      lon: _oNum('Longitude (fuller tiers)'),
+      power_mw: _oNum('Power capacity in MW (fuller tiers)'),
+      status: _oStr('operational | under-construction | planned (fuller tiers)'),
+      market_slug: _oStr('Market slug — feed to get_market_intel / get_market_dcpi_rank (fuller tiers)'),
+      profile_url: _oStr('dchub.cloud facility page'),
+      v: _oStr('Per-record verification flag: verified | tracked | published | inferred'),
+    }), 'Facility rows matching the filters'),
+    tier: _oStr('Tier the response was served at'),
+    full_results_available: _oBool('false when the row set was trimmed for your tier'),
+    note: _oStr('Serving note (e.g. how many rows the full tier returns)'),
+  }).describe('Facility search results: `data` rows (name, provider, location, capacity on fuller tiers) alongside the DC Hub envelope keys.'),
+
+  get_market_intel: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the market lookup succeeded'),
+    market: _oObj({
+      id: _oStr('Market slug'),
+      name: _oStr('Market display name'),
+      cities: _oAny('Cities composing the market'),
+    }, 'The market identity block'),
+    stats: _oObj({
+      facility_count: _oNum('Tracked facilities in the market'),
+      provider_count: _oNum('Distinct operators'),
+      total_power_mw: _oNum('Total tracked capacity, MW'),
+      avg_power_mw: _oNum('Average facility capacity, MW'),
+    }, 'Headline market stats'),
+    by_status: _oObj({}, 'Facility counts keyed by status (Operational, Under Construction, Planned, Announced, active)'),
+    top_providers: _oArr(z.looseObject({
+      name: _oStr('Operator name'),
+      facilities: _oNum('Facility count'),
+      power_mw: _oNum('Aggregate capacity, MW'),
+    }), 'Dominant operators, largest first'),
+    recent_facilities: _oArr(z.looseObject({
+      id: _oNum('Facility id'),
+      name: _oStr('Facility name'),
+      provider: _oStr('Operator'),
+      city: _oStr('City'),
+      status: _oStr('Facility status'),
+      power_mw: _oNum('Capacity, MW'),
+      discovered_at: _oStr('When DC Hub first tracked it'),
+    }), 'Recently added / discovered facilities in the market'),
+    related_intel: _oArr(z.looseObject({
+      title: _oStr('Passage title'),
+      text: _oStr('Cited passage text'),
+      url: _oStr('Source URL'),
+      source: _oStr('Source name'),
+      kind: _oStr('Passage kind'),
+      citation: _oAny('Citation payload'),
+      cosine: _oNum('Retrieval similarity score'),
+    }), 'RAG-grounded related intelligence passages (cited)'),
+    _gated: _oBool('true when parts of the payload were withheld by tier'),
+  }).describe('One-market intelligence read: identity, stats, status mix, operators, recent facilities, cited related intel — alongside the DC Hub envelope keys.'),
+
+  get_market_dcpi_rank: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    narrative: _oAny('~100-word CBRE/JLL-style analyst read on the market — quote directly with attribution to DC Hub (CC-BY-4.0)'),
+    market_slug: _oStr('Market slug'),
+    market_name: _oStr('Market display name'),
+    state: _oStr('US state / region code'),
+    iso: _oStr('ISO/RTO serving the market'),
+    verdict: _oStr('DCPI verdict: BUILD | CAUTION | AVOID'),
+    composite_score: _oNum('0-100 verdict-aware composite score'),
+    excess_power_score: _oNum('0-100 excess-power component'),
+    constraint_score: _oNum('0-100 constraint component'),
+    quality_score: _oNum('0-100 data-quality score for this market'),
+    time_to_power_months: _oNum('Estimated months to power for a new interconnection'),
+    queue_wait_months: _oNum('ISO queue wait, months'),
+    reserve_margin_pct: _oNum('Grid reserve margin, %'),
+    curtailment_pct: _oNum('Curtailment, %'),
+    avg_kwh_cents: _oNum('Average retail power price, cents/kWh (may arrive as a string)'),
+    latitude: _oNum('Market anchor latitude'),
+    longitude: _oNum('Market anchor longitude'),
+    top_opportunities_json: _oAny('Top opportunity bullets for the market'),
+    top_risks_json: _oAny('Top risk bullets for the market'),
+    forecast: _oObj({}, 'Forecast availability block: {available, note, reason, samples_in_30d} — see predict_market_trajectory'),
+    trend_30d: _oAny('30-day trend read when enough snapshots exist'),
+    data_basis: _oStr('What the scores were computed from'),
+    data_basis_source: _oStr('Source of the data basis'),
+    computed_at: _oStr('When the score row was computed'),
+    published: _oBool('Whether the score is published'),
+    tier_required: _oStr('Tier required for the full row'),
+  }).describe('DCPI rank for ONE market: BUILD/CAUTION/AVOID verdict, component scores, time-to-power, and analyst narrative — alongside the DC Hub envelope keys.'),
+
+  hyperscaler_deals: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    feed_name: _oStr('Feed identity line'),
+    deals: _oArr(z.looseObject({
+      id: _oNum('Deal id'),
+      title: _oStr('Headline'),
+      summary: _oStr('Deal summary'),
+      url: _oStr('Source article URL'),
+      source: _oStr('Publication'),
+      published: _oStr('Publication timestamp'),
+      actors: _oAny('Classified actors (OpenAI, Microsoft, Oracle, NVIDIA, sovereign-AI, …)'),
+      value_usd: _oNum('Extracted deal value in USD (regex-extracted; null when undisclosed)'),
+      capacity: _oNum('Extracted capacity (MW/GW) when present'),
+    }), 'Live AI-capex deal feed entries, newest first'),
+    result_count: _oNum('Number of deals returned'),
+    computed_at: _oStr('Feed computation timestamp (10-min refresh)'),
+    methodology: _oStr('How deals are extracted and classified'),
+    live_feed: _oStr('Live feed URL'),
+    landing: _oStr('Human landing page URL'),
+    error: _oStr('Feed error, if any (null on success)'),
+  }).describe('Hyperscaler AI Deal Tracker feed: `deals` with extracted $-figures + MW, alongside the DC Hub envelope keys.'),
+
+  get_interconnection_queue: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    iso: _oStr('ISO/RTO this snapshot covers (per-ISO drill-down form)'),
+    as_of: _oStr('Queue snapshot date'),
+    project_count: _oNum('Projects in the queue snapshot'),
+    projects: _oArr(z.looseObject({
+      queue_id: _oStr('ISO queue position id'),
+      project_name: _oStr('Project name'),
+      iso: _oStr('ISO/RTO'),
+      state: _oStr('US state'),
+      county: _oStr('County'),
+      fuel_type: _oStr('Fuel / technology'),
+      capacity_mw: _oNum('Nameplate capacity, MW'),
+      queue_status: _oStr('Queue status'),
+      queue_date: _oStr('Queue entry date'),
+    }), 'Queued generation projects (largest / most recent first)'),
+    queued_load_total_gw: _oNum('Total queued GENERATION capacity in this ISO, GW'),
+    queued_load_data_center_gw: _oNum('ERCOT only: large-load (data-center-driven) queue, GW — null for ISOs that publish no comparable feed'),
+    queued_load_dc_share_pct: _oNum('ERCOT only: data-center share of queued load, %'),
+    top_subregions: _oAny('Provenance / sub-region breakdown for the large-load figure (ERCOT)'),
+    new_applications_q_gw: _oNum('New queue applications in the latest period, GW (when published)'),
+    new_applications_period: _oStr('Period the new-applications figure covers'),
+    historical_completion_pct: _oNum('Share of queued projects that historically complete, % (when published)'),
+    source_name: _oStr('Queue source name'),
+    source_url: _oStr('Queue source URL'),
+    v: _oStr('Verification flag for the snapshot'),
+  }).describe('ISO interconnection-queue snapshot: queued GW, per-project rows, and (ERCOT) the large-load data-center queue — alongside the DC Hub envelope keys.'),
+
+  get_fiber_intel: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    type: _oStr('"FeatureCollection" — the payload is GeoJSON, ready for Leaflet/Mapbox'),
+    features: _oArr(z.looseObject({
+      type: _oStr('"Feature"'),
+      geometry: _oAny('GeoJSON geometry (LineString/MultiLineString route path)'),
+      properties: _oObj({
+        carrier: _oStr('Fiber carrier, e.g. Zayo, Lumen, Cogent'),
+        route_type: _oStr('metro | longhaul | dark | ix'),
+        fiber_count: _oNum('Fiber strand count when known'),
+        lit_capacity_gbps: _oNum('Lit capacity, Gbps, when known'),
+        capacity: _oNum('Capacity (carrier-reported units) when known'),
+        distance_miles: _oNum('Route length, miles'),
+        distance_km: _oNum('Route length, km'),
+      }, 'Route attributes'),
+    }), 'Fiber route features'),
+    total: _oNum('Total routes matching the filter (null when withheld by tier)'),
+  }).describe('Fiber-route intelligence as a GeoJSON FeatureCollection (carrier, route_type, capacity, distance per feature) — alongside the DC Hub envelope keys.'),
+
+  analyze_site: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    composite_score: _oNum('0-100 composite site suitability score (free HEADLINE tier and full tier)'),
+    overall_score: _oNum('Alias of composite_score on the full payload'),
+    verdict: _oStr('Verdict string, e.g. "Excellent site" / BUILD-CAUTION-AVOID read'),
+    interpretation: _oStr('Verdict prose on the full payload'),
+    limiting_factor: _oObj({
+      factor: _oStr('The lowest-scoring factor'),
+      score: _oNum('Its score'),
+      of: _oNum('Scale maximum (100)'),
+      note: _oStr('Why it limits the site'),
+    }, 'Single top limiting factor (the lowest sub-score) — always present on the free headline'),
+    scores: _oObj({
+      power_infrastructure: _oNum('0-100'),
+      gas_pipeline_access: _oNum('0-100'),
+      fiber_connectivity: _oNum('0-100'),
+      market_conditions: _oNum('0-100'),
+      risk_resilience: _oNum('0-100'),
+    }, 'Per-factor breakdown (full/paid payload)'),
+    nearby: _oObj({}, 'Nearby infrastructure counts: {substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw} (full payload)'),
+    power_cost: _oObj({}, 'Power cost read: {industrial_cents_kwh, commercial_cents_kwh, period, basis} (full payload)'),
+    fiber: _oObj({}, 'Fiber read: {connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk} (full payload)'),
+    location: _oAny('Echo of the analyzed location (full payload)'),
+    site_headline: _oBool('true when this is the free citable HEADLINE (score + verdict + limiting factor)'),
+    preview: _oStr('Headline preview line (free tier)'),
+    locked: _oObj({}, 'Which sections are Pro-locked on the free headline: {per_factor_breakdown, nearby_infrastructure, power_cost, fiber_carriers, site_analysis_report}'),
+  }).describe('Multi-factor site suitability for one lat/lon: composite score + verdict (+ per-factor breakdown, nearby infra, power cost, fiber on paid) — alongside the DC Hub envelope keys.'),
+
+  get_energy_prices: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the pricing lookup succeeded'),
+    scope: _oStr('What the figures cover (e.g. the ISO/state scope line)'),
+    filter: _oObj({
+      iso: _oStr('ISO filter echoed back'),
+      state: _oStr('State filter echoed back'),
+      sector: _oStr('Sector the rate covers'),
+    }, 'Echo of the applied filters'),
+    retail_rate_kwh: _oNum('Retail electricity rate, cents/kWh'),
+    industrial_rate_kwh: _oNum('Industrial electricity rate, cents/kWh'),
+    avg_rate_kwh: _oNum('Average rate, cents/kWh'),
+    retail_rates: _oObj({
+      avg_cents_kwh: _oNum('Average retail, cents/kWh'),
+      min_cents_kwh: _oNum('Minimum, cents/kWh'),
+      max_cents_kwh: _oNum('Maximum, cents/kWh'),
+      latest_period: _oStr('EIA period the rates come from'),
+      states_covered: _oNum('States in the aggregate'),
+    }, 'Retail-rate aggregate block'),
+    wholesale_price_usd_mwh: _oNum('Wholesale / LMP context, USD/MWh (when served)'),
+    natural_gas_usd_mmbtu: _oNum('Henry Hub-referenced natural gas price, USD/MMBtu (when served)'),
+    grid_status: _oStr('Real-time grid status flag (when served)'),
+    as_of: _oStr('Pricing as-of timestamp'),
+    caller_tier: _oStr('Tier the response was served at'),
+    gated: _oBool('true when parts of the payload were withheld by tier'),
+  }).describe('Live energy pricing for one US ISO: retail cents/kWh + wholesale + natural gas context — alongside the DC Hub envelope keys.'),
+
+  list_transactions: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the deal query succeeded'),
+    count: _oNum('Rows returned in THIS response'),
+    total_count: _oNum('Total deals matching the filter'),
+    transactions: _oArr(z.looseObject({
+      id: _oNum('Deal id'),
+      buyer: _oStr('Acquirer'),
+      seller: _oStr('Seller / target'),
+      date: _oStr('Deal date (ISO-8601)'),
+      year: _oNum('Deal year'),
+      market: _oStr('Market the deal touches'),
+      region: _oStr('Region (us | eu | apac | americas …)'),
+      type: _oStr('acquisition | jv | refinance | recap …'),
+      mw: _oNum('Capacity involved, MW, when disclosed'),
+      value: _oNum('Deal value when disclosed (see value_unit)'),
+      value_display: _oStr('Human-formatted value, e.g. "$9.2B" or "Undisclosed"'),
+      value_unit: _oStr('Unit of `value` (e.g. USD)'),
+      value_confirmed: _oBool('Whether the value is confirmed vs reported'),
+    }), 'M&A / capital-transaction rows'),
+    total_value: _oNum('Aggregate disclosed value across the returned set (null when not computed)'),
+    total_value_unit: _oStr('Unit of total_value'),
+    data_source: _oStr('Where the deal set comes from'),
+    tier: _oStr('Tier the response was served at'),
+    cached: _oBool('Whether the response was served from cache'),
+    note: _oStr('Serving note'),
+  }).describe('Data-center M&A / capital transactions: `transactions` rows with buyer/seller/value/date — alongside the DC Hub envelope keys.'),
+};
 
 function _ensureStructured(r) {
   // outputSchema contract: a SUCCESS result must carry structuredContent.
@@ -5442,7 +5761,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     title: _toolTitle(name),
     description: _desc,
     inputSchema: schema,
-    outputSchema: _OUTPUT_ENVELOPE,
+    // r-output-schema-typed: flagship tools advertise their documented data
+    // fields; everything else advertises the generic envelope. Both are loose
+    // + all-optional, so neither can reject a real payload.
+    outputSchema: _TOOL_OUTPUT_SCHEMAS[name] || _OUTPUT_ENVELOPE,
     annotations: _annot,
   }, async (args, extra) => _ensureStructured(await _stamped(args, extra)));
 }
