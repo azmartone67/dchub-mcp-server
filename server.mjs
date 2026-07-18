@@ -528,6 +528,7 @@ function detectPlatform(ua = '') {
   if (u.includes('deepseek'))    return 'deepseek';
   if (u.includes('cline'))       return 'cline';
   if (u.includes('mistral') || u.includes('lechat') || u.includes('le-chat')) return 'mistral';
+  if (u.includes('kimi') || u.includes('moonshot')) return 'kimi';
   if (u.includes('codex'))       return 'codex';
   if (u.includes('glama'))       return 'glama';
   if (u.includes('windsurf'))    return 'windsurf';
@@ -574,6 +575,7 @@ function detectPlatformFromInit(body, ua = '') {
     if (clientName.includes('groq'))        return 'groq';
     if (clientName.includes('nvidia'))      return 'nvidia';
     if (clientName.includes('mistral'))     return 'mistral';
+    if (clientName.includes('kimi') || clientName.includes('moonshot')) return 'kimi';
     if (clientName.includes('glama'))       return 'glama';
     if (clientName.includes('meta'))        return 'meta';
     if (clientName.includes('mcp-inspector')) return 'mcp-inspector';
@@ -3893,6 +3895,7 @@ const _DESC_BY_PLATFORM = new Map();                 // platform -> { tool: desc
 const _DESC_KNOWN_PLATFORMS = [
   'claude', 'chatgpt', 'cline', 'cursor', 'perplexity',           // original 5
   'gemini', 'grok', 'copilot', 'meta', 'deepseek', 'mistral',     // 2026-07-11 wave
+  'kimi',                                                          // 2026-07-17 Moonshot/Kimi (r-tuner-kimi-driftgate)
 ];
 const _DESC_REFRESH_MS = 30 * 60 * 1000;
 let _descRefreshStarted = false;
@@ -9288,4 +9291,9 @@ export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetri
 // rank_sites objectives bugs were both invisible to handler-level tests
 // because the SDK rejected the call (-32602) before any handler ran.
 export { createServer };
+// r-tuner-kimi-driftgate (2026-07-18): the platform-detection maps + the
+// tuned-description fetch list are exported so test/platform-desc-sync.test.mjs
+// can assert the 3-list sync (this drift has now shipped twice — the 07-11 wave
+// and Kimi on 07-17). See [[reference_dchub_tuner_warmcache_platforms]].
+export { detectPlatform, detectPlatformFromInit, _DESC_KNOWN_PLATFORMS };
 
