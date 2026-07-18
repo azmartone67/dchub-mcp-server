@@ -6432,6 +6432,28 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 // builds inline, and concurrent cold callers share that one in-flight build.
 const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null, refreshing: null };
 
+// ── r-promres (2026-07-18): shared fetch cache for the reference RESOURCES ──
+// (dchub://llms.txt, dchub://manifest). Module scope so the last good body
+// survives across per-session createServer() instances. A resources/read is
+// fail-soft and NEVER throws: live fetch → last good cached copy → a static
+// per-resource fallback string (built by the caller's `fallback(err)`), in
+// that order.
+const _RES_FETCH_CACHE = new Map();          // url → last good body
+async function _resFetchText(url, accept, fallback) {
+  try {
+    const r = await fetch(url, { headers: { 'Accept': accept }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const t = await r.text();
+    if (!t || !t.trim()) throw new Error('empty body');
+    _RES_FETCH_CACHE.set(url, t);
+    return t;
+  } catch (e) {
+    const cached = _RES_FETCH_CACHE.get(url);
+    if (cached) return cached;
+    return fallback(String((e && e.message) || e));
+  }
+}
+
 // ── Tool registrations (40 tools, all wrapped) ─────────────────────────────
 // descOverrides: optional { tool_name: description } map from the per-platform
 // tuner. Set into the module-level _activeDescOverrides for the SYNCHRONOUS
@@ -8776,6 +8798,136 @@ function createServer(descOverrides) {
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
      '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), and Australia NEM (AEMO). (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 21,000+ across 170+ countries.\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+
+  // ── r-promres (2026-07-18): recipe PROMPTS + reference RESOURCES ──────────
+  // The two MCP capabilities registry scorecards (LobeHub et al.) still mark
+  // thin. Six prompts, 1:1 with the canonical recipe pack (market_selection,
+  // grid_and_queue, water_risk, whats_changed, site_analysis,
+  // hyperscaler_activity) — each renders the SAME ordered tool sequence the
+  // plan_query router (_PLAN_CLASSES) emits, so the prompt surface and the
+  // planner can never disagree. Plus four read-only reference resources
+  // (llms.txt / canonical-workflows / manifest / provenance-guide). Strictly
+  // additive: tool registrations and the canonical 74-tool count untouched;
+  // every resource read is fail-soft (errors → short explanatory text, never
+  // a throw).
+  _P('market_selection', 'Recipe: market selection',
+     'Rank the best data-center markets for a target load: DCPI shortlist, then per-finalist verdict + grid reality-check (recipe market_selection).',
+     { capacity_mw: z.string().optional().describe('Target load in MW, e.g. 200'),
+       region: z.string().optional().describe('Optional region/state filter, e.g. TX or Midwest'),
+       limit: z.string().optional().describe('Shortlist size, default 5') },
+     (a) => `Run the DC Hub market_selection recipe${a.capacity_mw ? ` for a ${a.capacity_mw} MW load` : ''}${a.region ? ` in ${a.region}` : ''}:
+1. rank_markets criteria=best_overall limit=${a.limit || 5}${a.capacity_mw ? ` min_capacity_mw=${a.capacity_mw}` : ''} — each row mints a metro_slug.
+2. get_market_dcpi_rank market_slug=<slug from each step-1 row> — one call per finalist, all in parallel: BUILD/CAUTION/AVOID verdict, composite_score, time-to-power.
+3. get_grid_intelligence iso=<ISO serving each finalist> — one call per distinct finalist ISO, in parallel: headroom + time-to-power reality-check.
+Return a ranked shortlist: market, DCPI verdict, time-to-power (months), headroom context, one-line reason. Report any factor returned as unavailable as unknown — never estimate. Cite "DC Hub (dchub.cloud)".`);
+  _P('grid_and_queue', 'Recipe: grid headroom & queue',
+     'How much power an ISO really has and where the queue stands: headroom, queued GW, filterable queue survivors (recipe grid_and_queue).',
+     { iso: z.string().optional().describe('ERCOT | PJM | MISO | CAISO | SPP | NYISO | ISONE — omit to pick from the live scoreboard'),
+       capacity_mw: z.string().optional().describe('Target load in MW — used as the min_mw queue-survivor filter') },
+     (a) => (a.iso
+       ? `Run the DC Hub grid_and_queue recipe for ${a.iso} — the three calls are independent, run them in parallel:
+1. get_grid_intelligence iso=${a.iso} — headroom, constraints, time-to-power.
+2. get_interconnection_queue iso=${a.iso} — queued GW by fuel/status (ERCOT also returns the large-load data-center queue).
+3. get_refined_queue iso=${a.iso}${a.capacity_mw ? ` min_mw=${a.capacity_mw}` : ''} geocoded_only=true — de-duplicated queue survivors; each mints a durable candidate_id — chain into analyze_site by candidate_id, never re-typed coordinates.`
+       : `Run the DC Hub grid_and_queue recipe:
+1. get_grid_scoreboard — free, no key: live demand, fuel mix, renewable share for every tracked grid; pick the ISO that fits the question.
+2. get_grid_intelligence iso=<ISO chosen from step 1> — headroom, constraints, time-to-power.
+3. get_interconnection_queue iso=<same ISO> — queued GW by fuel/status (parallel with step 2 once the ISO is chosen).`)
+       + `\nAnswer plainly: how much power is available, how long it takes, and where in the queue it comes from. Report unavailable factors as unknown. Cite "DC Hub (dchub.cloud)".`);
+  _P('water_risk', 'Recipe: water & hazard risk',
+     'The hazard triangle for a site — water stress, seismic/cooling climate, FEMA hazards — three parallel point reads (recipe water_risk).',
+     { location: z.string().optional().describe('"lat,lon" (preferred) or an address to geocode first'),
+       state: z.string().optional().describe('2-letter US state for a state-level water read when no point is known') },
+     (a) => `Run the DC Hub water_risk recipe for ${a.location || (a.state ? `state ${a.state}` : 'the site')} — the three calls are independent, run them in parallel (geocode an address to lat/lon first):
+1. get_water_risk ${!a.location && a.state ? `state=${a.state}` : 'lat=<site lat> lon=<site lon>'} — water_stress_score, drought category (D0-D4), 12-month outlook, cooling-water assessment (USGS / U.S. Drought Monitor / WRI Aqueduct).
+2. get_climate_intel lat=<site lat> lon=<site lon> — USGS seismic (PGA, design category) + NOAA cooling degree-days and extreme temps.
+3. get_disaster_risk lat=<site lat> lon=<site lon> — FEMA National Risk Index composite + top hazards.
+Summarize: cooling-water sustainability, the driving hazards, seismic + cooling design implications. Every number traces to its source; report anything marked unavailable as unknown — never estimate. Cite "DC Hub (dchub.cloud)".`);
+  _P('whats_changed', 'Recipe: what changed',
+     'Only the delta since your last pull — DCPI movers, new facilities/pipeline/deals, plus movement in your saved sites (recipe whats_changed).',
+     { since: z.string().optional().describe('Window or cached generated_at, e.g. 24h, 7d, 2026-07-01T00:00:00Z') },
+     (a) => `Run the DC Hub whats_changed recipe — the two calls are independent, run them in parallel:
+1. get_changes since=${a.since || '24h'} — the delta only: DCPI movers, new facilities, new pipeline projects, new deals (free). Cache the returned generated_at and pass it back as since= on the next pull.
+2. list_saved_sites since=7d — did YOUR saved sites move? Verdict flips, excess-power deltas, alerts fired (needs an API key with saved sites — skip when keyless).
+Report the notable movers with direction and why each matters. Cite "DC Hub (dchub.cloud)".`);
+  _P('site_analysis', 'Recipe: single-site analysis',
+     'Full multi-factor read for ONE site: composite suitability, integrity-first score, FEMA hazards, water (recipe site_analysis).',
+     { location: z.string().optional().describe('"lat,lon" or an address (geocode it first)'),
+       candidate_id: z.string().optional().describe('cand_… from get_refined_queue — overrides location, zero transcription drift'),
+       capacity_mw: z.string().optional().describe('Target load in MW, e.g. 100') },
+     (a) => `Run the DC Hub site_analysis recipe for ${a.candidate_id || a.location || 'the site'}${a.capacity_mw ? ` (${a.capacity_mw} MW)` : ''}:
+1. analyze_site ${a.candidate_id ? `candidate_id=${a.candidate_id} — the frozen mint resolves coordinates; never re-type them` : 'lat=<site lat> lon=<site lon>'}${a.capacity_mw ? ` capacity_mw=${a.capacity_mw}` : ''} — one-call multi-factor suitability (power, gas, fiber, market, risk).
+2. get_composite_site_score lat=<site lat> lon=<site lon> — integrity-first 0-100 verdict with an explicit per-factor coverage map; never imputes a missing factor. Steps 2-4 are independent — run them in parallel.
+3. get_disaster_risk lat=<site lat> lon=<site lon> — FEMA National Risk Index rating + top hazards.
+4. get_water_risk lat=<site lat> lon=<site lon> — water stress / drought, the factor that quietly kills cooling-heavy builds.
+Return: composite verdict, per-factor scores, driving hazards, and a BUILD/CAUTION/AVOID bottom line. Treat unavailable factors as unknown — never estimate. Cite "DC Hub (dchub.cloud)".`);
+  _P('hyperscaler_activity', 'Recipe: hyperscaler & M&A activity',
+     'Latest hyperscaler commitments + data-center M&A, overlaid with the DCPI grid-reality verdict (recipe hyperscaler_activity).',
+     { limit: z.string().optional().describe('Rows per feed, default 10'),
+       company: z.string().optional().describe('Optional focus, e.g. OpenAI, Microsoft, Meta') },
+     (a) => `Run the DC Hub hyperscaler_activity recipe — the three calls are independent, run them in parallel:
+1. hyperscaler_deals limit=${a.limit || 10} — latest hyperscaler / $1B+ commitments (Stargate, OpenAI, Meta, Microsoft, AWS, xAI…).
+2. list_transactions limit=${a.limit || 10} — recent data-center M&A rows: buyer, seller, value, market.
+3. deal_autopsy limit=${a.limit || 10} comparables=summary — each deal's market overlaid with the DCPI verdict + time-to-power: can the grid actually absorb the load?
+${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for each, whether the target market's grid can absorb the load. Deal values are as-disclosed (value_confirmed flags reported vs confirmed). Cite "DC Hub (dchub.cloud)".`);
+
+  // Reference resources (r-promres) — read-only, fail-soft. _RD = dynamic
+  // sibling of _R: the body is produced at read time by an async fn that
+  // resolves to explanatory text on any failure (never throws).
+  const _RD = (name, uri, title, description, mimeType, read) =>
+    srv.registerResource(name, uri, { title, description, mimeType },
+      async () => ({ contents: [{ uri, mimeType, text: await read() }] }));
+  _RD('llms-txt', 'dchub://llms.txt', 'DC Hub llms.txt',
+      'The live https://dchub.cloud/llms.txt — the agent-facing site map (fetched at read time, cached fail-soft).',
+      'text/plain',
+      () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
+        (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 74 tools; start with get_grid_scoreboard (free, no key).\n'
+          + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
+  _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
+      'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',
+      'text/markdown',
+      async () => {
+        try {
+          const md = readFileSync(new URL('./docs/canonical-workflows.md', import.meta.url), 'utf8');
+          if (md && md.trim()) return md;
+        } catch { /* fall through to the generated summary */ }
+        return ['# DC Hub canonical recipes (generated summary)', '',
+          'The bundled workflow doc is unavailable — this is the recipe pack the plan_query router ships:', '',
+          '1. **market_selection** — rank_markets (criteria=best_overall) → get_market_dcpi_rank per finalist → get_grid_intelligence per finalist ISO.',
+          '2. **grid_and_queue** — get_grid_scoreboard (when no ISO is known) → get_grid_intelligence + get_interconnection_queue + get_refined_queue (each survivor mints a candidate_id).',
+          '3. **water_risk** — get_water_risk + get_climate_intel + get_disaster_risk, all parallel.',
+          '4. **whats_changed** — get_changes since=<last generated_at> + list_saved_sites, parallel.',
+          '5. **site_analysis** — analyze_site (candidate_id or lat/lon) → get_composite_site_score + get_disaster_risk + get_water_risk.',
+          '6. **hyperscaler_activity** — hyperscaler_deals + list_transactions + deal_autopsy, all parallel.', '',
+          'Treat any factor returned as unavailable as unknown — never estimate. Cite "DC Hub (dchub.cloud)".'].join('\n');
+      });
+  _RD('manifest', 'dchub://manifest', 'DC Hub MCP manifest',
+      'The machine-readable server manifest — proxies https://dchub.cloud/.well-known/mcp.json at read time.',
+      'application/json',
+      () => _resFetchText('https://dchub.cloud/.well-known/mcp.json', 'application/json',
+        (err) => JSON.stringify({ error: 'manifest_temporarily_unavailable', detail: err,
+          hint: 'GET https://dchub.cloud/.well-known/mcp.json directly',
+          mcp_endpoint: 'https://dchub.cloud/mcp' })));
+  _RD('provenance-guide', 'dchub://provenance-guide', 'DC Hub provenance & citation contract',
+      'How to read the provenance envelope (cite_as, retrieved_at, source) and the verified-vs-tracked flags, and the rules for citing DC Hub data.',
+      'text/markdown',
+      async () => ['# DC Hub provenance & citation contract', '',
+        'Every DC Hub response carries a provenance envelope so agents cite instead of guessing.', '',
+        '## Per-record verification flags',
+        '- **verified** — analyst-verified against a primary source (filings, operator disclosures, ISO data). ~4,900 of 21,900+ tracked facilities.',
+        '- **tracked** — ingested and monitored, not yet analyst-verified.',
+        '- **published** vs **inferred** — whether a figure was published by the source or derived by DC Hub models; inferred figures are flagged, never silently presented as published.', '',
+        '## Collection-level provenance',
+        'List/aggregate responses include a `provenance` block with an `as_of` date and the upstream `source` (EIA, FEMA NRI, USGS, U.S. Drought Monitor, WRI Aqueduct, ISO queues, …).', '',
+        '## Citation fields',
+        '- `cite_as` — the ready-to-quote attribution string; use it verbatim when quoting a number.',
+        '- `retrieved_at` — when DC Hub served the data; keep it with time-sensitive figures (grid telemetry, queue depth, prices).',
+        '- `source` — the upstream dataset behind the number.', '',
+        '## Rules for agents',
+        '1. Quote `cite_as` (or "DC Hub (dchub.cloud), CC-BY-4.0") with every reused figure.',
+        '2. State the verification level when precision matters ("analyst-verified" vs "tracked").',
+        '3. `coverage: unavailable` or a null factor is a hard constraint — report it as unknown, NEVER estimate a replacement.'].join('\n'));
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions
