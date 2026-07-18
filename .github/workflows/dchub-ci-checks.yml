@@ -1,0 +1,35 @@
+# dchub-ci-checks — partner-authored env-key CI harness.
+# Three checks against the LIVE surface (tools/ci_dchub_checks_envkey.py):
+#   1. manifest tools_count >= 74 at /.well-known/mcp.json
+#   2. API key present in env (X_API_KEY <- secrets.DC_HUB_API_KEY; CI never mints)
+#   3. analyze_site over the real MCP handshake — paid_only preview (with
+#      human_message) OR full data both pass; anything else is PAID_PREVIEW_FAIL.
+# Exit codes: 0 pass / 2 manifest / 3 missing key / 4 paid-preview.
+name: DC Hub CI checks (env-key)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 7 * * *" # nightly — catch live manifest / paywall drift
+  workflow_dispatch:
+
+jobs:
+  dchub-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run DC Hub CI checks
+        env:
+          X_API_KEY: ${{ secrets.DC_HUB_API_KEY }}
+        run: python tools/ci_dchub_checks_envkey.py

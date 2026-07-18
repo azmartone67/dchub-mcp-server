@@ -1,8 +1,9 @@
 // plan-query.test.mjs — unit tests for the deterministic plan_query router
-// (r-plan-query v1 + r-planner-v2). Pure functions, no network: these tests
-// exercise the exported _planQuery/_planSignals/_planWaves helpers directly.
+// (r-plan-query v1 + r-planner-v2 + r-planner-v3). Pure functions, no network:
+// these tests exercise the exported _planQuery/_planSignals/_planWaves helpers directly.
 import { describe, it, expect } from 'vitest';
-import { _planQuery, _planSignals, _planWaves, _planWorkflowConfidence } from '../server.mjs';
+import { _planQuery, _planSignals, _planWaves, _planWorkflowConfidence,
+         _planExecutionEstimate, _planParallelGroups } from '../server.mjs';
 
 describe('plan_query router (pure)', () => {
   it('is deterministic: same intent + context → identical plan', () => {
@@ -131,5 +132,100 @@ describe('plan_query router (pure)', () => {
     expect(d.iso).toBe('ERCOT');
     expect(d.mw).toBe(1500);
     expect(d.coords).toEqual({ lat: 33.44, lon: -112.07 });
+  });
+
+  // ── r-planner-v3: parallel_groups + execution_estimate + plan-only note ────
+  describe('r-planner-v3 execution strategy & estimate', () => {
+    it('market_ranking: pins parallel_groups + estimate (standard-tier waves)', () => {
+      const p = _planQuery('rank the best markets for a 200MW AI campus', {});
+      expect(p.intent_class).toBe('market_ranking');
+      expect(p.execution_strategy.parallel_groups).toEqual([
+        ['rank_markets'],
+        ['get_market_dcpi_rank', 'get_grid_intelligence'],
+      ]);
+      // node count (3 steps), NOT the fan-out sum (which stays in estimated_calls)
+      expect(p.execution_estimate).toEqual({
+        estimated_calls: 3,
+        estimated_latency_ms: 2400, // 1200 (rank_markets) + 1200 (parallel standard wave)
+        parallelizable: true,
+      });
+      expect(p.estimated_calls).toBeGreaterThan(p.execution_estimate.estimated_calls); // fan-out ≠ node count
+    });
+
+    it('grid_headroom with ISO: one fully-parallel wave, single-wave latency', () => {
+      const p = _planQuery('how much power is available', { iso: 'ERCOT' });
+      expect(p.intent_class).toBe('grid_headroom');
+      expect(p.execution_strategy.parallel_groups).toEqual([
+        ['get_grid_intelligence', 'get_interconnection_queue', 'get_refined_queue'],
+      ]);
+      expect(p.execution_estimate).toEqual({
+        estimated_calls: 3,
+        estimated_latency_ms: 1200, // one wave, all standard tier, runs concurrently
+        parallelizable: true,
+      });
+    });
+
+    it('grid_headroom without ISO: light scoreboard wave then standard wave', () => {
+      const p = _planQuery('how much power is available on the grid', {});
+      expect(p.execution_strategy.parallel_groups).toEqual([
+        ['get_grid_scoreboard'],
+        ['get_grid_intelligence', 'get_interconnection_queue'],
+      ]);
+      expect(p.execution_estimate.estimated_latency_ms).toBe(1700); // 500 light + 1200 standard
+    });
+
+    it('interconnection_queue: heavy analyze_site wave dominates the estimate', () => {
+      const p = _planQuery('what is queued for interconnection in ERCOT', {});
+      expect(p.intent_class).toBe('interconnection_queue');
+      expect(p.execution_strategy.parallel_groups).toEqual([
+        ['get_interconnection_queue', 'get_refined_queue'],
+        ['analyze_site'],
+      ]);
+      expect(p.execution_estimate).toEqual({
+        estimated_calls: 3,
+        estimated_latency_ms: 4200, // 1200 (parallel standard wave) + 3000 (heavy analyze_site)
+        parallelizable: true,
+      });
+    });
+
+    it('carries the plan-only note so agents do not wait for an execute_plan', () => {
+      for (const p of [
+        _planQuery('rank the best markets', {}),
+        _planQuery('zzz completely unrelated gibberish qqq', {}), // fallback branch too
+      ]) {
+        expect(p.execution_strategy.note).toMatch(/only plans; execute the sequence yourself/);
+        expect(p.note).toMatch(/only plans; execute the sequence yourself/);
+      }
+    });
+
+    it('fallback branch: parallel_groups + estimate present and deterministic', () => {
+      const p = _planQuery('zzz completely unrelated gibberish qqq', {});
+      expect(p.execution_strategy.parallel_groups).toEqual([
+        ['discover_tools', 'get_dchub_recommendation'],
+      ]);
+      expect(p.execution_estimate).toEqual({
+        estimated_calls: 2,
+        estimated_latency_ms: 3000, // max(light discover_tools 500, heavy recommendation 3000)
+        parallelizable: true,
+      });
+    });
+
+    it('_planExecutionEstimate / _planParallelGroups: pure helpers agree with waves', () => {
+      const seq = [
+        { step: 1, tool: 'get_grid_scoreboard', depends_on: [] },
+        { step: 2, tool: 'analyze_site', depends_on: [1] },
+        { step: 3, tool: 'get_water_risk', depends_on: [1] },
+      ];
+      const waves = _planWaves(seq);
+      expect(waves).toEqual([[1], [2, 3]]);
+      expect(_planParallelGroups(seq, waves)).toEqual([
+        ['get_grid_scoreboard'], ['analyze_site', 'get_water_risk'],
+      ]);
+      expect(_planExecutionEstimate(seq, waves)).toEqual({
+        estimated_calls: 3,
+        estimated_latency_ms: 3500, // 500 light + max(3000 heavy, 1200 standard)
+        parallelizable: true,
+      });
+    });
   });
 });

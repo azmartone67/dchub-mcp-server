@@ -4659,6 +4659,8 @@ const _TOOL_OUTPUT_SCHEMAS = {
     estimated_calls: _oNum('Total estimated API calls for the whole plan (sum of per-step estimates)'),
     parallelizable: _oBool('true when at least one execution wave holds 2+ steps — the plan is not purely sequential'),
     execution_waves: _oAny('The execution graph as concurrency waves: array of arrays of step numbers; every step in a wave can run concurrently once earlier waves finish (derived from depends_on)'),
+    execution_strategy: _oAny('r-planner-v3 explicit strategy: {parallel_groups: string[][] — execution_waves rendered as TOOL-NAME arrays (e.g. [["get_grid_intelligence","get_interconnection_queue","get_refined_queue"]]), note: plan-only disclaimer — this tool only plans; execute the sequence yourself}'),
+    execution_estimate: _oAny('r-planner-v3 deterministic cost preview: {estimated_calls (plan NODE count — one per step; the top-level estimated_calls is the fan-out-weighted API-call total), estimated_latency_ms (sum over waves of the SLOWEST tool in each wave, from a static 3-tier table: heavy synthesis 3000ms / standard read 1200ms / light free read 500ms), parallelizable (any wave holds 2+ steps)}'),
     alternatives: _oArr(z.looseObject({
       tool: _oStr('Alternative tool name'),
       when: _oStr('When to prefer this tool over the recommended sequence'),
@@ -5077,6 +5079,70 @@ export function _planWaves(seq) {
   return waves;
 }
 
+// r-planner-v3 (2026-07-18): static per-tool latency tiers for the deterministic
+// execution_estimate. These are rough planning priors, NOT live measurements —
+// three tiers only, so the arithmetic stays pinnable in tests:
+//   · heavy  = 3000 ms — server-side multi-factor synthesis / route planning
+//     (analyze_site, get_composite_site_score, deal_autopsy, plan_fiber_leadin,
+//      get_dchub_recommendation, analyze_parcel, generate_site_analysis,
+//      rank_sites, predict_market_trajectory)
+//   · light  =  500 ms — cached / free-tier / registry-local reads
+//     (get_grid_scoreboard, discover_tools, get_changes, list_saved_sites)
+//   · standard = 1200 ms — every other data read (the default for unknown tools)
+// Wave latency = the SLOWEST tool in the wave (steps in a wave run concurrently);
+// plan latency = sum of wave latencies. All deterministic — same plan, same estimate.
+const _PLAN_LATENCY_TIERS_MS = { heavy: 3000, standard: 1200, light: 500 };
+const _PLAN_HEAVY_TOOLS = new Set([
+  'analyze_site', 'get_composite_site_score', 'deal_autopsy', 'plan_fiber_leadin',
+  'get_dchub_recommendation', 'analyze_parcel', 'generate_site_analysis',
+  'rank_sites', 'predict_market_trajectory',
+]);
+const _PLAN_LIGHT_TOOLS = new Set([
+  'get_grid_scoreboard', 'discover_tools', 'get_changes', 'list_saved_sites',
+]);
+function _planToolLatencyMs(tool) {
+  if (_PLAN_HEAVY_TOOLS.has(tool)) return _PLAN_LATENCY_TIERS_MS.heavy;
+  if (_PLAN_LIGHT_TOOLS.has(tool)) return _PLAN_LATENCY_TIERS_MS.light;
+  return _PLAN_LATENCY_TIERS_MS.standard;
+}
+
+// r-planner-v3: deterministic execution preview over a sequence + its waves.
+// estimated_calls counts plan NODES (one per step — fan-out weighting lives in
+// the top-level estimated_calls, which sums per-step estimated_calls instead);
+// estimated_latency_ms sums, over waves, the slowest static tool latency in
+// each wave; parallelizable is true when any wave holds 2+ steps. Exported for
+// unit tests. Pure — no clock, no network.
+export function _planExecutionEstimate(seq, waves) {
+  const byStep = new Map(seq.map((s) => [s.step, s]));
+  const estimated_latency_ms = waves.reduce((total, wave) => {
+    const waveMs = wave.reduce((mx, n) => {
+      const st = byStep.get(n);
+      return Math.max(mx, st ? _planToolLatencyMs(st.tool) : 0);
+    }, 0);
+    return total + waveMs;
+  }, 0);
+  return {
+    estimated_calls: seq.length,
+    estimated_latency_ms,
+    parallelizable: waves.some((w) => w.length > 1),
+  };
+}
+
+// r-planner-v3: map step-number waves onto explicit TOOL-NAME wave arrays —
+// the copy-paste-ready form of the execution graph (e.g.
+// [["get_grid_intelligence","get_interconnection_queue","get_refined_queue"]]).
+export function _planParallelGroups(seq, waves) {
+  const byStep = new Map(seq.map((s) => [s.step, s]));
+  return waves.map((w) => w.map((n) => {
+    const st = byStep.get(n);
+    return st ? st.tool : null;
+  }).filter(Boolean));
+}
+
+// r-planner-v3: plan-mode disclaimer — plan_query NEVER executes; without this
+// note some agents were observed waiting for an execute_plan follow-up tool.
+const _PLAN_ONLY_NOTE = 'This tool only plans; execute the sequence yourself — plan_query never executes and there is no execute_plan tool to wait for.';
+
 // r-planner-v2: dual-confidence + call-estimate derivation over a sequence.
 // workflow_confidence is DISTINCT from intent_confidence: intent asks "did we
 // read the question right", workflow asks "can this plan execute cleanly with
@@ -5144,6 +5210,7 @@ export function _planQuery(intent, context) {
         args_hint: { context: text.slice(0, 200) } },
     ];
     const fbWc = _planWorkflowConfidence(fbSeq, d);
+    const fbWaves = _planWaves(fbSeq);
     const sc = {
       _entity: 'query_plan', ok: true, intent: text, intent_class: 'unknown',
       best_tool: 'discover_tools',
@@ -5156,12 +5223,17 @@ export function _planQuery(intent, context) {
       recommended_sequence: fbSeq,
       estimated_calls: 2,
       parallelizable: true,
-      execution_waves: _planWaves(fbSeq),
+      execution_waves: fbWaves,
+      execution_strategy: {
+        parallel_groups: _planParallelGroups(fbSeq, fbWaves),
+        note: _PLAN_ONLY_NOTE,
+      },
+      execution_estimate: _planExecutionEstimate(fbSeq, fbWaves),
       alternatives: [{ tool: 'semantic_search', when: 'Free-text search across DC Hub\'s intelligence corpus.',
         rejected_because: 'Corpus search returns documents, not a tool route — the navigator narrows to callable tools first.' }],
       coverage_notes: 'Router is keyword-based and found no signal — the fallback tools are broad by design. tools/list stays canonical.',
       matched_classes,
-      note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan.',
+      note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. ' + _PLAN_ONLY_NOTE,
       _source: 'DC Hub — dchub.cloud',
     };
     return sc;
@@ -5199,11 +5271,16 @@ export function _planQuery(intent, context) {
     estimated_calls: estimatedCalls,
     parallelizable: waves.some((w) => w.length > 1),
     execution_waves: waves,
+    execution_strategy: {
+      parallel_groups: _planParallelGroups(seq, waves),
+      note: _PLAN_ONLY_NOTE,
+    },
+    execution_estimate: _planExecutionEstimate(seq, waves),
     alternatives: [...top.cls.alternatives, ...runnerUp],
     coverage_notes: top.cls.coverage_notes,
     matched_classes,
     ...(usesCandidates ? { chaining: chainNote } : {}),
-    note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas.',
+    note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
     _source: 'DC Hub — dchub.cloud',
   };
   return sc;
@@ -7515,7 +7592,7 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'plan_query',
-    'ORCHESTRATION meta-tool: turn a natural-language intent into an ordered DC Hub tool plan BEFORE burning calls. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan: {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves — run a wave\'s steps in parallel), parallelizable, estimated_calls (plan total), alternatives (each with when + rejected_because), coverage_notes, matched_classes} — the sequences mirror the shipped recipes (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity) plus fiber/price/facility-search routes, including the zero-drift candidate_id chaining contract where a plan crosses get_refined_queue → analyze_site/rank_sites. args_hint values in <angle brackets> come from the named earlier step — substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. Try: plan_query intent="rank markets for a 200MW AI campus". Use FIRST for multi-step questions when you are unsure which tools to chain; for a family-level browse use discover_tools; for a one-call server-side ANSWER (not a plan) use get_dchub_recommendation. This tool plans — it never executes; tools/list stays canonical for schemas.',
+    'ORCHESTRATION meta-tool: turn a natural-language intent into an ordered DC Hub tool plan BEFORE burning calls. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan: {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves — run a wave\'s steps in parallel), execution_strategy.parallel_groups (the same waves as explicit TOOL-NAME arrays), execution_estimate {estimated_calls, estimated_latency_ms, parallelizable} (deterministic static-tier preview), parallelizable, estimated_calls (plan total), alternatives (each with when + rejected_because), coverage_notes, matched_classes} — the sequences mirror the shipped recipes (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity) plus fiber/price/facility-search routes, including the zero-drift candidate_id chaining contract where a plan crosses get_refined_queue → analyze_site/rank_sites. args_hint values in <angle brackets> come from the named earlier step — substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. Try: plan_query intent="rank markets for a 200MW AI campus". Use FIRST for multi-step questions when you are unsure which tools to chain; for a family-level browse use discover_tools; for a one-call server-side ANSWER (not a plan) use get_dchub_recommendation. This tool plans — it never executes; tools/list stays canonical for schemas.',
     { intent: z.string().describe('Natural-language description of what you are trying to find out, e.g. "rank markets for a 200MW AI campus" or "how much power is available in ERCOT"'),
       context: z.any().optional().describe('Optional structured hints: {lat, lon, iso, market, capacity_mw, candidate_id, state (2-letter), since} — sharpens args_hint values and routing (e.g. lat/lon boosts the site-analysis route)') },
     async (a) => {
