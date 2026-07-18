@@ -2239,7 +2239,7 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
 // throwing toString) through _chBump: the Map held 5 and Object.prototype stayed
 // clean. Flat backend work under any input is the whole outage argument.
 // Kill switch: DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 -> fully INERT.
-const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer']);
+const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen']);
 const _CH_METHODS = new Set(['initialize', 'tools/call']);
 const _CH_BEAT_MS = 60 * 60 * 1000;          // idle heartbeat: 1 POST/hour/replica
 const _chCounts = new Map();                 // `${kind}:${method}` -> n  (<=6 keys, ever)
@@ -8052,6 +8052,20 @@ app.post('/mcp', async (req, res) => {
     // already served statelessly below — challenge only where identity actually
     // matters: initialize (starts the OAuth handshake) and tools/call.
     const _challengeMethod = req.body?.method === 'initialize' || req.body?.method === 'tools/call';
+    // r-chatgpt-instrument (2026-07-17) — PASSIVE Phase-0 measurement. Issues NO 401 and
+    // changes NO behavior: it only COUNTS the anonymous, keyless, sessionless ChatGPT
+    // connector inits/calls that WOULD be challenge-eligible IF the OAuth challenge were
+    // widened to ChatGPT — sizing the cohort denominator so that decision is evidence-based
+    // rather than a blind auth change (the durable-identity "lever" is unproven; see
+    // reference_dchub_oauth_challenge_funnel). Reuses the existing challenge-count feed
+    // (read at GET /api/v1/mcp/oauth-challenge/state). Kill: the same
+    // DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 that gates _chBump. The Claude challenge below
+    // is UNCHANGED — this block only observes.
+    if (detectPlatformFromInit(req.body, userAgent) === 'chatgpt' && _challengeMethod
+        && !req.headers['x-api-key'] && !_workosAuthed
+        && !(sessionId && sessions.has(sessionId))) {
+      _chBump('chatgpt_connector_seen', req.body?.method);
+    }
     if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector && _challengeMethod
         && !req.headers['x-api-key'] && !_workosAuthed
         && !(sessionId && sessions.has(sessionId))) {
