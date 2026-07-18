@@ -34,7 +34,7 @@ jobs:
         run: |
           set -e
           # Canonical (the ONLY values allowed): 21,000+ facilities · 170+ countries
-          # · 3,000+ tracked deals · 311 markets · "DC Hub" (never "Nexus").
+          # · 1,400+ tracked deals · 311 markets · "DC Hub" (never "Nexus").
           FILES="mcp-server.json"
           [ -f integrations/chatgpt/openapi.json ] && FILES="$FILES integrations/chatgpt/openapi.json"
           [ -f README.md ] && FILES="$FILES README.md"
@@ -42,11 +42,11 @@ jobs:
           echo "Scanning: $FILES"
           # Patterns that must NEVER appear (extended regex, case-insensitive).
           # "232 …markets" is a hard-stale value that leaked to the Glama listing (canonical
-          # is 311). Deal-count 2,000+ is enforced by scripts/sync-tools-manifest.mjs instead
+          # is 311). Deal-count 1,400+ is enforced by scripts/sync-tools-manifest.mjs instead
           # (it scopes to the top-level description, skipping mcp-server.json's derived tools[]).
           PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus|232 ?(US )?(power |DCPI-scored |DCPI[- ])?markets?'
           if grep -rEni "$PAT" $FILES ; then
-            echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical: 21,000+ facilities · 170+ countries · 3,000+ tracked deals · DC Hub (not Nexus). Fix before this reaches the public registries."
+            echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical: 21,000+ facilities · 170+ countries · 1,400+ tracked deals · DC Hub (not Nexus). Fix before this reaches the public registries."
             exit 1
           fi
           echo "✅ registry source is clean — no stale numbers."

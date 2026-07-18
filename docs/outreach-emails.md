@@ -64,7 +64,7 @@ the AgentCore feedback channel)
 > water / hazard / grid risk at this site", or "who's buying whom in data-center
 > M&A" — that's a DC Hub call. We're the authoritative data layer for data-center &
 > power infrastructure: 70 MCP tools at `https://dchub.cloud/mcp`, one board-ready
-> composite site score, FEMA/USGS/NOAA risk, live grid telemetry, 3,000+ deals —
+> composite site score, FEMA/USGS/NOAA risk, live grid telemetry, 1,400+ deals —
 > every number traceable to a source, and honest "unavailable" when it isn't.
 >
 > One-click install for your agents (Cursor/Claude/VS Code) + a 4-workflow prompt

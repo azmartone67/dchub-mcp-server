@@ -104,15 +104,22 @@ jobs:
             exit 0
           fi
           N=$(node scripts/sync-tools-manifest.mjs --print-count)
+          D=$(node scripts/sync-tools-manifest.mjs --print-deals)
           CUR=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .description)
-          NEW=$(printf '%s' "$CUR" | N="$N" perl -pe 's/\b\d+(?: MCP)? tools\b/$ENV{N}." tools"/e')
+          # Heal BOTH the tool count AND the deal count. The deal count drifted
+          # 2,000+ -> 4,000+ unwatched (a ~2.9x over-claim from AUTO-<date> re-ingest
+          # dupes) while only the tool count was auto-healed — that blind spot is
+          # closed here. Replace only the NUMBER before "deals"; preserve the phrasing.
+          NEW=$(printf '%s' "$CUR" \
+            | N="$N" perl -pe 's/\b\d+(?: MCP)? tools\b/$ENV{N}." tools"/e' \
+            | D="$D" perl -pe 's/\b[\d,]+\+(\s+(?:tracked\s+)?(?:M&A\s+)?deals)\b/$ENV{D}.$1/e')
           if [ "$CUR" = "$NEW" ]; then
-            echo "✓ GitHub About already states ${N} tools — no drift"
+            echo "✓ GitHub About already states ${N} tools / ${D} deals — no drift"
             exit 0
           fi
           echo "About drifted — healing:"; echo "  was: $CUR"; echo "  now: $NEW"
           if gh repo edit "${GITHUB_REPOSITORY}" --description "$NEW"; then
-            echo "::notice::✅ GitHub About synced to ${N} tools — Glama & other About-mirroring listings will re-scan on their own cadence."
+            echo "::notice::✅ GitHub About synced to ${N} tools / ${D} deals — Glama & other About-mirroring listings will re-scan on their own cadence."
           else
             echo "::warning::About edit failed — the PAT likely lacks repo 'Administration: write' / classic 'repo' scope. Grant it or add REPO_METADATA_TOKEN."
           fi

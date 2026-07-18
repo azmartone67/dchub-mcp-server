@@ -49,10 +49,21 @@ const tools = canonicalTools();
 const COUNT = tools.length;
 const names = new Set(tools.map((t) => t.name));
 
+// Single source for the honest M&A deal-count phrase: DEDUPED distinct deals.
+// The raw ~4.3k deal-table row count is a ~2.9x over-claim (AUTO-<date> ingest
+// re-inserts one deal per day — one atNorth deal held 945 rows). Referenced by
+// --print-deals (the daily About/manifest heal) AND the drift-guard CANON below,
+// so the number lives in ONE place and the automated layer keeps it honest.
+const DEALS_FLOOR = '1,400+';
+
 // --print-count: emit the live tool count (from server.mjs) and exit. Lets the
 // daily-manifest-sync workflow feed the SAME source-of-truth number into the
 // GitHub About field, which aggregators (Glama) mirror but no manifest file owns.
 if (process.argv.includes('--print-count')) { console.log(COUNT); process.exit(0); }
+// --print-deals: emit the canonical deal-count phrase — same purpose. The daily
+// workflow heals the GitHub About deal count the same way it heals the tool count,
+// so the 2,000+ -> 4,000+ drift (that no auto-heal watched) cannot recur.
+if (process.argv.includes('--print-deals')) { console.log(DEALS_FLOOR); process.exit(0); }
 
 // ---- surfaces to keep in sync ---------------------------------------------
 const problems = [];
@@ -144,7 +155,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md']) {
 // (verified working, emits all 58). We therefore (1) assert glama.json stays
 // schema-valid, (2) keep server.json's positioning intact, and (3) lock the
 // coverage prose Glama re-derives from.
-const CANON = { markets: 311, dealsFloor: '1,400+' };
+const CANON = { markets: 311, dealsFloor: DEALS_FLOOR };
 {
   // (1) glama.json must stay schema-valid — an invalid manifest makes Glama drop the listing
   try {
@@ -171,7 +182,7 @@ const CANON = { markets: 311, dealsFloor: '1,400+' };
   // floors). 311 itself must NOT match.
   const STALE = [
     { rx: /\b(?:2\d{2}|300)\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
-    { rx: /\b[23][,.]?000\+/,                                                                  why: `stale deal count (canonical ${CANON.dealsFloor})` },
+    { rx: /\b[2-9][,.]?000\+/,                                                                 why: `stale deal count (canonical ${CANON.dealsFloor})` },  // was [23] — MISSED 4,000+ (the 2026-07-16 over-claim); [2-9] catches every round-thousand over-claim, never 1,400+ or 21,000+
   ];
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',

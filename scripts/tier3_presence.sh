@@ -25,7 +25,7 @@ fiber, capacity, and interconnection.)
 It exposes 58 tools + 6 guided prompts over: 21,000+ data-center facilities
 (170+ countries), 311 power markets scored by a Data Center Power Index (DCPI),
 real-time grid telemetry for 10 ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
-time-to-power), interconnection queues, fiber routes, gas pipelines, and 4,000+
+time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,400+
 tracked M&A deals.
 
 Two things I cared about: (1) it's remote (streamable-HTTP) so it works in Claude
@@ -74,7 +74,7 @@ assistant LIVE, citable ground truth on the infrastructure behind AI:
 → 21,000+ data-center facilities across 170+ countries
 → 311 markets scored by our Data Center Power Index (BUILD / CAUTION / AVOID)
 → Real-time grid telemetry for 10 ISOs — headroom, fuel mix, time-to-power
-→ Fiber routes, gas pipelines, interconnection queues, 4,000+ M&A deals
+→ Fiber routes, gas pipelines, interconnection queues, 1,400+ M&A deals
 
 58 tools + 6 guided prompts, free tier, and every figure is CC-BY-4.0 so agents
 can query AND cite it. Works in Claude, Cursor, VS Code, Cline.
