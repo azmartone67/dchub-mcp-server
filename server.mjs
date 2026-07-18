@@ -3867,14 +3867,25 @@ function _toolTitle(name) {
 // backend's DB-backed /tool-descriptions endpoint synchronously on EVERY session
 // init. Under load that hammered the backend's connection pool → pool exhaustion
 // → watchdog restart loop → site 502/404. NEVER put a synchronous, DB-touching
-// self-call in the init hot path. Fixed: a background refresher loads the 5 known
-// platforms ONCE at startup + every 30 min (5 calls/replica/30min, OFF the hot
-// path); init reads the in-process map SYNCHRONOUSLY with zero backend calls.
+// self-call in the init hot path. Fixed: a background refresher loads the known
+// tuned platforms ONCE at startup + every 30 min (N calls/replica/30min, OFF the
+// hot path); init reads the in-process map SYNCHRONOUSLY with zero backend calls.
 let _activeDescOverrides = null;  // set by createServer() during the SYNCHRONOUS
                                   // tool-registration block (concurrency-safe: the
                                   // body of createServer never awaits).
 const _DESC_BY_PLATFORM = new Map();                 // platform -> { tool: desc }
-const _DESC_KNOWN_PLATFORMS = ['claude', 'chatgpt', 'cline', 'cursor', 'perplexity'];
+// r-tuner-unshelf-all11 (2026-07-17): the warm cache loaded only the original 5
+// platforms, so the per-platform descriptions the tuner GENERATES + stores for the
+// 2026-07-11 expansion wave (gemini/grok/copilot/meta/deepseek/mistral) were never
+// fetched — those platforms silently fell back to generic copy despite real,
+// distinct overrides existing in mcp_tool_descriptions_per_platform. Load all 11.
+// Source of truth for this list: dchub-backend ai_platform_tool_tuner.TUNED_PLATFORMS
+// (canonical keys) — keep the two in sync when a platform is added. Cost is a
+// background Promise.all of 11 GETs once per 30 min per replica, OFF the hot path.
+const _DESC_KNOWN_PLATFORMS = [
+  'claude', 'chatgpt', 'cline', 'cursor', 'perplexity',           // original 5
+  'gemini', 'grok', 'copilot', 'meta', 'deepseek', 'mistral',     // 2026-07-11 wave
+];
 const _DESC_REFRESH_MS = 30 * 60 * 1000;
 let _descRefreshStarted = false;
 function _perPlatformDescDisabled() {
