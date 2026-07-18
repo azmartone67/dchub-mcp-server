@@ -526,6 +526,8 @@ function detectPlatform(ua = '') {
   if (u.includes('perplexity'))  return 'perplexity';
   if (u.includes('grok'))        return 'grok';
   if (u.includes('deepseek'))    return 'deepseek';
+  if (u.includes('cline'))       return 'cline';
+  if (u.includes('mistral') || u.includes('lechat') || u.includes('le-chat')) return 'mistral';
   if (u.includes('codex'))       return 'codex';
   if (u.includes('glama'))       return 'glama';
   if (u.includes('windsurf'))    return 'windsurf';
