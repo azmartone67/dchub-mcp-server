@@ -207,6 +207,10 @@ async function openPR(t, newContent, opts = {}) {
   let opened = 0;
   const readyLinks = [];   // blocked-but-ready: {key, compare} for the run summary
   for (const t of TARGETS) {
+    // Auto-discovered stubs land here with enabled:false (registry-discover.mjs
+    // opens the PR; a human vets the section + flips this). Skip until vetted so
+    // a placeholder `section` can never blind-insert our entry in the wrong spot.
+    if (t.enabled === false) { console.log(`  ⏸ ${t.key}: disabled stub — awaiting human vet (set enabled:true) — skip`); continue; }
     const res = await fetch(raw(t.upstream, t.base, t.path));
     if (!res.ok) { console.log(`  ~ ${t.key}: README fetch ${res.status} — skip`); continue; }
     const text = await res.text();

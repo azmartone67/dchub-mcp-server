@@ -26,6 +26,15 @@ const ISSUE_TITLE = '🔎 New MCP registry candidates (auto-discovery)';
 const MIN_STARS = Number(process.env.DISCOVER_MIN_STARS || 40);
 const MAX_CANDIDATES = Number(process.env.DISCOVER_MAX || 12);
 const LISTED_RE = /dchub|dc[\s-]?hub/i;
+// Onboard-PR half (2026-07-17): when LIVE, also open ONE same-repo PR that
+// appends a DISABLED TARGETS stub to registry-pr-submit.mjs, so onboarding is
+// propose-only-automated (a human vets the section + flips enabled:true) rather
+// than a manual edit. Same-repo → GITHUB_TOKEN with contents+pull-requests write
+// is enough (no PAT/fork). Kill-switch: DISCOVER_PR_DISABLE=1 keeps the tracking
+// issue but skips the PR.
+const SUBMIT_PATH = 'scripts/registry-pr-submit.mjs';
+const DEFAULT_BRANCH = process.env.DISCOVER_BASE_BRANCH || 'main';
+const PR_ENABLED = !['1', 'true', 'yes'].includes(String(process.env.DISCOVER_PR_DISABLE || '').toLowerCase());
 
 // Registries we ALREADY handle or have deliberately ruled out — keep in sync with
 // TARGETS in registry-pr-submit.mjs. A repo whose full_name matches any of these
@@ -76,6 +85,84 @@ async function readme(full, branch) {
   return null;
 }
 
+// Build a DISABLED TARGETS stub for a candidate. section/entry are placeholders
+// a human completes — auto-guessing a list's category is exactly what we must
+// NOT do (registry-pr-submit refuses to blind-append), so it ships enabled:false.
+function buildStub(c) {
+  const key = c.full.split('/').pop().replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
+  const text = [
+    `  // ── AUTO-DISCOVERED ${c.full} (★${c.stars}) — VET BEFORE ENABLING ──`,
+    `  // ${c.desc || 'curated MCP list'}`,
+    '  // TODO(human): confirm the README path + set the exact `section` header for',
+    '  // this list, then set enabled:true. Left disabled so the submit loop skips it',
+    '  // — a wrong section would blind-insert our entry in the wrong place.',
+    '  {',
+    `    key: '${key}', upstream: '${c.full}', base: '${c.base}', path: 'README.md',`,
+    '    enabled: false,',
+    '    listedRe: /dchub|dc[\\s-]?hub/i,',
+    "    section: '### TODO: set the exact section header from this list',",
+    '    alphabetical: false,',
+    '    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,',
+    '  },',
+  ].join('\n');
+  return { key, text };
+}
+
+// Insert the stub just before the TARGETS array's closing `];` (never touches
+// REFRESH_TARGETS, which closes later). Returns null if the array isn't found.
+function insertStub(src, stubText) {
+  const start = src.indexOf('const TARGETS = [');
+  if (start < 0) return null;
+  const close = src.indexOf('\n];', start);
+  if (close < 0) return null;
+  return src.slice(0, close) + '\n' + stubText + src.slice(close);
+}
+
+// Open ONE same-repo PR appending a disabled stub for the top not-yet-scaffolded
+// candidate. Idempotent (skips a candidate already referenced in the file, and a
+// branch/PR that already exists). Fail-soft: logs + returns on any hiccup.
+async function openScaffoldPR(candidates) {
+  const owner = SELF.split('/')[0];
+  const cur = await gh(`/repos/${SELF}/contents/${SUBMIT_PATH}`);
+  if (!cur.ok || !cur.json.content) { console.log(`  ! can't read ${SUBMIT_PATH} (${cur.status}) — skip scaffold PR`); return; }
+  const src = Buffer.from(cur.json.content, 'base64').toString('utf8');
+  const pick = candidates.find((c) => !src.includes(c.full));
+  if (!pick) { console.log('  ✓ all candidates already scaffolded in registry-pr-submit.mjs — no PR'); return; }
+  const { key, text } = buildStub(pick);
+  const branch = `discover/add-target-${key}`;
+  const open = await gh(`/repos/${SELF}/pulls?head=${owner}:${branch}&state=open`);
+  if (open.ok && Array.isArray(open.json) && open.json.length) { console.log(`  ↳ scaffold PR already open: ${open.json[0].html_url}`); return; }
+  const updated = insertStub(src, text);
+  if (!updated) { console.log('  ! TARGETS array not found — skip scaffold PR'); return; }
+  const ref = await gh(`/repos/${SELF}/git/ref/heads/${DEFAULT_BRANCH}`);
+  const baseSha = ref.json?.object?.sha;
+  if (!baseSha) { console.log(`  ! can't resolve ${DEFAULT_BRANCH} head — skip scaffold PR`); return; }
+  const mk = await gh(`/repos/${SELF}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }) });
+  if (!mk.ok && mk.status !== 422) { console.log(`  ! branch create failed ${mk.status} — skip`); return; }
+  const put = await gh(`/repos/${SELF}/contents/${SUBMIT_PATH}`, { method: 'PUT', body: JSON.stringify({
+    message: `chore(registry): scaffold onboarding target ${pick.full} (auto-discovery, disabled)`,
+    content: Buffer.from(updated, 'utf8').toString('base64'), branch, sha: cur.json.sha,
+  }) });
+  if (!put.ok) { console.log(`  ! contents PUT failed ${put.status} — skip`); return; }
+  const prBody = [
+    `Auto-discovered curated MCP list ${pick.full} (★${pick.stars}) that accepts PRs and does not yet list DC Hub.`,
+    '',
+    'Appends a DISABLED TARGETS stub to scripts/registry-pr-submit.mjs so onboarding is propose-only-automated.',
+    'Before merging: confirm the README path, set the exact section header, and flip enabled:true.',
+    'Left enabled:false so the submit loop skips it until vetted.',
+    '',
+    `List: ${pick.url}`,
+    '',
+    'Opened by registry-discover.mjs. Safe to close if the list is not a fit.',
+  ].join('\n');
+  const pr = await gh(`/repos/${SELF}/pulls`, { method: 'POST', body: JSON.stringify({
+    title: `Scaffold onboarding target: ${pick.full} (disabled — vet + enable)`,
+    head: branch, base: DEFAULT_BRANCH, body: prBody,
+  }) });
+  if (pr.ok) console.log(`  🆕 scaffold PR opened: ${pr.json.html_url}`);
+  else console.log(`  ! scaffold PR create failed ${pr.status}: ${JSON.stringify(pr.json).slice(0, 120)}`);
+}
+
 (async () => {
   console.log(`▶ registry-discover — mode=${LIVE ? 'LIVE (will file/refresh issue)' : 'REPORT-ONLY'} · min ★${MIN_STARS}\n`);
   if (!TOKEN) console.log('  (no token — GitHub search is unauthenticated; results may be rate-limited)\n');
@@ -113,6 +200,7 @@ async function readme(full, branch) {
     if (!(await prsEnabled(full))) { console.log(`  – ${full}: PRs disabled — skip`); continue; }
     candidates.push({
       full, stars: item.stargazers_count || 0, url: item.html_url,
+      base: item.default_branch || 'main',
       desc: (item.description || '').slice(0, 100),
     });
     if (candidates.length >= MAX_CANDIDATES) break;
@@ -153,5 +241,16 @@ async function readme(full, branch) {
       body: JSON.stringify({ title: ISSUE_TITLE, body, labels: ['registry', 'discovery'] }),
     });
     console.log(`\n  🆕 opened tracking issue: ${created.json.html_url || `(status ${created.status})`}`);
+  }
+
+  // Onboard proposal (propose-only-automated): open ONE same-repo PR appending a
+  // disabled TARGETS stub for the top candidate, gated for human merge. This is
+  // the "discover -> onboard" close: discovery no longer stops at a tracking
+  // issue a human must hand-translate into code.
+  if (PR_ENABLED) {
+    console.log('\n▶ scaffold onboarding PR:');
+    await openScaffoldPR(candidates);
+  } else {
+    console.log('\n  (scaffold PR disabled via DISCOVER_PR_DISABLE)');
   }
 })().catch((e) => { console.error('fatal:', e.message); process.exit(1); });

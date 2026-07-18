@@ -21,8 +21,9 @@ on:
         default: false
 
 permissions:
-  contents: read
-  issues: write
+  contents: write        # create the discover/add-target-* branch + commit the stub
+  issues: write          # file/refresh the tracking issue
+  pull-requests: write   # open the propose-only onboarding PR
 
 concurrency:
   group: registry-discover
