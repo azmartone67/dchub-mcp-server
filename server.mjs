@@ -1744,6 +1744,9 @@ const PRO_ONLY_TOOLS = new Set([
 // drives conversion. The paid line stays the DECISION layer, not the facts.
 const FREE_FULL_TOOLS = new Set([
   'get_grid_scoreboard',   // live global grid scoreboard — the flagship free hook
+  'get_permitting_intel',  // agentic wave 2026-07-18: NEW data axis (moratoriums/zoning) —
+                           // adoption-first, human-curated, small row count; free-full so
+                           // every agent learns DC Hub is the machine-readable source for it
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
   // audit item 2 (2026-06-30): the OpenAI Deep Research `search`/`fetch` pair return
@@ -3461,6 +3464,11 @@ const _ENTITY_MAP = {
   why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
   recover_my_key: 'meta', subscribe_digest: 'meta', set_market_alert: 'alert',
   set_site_alert: 'alert',
+  // agentic wave 2026-07-18
+  get_permitting_intel: 'permitting_records',
+  simulate_scenario: 'scenario_results',
+  research_task: 'research_dossier',
+  standing_intent: 'intent',
 };
 function _entityType(name) { return _ENTITY_MAP[name] || (name || 'record'); }
 
@@ -3855,6 +3863,10 @@ const _TOOL_TITLE_OVERRIDES = {
   score_facility: "Score Facility", ai_capacity_index: "AI Capacity Index",
   hyperscaler_deals: "Hyperscaler Deal Tracker", site_selection_canvas: "Site Selection Canvas",
   grid_transition_radar: "Grid Transition Radar", deal_autopsy: "Deal Autopsy",
+  get_permitting_intel: "Permitting & Moratorium Intel",
+  simulate_scenario: "Market Scenario Simulator",
+  research_task: "Research Dossier (async)",
+  standing_intent: "Standing Intents (webhook push)",
 };
 function _toolTitle(name) {
   return _TOOL_TITLE_OVERRIDES[name]
@@ -8259,6 +8271,91 @@ function createServer(descOverrides) {
         }))
       }]
     }));
+
+  // ── agentic wave (2026-07-18): MCP parity for the four rest_native
+  // endpoints announced in /api/v1/agent/tools-manifest. Backend module:
+  // dchub-backend/routes/agentic_master_shell.py.
+  trackedTool(srv, 'get_permitting_intel',
+    'Data center PERMITTING & MORATORIUM intelligence — curated, HUMAN-VERIFIED jurisdiction records: moratoriums, zoning restrictions, tax changes, utility pauses. Each record is stage-tagged (read the detail prefix: "Enacted" / "Proposed" / "Speculative"), with jurisdiction, state/country, the source article URL, and map coordinates. The permitting-risk axis for site selection that no other machine-readable source serves — e.g. New York\'s statewide >=50MW moratorium, county-level halts. FREE and full for every caller. Try: get_permitting_intel class=moratorium — or state=MN. Rendered live as the Permitting & Zoning layer on https://dchub.cloud/land-power-map. Do NOT use for tax INCENTIVE programs by state (use get_tax_incentives); this tracks restrictions and risk per jurisdiction.',
+    { state: S.describe('US state filter, e.g. NY or MN (optional)'),
+      class: S.describe('Record class: "moratorium" | "zoning" | "tax" | "utility_pause" (optional)') },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(
+      await callAPI('/api/v1/permitting/intel', { state: a.state, class: a.class })) }] }));
+
+  trackedTool(srv, 'simulate_scenario',
+    'Counterfactual WHAT-IF re-scoring of 316 DC Hub power markets under YOUR explicit deltas — answers "what happens to the market ranking if conditions change" (only DC Hub holds the underlying components). Params (all optional, pass at least one delta): avg_kwh_cents_pct (power-price % change, e.g. 30), time_to_power_months_delta (months added/removed), queue_wait_months_delta, reserve_margin_pct_delta (points), curtailment_pct_delta (points), market (one slug, e.g. abilene), top_n (default 10, max 25 — ranked by |score change|). Returns per-market baseline vs scenario composite + component breakdown + the EXACT formula/weights in every response (transparent scenario_composite — deliberately NOT the DCPI). Keyless callers get a top-3 preview; any live key (claim_free_key) returns up to 25. Try: simulate_scenario avg_kwh_cents_pct=30 top_n=10. Do NOT use for the present-day ranking (use rank_markets) or trajectory extrapolation (use predict_market_trajectory); this answers explicit hypotheticals.',
+    { avg_kwh_cents_pct: N.describe('Power price % change, e.g. 30 for +30% or -20 for -20%'),
+      time_to_power_months_delta: N.describe('Months added (+) or removed (-) from time-to-power, e.g. 12'),
+      queue_wait_months_delta: N.describe('Months added/removed from interconnection queue wait'),
+      reserve_margin_pct_delta: N.describe('Percentage POINTS added/removed from reserve margin, e.g. -5'),
+      curtailment_pct_delta: N.describe('Percentage POINTS added/removed from curtailment'),
+      market: S.describe('Score ONE market by slug (optional), e.g. abilene — slugs from rank_markets'),
+      top_n: z.number().int().min(1).max(25).optional().describe('Markets to return, ranked by |score delta| (default 10)') },
+    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(
+      await callAPI('/api/v1/agentic/scenario', {}, { method: 'POST', body: {
+        avg_kwh_cents_pct: a.avg_kwh_cents_pct,
+        time_to_power_months_delta: a.time_to_power_months_delta,
+        queue_wait_months_delta: a.queue_wait_months_delta,
+        reserve_margin_pct_delta: a.reserve_margin_pct_delta,
+        curtailment_pct_delta: a.curtailment_pct_delta,
+        market: a.market, top_n: a.top_n,
+      } })) }] }));
+
+  trackedTool(srv, 'research_task',
+    'Commission an ASYNC, CITED research dossier from DC Hub\'s corpora (news, deals, facilities, market deep-dive narratives + live market components) — a decision-ready analyst brief with [n] citations, not a lookup. Requires a key (one claim_free_key call), 5 dossiers/day. Submits the question, waits up to ~35s for completion, and returns the finished dossier inline when ready; if still running, returns {task_id} — call research_task task_id=<id> to fetch it. Params: question (required for a new dossier, min 12 chars) OR task_id (poll an earlier one). Typical completion under a minute. Try: research_task question="What do recent deals say about gas-bridged power for data centers in ERCOT?". Do NOT use for a single fact (use search_intelligence / semantic_search); this synthesizes ACROSS sources with citations.',
+    { question: S.describe('The research question (min 12 chars) — omit when polling with task_id'),
+      task_id: S.describe('Poll an earlier submission: the task_id returned by a previous research_task call') },
+    async (a) => {
+      if (a.task_id) {
+        return { content: [{ type: 'text', text: JSON.stringify(
+          await callAPI(`/api/v1/agentic/research/${encodeURIComponent(a.task_id)}`, {})) }] };
+      }
+      const sub = await callAPIWrite('/api/v1/agentic/research', { question: a.question });
+      if (!sub || !sub.task_id) {
+        return { content: [{ type: 'text', text: JSON.stringify(sub) }] };
+      }
+      // Short inline wait so most dossiers return in ONE tool call.
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 7000));
+        const st = await callAPI(`/api/v1/agentic/research/${sub.task_id}`, {});
+        if (st && (st.status === 'done' || st.status === 'error')) {
+          return { content: [{ type: 'text', text: JSON.stringify(st) }] };
+        }
+      }
+      return { content: [{ type: 'text', text: JSON.stringify({
+        ok: true, status: 'running', task_id: sub.task_id,
+        note: 'Dossier still synthesizing — call research_task task_id="'
+              + sub.task_id + '" in ~30s to fetch it.' }) }] };
+    });
+
+  trackedTool(srv, 'standing_intent',
+    'STANDING QUERIES with webhook push — register an intent once and DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: action ("register" default | "list" | "delete"), kind ("new_deal_in_market" watches deals in params market · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (public HTTPS only — private/internal hosts rejected), intent_id (for delete). Register returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Try: standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (use get_news / list_transactions) or email alerts (use set_market_alert); this is machine-to-machine push.',
+    { action: S.describe('"register" (default), "list" (your intents), or "delete" (needs intent_id)'),
+      kind: S.describe('Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change"'),
+      market: S.describe('For new_deal_in_market: the market/region substring to watch, e.g. columbus'),
+      q: S.describe('For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium'),
+      state: S.describe('For permitting_change: optional US state filter, e.g. MN'),
+      webhook_url: S.describe('Your public HTTPS webhook endpoint (required for register)'),
+      intent_id: S.describe('The intent_id to delete (from register/list)') },
+    async (a) => {
+      const act = String(a.action || 'register').toLowerCase();
+      let out;
+      if (act === 'list') {
+        out = await callAPI('/api/v1/agentic/intents', {});
+      } else if (act === 'delete') {
+        out = await callAPIWrite(
+          `/api/v1/agentic/intents/${encodeURIComponent(a.intent_id || '')}`,
+          {}, { method: 'DELETE' });
+      } else {
+        const params = {};
+        if (a.market) params.market = a.market;
+        if (a.q) params.q = a.q;
+        if (a.state) params.state = a.state;
+        out = await callAPIWrite('/api/v1/agentic/intents',
+          { kind: a.kind, params, webhook_url: a.webhook_url });
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
 
   // 2026-06-16: plan_fiber_leadin — diverse fibre lead-in route planner (backs the
   // land+power map's "Plan fibre routes" tool). Wraps the open /api/v1/route-plan.
