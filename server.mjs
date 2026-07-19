@@ -9301,8 +9301,22 @@ app.post('/mcp', async (req, res) => {
         && !(sessionId && sessions.has(sessionId))) {
       _chBump('chatgpt_connector_seen', req.body?.method);
     }
+    // r-api-connector-bearer (2026-07-19): Anthropic's MESSAGES-API MCP
+    // connector ships the same `User-Agent: Claude-User` as the claude.ai web
+    // connector but can only authenticate via `authorization_token` → a Bearer
+    // header. This challenge tested req.headers['x-api-key'] and never looked
+    // at the Bearer, so an API-connector call carrying a perfectly VALID
+    // dchub_live key was 401-challenged into an OAuth flow it cannot perform —
+    // every Messages-API eval against /mcp failed with "Authentication error"
+    // since the challenge shipped (July golden eval: 50/50 ERROR, silently
+    // green). Skip the challenge whenever ANY Bearer credential was presented:
+    // the r-invalid-bearer-401 gate right below already owns that cohort and
+    // does it correctly (validateKey() → valid key rides as X-API-Key → 200;
+    // junk/expired → 401 invalid_token). Keyless claude.ai web stays
+    // challenged exactly as designed.
     if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector && _challengeMethod
         && !req.headers['x-api-key'] && !_workosAuthed
+        && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))
         && !(sessionId && sessions.has(sessionId))) {
       // resource_metadata points at the FLASK-served document (not the stale CF
       // worker at /.well-known/*, which advertises custom scopes WorkOS rejects).
