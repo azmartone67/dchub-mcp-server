@@ -4512,7 +4512,10 @@ const _TOOL_OUTPUT_SCHEMAS = {
       published: _oStr('Publication timestamp'),
       actors: _oAny('Classified actors (OpenAI, Microsoft, Oracle, NVIDIA, sovereign-AI, …)'),
       value_usd: _oNum('Extracted deal value in USD (regex-extracted; null when undisclosed)'),
-      capacity: _oNum('Extracted capacity (MW/GW) when present'),
+      // r-capacity-object (2026-07-19): the backend enriched `capacity` from a
+      // bare number into {display:"1.6 GW", value:1600.0} — the number schema
+      // made EVERY hyperscaler_deals call fail output validation (-32602).
+      capacity: _oAny('Extracted capacity when present — {display, value_mw} object (was a bare number pre-2026-07)'),
     }), 'Live AI-capex deal feed entries, newest first'),
     result_count: _oNum('Number of deals returned'),
     computed_at: _oStr('Feed computation timestamp (10-min refresh)'),
