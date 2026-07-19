@@ -1747,6 +1747,13 @@ const FREE_FULL_TOOLS = new Set([
   'get_permitting_intel',  // agentic wave 2026-07-18: NEW data axis (moratoriums/zoning) —
                            // adoption-first, human-curated, small row count; free-full so
                            // every agent learns DC Hub is the machine-readable source for it
+  // agentic wave (2026-07-18): these three are BACKEND-gated — scenario serves
+  // a keyless top-3 preview itself; research/intents 401 without a key — so the
+  // MCP anon trim must NOT double-apply (verified live: it nulled scenario's
+  // deltas_applied and emptied results for anon callers).
+  'simulate_scenario',
+  'research_task',
+  'standing_intent',
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
   // audit item 2 (2026-06-30): the OpenAI Deep Research `search`/`fetch` pair return
