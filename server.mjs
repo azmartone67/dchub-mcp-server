@@ -1755,6 +1755,7 @@ const FREE_FULL_TOOLS = new Set([
   'research_task',
   'standing_intent',
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
+  'get_global_power',      // public GEM Global Integrated Power (CC-BY facts) — worldwide operating+planned power, same free-citation class
   'why_dchub',             // r-why-dchub (2026-06-21 growth audit): the positioning/"how do you compare" tool is a SALES asset — must be full + free so every agent session can answer "is DC Hub better than DCHawk/DC Byte/Baxtel?" with citable facts at the moment of intent.
   // audit item 2 (2026-06-30): the OpenAI Deep Research `search`/`fetch` pair return
   // ONLY public, crawlable facility-page fields (name, operator, location, status,
@@ -3466,7 +3467,7 @@ const _ENTITY_MAP = {
   get_dchub_recommendation: 'site', get_news: 'news', get_energy_prices: 'energy',
   get_renewable_energy: 'energy', get_tax_incentives: 'incentives', get_water_risk: 'risk',
   ai_capacity_index: 'index', get_intelligence_index: 'index', get_agent_registry: 'meta',
-  get_changes: 'changes', get_pipeline: 'pipeline', get_power_pipeline: 'pipeline',
+  get_changes: 'changes', get_pipeline: 'pipeline', get_power_pipeline: 'pipeline', get_global_power: 'pipeline',
   get_infrastructure: 'infrastructure', export_dataset: 'export', get_backup_status: 'meta',
   why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
   recover_my_key: 'meta', subscribe_digest: 'meta', set_market_alert: 'alert',
@@ -7497,6 +7498,46 @@ function createServer(descOverrides) {
         as_of: d && d.as_of,
         source: 'DC Hub — EIA-860M planned generators (dchub.cloud)',
         largest_projects: top,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+    });
+
+  // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the
+  // international operating + planned/UC asset set the US-federal feeds don't cover.
+  trackedTool(srv, 'get_global_power', 'Use when a user asks about power plants/units WORLDWIDE or in a NON-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Try: get_global_power country=India pipeline=true. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
+    { country: S.describe('Country/area name to filter, e.g. Germany, India, Brazil, Japan'),
+      fuel: S.describe('Fuel/type filter, comma-separated for a union: coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal'),
+      status: S.describe('Status substring filter, e.g. operating, construction, pre-construction, announced'),
+      pipeline: B.describe('true = ONLY the forward pipeline (announced + pre-construction + under-construction)'),
+      bbox: S.describe('Viewport filter as minLng,minLat,maxLng,maxLat'),
+      min_mw: N.describe('Minimum unit capacity in MW'),
+      limit: LIMIT },
+    async (a) => {
+      const q = { format: 'json', limit: Math.min((a && a.limit) || 800, 3000) };
+      if (a && a.country) q.country = a.country;
+      if (a && a.fuel) q.fuel = a.fuel;
+      if (a && a.pipeline) q.pipeline = '1';
+      else if (a && a.status) q.status = a.status;
+      if (a && a.bbox) q.bbox = a.bbox;
+      if (a && a.min_mw) q.min_mw = a.min_mw;
+      const d = await callAPI('/api/v1/global-power', q);
+      const units = (d && d.units) || [];
+      const byFuel = {}, byStatus = {}; let totalMw = 0;
+      for (const u of units) {
+        const mw = Number(u.capacity_mw) || 0; totalMw += mw;
+        const f = u.fuel_type || 'Unknown'; byFuel[f] = (byFuel[f] || 0) + mw;
+        const s = (u.status || 'Unknown'); byStatus[s] = (byStatus[s] || 0) + 1;
+      }
+      const top = units.slice().sort((x, y) => (Number(y.capacity_mw) || 0) - (Number(x.capacity_mw) || 0)).slice(0, 25);
+      const out = {
+        count: units.length,
+        total_units_worldwide: d && d.total,
+        total_capacity_mw: Math.round(totalMw),
+        by_fuel_mw: Object.fromEntries(Object.entries(byFuel).sort((p, r) => r[1] - p[1]).slice(0, 10).map(([k, v]) => [k, Math.round(v)])),
+        by_status: byStatus,
+        as_of: d && d.as_of,
+        source: 'DC Hub — GEM Global Integrated Power Tracker (CC-BY, dchub.cloud)',
+        largest_units: top,
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
