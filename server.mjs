@@ -9201,6 +9201,11 @@ app.get('/internal/sessions', (req, res) => {
 
 app.post('/mcp', async (req, res) => {
   try {
+    // r-apps-sdk-csp (2026-07-19): the ChatGPT App Directory (Apps SDK)
+    // review checks for a Content-Security-Policy on the MCP endpoint.
+    // These responses are JSON/SSE (never rendered HTML), so the strictest
+    // policy is free — inert for every existing client.
+    res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
     try { _chEnsureFlusher(); } catch (_) { /* r-oauth-funnel: never affect the handler */ }
