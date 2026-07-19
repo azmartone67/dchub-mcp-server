@@ -35,7 +35,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **21,000+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
 - **126,427 substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
-- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts (e.g. ERCOT ~225 GW of data-center load in the interconnection queue)
+- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts — including live large-load queue depth where the ISO publishes it (ERCOT is the only US ISO with a public data-center-scale large-load feed)
 - **1,400+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
