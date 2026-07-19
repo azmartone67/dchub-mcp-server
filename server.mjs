@@ -4749,8 +4749,28 @@ const _PLAN_CLASSES = [
       [/\bmetros?\b/i, 1], [/\bdcpi\b/i, 2], [/\bbuild.*(campus|cluster|data\s*cent)/i, 1.5],
       [/\bsite\s+selection\b/i, 1.5], [/\bcompare\s+markets\b/i, 2],
     ],
-    rationale: 'Shortlist first so every deeper read is scoped to minted metro_slugs — then the per-finalist DCPI and grid reality-checks fan out from one cheap ranking call.',
-    sequence: (d) => [
+    // r-planner-v4 (2026-07-19): the AI-workload branch. When the intent is an
+    // AI campus / GPU cluster / hyperscale build, LEAD with ai_capacity_index —
+    // the deployability-ranked tool (where N MW of AI load can LAND in 30/60/90
+    // days: depth + diversity + power composite, hyperscale_ready flag). Ranking
+    // by installed build-out (rank_markets' view) surfaces the most-saturated
+    // markets, which are often AVOID for new load — the exact miss the partner
+    // grading panel (Grok/Sonar/Mistral) flagged. General ranking stays the
+    // primary route for non-AI market questions.
+    rationale: (d) => d.ai
+      ? 'AI campuses are power-availability and time-to-power bound, not installed-capacity bound — so lead with ai_capacity_index (ranks where AI load can LAND), then reality-check each finalist on the live DCPI verdict and grid headroom. rank_markets\' installed-build-out ranking is the alternative, not the lead, because the most-built-out markets are frequently AVOID for new load.'
+      : 'Shortlist first so every deeper read is scoped to minted metro_slugs — then the per-finalist DCPI and grid reality-checks fan out from one cheap ranking call.',
+    sequence: (d) => d.ai ? [
+      { step: 1, tool: 'ai_capacity_index', depends_on: [], estimated_calls: 1,
+        why: 'AI-campus deployability ranking: where AI training capacity can LAND in the next 30/60/90 days (depth + diversity + power composite, hyperscale_ready flag) — the AI-workload-specific view that rank_markets\' installed-capacity ranking misses. The index is normalized to a 100 MW block; scale for a larger campus (e.g. ' + (d.mw ? Math.round(d.mw) + ' MW ≈ ' + Math.max(1, Math.round(d.mw / 100)) + '× the base block' : '200 MW ≈ 2× the base block') + ').',
+        args_hint: { horizon: 90, limit: 10 } },
+      { step: 2, tool: 'get_market_dcpi_rank', depends_on: [1], estimated_calls: 5,
+        why: 'BUILD/CAUTION/AVOID verdict, composite_score and time-to-power for each ai_capacity_index finalist — the reality-check that separates "buildable AI campus" from "saturated market".',
+        args_hint: { market_slug: '<slug from a step-1 finalist>' } },
+      { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 3,
+        why: 'Grid headroom + time-to-power for the finalists\' ISOs — an AI campus lives or dies on firm-power delivery date (canonical 100MW-in-90-days workflow)' + (d.iso ? '.' : ' — one call per distinct finalist ISO (est. ~3), all parallel.'),
+        args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
+    ] : [
       { step: 1, tool: 'rank_markets', depends_on: [], estimated_calls: 1,
         why: 'Shortlist the top DCPI markets by your criterion (recipe market_selection step 1) — each row carries a metro_slug.',
         args_hint: { criteria: 'best_overall', limit: 5, ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
@@ -4762,6 +4782,8 @@ const _PLAN_CLASSES = [
         args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
     ],
     alternatives: [
+      { tool: 'rank_markets', when: 'You want a GENERAL market ranking by installed capacity / operators / power cost — not AI-campus deployability.',
+        rejected_because: 'The intent read as an AI-campus build, which is bound by where new load can LAND (ai_capacity_index), not by which markets are already the most built out (rank_markets).' },
       { tool: 'ai_capacity_index', when: 'The question is "where can N MW land in ~90 days" — the pre-computed capacity-vs-time index.',
         rejected_because: 'The intent read as an open market ranking, not a capacity-vs-time lookup — the index answers a narrower question than rank_markets.' },
       { tool: 'get_dchub_recommendation', when: 'You want ONE call that returns a ready-to-quote siting answer instead of orchestrating steps yourself.',
@@ -5077,7 +5099,19 @@ export function _planSignals(intent, context) {
     : ((text.match(/\b(cand_[A-Za-z0-9_-]+)/) || [])[1] || null);
   const market = (c.market && String(c.market).trim()) || null;
   const since = (c.since && String(c.since).trim()) || null;
-  return { iso, mw, coords, state, candidateId, market, since };
+  // r-planner-v4 (2026-07-19): AI-workload signal. Grok/Sonar/Mistral (the
+  // partner grading panel) independently flagged that an "AI campus" intent
+  // was NOT reflected in the ranking — and rank_markets ranks by INSTALLED
+  // build-out, which surfaces the most-saturated (often AVOID) markets for
+  // NEW load. Detect the signal so the plan routes to ai_capacity_index (the
+  // deployability-ranked tool) instead of hinting a workload_type param that
+  // rank_markets does not accept. Explicit context.workload_type wins.
+  const ai = (() => {
+    const wt = c && (c.workload_type || c.workload);
+    if (wt && /\bai\b|gpu|train|infer|hpc|accelerat/i.test(String(wt))) return true;
+    return /\bai\b|a\.i\.|gpu|training|inference|hyperscal|accelerated\s+comput|ml\s+cluster|compute\s+campus/i.test(text);
+  })();
+  return { iso, mw, coords, state, candidateId, market, since, ai };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -5286,10 +5320,13 @@ export function _planQuery(intent, context) {
     workflow_confidence: wc.workflow_confidence,
     workflow_confidence_basis: wc.basis,
     reason: `Matched intent class "${top.cls.id}" (score ${Math.round(top.score * 100) / 100}) on: ${top.hits.slice(0, 5).join(', ') || 'context signals'}`
+      + (d.ai ? `; AI-workload signal detected → deployability-ranked route` : '')
       + (d.iso ? `; ISO detected: ${d.iso}` : '') + (d.mw ? `; capacity detected: ${d.mw} MW` : '')
       + (d.coords ? `; coordinates detected: ${d.coords.lat},${d.coords.lon}` : '')
       + (d.candidateId ? `; candidate_id supplied` : ''),
-    planner_rationale: top.cls.rationale,
+    // r-planner-v4: rationale may be a (d) => string for per-context branches.
+    planner_rationale: (typeof top.cls.rationale === 'function'
+      ? top.cls.rationale(d) : top.cls.rationale),
     recommended_sequence: seq,
     estimated_calls: estimatedCalls,
     parallelizable: waves.some((w) => w.length > 1),
@@ -5299,7 +5336,9 @@ export function _planQuery(intent, context) {
       note: _PLAN_ONLY_NOTE,
     },
     execution_estimate: _planExecutionEstimate(seq, waves),
-    alternatives: [...top.cls.alternatives, ...runnerUp],
+    // r-planner-v4: never list the CURRENT primary tool as its own alternative
+    // (a per-context branch can promote an alternative into best_tool).
+    alternatives: [...top.cls.alternatives.filter((a) => a.tool !== seq[0].tool), ...runnerUp],
     coverage_notes: top.cls.coverage_notes,
     matched_classes,
     ...(usesCandidates ? { chaining: chainNote } : {}),

@@ -12,8 +12,33 @@ describe('plan_query router (pure)', () => {
     expect(a).toEqual(b);
   });
 
+  it('r-planner-v4: AI-campus intent leads with ai_capacity_index, demotes rank_markets', () => {
+    // The partner grading panel (Grok/Sonar/Mistral) flagged that an AI-campus
+    // intent was ranked by installed build-out (rank_markets) — which surfaces
+    // saturated AVOID markets. AI campuses are deployability-bound, so lead with
+    // ai_capacity_index and keep rank_markets as the explained alternative.
+    const p = _planQuery('rank markets for a 200 MW AI campus', {});
+    expect(p.intent_class).toBe('market_ranking');
+    expect(p.best_tool).toBe('ai_capacity_index');
+    expect(p.recommended_sequence[0].tool).toBe('ai_capacity_index');
+    const altTools = p.alternatives.map((a) => a.tool);
+    expect(altTools).toContain('rank_markets');        // demoted, not dropped
+    expect(altTools).not.toContain('ai_capacity_index'); // never its own alternative
+    expect(p.reason).toMatch(/AI-workload signal/i);
+    // GPU / hyperscale market phrasings hit the same branch (the AI branch is
+    // scoped to market_ranking — a specific-SITE GPU intent still routes to
+    // site_analysis, which is correct).
+    expect(_planQuery('best markets for a GPU training buildout').best_tool).toBe('ai_capacity_index');
+    // explicit context.workload_type also triggers it
+    expect(_planQuery('rank the best markets', { workload_type: 'ai' }).best_tool).toBe('ai_capacity_index');
+    // a PLAIN market ranking is unaffected
+    expect(_planQuery('rank the best data-center markets in the US').best_tool).toBe('rank_markets');
+  });
+
   it('routes a market-ranking intent and carries every v2 field', () => {
-    const p = _planQuery('rank the best markets for a 200MW AI campus', {});
+    // r-planner-v4: use a PLAIN (non-AI) market intent so this covers the
+    // rank_markets lead; the AI-campus route is asserted separately above.
+    const p = _planQuery('rank the best data-center markets in the US', {});
     expect(p.intent_class).toBe('market_ranking');
     expect(p.best_tool).toBe('rank_markets');
     // dual confidences
@@ -137,7 +162,7 @@ describe('plan_query router (pure)', () => {
   // ── r-planner-v3: parallel_groups + execution_estimate + plan-only note ────
   describe('r-planner-v3 execution strategy & estimate', () => {
     it('market_ranking: pins parallel_groups + estimate (standard-tier waves)', () => {
-      const p = _planQuery('rank the best markets for a 200MW AI campus', {});
+      const p = _planQuery('rank the best data-center markets in the US', {});
       expect(p.intent_class).toBe('market_ranking');
       expect(p.execution_strategy.parallel_groups).toEqual([
         ['rank_markets'],
