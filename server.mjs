@@ -6437,7 +6437,30 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     // + all-optional, so neither can reject a real payload.
     outputSchema: _TOOL_OUTPUT_SCHEMAS[name] || _OUTPUT_ENVELOPE,
     annotations: _annot,
-  }, async (args, extra) => _ensureStructured(await _stamped(args, extra)));
+  }, async (args, extra) => _scrubCommerce(_ensureStructured(await _stamped(args, extra))));
+}
+
+// r-chatgpt-commerce-scrub (2026-07-19): OpenAI's App Directory supports
+// PHYSICAL-goods link-outs only — checkout deep-links for API credits
+// (digital goods) are a rejection class. For ChatGPT-platform sessions only,
+// replace every Stripe checkout URL in tool results with the plain pricing
+// page (informational, no checkout). Every other platform keeps full
+// monetization. Runs at the single tool-dispatch chokepoint, BEFORE the SDK
+// serializes (no content-length concerns). Kill switch:
+// DCHUB_CHATGPT_COMMERCE_SCRUB_DISABLE=1.
+const _STRIPE_URL_RE = /https:\/\/(?:buy|checkout)\.stripe\.com\/[^\s"'\\)\]}>]+/g;
+function _scrubCommerce(result) {
+  try {
+    if (/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CHATGPT_COMMERCE_SCRUB_DISABLE || ''))) return result;
+    let plat = '';
+    try { plat = (getCtx() && getCtx().platform) || ''; } catch (_) {}
+    if (String(plat).toLowerCase() !== 'chatgpt') return result;
+    const s = JSON.stringify(result);
+    if (!s.includes('stripe.com')) return result;
+    return JSON.parse(s.replace(_STRIPE_URL_RE, 'https://dchub.cloud/pricing'));
+  } catch (_) {
+    return result;  // never break a tool response over the scrub
+  }
 }
 
 // r-scoreboard-cache-hoist (2026-06-27): MODULE-SCOPE cache for get_grid_scoreboard.
