@@ -1951,7 +1951,7 @@ const CLAIM_CAROT_COPY = String(process.env.CLAIM_CAROT_COPY || 'on').toLowerCas
 const DEPTH_TEASE_KEEP = 3;   // owner's preview: "top 3-5 rows shown"
 function _isPaidDepthTier(t) {
   // Developer ($49) and up get full depth. founding==pro (tier_registry.py).
-  return ['paid', 'enterprise', 'developer', 'pro', 'founding'].includes(String(t || '').toLowerCase());
+  return ['paid', 'enterprise', 'developer', 'starter', 'pro', 'founding'].includes(String(t || '').toLowerCase());
 }
 // Like trimForTrial but keeps the TOP-N of each array (a more generous taste
 // than the anon top-1) and records the honest full count in a side field.
@@ -5435,6 +5435,18 @@ function trackedTool(srv, name, description, schema, handler) {
     }
     try {
       let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
+      // r-starterdev-parity (2026-07-20): $9 Starter / $49 Developer are paid-class
+      // for every tool EXCEPT the Pro-only set. The backend hands us the literal tier
+      // ('starter'/'developer'; the Stripe webhook stamps starter->developer), but the
+      // paid gates below only recognized 'paid'/'enterprise' — so these PAYING customers
+      // were silently gated to free previews (PAID_ONLY tools blocked + free result caps).
+      // Normalize to 'paid' for NON-Pro tools so the access gate, credit cascade, metered
+      // wall and depth-tease all treat them correctly; leave them as-is on PRO_ONLY tools
+      // so those still hit the Pro upgrade wall (PRO_ONLY is a subset of PAID_ONLY, so
+      // applyTierGate below blocks them for the un-normalized 'developer'/'starter' tier).
+      if ((_gateTier === 'developer' || _gateTier === 'starter') && !PRO_ONLY_TOOLS.has(name)) {
+        _gateTier = 'paid';
+      }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
