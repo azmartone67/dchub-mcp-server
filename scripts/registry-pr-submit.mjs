@@ -57,6 +57,19 @@ const TARGETS = [
     alphabetical: false,
     entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (311 US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 1,400+ M&A deals; 73 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
   },
+  // ── AUTO-DISCOVERED YuzeHao2023/Awesome-MCP-Servers (★1051) — VET BEFORE ENABLING ──
+  // A curated list of Model Context Protocol (MCP) servers 
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-mcp-servers', upstream: 'YuzeHao2023/Awesome-MCP-Servers', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
