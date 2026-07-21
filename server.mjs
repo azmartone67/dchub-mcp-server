@@ -555,30 +555,52 @@ function detectPlatform(ua = '') {
 //   "windsurf"            → Windsurf IDE
 //   "openai-chat"         → ChatGPT (when MCP-enabled)
 //   ...etc
-function detectPlatformFromInit(body, ua = '') {
+function _KNOWN_PLATFORM_FROM_NAME(name) {
+  // r-platform-header (2026-07-20): the KNOWN-platform substring vocabulary,
+  // shared by clientInfo detection AND the explicit platform header. Returns a
+  // canonical platform, or '' when the name matches no known platform — so a
+  // header can NEVER mint an arbitrary platform or dodge the junk screen below.
+  const n = (name || '').toString().toLowerCase();
+  if (!n) return '';
+  if (n.includes('claude'))      return 'claude';
+  if (n.includes('chatgpt') || n.includes('openai')) return 'chatgpt';
+  if (n.includes('cursor'))      return 'cursor';
+  if (n.includes('cline'))       return 'cline';
+  if (n.includes('continue'))    return 'continue';
+  if (n.includes('windsurf'))    return 'windsurf';
+  if (n.includes('copilot'))     return 'copilot';
+  if (n.includes('codex'))       return 'codex';
+  if (n.includes('gemini'))      return 'gemini';
+  if (n.includes('perplexity'))  return 'perplexity';
+  if (n.includes('grok'))        return 'grok';
+  if (n.includes('deepseek'))    return 'deepseek';
+  if (n.includes('cohere'))      return 'cohere';
+  if (n.includes('groq'))        return 'groq';
+  if (n.includes('nvidia'))      return 'nvidia';
+  if (n.includes('mistral'))     return 'mistral';
+  if (n.includes('kimi') || n.includes('moonshot')) return 'kimi';
+  if (n.includes('glama'))       return 'glama';
+  if (n.includes('meta'))        return 'meta';
+  if (n.includes('huggingface') || n.includes('hf-space')) return 'huggingface';
+  if (n.includes('smithery'))    return 'smithery';
+  if (n.includes('mcp-inspector')) return 'mcp-inspector';
+  return '';
+}
+
+function detectPlatformFromInit(body, ua = '', explicitHint = '') {
+  // r-platform-header (2026-07-20): an explicit platform header
+  // (X-MCP-Platform / X-Client-Source) wins FIRST — but ONLY when it names a
+  // KNOWN platform, through the SAME vocabulary as clientInfo. Enterprise
+  // deployments whose MCP client ships a generic clientInfo='mcp' (Gemini
+  // custom-MCP data stores, the HF Space bridge) can attribute their real
+  // tool-use; an unknown hint can't mint a platform — it falls through to
+  // clientInfo / UA detection, so crawl traffic can't be brand-attributed.
+  const hinted = _KNOWN_PLATFORM_FROM_NAME(explicitHint);
+  if (hinted) return hinted;
   const clientName = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
   if (clientName) {
-    // Direct matches first (specific MCP client IDs)
-    if (clientName.includes('claude'))      return 'claude';
-    if (clientName.includes('chatgpt') || clientName.includes('openai')) return 'chatgpt';
-    if (clientName.includes('cursor'))      return 'cursor';
-    if (clientName.includes('cline'))       return 'cline';
-    if (clientName.includes('continue'))    return 'continue';
-    if (clientName.includes('windsurf'))    return 'windsurf';
-    if (clientName.includes('copilot'))     return 'copilot';
-    if (clientName.includes('codex'))       return 'codex';
-    if (clientName.includes('gemini'))      return 'gemini';
-    if (clientName.includes('perplexity'))  return 'perplexity';
-    if (clientName.includes('grok'))        return 'grok';
-    if (clientName.includes('deepseek'))    return 'deepseek';
-    if (clientName.includes('cohere'))      return 'cohere';
-    if (clientName.includes('groq'))        return 'groq';
-    if (clientName.includes('nvidia'))      return 'nvidia';
-    if (clientName.includes('mistral'))     return 'mistral';
-    if (clientName.includes('kimi') || clientName.includes('moonshot')) return 'kimi';
-    if (clientName.includes('glama'))       return 'glama';
-    if (clientName.includes('meta'))        return 'meta';
-    if (clientName.includes('mcp-inspector')) return 'mcp-inspector';
+    const known = _KNOWN_PLATFORM_FROM_NAME(clientName);
+    if (known) return known;
     // Else: ship the raw clientInfo.name as the platform tag (lowercase,
     // truncated, alphanumeric-safe) so the citations endpoint can show
     // distinct platforms even before we add a rule for each.
@@ -9389,6 +9411,12 @@ app.post('/mcp', async (req, res) => {
     res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
+    // r-platform-header (2026-07-20): explicit platform attribution header —
+    // X-MCP-Platform (the HF Space bridge already sends this) or X-Client-Source
+    // (Gemini enterprise). Only a KNOWN-platform value is honored (see
+    // detectPlatformFromInit); an unknown value is ignored, so it can't mint a
+    // platform or brand-attribute crawl. The CF worker forwards custom X- headers.
+    const platformHeader = (req.headers['x-mcp-platform'] || req.headers['x-client-source'] || '').toString();
     try { _chEnsureFlusher(); } catch (_) { /* r-oauth-funnel: never affect the handler */ }
     // r-alias (2026-07-10): normalize a GUESSED tool name to the real one here —
     // BEFORE the session/stateless branch — so it applies on EVERY tools/call
@@ -9485,7 +9513,7 @@ app.post('/mcp', async (req, res) => {
     // (read at GET /api/v1/mcp/oauth-challenge/state). Kill: the same
     // DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 that gates _chBump. The Claude challenge below
     // is UNCHANGED — this block only observes.
-    if (detectPlatformFromInit(req.body, userAgent) === 'chatgpt' && _challengeMethod
+    if (detectPlatformFromInit(req.body, userAgent, platformHeader) === 'chatgpt' && _challengeMethod
         && !req.headers['x-api-key'] && !_workosAuthed
         && !(sessionId && sessions.has(sessionId))) {
       _chBump('chatgpt_connector_seen', req.body?.method);
@@ -9617,7 +9645,7 @@ app.post('/mcp', async (req, res) => {
     if (body?.method === 'initialize') {
       // r47.30 (2026-05-26): use clientInfo.name as the canonical source
       // (UA is a noisy fallback — most MCP clients ship "node" as UA).
-      const platform   = detectPlatformFromInit(body, userAgent);
+      const platform   = detectPlatformFromInit(body, userAgent, platformHeader);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
 
@@ -9711,7 +9739,7 @@ app.post('/mcp', async (req, res) => {
     // mode is unchanged (enableJsonResponse left unset, matching the stateful
     // transport above) so Smithery's existing SSE consumption is unaffected.
     if (body?.method === 'tools/list' || body?.method === 'ping') {
-      const platform = detectPlatformFromInit(body, userAgent);
+      const platform = detectPlatformFromInit(body, userAgent, platformHeader);
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
       // r-list-swr (2026-07-11): serve BOTH of these caller-independent methods
@@ -9778,7 +9806,7 @@ app.post('/mcp', async (req, res) => {
     // Kill switch: DCHUB_STATELESS_CALL_DISABLE=1 → falls back to the r-session-404.
     if (body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
-      const platform   = detectPlatformFromInit(body, userAgent);
+      const platform   = detectPlatformFromInit(body, userAgent, platformHeader);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
       let _descOverrides = null;
