@@ -88,6 +88,10 @@ describe('plan_query router (pure)', () => {
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
     expect(REPLAY_DECISION_STATUSES).toEqual(     // full lifecycle published
       ['planned', 'running', 'completed', 'failed', 'skipped', 'cancelled']);
+    // compatibility contract published in-object (ChatGPT: publish the policy)
+    expect(r.compatibility.schema_version).toBe(1);
+    expect(r.compatibility.schema_v1).toMatch(/additive-only/i);
+    expect(r.compatibility.breaking_changes).toMatch(/schema_version/i);
     // r-planner-v5.1 field names: decisions / rationale / decision_confidence / status
     // D0 is the routing decision, carrying intent_confidence; D1..Dn mirror steps
     expect(r.decision_log).toBeUndefined();      // renamed → decisions

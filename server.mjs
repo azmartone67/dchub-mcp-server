@@ -4718,6 +4718,7 @@ const _TOOL_OUTPUT_SCHEMAS = {
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so a planner routing rev (5.1→5.2) leaves it untouched.'),
       planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 field renames → 5.2 new intent classes). Distinct from schema_version.'),
+      compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
       decisions: _oArr(z.looseObject({
@@ -5398,6 +5399,14 @@ export const REPLAY_SCHEMA_VERSION = 1;
 // Full decision lifecycle, PUBLISHED now so SDKs can code all states even though
 // plan_query only ever emits 'planned' today (it never executes).
 export const REPLAY_DECISION_STATUSES = ['planned', 'running', 'completed', 'failed', 'skipped', 'cancelled'];
+// r-planner-v5.2 (ChatGPT SDK-author review): the compatibility contract SDK
+// authors build against — published IN the object so "stable" is unambiguous.
+export const REPLAY_COMPATIBILITY = {
+  schema_version: 1,
+  schema_v1: 'additive-only — new optional fields may appear; no field is removed or changes meaning',
+  planner_version: 'may change routing, confidence values, recommended tool sequences, and intent coverage WITHOUT changing the schema — do not pin it for shape',
+  breaking_changes: 'only ever at a new schema_version (e.g. 2), and intentionally — pin schema_version to stay safe',
+};
 
 export function _planReplay(sc) {
   const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
@@ -5423,6 +5432,7 @@ export function _planReplay(sc) {
     // `replay` alone without reaching back to the top-level plan object.
     schema_version: REPLAY_SCHEMA_VERSION,
     planner_version: PLANNER_VERSION,
+    compatibility: REPLAY_COMPATIBILITY,
     intent: sc.intent,
     intent_class: sc.intent_class,
     decisions,
