@@ -5387,7 +5387,7 @@ export function _planWorkflowConfidence(seq, d) {
 // planner_version. Deferred to keep parity with the top-level output: intent_class
 // (mirrors plan_query.intent_class) and execution_graph.parallel_groups (mirrors
 // execution_strategy.parallel_groups). Versioning is what makes this a safe swap.
-export const PLANNER_VERSION = '5.1';
+export const PLANNER_VERSION = '5.2';  // 5.1 = replay field renames; 5.2 = capacity_search + market_comparison routing
 
 export function _planReplay(sc) {
   const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
