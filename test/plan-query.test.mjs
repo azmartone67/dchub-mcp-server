@@ -78,18 +78,20 @@ describe('plan_query router (pure)', () => {
     // versioned so downstream tooling can pin a shape
     expect(typeof r.planner_version).toBe('string');
     expect(r.planner_version).toBe(PLANNER_VERSION);
+    // r-planner-v5.1 field names: decisions / rationale / decision_confidence / status
     // D0 is the routing decision, carrying intent_confidence; D1..Dn mirror steps
-    expect(r.decision_log[0]).toMatchObject({ id: 'D0', step: 0, kind: 'route' });
-    expect(r.decision_log[0].confidence).toBe(p.intent_confidence);
-    expect(r.decision_log[0].because).toBe(p.reason);
-    expect(r.decision_log.length).toBe(1 + p.recommended_sequence.length);
+    expect(r.decision_log).toBeUndefined();      // renamed → decisions
+    expect(r.decisions[0]).toMatchObject({ id: 'D0', step: 0, kind: 'route', status: 'planned' });
+    expect(r.decisions[0].decision_confidence).toBe(p.intent_confidence);
+    expect(r.decisions[0].rationale).toBe(p.reason);
+    expect(r.decisions.length).toBe(1 + p.recommended_sequence.length);
     for (let i = 0; i < p.recommended_sequence.length; i++) {
       const step = p.recommended_sequence[i];
-      const entry = r.decision_log[i + 1];
-      expect(entry).toMatchObject({ id: `D${step.step}`, step: step.step, kind: 'step' });
+      const entry = r.decisions[i + 1];
+      expect(entry).toMatchObject({ id: `D${step.step}`, step: step.step, kind: 'step', status: 'planned' });
       expect(entry.decision).toContain(step.tool);
-      expect(entry.because).toBe(step.why);
-      expect(entry.confidence).toBe(p.workflow_confidence);
+      expect(entry.rationale).toBe(step.why);
+      expect(entry.decision_confidence).toBe(p.workflow_confidence);
     }
     // rejected mirrors alternatives, with stable ids + the rejection reason
     expect(r.rejected.length).toBe(p.alternatives.length);
@@ -112,7 +114,8 @@ describe('plan_query router (pure)', () => {
     expect(a.replay).toEqual(b.replay); // determinism preserved end-to-end
     const fb = _planQuery('zxcv qwerty asdf nonsense', {});
     expect(fb.intent_class).toBe('unknown');
-    expect(fb.replay.decision_log[0].id).toBe('D0');
+    expect(fb.replay.decisions[0].id).toBe('D0');
+    expect(fb.replay.decisions[0].status).toBe('planned');
     expect(fb.replay.planner_version).toBe(PLANNER_VERSION);
   });
 

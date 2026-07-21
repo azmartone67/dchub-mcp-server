@@ -4716,16 +4716,17 @@ const _TOOL_OUTPUT_SCHEMAS = {
     chaining: _oAny('Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue → analyze_site / rank_sites'),
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
-      planner_version: _oStr('Semantic version of the planner that produced this trail — bump when routing/output changes so downstream tooling can pin a shape (r-planner-v5, ChatGPT orchestration feedback)'),
+      planner_version: _oStr('Semantic version of the planner that produced this trail — bump when routing/output changes so downstream tooling can pin a shape (r-planner-v5.1, ChatGPT schema review)'),
       intent: _oStr('The routed intent (echoed)'),
-      intent_class: _oStr('The matched intent class'),
-      decision_log: _oArr(z.looseObject({
+      intent_class: _oStr('The matched intent class (mirrors plan_query.intent_class)'),
+      decisions: _oArr(z.looseObject({
         id: _oStr('Stable decision id — D0 = routing decision, D1..Dn = per-step selections; cite as "Decision D2"'),
         step: _oNum('0 for the routing decision, else the 1-based step number'),
         kind: _oStr('"route" (the intent→class decision) or "step" (a tool selection)'),
+        status: _oStr('"planned" — plan_query never executes; reserved so planning + (future) execution can share one object'),
         decision: _oStr('What the planner decided (route to a class / call a tool)'),
-        because: _oStr('The deterministic reason for the decision'),
-        confidence: _oNum('0-1 — intent_confidence for the routing decision, workflow_confidence for step decisions'),
+        rationale: _oStr('The deterministic reason for the decision'),
+        decision_confidence: _oNum('0-1 — intent_confidence for the routing decision, workflow_confidence for step decisions'),
         depends_on: _oAny('Step numbers this step depends on (step decisions only)'),
       }), 'The ordered, auditable decision trail — one route decision + one per recommended step'),
       rejected: _oArr(z.looseObject({
@@ -4735,7 +4736,7 @@ const _TOOL_OUTPUT_SCHEMAS = {
       }), 'Roads not taken, with reasons — the "why not" half of the audit trail'),
       execution_graph: _oAny('{waves: number[][], parallel_groups: string[][]} — the concurrency graph the plan executes as'),
       note: _oStr('How to read + cite the replay; plan-only disclaimer'),
-    }, 'FIRST-CLASS VERSIONED replay object (r-planner-v5, ChatGPT orchestration feedback): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each with a stable id, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
+    }, 'FIRST-CLASS VERSIONED replay object (r-planner-v5.1, ChatGPT schema review): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each decision with a stable id + status, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
   }).describe('Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry — keyword/regex routing, no LLM, same intent → same plan — plus a versioned replay decision-trail, alongside the DC Hub envelope keys.'),
 };
 
@@ -5281,21 +5282,33 @@ export function _planWorkflowConfidence(seq, d) {
 // Purely additive — no existing field changes, no new network. plan_query NEVER
 // executes, so the replay covers PLANNING decisions only; execution/evidence
 // IDs are minted by the caller when it runs the plan.
-export const PLANNER_VERSION = '5.0';
+// r-planner-v5.1 (2026-07-20): pre-freeze naming pass from ChatGPT's schema
+// review, applied while no external consumer had built against v5.0 yet:
+//   decision_log -> decisions   (chronology is implied; shorter reads better)
+//   because      -> rationale   (standard engineering term, reads better in logs)
+//   confidence   -> decision_confidence   ("confidence in WHAT?" — make it explicit)
+//   + status per decision       (always 'planned' today; plan_query never executes,
+//                                but this reserves the field for when execution IDs
+//                                land, so planning + execution can share one object)
+// Kept as-is (ChatGPT endorsed): D0/D1/R1 ids, execution_graph, rejected, depends_on,
+// planner_version. Deferred to keep parity with the top-level output: intent_class
+// (mirrors plan_query.intent_class) and execution_graph.parallel_groups (mirrors
+// execution_strategy.parallel_groups). Versioning is what makes this a safe swap.
+export const PLANNER_VERSION = '5.1';
 
 export function _planReplay(sc) {
   const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
   const alts = Array.isArray(sc.alternatives) ? sc.alternatives : [];
-  const decision_log = [
-    { id: 'D0', step: 0, kind: 'route',
+  const decisions = [
+    { id: 'D0', step: 0, kind: 'route', status: 'planned',
       decision: `Route intent → class "${sc.intent_class}", lead with ${sc.best_tool}`,
-      because: sc.reason,
-      confidence: sc.intent_confidence },
+      rationale: sc.reason,
+      decision_confidence: sc.intent_confidence },
     ...seq.map((s) => ({
-      id: `D${s.step}`, step: s.step, kind: 'step',
+      id: `D${s.step}`, step: s.step, kind: 'step', status: 'planned',
       decision: `Call ${s.tool}`,
-      because: s.why,
-      confidence: sc.workflow_confidence,
+      rationale: s.why,
+      decision_confidence: sc.workflow_confidence,
       depends_on: Array.isArray(s.depends_on) ? s.depends_on : [] })),
   ];
   const rejected = alts.map((a, i) => ({
@@ -5305,12 +5318,12 @@ export function _planReplay(sc) {
     planner_version: PLANNER_VERSION,
     intent: sc.intent,
     intent_class: sc.intent_class,
-    decision_log,
+    decisions,
     rejected,
     execution_graph: {
       waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
       parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
-    note: 'Auditable planning trail: decision_log (D0 = routing, D1..Dn = per-step selections) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". Stable within a planner_version; execution/evidence IDs are minted by the caller at run time — plan_query never executes.',
+    note: 'Auditable planning trail: decisions (D0 = routing, D1..Dn = per-step selections; status="planned" — plan_query never executes) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". Stable within a planner_version; execution/evidence IDs are minted by the caller at run time.',
   };
 }
 
