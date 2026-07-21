@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { _planQuery, _planSignals, _planWaves, _planWorkflowConfidence,
          _planExecutionEstimate, _planParallelGroups, _planReplay,
-         PLANNER_VERSION } from '../server.mjs';
+         PLANNER_VERSION, REPLAY_SCHEMA_VERSION, REPLAY_DECISION_STATUSES } from '../server.mjs';
 
 describe('plan_query router (pure)', () => {
   it('is deterministic: same intent + context → identical plan', () => {
@@ -78,6 +78,16 @@ describe('plan_query router (pure)', () => {
     // versioned so downstream tooling can pin a shape
     expect(typeof r.planner_version).toBe('string');
     expect(r.planner_version).toBe(PLANNER_VERSION);
+    // r-planner-v5.2 (ChatGPT SDK review): schema_version is independent of
+    // planner_version; replay is self-contained; status publishes the full enum.
+    expect(r.schema_version).toBe(REPLAY_SCHEMA_VERSION);
+    expect(r.schema_version).toBe(1);
+    expect(r.planner_version).toBe('5.2');       // planner behavior rev...
+    expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
+    expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
+    expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
+    expect(REPLAY_DECISION_STATUSES).toEqual(     // full lifecycle published
+      ['planned', 'running', 'completed', 'failed', 'skipped', 'cancelled']);
     // r-planner-v5.1 field names: decisions / rationale / decision_confidence / status
     // D0 is the routing decision, carrying intent_confidence; D1..Dn mirror steps
     expect(r.decision_log).toBeUndefined();      // renamed → decisions

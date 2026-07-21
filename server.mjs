@@ -4716,14 +4716,15 @@ const _TOOL_OUTPUT_SCHEMAS = {
     chaining: _oAny('Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue → analyze_site / rank_sites'),
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
-      planner_version: _oStr('Semantic version of the planner that produced this trail — bump when routing/output changes so downstream tooling can pin a shape (r-planner-v5.1, ChatGPT schema review)'),
-      intent: _oStr('The routed intent (echoed)'),
-      intent_class: _oStr('The matched intent class (mirrors plan_query.intent_class)'),
+      schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so a planner routing rev (5.1→5.2) leaves it untouched.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 field renames → 5.2 new intent classes). Distinct from schema_version.'),
+      intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
+      intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
       decisions: _oArr(z.looseObject({
         id: _oStr('Stable decision id — D0 = routing decision, D1..Dn = per-step selections; cite as "Decision D2"'),
         step: _oNum('0 for the routing decision, else the 1-based step number'),
         kind: _oStr('"route" (the intent→class decision) or "step" (a tool selection)'),
-        status: _oStr('"planned" — plan_query never executes; reserved so planning + (future) execution can share one object'),
+        status: _oStr('Decision lifecycle — one of planned | running | completed | failed | skipped | cancelled. plan_query only ever emits "planned" (it never executes); the full enum is published now so consumers can code the whole lifecycle without an SDK bump later.'),
         decision: _oStr('What the planner decided (route to a class / call a tool)'),
         rationale: _oStr('The deterministic reason for the decision'),
         decision_confidence: _oNum('0-1 — intent_confidence for the routing decision, workflow_confidence for step decisions'),
@@ -5388,6 +5389,15 @@ export function _planWorkflowConfidence(seq, d) {
 // (mirrors plan_query.intent_class) and execution_graph.parallel_groups (mirrors
 // execution_strategy.parallel_groups). Versioning is what makes this a safe swap.
 export const PLANNER_VERSION = '5.2';  // 5.1 = replay field renames; 5.2 = capacity_search + market_comparison routing
+// r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
+// planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
+// touching the replay object's SHAPE. SDK consumers pin schema_version (the
+// field set), not planner_version (the behavior). Bump only when the shape
+// changes in a breaking way.
+export const REPLAY_SCHEMA_VERSION = 1;
+// Full decision lifecycle, PUBLISHED now so SDKs can code all states even though
+// plan_query only ever emits 'planned' today (it never executes).
+export const REPLAY_DECISION_STATUSES = ['planned', 'running', 'completed', 'failed', 'skipped', 'cancelled'];
 
 export function _planReplay(sc) {
   const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
@@ -5408,6 +5418,10 @@ export function _planReplay(sc) {
     id: `R${i + 1}`, tool: a.tool,
     reason: a.rejected_because || a.when || 'adjacent intent' }));
   return {
+    // self-contained (ChatGPT SDK review): schema_version + planner_version +
+    // intent + intent_class are duplicated here so a consumer can deserialize
+    // `replay` alone without reaching back to the top-level plan object.
+    schema_version: REPLAY_SCHEMA_VERSION,
     planner_version: PLANNER_VERSION,
     intent: sc.intent,
     intent_class: sc.intent_class,
@@ -5416,7 +5430,7 @@ export function _planReplay(sc) {
     execution_graph: {
       waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
       parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
-    note: 'Auditable planning trail: decisions (D0 = routing, D1..Dn = per-step selections; status="planned" — plan_query never executes) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". Stable within a planner_version; execution/evidence IDs are minted by the caller at run time.',
+    note: 'Auditable planning trail: decisions (D0 = routing, D1..Dn = per-step selections; status is one of ' + REPLAY_DECISION_STATUSES.join('/') + ' — only "planned" is emitted today, plan_query never executes) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". schema_version pins the SHAPE (independent of planner_version); execution/evidence IDs are minted by the caller at run time.',
   };
 }
 
