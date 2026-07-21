@@ -4768,6 +4768,11 @@ function _ensureStructured(r) {
 const _PLAN_ISO_RE = /\b(ercot|pjm|caiso|miso|spp|nyiso|iso-?ne|isone)\b/i;
 const _PLAN_MW_RE = /(\d+(?:\.\d+)?)\s*(gw|mw|megawatt|gigawatt)/i;
 const _PLAN_COORD_RE = /(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/;
+// r-planner-v5.2: lead words stripped when pulling market names out of a
+// head-to-head ("compare Phoenix vs Columbus" → phoenix / columbus).
+const _PLAN_COMPARE_STOP = new Set(['compare', 'between', 'which', 'is', 'better',
+  'rank', 'the', 'a', 'an', 'for', 'of', 'me', 'and', 'or', 'both', 'to', 'with',
+  'market', 'markets', 'metro', 'metros', 'city', 'cities']);
 // One entry per intent class. `patterns` are [regex, weight] pairs — scores sum,
 // the highest-scoring class wins. `sequence`/`alternatives`/`coverage_notes`
 // mirror the recipe docs; args_hint values in <angle brackets> are produced by
@@ -4839,6 +4844,79 @@ const _PLAN_CLASSES = [
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
     coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel full depth is Developer+ (free tiers get a headline tease). Treat any factor returned as unavailable as unknown — never estimate it.',
+  },
+  {
+    // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
+    // fallback — this class routes a CAPACITY SEARCH (find buildable N MW) to the
+    // three independent reads that answer it: retirement openings near substations,
+    // interconnection-queue survivors at that size, and the market's own DCPI verdict.
+    id: 'capacity_search', recipe: 'grid_and_queue',
+    patterns: [
+      [/\b(?:find|need|want|get|land|place|put|source|secure|locate)\b[^.?!]{0,40}\b\d*\s*(?:mw|gw|megawatt|gigawatt)\b/i, 2.5],
+      [/\b\d+(?:\.\d+)?\s*(?:mw|gw|megawatt|gigawatt)\b[^.?!]{0,30}\b(?:in|near|around|within|for)\b/i, 2],
+      [/\bpockets?\b/i, 2],
+      [/\bnear\s+a\s+substation\b/i, 2.5], [/\bsubstations?\b/i, 1],
+      [/\bwhere\s+can\s+i\s+(?:find|get|put|land|build|site|source|secure)\b/i, 2.5],
+      [/\bbrownfield\b/i, 1.5],
+      [/\bhow\s+much\s+(?:power|capacity)\s+can\s+i\s+(?:get|land|secure)\b/i, 2.5],
+    ],
+    rationale: (d) => `A capacity search is three INDEPENDENT reads that fan out in one wave: where ${d.mw ? Math.round(d.mw) + ' MW' : 'MW'} is OPENING (retiring generators near substations), what's in the interconnection QUEUE at that size, and whether the target market can even energize it (DCPI verdict + time-to-power). No dependency between them — merge the three.`,
+    sequence: (d) => [
+      { step: 1, tool: 'get_retirement_headroom', depends_on: [], estimated_calls: 1,
+        why: `Retiring generators = ${d.mw ? '~' + Math.round(d.mw) + ' MW' : 'MW'} openings near existing substations inside your horizon (each with nearest-substation distance_km) — the fastest path to power, sidestepping the multi-year mega-queue.`,
+        args_hint: { target_mw: d.mw || 50, horizon_months: 24, ...(d.iso ? { region_iso: d.iso } : {}) } },
+      { step: 2, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
+        why: 'De-duplicated interconnection-queue survivors at your size floor — each mints a durable candidate_id for zero-drift chaining into analyze_site. Independent of step 1 — run in parallel.',
+        args_hint: { ...(d.mw ? { min_mw: d.mw } : {}), ...(d.iso ? { iso: d.iso } : {}), geocoded_only: true } },
+      { step: 3, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+        why: 'Reality-check the target market: BUILD/CAUTION/AVOID verdict, composite_score, time-to-power — so "found N MW" is weighed against whether the market can actually deliver it. Independent — parallel.',
+        args_hint: { market_slug: '<the market named in the intent, e.g. dallas>' } },
+    ],
+    alternatives: [
+      { tool: 'rank_markets', args_hint: { criteria: 'most_capacity', region: 'us', min_capacity_mw: 100 },
+        when: 'No single market is fixed and you want to force-rank which markets have the capacity headroom.',
+        rejected_because: 'The intent pointed at a specific capacity search, not an open ranking — the retirement + queue reads answer "find N MW here" directly.' },
+      { tool: 'analyze_site', when: 'You already have a lat/lon or candidate_id and want its full power/fiber/risk score.',
+        rejected_because: 'No coordinates or candidate_id were supplied — the search has to SURFACE sites before one can be scored.' },
+      { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
+        rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
+    ],
+    coverage_notes: 'get_retirement_headroom + get_refined_queue are depth-teased below Developer tier (top rows + count free); get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM).',
+  },
+  {
+    // r-planner-v5.2 (2026-07-20): "compare Phoenix vs Columbus" fell to unknown —
+    // this class routes a market HEAD-TO-HEAD to the symmetric DCPI reads. The two
+    // market names are pulled from the intent (comparePair) when possible.
+    id: 'market_comparison', recipe: 'market_selection',
+    patterns: [
+      [/\b(?:vs\.?|versus)\b/i, 3], [/\bhead[-\s]?to[-\s]?head\b/i, 2.5],
+      [/\bcompare\b/i, 1.5], [/\bwhich\s+is\s+better\b/i, 2],
+      [/\bbetween\s+[A-Za-z][\w-]*\s+and\s+[A-Za-z][\w-]*/i, 2],
+      [/\bcompare\s+[A-Za-z][\w-]*\s+(?:and|to|with)\s+[A-Za-z][\w-]*/i, 2],
+    ],
+    rationale: (d) => d.comparePair
+      ? `A head-to-head is symmetric: pull the same DCPI scorecard (BUILD/CAUTION/AVOID verdict, composite_score, time-to-power) for ${d.comparePair.a} and ${d.comparePair.b} in parallel, then compare like-for-like. Neither read depends on the other.`
+      : 'A head-to-head is symmetric: pull the same DCPI scorecard (verdict, score, time-to-power) for each named market in parallel, then compare like-for-like. Neither read depends on the other.',
+    sequence: (d) => [
+      { step: 1, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+        why: 'DCPI verdict + composite_score + time-to-power for the FIRST market — like-for-like scorecard, side A.',
+        args_hint: { market_slug: (d.comparePair && d.comparePair.a) || '<first market, e.g. phoenix>' } },
+      { step: 2, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+        why: 'Same DCPI scorecard for the SECOND market — side B. Independent of step 1, run in parallel.',
+        args_hint: { market_slug: (d.comparePair && d.comparePair.b) || '<second market, e.g. columbus>' } },
+      { step: 3, tool: 'get_market_intel', depends_on: [], estimated_calls: 2,
+        why: 'Optional depth on both markets (vacancy, pricing, pipeline) once the DCPI verdicts flag which factors to dig into — one call per market, parallel.',
+        args_hint: { market: (d.comparePair && d.comparePair.a) || '<either market>' } },
+    ],
+    alternatives: [
+      { tool: 'compare_isos', when: 'You are comparing GRIDS (ISOs) head-to-head, not markets.',
+        rejected_because: 'The intent named markets/metros, not ISOs — DCPI per market is the market-level comparison.' },
+      { tool: 'compare_sites', when: 'You have specific lat/lon pairs (2-4 sites), not market names.',
+        rejected_because: 'No coordinates were supplied — this is a market-level, not a site-level, comparison.' },
+      { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
+        rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
+    ],
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel full depth is Developer+. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -5156,7 +5234,22 @@ export function _planSignals(intent, context) {
     if (wt && /\bai\b|gpu|train|infer|hpc|accelerat/i.test(String(wt))) return true;
     return /\bai\b|a\.i\.|gpu|training|inference|hyperscal|accelerated\s+comput|ml\s+cluster|compute\s+campus/i.test(text);
   })();
-  return { iso, mw, coords, state, candidateId, market, since, ai };
+  // r-planner-v5.2 (2026-07-20): the two market names in a head-to-head ("A vs B",
+  // "compare A and B") — best-effort, stopword-stripped, up to 2 words each — so
+  // market_comparison can fill CONCRETE market_slug hints instead of placeholders.
+  // Explicit context.markets [a,b] wins over text extraction.
+  const comparePair = (() => {
+    const norm = (s) => String(s || '').trim().toLowerCase().split(/\s+/)
+      .filter((w) => !_PLAN_COMPARE_STOP.has(w)).slice(-2).join('-');
+    const cm = Array.isArray(c.markets) ? c.markets.filter(Boolean).map(norm) : null;
+    if (cm && cm.length >= 2 && cm[0] && cm[1] && cm[0] !== cm[1]) return { a: cm[0], b: cm[1] };
+    const m = text.match(/([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:vs\.?|versus|against)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i)
+      || text.match(/\bcompare\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)\s+(?:and|to|with)\s+([A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*)?)/i);
+    if (!m) return null;
+    const a = norm(m[1]), b = norm(m[2]);
+    return (a && b && a !== b) ? { a, b } : null;
+  })();
+  return { iso, mw, coords, state, candidateId, market, since, ai, comparePair };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -5345,6 +5438,7 @@ export function _planQuery(intent, context) {
     if (s.cls.id === 'site_analysis' && (d.coords || d.candidateId)) s.score += 2;
     if (s.cls.id === 'grid_headroom' && d.iso) s.score += 1.5;
     if (s.cls.id === 'market_ranking' && d.market) s.score += 1.5;
+    if (s.cls.id === 'market_comparison' && d.comparePair) s.score += 1.5;
     if (s.cls.id === 'changes_delta' && d.since) s.score += 2;
   }
   scored.sort((a, b) => b.score - a.score);

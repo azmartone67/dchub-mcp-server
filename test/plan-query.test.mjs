@@ -302,4 +302,47 @@ describe('plan_query router (pure)', () => {
       });
     });
   });
+
+  // r-planner-v5.2: the two intents ChatGPT's schema review surfaced as routing
+  // to 'unknown' — capacity-in-a-market and market head-to-head.
+  describe('v5.2 capacity_search + market_comparison (were unknown)', () => {
+    it('routes "find 50 MW in Dallas" to capacity_search, carrying target_mw', () => {
+      const p = _planQuery('find 50 MW in Dallas', {});
+      expect(p.intent_class).toBe('capacity_search');
+      expect(p.best_tool).toBe('get_retirement_headroom');
+      const s1 = p.recommended_sequence.find((s) => s.tool === 'get_retirement_headroom');
+      expect(s1.args_hint.target_mw).toBe(50);      // MW parsed from the intent
+      // three independent reads → one parallel wave
+      expect(p.recommended_sequence.map((s) => s.tool)).toEqual([
+        'get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank']);
+      expect(p.execution_waves).toEqual([[1, 2, 3]]);
+      expect(p.parallelizable).toBe(true);
+      // an ISO in the intent scopes the retirement/queue reads
+      const q = _planQuery('where can I find 100 MW near a substation in ERCOT', {});
+      expect(q.intent_class).toBe('capacity_search');
+      expect(q.recommended_sequence.find((s) => s.tool === 'get_retirement_headroom').args_hint.region_iso).toBe('ERCOT');
+    });
+
+    it('routes "compare Phoenix vs Columbus" to market_comparison, extracting both slugs', () => {
+      const p = _planQuery('compare Phoenix vs Columbus for hyperscale', {});
+      expect(p.intent_class).toBe('market_comparison');
+      expect(p.best_tool).toBe('get_market_dcpi_rank');
+      const [a, b] = p.recommended_sequence.filter((s) => s.tool === 'get_market_dcpi_rank');
+      expect(a.args_hint.market_slug).toBe('phoenix');   // pulled from the intent, not a placeholder
+      expect(b.args_hint.market_slug).toBe('columbus');
+      // symmetric reads run in parallel
+      expect(p.execution_waves[0]).toEqual(expect.arrayContaining([1, 2]));
+      // two-word market names survive extraction
+      const nv = _planQuery('compare Northern Virginia and Atlanta', {});
+      expect(nv.intent_class).toBe('market_comparison');
+      const slugs = nv.recommended_sequence.filter((s) => s.tool === 'get_market_dcpi_rank').map((s) => s.args_hint.market_slug);
+      expect(slugs).toEqual(['northern-virginia', 'atlanta']);
+    });
+
+    it('does NOT steal the existing AI-campus / ranking / grid routes (regression)', () => {
+      expect(_planQuery('rank markets for a 200 MW AI campus').intent_class).toBe('market_ranking');
+      expect(_planQuery('rank the best data-center markets in the US').intent_class).toBe('market_ranking');
+      expect(_planQuery('how much power is available', { iso: 'ERCOT' }).intent_class).toBe('grid_headroom');
+    });
+  });
 });
