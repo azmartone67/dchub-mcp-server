@@ -4326,6 +4326,62 @@ function withReturnNudge(result, toolName, c) {
   return result;
 }
 
+// r-front-door-inband (2026-07-21): the plan_query FRONT DOOR is promoted only
+// in the server `instructions` blob + tool descriptions — which MCP clients
+// CACHE and re-read only on reconnect. So agents that connected before it
+// shipped (2026-07-20) never learn it, which is exactly why planner-first
+// adoption sat at 0/197 sessions. Surface it IN-BAND: on the FIRST workflow-
+// ENTRY tool of a session, append ONE line pointing at plan_query, so an agent
+// discovers the front door mid-session without a reconnect. Once per session
+// (bounded module set keyed by session_id/api_key), skipped for clean/lean-
+// output platforms. Append-only, idempotent, fully wrapped, fail-soft — mirrors
+// withReturnNudge/withBindHint and must never break a response. The trigger set
+// is tools that BEGIN a multi-step investigation (search / rank / compare /
+// queue / market-overview / grid / deals) — NOT terminal, identity, or meta
+// tools, and NOT plan_query itself (its output already IS the plan).
+const _FRONT_DOOR_NUDGE_TOOLS = new Set([
+  'search_facilities', 'search_intelligence', 'semantic_search',
+  'rank_markets', 'rank_sites', 'compare_isos', 'compare_sites',
+  'get_market_intel', 'get_market_dcpi_rank', 'get_market_context',
+  'get_interconnection_queue', 'get_refined_queue', 'get_power_pipeline',
+  'get_grid_scoreboard', 'get_grid_intelligence', 'hyperscaler_deals',
+]);
+// Bounded per-session dedupe so the front-door line shows AT MOST once per
+// session (FIFO eviction; process-local — a restart or a 2nd instance may
+// re-show once, which is harmless). Keyed by session_id, falling back to
+// api_key so a keyed-but-sessionless caller still dedupes.
+const _FRONT_DOOR_SEEN = new Set();
+const _FRONT_DOOR_SEEN_MAX = 20000;
+function _frontDoorFirstTime(sid) {
+  if (!sid) return true;                     // no id to dedupe on → allow (still one line)
+  if (_FRONT_DOOR_SEEN.has(sid)) return false;
+  if (_FRONT_DOOR_SEEN.size >= _FRONT_DOOR_SEEN_MAX) {
+    let i = 0; const drop = _FRONT_DOOR_SEEN_MAX / 10;
+    for (const k of _FRONT_DOOR_SEEN) { _FRONT_DOOR_SEEN.delete(k); if (++i >= drop) break; }
+  }
+  _FRONT_DOOR_SEEN.add(sid);
+  return true;
+}
+export function withFrontDoorNudge(result, toolName, c) {
+  try {
+    if (_isCleanPlatform()) return result;                         // respect lean-output platforms
+    if (!_FRONT_DOOR_NUDGE_TOOLS.has(toolName)) return result;
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    // idempotent: never add if a plan_query hint is already present in this response
+    if (result.content.some((it) => typeof it?.text === 'string' && it.text.includes('`plan_query`'))) return result;
+    const sid = (c && (c.session_id || c.api_key)) || '';
+    if (!_frontDoorFirstTime(sid)) return result;                   // once per session
+    result.content.push({ type: 'text', text:
+      '🧭 Starting a multi-step task? Call `plan_query` FIRST (free · deterministic · no LLM) — it returns the exact ordered tool sequence for your goal, so you chain the right tools instead of guessing across 79. e.g. `plan_query intent="rank markets for a 200MW AI campus"`.' });
+    if (result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent)) {
+      result.structuredContent._front_door = { next_tool: 'plan_query',
+        hint: 'call plan_query(intent) first for the ordered multi-step plan (free, deterministic, no LLM)' };
+    }
+  } catch (_e) { /* never break a response */ }
+  return result;
+}
+
 // ── outputSchema (r-output-schema, 2026-07-17) ─────────────────────────────
 // Every tool now ADVERTISES its return shape in tools/list. The honest common
 // contract across all 79 tools is the DC Hub ENVELOPE: the full JSON payload
@@ -4367,6 +4423,8 @@ const _ENVELOPE_SHAPE = {
     'Pre-built follow-up calls (analyze_site / get_water_risk args) when the payload carries coordinates — an array of {tool, parameters, why} entries.'),
   _return_loop: z.looseObject({}).optional().describe(
     'Suggested next-session delta call (get_changes since=24h) so you pull only what changed.'),
+  _front_door: z.looseObject({}).optional().describe(
+    'In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.'),
 };
 const _OUTPUT_ENVELOPE = z.looseObject(_ENVELOPE_SHAPE).describe(
   'DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text — tool-specific data fields ride at the top level alongside these envelope keys.');
@@ -6638,7 +6696,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       } catch (_) { /* additive only — never break the data path */ }
       // r-appstore-clean: strip signpost/meta for ChatGPT so the DATA renders (no-op elsewhere).
       // r-return-nudge: append the get_changes re-entry loop for identified callers
-      return withReturnNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c);
+      // r-front-door-inband: surface plan_query in-band on the first workflow-
+      // entry tool of a session (inside withReturnNudge so its line sits ABOVE
+      // the get_changes re-entry line).
+      return withReturnNudge(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c);
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
