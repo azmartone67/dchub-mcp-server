@@ -57,6 +57,16 @@ const TARGETS = [
     alphabetical: false,
     entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (311 US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 1,400+ M&A deals; 79 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
   },
+  {
+    // YuzeHao2023 (1051★, hand-curated, github-repo entries). Terse em-dash convention:
+    // `- Name — https://github.com/…` (no bold, no star badge). Vetted 2026-07-20 from
+    // discover issue #73; best-fit section is "Research & Data" (datasets / domain data).
+    key: 'yuzehao', upstream: 'YuzeHao2023/Awesome-MCP-Servers', base: 'main', path: 'README.md',
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: 'Category: Research & Data',   // header: "## Category: Research & Data (🧬)"
+    alphabetical: false,                    // section isn't sorted — append at end
+    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across 311 markets, ISO grid telemetry, fiber routes; 79 tools, free tier, no signup)`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.

@@ -44,15 +44,27 @@ const PR_ENABLED = !['1', 'true', 'yes'].includes(String(process.env.DISCOVER_PR
 //   non-PR submission mechanism ... toolsdk-ai (JSON), lobehub / glama / smithery (owner UI)
 //   PR open, awaiting merge ....... jaw9c, sylviangth (2026-07-14, bespoke table/heading
 //                                    formats — self-drop once merged via listedRe)
+//   live pr-submit target (added) . YuzeHao2023 (2026-07-20, Research & Data section)
+//   vetted-out from #73 (07-20) ... PipedreamHQ + ever-works (AUTO-GENERATED from
+//                                    Pipedream's hosted-app catalog — a PR is clobbered
+//                                    on regen); win4r/Awesome-Claude (tiny 112-line list,
+//                                    no data/energy category — poor fit); mctrinh
+//                                    (44★, low reach — deferred, not worth a PR)
 const KNOWN = new Set([
   'mobinx/awesome-mcp-list',
   'tensorblock/awesome-mcp-servers',
+  'yuzehao2023/awesome-mcp-servers',
   'punkpeye/awesome-mcp-servers',
   'wong2/awesome-mcp-servers',
   'appcypher/awesome-mcp-servers',
   'toolsdk-ai/awesome-mcp-registry',
   'jaw9c/awesome-remote-mcp-servers',
   'sylviangth/awesome-remote-mcp-servers',
+  // vetted-out from discover issue #73 (2026-07-20) — see note above
+  'pipedreamhq/awesome-mcp-servers',
+  'ever-works/awesome-mcp-servers',
+  'win4r/awesome-claude-mcp-servers',
+  'mctrinh/awesome-mcp-servers',
 ].map((s) => s.toLowerCase()));
 
 async function gh(path, opts = {}) {
