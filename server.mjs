@@ -4693,7 +4693,28 @@ const _TOOL_OUTPUT_SCHEMAS = {
     matched_classes: _oAny('Every intent class that scored, with its score — the router\'s full deterministic trace'),
     chaining: _oAny('Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue → analyze_site / rank_sites'),
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
-  }).describe('Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry — keyword/regex routing, no LLM, same intent → same plan — alongside the DC Hub envelope keys.'),
+    replay: z.looseObject({
+      planner_version: _oStr('Semantic version of the planner that produced this trail — bump when routing/output changes so downstream tooling can pin a shape (r-planner-v5, ChatGPT orchestration feedback)'),
+      intent: _oStr('The routed intent (echoed)'),
+      intent_class: _oStr('The matched intent class'),
+      decision_log: _oArr(z.looseObject({
+        id: _oStr('Stable decision id — D0 = routing decision, D1..Dn = per-step selections; cite as "Decision D2"'),
+        step: _oNum('0 for the routing decision, else the 1-based step number'),
+        kind: _oStr('"route" (the intent→class decision) or "step" (a tool selection)'),
+        decision: _oStr('What the planner decided (route to a class / call a tool)'),
+        because: _oStr('The deterministic reason for the decision'),
+        confidence: _oNum('0-1 — intent_confidence for the routing decision, workflow_confidence for step decisions'),
+        depends_on: _oAny('Step numbers this step depends on (step decisions only)'),
+      }), 'The ordered, auditable decision trail — one route decision + one per recommended step'),
+      rejected: _oArr(z.looseObject({
+        id: _oStr('Stable rejection id (R1..Rn)'),
+        tool: _oStr('The tool/route the planner did NOT take'),
+        reason: _oStr('Why it was rejected — the deterministic rejected_because'),
+      }), 'Roads not taken, with reasons — the "why not" half of the audit trail'),
+      execution_graph: _oAny('{waves: number[][], parallel_groups: string[][]} — the concurrency graph the plan executes as'),
+      note: _oStr('How to read + cite the replay; plan-only disclaimer'),
+    }, 'FIRST-CLASS VERSIONED replay object (r-planner-v5, ChatGPT orchestration feedback): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each with a stable id, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
+  }).describe('Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry — keyword/regex routing, no LLM, same intent → same plan — plus a versioned replay decision-trail, alongside the DC Hub envelope keys.'),
 };
 
 function _ensureStructured(r) {
@@ -5229,6 +5250,48 @@ export function _planWorkflowConfidence(seq, d) {
   };
 }
 
+// ── r-planner-v5 (2026-07-20): first-class VERSIONED replay object ──────────
+// The ChatGPT orchestration feedback asked to turn the planner from "trust me"
+// into "here's why" — an auditable, versioned decision trail. This COMPOSES the
+// signals the router already produces (routing reason + per-step why +
+// rejected_because + concurrency waves) into ONE stable object with decision
+// IDs, keyed by planner_version so downstream tooling survives planner upgrades.
+// Purely additive — no existing field changes, no new network. plan_query NEVER
+// executes, so the replay covers PLANNING decisions only; execution/evidence
+// IDs are minted by the caller when it runs the plan.
+export const PLANNER_VERSION = '5.0';
+
+export function _planReplay(sc) {
+  const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
+  const alts = Array.isArray(sc.alternatives) ? sc.alternatives : [];
+  const decision_log = [
+    { id: 'D0', step: 0, kind: 'route',
+      decision: `Route intent → class "${sc.intent_class}", lead with ${sc.best_tool}`,
+      because: sc.reason,
+      confidence: sc.intent_confidence },
+    ...seq.map((s) => ({
+      id: `D${s.step}`, step: s.step, kind: 'step',
+      decision: `Call ${s.tool}`,
+      because: s.why,
+      confidence: sc.workflow_confidence,
+      depends_on: Array.isArray(s.depends_on) ? s.depends_on : [] })),
+  ];
+  const rejected = alts.map((a, i) => ({
+    id: `R${i + 1}`, tool: a.tool,
+    reason: a.rejected_because || a.when || 'adjacent intent' }));
+  return {
+    planner_version: PLANNER_VERSION,
+    intent: sc.intent,
+    intent_class: sc.intent_class,
+    decision_log,
+    rejected,
+    execution_graph: {
+      waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
+      parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
+    note: 'Auditable planning trail: decision_log (D0 = routing, D1..Dn = per-step selections) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". Stable within a planner_version; execution/evidence IDs are minted by the caller at run time — plan_query never executes.',
+  };
+}
+
 // The router core — exported for unit tests. Pure function: no ctx, no network.
 export function _planQuery(intent, context) {
   const text = String(intent || '').trim();
@@ -5294,6 +5357,7 @@ export function _planQuery(intent, context) {
       note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. ' + _PLAN_ONLY_NOTE,
       _source: 'DC Hub — dchub.cloud',
     };
+    sc.replay = _planReplay(sc);
     return sc;
   }
   const seq = top.cls.sequence(d).filter(Boolean);
@@ -5346,6 +5410,7 @@ export function _planQuery(intent, context) {
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
     _source: 'DC Hub — dchub.cloud',
   };
+  sc.replay = _planReplay(sc);
   return sc;
 }
 

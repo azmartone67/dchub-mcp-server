@@ -3,7 +3,8 @@
 // these tests exercise the exported _planQuery/_planSignals/_planWaves helpers directly.
 import { describe, it, expect } from 'vitest';
 import { _planQuery, _planSignals, _planWaves, _planWorkflowConfidence,
-         _planExecutionEstimate, _planParallelGroups } from '../server.mjs';
+         _planExecutionEstimate, _planParallelGroups, _planReplay,
+         PLANNER_VERSION } from '../server.mjs';
 
 describe('plan_query router (pure)', () => {
   it('is deterministic: same intent + context → identical plan', () => {
@@ -68,6 +69,51 @@ describe('plan_query router (pure)', () => {
       expect(alt.rejected_because).toBeTruthy();
       expect(alt.when).toBeTruthy();
     }
+  });
+
+  it('r-planner-v5: emits a versioned replay decision-trail composed from existing fields', () => {
+    const p = _planQuery('rank the best data-center markets in the US', {});
+    const r = p.replay;
+    expect(r).toBeTruthy();
+    // versioned so downstream tooling can pin a shape
+    expect(typeof r.planner_version).toBe('string');
+    expect(r.planner_version).toBe(PLANNER_VERSION);
+    // D0 is the routing decision, carrying intent_confidence; D1..Dn mirror steps
+    expect(r.decision_log[0]).toMatchObject({ id: 'D0', step: 0, kind: 'route' });
+    expect(r.decision_log[0].confidence).toBe(p.intent_confidence);
+    expect(r.decision_log[0].because).toBe(p.reason);
+    expect(r.decision_log.length).toBe(1 + p.recommended_sequence.length);
+    for (let i = 0; i < p.recommended_sequence.length; i++) {
+      const step = p.recommended_sequence[i];
+      const entry = r.decision_log[i + 1];
+      expect(entry).toMatchObject({ id: `D${step.step}`, step: step.step, kind: 'step' });
+      expect(entry.decision).toContain(step.tool);
+      expect(entry.because).toBe(step.why);
+      expect(entry.confidence).toBe(p.workflow_confidence);
+    }
+    // rejected mirrors alternatives, with stable ids + the rejection reason
+    expect(r.rejected.length).toBe(p.alternatives.length);
+    r.rejected.forEach((rej, i) => {
+      expect(rej.id).toBe(`R${i + 1}`);
+      expect(rej.tool).toBe(p.alternatives[i].tool);
+      expect(rej.reason).toBeTruthy();
+    });
+    // execution graph carries the concurrency structure
+    expect(r.execution_graph.waves).toEqual(p.execution_waves);
+    expect(r.execution_graph.parallel_groups).toEqual(p.execution_strategy.parallel_groups);
+    // additive: the replay does NOT mutate any pre-existing field
+    expect(p.intent_class).toBe('market_ranking');
+    expect(p.best_tool).toBe('rank_markets');
+  });
+
+  it('r-planner-v5: replay is deterministic and present on the unknown-intent fallback', () => {
+    const a = _planQuery('rank markets for a 200MW AI campus', {});
+    const b = _planQuery('rank markets for a 200MW AI campus', {});
+    expect(a.replay).toEqual(b.replay); // determinism preserved end-to-end
+    const fb = _planQuery('zxcv qwerty asdf nonsense', {});
+    expect(fb.intent_class).toBe('unknown');
+    expect(fb.replay.decision_log[0].id).toBe('D0');
+    expect(fb.replay.planner_version).toBe(PLANNER_VERSION);
   });
 
   it('market_ranking: step 2 depends on step 1 (slug mint) and fans out', () => {
