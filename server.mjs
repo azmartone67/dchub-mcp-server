@@ -9027,6 +9027,18 @@ function createServer(descOverrides) {
       const _tierLine = CLAIM_CAROT_COPY
         ? 'Full free toolset — no card, no browser.\n\n'
         : 'Free tier = 10 calls/day, full toolset.\n\n';
+      // r-bind-default (2026-07-21): make email-bind the DEFAULT persist step at
+      // claim success, not only at exhaustion. Only 55/346 keys are email-bound
+      // because the ask fired solely on the paywall/exhaustion branch — so
+      // header-capable keys save a header (uncontactable, still 10/day, invisible
+      // to the return loop). One quiet line + a first-class next_tool. Skipped
+      // when the caller already passed an email, and for header-less web (its
+      // _headerlessLead already LEADS with bind). Kill switch: CLAIM_BIND_DEFAULT=0.
+      const _bindDefaultOn  = process.env.CLAIM_BIND_DEFAULT !== '0';
+      const _bindDefault    = _bindDefaultOn && !a.email && !_headerlessWeb;
+      const _bindDefaultLine = _bindDefault
+        ? '🔗 **One free step so this key is still yours tomorrow:** ask your human for their email and call `bind_email {email}` — it lifts this key to 50 calls/day and makes it recoverable next session (no card, works on any client). Binding is what turns a one-session key into a durable identity.\n\n'
+        : '';
       const text =
         '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
         (_autoBound
@@ -9036,6 +9048,7 @@ function createServer(descOverrides) {
         _headerlessLead +
         _saveLine +
         _tierLine +
+        _bindDefaultLine +
         // r-return (2026-06-18): retention hook at the point of PEAK engagement.
         // The funnel pushed UPGRADE here but gave the agent no reason to COME BACK
         // — and ~1 returning IP/wk (not conversion) is the binding constraint.
@@ -9086,6 +9099,14 @@ function createServer(descOverrides) {
           // a concrete tool to return, not just an upgrade URL the agent ignores.
           return_hook:             'Your free key includes get_changes. Next session call get_changes since=24h to pull only what moved (DCPI market movers, new facilities, deals, news). Cache the returned generated_at and pass it back each session to keep a running watch.',
           next_session_tool:       'get_changes',
+          // r-bind-default (2026-07-21): first-class default identity step (this
+          // session) — complements next_session_tool (get_changes, next session).
+          // Present unless the caller already bound an email. Lifting the 55/346
+          // email-bound ratio is the real cross-week retention lever.
+          ...(_bindDefault ? {
+            next_tool:      'bind_email',
+            next_tool_hint: 'Ask your human for their email, then call bind_email {email}. This key already works — binding lifts it to 50 calls/day AND makes it recoverable next session (the durable-identity default; a header-less web session otherwise starts over anonymous).',
+          } : {}),
           retention_tools:         ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
           upgrade_url:             'https://dchub.cloud/pricing/upgrade',
         },
