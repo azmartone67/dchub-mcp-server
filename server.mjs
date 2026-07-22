@@ -1970,6 +1970,11 @@ function withBindHint(result, name, c) {
 // makes NO specific calls/day promise, because the per-IP cap is not observably
 // enforced on the live /mcp path (28 anon calls, zero throttle, 2026-06-18).
 const CLAIM_CAROT_COPY = String(process.env.CLAIM_CAROT_COPY || 'on').toLowerCase() !== 'off';
+// r-session-tier-bind (2026-07-22): the identity/free tools that must NOT trigger
+// the early session→key tier-bind (below) — a claim's OWN call would otherwise
+// record a miss-throttle before its key exists, delaying the very next data call.
+const _TIER_BIND_SKIP = new Set(['claim_free_key', 'bind_email', 'recover_my_key',
+                                 'claim_key', 'get_free_key']);
 const DEPTH_TEASE_KEEP = 3;   // owner's preview: "top 3-5 rows shown"
 function _isPaidDepthTier(t) {
   // Developer ($49) and up get full depth. founding==pro (tier_registry.py).
@@ -5711,6 +5716,48 @@ function trackedTool(srv, name, description, schema, handler) {
     }
     try {
       let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
+      // r-session-tier-bind (2026-07-22, flag DCHUB_SESSION_TIER_BIND, default on):
+      // give an agent the IDENTIFIED TIER in-session right after claim_free_key — the
+      // in-session half of the retention fix (the backend /track resolver already fixes
+      // cross-replica ATTRIBUTION; this fixes in-session SERVICE). The keystone bind
+      // further below only ran inside the PAID-tool paywall branch AND only when this
+      // replica's sessionMeta already held the session — so free-tool calls, and any
+      // call on a cold/other replica (sessions are NOT sticky, which is why trial-check
+      // is DB-backed), stayed anon despite owning a claimed key (live: only ~18% carried
+      // it). Resolve it EARLY for ALL tools: if this ANON call's session owns a claimed
+      // key, bind it. Skips the identity tools (claim/bind/recover — see _TIER_BIND_SKIP)
+      // so a claim's OWN call doesn't set the miss-throttle before its key exists, and
+      // the very next data call binds immediately. Throttled to ~1 trial-check /60s
+      // /session /replica; once bound, the per-request meta-seed (POST /mcp, sessionMeta)
+      // reflects it on every later call (no repeat lookup). UPGRADE-ONLY (claim keys are
+      // free/identified tier — can NEVER grant paid) and resolved by EXACT session_id
+      // (no cross-session leak). Fully wrapped — never blocks a tool call.
+      if ((process.env.DCHUB_SESSION_TIER_BIND ?? 'on') !== 'off'
+          && c && !c.api_key && c.session_id && !_TIER_BIND_SKIP.has(name)) {
+        try {
+          const _sid = c.session_id;
+          const _sm = sessionMeta.get(_sid);
+          const _throttled = _sm && _sm.tierTriedAt && (Date.now() - _sm.tierTriedAt < 60000);
+          if (!(_sm && _sm.api_key) && !_throttled) {
+            const _tk = await checkTrialEligibility(_sid, name);
+            const _m2 = sessionMeta.get(_sid) || {};
+            if (_tk && _tk.session_api_key && !_m2.api_key) {
+              _m2.api_key    = _tk.session_api_key;
+              _m2.tier       = String(_tk.tier_upgrade || 'identified').toLowerCase();
+              _m2.auto_bound = true;
+              sessionMeta.set(_sid, _m2);
+              c.api_key = _m2.api_key;          // reflect into THIS call (gate + backend headers + attribution)
+              c.tier    = _m2.tier;
+              _gateTier = _m2.tier;
+              try { recordSessionUpgrade(c.platform, _m2.tier); } catch (_) {}
+              console.log(`[MCP] session-tier-bind sid=${String(_sid).slice(0, 8)} → ${_m2.tier} (early · all-tool · cross-replica)`);
+            } else {
+              _m2.tierTriedAt = Date.now();     // throttle a miss for 60s (a mid-session claim is picked up next window)
+              sessionMeta.set(_sid, _m2);
+            }
+          }
+        } catch (_) { /* never block a tool call on the tier-bind resolution */ }
+      }
       // r-starterdev-parity (2026-07-20): $9 Starter / $49 Developer are paid-class
       // for every tool EXCEPT the Pro-only set. The backend hands us the literal tier
       // ('starter'/'developer'; the Stripe webhook stamps starter->developer), but the
