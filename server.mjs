@@ -9566,6 +9566,13 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key');
   res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
+  // r-csp (2026-07-23): the ChatGPT App Directory requires a Content-Security-
+  // Policy on the MCP endpoint to submit ("you defined a CSP … required to submit
+  // a plugin that contains an app"). This server speaks JSON-RPC only — no UI, no
+  // document context, no external fetches — so the tightest policy is correct and
+  // safe: it declares a CSP while permitting nothing.
+  res.setHeader('Content-Security-Policy',
+    "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   // (r-workos-consolidate 2026-06-21) Removed the 200-response WWW-Authenticate
   // "hint": per the MCP auth spec a client only starts OAuth on a 401, so a hint
   // on a 200 is inert. The single source of truth is the 401 challenge block in
