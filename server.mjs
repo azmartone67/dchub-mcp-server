@@ -4393,6 +4393,54 @@ export function withFrontDoorNudge(result, toolName, c) {
   return result;
 }
 
+// r-cookbook-inband (2026-07-23): the agent cookbook (GET /api/v1/agent/cookbook,
+// 18 ready-made multi-tool recipes) was surfaced in only ONE output block — the
+// agent-utilization engine flags it the single under-fired "train" actuator
+// (armable_now). Surface it IN-BAND on a breadth-relevant tool, once per session,
+// so agents discover the recipe library mid-workflow without a reconnect. Mirrors
+// withFrontDoorNudge exactly: append-only, idempotent, once/session, skips lean
+// platforms, fail-soft. ENV-GATED OFF by default — set DCHUB_COOKBOOK_HINT=1 to
+// arm (byte-identical when unset).
+const _COOKBOOK_HINT_TOOLS = new Set([
+  'search_facilities', 'search_intelligence', 'semantic_search',
+  'rank_markets', 'rank_sites', 'compare_sites', 'compare_isos',
+  'get_market_intel', 'get_interconnection_queue', 'get_power_pipeline',
+  'get_grid_intelligence', 'hyperscaler_deals', 'analyze_site',
+  'get_dchub_recommendation', 'get_fiber_intel',
+]);
+const _COOKBOOK_SEEN = new Set();
+const _COOKBOOK_SEEN_MAX = 20000;
+function _cookbookFirstTime(sid) {
+  if (!sid) return true;                     // no id to dedupe on → allow (still one line)
+  if (_COOKBOOK_SEEN.has(sid)) return false;
+  if (_COOKBOOK_SEEN.size >= _COOKBOOK_SEEN_MAX) {
+    let i = 0; const drop = _COOKBOOK_SEEN_MAX / 10;
+    for (const k of _COOKBOOK_SEEN) { _COOKBOOK_SEEN.delete(k); if (++i >= drop) break; }
+  }
+  _COOKBOOK_SEEN.add(sid);
+  return true;
+}
+export function withCookbookHint(result, toolName, c) {
+  try {
+    if (process.env.DCHUB_COOKBOOK_HINT !== '1') return result;    // env-gated OFF by default
+    if (_isCleanPlatform()) return result;                         // respect lean-output platforms
+    if (!_COOKBOOK_HINT_TOOLS.has(toolName)) return result;
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (result.content.some((it) => typeof it?.text === 'string'
+        && it.text.includes('/api/v1/agent/cookbook'))) return result;   // idempotent
+    const sid = (c && (c.session_id || c.api_key)) || '';
+    if (!_cookbookFirstTime(sid)) return result;                   // once per session
+    result.content.push({ type: 'text', text:
+      '📓 DC Hub recipes: 18 ready-made multi-tool workflows (site selection, grid-headroom scouting, deal scans) at `GET /api/v1/agent/cookbook` — chain the right tools in one pass instead of guessing the sequence.' });
+    if (result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent)) {
+      result.structuredContent._cookbook = { url: '/api/v1/agent/cookbook',
+        hint: 'browsable library of multi-tool recipes (problem → ordered tool sequence)' };
+    }
+  } catch (_e) { /* never break a response */ }
+  return result;
+}
+
 // ── outputSchema (r-output-schema, 2026-07-17) ─────────────────────────────
 // Every tool now ADVERTISES its return shape in tools/list. The honest common
 // contract across all 79 tools is the DC Hub ENVELOPE: the full JSON payload
@@ -6752,7 +6800,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // r-front-door-inband: surface plan_query in-band on the first workflow-
       // entry tool of a session (inside withReturnNudge so its line sits ABOVE
       // the get_changes re-entry line).
-      return withReturnNudge(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c);
+      return withReturnNudge(withCookbookHint(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c), name, c);
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
