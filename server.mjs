@@ -6524,7 +6524,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest unlock.',
               remaining_today: 0,
             };
-            return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+            // 2026-07-24 growthfix: mirror the payload into structuredContent.
+            // Every tool declares an outputSchema, so schema-aware clients read
+            // structuredContent as THE result — without this, _stampEntityCb's
+            // content-only branch fabricated a bare {_entity, quota} envelope and
+            // a capped anon agent saw NO data, NO cap message, NO upgrade path
+            // (observed live via get_changes, 2026-07-24). The trimmed preview +
+            // _upgrade CTA now ride BOTH channels; the stamper's sc-branch merges
+            // _entity/quota on top instead of replacing the payload.
+            return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
+                     structuredContent: trimmed };
           }
         } catch (_) { /* non-object/parse failure → fall through to normal handling */ }
       }
