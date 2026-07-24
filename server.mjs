@@ -3598,10 +3598,22 @@ function _stampEntityCb(toolName, fn) {
             return { ...r, structuredContent: { ..._add, ...sc } };
           }
         } else {
-          // content-only tool → add a minimal discriminator (no data dup) so an
-          // agent can branch on the payload class before parsing content[0].
-          const _base = { _entity: _entityType(toolName) };
-          if (_q) _base.quota = _q;
+          // content-only tool → MIRROR the JSON payload into structuredContent
+          // (2026-07-24 growthfix). Every tool declares an outputSchema, so
+          // schema-aware clients treat structuredContent as THE result — the
+          // old minimal discriminator made every content-only return (anon
+          // trim, daily-cap preview, …) look like an EMPTY {_entity, quota}
+          // envelope: the data AND the upgrade CTA lived only in the ignored
+          // text channel (observed live via get_changes). Non-object payloads
+          // keep the bare discriminator — never break a response over a stamp.
+          let _base = null;
+          try {
+            const _p = JSON.parse(r.content[0]?.text || '');
+            if (_p && typeof _p === 'object' && !Array.isArray(_p)) _base = { ..._p };
+          } catch (_) { /* non-JSON text stays content-only */ }
+          if (!_base) _base = {};
+          if (!_base._entity) _base._entity = _entityType(toolName);
+          if (_q && _base.quota === undefined) _base.quota = _q;
           return { ...r, structuredContent: _base };
         }
       }
