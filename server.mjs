@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.6.1' }.version;  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.0' }.version;  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -1847,6 +1847,10 @@ const FREE_FULL_TOOLS = new Set([
   // destroying the plan without protecting anything paid. Value IS the complete
   // sequence, same class as discover_tools/scoreboard.
   'plan_query',
+  // r-execute-plan (2026-07-26): per-step results were ALREADY tier-gated by
+  // their own loopback tools/call — re-trimming the executed[] array here
+  // would cut a 5-step execution to 1 step without protecting anything.
+  'execute_plan',
 ]);
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
@@ -4382,6 +4386,7 @@ const _RETURN_NUDGE_SKIP = new Set([
   'save_site', 'list_saved_sites', 'why_dchub', 'get_dchub_recommendation',
   'get_agent_registry', 'get_backup_status', 'search', 'fetch',
   'plan_query',  // r-plan-query: meta/orchestration tool — its output IS next-tool guidance; a re-entry nudge would be noise
+  'execute_plan',  // r-execute-plan: same class — the envelope already carries answer_guide
 ]);
 function withReturnNudge(result, toolName, c) {
   try {
@@ -8217,6 +8222,187 @@ function createServer(descOverrides) {
     async (a) => {
       const sc = _planQuery(a && a.intent, a && a.context);
       return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+    });
+
+  // ── r-execute-plan (2026-07-26, v2.7.0): the planner EXECUTES its own graph ──
+  // Every 07-26 platform review converged on 'intent → answer' over 'intent →
+  // plan → you orchestrate'. This closes the loop: plan_query's deterministic
+  // graph runs server-side, wave by wave. SAFETY MODEL: each step is a
+  // sessionless LOOPBACK tools/call to this same server carrying ONLY the
+  // caller's own X-API-Key + platform header — so every step pays the same
+  // quota and gets the same tier gate / depth trim / tracking as a native
+  // call. No gate bypass is possible by construction; anonymous callers get
+  // anonymous-tier step results. Recursion is structurally impossible:
+  // plan_query / execute_plan steps are skipped, never dispatched.
+  const _EXEC_SLUG_KEYS = ['metro_slug', 'market_slug', 'slug'];
+  const _EXEC_MINT_KINDS = { candidate_id: 'candidate_id', iso: 'iso', region_iso: 'iso' };
+  function _execHarvest(node, minted, capPerKind, depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 3) return;
+    if (Array.isArray(node)) {
+      for (const it of node.slice(0, 10)) _execHarvest(it, minted, capPerKind, depth + 1);
+      return;
+    }
+    for (const [k, v] of Object.entries(node)) {
+      if (typeof v === 'string' && v) {
+        const kind = _EXEC_SLUG_KEYS.includes(k) ? 'slug' : _EXEC_MINT_KINDS[k];
+        if (kind) {
+          const arr = (minted[kind] = minted[kind] || []);
+          if (!arr.includes(v) && arr.length < capPerKind) arr.push(v);
+        }
+      } else if (v && typeof v === 'object') {
+        _execHarvest(v, minted, capPerKind, depth + 1);
+      }
+    }
+  }
+  function _execResolveArgs(hint, minted, userCtx, wantFanout) {
+    const args = {}; let unresolved = null; let fanKey = null; let fanVals = null;
+    for (const [k, v] of Object.entries(hint || {})) {
+      if (typeof v === 'string' && /^<.*>$/.test(v.trim())) {
+        const ph = v.toLowerCase();
+        let kind = null;
+        if (/slug|market|metro/.test(ph)) kind = 'slug';
+        else if (/candidate_id/.test(ph)) kind = 'candidate_id';
+        else if (/\biso\b/.test(ph)) kind = 'iso';
+        const fromUser = userCtx && userCtx[k];
+        if (fromUser != null && fromUser !== '') { args[k] = String(fromUser); continue; }
+        const vals = kind && minted[kind];
+        if (vals && vals.length) {
+          if (wantFanout && vals.length > 1 && !fanKey) { fanKey = k; fanVals = vals; }
+          else args[k] = vals[0];
+        } else { unresolved = k; }
+      } else if (v != null) {
+        args[k] = v;
+      }
+    }
+    if (userCtx) for (const [k, v] of Object.entries(userCtx)) {
+      if (args[k] == null && v != null && v !== '' && k !== 'intent') args[k] = v;
+    }
+    return { args, unresolved, fanKey, fanVals };
+  }
+  async function _execLoopbackCall(name, args, c, timeoutMs) {
+    const t0 = Date.now();
+    const ctl = new AbortController();
+    const tm = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const headers = { 'Content-Type': 'application/json',
+                        'Accept': 'application/json, text/event-stream' };
+      if (c && c.api_key) headers['X-API-Key'] = c.api_key;
+      if (c && c.platform) headers['X-MCP-Platform'] = String(c.platform);
+      const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
+        method: 'POST', headers,
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+                               params: { name, arguments: args } }),
+        signal: ctl.signal });
+      const raw = await r.text();
+      let payload = null;
+      for (const line of raw.split('\n')) {
+        if (line.startsWith('data:')) { try { payload = JSON.parse(line.slice(5).trim()); } catch (_e) {} break; }
+      }
+      if (!payload) { try { payload = JSON.parse(raw); } catch (_e) {} }
+      const res = payload && payload.result;
+      let out = res && res.structuredContent;
+      if (!out) {
+        const txt = res && Array.isArray(res.content)
+          ? (res.content.find((b) => b.type === 'text') || {}).text : null;
+        if (txt) { try { out = JSON.parse(txt); } catch (_e) { out = { text: String(txt).slice(0, 1200) }; } }
+      }
+      if (!out) out = { error: 'no_result', http_status: r.status };
+      let slim = out;
+      try {
+        if (JSON.stringify(out).length > 6000) {
+          const txt = JSON.stringify(out).slice(0, 1200);
+          slim = { truncated: true, preview: txt, note: 'step result truncated to 1.2KB — call ' + name + ' directly for the full payload' };
+        }
+      } catch (_e) {}
+      return { ok: !(res && res.isError), result: slim, ms: Date.now() - t0 };
+    } catch (e) {
+      return { ok: false, result: { error: String(e && e.message || e).slice(0, 120) }, ms: Date.now() - t0 };
+    } finally { clearTimeout(tm); }
+  }
+
+  trackedTool(srv, 'execute_plan',
+    'The FRONT DOOR that ANSWERS — plan_query\'s deterministic graph, executed server-side. Give it the same natural-language intent; it routes the intent (same no-LLM planner), then runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you ("rank markets for a 200 MW AI campus", "compare phoenix vs columbus", "power availability in ERCOT"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
+    { intent: z.string().describe('Natural-language question, e.g. "rank markets for a 200MW AI campus" — same as plan_query'),
+      context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones'),
+      max_steps: z.any().optional().describe('Max plan steps to execute, 1-8 (default 6)'),
+      max_fanout: z.any().optional().describe('Max per-finalist fan-out calls for one step, 1-3 (default 2)') },
+    async (a) => {
+      const t0 = Date.now();
+      const DEADLINE_MS = 40000;
+      const maxSteps = Math.max(1, Math.min(8, parseInt(a && a.max_steps, 10) || 6));
+      const maxFan = Math.max(1, Math.min(3, parseInt(a && a.max_fanout, 10) || 2));
+      const c = getCtx();
+      const userCtx = (a && typeof a.context === 'object' && a.context) || {};
+      const sc = _planQuery(a && a.intent, a.context);
+      const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
+      const byStep = new Map(seq.map((s) => [s.step, s]));
+      const waves = (Array.isArray(sc.execution_waves) && sc.execution_waves.length)
+        ? sc.execution_waves : [seq.map((s) => s.step)];
+      const minted = {};
+      const executed = [];
+      let ran = 0; let calls = 0;
+      for (const wave of waves) {
+        const doable = [];
+        for (const stepNo of wave) {
+          const s = byStep.get(stepNo);
+          if (!s) continue;
+          if (s.tool === 'plan_query' || s.tool === 'execute_plan') {
+            executed.push({ step: s.step, tool: s.tool, status: 'skipped_meta', ms: 0 });
+            continue;
+          }
+          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
+            executed.push({ step: s.step, tool: s.tool, status: 'not_run',
+                            args_hint: s.args_hint || {},
+                            note: ran >= maxSteps ? 'max_steps reached' : 'time budget reached — call this tool directly to continue' });
+            continue;
+          }
+          const wantFan = Number(s.estimated_calls) > 1;
+          const r = _execResolveArgs(s.args_hint || {}, minted, userCtx, wantFan);
+          if (r.unresolved) {
+            executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved',
+                            missing: r.unresolved,
+                            note: 'earlier steps minted no value for <' + r.unresolved + '> — run it manually with a concrete value' });
+            continue;
+          }
+          const variants = (r.fanKey && r.fanVals)
+            ? r.fanVals.slice(0, maxFan).map((v) => ({ ...r.args, [r.fanKey]: v }))
+            : [r.args];
+          for (const args of variants) { doable.push({ s, args }); ran += 1; if (ran >= maxSteps) break; }
+        }
+        if (doable.length) {
+          const results = await Promise.all(doable.map(({ s, args }) =>
+            _execLoopbackCall(s.tool, args, c, 15000).then((out) => ({ s, args, out }))));
+          for (const { s, args, out } of results) {
+            calls += 1;
+            executed.push({ step: s.step, tool: s.tool, args,
+                            status: out.ok ? 'executed' : 'failed',
+                            ms: out.ms, result: out.result });
+            if (out.ok) _execHarvest(out.result, minted, Math.max(maxFan, 3));
+          }
+        }
+      }
+      const replay = _planReplay(sc);
+      try {
+        const statusByStep = new Map();
+        for (const e of executed) {
+          if (!statusByStep.has(e.step) || e.status === 'failed') statusByStep.set(e.step, e.status);
+        }
+        for (const d of (replay.decisions || [])) {
+          if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
+        }
+      } catch (_e) {}
+      const out = {
+        _entity: 'plan_execution', ok: true,
+        intent: sc.intent, intent_class: sc.intent_class,
+        planner_version: replay.planner_version,
+        executed, minted,
+        totals: { steps_run: calls, ms: Date.now() - t0,
+                  tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
+        replay,
+        answer_guide: 'Compose the answer from executed[].result (each already tier-honest). Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to continue manually.',
+        _source: 'DC Hub — dchub.cloud',
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
     });
 
   trackedTool(srv, 'save_to_shortlist',
