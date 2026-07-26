@@ -15,7 +15,7 @@ the AgentCore feedback channel)
 > Hi — AgentCore Gateway now supports existing MCP servers as a target type, and
 > DC Hub is a clean fit for any agent doing data-center / energy / site-selection
 > work. It's a remote HTTP MCP server (`https://dchub.cloud/mcp`, 70 tools) over
-> 21,000+ facilities, live ISO grid telemetry, DCPI market verdicts, plus
+> 12,650+ facilities, live ISO grid telemetry, DCPI market verdicts, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel.
 >

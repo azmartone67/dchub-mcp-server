@@ -83,7 +83,7 @@ Field labels vary; map by intent.
 
 **Long description:**
 > DC Hub gives Devin agents ground-truth data-center & energy data instead of
-> stale training knowledge. 58 MCP tools over Streamable HTTP: search 21,000+
+> stale training knowledge. 58 MCP tools over Streamable HTTP: search 12,650+
 > facilities, score build sites, rank 300+ markets (DCPI power index), check the
 > DCGI gas index, compare US ISO grids live, and pull interconnection queues,
 > M&A, fiber, water & tax data. Every response is citation-ready (CC-BY-4.0).
