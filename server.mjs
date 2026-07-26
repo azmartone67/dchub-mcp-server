@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.6.0' }.version;  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.6.1' }.version;  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -7076,69 +7076,6 @@ function createServer(descOverrides) {
   // id = facility slug/id; url = the live facility page (https://dchub.cloud/facility/<id>, 200).
   const _facLoc = (r) => [r && r.city, r && r.state, r && r.country].filter(Boolean).join(', ');
   const _facUrl = (id) => 'https://dchub.cloud/facility/' + encodeURIComponent(id);
-  // ── r-recipes (2026-07-26): MCP prompts/list — Agent Recipes ─────────────
-  // Every platform iteration review (Gemini/Perplexity/Grok/ChatGPT/Meta/
-  // Copilot, 07-26) converged on the same bottleneck: agents connect but
-  // don't know which of the 79 tools to chain, so first-call success — not
-  // discovery — gates adoption. These recipes ship the five highest-intent
-  // workflows IN THE PROTOCOL: clients that support prompts/list (Claude
-  // Desktop, Cursor, Gemini builders, …) surface them natively as one-click
-  // workflows. Each prompts/get is tracked as tool `recipe:<name>` so the
-  // per-platform funnel measures recipe→call conversion. The SDK advertises
-  // the `prompts` capability automatically once one prompt registers.
-  const _recipePrompt = (name, description, argsShape, textBuilder) => {
-    srv.prompt(name, description, argsShape, (args) => {
-      try {
-        trackToolCall({
-          timestamp: new Date().toISOString(),
-          tool: 'recipe:' + name,
-          params: args || {},
-          platform: 'unknown',
-          client_name: null,
-          api_key: null,
-          tier: null,
-          session_id: null,
-          status: 'success',
-          duration_ms: 0,
-        });
-      } catch (_e) { /* telemetry never blocks a recipe */ }
-      return {
-        description,
-        messages: [{ role: 'user',
-                     content: { type: 'text', text: textBuilder(args || {}) } }],
-      };
-    });
-  };
-
-  _recipePrompt('site_selection_audit',
-    'Full site-selection audit for a market or coordinates: DCPI verdict, water risk, and a composite site score — the "should I build here?" workflow.',
-    { market: z.string().describe('Market slug or name, e.g. northern-virginia, phoenix, dallas').optional(),
-      lat: z.string().describe('Site latitude (use with lon instead of market)').optional(),
-      lon: z.string().describe('Site longitude').optional(),
-      target_mw: z.string().describe('Target capacity in MW, e.g. 100').optional() },
-    (a) => `Run a DC Hub site-selection audit for ${a.market ? 'the ' + a.market + ' market' : 'the site at ' + (a.lat || '?') + ',' + (a.lon || '?')}${a.target_mw ? ' (target ' + a.target_mw + ' MW)' : ''}.\n\n1. Call plan_query with this intent first and follow its recommended_sequence.\n2. Expect the chain: get_market_dcpi_rank (BUILD/CAUTION/AVOID + narrative) → get_water_risk → ${a.market ? 'rank_sites for the market' : 'analyze_site at the coordinates'} → get_grid_intelligence for the ISO.\n3. Synthesize: verdict, the single binding constraint, time-to-power, and the top risk — with numbers.\n4. Cite every figure as "DC Hub, dchub.cloud" with the as_of date from the provenance block.`);
-
-  _recipePrompt('grid_headroom_check',
-    'Live grid headroom for an ISO: scoreboard now, headroom + constraints, and the interconnection queue — the "where is power actually available?" workflow.',
-    { iso: z.string().describe('ISO/market, e.g. ERCOT, PJM, MISO, CAISO') },
-    (a) => `Check live grid headroom for ${a.iso || 'ERCOT'} with DC Hub.\n\n1. get_grid_scoreboard (no key needed) for the live ranked picture.\n2. get_grid_intelligence iso=${a.iso || 'ERCOT'} for headroom, constraints, and time-to-power.\n3. get_interconnection_queue iso=${a.iso || 'ERCOT'} for queue depth and what is actually moving.\n4. Optional: get_retirement_headroom target_mw=100 region_iso=${a.iso || 'ERCOT'} for retiring-generator interconnection points with nearby substations.\n5. Report headroom MW, queue depth, and the fastest realistic path to power. Cite "DC Hub, dchub.cloud".`);
-
-  _recipePrompt('hyperscaler_pipeline_scan',
-    'Hyperscaler deal flow + the forward construction pipeline — who is buying and building where, from 1,500+ tracked deals.',
-    { operator: z.string().describe('Optional operator filter, e.g. Microsoft, Meta, AWS').optional() },
-    (a) => `Scan hyperscaler activity with DC Hub${a.operator ? ' for ' + a.operator : ''}.\n\n1. hyperscaler_deals${a.operator ? ' operator=' + a.operator : ''} for recent acquisitions and leases.\n2. get_power_pipeline for the forward construction/power pipeline behind them.\n3. get_refined_queue for the interconnection requests that corroborate the pipeline.\n4. Summarize: top 3 moves, the market each concentrates in, and the MW involved. Cite "DC Hub, dchub.cloud".`);
-
-  _recipePrompt('market_compare',
-    'Head-to-head market comparison: DCPI verdicts, power economics, and the deciding constraint — the "A vs B" workflow.',
-    { market_a: z.string().describe('First market slug, e.g. phoenix'),
-      market_b: z.string().describe('Second market slug, e.g. columbus') },
-    (a) => `Compare ${a.market_a || 'phoenix'} vs ${a.market_b || 'columbus'} for a data-center build using DC Hub.\n\n1. Call plan_query with this comparison intent and follow its graph.\n2. Expect: get_market_dcpi_rank for BOTH markets (verdict + composite score + narrative) → get_market_intel for vacancy/pricing/pipeline → get_energy_prices for the power-cost spread → compare_isos if they sit in different ISOs.\n3. Deliver a decision table: verdict, score, $/kWh, vacancy, time-to-power, and the single factor that decides it.\n4. Cite "DC Hub, dchub.cloud" with as_of dates.`);
-
-  _recipePrompt('fiber_power_pairing',
-    'Find where fiber density and available power overlap in a market — the connectivity-plus-energy site screen.',
-    { market: z.string().describe('Market slug or metro, e.g. dallas') },
-    (a) => `Screen ${a.market || 'dallas'} for sites where fiber and power pair well, using DC Hub.\n\n1. get_metro_fiber market=${a.market || 'dallas'} for carrier density and route miles.\n2. get_fiber_readiness for near-net buckets and single-carrier risk.\n3. get_grid_intelligence for the ISO's headroom where the fiber concentrates.\n4. Optional deep-dive: analyze_site at the best intersection, or plan_fiber_leadin for a specific parcel.\n5. Report the 2-3 zones where both layers align, with carrier counts and headroom MW. Cite "DC Hub, dchub.cloud".`);
-
   trackedTool(srv, 'search',
     'Search DC Hub for relevant records (OpenAI Deep Research / ChatGPT connector format). Returns a list of matching data-center facilities as {id, title, url}; pass an id to the `fetch` tool for the record, or open the url to cite the live facility page. For structured queries (by MW, operator, status, market) use search_facilities directly.',
     { query: z.string().describe('Free-text query, e.g. "data centers in Northern Virginia" or "Ashburn hyperscale power"') },
@@ -9513,10 +9450,23 @@ function createServer(descOverrides) {
   // 79 tools; registering these auto-advertises the prompts + resources
   // capabilities on initialize, and lifts Glama/Smithery quality scores (most
   // servers ship tools-only).
+  // r-recipes v2.6.1 (2026-07-26): every prompts/get is tracked as tool
+  // `recipe:<name>` through the existing /track rail, so the per-platform
+  // funnel measures recipe→call conversion for the WHOLE menu.
   const _P = (name, title, description, argsSchema, text) =>
-    srv.registerPrompt(name, { title, description, argsSchema }, (a) => ({
-      messages: [{ role: 'user', content: { type: 'text', text: text(a || {}) } }],
-    }));
+    srv.registerPrompt(name, { title, description, argsSchema }, (a) => {
+      try {
+        trackToolCall({
+          timestamp: new Date().toISOString(), tool: 'recipe:' + name,
+          params: a || {}, platform: 'unknown', client_name: null,
+          api_key: null, tier: null, session_id: null,
+          status: 'success', duration_ms: 0,
+        });
+      } catch (_e) { /* telemetry never blocks a recipe */ }
+      return {
+        messages: [{ role: 'user', content: { type: 'text', text: text(a || {}) } }],
+      };
+    });
   _P('analyze-site', 'Analyze a data-center site',
      'Full buildability read (power, fiber, water, tax, verdict) for an address or lat,lon.',
      { location: z.string().describe('Street address or "lat,lon"'),
@@ -9627,6 +9577,15 @@ Report the notable movers with direction and why each matters. Cite "DC Hub (dch
 3. get_disaster_risk lat=<site lat> lon=<site lon> — FEMA National Risk Index rating + top hazards.
 4. get_water_risk lat=<site lat> lon=<site lon> — water stress / drought, the factor that quietly kills cooling-heavy builds.
 Return: composite verdict, per-factor scores, driving hazards, and a BUILD/CAUTION/AVOID bottom line. Treat unavailable factors as unknown — never estimate. Cite "DC Hub (dchub.cloud)".`);
+  _P('fiber_power_pairing', 'Recipe: fiber + power pairing',
+     'Find where fiber density and available grid headroom overlap in a market — the connectivity-plus-energy site screen.',
+     { market: z.string().describe('Market slug or metro, e.g. dallas') },
+     (a) => `Screen ${a.market || 'dallas'} for sites where fiber and power pair well, using DC Hub:
+1. get_metro_fiber market=${a.market || 'dallas'} — carrier density + route miles.
+2. get_fiber_readiness — near-net buckets and single-carrier risk. Steps 1-3 are independent — run them in parallel.
+3. get_grid_intelligence iso=<ISO serving the market> — headroom where the fiber concentrates.
+4. Optional deep-dive: analyze_site at the best intersection, or plan_fiber_leadin for a specific parcel.
+Return the 2-3 zones where both layers align, with carrier counts and headroom MW. Treat unavailable factors as unknown — never estimate. Cite "DC Hub (dchub.cloud)".`);
   _P('hyperscaler_activity', 'Recipe: hyperscaler & M&A activity',
      'Latest hyperscaler commitments + data-center M&A, overlaid with the DCPI grid-reality verdict (recipe hyperscaler_activity).',
      { limit: z.string().optional().describe('Rows per feed, default 10'),
