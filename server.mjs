@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.3' }.version;  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.4' }.version;  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8244,7 +8244,11 @@ function createServer(descOverrides) {
     }
     for (const [k, v] of Object.entries(node)) {
       if (typeof v === 'string' && v) {
-        const kind = _EXEC_SLUG_KEYS.includes(k) ? 'slug' : _EXEC_MINT_KINDS[k];
+        let kind = _EXEC_SLUG_KEYS.includes(k) ? 'slug' : _EXEC_MINT_KINDS[k];
+        // r-invariants v2.7.4: iso mints must LOOK like ISOs — grid tools
+        // echo their input args back, so a bad iso arg round-trips into the
+        // mint pool ('ASHBURN-VA' minted as an iso, live). Whitelist shape.
+        if (kind === 'iso' && !/^(ERCOT|PJM|MISO|CAISO|SPP|NYISO|ISO-?NE|WECC|SERC|AESO|IESO|ONS|NEM)$/i.test(v.trim())) kind = null;
         if (kind) {
           const arr = (minted[kind] = minted[kind] || []);
           if (!arr.includes(v) && arr.length < capPerKind) arr.push(v);
@@ -8259,10 +8263,19 @@ function createServer(descOverrides) {
     for (const [k, v] of Object.entries(hint || {})) {
       if (typeof v === 'string' && /^<.*>$/.test(v.trim())) {
         const ph = v.toLowerCase();
+        // r-invariants v2.7.4: kind from the LEADING token of the
+        // placeholder, not a whole-string scan — '<ISO serving the finalist
+        // market>' contains the word 'market' and was resolving as a SLUG
+        // (live: get_grid_intelligence called with iso=ashburn-va).
+        // Planner placeholders name the artifact first by convention.
+        const lead = (ph.slice(1).trim().split(/[\s>]/)[0] || '');
         let kind = null;
-        if (/slug|market|metro/.test(ph)) kind = 'slug';
+        if (/iso/.test(lead)) kind = 'iso';
+        else if (/candidate/.test(lead)) kind = 'candidate_id';
+        else if (/slug|market|metro/.test(lead)) kind = 'slug';
         else if (/candidate_id/.test(ph)) kind = 'candidate_id';
         else if (/\biso\b/.test(ph)) kind = 'iso';
+        else if (/slug|metro/.test(ph)) kind = 'slug';
         const fromUser = userCtx && userCtx[k];
         if (fromUser != null && fromUser !== '') { args[k] = String(fromUser); continue; }
         const vals = kind && minted[kind];
