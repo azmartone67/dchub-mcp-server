@@ -48,7 +48,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## Guided prompts & resources
 
-Beyond the 79 tools, DC Hub ships **6 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients:
+Beyond the 79 tools, DC Hub ships **13 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
@@ -56,6 +56,13 @@ Beyond the 79 tools, DC Hub ships **6 guided prompts** — they surface as slash
 - `/dchub:site-report` — premium one-page site brief (power · gas · fiber · market · risk)
 - `/dchub:compare-markets` — 2–4 markets head-to-head
 - `/dchub:fiber-plan` — diverse fibre lead-in routes to a carrier hotel
+- `/dchub:market_selection` — DCPI shortlist → per-finalist verdict → grid reality-check
+- `/dchub:grid_and_queue` — grid headroom + interconnection queue for an ISO
+- `/dchub:site_analysis` — one site, multi-factor: composite score, FEMA hazards, water
+- `/dchub:water_risk` — water stress & hazard read for a site
+- `/dchub:hyperscaler_activity` — deals + forward pipeline: who is buying and building
+- `/dchub:whats_changed` — what moved since your last call (the return hook)
+- `/dchub:fiber_power_pairing` — where fiber density and grid headroom overlap in a market
 
 Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
 
