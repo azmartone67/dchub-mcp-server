@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.7' }.version;  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.8' }.version;  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8275,14 +8275,19 @@ function createServer(descOverrides) {
         else if (/slug|market|metro/.test(lead)) kind = 'slug';
         else if (/candidate_id/.test(ph)) kind = 'candidate_id';
         else if (/\biso\b/.test(ph)) kind = 'iso';
-        else if (/slug|metro/.test(ph)) kind = 'slug';
+        // v2.7.8: 'market' restored to the FALLBACK (the leading-token check
+        // above still wins, so '<ISO serving the finalist market>' stays an
+        // iso) — '<the market named in the intent, e.g. dallas>' leads with
+        // 'the' and was resolving to no kind at all.
+        else if (/slug|metro|market/.test(ph)) kind = 'slug';
         const fromUser = userCtx && userCtx[k];
         if (fromUser != null && fromUser !== '') { args[k] = String(fromUser); continue; }
         const vals = kind && minted[kind];
         if (vals && vals.length) {
           if (wantFanout && vals.length > 1 && !fanKey) { fanKey = k; fanVals = vals; }
           else args[k] = vals[0];
-        } else if (kind === 'iso' && minted.__constraint_iso) {
+        } else if (kind === 'iso' && minted.__constraint_iso
+                   && _EXEC_IS_RTO(minted.__constraint_iso)) {
           // v2.7.7: the intent's geography is itself a producer — Atlanta
           // KNEW iso=SERC yet skipped the grid steps when the (rejected)
           // scoreboard mint left the pool empty.
@@ -8408,6 +8413,13 @@ function createServer(descOverrides) {
   const _EXEC_TOOL_MINTS = {
     ai_capacity_index: { rowsKey: 'markets', field: 'market', kind: 'slug' },
   };
+  // v2.7.8: only a real RTO/ISO is a valid `iso` ARG — WECC and SERC are
+  // reliability regions (Atlanta/Southern Co and most of the desert
+  // Southwest are non-RTO), and injecting them made
+  // get_interconnection_queue fail. They still serve as CONSTRAINTS (a
+  // WECC-region intent must not mint an ERCOT hand-off).
+  const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','ISO-NE','ISONE']);
+  const _EXEC_IS_RTO = (v) => _EXEC_RTOS.has(String(v || '').toUpperCase());
   const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
     get_interconnection_queue: 'iso', get_refined_queue: 'iso',
     get_retirement_headroom: 'region_iso' };
@@ -8485,7 +8497,8 @@ function createServer(descOverrides) {
             // Constraint propagation: inject the intent's ISO into
             // iso-accepting tools when the planner left it unbound.
             const isoKey = _EXEC_ISO_ARG[s.tool];
-            if (isoKey && constraintIso && args[isoKey] == null) args[isoKey] = constraintIso;
+            if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
+                && args[isoKey] == null) args[isoKey] = constraintIso;
             return _execLoopbackCall(s.tool, args, c, 15000).then((out) => ({ s, args, out }));
           }));
           for (const { s, args, out } of results) {
@@ -8545,7 +8558,8 @@ function createServer(descOverrides) {
             continue;
           }
           const isoKey2 = _EXEC_ISO_ARG[s.tool];
-          if (isoKey2 && constraintIso && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
+          if (isoKey2 && constraintIso && _EXEC_IS_RTO(constraintIso)
+              && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
           ran += 1;
           const out2 = await _execLoopbackCall(s.tool, r2.args, c, 15000);
           calls += 1;
