@@ -182,7 +182,7 @@ const CANON = { markets: 311, dealsFloor: DEALS_FLOOR };
   // floors). 311 itself must NOT match.
   const STALE = [
     { rx: /\b(?:2\d{2}|300)\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
-    { rx: /\b[2-9][,.]?000\+/,                                                                 why: `stale deal count (canonical ${CANON.dealsFloor})` },  // was [23] — MISSED 4,000+ (the 2026-07-16 over-claim); [2-9] catches every round-thousand over-claim, never 1,400+ or 21,000+
+    { rx: /\b[2-9][,.]?000\+/,                                                                 why: `stale deal count (canonical ${CANON.dealsFloor})` },  // was [23] — MISSED 4,000+ (the 2026-07-16 over-claim); [2-9] catches every round-thousand over-claim, never 1,400+ or 12,650+
   ];
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
