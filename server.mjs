@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.2' }.version;  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.3' }.version;  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8351,6 +8351,15 @@ function createServer(descOverrides) {
     'salt lake': 'WECC', 'las vegas': 'WECC', reno: 'WECC',
     'santa clara': 'CAISO', sacramento: 'CAISO', 'des moines': 'MISO',
     'kansas city': 'SPP', tulsa: 'SPP', 'new albany': 'PJM' };
+  // r-invariants v2.7.3: per-tool mint contracts — ai_capacity_index rows
+  // carry display names ('market': 'Dallas-Fort Worth'), not slugs; the
+  // generic key harvester can't see them. Bounded per-tool extraction
+  // (slugified) so the deliberate r-planner-v4 AI-branch lead keeps its
+  // rationale AND chains. Anonymous tier still previews to zero rows —
+  // that C2 FAIL is honest, not a bug.
+  const _EXEC_TOOL_MINTS = {
+    ai_capacity_index: { rowsKey: 'markets', field: 'market', kind: 'slug' },
+  };
   const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
     get_interconnection_queue: 'iso', get_refined_queue: 'iso',
     get_retirement_headroom: 'region_iso' };
@@ -8433,6 +8442,22 @@ function createServer(descOverrides) {
             if (out.ok || out.gated) {
               const fresh = {};
               _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
+              const tm = _EXEC_TOOL_MINTS[s.tool];
+              if (tm) {
+                try {
+                  const rows = ((out.full || out.result) || {})[tm.rowsKey];
+                  if (Array.isArray(rows)) {
+                    for (const row of rows.slice(0, Math.max(maxFan, 3))) {
+                      const raw = row && row[tm.field];
+                      if (typeof raw === 'string' && raw) {
+                        const v = slugify(raw);
+                        const arr = (fresh[tm.kind] = fresh[tm.kind] || []);
+                        if (v && !arr.includes(v)) arr.push(v);
+                      }
+                    }
+                  }
+                } catch (_e) { /* contract extraction is fail-soft */ }
+              }
               for (const [kind, vals] of Object.entries(fresh)) {
                 for (const v of vals) {
                   if (kind === 'iso' && constraintIso
