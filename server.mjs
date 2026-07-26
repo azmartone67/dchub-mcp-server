@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.8.0' }.version;  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.8.1' }.version;  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -5286,10 +5286,19 @@ const _PLAN_CLASSES = [
       { step: 1, tool: 'get_metro_fiber', depends_on: [], estimated_calls: 1,
         why: 'Metro carrier density + route miles — the connectivity half, scoped to the market.',
         args_hint: d.market ? { market: d.market } : { market: '<metro slug named in the intent>' } },
-      { step: 2, tool: 'get_fiber_readiness', depends_on: [], estimated_calls: 1,
-        why: 'Near-net buckets + single-carrier risk. Independent of step 1 — same wave.',
-        args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon }
-                            : (d.market ? { market: d.market } : { market: '<metro slug named in the intent>' }) },
+      // v2.8.1: get_fiber_readiness is PARCEL-level (lat/lon required) — the
+      // first live run of this class passed a market and the step failed.
+      // With coordinates, take the parcel read; without them, take the
+      // market-level carrier/route depth instead. Same wave either way.
+      ...(d.coords ? [{
+        step: 2, tool: 'get_fiber_readiness', depends_on: [], estimated_calls: 1,
+        why: 'Parcel-level near-net bucket, nearest-carrier distance and single-carrier risk for the given coordinates. Independent of step 1 — same wave.',
+        args_hint: { lat: d.coords.lat, lon: d.coords.lon },
+      }] : [{
+        step: 2, tool: 'get_fiber_intel', depends_on: [], estimated_calls: 1,
+        why: 'Market-level carrier list and route density (no coordinates in the intent, so the parcel-level readiness read does not apply). Independent of step 1 — same wave.',
+        args_hint: d.market ? { market: d.market } : { market: '<metro slug named in the intent>' },
+      }]),
       { step: 3, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
         why: 'The power half at MARKET level — verdict, excess-power score and time-to-power. Market-scoped (not ISO-scoped) so it answers correctly in non-RTO territory (Southern Co, most of WECC) as well as inside an RTO.',
         args_hint: d.market ? { market_slug: d.market } : { market_slug: '<metro slug named in the intent>' } },
