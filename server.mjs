@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.4' }.version;  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.5' }.version;  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8413,6 +8413,7 @@ function createServer(descOverrides) {
       let ran = 0; let calls = 0;
       for (const wave of waves) {
         const doable = [];
+        const deferred = [];
         for (const stepNo of wave) {
           const s = byStep.get(stepNo);
           if (!s) continue;
@@ -8429,9 +8430,11 @@ function createServer(descOverrides) {
           const wantFan = Number(s.estimated_calls) > 1;
           const r = _execResolveArgs(s.args_hint || {}, minted, userCtx, wantFan);
           if (r.unresolved) {
-            executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved',
-                            missing: r.unresolved,
-                            note: 'earlier steps minted no value for <' + r.unresolved + '> — run it manually with a concrete value' });
+            // r-invariants v2.7.5: don't give up yet — the artifact may be
+            // produced LATER IN THIS WAVE (planner graphs mark siblings as
+            // depends_on:[1] when the ISO really comes from the sibling's
+            // result). Park it; retried once after the wave lands.
+            deferred.push(s);
             continue;
           }
           const variants = (r.fanKey && r.fanVals)
@@ -8482,6 +8485,46 @@ function createServer(descOverrides) {
                   const arr = (minted[kind] = minted[kind] || []);
                   if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
                 }
+              }
+            }
+          }
+        }
+        // r-invariants v2.7.5: one bounded retry for steps whose artifact was
+        // minted by a SIBLING in this wave (intra-wave production). A step
+        // that resolves now runs; one that still can't reads
+        // skipped_unresolved, honestly.
+        for (const s of deferred) {
+          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
+            executed.push({ step: s.step, tool: s.tool, status: 'not_run',
+                            note: 'budget reached before the intra-wave retry' });
+            continue;
+          }
+          const r2 = _execResolveArgs(s.args_hint || {}, minted, userCtx, false);
+          if (r2.unresolved) {
+            executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved',
+                            missing: r2.unresolved,
+                            note: 'no earlier or sibling step minted <' + r2.unresolved + '> — run it manually with a concrete value' });
+            continue;
+          }
+          const isoKey2 = _EXEC_ISO_ARG[s.tool];
+          if (isoKey2 && constraintIso && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
+          ran += 1;
+          const out2 = await _execLoopbackCall(s.tool, r2.args, c, 15000);
+          calls += 1;
+          executed.push({ step: s.step, tool: s.tool, args: r2.args,
+                          status: out2.ok ? 'executed' : (out2.gated ? 'gated_preview' : 'failed'),
+                          retried_after_wave: true, ms: out2.ms, result: out2.result });
+          if (out2.ok || out2.gated) {
+            const fresh2 = {};
+            _execHarvest(out2.full || out2.result, fresh2, Math.max(maxFan, 3));
+            for (const [kind, vals] of Object.entries(fresh2)) {
+              for (const v of vals) {
+                if (kind === 'iso' && constraintIso && String(v).toUpperCase() !== constraintIso) {
+                  rejectedMints.push({ kind, value: v, from: s.tool, constraint: constraintIso });
+                  continue;
+                }
+                const arr = (minted[kind] = minted[kind] || []);
+                if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
               }
             }
           }
