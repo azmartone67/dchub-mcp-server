@@ -5427,6 +5427,154 @@ const _PLAN_CLASSES = [
   },
 ];
 // Extract deterministic signals from intent + context (never throws).
+
+// ── execute_plan executor internals (hoisted to module scope 2026-07-26 so
+// tests/execute-plan-invariants.test.mjs can pin the twelve traps found by
+// live batteries; pure functions + constant tables, behaviour unchanged) ──
+export const _EXEC_SLUG_KEYS = ['metro_slug', 'market_slug', 'slug'];
+export const _EXEC_MINT_KINDS = { candidate_id: 'candidate_id', iso: 'iso', region_iso: 'iso' };
+export function _execHarvest(node, minted, capPerKind, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 3) return;
+  if (Array.isArray(node)) {
+    for (const it of node.slice(0, 10)) _execHarvest(it, minted, capPerKind, depth + 1);
+    return;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    if (typeof v === 'string' && v) {
+      let kind = _EXEC_SLUG_KEYS.includes(k) ? 'slug' : _EXEC_MINT_KINDS[k];
+      // r-invariants v2.7.4: iso mints must LOOK like ISOs — grid tools
+      // echo their input args back, so a bad iso arg round-trips into the
+      // mint pool ('ASHBURN-VA' minted as an iso, live). Whitelist shape.
+      if (kind === 'iso' && !/^(ERCOT|PJM|MISO|CAISO|SPP|NYISO|ISO-?NE|WECC|SERC|AESO|IESO|ONS|NEM)$/i.test(v.trim())) kind = null;
+      if (kind) {
+        const arr = (minted[kind] = minted[kind] || []);
+        if (!arr.includes(v) && arr.length < capPerKind) arr.push(v);
+      }
+    } else if (v && typeof v === 'object') {
+      _execHarvest(v, minted, capPerKind, depth + 1);
+    }
+  }
+}
+export function _execResolveArgs(hint, minted, userCtx, wantFanout) {
+  const args = {}; let unresolved = null; let fanKey = null; let fanVals = null;
+  for (const [k, v] of Object.entries(hint || {})) {
+    if (typeof v === 'string' && /^<.*>$/.test(v.trim())) {
+      const ph = v.toLowerCase();
+      // r-invariants v2.7.4: kind from the LEADING token of the
+      // placeholder, not a whole-string scan — '<ISO serving the finalist
+      // market>' contains the word 'market' and was resolving as a SLUG
+      // (live: get_grid_intelligence called with iso=ashburn-va).
+      // Planner placeholders name the artifact first by convention.
+      const lead = (ph.slice(1).trim().split(/[\s>]/)[0] || '');
+      let kind = null;
+      if (/iso/.test(lead)) kind = 'iso';
+      else if (/candidate/.test(lead)) kind = 'candidate_id';
+      else if (/slug|market|metro/.test(lead)) kind = 'slug';
+      else if (/candidate_id/.test(ph)) kind = 'candidate_id';
+      else if (/\biso\b/.test(ph)) kind = 'iso';
+      // v2.7.8: 'market' restored to the FALLBACK (the leading-token check
+      // above still wins, so '<ISO serving the finalist market>' stays an
+      // iso) — '<the market named in the intent, e.g. dallas>' leads with
+      // 'the' and was resolving to no kind at all.
+      else if (/slug|metro|market/.test(ph)) kind = 'slug';
+      const fromUser = userCtx && userCtx[k];
+      if (fromUser != null && fromUser !== '') { args[k] = String(fromUser); continue; }
+      const vals = kind && minted[kind];
+      if (vals && vals.length) {
+        if (wantFanout && vals.length > 1 && !fanKey) { fanKey = k; fanVals = vals; }
+        else args[k] = vals[0];
+      } else if (kind === 'iso' && minted.__constraint_iso
+                 && _EXEC_IS_RTO(minted.__constraint_iso)) {
+        // v2.7.7: the intent's geography is itself a producer — Atlanta
+        // KNEW iso=SERC yet skipped the grid steps when the (rejected)
+        // scoreboard mint left the pool empty.
+        args[k] = minted.__constraint_iso;
+      } else if (kind === 'slug' && minted.__constraint_slug) {
+        args[k] = minted.__constraint_slug;
+      } else { unresolved = k; }
+    } else if (v != null) {
+      args[k] = v;
+    }
+  }
+  if (userCtx) for (const [k, v] of Object.entries(userCtx)) {
+    if (args[k] == null && v != null && v !== '' && k !== 'intent') args[k] = v;
+  }
+  return { args, unresolved, fanKey, fanVals };
+}
+
+// r-invariants (2026-07-26, v2.7.2): execution invariants — ChatGPT's spec
+// from the live battery findings. Dallas→CAISO happened because an
+// unfiltered queue row's iso was harvested as a hand-off; geography
+// established by the INTENT must constrain every downstream mint unless
+// explicitly widened. Bounded city→ISO map (top DC metros only — this is a
+// constraint source, not a geocoder) + per-run constraint_check decisions
+// appended to the replay (PASS/FAIL — 'execution integrity').
+// v2.7.7: entries carry {iso, slug} — the intent-named metro now resolves
+// BOTH iso and market_slug hand-offs when no step produced them (the
+// Dallas capacity_search C2 gap: queue tools mint candidates, never slugs).
+export const _CITY_ISO_META = {
+  dallas: { iso: 'ERCOT', slug: 'dallas-tx' },
+  'fort worth': { iso: 'ERCOT', slug: 'fort-worth-tx' },
+  houston: { iso: 'ERCOT', slug: 'houston-tx' },
+  austin: { iso: 'ERCOT', slug: 'austin-tx' },
+  'san antonio': { iso: 'ERCOT', slug: 'san-antonio-tx' },
+  abilene: { iso: 'ERCOT', slug: 'abilene-tx' },
+  ashburn: { iso: 'PJM', slug: 'ashburn-va' },
+  'northern virginia': { iso: 'PJM', slug: 'northern-virginia' },
+  richmond: { iso: 'PJM', slug: 'richmond-va' },
+  columbus: { iso: 'PJM', slug: 'columbus-oh' },
+  chicago: { iso: 'PJM', slug: 'chicago-il' },
+  atlanta: { iso: 'SERC', slug: 'atlanta-ga' },
+  phoenix: { iso: 'WECC', slug: 'phoenix-az' },
+  'salt lake': { iso: 'WECC', slug: 'salt-lake-city-ut' },
+  'las vegas': { iso: 'WECC', slug: 'las-vegas-nv' },
+  reno: { iso: 'WECC', slug: 'reno-nv' },
+  'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
+  sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
+  'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
+  'kansas city': { iso: 'SPP', slug: 'kansas-city-mo' },
+  tulsa: { iso: 'SPP', slug: 'tulsa-ok' },
+  'new albany': { iso: 'PJM', slug: 'new-albany-oh' } };
+export const _CITY_ISO = Object.fromEntries(
+  Object.entries(_CITY_ISO_META).map(([k, v]) => [k, v.iso]));
+export function _execConstraintSlug(intentText) {
+  const t = String(intentText || '').toLowerCase();
+  for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
+    if (t.includes(city)) return meta.slug;
+  }
+  return null;
+}
+// r-invariants v2.7.3: per-tool mint contracts — ai_capacity_index rows
+// carry display names ('market': 'Dallas-Fort Worth'), not slugs; the
+// generic key harvester can't see them. Bounded per-tool extraction
+// (slugified) so the deliberate r-planner-v4 AI-branch lead keeps its
+// rationale AND chains. Anonymous tier still previews to zero rows —
+// that C2 FAIL is honest, not a bug.
+export const _EXEC_TOOL_MINTS = {
+  ai_capacity_index: { rowsKey: 'markets', field: 'market', kind: 'slug' },
+};
+// v2.7.8: only a real RTO/ISO is a valid `iso` ARG — WECC and SERC are
+// reliability regions (Atlanta/Southern Co and most of the desert
+// Southwest are non-RTO), and injecting them made
+// get_interconnection_queue fail. They still serve as CONSTRAINTS (a
+// WECC-region intent must not mint an ERCOT hand-off).
+export const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','ISO-NE','ISONE']);
+export const _EXEC_IS_RTO = (v) => _EXEC_RTOS.has(String(v || '').toUpperCase());
+export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
+  get_interconnection_queue: 'iso', get_refined_queue: 'iso',
+  get_retirement_headroom: 'region_iso' };
+export function _execConstraintIso(intentText, userCtx, signals) {
+  if (userCtx && userCtx.iso) return String(userCtx.iso).toUpperCase();
+  if (signals && signals.iso) return String(signals.iso).toUpperCase();
+  const t = String(intentText || '').toLowerCase();
+  for (const [city, iso] of Object.entries(_CITY_ISO)) {
+    if (t.includes(city)) return iso;
+  }
+  return null;
+}
+
+
+
 export function _planSignals(intent, context) {
   const text = String(intent || '');
   const c = (context && typeof context === 'object' && !Array.isArray(context)) ? context : {};
@@ -8284,76 +8432,6 @@ function createServer(descOverrides) {
   // call. No gate bypass is possible by construction; anonymous callers get
   // anonymous-tier step results. Recursion is structurally impossible:
   // plan_query / execute_plan steps are skipped, never dispatched.
-  const _EXEC_SLUG_KEYS = ['metro_slug', 'market_slug', 'slug'];
-  const _EXEC_MINT_KINDS = { candidate_id: 'candidate_id', iso: 'iso', region_iso: 'iso' };
-  function _execHarvest(node, minted, capPerKind, depth = 0) {
-    if (!node || typeof node !== 'object' || depth > 3) return;
-    if (Array.isArray(node)) {
-      for (const it of node.slice(0, 10)) _execHarvest(it, minted, capPerKind, depth + 1);
-      return;
-    }
-    for (const [k, v] of Object.entries(node)) {
-      if (typeof v === 'string' && v) {
-        let kind = _EXEC_SLUG_KEYS.includes(k) ? 'slug' : _EXEC_MINT_KINDS[k];
-        // r-invariants v2.7.4: iso mints must LOOK like ISOs — grid tools
-        // echo their input args back, so a bad iso arg round-trips into the
-        // mint pool ('ASHBURN-VA' minted as an iso, live). Whitelist shape.
-        if (kind === 'iso' && !/^(ERCOT|PJM|MISO|CAISO|SPP|NYISO|ISO-?NE|WECC|SERC|AESO|IESO|ONS|NEM)$/i.test(v.trim())) kind = null;
-        if (kind) {
-          const arr = (minted[kind] = minted[kind] || []);
-          if (!arr.includes(v) && arr.length < capPerKind) arr.push(v);
-        }
-      } else if (v && typeof v === 'object') {
-        _execHarvest(v, minted, capPerKind, depth + 1);
-      }
-    }
-  }
-  function _execResolveArgs(hint, minted, userCtx, wantFanout) {
-    const args = {}; let unresolved = null; let fanKey = null; let fanVals = null;
-    for (const [k, v] of Object.entries(hint || {})) {
-      if (typeof v === 'string' && /^<.*>$/.test(v.trim())) {
-        const ph = v.toLowerCase();
-        // r-invariants v2.7.4: kind from the LEADING token of the
-        // placeholder, not a whole-string scan — '<ISO serving the finalist
-        // market>' contains the word 'market' and was resolving as a SLUG
-        // (live: get_grid_intelligence called with iso=ashburn-va).
-        // Planner placeholders name the artifact first by convention.
-        const lead = (ph.slice(1).trim().split(/[\s>]/)[0] || '');
-        let kind = null;
-        if (/iso/.test(lead)) kind = 'iso';
-        else if (/candidate/.test(lead)) kind = 'candidate_id';
-        else if (/slug|market|metro/.test(lead)) kind = 'slug';
-        else if (/candidate_id/.test(ph)) kind = 'candidate_id';
-        else if (/\biso\b/.test(ph)) kind = 'iso';
-        // v2.7.8: 'market' restored to the FALLBACK (the leading-token check
-        // above still wins, so '<ISO serving the finalist market>' stays an
-        // iso) — '<the market named in the intent, e.g. dallas>' leads with
-        // 'the' and was resolving to no kind at all.
-        else if (/slug|metro|market/.test(ph)) kind = 'slug';
-        const fromUser = userCtx && userCtx[k];
-        if (fromUser != null && fromUser !== '') { args[k] = String(fromUser); continue; }
-        const vals = kind && minted[kind];
-        if (vals && vals.length) {
-          if (wantFanout && vals.length > 1 && !fanKey) { fanKey = k; fanVals = vals; }
-          else args[k] = vals[0];
-        } else if (kind === 'iso' && minted.__constraint_iso
-                   && _EXEC_IS_RTO(minted.__constraint_iso)) {
-          // v2.7.7: the intent's geography is itself a producer — Atlanta
-          // KNEW iso=SERC yet skipped the grid steps when the (rejected)
-          // scoreboard mint left the pool empty.
-          args[k] = minted.__constraint_iso;
-        } else if (kind === 'slug' && minted.__constraint_slug) {
-          args[k] = minted.__constraint_slug;
-        } else { unresolved = k; }
-      } else if (v != null) {
-        args[k] = v;
-      }
-    }
-    if (userCtx) for (const [k, v] of Object.entries(userCtx)) {
-      if (args[k] == null && v != null && v !== '' && k !== 'intent') args[k] = v;
-    }
-    return { args, unresolved, fanKey, fanVals };
-  }
   async function _execLoopbackCall(name, args, c, timeoutMs) {
     const t0 = Date.now();
     const ctl = new AbortController();
@@ -8410,77 +8488,6 @@ function createServer(descOverrides) {
     } catch (e) {
       return { ok: false, result: { error: String(e && e.message || e).slice(0, 120) }, ms: Date.now() - t0 };
     } finally { clearTimeout(tm); }
-  }
-
-  // r-invariants (2026-07-26, v2.7.2): execution invariants — ChatGPT's spec
-  // from the live battery findings. Dallas→CAISO happened because an
-  // unfiltered queue row's iso was harvested as a hand-off; geography
-  // established by the INTENT must constrain every downstream mint unless
-  // explicitly widened. Bounded city→ISO map (top DC metros only — this is a
-  // constraint source, not a geocoder) + per-run constraint_check decisions
-  // appended to the replay (PASS/FAIL — 'execution integrity').
-  // v2.7.7: entries carry {iso, slug} — the intent-named metro now resolves
-  // BOTH iso and market_slug hand-offs when no step produced them (the
-  // Dallas capacity_search C2 gap: queue tools mint candidates, never slugs).
-  const _CITY_ISO_META = {
-    dallas: { iso: 'ERCOT', slug: 'dallas-tx' },
-    'fort worth': { iso: 'ERCOT', slug: 'fort-worth-tx' },
-    houston: { iso: 'ERCOT', slug: 'houston-tx' },
-    austin: { iso: 'ERCOT', slug: 'austin-tx' },
-    'san antonio': { iso: 'ERCOT', slug: 'san-antonio-tx' },
-    abilene: { iso: 'ERCOT', slug: 'abilene-tx' },
-    ashburn: { iso: 'PJM', slug: 'ashburn-va' },
-    'northern virginia': { iso: 'PJM', slug: 'northern-virginia' },
-    richmond: { iso: 'PJM', slug: 'richmond-va' },
-    columbus: { iso: 'PJM', slug: 'columbus-oh' },
-    chicago: { iso: 'PJM', slug: 'chicago-il' },
-    atlanta: { iso: 'SERC', slug: 'atlanta-ga' },
-    phoenix: { iso: 'WECC', slug: 'phoenix-az' },
-    'salt lake': { iso: 'WECC', slug: 'salt-lake-city-ut' },
-    'las vegas': { iso: 'WECC', slug: 'las-vegas-nv' },
-    reno: { iso: 'WECC', slug: 'reno-nv' },
-    'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
-    sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
-    'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
-    'kansas city': { iso: 'SPP', slug: 'kansas-city-mo' },
-    tulsa: { iso: 'SPP', slug: 'tulsa-ok' },
-    'new albany': { iso: 'PJM', slug: 'new-albany-oh' } };
-  const _CITY_ISO = Object.fromEntries(
-    Object.entries(_CITY_ISO_META).map(([k, v]) => [k, v.iso]));
-  function _execConstraintSlug(intentText) {
-    const t = String(intentText || '').toLowerCase();
-    for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
-      if (t.includes(city)) return meta.slug;
-    }
-    return null;
-  }
-  // r-invariants v2.7.3: per-tool mint contracts — ai_capacity_index rows
-  // carry display names ('market': 'Dallas-Fort Worth'), not slugs; the
-  // generic key harvester can't see them. Bounded per-tool extraction
-  // (slugified) so the deliberate r-planner-v4 AI-branch lead keeps its
-  // rationale AND chains. Anonymous tier still previews to zero rows —
-  // that C2 FAIL is honest, not a bug.
-  const _EXEC_TOOL_MINTS = {
-    ai_capacity_index: { rowsKey: 'markets', field: 'market', kind: 'slug' },
-  };
-  // v2.7.8: only a real RTO/ISO is a valid `iso` ARG — WECC and SERC are
-  // reliability regions (Atlanta/Southern Co and most of the desert
-  // Southwest are non-RTO), and injecting them made
-  // get_interconnection_queue fail. They still serve as CONSTRAINTS (a
-  // WECC-region intent must not mint an ERCOT hand-off).
-  const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','ISO-NE','ISONE']);
-  const _EXEC_IS_RTO = (v) => _EXEC_RTOS.has(String(v || '').toUpperCase());
-  const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
-    get_interconnection_queue: 'iso', get_refined_queue: 'iso',
-    get_retirement_headroom: 'region_iso' };
-  function _execConstraintIso(intentText, userCtx, signals) {
-    if (userCtx && userCtx.iso) return String(userCtx.iso).toUpperCase();
-    if (signals && signals.iso) return String(signals.iso).toUpperCase();
-    const t = String(intentText || '').toLowerCase();
-    for (const [city, iso] of Object.entries(_CITY_ISO)) {
-      if (t.includes(city)) return iso;
-    }
-    return null;
   }
 
   trackedTool(srv, 'execute_plan',
