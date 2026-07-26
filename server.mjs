@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.0' }.version;  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.1' }.version;  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8314,7 +8314,20 @@ function createServer(descOverrides) {
           slim = { truncated: true, preview: txt, note: 'step result truncated to 1.2KB — call ' + name + ' directly for the full payload' };
         }
       } catch (_e) {}
-      return { ok: !(res && res.isError), result: slim, ms: Date.now() - t0 };
+      // r-execute-plan v2.7.1: the paywall serves previews through the MCP
+      // ERROR channel for some gated tools — an isError body carrying
+      // preview/upgrade markers is a WORKING tease, not a failure. Label it
+      // honestly: 'gated_preview' reads right on an anonymous first call
+      // (first-call success is the adoption gate every platform named).
+      let ok = !(res && res.isError);
+      let gated = false;
+      if (!ok) {
+        try {
+          const s = JSON.stringify(slim).toLowerCase();
+          gated = s.includes('preview') || s.includes('upgrade_url') || s.includes('locked') || s.includes('trial');
+        } catch (_e) {}
+      }
+      return { ok, gated, result: slim, ms: Date.now() - t0 };
     } catch (e) {
       return { ok: false, result: { error: String(e && e.message || e).slice(0, 120) }, ms: Date.now() - t0 };
     } finally { clearTimeout(tm); }
@@ -8375,9 +8388,9 @@ function createServer(descOverrides) {
           for (const { s, args, out } of results) {
             calls += 1;
             executed.push({ step: s.step, tool: s.tool, args,
-                            status: out.ok ? 'executed' : 'failed',
+                            status: out.ok ? 'executed' : (out.gated ? 'gated_preview' : 'failed'),
                             ms: out.ms, result: out.result });
-            if (out.ok) _execHarvest(out.result, minted, Math.max(maxFan, 3));
+            if (out.ok || out.gated) _execHarvest(out.result, minted, Math.max(maxFan, 3));
           }
         }
       }
