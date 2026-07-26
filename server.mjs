@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.1' }.version;  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.2' }.version;  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8327,10 +8327,41 @@ function createServer(descOverrides) {
           gated = s.includes('preview') || s.includes('upgrade_url') || s.includes('locked') || s.includes('trial');
         } catch (_e) {}
       }
-      return { ok, gated, result: slim, ms: Date.now() - t0 };
+      // r-invariants v2.7.2: hand back the FULL pre-slim result too — the
+      // first live battery harvested mints from the SLIMMED object, so any
+      // step whose payload crossed 6KB (ai_capacity_index at 8.8s) minted
+      // nothing and downstream steps skipped. Harvest full, store slim.
+      return { ok, gated, result: slim, full: out, ms: Date.now() - t0 };
     } catch (e) {
       return { ok: false, result: { error: String(e && e.message || e).slice(0, 120) }, ms: Date.now() - t0 };
     } finally { clearTimeout(tm); }
+  }
+
+  // r-invariants (2026-07-26, v2.7.2): execution invariants — ChatGPT's spec
+  // from the live battery findings. Dallas→CAISO happened because an
+  // unfiltered queue row's iso was harvested as a hand-off; geography
+  // established by the INTENT must constrain every downstream mint unless
+  // explicitly widened. Bounded city→ISO map (top DC metros only — this is a
+  // constraint source, not a geocoder) + per-run constraint_check decisions
+  // appended to the replay (PASS/FAIL — 'execution integrity').
+  const _CITY_ISO = { dallas: 'ERCOT', 'fort worth': 'ERCOT', houston: 'ERCOT',
+    austin: 'ERCOT', 'san antonio': 'ERCOT', abilene: 'ERCOT',
+    ashburn: 'PJM', 'northern virginia': 'PJM', richmond: 'PJM',
+    columbus: 'PJM', chicago: 'PJM', atlanta: 'SERC', phoenix: 'WECC',
+    'salt lake': 'WECC', 'las vegas': 'WECC', reno: 'WECC',
+    'santa clara': 'CAISO', sacramento: 'CAISO', 'des moines': 'MISO',
+    'kansas city': 'SPP', tulsa: 'SPP', 'new albany': 'PJM' };
+  const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
+    get_interconnection_queue: 'iso', get_refined_queue: 'iso',
+    get_retirement_headroom: 'region_iso' };
+  function _execConstraintIso(intentText, userCtx, signals) {
+    if (userCtx && userCtx.iso) return String(userCtx.iso).toUpperCase();
+    if (signals && signals.iso) return String(signals.iso).toUpperCase();
+    const t = String(intentText || '').toLowerCase();
+    for (const [city, iso] of Object.entries(_CITY_ISO)) {
+      if (t.includes(city)) return iso;
+    }
+    return null;
   }
 
   trackedTool(srv, 'execute_plan',
@@ -8347,6 +8378,10 @@ function createServer(descOverrides) {
       const c = getCtx();
       const userCtx = (a && typeof a.context === 'object' && a.context) || {};
       const sc = _planQuery(a && a.intent, a.context);
+      let _sig = null;
+      try { _sig = _planSignals(String((a && a.intent) || ''), a.context); } catch (_e) {}
+      const constraintIso = _execConstraintIso(a && a.intent, userCtx, _sig);
+      const rejectedMints = [];
       const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
       const byStep = new Map(seq.map((s) => [s.step, s]));
       const waves = (Array.isArray(sc.execution_waves) && sc.execution_waves.length)
@@ -8383,19 +8418,59 @@ function createServer(descOverrides) {
           for (const args of variants) { doable.push({ s, args }); ran += 1; if (ran >= maxSteps) break; }
         }
         if (doable.length) {
-          const results = await Promise.all(doable.map(({ s, args }) =>
-            _execLoopbackCall(s.tool, args, c, 15000).then((out) => ({ s, args, out }))));
+          const results = await Promise.all(doable.map(({ s, args }) => {
+            // Constraint propagation: inject the intent's ISO into
+            // iso-accepting tools when the planner left it unbound.
+            const isoKey = _EXEC_ISO_ARG[s.tool];
+            if (isoKey && constraintIso && args[isoKey] == null) args[isoKey] = constraintIso;
+            return _execLoopbackCall(s.tool, args, c, 15000).then((out) => ({ s, args, out }));
+          }));
           for (const { s, args, out } of results) {
             calls += 1;
             executed.push({ step: s.step, tool: s.tool, args,
                             status: out.ok ? 'executed' : (out.gated ? 'gated_preview' : 'failed'),
                             ms: out.ms, result: out.result });
-            if (out.ok || out.gated) _execHarvest(out.result, minted, Math.max(maxFan, 3));
+            if (out.ok || out.gated) {
+              const fresh = {};
+              _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
+              for (const [kind, vals] of Object.entries(fresh)) {
+                for (const v of vals) {
+                  if (kind === 'iso' && constraintIso
+                      && String(v).toUpperCase() !== constraintIso) {
+                    rejectedMints.push({ kind, value: v, from: s.tool,
+                                         constraint: constraintIso });
+                    continue;
+                  }
+                  const arr = (minted[kind] = minted[kind] || []);
+                  if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
+                }
+              }
+            }
           }
         }
       }
       const replay = _planReplay(sc);
       try {
+        // r-invariants: constraint_check decisions — 'completed without
+        // invariant violations' is what completion-rate can't see.
+        const cchecks = [];
+        if (constraintIso) {
+          cchecks.push({ id: 'C1', kind: 'constraint_check',
+            status: rejectedMints.length ? 'FAIL' : 'PASS',
+            decision: 'every minted iso must satisfy intent geography (' + constraintIso + ')',
+            rationale: rejectedMints.length
+              ? 'rejected ' + rejectedMints.length + ' mint(s): '
+                + rejectedMints.map((r) => r.value + ' from ' + r.from).join(', ')
+              : 'all mints consistent' });
+        }
+        const unresolvedSteps = executed.filter((e) => e.status === 'skipped_unresolved');
+        cchecks.push({ id: 'C' + (cchecks.length + 1), kind: 'constraint_check',
+          status: unresolvedSteps.length ? 'FAIL' : 'PASS',
+          decision: 'every consumed artifact was produced by an earlier step',
+          rationale: unresolvedSteps.length
+            ? 'unproduced artifact(s): ' + unresolvedSteps.map((e) => '<' + (e.missing || '?') + '> wanted by ' + e.tool).join(', ')
+            : 'all hand-offs resolved' });
+        replay.decisions = [...(replay.decisions || []), ...cchecks];
         const statusByStep = new Map();
         for (const e of executed) {
           if (!statusByStep.has(e.step) || e.status === 'failed') statusByStep.set(e.step, e.status);
@@ -8404,11 +8479,26 @@ function createServer(descOverrides) {
           if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
         }
       } catch (_e) {}
+      try {
+        const counts = {};
+        for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
+        trackToolCall({
+          timestamp: new Date().toISOString(), tool: 'execute_plan_steps',
+          params: { intent_class: sc.intent_class, status_counts: counts,
+                    wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
+                    constraint_iso: constraintIso || null },
+          platform: (c && c.platform) || 'unknown', client_name: null,
+          api_key: null, tier: null, session_id: (c && c.session_id) || null,
+          status: 'success', duration_ms: Date.now() - t0,
+        });
+      } catch (_e) { /* planner-quality telemetry never blocks the answer */ }
       const out = {
         _entity: 'plan_execution', ok: true,
         intent: sc.intent, intent_class: sc.intent_class,
         planner_version: replay.planner_version,
         executed, minted,
+        ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
+        ...(constraintIso ? { constraint_iso: constraintIso } : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
