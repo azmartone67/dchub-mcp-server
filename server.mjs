@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.6' }.version;  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.7' }.version;  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8282,6 +8282,13 @@ function createServer(descOverrides) {
         if (vals && vals.length) {
           if (wantFanout && vals.length > 1 && !fanKey) { fanKey = k; fanVals = vals; }
           else args[k] = vals[0];
+        } else if (kind === 'iso' && minted.__constraint_iso) {
+          // v2.7.7: the intent's geography is itself a producer — Atlanta
+          // KNEW iso=SERC yet skipped the grid steps when the (rejected)
+          // scoreboard mint left the pool empty.
+          args[k] = minted.__constraint_iso;
+        } else if (kind === 'slug' && minted.__constraint_slug) {
+          args[k] = minted.__constraint_slug;
         } else { unresolved = k; }
       } else if (v != null) {
         args[k] = v;
@@ -8357,13 +8364,41 @@ function createServer(descOverrides) {
   // explicitly widened. Bounded city→ISO map (top DC metros only — this is a
   // constraint source, not a geocoder) + per-run constraint_check decisions
   // appended to the replay (PASS/FAIL — 'execution integrity').
-  const _CITY_ISO = { dallas: 'ERCOT', 'fort worth': 'ERCOT', houston: 'ERCOT',
-    austin: 'ERCOT', 'san antonio': 'ERCOT', abilene: 'ERCOT',
-    ashburn: 'PJM', 'northern virginia': 'PJM', richmond: 'PJM',
-    columbus: 'PJM', chicago: 'PJM', atlanta: 'SERC', phoenix: 'WECC',
-    'salt lake': 'WECC', 'las vegas': 'WECC', reno: 'WECC',
-    'santa clara': 'CAISO', sacramento: 'CAISO', 'des moines': 'MISO',
-    'kansas city': 'SPP', tulsa: 'SPP', 'new albany': 'PJM' };
+  // v2.7.7: entries carry {iso, slug} — the intent-named metro now resolves
+  // BOTH iso and market_slug hand-offs when no step produced them (the
+  // Dallas capacity_search C2 gap: queue tools mint candidates, never slugs).
+  const _CITY_ISO_META = {
+    dallas: { iso: 'ERCOT', slug: 'dallas-tx' },
+    'fort worth': { iso: 'ERCOT', slug: 'fort-worth-tx' },
+    houston: { iso: 'ERCOT', slug: 'houston-tx' },
+    austin: { iso: 'ERCOT', slug: 'austin-tx' },
+    'san antonio': { iso: 'ERCOT', slug: 'san-antonio-tx' },
+    abilene: { iso: 'ERCOT', slug: 'abilene-tx' },
+    ashburn: { iso: 'PJM', slug: 'ashburn-va' },
+    'northern virginia': { iso: 'PJM', slug: 'northern-virginia' },
+    richmond: { iso: 'PJM', slug: 'richmond-va' },
+    columbus: { iso: 'PJM', slug: 'columbus-oh' },
+    chicago: { iso: 'PJM', slug: 'chicago-il' },
+    atlanta: { iso: 'SERC', slug: 'atlanta-ga' },
+    phoenix: { iso: 'WECC', slug: 'phoenix-az' },
+    'salt lake': { iso: 'WECC', slug: 'salt-lake-city-ut' },
+    'las vegas': { iso: 'WECC', slug: 'las-vegas-nv' },
+    reno: { iso: 'WECC', slug: 'reno-nv' },
+    'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
+    sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
+    'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
+    'kansas city': { iso: 'SPP', slug: 'kansas-city-mo' },
+    tulsa: { iso: 'SPP', slug: 'tulsa-ok' },
+    'new albany': { iso: 'PJM', slug: 'new-albany-oh' } };
+  const _CITY_ISO = Object.fromEntries(
+    Object.entries(_CITY_ISO_META).map(([k, v]) => [k, v.iso]));
+  function _execConstraintSlug(intentText) {
+    const t = String(intentText || '').toLowerCase();
+    for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
+      if (t.includes(city)) return meta.slug;
+    }
+    return null;
+  }
   // r-invariants v2.7.3: per-tool mint contracts — ai_capacity_index rows
   // carry display names ('market': 'Dallas-Fort Worth'), not slugs; the
   // generic key harvester can't see them. Bounded per-tool extraction
@@ -8403,12 +8438,15 @@ function createServer(descOverrides) {
       let _sig = null;
       try { _sig = _planSignals(String((a && a.intent) || ''), a.context); } catch (_e) {}
       const constraintIso = _execConstraintIso(a && a.intent, userCtx, _sig);
+      const constraintSlug = (userCtx && userCtx.market) || _execConstraintSlug(a && a.intent);
       const rejectedMints = [];
       const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
       const byStep = new Map(seq.map((s) => [s.step, s]));
       const waves = (Array.isArray(sc.execution_waves) && sc.execution_waves.length)
         ? sc.execution_waves : [seq.map((s) => s.step)];
       const minted = {};
+      if (constraintIso) minted.__constraint_iso = constraintIso;
+      if (constraintSlug) minted.__constraint_slug = constraintSlug;
       const executed = [];
       let ran = 0; let calls = 0;
       for (const wave of waves) {
@@ -8577,7 +8615,9 @@ function createServer(descOverrides) {
         _entity: 'plan_execution', ok: true,
         intent: sc.intent, intent_class: sc.intent_class,
         planner_version: replay.planner_version,
-        executed, minted,
+        executed,
+        minted: Object.fromEntries(Object.entries(minted)
+          .filter(([k]) => !k.startsWith('__'))),
         ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
         ...(constraintIso ? { constraint_iso: constraintIso } : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
