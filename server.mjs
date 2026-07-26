@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.5' }.version;  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.7.6' }.version;  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -8584,6 +8584,19 @@ function createServer(descOverrides) {
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
         answer_guide: 'Compose the answer from executed[].result (each already tier-honest). Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to continue manually.',
+        // r-next-recipe (2026-07-26): the second call is where habit forms —
+        // every execution suggests ONE contextual follow-up (Perplexity/Grok
+        // converged ask). Static intent_class→recipe map; measurable because
+        // both recipes and execute_plan are telemetry-tracked.
+        next_recipe: ({
+          market_ranking: { prompt: 'grid_and_queue', why: 'Verify the winning market\'s ISO can actually deliver the power: headroom + interconnection queue.' },
+          market_comparison: { prompt: 'site_analysis', why: 'Drill into the winning market with a full multi-factor site read (score, hazards, water).' },
+          grid_headroom: { prompt: 'market_selection', why: 'Turn the ISO headroom picture into a ranked market shortlist with DCPI verdicts.' },
+          capacity_search: { prompt: 'site_analysis', why: 'Analyze the minted candidate site end-to-end — pass its candidate_id for zero transcription drift.' },
+          site_analysis: { prompt: 'fiber_power_pairing', why: 'Check whether fiber density and grid headroom align around the site\'s market.' },
+          fiber_intel: { prompt: 'grid_and_queue', why: 'Pair the fiber picture with live power availability for the same market.' },
+          hyperscaler_activity: { prompt: 'market_selection', why: 'Rank the markets the deal flow is concentrating in — verdicts + time-to-power.' },
+        })[sc.intent_class] || { prompt: 'whats_changed', why: 'See what moved in the dataset since this call — the return hook.' },
         _source: 'DC Hub — dchub.cloud',
       };
       return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
@@ -9875,6 +9888,9 @@ function createServer(descOverrides) {
   _R('about', 'dchub://about', 'About DC Hub',
      'What DC Hub is, what it covers, and how to cite it.',
      '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 12,650+ facilities across 170+ countries\n- 300+ markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, 24 EU zones, Taiwan, Australia)\n- 1,400+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
+  _R('pack-ai-campus-power', 'dchub://packs/ai-campus-power', 'Starter pack: AI Campus Power + Interconnect',
+     'The scoped 10-tool pack + 6 ready intents for the hyperscale AI-campus wave (Grok + Perplexity converged spec).',
+     '# Starter pack — AI Campus Power + Interconnect\n\nScope your client\'s allowed_tools to this set for the energy-first AI-campus workflow (10 tools):\n\n`execute_plan` · `plan_query` · `get_grid_scoreboard` · `get_interconnection_queue` · `get_retirement_headroom` · `rank_markets` · `get_market_dcpi_rank` · `search_facilities` · `get_fiber_intel` · `analyze_site` (+ `get_water_risk` if cooling matters)\n\n## Six first-call intents (each is one execute_plan call)\n\n1. "rank markets for a 200 MW AI campus"\n2. "how much power is available in ERCOT for a 100 MW data center"\n3. "find 100 MW of buildable capacity near Dallas"\n4. "compare Phoenix vs Columbus for an AI campus"\n5. "where do fiber density and grid headroom overlap in Atlanta"\n6. "analyze the site at 39.0438,-77.4874 for a 200 MW build"\n\nEvery response carries the auditable replay + a `next_recipe` follow-up. Free tier answers all six at preview depth — `claim_free_key` (no email) raises it.\n\nCite results as "DC Hub, dchub.cloud" (CC-BY-4.0).');
   _R('methodology', 'dchub://methodology', 'DCPI / DCGI methodology',
      'How the Data Center Power Index and Gas Index are computed.',
      '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of excess-power headroom, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** (0-100, per US state): gas-access + gas-cost suitability for gas-fired / behind-the-meter power, with interstate-pipeline counts -> GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED.\n\nBoth update from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
