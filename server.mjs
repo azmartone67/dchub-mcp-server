@@ -1312,6 +1312,45 @@ function _autoBindTrialToSession(mint) {
 //   • unrecognized key on a KEYED session → null — never downgrade a working
 //     identity on a junk header (Claude.ai connectors re-send Bearer JWTs that
 //     resolve to raw strings once expired).
+// r-session-restore (2026-07-26): sessionMeta is in-memory PER REPLICA, so an
+// agent that claimed a key mid-session lost its identity on replica rotation
+// or a restart — the confirmed remaining half of the claim-carry leak (only
+// ~50% of post-claim sessions carried the key; the backend /track resolver
+// patches telemetry but not LIVE tier). When a request arrives with NO
+// credential but names a session, ask the backend whether that session owns a
+// recently-claimed key (internal-gated GET, 1.5s abort, result — including
+// misses — cached so a busy anonymous session costs one lookup a minute, not
+// one per call). A restored key flows through the SAME adoption path a
+// header-supplied key would. Fail-soft: any error → anonymous, exactly as
+// before. Kill: DCHUB_SESSION_KEY_RESTORE=0.
+const _SESSION_RESTORE_CACHE = new Map(); // sid -> {key: string|null, ts: ms}
+
+async function restoreSessionKey(sid) {
+  try {
+    const now = Date.now();
+    const hit = _SESSION_RESTORE_CACHE.get(sid);
+    if (hit && now - hit.ts < (hit.key ? 600000 : 60000)) return hit.key;
+    const base = process.env.DCHUB_API_BASE
+              || 'https://dchub-backend-production.up.railway.app';
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 1500);
+    let key = null;
+    try {
+      const r = await fetch(base + '/api/v1/mcp/session-key?session_id='
+                            + encodeURIComponent(String(sid).slice(0, 200)),
+        { headers: { 'X-Internal-Key': process.env.DCHUB_INTERNAL_KEY || '' },
+          signal: ctl.signal });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.api_key) key = String(j.api_key);
+      }
+    } finally { clearTimeout(t); }
+    if (_SESSION_RESTORE_CACHE.size > 5000) _SESSION_RESTORE_CACHE.clear();
+    _SESSION_RESTORE_CACHE.set(sid, { key, ts: now });
+    return key;
+  } catch (_e) { return null; }
+}
+
 function _lateKeyResolve(meta, apiKey, validation) {
   if (!apiKey || apiKey === meta.api_key) return null;
   if (validation && validation.valid) {
@@ -9830,6 +9869,15 @@ app.post('/mcp', async (req, res) => {
         const _wid = await resolveWorkosBearer(_bearer);
         if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; _bearerResolved = true; }
       }
+    }
+    // ── r-session-restore (2026-07-26): no credential at all, but the session
+    // may own a claimed key this replica never saw (rotation/restart). Restore
+    // it BEFORE the OAuth challenge below — a restored identity must not be
+    // challenged. Fail-soft anonymous; kill DCHUB_SESSION_KEY_RESTORE=0.
+    if (!apiKey && sessionId
+        && process.env.DCHUB_SESSION_KEY_RESTORE !== '0') {
+      const _restored = await restoreSessionKey(sessionId);
+      if (_restored) apiKey = _restored;
     }
     // ── Phase B+ (r-workos-challenge): trigger the OAuth handshake ──────────
     // Per the MCP auth spec (2025-06-18) + Claude's connector docs, a client
