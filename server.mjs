@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.7.8' }.version;  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.8.0' }.version;  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -5265,6 +5265,47 @@ const _PLAN_CLASSES = [
     coverage_notes: 'hyperscaler_deals is free-tier friendly; list_transactions full depth ($ aggregates) is Developer+ (teased below). Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
   {
+    // r-planner-v5.4 (2026-07-26): CROSS-DOMAIN fiber + power. Live battery:
+    // "where do fiber density and grid headroom overlap in Atlanta" routed to
+    // grid_headroom — a plan with ZERO fiber tools, silently dropping half the
+    // intent. This class requires BOTH signals, so it only fires on genuinely
+    // cross-domain asks and never steals a pure-fiber or pure-grid question.
+    // Non-RTO aware: Atlanta (Southern Co) and most of the desert Southwest sit
+    // outside an RTO, so the market read — not an ISO queue — carries the power
+    // half there.
+    id: 'fiber_power_pairing', recipe: 'fiber_power_pairing',
+    patterns: [
+      [/\bfiber\b[^.?!]{0,60}\b(?:power|grid|headroom|capacity|energy)\b/i, 4],
+      [/\b(?:power|grid|headroom|energy)\b[^.?!]{0,60}\bfiber\b/i, 4],
+      [/\bconnectivity\b[^.?!]{0,50}\b(?:power|grid)\b/i, 3],
+      [/\boverlap\b/i, 1.5], [/\bpair(?:ing|ed)?\b/i, 1.5],
+      [/\bboth\b[^.?!]{0,30}\bfiber\b/i, 2],
+    ],
+    rationale: 'Fiber-and-power questions need BOTH planes read against the same geography — carrier density where the headroom is, not either one alone. The fiber reads are independent (parallel wave 1); the power read follows so it can be scoped to the market the fiber map surfaces.',
+    sequence: (d) => [
+      { step: 1, tool: 'get_metro_fiber', depends_on: [], estimated_calls: 1,
+        why: 'Metro carrier density + route miles — the connectivity half, scoped to the market.',
+        args_hint: d.market ? { market: d.market } : { market: '<metro slug named in the intent>' } },
+      { step: 2, tool: 'get_fiber_readiness', depends_on: [], estimated_calls: 1,
+        why: 'Near-net buckets + single-carrier risk. Independent of step 1 — same wave.',
+        args_hint: d.coords ? { lat: d.coords.lat, lon: d.coords.lon }
+                            : (d.market ? { market: d.market } : { market: '<metro slug named in the intent>' }) },
+      { step: 3, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+        why: 'The power half at MARKET level — verdict, excess-power score and time-to-power. Market-scoped (not ISO-scoped) so it answers correctly in non-RTO territory (Southern Co, most of WECC) as well as inside an RTO.',
+        args_hint: d.market ? { market_slug: d.market } : { market_slug: '<metro slug named in the intent>' } },
+      { step: 4, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+        why: 'Live ISO headroom + time-to-power — only meaningful when the metro sits inside an RTO; treat as unknown for non-RTO metros rather than estimating.',
+        args_hint: d.iso ? { iso: d.iso } : { iso: '<ISO serving the metro, if it is inside an RTO>' } },
+    ],
+    alternatives: [
+      { tool: 'plan_fiber_leadin', when: 'You already picked the site and want diverse lead-in routes to a carrier hotel.',
+        rejected_because: 'The intent asked where the two layers OVERLAP across a market, not how to reach one POP from one parcel.' },
+      { tool: 'analyze_site', when: 'You have coordinates and want every factor for that one site in a single call.',
+        rejected_because: 'The question was market-wide overlap, not a single-site multi-factor read.' },
+    ],
+    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel depth is Developer+. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
+  },
+  {
     id: 'fiber', recipe: null,
     patterns: [
       [/\bfiber\b/i, 3], [/\bdark\s+fiber\b/i, 3], [/\bcarriers?\b/i, 2], [/\blit\b/i, 1],
@@ -9914,12 +9955,12 @@ function createServer(descOverrides) {
      { capacity_mw: z.string().describe('Target load in MW, e.g. 100'),
        region: z.string().optional().describe('Optional region/state filter, e.g. TX or Midwest'),
        max_months: z.string().optional().describe('Max acceptable time-to-power in months') },
-     (a) => `Use DC Hub to recommend where to build ${a.capacity_mw} MW${a.region ? ' in ' + a.region : ''}${a.max_months ? ' within ' + a.max_months + ' months to power' : ''}. Call rank_markets (or site_selection_canvas) and return a ranked shortlist with each market's DCPI verdict, excess-power score, and time-to-power. Cite DC Hub.`);
+     (a) => `Use DC Hub to recommend where to build ${a.capacity_mw} MW${a.region ? ' in ' + a.region : ''}${a.max_months ? ' within ' + a.max_months + ' months to power' : ''}. Call rank_markets (or site_selection_canvas) and return a ranked shortlist with each market's DCPI verdict, excess-power score, and time-to-power. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
   _P('power-availability', 'Power availability in an ISO',
      'How much headroom an ISO has and the time-to-power for a target load.',
      { iso: z.string().describe('PJM | ERCOT | CAISO | MISO | SPP | NYISO | ISO-NE'),
        capacity_mw: z.string().optional().describe('Target load in MW') },
-     (a) => `Use DC Hub get_grid_intelligence for ${a.iso}. Report current demand, fuel mix, renewable share, interconnection-queue depth, average time-to-power${a.capacity_mw ? ' for a ' + a.capacity_mw + ' MW load' : ''}, and stranded capacity. State plainly whether power is readily available and how long it takes. Cite DC Hub.`);
+     (a) => `Use DC Hub get_grid_intelligence for ${a.iso}. Report current demand, fuel mix, renewable share, interconnection-queue depth, average time-to-power${a.capacity_mw ? ' for a ' + a.capacity_mw + ' MW load' : ''}, and stranded capacity. State plainly whether power is readily available and how long it takes. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
   _P('site-report', 'Premium site intelligence report',
      'A full one-page site brief: power, gas, fiber, market, risk, verdict.',
      { location: z.string().describe('Address or "lat,lon"'),
@@ -9928,13 +9969,13 @@ function createServer(descOverrides) {
   _P('compare-markets', 'Compare data-center markets',
      'Side-by-side of 2-4 markets on power, price, pipeline and DCPI verdict.',
      { markets: z.string().describe('2-4 market slugs, comma-separated, e.g. northern-virginia,dallas,phoenix') },
-     (a) => `Use DC Hub to compare these markets head-to-head: ${a.markets}. Pull get_market_dcpi_rank for each and present a table of composite score, verdict, excess-power score, time-to-power, and retail price. End with a one-line recommendation. Cite DC Hub.`);
+     (a) => `Use DC Hub to compare these markets head-to-head: ${a.markets}. Pull get_market_dcpi_rank for each and present a table of composite score, verdict, excess-power score, time-to-power, and retail price. End with a one-line recommendation. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
   _P('fiber-plan', 'Plan diverse fibre routes',
      'N diverse road-following fibre lead-in routes from a site to a carrier hotel, with indicative cost.',
      { from: z.string().describe('Site address or "lat,lon"'),
        to: z.string().describe('Target carrier hotel / POP address or "lat,lon"'),
        routes: z.string().optional().describe('Number of diverse routes (1-6, default 4)') },
-     (a) => `Use DC Hub plan_fiber_leadin to plan ${a.routes || 4} diverse fibre lead-in routes from ${a.from} to ${a.to}. Report each route's length, the shared-street km / minimum separation, and the indicative capex + opex. Note the routes are indicative, not engineered alignments. Cite DC Hub.`);
+     (a) => `Use DC Hub plan_fiber_leadin to plan ${a.routes || 4} diverse fibre lead-in routes from ${a.from} to ${a.to}. Report each route's length, the shared-street km / minimum separation, and the indicative capex + opex. Note the routes are indicative, not engineered alignments. Cite DC Hub. Run independent steps in parallel. Treat any factor returned as unavailable as unknown — never estimate it.`);
 
   const _R = (name, uri, title, description, text) =>
     srv.registerResource(name, uri, { title, description, mimeType: 'text/markdown' },
@@ -10306,9 +10347,32 @@ app.post('/mcp', async (req, res) => {
       const _sp = new URL(req.url, 'http://_').searchParams;
       _qKey = _sp.get('apiKey') || _sp.get('api_key') || _sp.get('key') || '';
     } catch (_) {}
+    // r-inline-key (2026-07-26): agents that HOLD a key but cannot set headers
+    // (hosted web clients; Claude.ai web / ChatGPT / Le Chat) demonstrably pass
+    // it as a TOOL ARGUMENT — observed live: Mistral's Org Agent sent
+    // {"X-API-Key": "dch_trial_…"} inside arguments after the paywall handed it
+    // one, we ignored it, the call stayed anonymous, and the agent spent its
+    // answer pitching an upgrade it had already been granted. Accept the inline
+    // key as the LAST credential fallback (header > Bearer > query > inline) and
+    // strip it from the arguments so it never reaches a tool schema or telemetry.
+    let _inlineKey = null;
+    try {
+      const _a = req.body && req.body.params && req.body.params.arguments;
+      if (_a && typeof _a === 'object') {
+        for (const k of ['api_key', 'apiKey', 'X-API-Key', 'x-api-key', 'key']) {
+          const v = _a[k];
+          if (typeof v === 'string' && /^dch/i.test(v.trim())) {
+            _inlineKey = v.trim();
+            delete _a[k];
+            break;
+          }
+        }
+      }
+    } catch (_e) {}
     let apiKey      = req.headers['x-api-key']
                    || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '')
                    || _qKey
+                   || _inlineKey
                    || null;
     // OAuth (Phase 1, DORMANT unless DCHUB_OAUTH_ENABLED): if the Bearer is an
     // issued OAuth access token, resolve it to its bound dev key. Flag off / not
