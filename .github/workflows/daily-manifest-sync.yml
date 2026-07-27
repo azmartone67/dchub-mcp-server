@@ -56,11 +56,40 @@ jobs:
           git commit -m "chore(registry): daily tool-count/version sync from server.mjs [skip ci]"
           git push
           echo "✓ healed registry surfaces — Glama/PulseMCP/GitHub will re-scan the updated source"
+      - name: Detect registry drift (is the LIVE registry behind server.json?)
+        id: regdrift
+        run: |
+          LOCAL=$(node -p "require('./server.json').version")
+          LIVE=$(curl -sS --max-time 20 \
+            'https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub' \
+            | node -e "let b='';process.stdin.on('data',d=>b+=d).on('end',()=>{
+                try{const j=JSON.parse(b);const v=(j.servers||[])
+                  .map(s=>(s.server||{}).version).filter(Boolean)
+                  .sort((a,c)=>{const p=x=>String(x).split('.').map(Number);
+                    const A=p(a),C=p(c);for(let i=0;i<3;i++){if(A[i]!==C[i])return A[i]-C[i];}return 0;});
+                console.log(v.length?v[v.length-1]:'0.0.0');}catch(e){console.log('');}})" || echo "")
+          echo "local=$LOCAL live=$LIVE"
+          if [ -z "$LIVE" ]; then
+            echo "::warning::could not read the live registry — treating as UNKNOWN, not clean"
+            echo "behind=unknown" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          HIGHEST=$(printf '%s\n%s\n' "$LOCAL" "$LIVE" | sort -V | tail -1)
+          if [ "$LIVE" != "$LOCAL" ] && [ "$HIGHEST" = "$LOCAL" ]; then
+            echo "::notice::registry is BEHIND ($LIVE < $LOCAL) — publishing"
+            echo "behind=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "behind=no" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Auto patch-bump + publish to official registry (cascades to GitHub mirror)
-        # Runs ONLY when server.json drifted (tool set changed). The bot's commit does NOT
-        # trigger registry-refresh (GitHub's recursion guard), so we publish inline here so
-        # the official + GitHub listings refresh the SAME DAY — not on the next manual bump.
-        if: steps.commit.outputs.server_json == 'yes'
+        # Runs when EITHER our server.json drifted (tool set changed) OR the LIVE
+        # registry is behind it. The second condition is the 2026-07-27 fix: this
+        # step used to fire only on LOCAL drift, so once server.json was correct
+        # the publisher went quiet — and the registry sat 2 MONTHS stale
+        # (v2.1.10, "21,000+ facilities") while our file said 2.9.3/80 tools.
+        # Verifying our own artifact instead of what the registry serves is the
+        # same blind spot that cost us the front door and the listing board.
+        if: steps.commit.outputs.server_json == 'yes' || steps.regdrift.outputs.behind == 'yes'
         env:
           MCP_REGISTRY_DNS_KEY: ${{ secrets.MCP_REGISTRY_DNS_KEY }}
         run: |
