@@ -6051,9 +6051,19 @@ function trackedTool(srv, name, description, schema, handler) {
   // with the same args return the same data, no side effect) → true; write tools mutate
   // state (mint key, bind email, save/alert) → false. Completes the 4-hint set ChatGPT
   // Apps review + Gemini Enterprise both read.
+  // r-access-tags (2026-07-27): declare cost expectations AT REGISTRATION so
+  // the SDK-sessioned tools/list (Claude Desktop et al.) carries them too —
+  // the post-parse injection in _buildToolsListResult only covers the
+  // stateless cached path (verified live: stateless 80/80 tagged, sessioned
+  // 0/80 because the SDK serializes from its registry). Same derivation as
+  // the gate sets, so declaration can't drift from enforcement.
+  const _access = PAID_ONLY_TOOLS.has(name) ? 'paid'
+    : METERED_ENFORCE_TOOLS.has(name) ? 'metered'
+    : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
+  const _accessTag = { access: _access, pricing_url: 'https://dchub.cloud/pricing' };
   const _annot = WRITE_TOOLS.has(name)
-    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
-    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false, ..._accessTag }
+    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false, ..._accessTag };
   const _stamped = _stampEntityCb(name, async (args, extra) => {
     const c = getCtx();
     const t0 = Date.now();
@@ -6996,8 +7006,39 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // email buys a real, visible benefit (more full flagship answers/day).
         const _bound = !!c.email;
         const _cap = _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
-        if (_cap > 0 && _trialFullCallsExceeded(c.client_ip, name, _cap,
-                                                c.api_key || c.client_ip)) {  // r-durable-cap: durable identity = api_key||ip
+        const _tasteExceeded = _cap > 0
+          && _trialFullCallsExceeded(c.client_ip, name, _cap,
+                                     c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
+        if (_cap > 0 && !_tasteExceeded) {
+          // r-metered-visible (2026-07-27 digest wave, "metered trial"): the
+          // taste was SILENT — an agent got N full answers with no warning,
+          // then slammed into the gate on call N+1 as a surprise (197 distinct
+          // grid-paywall callers / 14d, zero conversions — a surprise wall
+          // converts nobody). Announce the meter ON the full answers so the
+          // agent can anticipate the boundary and show its human concrete
+          // results BEFORE the gate. Additive + parse-guarded: any surprise
+          // leaves the full answer byte-identical.
+          try {
+            const _mtParsed = JSON.parse(result.content?.[0]?.text || '{}');
+            if (_mtParsed && typeof _mtParsed === 'object' && !Array.isArray(_mtParsed)) {
+              const _mtRemaining = _trialFullRemaining(c.client_ip, name, _cap);
+              const _mtCall = Math.min(_cap, Math.max(1, _cap - _mtRemaining));
+              _mtParsed._metered_trial = {
+                call: _mtCall,
+                of: _cap,
+                remaining_today: _mtRemaining,
+                note: 'Full-fidelity trial answer ' + _mtCall + ' of ' + _cap
+                  + ' today — keep or summarize these results for your human. '
+                  + 'After the last free call this tool returns a preview with '
+                  + 'one-click unlock options ($10 one-time = 1,000 calls'
+                  + (_bound ? '' : '; free: bind_email lifts your daily cap')
+                  + ').',
+              };
+              result.content[0].text = JSON.stringify(_mtParsed);
+            }
+          } catch (_e) { /* annotation must never break a full answer */ }
+        }
+        if (_tasteExceeded) {
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
