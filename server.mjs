@@ -45,7 +45,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
 // error codes, so payment challenge/failure are surfaced as structured TOOL
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
-import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED } from './mpp-hook.mjs';
+import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppOffer, mppPrewallOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED } from './mpp-hook.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
@@ -7089,6 +7089,40 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               ] };
             }
           } catch (_) { /* fall through to full data on parse failure */ }
+        }
+        // ── r-prewall (2026-07-27): UNDER-cap path — the agent is getting its
+        // FULL answer, and is at/near its last free one. Attach the ready-to-pay
+        // offer HERE, while intent is live, instead of only at the wall.
+        // Measured reason: only 0.1% of payable-tool calls are ever gated, so
+        // the pay offer (and the bind ladder) were effectively invisible.
+        // Nothing is withheld — this is additive metadata on a successful call.
+        // Fail-soft + flag-killable (MPP_PREWALL_DISABLE=1); never blocks the
+        // response. Recorded as a PASSIVE offer, never as `mpp_challenge`.
+        else if (_cap > 0) {
+          try {
+            // ★ Counter semantics: _trialFullCallsExceeded ALREADY incremented
+            // for this call in the `if` above (it increments, then compares), so
+            // _trialFullRemaining is ALREADY "left AFTER this answer" — do not
+            // subtract again or the offer fires a call early. And the day-counter
+            // key is built from the FIRST arg (client_ip); the durable id is only
+            // used for hydration, so read with the same client_ip or you read a
+            // different bucket and always see a full allowance.
+            const _rem = _trialFullRemaining(c.client_ip, name, _cap);
+            const _pre = await mppPrewallOffer(name, _rem);
+            if (_pre) {
+              const _p = JSON.parse(result.content?.[0]?.text || '{}');
+              if (_p && typeof _p === 'object') {
+                _p.agent_payment = _pre;
+                // `result` is a const binding — mutate its contents, never
+                // reassign it (assignment would throw TypeError at runtime,
+                // and `node --check` does not catch that).
+                result.content = [{ type: 'text', text: JSON.stringify(_p) }];
+                result.structuredContent = { ...(result.structuredContent || {}),
+                                             agent_payment: _pre };
+                status = 'mpp_offer_prewall';   // NOT mpp_challenge — passive offer
+              }
+            }
+          } catch (_) { /* offer is a bonus; a failure must never cost the answer */ }
         }
       }
       // r-fiber-taste-cap (2026-06-20): the trial_taste UNDER-cap path falls

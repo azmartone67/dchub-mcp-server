@@ -182,3 +182,47 @@ export async function mppOffer(name, ms = 1200) {
     refresh_challenge: 'retry this call with _meta.mpp_pay=true for a new challenge',
   };
 }
+
+/**
+ * r-prewall (2026-07-27): PRE-WALL offer — the pay option attached to a call that
+ * SUCCEEDS, while the agent still has intent, instead of only at the wall.
+ *
+ * WHY: shell #34 measured the wall itself. Only 3 of 2,529 real payable-tool calls
+ * in 30d were ever gated (0.1%) — the auto-trial grants full data on essentially
+ * every call, so 99.9% of agents never saw the pay offer at all. Both the payment
+ * rail and the email-bind ladder sit behind a wall almost nobody reaches. Making
+ * the rail nicer was never going to help; making the offer REACHABLE is the lever.
+ *
+ * This takes nothing away: the agent still gets its full answer. It just also
+ * learns, on its last free call, that the next one costs $0.50 and can be paid
+ * in one retry — while it is mid-task and the answer just proved useful.
+ *
+ * ★ METRIC CONTRACT (do not break): this offer is PASSIVE. It must never be
+ * recorded as `mpp_challenge` — that status means "an agent ASKED to pay" and is
+ * the real pay-intent signal. If a passively-shipped challenge were counted, the
+ * metric would degrade into "every call near the cap" and stop meaning anything.
+ * The downstream signal for this surface is a SETTLE attempt (mpp_paid /
+ * mpp_verify_failed), and challenges≈0 stays the expected steady state.
+ *
+ * @param {string} name       tool name
+ * @param {number} remaining  full answers left today AFTER this one (0 = last free)
+ * @returns {object|null}     offer to merge into structuredContent.agent_payment
+ */
+export async function mppPrewallOffer(name, remaining) {
+  if (String(process.env.MPP_PREWALL_DISABLE || '') === '1') return null;
+  if (!mppEnabled() || !isMppTool(name)) return null;
+  const at = Math.max(0, parseInt(process.env.MPP_PREWALL_AT || '1', 10));
+  if (!Number.isFinite(remaining) || remaining > at) return null;
+  const offer = await mppOffer(name);          // reuses the breaker + inline challenge
+  if (!offer) return null;
+  const last = remaining <= 0;
+  return {
+    ...offer,
+    offer_type: 'pre_wall',                    // passive — NOT pay-intent
+    passive: true,
+    free_full_answers_remaining: remaining,
+    note: last
+      ? `This was your LAST free full \`${name}\` answer today. The next one is $${mppPrice(name)} — payable in one retry with the challenge below, no key and no human needed.`
+      : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that it is $${mppPrice(name)} per call — payable in one retry with the challenge below, no key and no human needed.`,
+  };
+}
