@@ -47,7 +47,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
 import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED } from './mpp-hook.mjs';
 import express from 'express';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID, createHash, createHmac } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
@@ -286,7 +286,35 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // off-ramp (human_message) is what an agent actually relays; the recover
   // pointer was a 3rd competing line that got summarized away anyway.
   const recoverLine = '';
+  // r-human-relay (2026-07-27 digest wave): the structured half of the
+  // agent→human bridge. 2,155 claims in 30d were consumed by agents and
+  // opened by ZERO humans — everything died in the agent's context window.
+  // for_your_human is ONE stable object (a sentence + ONE link) that
+  // platforms reliably surface verbatim; the link is a signed short-lived
+  // HUMAN page (/upgrade/h/<token>, backend routes/human_relay.py) that
+  // shows what the agent was doing and one attributed upgrade button —
+  // and every open is measured (relay_opens), the first human-eyeball
+  // metric this funnel has ever had. Token contract mirrors the backend:
+  // base64url(sid|tool|tier|ts) + '.' + hex(hmac_sha256(INTERNAL_KEY))[:32].
+  // Kill: DCHUB_HUMAN_RELAY=0 (envelopes simply omit the block).
+  let for_your_human;
+  try {
+    if ((process.env.DCHUB_HUMAN_RELAY || '1') !== '0'
+        && process.env.DCHUB_INTERNAL_KEY) {
+      const _raw = `${sessionId || ''}|${toolName || ''}|${currentTier}|${Math.floor(Date.now() / 1000)}`;
+      const _payload = Buffer.from(_raw).toString('base64url');
+      const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
+        .update(_payload).digest('hex').slice(0, 32);
+      for_your_human = {
+        message: 'Your AI assistant hit DC Hub’s paid data boundary'
+          + (toolName ? ' on ' + toolName : '')
+          + '. Open this link to see what it found and how to unlock it:',
+        url: 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig,
+      };
+    }
+  } catch (_e) { /* relay is additive — never break a paywall envelope */ }
   return {
+    ...(for_your_human ? { for_your_human } : {}),
     human_message: relayLead + human_message + recoverLine + usageLine + promoText(),
     redeem_url:    redeemUrl,
     upgrade_url:   upgradeUrl,
@@ -4099,6 +4127,25 @@ async function _buildToolsListResult(descOverrides) {
     if (!r || !Array.isArray(r.tools) || r.tools.length === 0) {
       throw new Error(`probe returned ${r && r.tools ? r.tools.length : 'no'} tools`);
     }
+    // r-access-tags (2026-07-27 digest wave, Cline-parity): declare cost
+    // expectations per tool so agents plan around the paywall instead of
+    // slamming into it (197 distinct callers hit the grid paywall in 14d,
+    // zero conversions — a surprise wall converts nobody). access ∈
+    // free|metered|paid derived from the SAME sets the live gate enforces,
+    // so the declaration can't drift from behavior. Injected post-parse on
+    // the cached result (the hot path); spec-safe under namespaced _meta,
+    // mirrored in annotations for UIs that render them.
+    try {
+      for (const t of r.tools) {
+        const access = PAID_ONLY_TOOLS.has(t.name) ? 'paid'
+          : METERED_ENFORCE_TOOLS.has(t.name) ? 'metered'
+          : FREE_FULL_TOOLS.has(t.name) ? 'free'
+          : 'free_preview';   // free-tier depth with paid full-fidelity
+        const tag = { access, pricing_url: 'https://dchub.cloud/pricing' };
+        t._meta = { ...(t._meta || {}), 'cloud.dchub/access': tag };
+        t.annotations = { ...(t.annotations || {}), ...tag };
+      }
+    } catch (_e) { /* tags are additive — never break tools/list */ }
     console.log(`[tools-list-cache] built ${r.tools.length} tools in ${Date.now() - t0}ms`);
     return { tools: r.tools };
   } finally {
