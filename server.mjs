@@ -329,7 +329,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.9.1' }.version;  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.9.2' }.version;  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -5563,6 +5563,28 @@ export const _EXEC_IS_RTO = (v) => _EXEC_RTOS.has(String(v || '').toUpperCase())
 export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
   get_interconnection_queue: 'iso', get_refined_queue: 'iso',
   get_retirement_headroom: 'region_iso' };
+// v2.9.2: a COMPARISON intent legitimately spans several geographies
+// ("compare Phoenix vs Dallas" = WECC + ERCOT). Constraining to the first
+// match and rejecting the other market's mints produced C1 FAIL on a
+// perfectly correct run — proven live by the Mistral Org Agent's round-2
+// execution. Rejection now tests membership of the FULL set the intent
+// names; injection still requires exactly ONE (you cannot inject two ISOs
+// into one argument).
+export function _execConstraintIsoSet(intentText, userCtx, signals) {
+  const out = [];
+  const push = (v) => {
+    const u = String(v || '').toUpperCase();
+    if (u && !out.includes(u)) out.push(u);
+  };
+  if (userCtx && userCtx.iso) { push(userCtx.iso); return out; }
+  if (signals && signals.iso) push(signals.iso);
+  const t = String(intentText || '').toLowerCase();
+  for (const [city, iso] of Object.entries(_CITY_ISO)) {
+    if (t.includes(city)) push(iso);
+  }
+  return out;
+}
+
 export function _execConstraintIso(intentText, userCtx, signals) {
   if (userCtx && userCtx.iso) return String(userCtx.iso).toUpperCase();
   if (signals && signals.iso) return String(signals.iso).toUpperCase();
@@ -8506,7 +8528,9 @@ function createServer(descOverrides) {
       const sc = _planQuery(a && a.intent, a.context);
       let _sig = null;
       try { _sig = _planSignals(String((a && a.intent) || ''), a.context); } catch (_e) {}
-      const constraintIso = _execConstraintIso(a && a.intent, userCtx, _sig);
+      const constraintIsoSet = _execConstraintIsoSet(a && a.intent, userCtx, _sig);
+      // Inject ONLY when the intent named exactly one geography.
+      const constraintIso = constraintIsoSet.length === 1 ? constraintIsoSet[0] : null;
       const constraintSlug = (userCtx && userCtx.market) || _execConstraintSlug(a && a.intent);
       const rejectedMints = [];
       const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
@@ -8584,10 +8608,10 @@ function createServer(descOverrides) {
               }
               for (const [kind, vals] of Object.entries(fresh)) {
                 for (const v of vals) {
-                  if (kind === 'iso' && constraintIso
-                      && String(v).toUpperCase() !== constraintIso) {
+                  if (kind === 'iso' && constraintIsoSet.length
+                      && !constraintIsoSet.includes(String(v).toUpperCase())) {
                     rejectedMints.push({ kind, value: v, from: s.tool,
-                                         constraint: constraintIso });
+                                         constraint: constraintIsoSet.join('|') });
                     continue;
                   }
                   const arr = (minted[kind] = minted[kind] || []);
@@ -8628,8 +8652,9 @@ function createServer(descOverrides) {
             _execHarvest(out2.full || out2.result, fresh2, Math.max(maxFan, 3));
             for (const [kind, vals] of Object.entries(fresh2)) {
               for (const v of vals) {
-                if (kind === 'iso' && constraintIso && String(v).toUpperCase() !== constraintIso) {
-                  rejectedMints.push({ kind, value: v, from: s.tool, constraint: constraintIso });
+                if (kind === 'iso' && constraintIsoSet.length
+                    && !constraintIsoSet.includes(String(v).toUpperCase())) {
+                  rejectedMints.push({ kind, value: v, from: s.tool, constraint: constraintIsoSet.join('|') });
                   continue;
                 }
                 const arr = (minted[kind] = minted[kind] || []);
@@ -8644,10 +8669,11 @@ function createServer(descOverrides) {
         // r-invariants: constraint_check decisions — 'completed without
         // invariant violations' is what completion-rate can't see.
         const cchecks = [];
-        if (constraintIso) {
+        if (constraintIsoSet.length) {
           cchecks.push({ id: 'C1', kind: 'constraint_check',
             status: rejectedMints.length ? 'FAIL' : 'PASS',
-            decision: 'every minted iso must satisfy intent geography (' + constraintIso + ')',
+            decision: 'every minted iso must satisfy intent geography ('
+              + constraintIsoSet.join(' or ') + ')',
             rationale: rejectedMints.length
               ? 'rejected ' + rejectedMints.length + ' mint(s): '
                 + rejectedMints.map((r) => r.value + ' from ' + r.from).join(', ')
@@ -8676,7 +8702,7 @@ function createServer(descOverrides) {
           timestamp: new Date().toISOString(), tool: 'execute_plan_steps',
           params: { intent_class: sc.intent_class, status_counts: counts,
                     wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
-                    constraint_iso: constraintIso || null },
+                    constraint_iso: constraintIsoSet.join('|') || null },
           platform: (c && c.platform) || 'unknown', client_name: null,
           api_key: null, tier: null, session_id: (c && c.session_id) || null,
           status: 'success', duration_ms: Date.now() - t0,
@@ -8690,7 +8716,10 @@ function createServer(descOverrides) {
         minted: Object.fromEntries(Object.entries(minted)
           .filter(([k]) => !k.startsWith('__'))),
         ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
-        ...(constraintIso ? { constraint_iso: constraintIso } : {}),
+        ...(constraintIsoSet.length
+            ? { constraint_iso: constraintIsoSet.length === 1
+                  ? constraintIsoSet[0] : constraintIsoSet }
+            : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,

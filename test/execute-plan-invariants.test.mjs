@@ -8,10 +8,11 @@
  *
  * Pure functions + constant tables only — no network, no DB, no server boot.
  */
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   _execResolveArgs, _execHarvest, _execConstraintIso, _execConstraintSlug,
-  _EXEC_IS_RTO, _EXEC_TOOL_MINTS, _EXEC_ISO_ARG, _planQuery,
+  _execConstraintIsoSet, _EXEC_IS_RTO, _EXEC_TOOL_MINTS, _EXEC_ISO_ARG, _planQuery,
 } from '../server.mjs';
 
 describe('execute_plan invariants (live-battery regressions)', () => {
@@ -116,6 +117,26 @@ describe('execute_plan invariants (live-battery regressions)', () => {
     expect(_execConstraintIso('no geography here', {}, null)).toBeNull();
     // non-RTO metros still yield a CONSTRAINT (used to reject bad mints)
     expect(_execConstraintIso('overlap in Atlanta', {}, null)).toBe('SERC');
+  });
+
+  // ── trap 13 (v2.9.2): comparison intents span MULTIPLE geographies ──
+  it('collects every geography a comparison intent names', () => {
+    // Live: the Mistral Org Agent ran "compare Phoenix vs Dallas" and C1
+    // FAILED on a correct run, because the executor constrained to the first
+    // match and rejected the other market's mints.
+    expect(_execConstraintIsoSet('compare Phoenix vs Dallas for power cost', {}, null))
+      .toEqual(['ERCOT', 'WECC']);
+    expect(_execConstraintIsoSet('find 100 MW near Dallas', {}, null)).toEqual(['ERCOT']);
+    expect(_execConstraintIsoSet('rank markets for a 200 MW AI campus', {}, null)).toEqual([]);
+    // explicit user context still wins outright
+    expect(_execConstraintIsoSet('compare Phoenix vs Dallas', { iso: 'pjm' }, null))
+      .toEqual(['PJM']);
+  });
+
+  it('injects an iso arg ONLY when the intent named exactly one geography', () => {
+    // You cannot inject two ISOs into one argument — ambiguity must not guess.
+    const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+    expect(src).toContain('constraintIsoSet.length === 1 ? constraintIsoSet[0] : null');
   });
 
   it('derives a market slug from the intent-named metro', () => {
