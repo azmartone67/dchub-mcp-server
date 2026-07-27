@@ -67,6 +67,19 @@ const TARGETS = [
     alphabetical: false,                    // section isn't sorted — append at end
     entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across 311 markets, ISO grid telemetry, fiber routes; 79 tools, free tier, no signup)`,
   },
+  // ── AUTO-DISCOVERED yzfly/Awesome-MCP-ZH (★7470) — VET BEFORE ENABLING ──
+  // MCP 资源精选， MCP指南，Claude MCP，MCP Servers, MCP Clients
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-mcp-zh', upstream: 'yzfly/Awesome-MCP-ZH', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
