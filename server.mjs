@@ -2678,6 +2678,28 @@ const ANON_INLINE_FULL = _anonInlineFullEnabled(process.env.DCHUB_ANON_INLINE_FU
 // Returns {text, sc}; {'',{}} if no key (caller falls back to prior behavior).
 const _TRIAL_UNLOCKED_HINT =
   'get_grid_intelligence + get_fiber_intel (full, ' + TRIAL_DAILY_FULL_CAP + '/day), get_grid_data, get_market_intel, get_pipeline, get_interconnection_queue, list_transactions';
+// r-envelope (2026-07-27, shell #38 lane 2). Removes ONLY `high_intent_*` keys
+// whose exact value already appears under a different key in the same envelope.
+// Conservative on purpose: same-value duplicates carry no information, but a
+// key that is the sole carrier of its value is always kept.
+function _dedupeAliasKeys(obj) {
+  try {
+    if (!obj || typeof obj !== 'object') return obj;
+    const seen = new Map();
+    for (const [k, v] of Object.entries(obj)) {
+      if (k.startsWith('high_intent_')) continue;
+      if (typeof v === 'string' && v.length >= 40) seen.set(v, k);
+    }
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k.startsWith('high_intent_') && typeof v === 'string'
+          && v.length >= 40 && seen.has(v)) continue;   // duplicate label only
+      out[k] = v;
+    }
+    return out;
+  } catch { return obj; }
+}
+
 function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   if (!mint || !mint.api_key) return { text: '', sc: {} };
   const days  = mint.days_remaining != null ? mint.days_remaining : (mint.trial_days || 7);
@@ -2788,9 +2810,18 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it ($10 one-time = 1,000 API calls) at ' + _meteredUrl + '.')
       : _exhausted
       ? ('Today’s free full ' + name + ' answers are used. \u{1F4B3} $10 one-time = 1,000 calls (' + _meteredUrl + ' — or call unlock_more_data for one-click links) returns complete answers the moment your human pays. Free: bind_email lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.')
-      : (autoBound
-          ? ('This trial key is ALREADY applied to your current session — just call ' + name + ' again' + (_capKnown ? ' (you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the free trial)' : ' for the full result') + '. No header, no reconnect. (Save persist_command to keep it across future sessions.)')
-          : ('Add header X-API-Key: ' + mint.api_key + ' (configure it on the MCP server and reconnect), then call ' + name + ' again' + (_capKnown ? ' — you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the free trial' : ' for the full result') + '.')),
+      // r-coherence (2026-07-27, shell #38 lane 3): ONE instruction, true under
+      // BOTH session states. The old code branched on `autoBound`, which is set
+      // only when this replica's in-memory sessionMeta holds the session — so two
+      // consecutive calls that land on DIFFERENT replicas produced:
+      //   call 1 "ALREADY applied … No header, no reconnect"   (autoBound true)
+      //   call 2 "Add header … and reconnect"                  (autoBound false)
+      // An agent that OBEYED call 1 landed in call 2 and was told the opposite.
+      // Measured live 2026-07-27. Never branch a caller INSTRUCTION on per-replica
+      // state; state the key once and make both paths work.
+      : ('Call ' + name + ' again' + (_capKnown ? ' (you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the free trial)' : ' for the full result')
+         + '. If it is still gated, your client did not carry the key — add header X-API-Key: ' + mint.api_key
+         + ' (session binding is per-connection, so a reconnect can drop it). Save persist_command to keep it across future sessions.'),
     ...(_capKnown ? { remaining_full_today: remainingFull } : {}),
     trial_unlocks_this_tool:   !stillPro,
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
@@ -3678,7 +3709,15 @@ function _stampEntityCb(toolName, fn) {
             if (_co) _add.site_evaluation_handoff = _siteHandoff(_co);
           }
           if (Object.keys(_add).length) {
-            return { ...r, structuredContent: { ..._add, ...sc } };
+            // r-envelope (2026-07-27, shell #38 lane 2): shed alias keys whose
+            // value is byte-identical to another key already in the envelope.
+            // Measured live: the api key appeared 8x, persist_command 2x and
+            // upgrade_url 2x in ONE response — 97.2% of a 6,683b payload was
+            // envelope and 0 fields were data. NARROW BY DESIGN: only drops a
+            // `high_intent_*` alias, only when an identical value is already
+            // present under another key, and only when it is long enough to be
+            // worth shedding — so no value is ever lost, just a duplicate label.
+            return { ...r, structuredContent: _dedupeAliasKeys({ ..._add, ...sc }) };
           }
         } else {
           // content-only tool → MIRROR the JSON payload into structuredContent
