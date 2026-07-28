@@ -4711,6 +4711,103 @@ function _cookbookFirstTime(sid) {
   _COOKBOOK_SEEN.add(sid);
   return true;
 }
+// ── STARTER PACK: the first surface a connecting agent actually sees ─────────
+// Perplexity named this three times as the single highest-leverage change:
+// "put the starter pack in the first surface a connecting agent sees, not just
+// in docs" — the first screen should answer "what do I do next?", not "what is
+// this?". Measured backdrop: 89.4% of agents are one-tool-and-gone.
+//
+// ★★ WHY IT HOOKS AT THE OUTERMOST WRAPPER AND NOT ALONGSIDE withFrontDoorNudge.
+// The 07-21 front-door nudge is applied on the CLEAN full-data return, which
+// sits at indent 6 inside trackedTool. Every anonymous / trial / preview path
+// returns EARLIER, at indent 8-12 — `return withBindHint(...)` and friends —
+// and so exits the handler before that line is ever reached. Probed live
+// 2026-07-28 with fresh anonymous sessions: get_grid_scoreboard, rank_markets
+// and get_grid_intelligence ALL returned with no `_front_door` key and no
+// nudge prose, despite all three being in _FRONT_DOOR_NUDGE_TOOLS. The channel
+// built to reach agents with stale instructions was reaching almost nobody —
+// the same PATH-vs-SET mistake as the pre-wall pay offer (07-28): the tool set
+// overlapped, the code path did not.
+//
+// So this attaches at the single choke point every return flows through — the
+// registerTool callback — where anonymous and keyed paths have already merged.
+//
+// ★ get_grid_scoreboard is the specific reason this matters: our own server
+// instructions say "GOLDEN PATH for your first session: (1) call
+// get_grid_scoreboard". The one call we tell every new agent to make first was
+// the one returning no next step at all.
+//
+// Cost is bounded by design: ONCE per session, ~600 bytes, on the single call
+// the majority of agents ever make. Kill: DCHUB_STARTER_PACK=0.
+const _STARTER_PACK_SEEN = new Set();
+const _STARTER_PACK_SEEN_MAX = 20000;
+function _starterPackFirstTime(sid) {
+  if (!sid) return false;            // no id to dedupe on → skip, never spam every call
+  if (_STARTER_PACK_SEEN.has(sid)) return false;
+  if (_STARTER_PACK_SEEN.size >= _STARTER_PACK_SEEN_MAX) {
+    let i = 0; const drop = _STARTER_PACK_SEEN_MAX / 10;
+    for (const k of _STARTER_PACK_SEEN) { _STARTER_PACK_SEEN.delete(k); if (++i >= drop) break; }
+  }
+  _STARTER_PACK_SEEN.add(sid);
+  return true;
+}
+
+// The five high-intent recipes, in Perplexity's order. Each is a literal,
+// runnable execute_plan intent — ChatGPT's point that these function as
+// BEHAVIOURAL ANCHORS, not documentation: an agent that repeatedly sees the
+// shape learns both the entry point and the class of problem it solves. Kept
+// byte-identical to the six anchors published on /for/*, llms.txt, AGENTS.md
+// and every /integrations page, so repetition across surfaces is the signal.
+const _STARTER_PACK = Object.freeze([
+  { recipe: 'market_selection',
+    intent: 'rank markets for a 200 MW AI campus' },
+  { recipe: 'grid_and_queue',
+    intent: 'how much power is available in ERCOT for a 100 MW data center' },
+  { recipe: 'compare_markets',
+    intent: 'compare Dallas vs Phoenix for a GPU training cluster' },
+  { recipe: 'site_analysis',
+    intent: 'find 100 MW of buildable capacity near Ashburn' },
+  { recipe: 'fiber_power_pairing',
+    intent: 'where do fiber density and grid headroom overlap in Atlanta' },
+]);
+
+export function withStarterPack(result, toolName, c) {
+  try {
+    if ((process.env.DCHUB_STARTER_PACK || '') === '0') return result;
+    if (_isCleanPlatform()) return result;
+    if (!result || result.isError) return result;
+    const sid = (c && (c.session_id || c.api_key)) || '';
+    if (!_starterPackFirstTime(sid)) return result;
+
+    // structuredContent is the durable channel — one object, no prose to parse.
+    if (result.structuredContent && typeof result.structuredContent === 'object'
+        && !Array.isArray(result.structuredContent)) {
+      result.structuredContent.starter_pack = {
+        how: 'Each of these is ONE execute_plan call. Pass the intent through unchanged.',
+        call: 'execute_plan',
+        recipes: _STARTER_PACK.map((r) => ({ ...r })),
+        slash_commands: 'Clients supporting MCP prompts/list get these as /dchub:<recipe>.',
+      };
+    }
+    // Prose only if the front-door nudge has not already spoken on THIS
+    // response — most hosts render content[] and not structuredContent, but two
+    // execute_plan explanations in one envelope is noise, not emphasis.
+    if (Array.isArray(result.content)) {
+      const already = result.content.some(
+        (it) => typeof it?.text === 'string' && it.text.includes('`execute_plan`'));
+      if (!already) {
+        result.content = [...result.content, { type: 'text', text:
+          '\u{1F9ED} **Next:** one `execute_plan` call answers a whole multi-step question — '
+          + 'it runs the ordered plan server-side and returns every step plus an auditable replay. '
+          + 'Try any of these verbatim:\n'
+          + _STARTER_PACK.map((r) => '  • `execute_plan intent="' + r.intent + '"`').join('\n')
+          + '\nSingle-capability lookups go direct to their tool.' }];
+      }
+    }
+  } catch (_e) { /* never break a tool response */ }
+  return result;
+}
+
 export function withCookbookHint(result, toolName, c) {
   try {
     if (process.env.DCHUB_COOKBOOK_HINT !== '1') return result;    // env-gated OFF by default
@@ -7825,7 +7922,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     // + all-optional, so neither can reject a real payload.
     outputSchema: _TOOL_OUTPUT_SCHEMAS[name] || _OUTPUT_ENVELOPE,
     annotations: _annot,
-  }, async (args, extra) => _scrubCommerce(_ensureStructured(await _stamped(args, extra))));
+  }, async (args, extra) => withStarterPack(
+       _scrubCommerce(_ensureStructured(await _stamped(args, extra))), name, getCtx()));
 }
 
 // r-chatgpt-commerce-scrub (2026-07-19): OpenAI's App Directory supports
