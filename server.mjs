@@ -102,6 +102,45 @@ const TOOL_ALIASES = {
 // render verbatim instead of summarizing away. Plus attribution query
 // params on the upgrade URL so /api/v1/observability/conversion/track
 // can attribute clicks to the exact tool that triggered the upgrade.
+// ★★2026-07-28 relay-click gap. Extracted from buildPaywallExtras so the
+// AUTO-TRIAL envelope can emit it too — that was THE reason zero humans had ever
+// opened a relay link.
+//
+// MEASURED, EMPIRICALLY: an anonymous agent calling a paid tool is auto-trialled
+// INLINE (auto_trial_key minted, remaining=2) and NEVER sees a paywall, so
+// buildPaywallExtras never runs and for_your_human is never emitted. Four
+// consecutive live calls to get_grid_intelligence returned for_your_human=false.
+// The auto-trial envelope's only human CTA was a TEXT line pointing at the Stripe
+// metered URL — which is NOT the signed /upgrade/h/<token> page and is therefore
+// NOT counted in relay_opens. Hence relay_opens held 2 rows, both our own probes.
+// This is the open brain finding "[brain-l15] Auto-trial whitelist swallows the
+// upgrade wall" (#1790), now reproduced from the client side.
+//
+// The fix is NOT to restore friction: auto-trial exists because 7,839 paywall
+// signals produced 6 conversions (0.08%) — agents bounced. Instead the agent gets
+// BOTH: the working data AND a measured human handoff link. Asking for paid data
+// IS the high-intent moment, whether or not a wall was hit.
+function buildHumanRelay(toolName, tier, sessionId) {
+  try {
+    if ((process.env.DCHUB_HUMAN_RELAY || '1') === '0'
+        || !process.env.DCHUB_INTERNAL_KEY) return undefined;
+    if (!sessionId) {
+      try { sessionId = (getCtx() && getCtx().session_id) || ''; } catch (_) { sessionId = ''; }
+    }
+    const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}`;
+    const _payload = Buffer.from(_raw).toString('base64url');
+    const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
+      .update(_payload).digest('hex').slice(0, 32);
+    return {
+      message: 'Your AI assistant hit DC Hub’s paid data boundary'
+        + (toolName ? ' on ' + toolName : '')
+        + '. Open this link to see what it found and how to unlock it:',
+      url: 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig,
+    };
+  } catch (_e) { return undefined; }   // additive — never break an envelope
+}
+
+
 function buildPaywallExtras(toolName, currentTier, sessionId) {
   // phase65_redeem_in_human_message -- redeem URL is the primary CTA in
   // human_message because AI clients render this field verbatim.
@@ -297,22 +336,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // metric this funnel has ever had. Token contract mirrors the backend:
   // base64url(sid|tool|tier|ts) + '.' + hex(hmac_sha256(INTERNAL_KEY))[:32].
   // Kill: DCHUB_HUMAN_RELAY=0 (envelopes simply omit the block).
-  let for_your_human;
-  try {
-    if ((process.env.DCHUB_HUMAN_RELAY || '1') !== '0'
-        && process.env.DCHUB_INTERNAL_KEY) {
-      const _raw = `${sessionId || ''}|${toolName || ''}|${currentTier}|${Math.floor(Date.now() / 1000)}`;
-      const _payload = Buffer.from(_raw).toString('base64url');
-      const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
-        .update(_payload).digest('hex').slice(0, 32);
-      for_your_human = {
-        message: 'Your AI assistant hit DC Hub’s paid data boundary'
-          + (toolName ? ' on ' + toolName : '')
-          + '. Open this link to see what it found and how to unlock it:',
-        url: 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig,
-      };
-    }
-  } catch (_e) { /* relay is additive — never break a paywall envelope */ }
+  const for_your_human = buildHumanRelay(toolName, currentTier, sessionId);
   return {
     ...(for_your_human ? { for_your_human } : {}),
     human_message: relayLead + human_message + recoverLine + usageLine + promoText(),
@@ -2865,7 +2889,12 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
           : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days' + (_capKnown ? ', first ' + remainingFull + ' answer' + _morePlural + '/day full' : '') + ').\n')) +
        '\n\u{1F464} **Tell your human:** to keep `' + name + '` past the ' + days + '-day trial — one click, **$10 = 1,000 calls**, no subscription, no email needed → ' + _meteredUrl + '\n' +
        _FRONT_DOOR_LINE);
+  // ★2026-07-28: the auto-trial envelope now carries the SAME measured human-relay
+  // link as a paywall envelope. Before this, the most common agent path produced no
+  // for_your_human at all and every human handoff was unmeasurable.
+  const _autoRelay = buildHumanRelay(name, mint.tier || 'trial', null);
   const sc = {
+    ...(_autoRelay ? { for_your_human: _autoRelay } : {}),
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
     auto_trial_daily_calls:    calls,
