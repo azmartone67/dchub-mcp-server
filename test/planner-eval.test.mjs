@@ -31,6 +31,15 @@ const CANONICAL = [
   { intent: 'electricity prices in Texas',                   cls: 'price',                 tool: 'get_energy_prices' },
   { intent: 'search for data centers in Virginia',           cls: 'facility_search',       tool: 'search_facilities' },
   { intent: 'analyze the site at 33.45,-112.07',             cls: 'site_analysis',         tool: 'analyze_site' },
+  // 2026-07-28: the DISTRIBUTION layer. get_hosting_capacity shipped registered
+  // but absent from every class, so execute_plan — the advertised front door —
+  // could not reach it for ANY intent.
+  { intent: 'hosting capacity on the feeders near Poughkeepsie', cls: 'hosting_capacity',   tool: 'get_hosting_capacity' },
+  // ...and the intent that exposed it: a textbook capacity search that scored 2
+  // against facility_search's 3 (on "data cent…s in") and routed to a search of
+  // EXISTING data centers, so it never reached the class the feeder read hangs
+  // off. Fixed by a verb-then-MW pattern, not by widening \bsite\b.
+  { intent: 'site a 50 MW data center in central Illinois',  cls: 'capacity_search',       tool: 'get_retirement_headroom' },
 ];
 
 describe('plan_query canonical behavior suite (run on every planner revision)', () => {

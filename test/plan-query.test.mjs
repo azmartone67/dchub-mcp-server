@@ -3,7 +3,7 @@
 // these tests exercise the exported _planQuery/_planSignals/_planWaves helpers directly.
 import { describe, it, expect } from 'vitest';
 import { _planQuery, _planSignals, _planWaves, _planWorkflowConfidence,
-         _planExecutionEstimate, _planParallelGroups, _planReplay,
+         _planExecutionEstimate, _planParallelGroups, _planReplay, _planHostingCoverage,
          PLANNER_VERSION, REPLAY_SCHEMA_VERSION, REPLAY_DECISION_STATUSES } from '../server.mjs';
 
 describe('plan_query router (pure)', () => {
@@ -357,6 +357,162 @@ describe('plan_query router (pure)', () => {
       expect(_planQuery('rank markets for a 200 MW AI campus').intent_class).toBe('market_ranking');
       expect(_planQuery('rank the best data-center markets in the US').intent_class).toBe('market_ranking');
       expect(_planQuery('how much power is available', { iso: 'ERCOT' }).intent_class).toBe('grid_headroom');
+    });
+  });
+
+  // ── r-planner-v5.5 (2026-07-28): the DISTRIBUTION layer ───────────────────
+  // get_hosting_capacity (tool #81) was registered and live but appeared in NO
+  // plan class, so execute_plan — advertised as the front door for multi-
+  // capability questions — could never route to it. Every other grid class in
+  // this router answers at TRANSMISSION level; none of them can say what the
+  // distribution system will actually serve.
+  //
+  // The whole risk of this wiring is score theft: keyword weights are one
+  // shared pool, and a pattern containing "capacity" would bleed score off
+  // capacity_search and grid_headroom. So the routing assertions below are
+  // paired with the no-theft sweep at the bottom, which is the real contract.
+  describe('v5.5 hosting_capacity (get_hosting_capacity was unroutable)', () => {
+    const seq = (q, ctx = {}) => (_planQuery(q, ctx).recommended_sequence || []).map((s) => s.tool);
+    const hcStep = (q, ctx = {}) => (_planQuery(q, ctx).recommended_sequence || [])
+      .find((s) => s.tool === 'get_hosting_capacity');
+
+    it('routes an explicit feeder / hosting-capacity intent to its own class', () => {
+      const p = _planQuery('what is the hosting capacity on the feeders near Poughkeepsie', {});
+      expect(p.intent_class).toBe('hosting_capacity');
+      expect(p.best_tool).toBe('get_hosting_capacity');
+      // the covered utility is resolved into a CONCRETE arg, not a placeholder
+      expect(p.recommended_sequence[0].args_hint).toMatchObject({
+        utility: 'Central Hudson (load headroom)', capacity_type: 'load' });
+      // the feeder number is never quoted alone: published feeders top out
+      // around 5-27 MW, so the transmission read rides in the same wave.
+      expect(seq('what is the hosting capacity on the feeders near Poughkeepsie'))
+        .toContain('get_grid_intelligence');
+      expect(p.execution_waves).toEqual([[1, 2, 3]]);
+    });
+
+    it('with no covered geography, plans the COVERAGE listing (no invented args)', () => {
+      // "is this published anywhere" is a real answer — the no-arg mode returns
+      // the 18 covered utilities rather than a placeholder the agent must fill.
+      const p = _planQuery('how much load can this feeder take', {});
+      expect(p.intent_class).toBe('hosting_capacity');
+      expect(p.recommended_sequence[0].args_hint).toEqual({});
+    });
+
+    it('capacity_search adds the feeder read ONLY inside a load-publishing utility', () => {
+      // Ameren Illinois FILES load-serving headroom — the number that actually
+      // answers "site 50 MW here" — so the step is worth a call.
+      const il = _planQuery('site a 50 MW data center in central Illinois', {});
+      expect(il.intent_class).toBe('capacity_search');
+      expect(seq('site a 50 MW data center in central Illinois')).toEqual([
+        'get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank', 'get_hosting_capacity']);
+      expect(il.execution_waves).toEqual([[1, 2, 3, 4]]);   // still one parallel wave
+      expect(hcStep('site a 50 MW data center in central Illinois').args_hint)
+        .toMatchObject({ utility: 'Ameren Illinois (load)', capacity_type: 'load' });
+      // ...and the intent's MW figure is deliberately NOT pushed into min_mw:
+      // filtering a 50 MW floor against a table whose ceiling is 9.9 MW returns
+      // empty, and empty reads as "no capacity" — the exact confidently-wrong
+      // answer this tool exists to prevent.
+      expect(hcStep('site a 50 MW data center in central Illinois').args_hint.min_mw).toBeUndefined();
+
+      // Texas: no utility publishes. The step is omitted rather than spent on a
+      // call whose whole content would be "not published" — but it stays a
+      // declared alternative so the route is still discoverable.
+      expect(seq('find 50 MW in Dallas')).toEqual([
+        'get_retirement_headroom', 'get_refined_queue', 'get_market_dcpi_rank']);
+      expect(_planQuery('find 50 MW in Dallas', {}).alternatives.map((a) => a.tool))
+        .toContain('get_hosting_capacity');
+    });
+
+    it('gen-only territory gets NO step — an export number cannot answer siting', () => {
+      // Dominion VA publishes "gen": DER EXPORT headroom, what the feeder can
+      // ACCEPT from solar/storage. Planning a step that returns it invites
+      // exactly the gen-quoted-as-load error the tool is built to prevent.
+      expect(seq('find 100 MW in Northern Virginia')).not.toContain('get_hosting_capacity');
+      expect(seq('find 100 MW near Providence Rhode Island')).not.toContain('get_hosting_capacity');
+    });
+
+    it('site_analysis adds the parcel-level feeder read inside covered territory', () => {
+      // A Central Hudson parcel: coordinates alone are enough — no utility name
+      // in the text — and they resolve to a point read, not a territory read.
+      const ctx = { lat: 41.86, lon: -74.02 };
+      const p = _planQuery('what power can I actually get at this parcel', ctx);
+      expect(p.intent_class).toBe('site_analysis');
+      expect(seq('what power can I actually get at this parcel', ctx)).toEqual([
+        'analyze_site', 'get_composite_site_score', 'get_disaster_risk', 'get_water_risk',
+        'get_hosting_capacity']);
+      expect(hcStep('what power can I actually get at this parcel', ctx).args_hint)
+        .toMatchObject({ lat: 41.86, lon: -74.02, capacity_type: 'load' });
+      // Phoenix — nobody publishes there, so the plan is byte-for-byte the old one
+      expect(seq('analyze the site at 33.45,-112.07')).toEqual([
+        'analyze_site', 'get_composite_site_score', 'get_disaster_risk', 'get_water_risk']);
+    });
+
+    it('a scheduled tool is never ALSO listed as a rejected alternative', () => {
+      for (const q of ['site a 50 MW data center in central Illinois',
+                       'what is the hosting capacity on the feeders near Poughkeepsie']) {
+        const p = _planQuery(q, {});
+        const planned = new Set(p.recommended_sequence.map((s) => s.tool));
+        for (const a of p.alternatives) expect(planned.has(a.tool)).toBe(false);
+        // and no tool is offered twice (runner-up colliding with a declaration)
+        const tools = p.alternatives.map((a) => a.tool);
+        expect(tools.length).toBe(new Set(tools).size);
+      }
+    });
+
+    it('_planHostingCoverage prefers the DRAW-side utility over the export-side one', () => {
+      // Published extents overlap: this Hudson Valley point sits inside Central
+      // Hudson's LOAD-headroom filing AND inside several export-side maps
+      // (Central Hudson's own DER map, NYSEG, Con Edison). Only the load number
+      // answers "how much can I take here", so it must win the tie — declaration
+      // order alone would hand back whichever box was listed first.
+      const both = _planHostingCoverage('this parcel', { lat: 41.86, lon: -74.02 });
+      expect(both.covered_hits).toBeGreaterThan(1);
+      expect(both.capacity_type).toBe('load');
+      expect(both.answers_load).toBe(true);
+      // coordinates work with no place name in the text at all
+      expect(both.matched_on).toBe('coordinates');
+      // a named territory resolves without coordinates
+      expect(_planHostingCoverage('a parcel in the Hudson Valley', null))
+        .toMatchObject({ utility: 'Central Hudson (load headroom)', matched_on: 'name' });
+      // export-side is still DETECTED — it just never earns a step
+      expect(_planHostingCoverage('near Providence', null).answers_load).toBe(false);
+      // and uncovered is honestly null, never a guess
+      expect(_planHostingCoverage('find 50 MW in Dallas', { lat: 32.78, lon: -96.8 })).toBeNull();
+    });
+
+    it('steals NOTHING — every intent the two planner suites pin keeps its class', () => {
+      // The stated risk of this change: "capacity" is a shared scoring pool.
+      // Every pattern added for hosting_capacity is feeder-shaped for exactly
+      // this reason; this is the assertion that holds them to it.
+      const PINNED = [
+        ['rank the best data-center markets in the US', 'market_ranking'],
+        ['rank markets for a 200 MW AI campus', 'market_ranking'],
+        ['best markets for a GPU training buildout', 'market_ranking'],
+        ['rank the best markets by grid power availability', 'market_ranking'],
+        ['find 50 MW in Dallas', 'capacity_search'],
+        ['where can I get 100 MW near a substation', 'capacity_search'],
+        ['where can I find 100 MW near a substation in ERCOT', 'capacity_search'],
+        ['compare Phoenix vs Columbus for hyperscale', 'market_comparison'],
+        ['compare Northern Virginia and Atlanta', 'market_comparison'],
+        ['how much power is available in ERCOT', 'grid_headroom'],
+        ['how much power is available on the grid', 'grid_headroom'],
+        ['how much power is available in ERCOT for a 200 MW site', 'grid_headroom'],
+        ['interconnection queue depth in PJM', 'interconnection_queue'],
+        ['what is queued for interconnection in ERCOT', 'interconnection_queue'],
+        ['what changed in the last week', 'changes_delta'],
+        ['water and drought risk for Phoenix', 'water_climate'],
+        ['recent hyperscaler data center deals', 'deals_ma'],
+        ['dark fiber routes near Ashburn', 'fiber'],
+        ['plan diverse fiber routes to a carrier hotel in Dallas', 'fiber'],
+        ['electricity prices in Texas', 'price'],
+        ['search for data centers in Virginia', 'facility_search'],
+        ['analyze the site at 33.45,-112.07', 'site_analysis'],
+        ['where do fiber density and grid headroom overlap in Atlanta', 'fiber_power_pairing'],
+      ];
+      const rerouted = PINNED
+        .map(([intent, want]) => ({ intent, want, got: _planQuery(intent, {}).intent_class }))
+        .filter((r) => r.got !== r.want);
+      expect(rerouted).toEqual([]);
     });
   });
 });

@@ -5141,6 +5141,92 @@ const _PLAN_COORD_RE = /(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/;
 const _PLAN_COMPARE_STOP = new Set(['compare', 'between', 'which', 'is', 'better',
   'rank', 'the', 'a', 'an', 'for', 'of', 'me', 'and', 'or', 'both', 'to', 'with',
   'market', 'markets', 'metro', 'metros', 'city', 'cities']);
+// ── r-planner-v5.5 (2026-07-28): the DISTRIBUTION layer enters the planner ──
+// get_hosting_capacity (tool #81) reads utility-FILED feeder hosting capacity —
+// the only tool that answers "what can this feeder actually give me". It shipped
+// registered but unrouted, so execute_plan — the advertised front door — could
+// never reach it: "site a 50 MW data center in central Illinois" got a
+// transmission/queue answer while Ameren's own filed LOAD-serving numbers sat
+// one call away.
+//
+// Coverage is 18 utilities (Northeast / Mid-Atlantic / Midwest), NOT nationwide,
+// so every route into it is CONDITIONAL. This bounded footprint table is what
+// the planner checks before spending a step on it. Boxes are the published
+// extents reported by /api/v1/grid/hosting-capacity/coverage (rounded outward);
+// they are a coverage GUESS, never an answer — the tool itself returns an
+// explicit not-published verdict plus the nearest covered markets, so an
+// over-inclusive box self-corrects while a missing one silently loses the read.
+//
+// capacity_type is the whole game (see the tool's own CRITICAL note):
+//   load         — LOAD-serving headroom: what a NEW DATA-CENTER LOAD can DRAW.
+//                  Only Ameren Illinois, AEP Ohio & I&M and Central Hudson file it.
+//   bus_headroom — transmission BUS MW (Avista) — also a draw-side number.
+//   gen          — DER/generation EXPORT headroom. NOT available load, and it must
+//                  never be relayed as "you can site N MW here".
+// Only DRAW-side territory earns a STEP inside capacity_search / site_analysis.
+// gen-only territory stays an explained ALTERNATIVE, because an export number
+// cannot answer a siting question at all — spending a plan step on it would
+// manufacture exactly the gen-quoted-as-load error the tool is built to prevent.
+const _PLAN_HC_COVERAGE = [
+  // ── draw-side (load / bus headroom): these answer "what can I take here" ──
+  { utility: 'Ameren Illinois (load)', type: 'load', box: [37.16, -91.43, 41.47, -87.58],
+    names: /\bameren\b|\billinois\b|\bspringfield,?\s*il\b|\bpeoria\b|\bdecatur\b|\bchampaign\b|\bbloomington,?\s*il\b/i },
+  { utility: 'AEP Ohio & I&M (load)', type: 'load', box: [38.40, -86.79, 42.39, -80.54],
+    names: /\baep\b|\bi&m\b|\bindiana\s*(?:&|and)?\s*michigan\s+power\b|\bohio\b|\bcolumbus\b|\bnew\s+albany\b|\bdublin,?\s*oh\b|\bhilliard\b|\bindiana\b|\bfort\s+wayne\b/i },
+  { utility: 'Central Hudson (load headroom)', type: 'load', box: [41.43, -74.40, 42.45, -73.52],
+    names: /\bcentral\s+hudson\b|\bhudson\s+valley\b|\bpoughkeepsie\b|\bnewburgh\b|\bkingston,?\s*ny\b|\bdutchess\b|\bulster\s+county\b/i },
+  { utility: 'Avista (bus headroom)', type: 'bus_headroom', box: [45.93, -119.43, 48.82, -115.70],
+    names: /\bavista\b|\bspokane\b|\bcoeur\s*d'?\s*alene\b/i },
+  // ── export-side (gen / DER): alternative-only, never a siting answer ──
+  { utility: 'Con Edison NY', type: 'gen', box: [40.50, -74.26, 42.52, -71.55],
+    names: /\bcon\s*ed(?:ison)?\b|\bnew\s+york\s+city\b|\bnyc\b|\bwestchester\b|\bmanhattan\b|\bbrooklyn\b/i },
+  { utility: 'NYSEG/RG&E', type: 'gen', box: [41.17, -79.19, 45.01, -73.25],
+    names: /\bnyseg\b|\brg&e\b|\brochester\b|\bupstate\s+new\s+york\b|\bbinghamton\b|\bithaca\b/i },
+  { utility: 'National Grid NY', type: 'gen', box: [42.00, -79.76, 44.98, -73.32],
+    names: /\bnational\s+grid\b|\balbany\b|\bsyracuse\b|\bbuffalo\b/i },
+  { utility: 'National Grid MA', type: 'gen', box: [41.60, -73.39, 42.85, -70.60],
+    names: /\bnational\s+grid\s+ma\b|\bmassachusetts\b|\bworcester\b|\bboston\b/i },
+  { utility: 'Orange & Rockland NY', type: 'gen', box: [40.93, -74.81, 41.56, -73.92],
+    names: /\borange\s*(?:and|&)\s*rockland\b|\bo&r\b|\brockland\s+county\b/i },
+  { utility: 'Central Hudson (DER HC)', type: 'gen', box: [41.37, -74.52, 42.50, -73.50],
+    names: /\bder\s+hosting\b/i },
+  { utility: 'Rhode Island Energy', type: 'gen', box: [41.30, -71.86, 42.02, -71.12],
+    names: /\brhode\s+island\b|\bprovidence\b/i },
+  { utility: 'Eversource CT (via Cadmus)', type: 'gen', box: [40.99, -73.66, 41.96, -72.13],
+    names: /\beversource\b|\bconnecticut\b|\bhartford\b|\bnew\s+haven\b|\bstamford\b/i },
+  { utility: 'BGE (Baltimore)', type: 'gen', box: [38.57, -77.06, 39.72, -76.08],
+    names: /\bbge\b|\bbaltimore\s+gas\b|\bbaltimore\b/i },
+  { utility: 'PHI (Pepco/Delmarva/ACE)', type: 'gen', box: [38.70, -77.40, 39.19, -76.73],
+    names: /\bpepco\b|\bdelmarva\b|\batlantic\s+city\s+electric\b|\bwashington,?\s*d\.?c\.?\b|\bdelaware\b/i },
+  { utility: 'Dominion Energy VA (binned)', type: 'gen', box: [36.44, -80.21, 38.94, -76.20],
+    names: /\bdominion\b|\bnorthern\s+virginia\b|\bashburn\b|\brichmond\b|\bloudoun\b|\bvirginia\b/i },
+  { utility: 'DTE Electric (MI)', type: 'gen', box: [41.89, -84.29, 44.03, -82.42],
+    names: /\bdte\b|\bdetroit\b|\bmichigan\b/i },
+  { utility: 'Xcel NSP (MN/ND/SD)', type: 'gen', box: [43.99, -96.32, 45.64, -91.60],
+    names: /\bxcel\b|\bnorthern\s+states\s+power\b|\bminnesota\b|\bminneapolis\b|\btwin\s+cities\b/i },
+  { utility: 'Xcel PSCO (Colorado)', type: 'gen', box: [37.05, -108.74, 40.64, -103.18],
+    names: /\bpsco\b|\bcolorado\b|\bdenver\b/i },
+];
+// Does this intent implicate a utility that PUBLISHES hosting capacity? Bounded
+// name match first (a named utility or its territory is the strongest signal),
+// published-extent box second. A DRAW-side hit always beats an export-side one
+// when both cover the same point — only a load/bus number answers "how much can
+// I take here", and Central Hudson genuinely files both. Exported for tests;
+// pure, never throws, no network.
+export function _planHostingCoverage(text, coords) {
+  const t = String(text || '');
+  const hits = [];
+  for (const c of _PLAN_HC_COVERAGE) {
+    const byName = c.names.test(t);
+    const byBox = !!coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lon)
+      && coords.lat >= c.box[0] && coords.lat <= c.box[2]
+      && coords.lon >= c.box[1] && coords.lon <= c.box[3];
+    if (byName || byBox) hits.push({ utility: c.utility, capacity_type: c.type, matched_on: byName ? 'name' : 'coordinates' });
+  }
+  if (!hits.length) return null;
+  const pick = hits.find((h) => h.capacity_type !== 'gen') || hits[0];
+  return { ...pick, answers_load: pick.capacity_type !== 'gen', covered_hits: hits.length };
+}
 // One entry per intent class. `patterns` are [regex, weight] pairs — scores sum,
 // the highest-scoring class wins. `sequence`/`alternatives`/`coverage_notes`
 // mirror the recipe docs; args_hint values in <angle brackets> are produced by
@@ -5227,8 +5313,20 @@ const _PLAN_CLASSES = [
       [/\bwhere\s+can\s+i\s+(?:find|get|put|land|build|site|source|secure)\b/i, 2.5],
       [/\bbrownfield\b/i, 1.5],
       [/\bhow\s+much\s+(?:power|capacity)\s+can\s+i\s+(?:get|land|secure)\b/i, 2.5],
+      // r-planner-v5.5: "SITE a 50 MW data center in central Illinois" scored
+      // capacity_search 2 vs facility_search 3 (on "data cent…s in") and routed
+      // to a search of EXISTING facilities — the textbook capacity search, sent
+      // to the wrong class. 'site' is missing from the verb alternation above,
+      // and cannot simply be added to it: a bare \bsite\b would collide with
+      // site_analysis and with market_ranking's \bsite\s+selection\b. Requiring
+      // the MW figure to follow the verb IMMEDIATELY keeps it to this one shape
+      // ("site selection for 200 MW" still does NOT match).
+      [/\b(?:site|siting)\s+(?:a|an|the)?\s*\d+(?:\.\d+)?\s*(?:mw|gw|megawatt|gigawatt)\b/i, 2.5],
     ],
-    rationale: (d) => `A capacity search is three INDEPENDENT reads that fan out in one wave: where ${d.mw ? Math.round(d.mw) + ' MW' : 'MW'} is OPENING (retiring generators near substations), what's in the interconnection QUEUE at that size, and whether the target market can even energize it (DCPI verdict + time-to-power). No dependency between them — merge the three.`,
+    rationale: (d) => `A capacity search is ${d.hc && d.hc.answers_load ? 'four' : 'three'} INDEPENDENT reads that fan out in one wave: where ${d.mw ? Math.round(d.mw) + ' MW' : 'MW'} is OPENING (retiring generators near substations), what's in the interconnection QUEUE at that size, and whether the target market can even energize it (DCPI verdict + time-to-power)`
+      + (d.hc && d.hc.answers_load
+        ? `, plus — because this geography sits inside ${d.hc.utility}, which FILES its ${d.hc.capacity_type === 'load' ? 'load-serving' : 'transmission-bus'} headroom — what the distribution system there will actually serve today. No dependency between them — merge the four.`
+        : `. No dependency between them — merge the three.`),
     sequence: (d) => [
       { step: 1, tool: 'get_retirement_headroom', depends_on: [], estimated_calls: 1,
         why: `Retiring generators = ${d.mw ? '~' + Math.round(d.mw) + ' MW' : 'MW'} openings near existing substations inside your horizon (each with nearest-substation distance_km) — the fastest path to power, sidestepping the multi-year mega-queue.`,
@@ -5239,8 +5337,24 @@ const _PLAN_CLASSES = [
       { step: 3, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
         why: 'Reality-check the target market: BUILD/CAUTION/AVOID verdict, composite_score, time-to-power — so "found N MW" is weighed against whether the market can actually deliver it. Independent — parallel.',
         args_hint: { market_slug: '<the market named in the intent, e.g. dallas>' } },
+      // r-planner-v5.5: CONDITIONAL fourth read. Steps 1-3 are all transmission-
+      // and market-level; none of them can say what the DISTRIBUTION system will
+      // serve. Where the utility files that number this is the only published
+      // answer to "what can I actually draw here" — and it is omitted entirely
+      // outside the 18 covered utilities rather than spent on a call whose whole
+      // content would be "not published".
+      ...(d.hc && d.hc.answers_load ? [{
+        step: 4, tool: 'get_hosting_capacity', depends_on: [], estimated_calls: 1,
+        why: `The DISTRIBUTION layer, which steps 1-3 cannot see: ${d.hc.utility} PUBLISHES its ${d.hc.capacity_type === 'load' ? 'LOAD-serving feeder headroom — what a new load can actually DRAW' : 'transmission-BUS headroom in MW'}, filed by the utility itself rather than inferred from proximity. Read it BEFORE quoting a siting number. Note the scale: published feeder ceilings run single-digit to ~27 MW, so a${d.mw ? ' ' + Math.round(d.mw) + ' MW' : ' data-center-scale'} load is a multi-feeder or transmission question — deliberately NOT filtered by min_mw here, because filtering a ${d.mw ? Math.round(d.mw) + ' MW' : 'large'} floor against a feeder table returns empty and empty reads as "no capacity". Independent of steps 1-3 — same wave.`,
+        args_hint: d.coords
+          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: 25, capacity_type: d.hc.capacity_type, limit: 10 }
+          : { utility: d.hc.utility, capacity_type: d.hc.capacity_type, limit: 10 },
+      }] : []),
     ],
     alternatives: [
+      { tool: 'get_hosting_capacity',
+        when: 'The search is aimed at one of the 18 utilities that PUBLISH hosting capacity (Northeast / Mid-Atlantic / Midwest) and you want the distribution-FEEDER number rather than the transmission one — Ameren Illinois, AEP Ohio & I&M and Central Hudson file LOAD-serving headroom, the only published number that answers "what can I actually draw here", and Avista files transmission-bus MW.',
+        rejected_because: 'The intent implicated no LOAD-publishing utility, so the feeder read stayed out of the sequence rather than spending a step whose whole content would be "not published". Coverage is 18 utilities, NOT nationwide — call it anyway if you want that stated explicitly: it answers with the nearest covered markets instead of a silent zero. Where the utility publishes only "gen" (DER export headroom), the number is what the feeder can ACCEPT from solar/storage and can never be relayed as siteable load.' },
       { tool: 'rank_markets', args_hint: { criteria: 'most_capacity', region: 'us', min_capacity_mw: 100 },
         when: 'No single market is fixed and you want to force-rank which markets have the capacity headroom.',
         rejected_because: 'The intent pointed at a specific capacity search, not an open ranking — the retirement + queue reads answer "find N MW here" directly.' },
@@ -5249,7 +5363,7 @@ const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom + get_refined_queue are depth-teased below Developer tier (top rows + count free); get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM).',
+    coverage_notes: 'get_retirement_headroom + get_refined_queue are depth-teased below Developer tier (top rows + count free); get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "compare Phoenix vs Columbus" fell to unknown —
@@ -5356,6 +5470,67 @@ const _PLAN_CLASSES = [
     coverage_notes: 'get_interconnection_queue and get_refined_queue are depth-teased below Developer tier. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
+    // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
+    // grid class in this router answers at TRANSMISSION level — ISO headroom,
+    // the interconnection queue, retiring generators. None of them can answer
+    // "how much can THIS feeder take", which is the question a developer with a
+    // parcel and a utility account actually asks. get_hosting_capacity shipped
+    // registered but unrouted, so execute_plan — the advertised front door —
+    // could not reach it at all.
+    //
+    // Declared AFTER capacity_search / grid_headroom / interconnection_queue so
+    // the deterministic tie-break (declaration order) favours the incumbent
+    // classes: this one wins on EXPLICIT distribution language only. Every
+    // pattern below is deliberately feeder-shaped — no bare \bcapacity\b, which
+    // would bleed score off capacity_search and grid_headroom's
+    // \bcapacity\s+availab/ for no routing gain.
+    id: 'hosting_capacity', recipe: null,
+    patterns: [
+      [/\bhosting[-\s]capacity\b/i, 4], [/\bfeeders?\b/i, 3.5],
+      [/\bhow\s+much\s+(?:power|load|capacity)\s+can\s+(?:this|the|that|a|my)\s+(?:feeder|circuit|line|parcel|site|address|property|lot)\s+(?:take|handle|support|serve|carry|host)\b/i, 3.5],
+      [/\bdistribution\s+(?:feeder|circuit|line|grid|system|network|level|voltage|capacity)\b/i, 3],
+      [/\bwhat\s+can\s+i\s+(?:actually\s+)?draw\b/i, 3], [/\bbus\s+headroom\b/i, 3],
+      [/\bder\s+(?:hosting|interconnect)/i, 2.5], [/\butility[-\s]published\b/i, 2.5],
+      [/\bcircuits?\b/i, 1.5], [/\bsubstation\s+bus\b/i, 2],
+      [/\b(?:ameren|con\s*ed(?:ison)?|nyseg|rg&e|orange\s+(?:and|&)\s+rockland|central\s+hudson|eversource|pepco|delmarva|avista|national\s+grid)\b/i, 2],
+    ],
+    rationale: (d) => (d.hc
+      ? `${d.hc.utility} publishes ${d.hc.capacity_type === 'load' ? 'LOAD-serving' : d.hc.capacity_type === 'bus_headroom' ? 'transmission-bus' : 'DER/generation-export'} hosting capacity, so the filed feeder read leads. It is also the SMALLEST number in the stack — published feeders run single-digit to ~27 MW — so the ISO and market reads run alongside it in the same wave to keep a feeder answer from being mistaken for a site answer.`
+      : 'Lead with the filed feeder read; with no covered utility named it returns the coverage list itself, which is the honest answer to "is this published anywhere". The ISO and market reads run in the same wave so a distribution number is never quoted without the transmission context that dwarfs it.'),
+    sequence: (d) => [
+      { step: 1, tool: 'get_hosting_capacity', depends_on: [], estimated_calls: 1,
+        why: (d.hc
+          ? `Utility-FILED feeder hosting capacity for ${d.hc.utility} — the MW a named distribution feeder can take, from the utility's own GIS, not a proximity proxy. capacity_type="${d.hc.capacity_type}"${d.hc.capacity_type === 'gen' ? ' — DER/generation EXPORT headroom: what the feeder can ACCEPT from solar/storage. This is NOT available load and must never be relayed as "you can site N MW here".' : d.hc.capacity_type === 'load' ? ' — LOAD-serving headroom, what a new data-center load can actually DRAW. This is the type that answers siting.' : ' — transmission BUS headroom in MW, a substation-bus number rather than a distribution-feeder one.'} Rows are GIS vertices: quote distinct_feeders, never geometry_rows_scanned, and check sample_complete before treating the set as exhaustive.`
+          : 'Called with no location it returns the COVERAGE list — every utility that publishes a machine-readable hosting-capacity GIS (18 of them, Northeast / Mid-Atlantic / Midwest). Pick one and call again with utility=, or with lat+lon for a point. A utility missing from that list has not published; that is never a statement about its available capacity.'),
+        args_hint: d.coords
+          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: 25, ...(d.hc ? { capacity_type: d.hc.capacity_type } : {}), limit: 10 }
+          : (d.hc ? { utility: d.hc.utility, capacity_type: d.hc.capacity_type, limit: 10 } : {}) },
+      { step: 2, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+        why: 'The layer ABOVE the feeder: ISO headroom, constraints and time-to-power. A published feeder tops out around 5-27 MW, so any data-center-scale load is a transmission question the feeder table cannot answer — carrying both stops a distribution number from being quoted as a siting verdict. Independent of step 1 — same wave.',
+        args_hint: { iso: d.iso || '<ISO serving the site>' } },
+      ...(d.coords ? [{
+        step: 3, tool: 'get_composite_site_score', depends_on: [], estimated_calls: 1,
+        why: 'Integrity-first 0-100 verdict for the same point with an explicit per-factor coverage map — it never imputes a missing factor, so the feeder read lands next to an honest accounting of what else is and is not known about the site. Independent — same wave.',
+        args_hint: { lat: d.coords.lat, lon: d.coords.lon },
+      }] : [{
+        step: 3, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
+        why: 'Market-level reality check — BUILD/CAUTION/AVOID verdict, composite_score and time-to-power for the market the feeder sits in. Independent — same wave.',
+        args_hint: { market_slug: '<the market named in the intent, e.g. columbus>' },
+      }]),
+    ],
+    alternatives: [
+      { tool: 'get_grid_intelligence', when: 'You actually want transmission-level headroom and time-to-power for the whole ISO, not one utility\'s filed feeder table.',
+        rejected_because: 'The intent named the DISTRIBUTION layer (feeder / circuit / hosting capacity), which the ISO read cannot see — it is carried as a step here rather than as the lead.' },
+      { tool: 'get_retirement_headroom', when: 'The question is MW freed by retiring generation near a substation — transmission-adjacent headroom, not filed feeder capacity.',
+        rejected_because: 'Retirement headroom is an inferred opening near a substation; the intent asked for what the utility itself has published.' },
+      { tool: 'analyze_site', when: 'You have a lat/lon and want the full multi-factor site read (power, gas, fiber, market, risk) rather than the feeder number alone.',
+        rejected_because: 'analyze_site scores power by substation PROXIMITY — where a utility files hosting capacity, the filed number beats the proxy, so the feeder read leads and the composite follows.' },
+      { tool: 'get_interconnection_queue', when: 'You want the ISO queue — projects seeking transmission interconnection.',
+        rejected_because: 'The queue is a transmission-interconnection register; a hosting-capacity question is about the distribution system already in the ground.' },
+    ],
+    coverage_notes: 'get_hosting_capacity is FREE + FULL at every tier (public utility GIS). Coverage is 18 utilities and NOT nationwide — Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista. Outside them it returns an explicit not-published answer plus the nearest covered markets, never a silent zero. CRITICAL: only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish "load" (what a new load can DRAW); "gen" is DER export headroom and must never be relayed as siteable capacity; "bus_headroom" (Avista) is transmission bus MW. Published rows are GIS vertices — read distinct_feeders, and check sample_complete/capacity_floor_mw before calling a capped read exhaustive. Informational, not binding interconnection guidance.',
+  },
+  {
     id: 'water_climate', recipe: 'water_risk',
     patterns: [
       [/\bwater\b/i, 3], [/\bdrought\b/i, 3], [/\baqueduct\b/i, 2.5], [/\bwater[-\s]stress\b/i, 3],
@@ -5407,15 +5582,30 @@ const _PLAN_CLASSES = [
       { step: 4, tool: 'get_water_risk',
         why: 'Water stress / drought severity — the factor that quietly kills cooling-heavy builds.',
         args_hint: { lat: d.coords ? d.coords.lat : '<site lat>', lon: d.coords ? d.coords.lon : '<site lon>' } },
+      // r-planner-v5.5: CONDITIONAL fifth read. "What power can I actually get at
+      // this parcel" is a DISTRIBUTION question, and steps 1-4 answer it only by
+      // proximity proxy (substations within N km). Where the serving utility files
+      // its load-serving headroom, that filed number beats every proxy — so add
+      // the read exactly there, and nowhere else.
+      ...(d.hc && d.hc.answers_load ? [{
+        step: 5, tool: 'get_hosting_capacity',
+        why: `This parcel sits inside ${d.hc.utility}, which PUBLISHES its ${d.hc.capacity_type === 'load' ? 'LOAD-serving feeder headroom — the MW a new load can actually DRAW' : 'transmission-BUS headroom in MW'}. That is filed distribution-level truth, not the substation-proximity proxy that carries analyze_site's power sub-score — where it exists it is the number that answers "what can I actually get here". Independent of steps 1-4 — same wave. Read distinct_feeders (rows are GIS vertices) and treat single-digit feeder ceilings as a multi-feeder / transmission conversation, not a no.`,
+        args_hint: d.coords
+          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: 25, capacity_type: d.hc.capacity_type, limit: 10 }
+          : { utility: d.hc.utility, capacity_type: d.hc.capacity_type, limit: 10 },
+      }] : []),
     ],
     alternatives: [
+      { tool: 'get_hosting_capacity',
+        when: 'The parcel sits in one of the 18 utilities that PUBLISH hosting capacity and you want the filed distribution-FEEDER number instead of analyze_site\'s substation-proximity proxy — Ameren Illinois, AEP Ohio & I&M and Central Hudson file LOAD-serving headroom, Avista files transmission-bus MW.',
+        rejected_because: 'No LOAD-publishing utility was implicated by the coordinates or the geography named, so the feeder read stayed out of the sequence. Coverage is 18 utilities (Northeast / Mid-Atlantic / Midwest), NOT nationwide — call it to have that stated explicitly with the nearest covered markets. Where a utility publishes only "gen", that is DER EXPORT headroom: what the feeder can ACCEPT from solar/storage, never what a data center can draw.' },
       { tool: 'compare_sites', when: 'You have 2+ specific sites to compare head-to-head.' },
       { tool: 'rank_sites', when: 'You have MANY candidates and want a deterministic constrained ranking (accepts candidate_id entries from get_refined_queue).' },
       { tool: 'analyze_parcel', when: 'You have a polygon/parcel GEOMETRY, not just a point.' },
       { tool: 'generate_site_analysis', when: 'You need the branded Site Analysis PDF for the point (Pro).' },
       { tool: 'find_alternatives', when: 'You want DC Hub to surface OTHER sites matching a target profile.' },
     ],
-    coverage_notes: 'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is paid. get_composite_site_score never fills a missing factor — treat unavailable as unknown. ZERO-DRIFT: sites minted by get_refined_queue should be chained by candidate_id, never re-typed coordinates.',
+    coverage_notes: 'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is paid. get_composite_site_score never fills a missing factor — treat unavailable as unknown. ZERO-DRIFT: sites minted by get_refined_queue should be chained by candidate_id, never re-typed coordinates. The get_hosting_capacity step is CONDITIONAL — it appears only when the point falls inside a utility that publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus). It is free + full at every tier, and outside those footprints it returns an explicit not-published answer with the nearest covered markets rather than a zero.',
   },
   {
     id: 'deals_ma', recipe: 'hyperscaler_activity',
@@ -5837,7 +6027,13 @@ export function _planSignals(intent, context) {
     const a = norm(m[1]), b = norm(m[2]);
     return (a && b && a !== b) ? { a, b } : null;
   })();
-  return { iso, mw, coords, state, candidateId, market, since, ai, comparePair };
+  // r-planner-v5.5 (2026-07-28): does this intent land inside a utility that
+  // PUBLISHES hosting capacity? Deliberately NOT a scoring boost — coverage
+  // decides whether a feeder STEP is worth a call, it must never decide which
+  // class wins, or every Ohio/Illinois/Virginia intent would start drifting
+  // toward the distribution layer. Routing stays on explicit feeder language.
+  const hc = _planHostingCoverage(text, coords);
+  return { iso, mw, coords, state, candidateId, market, since, ai, comparePair, hc };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -6149,7 +6345,18 @@ export function _planQuery(intent, context) {
     execution_estimate: _planExecutionEstimate(seq, waves),
     // r-planner-v4: never list the CURRENT primary tool as its own alternative
     // (a per-context branch can promote an alternative into best_tool).
-    alternatives: [...top.cls.alternatives.filter((a) => a.tool !== seq[0].tool), ...runnerUp],
+    // r-planner-v5.5: widened from seq[0] to the WHOLE sequence, and applied to
+    // the runner-up as well. A tool the plan already SCHEDULES is not an
+    // alternative to it — the conditional get_hosting_capacity step is declared
+    // as an alternative for the uncovered case, and a runner-up class often
+    // leads with a tool the winner already plans. Then dedupe by tool (the
+    // hosting_capacity runner-up is site_analysis, whose lead analyze_site it
+    // already declares), first-wins: the class's own declaration is
+    // tool-specific, where the runner-up entry restates a score margin that
+    // matched_classes already carries.
+    alternatives: [...top.cls.alternatives, ...runnerUp]
+      .filter((a) => !seq.some((s) => s.tool === a.tool))
+      .filter((a, i, all) => all.findIndex((x) => x.tool === a.tool) === i),
     coverage_notes: top.cls.coverage_notes,
     matched_classes,
     ...(usesCandidates ? { chaining: chainNote } : {}),
@@ -9012,8 +9219,13 @@ function createServer(descOverrides) {
       tools: ['search_facilities','get_facility','find_alternatives','score_facility'] },
     { family: 'market', when: 'Compare or rank the 300+ metro markets (DC Hub Power Index / DCPI).', keywords: ['market','metro','dcpi','rank','vacancy','pricing'],
       tools: ['rank_markets','get_market_intel','get_market_dcpi_rank','ai_capacity_index','get_intelligence_index'] },
-    { family: 'grid_power', when: 'Grid headroom, interconnection queue, power generation pipeline, energy pricing.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp'],
-      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_power_pipeline','grid_transition_radar','get_energy_prices'] },
+    // r-planner-v5.5: get_hosting_capacity was missing from the family navigator
+    // for the same reason it was missing from _PLAN_CLASSES — registered, live,
+    // and reachable by NO navigation surface. It is the only DISTRIBUTION-level
+    // entry here; everything else in this family answers at transmission level,
+    // hence the added feeder/distribution keywords.
+    { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, energy pricing.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit'],
+      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','grid_transition_radar','get_energy_prices'] },
     { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
       tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
     { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+risk+tax+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select'],
