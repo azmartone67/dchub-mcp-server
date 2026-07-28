@@ -2751,11 +2751,24 @@ const _ENV_DROP = new Set([
   'daily_calls_when_email_bound', 'claim_free_key_tool', 'recover_key_tool',
 ]);
 // moved under `upgrade` (kept, just not at top level)
+//
+// ★★2026-07-28: `for_your_human` was REMOVED from this set and now stays at TOP
+// LEVEL. Its entire design premise is "ONE stable object (a sentence + ONE link)
+// that platforms reliably surface verbatim" — nesting it under `upgrade`, beside
+// 14 other URL-ish keys, works directly against that. Zero real humans had ever
+// opened a relay link; the first cause was that the auto-trial path never emitted
+// the block at all (fixed, MCP f9c965d, issue #1790), and burial was the obvious
+// second suspect. This is that A/B: if relay_opens stays at 0 with the block
+// present AND top-level, the problem is agent behaviour, not envelope shape.
+//
+// CONSUMER NOTE: the read path changes from `structuredContent.upgrade.for_your_human`
+// to `structuredContent.for_your_human`. Deliberately NOT emitted in both places —
+// two identical URLs in one envelope is exactly the ambiguity the "ONE object"
+// design exists to avoid. Revert by re-adding the key here (no code change needed).
 const _ENV_MOVE = new Set([
   'upgrade_url', 'signup_url', 'redeem_url', 'starter_url', 'developer_url',
   'usage_url', 'owner_purchase_url', 'web_explore_url', 'docs_url', 'pricing',
   'identify_endpoint', 'identify_payload', 'claim_endpoint', 'claim_payload',
-  'for_your_human',
 ]);
 function _collapseEnvelope(obj) {
   try {
