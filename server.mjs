@@ -2922,10 +2922,21 @@ async function _refreshDcpiTeaser() {
     const score = Math.round(Number(m.composite_score) || 0);
     const ttp = (m.time_to_power_months != null) ? (', ~' + Math.round(m.time_to_power_months) + 'mo to power') : '';
     _dcpiTeaserLine =
+      '\u{1F9ED} **One call, not four:** for a multi-step question (`find 200MW near Dallas with fiber`) call `execute_plan` — it runs the whole tool graph server-side and returns an auditable replay.\n' +
       '\u{1F9ED} **You just unlocked the decision layer.** Today’s #1 BUILD market: **' +
       place + ' — BUILD (' + score + '/100)**' + ttp +
       '. Call `get_market_dcpi_rank` with any market_slug for its BUILD/CAUTION/AVOID verdict (or `rank_markets` for a ranked shortlist) — that’s the call worth keeping this key for.\n';
-    _dcpiTeaserSC = { try_tool: 'get_market_dcpi_rank', alt_tool: 'rank_markets',
+    // r-front-door (2026-07-28, shell #38 lane 5): the nudge fires on the FIRST
+    // call — the exact moment 89.4% of callers (1,800 of 2,014 in 30d) make their
+    // one and only tool call and never return. It pointed only at more SINGLE
+    // tools, so `execute_plan` — which answers a whole multi-step question in ONE
+    // call — sat at 99 of 225,919 calls (0.0%). A front door nobody is told about
+    // is not a front door. Named FIRST, with the shape of question it takes.
+    _dcpiTeaserSC = {
+      multi_step_tool: 'execute_plan',
+      multi_step_when: 'Any question needing more than one lookup — "find 200MW near Dallas with fiber", "compare Phoenix vs Ashburn on power and latency", "rank markets for an AI campus".',
+      multi_step_why: 'ONE call runs the whole tool graph server-side and returns every step plus an auditable replay — instead of you chaining 4+ calls and paying the latency of each.',
+      try_tool: 'get_market_dcpi_rank', alt_tool: 'rank_markets',
       live_example: place + ' — BUILD (' + score + '/100)',
       why: 'The DCPI decision layer (BUILD/CAUTION/AVOID per market) is the #1 thing real agents come back for.' };
   } catch (_) { /* fail-soft — keep prior value */ }
