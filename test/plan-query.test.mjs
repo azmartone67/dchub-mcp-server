@@ -82,7 +82,11 @@ describe('plan_query router (pure)', () => {
     // planner_version; replay is self-contained; status publishes the full enum.
     expect(r.schema_version).toBe(REPLAY_SCHEMA_VERSION);
     expect(r.schema_version).toBe(1);
-    expect(r.planner_version).toBe('5.2');       // planner behavior rev...
+    // The whole point of the split: the planner's behavior rev has moved
+    // 5.2 → 5.5 (fiber_power_pairing, then the hosting_capacity class) while
+    // the replay SHAPE never changed. A consumer pinning schema_version is
+    // still safe; one pinning planner_version would have broken — by design.
+    expect(r.planner_version).toBe('5.5');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated

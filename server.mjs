@@ -5082,8 +5082,8 @@ const _TOOL_OUTPUT_SCHEMAS = {
     chaining: _oAny('Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue → analyze_site / rank_sites'),
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
-      schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so a planner routing rev (5.1→5.2) leaves it untouched.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 field renames → 5.2 new intent classes). Distinct from schema_version.'),
+      schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.5) have all left it at 1.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -6171,7 +6171,21 @@ export function _planWorkflowConfidence(seq, d) {
 // planner_version. Deferred to keep parity with the top-level output: intent_class
 // (mirrors plan_query.intent_class) and execution_graph.parallel_groups (mirrors
 // execution_strategy.parallel_groups). Versioning is what makes this a safe swap.
-export const PLANNER_VERSION = '5.2';  // 5.1 = replay field renames; 5.2 = capacity_search + market_comparison routing
+// Behavior rev — bump whenever ROUTING changes (a new intent class, a re-scored
+// pattern, a different lead tool). Distinct from REPLAY_SCHEMA_VERSION below,
+// which pins the replay object's SHAPE and stays at 1 through all of these.
+//   5.1 = replay field renames
+//   5.2 = capacity_search + market_comparison routing
+//   5.3 = (unused — never shipped under this label)
+//   5.4 = fiber_power_pairing cross-domain class + parcel-vs-market step 2.
+//         NOTE: 5.4 shipped with this constant left at '5.2' (v2.8.0/v2.8.1),
+//         so a consumer that logged planner_version across 2026-07-26 saw 5.2
+//         reporting 5.4 behavior. Corrected at 5.5 — bump this WITH the routing
+//         change, not after it.
+//   5.5 = hosting_capacity class + conditional get_hosting_capacity steps in
+//         capacity_search / site_analysis; "site a N MW …" reaches
+//         capacity_search; alternatives filtered against the whole sequence.
+export const PLANNER_VERSION = '5.5';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
