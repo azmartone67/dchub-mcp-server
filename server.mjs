@@ -6764,11 +6764,44 @@ function trackedTool(srv, name, description, schema, handler) {
                 const _mapText = MAP_TOOLS.has(name)
                   ? `\n\n📍 See this on the live **Land & Power map** — every substation, transmission line, gas pipeline & fiber route for any site on one screen: ${mapHref(name)}`
                   : '';
+                // r-prewall-anon (2026-07-28): the pre-wall offer (dfc3f42) was wired
+                // ONLY into the KEYED `gate.trial_taste` branch (~L7253). That branch is
+                // unreachable from here — this anon/auto-mint cascade RETURNS below, so
+                // the offer was a no-op for real traffic: of 86 real flagship calls in
+                // the 8h after deploy, 68 were `trial_used` + 14 `trial_taste_inline`
+                // (95%, both statuses set only in THIS cascade) and 0 fired an offer,
+                // while all 23 offers that did fire were keyed internal probes. The
+                // 07-27 live verification passed because the probe held a minted key and
+                // took the keyed route; anonymous callers never reach it.
+                // ★ `_remainingFull` is ALREADY post-increment (see the r-honest-cap
+                //   note above) and is read with the SAME `c.client_ip` key the day
+                //   counter is built from. Do NOT recompute it from `api_key` — that is
+                //   a different bucket and always reports a full allowance.
+                // ★ Unlike the keyed branch, this path's content[0].text is JSON +
+                //   appended PROSE, so it cannot be JSON.parse'd and re-stringified
+                //   (that would throw, and would destroy the trial/map/high-intent
+                //   blocks). The offer rides in structuredContent only — `agent_payment`
+                //   is in _ENV_KEEP, so the envelope collapse preserves it at top level.
+                //   Deliberately NO prose line: shell #38 lane 2 closed by dropping
+                //   prose that restates a structured field.
+                // Fail-soft + flag-killable (MPP_PREWALL_DISABLE=1); never blocks the
+                // answer. Recorded as a PASSIVE offer, never as `mpp_challenge`.
+                let _preSC = {};
+                if (typeof _remainingFull === 'number') {
+                  try {
+                    const _pre = await mppPrewallOffer(name, _remainingFull);
+                    if (_pre) {
+                      _preSC = { agent_payment: _pre };
+                      status = 'mpp_offer_prewall';   // NOT mpp_challenge — passive offer
+                    }
+                  } catch (_) { /* offer is a bonus; a failure must never cost the answer */ }
+                }
                 return {
                   content: [{ type: 'text', text: _fullText + _mapText + _autoMintText + _hiText }],
                   structuredContent: _collapseEnvelope(_dedupeAliasKeys({
                     trial_taste: true,
                     inline_full: true,
+                    ..._preSC,
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
                     tool: name,
                     ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer ($49/mo).` } : {}),
