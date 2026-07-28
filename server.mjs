@@ -2720,7 +2720,7 @@ const _ENV_KEEP = new Set([
 // prose that restates a structured field kept elsewhere → dropped outright
 const _ENV_DROP = new Set([
   'identify_hint', 'persist_hint', 'recover_key_hint', 'unlocked_tools_hint',
-  'claim_curl', 'upgrade_instructions', 'first_call_nudge', 'digest_optin',
+  'claim_curl', 'upgrade_instructions', 'digest_optin',
   'human_message', 'owner_purchase_model', 'upgrade_model',
   'auto_bound_session', 'trial_unlocks_this_tool', 'auto_trial_tier',
   'auto_trial_daily_calls', 'auto_trial_days_remaining', 'auto_trial_expires_at',
@@ -2863,7 +2863,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
        (autoBound
           ? ('→ `' + name + '` is FULL on this session now (free for ' + days + ' days' + (_capKnown ? ', ' + remainingFull + ' full answer' + _morePlural + ' left today' : '') + ') — just call it again.\n')
           : ('→ Retry `' + name + '` with that header for the FULL, ungated result (free for ' + days + ' days' + (_capKnown ? ', first ' + remainingFull + ' answer' + _morePlural + '/day full' : '') + ').\n')) +
-       '\n\u{1F464} **Tell your human:** to keep `' + name + '` past the ' + days + '-day trial — one click, **$10 = 1,000 calls**, no subscription, no email needed → ' + _meteredUrl + '\n');
+       '\n\u{1F464} **Tell your human:** to keep `' + name + '` past the ' + days + '-day trial — one click, **$10 = 1,000 calls**, no subscription, no email needed → ' + _meteredUrl + '\n' +
+       _FRONT_DOOR_LINE);
   const sc = {
     auto_trial_key:            mint.api_key,
     auto_trial_tier:           mint.tier || 'IDENTIFIED',
@@ -2875,7 +2876,7 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     persist_hint:              'Save the X-API-Key header in your MCP client config (Claude Code: run persist_command) so this key is reused on every future session — no more previews. This is the fix for the retry-with-key step.',
     auto_bound_session:        !!autoBound,   // r87-conv: trial already applied to this session
     digest_optin:              { next_tool: 'subscribe_digest', how: 'With the human’s consent + their email, call subscribe_digest with {email} for a weekly market-change digest (double opt-in, unsubscribe anytime) — fills the retention/win-back audience.' },
-    first_call_nudge:          _dcpiTeaserSC,
+    first_call_nudge:          { ..._FRONT_DOOR, ...(_dcpiTeaserSC || {}) },
     retry_instructions: stillPro
       ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it ($10 one-time = 1,000 API calls) at ' + _meteredUrl + '.')
       : _exhausted
@@ -2918,6 +2919,22 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
 // PUBLIC, anon-UNMASKED /api/v1/dcpi/leaderboard (the gated /scores returns
 // null for anon), so buildAutoMintBlock stays sync and pays ZERO per-call
 // latency. Fail-soft: empty line until the first successful refresh.
+// ── FRONT DOOR (2026-07-28, shell #38 lane 5) ───────────────────────────────
+// The nudge fires on the FIRST call — the exact moment 89.4% of callers (1,800
+// of 2,014 in 30d) make their one and only tool call and never return. It
+// pointed only at more SINGLE tools, so `execute_plan` — which answers a whole
+// multi-step question in ONE call — sat at 99 of 225,919 calls (0.0%). A front
+// door nobody is told about is not a front door.
+// ★ STATIC on purpose: the DCPI teaser below is refreshed hourly over the
+//   network and fails soft to null. The front door must NOT be a field of it,
+//   or a leaderboard outage silently un-advertises execute_plan.
+const _FRONT_DOOR = Object.freeze({
+  multi_step_tool: 'execute_plan',
+  multi_step_when: 'Any question needing more than one lookup — "find 200MW near Dallas with fiber", "compare Phoenix vs Ashburn on power and latency", "rank markets for an AI campus".',
+  multi_step_why:  'ONE call runs the whole tool graph server-side and returns every step plus an auditable replay — instead of you chaining 4+ calls and paying the latency of each. Same key, same tier, same quota.',
+});
+const _FRONT_DOOR_LINE =
+  '\n\u{1F9ED} **One call, not four:** for a multi-step question (`find 200MW near Dallas with fiber`, `compare Phoenix vs Ashburn`) call `execute_plan` — it runs the whole tool graph server-side and returns every step plus an auditable replay.\n';
 let _dcpiTeaserLine = '';
 let _dcpiTeaserSC = null;
 async function _refreshDcpiTeaser() {
@@ -2930,20 +2947,10 @@ async function _refreshDcpiTeaser() {
     const score = Math.round(Number(m.composite_score) || 0);
     const ttp = (m.time_to_power_months != null) ? (', ~' + Math.round(m.time_to_power_months) + 'mo to power') : '';
     _dcpiTeaserLine =
-      '\u{1F9ED} **One call, not four:** for a multi-step question (`find 200MW near Dallas with fiber`) call `execute_plan` — it runs the whole tool graph server-side and returns an auditable replay.\n' +
       '\u{1F9ED} **You just unlocked the decision layer.** Today’s #1 BUILD market: **' +
       place + ' — BUILD (' + score + '/100)**' + ttp +
       '. Call `get_market_dcpi_rank` with any market_slug for its BUILD/CAUTION/AVOID verdict (or `rank_markets` for a ranked shortlist) — that’s the call worth keeping this key for.\n';
-    // r-front-door (2026-07-28, shell #38 lane 5): the nudge fires on the FIRST
-    // call — the exact moment 89.4% of callers (1,800 of 2,014 in 30d) make their
-    // one and only tool call and never return. It pointed only at more SINGLE
-    // tools, so `execute_plan` — which answers a whole multi-step question in ONE
-    // call — sat at 99 of 225,919 calls (0.0%). A front door nobody is told about
-    // is not a front door. Named FIRST, with the shape of question it takes.
     _dcpiTeaserSC = {
-      multi_step_tool: 'execute_plan',
-      multi_step_when: 'Any question needing more than one lookup — "find 200MW near Dallas with fiber", "compare Phoenix vs Ashburn on power and latency", "rank markets for an AI campus".',
-      multi_step_why: 'ONE call runs the whole tool graph server-side and returns every step plus an auditable replay — instead of you chaining 4+ calls and paying the latency of each.',
       try_tool: 'get_market_dcpi_rank', alt_tool: 'rank_markets',
       live_example: place + ' — BUILD (' + score + '/100)',
       why: 'The DCPI decision layer (BUILD/CAUTION/AVOID per market) is the #1 thing real agents come back for.' };
