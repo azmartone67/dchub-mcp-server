@@ -6598,6 +6598,13 @@ function trackedTool(srv, name, description, schema, handler) {
             // unlock_more_data — not just the generic applyTrialGuardIfFree path.
             let _gapLine = '';
             let _siteHeadlineObj = null;   // r-site-headline: set when analyze_site returned a real headline
+            // r-preview-sc (2026-07-28, shell #38 lane 1): the SAME trimmed taste,
+            // kept as an object so it can also reach structuredContent. Machine
+            // clients (Claude.ai) read structuredContent and were getting ZERO
+            // data fields while the identical JSON sat in content[0].text — the
+            // documented structuredContent-hides-payload class. Mirrors what is
+            // ALREADY served; un-gates nothing.
+            let _previewObj = null;
             try {
               const parsed = JSON.parse(_trialText);
               // r-site-headline (2026-07-12, owner-approved — analyze_site ONLY):
@@ -6618,9 +6625,10 @@ function trackedTool(srv, name, description, schema, handler) {
                 // single facility object nulls every metric and empties the preview —
                 // anon get_facility returned literally zero fields. Use the basic-
                 // fields mask instead (name/city/provider/coords) — a REAL teaser.
-                _trialText = JSON.stringify(name === 'get_facility'
+                _previewObj = name === 'get_facility'
                   ? _maskFacilityFieldsForFree(parsed)
-                  : trimForTrial(parsed));
+                  : trimForTrial(parsed);
+                _trialText = JSON.stringify(_previewObj);
               }
             } catch { /* not JSON, leave as prose */ }
             const _refUrl = (u) => u + (u.includes('?') ? '&' : '?') + 'ref=mcp-trial&tool=' + encodeURIComponent(name);
@@ -6785,6 +6793,13 @@ function trackedTool(srv, name, description, schema, handler) {
               // r51 preview-as-error behavior (DCHUB_PREVIEW_ISERROR).
               isError: _siteHeadlineObj ? false : PREVIEW_ISERROR,
               structuredContent: _collapseEnvelope(_dedupeAliasKeys({
+                // r-preview-sc (shell #38 lane 1): the trimmed taste, machine-readable.
+                // Spread FIRST so envelope/metadata keys win any collision; an array
+                // taste is wrapped as {results:[…]} to keep structuredContent an object.
+                ...(_previewObj && typeof _previewObj === 'object'
+                    ? (Array.isArray(_previewObj) ? { results: _previewObj } : _previewObj)
+                    : {}),
+                preview_is_partial: true,
                 // r-site-headline: expose the clean, machine-readable headline fields
                 // (composite_score/verdict/limiting_factor/citation) for consumers that
                 // read structuredContent — while still riding the full conversion CTA
