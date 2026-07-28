@@ -2682,6 +2682,68 @@ const _TRIAL_UNLOCKED_HINT =
 // whose exact value already appears under a different key in the same envelope.
 // Conservative on purpose: same-value duplicates carry no information, but a
 // key that is the sole carrier of its value is always kept.
+// r-envelope-collapse (2026-07-28, shell #38 lane 2). ONE upgrade object.
+//
+// Measured live on get_market_intel (18,629 calls/30d): 47 keys / 6,809 bytes,
+// of which ZERO were data. Most of the weight is PROSE that restates a
+// structured field sitting next to it — identify_hint explains identify_payload,
+// persist_hint explains persist_command, claim_curl spells out claim_payload,
+// unlocked_tools_hint re-lists unlocked_tools. An agent needs the field, not the
+// paragraph about the field.
+//
+// KEPT AT TOP LEVEL, deliberately and minimally:
+//   · the DOCUMENTED machine contract — retry_with_header, retry_instructions,
+//     unlocked_tools ("so a programmatic agent can act without parsing prose")
+//   · auto_trial_key + persist_command — the key and how to keep it
+//   · agent_payment — the stripe-mpp protocol block; an EXTERNAL standard with
+//     its own challenge/receipt shape. Never reshape someone else's protocol.
+//   · response metadata (_entity, tool, platform, quota, trial_preview,
+//     remaining_full_today) and ALL tool data, which is never touched.
+// Everything else moves under `upgrade`, and the prose duplicates are dropped.
+//
+// Allowlist, not a hoover: only keys named here are moved or dropped, so a data
+// field can never be swallowed by the envelope collapse.
+// Revert instantly without a deploy: MCP_ENVELOPE_COLLAPSE=0
+const _ENV_KEEP = new Set([
+  '_entity', 'tool', 'platform', 'quota', 'trial_preview', 'remaining_full_today',
+  'retry_with_header', 'retry_instructions', 'unlocked_tools',
+  'auto_trial_key', 'persist_command', 'agent_payment',
+]);
+// prose that restates a structured field kept elsewhere → dropped outright
+const _ENV_DROP = new Set([
+  'identify_hint', 'persist_hint', 'recover_key_hint', 'unlocked_tools_hint',
+  'claim_curl', 'upgrade_instructions', 'first_call_nudge', 'digest_optin',
+  'human_message', 'owner_purchase_model', 'upgrade_model',
+  'auto_bound_session', 'trial_unlocks_this_tool', 'auto_trial_tier',
+  'auto_trial_daily_calls', 'auto_trial_days_remaining', 'auto_trial_expires_at',
+  'daily_calls_when_email_bound', 'claim_free_key_tool', 'recover_key_tool',
+]);
+// moved under `upgrade` (kept, just not at top level)
+const _ENV_MOVE = new Set([
+  'upgrade_url', 'signup_url', 'redeem_url', 'starter_url', 'developer_url',
+  'usage_url', 'owner_purchase_url', 'web_explore_url', 'docs_url', 'pricing',
+  'identify_endpoint', 'identify_payload', 'claim_endpoint', 'claim_payload',
+  'for_your_human',
+]);
+function _collapseEnvelope(obj) {
+  try {
+    if (!obj || typeof obj !== 'object') return obj;
+    if ((process.env.MCP_ENVELOPE_COLLAPSE || '') === '0') return obj;
+    const out = {}, up = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (_ENV_DROP.has(k)) continue;
+      if (_ENV_MOVE.has(k)) { if (v != null) up[k] = v; continue; }
+      if (k.startsWith('high_intent_')) {          // alias family, already deduped
+        if (v != null && !(k in up)) up[k] = v;
+        continue;
+      }
+      out[k] = v;                                   // kept OR tool data — untouched
+    }
+    if (Object.keys(up).length) out.upgrade = up;
+    return out;
+  } catch { return obj; }
+}
+
 function _dedupeAliasKeys(obj) {
   try {
     if (!obj || typeof obj !== 'object') return obj;
@@ -3717,7 +3779,7 @@ function _stampEntityCb(toolName, fn) {
             // `high_intent_*` alias, only when an identical value is already
             // present under another key, and only when it is long enough to be
             // worth shedding — so no value is ever lost, just a duplicate label.
-            return { ...r, structuredContent: _dedupeAliasKeys({ ..._add, ...sc }) };
+            return { ...r, structuredContent: _collapseEnvelope(_dedupeAliasKeys({ ..._add, ...sc })) };
           }
         } else {
           // content-only tool → MIRROR the JSON payload into structuredContent
@@ -6668,7 +6730,7 @@ function trackedTool(srv, name, description, schema, handler) {
                   : '';
                 return {
                   content: [{ type: 'text', text: _fullText + _mapText + _autoMintText + _hiText }],
-                  structuredContent: _dedupeAliasKeys({
+                  structuredContent: _collapseEnvelope(_dedupeAliasKeys({
                     trial_taste: true,
                     inline_full: true,
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
@@ -6676,7 +6738,7 @@ function trackedTool(srv, name, description, schema, handler) {
                     ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer ($49/mo).` } : {}),
                     ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
                     ..._hiSC,
-                  }),
+                  })),
                 };
               }
             }
@@ -6722,7 +6784,7 @@ function trackedTool(srv, name, description, schema, handler) {
               // so clients surface + cite it (not summarize it away). Other tools keep the
               // r51 preview-as-error behavior (DCHUB_PREVIEW_ISERROR).
               isError: _siteHeadlineObj ? false : PREVIEW_ISERROR,
-              structuredContent: _dedupeAliasKeys({
+              structuredContent: _collapseEnvelope(_dedupeAliasKeys({
                 // r-site-headline: expose the clean, machine-readable headline fields
                 // (composite_score/verdict/limiting_factor/citation) for consumers that
                 // read structuredContent — while still riding the full conversion CTA
@@ -6747,7 +6809,7 @@ function trackedTool(srv, name, description, schema, handler) {
     ..._autoMintSC, /* r61-conv: present only when mint succeeded */
     ..._hiSC,       /* 2026-06-07: present only when count>=3 high-intent */
     ..._mppSC,      /* r-mpp-advertise: $0.50 MPP pay-per-call option (MPP tools only) */
-              }),
+              })),
             };
           }
         }
@@ -6873,7 +6935,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         return {
           content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 + _hiText2 + promoText() }],
           isError: true,
-          structuredContent: _dedupeAliasKeys({
+          structuredContent: _collapseEnvelope(_dedupeAliasKeys({
             error: 'paid_only',
             tool: name,
             current_tier: tier,
@@ -6883,7 +6945,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
     ..._autoMintSC2, /* r61-conv: present only when mint succeeded */
     ..._hiSC2,       /* 2026-06-07: present only when count>=3 high-intent */
-          }),
+          })),
         };
       }
       const result = await handler(gate.params || args);
