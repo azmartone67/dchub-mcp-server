@@ -6722,7 +6722,7 @@ function trackedTool(srv, name, description, schema, handler) {
               // so clients surface + cite it (not summarize it away). Other tools keep the
               // r51 preview-as-error behavior (DCHUB_PREVIEW_ISERROR).
               isError: _siteHeadlineObj ? false : PREVIEW_ISERROR,
-              structuredContent: {
+              structuredContent: _dedupeAliasKeys({
                 // r-site-headline: expose the clean, machine-readable headline fields
                 // (composite_score/verdict/limiting_factor/citation) for consumers that
                 // read structuredContent — while still riding the full conversion CTA
@@ -6747,7 +6747,7 @@ function trackedTool(srv, name, description, schema, handler) {
     ..._autoMintSC, /* r61-conv: present only when mint succeeded */
     ..._hiSC,       /* 2026-06-07: present only when count>=3 high-intent */
     ..._mppSC,      /* r-mpp-advertise: $0.50 MPP pay-per-call option (MPP tools only) */
-              },
+              }),
             };
           }
         }
