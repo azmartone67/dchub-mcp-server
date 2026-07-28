@@ -6496,8 +6496,87 @@ export const REPLAY_COMPATIBILITY = {
   breaking_changes: 'only ever at a new schema_version (e.g. 2), and intentionally — pin schema_version to stay safe',
 };
 
-export function _planReplay(sc) {
+// ── H3 RESOLUTION GAP: geography named but never bound ───────────────────────
+// Gemini's diagnostic, 2026-07-28. `stale_door_pct` measures WHICH DOOR the
+// agent opened; it cannot see whether the room was right. The Norway bug scored
+// as PERFECT planner adoption: the agent called execute_plan, the planner
+// classed it grid_headroom correctly, and we still answered about a Norwegian
+// bidding zone because "Northern Virginia" never reached the args.
+//
+//   Episode quality = f(stale_door_pct, H3a, H3b)
+//     stale_door_pct  which door the agent opened          (client adoption)
+//     H3a  DROPPED    place IS in our index, plan lost it  (parser bug — ours)
+//     H3b  UNMAPPED   place is outside our index           (coverage gap — data)
+//
+// Splitting them matters because they have different owners. Conflated, a
+// coverage gap reads as a parser bug and gets chased by the wrong team.
+//
+// ★ ZERO-HEURISTIC FOR TIER 1. Gemini's key observation: the strictly-spatial
+// classes ALREADY branch their whole sequence on `d.iso ? [...] : [...]`, so
+// "did geography bind?" is a decision the planner is already taking — it simply
+// never recorded which side it took. We read that existing branch rather than
+// inferring a new one.
+//
+// ★ TIER 2 IS DELIBERATELY EXCLUDED. market_ranking legitimately answers
+// "rank markets for a 200 MW AI campus" with no geography at all — that is our
+// single most-published anchor intent, and asserting on it would cry wolf on
+// the highest-volume path. Only classes that CANNOT be answered without a
+// geography are checked.
+const _TIER1_SPATIAL = new Set([
+  'grid_headroom', 'interconnection_queue', 'water_climate',
+  'site_analysis', 'capacity_search', 'fiber_power_pairing', 'fiber', 'price',
+]);
+
+// A spatial phrase = preposition + object. Intents arrive lowercased as often
+// as not, so capitalisation is NOT a usable signal. Time/quantity objects are
+// excluded so "available in 90 days" / "in 200 MW" never register as places.
+const _SPATIAL_PREP_RE =
+  /\b(?:in|near|around|across|within|throughout)\s+([a-z][a-z.'-]*(?:\s+[a-z.'-]+){0,3})/i;
+const _NON_PLACE_OBJECT_RE =
+  /^(?:\d|the\s+(?:next|last|past)\b|[a-z]*\s*(?:days?|weeks?|months?|years?|mw|gw|kw|mva)\b)/i;
+
+export function _resolutionGap(text, signals, intentClass) {
+  try {
+    if (!_TIER1_SPATIAL.has(intentClass)) return null;      // Tier 2/3: not asserted
+    // ★ FAIL CLOSED. Without signals we cannot tell whether geography bound, and
+    // `undefined` would sail past the binding check below and report a gap that
+    // may not exist. A caller with no signals gets no assertion, not a guess.
+    if (!signals || typeof signals !== 'object') return null;
+    const d = signals;
+    // Geography DID bind — by any route. Nothing to report.
+    if (d.iso || d.isoFromPlace || d.coords || d.market || d.state || d.candidateId) return null;
+
+    const m = String(text || '').match(_SPATIAL_PREP_RE);
+    if (!m) return null;                                     // no place was named
+    const phrase = String(m[1] || '').trim().toLowerCase().replace(/[.,;]+$/, '');
+    if (!phrase || _NON_PLACE_OBJECT_RE.test(phrase)) return null;
+
+    // Is the named place one we claim to track? Longest key wins, same rule as
+    // the isoFromPlace resolver, so "northern virginia" is not matched as a
+    // shorter fragment.
+    let known = null;
+    for (const city of Object.keys(_CITY_ISO_META)) {
+      if (known && city.length <= known.length) continue;
+      if (phrase.includes(city)) known = city;
+    }
+    return known
+      // In the index and STILL not bound → we lost it. Ours to fix.
+      ? { kind: 'dropped',  code: 'H3a', phrase, matched: known, intent_class: intentClass,
+          note: `"${known}" is in the tracked index but no geography bound to the plan — `
+              + 'argument binding lost it. This is a parser defect, not a coverage gap.' }
+      // Not in the index → we do not track it. Say so rather than defaulting.
+      : { kind: 'unmapped', code: 'H3b', phrase, matched: null, intent_class: intentClass,
+          note: `"${phrase}" is outside the tracked primary index, so no geography could bind. `
+              + 'Treat the answer as unscoped rather than local.' };
+  } catch (_e) { return null; }
+}
+
+export function _planReplay(sc, signals) {
   const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
+  // H3 check: a Tier-1 spatial class that named a place and bound nothing.
+  // Emitted ONLY when it fires — an always-present null would read as a field
+  // the consumer must handle, when the honest default is "nothing to report".
+  const _gap = _resolutionGap(sc.intent, signals, sc.intent_class);
   const alts = Array.isArray(sc.alternatives) ? sc.alternatives : [];
   const decisions = [
     { id: 'D0', step: 0, kind: 'route', status: 'planned',
@@ -6528,6 +6607,7 @@ export function _planReplay(sc) {
     execution_graph: {
       waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
       parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
+    ...(_gap ? { resolution_gap: _gap } : {}),
     note: 'Auditable planning trail: decisions (D0 = routing, D1..Dn = per-step selections; status is one of ' + REPLAY_DECISION_STATUSES.join('/') + ' — only "planned" is emitted today, plan_query never executes) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". schema_version pins the SHAPE (independent of planner_version); execution/evidence IDs are minted by the caller at run time.',
   };
 }
@@ -6605,7 +6685,7 @@ export function _planQuery(intent, context) {
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. ' + _PLAN_ONLY_NOTE,
       _source: 'DC Hub — dchub.cloud',
     };
-    sc.replay = _planReplay(sc);
+    sc.replay = _planReplay(sc, d);
     return sc;
   }
   const seq = top.cls.sequence(d).filter(Boolean);
@@ -6670,7 +6750,7 @@ export function _planQuery(intent, context) {
     note: 'Deterministic keyword router (no LLM): same intent + context always returns the same plan. args_hint values in <angle brackets> come from the named earlier step (depends_on lists hard data dependencies; execution_waves groups steps that can run concurrently). tools/list stays canonical for schemas. ' + _PLAN_ONLY_NOTE,
     _source: 'DC Hub — dchub.cloud',
   };
-  sc.replay = _planReplay(sc);
+  sc.replay = _planReplay(sc, d);
   return sc;
 }
 
