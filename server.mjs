@@ -4758,7 +4758,14 @@ function _starterPackFirstTime(sid) {
 // shape learns both the entry point and the class of problem it solves. Kept
 // byte-identical to the six anchors published on /for/*, llms.txt, AGENTS.md
 // and every /integrations page, so repetition across surfaces is the signal.
-const _STARTER_PACK = Object.freeze([
+// ★★ EXPORTED so the anchor list is a TESTED CONTRACT, not just copy.
+// Perplexity, 07-28: "your English-language examples have become operational
+// contracts — every example line now needs the same change control you'd apply
+// to a public API." Routing was already pinned; the recipe<->intent PAIRING was
+// not. A test can pin that "…overlap in Atlanta" routes to fiber_power_pairing
+// while this list quietly says the intent belongs to a different recipe, and
+// nothing notices. Exporting it lets one test assert the pairing itself.
+export const _STARTER_PACK = Object.freeze([
   { recipe: 'market_selection',
     intent: 'rank markets for a 200 MW AI campus' },
   { recipe: 'grid_and_queue',
