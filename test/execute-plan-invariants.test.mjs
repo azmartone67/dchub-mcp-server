@@ -193,10 +193,61 @@ describe('execute_plan invariants (live-battery regressions)', () => {
     expect(iso('what is the DCPI for springfield')).toEqual([]); // IS DC Hub's `springfield`
     expect(iso('find 100 MW in Peoria, AZ')).toEqual([]);        // WECC, Phoenix metro
     expect(iso('Decatur GA power availability')).toEqual([]);    // SERC, Atlanta metro
-    expect(iso('Quincy Washington data centers')).toEqual([]);   // WECC, a real DC market
+    // Quincy WA now has its own (correct) WECC entry, so the assertion here is
+    // that the Ameren one never claims it — MISO must not appear.
+    expect(iso('Quincy Washington data centers')).not.toContain('MISO');
     expect(iso('Urbana, OH interconnection')).toEqual([]);       // PJM
     // ...and 'normal' is deliberately absent: it is an ordinary English word.
     expect(iso('grid under normal operating conditions')).toEqual([]);
+  });
+
+  // ── 2026-07-28: second-tier markets, every slug probed live before adding ──
+  it('second-tier entries carry a VERIFIED slug and the physical-grid ISO', () => {
+    const slug = _execConstraintSlug;
+    const iso = (t) => _execConstraintIsoSet(t, {}, null);
+    expect(slug('find 200 MW near Seattle')).toBe('seattle-wa');
+    expect(slug('a campus in Council Bluffs')).toBe('council-bluffs-ia');
+    expect(slug('power availability in Cheyenne')).toBe('cheyenne-wy');
+    expect(iso('find 100 MW in Omaha')).toEqual(['SPP']);
+    expect(iso('a site in Minneapolis')).toEqual(['MISO']);
+    expect(iso('data center in Denver')).toEqual(['WECC']);
+
+    // Where DC Hub's market record and the physical grid disagree, this table
+    // follows the GRID — the same call as kansas city, and for the same
+    // reason: the value gets injected.
+    // Charlotte is Duke Energy Carolinas, NOT an RTO member, though
+    // charlotte-nc reports PJM. Declaring PJM would inject iso=PJM and return
+    // PJM queue projects for a Duke grid.
+    expect(iso('find 150 MW near Charlotte')).toEqual(['SERC']);
+    expect(_EXEC_IS_RTO('SERC')).toBe(false);            // ...so nothing is injected
+    // Nashville reports TVA (a balancing authority, not in the mint
+    // whitelist); declared SERC, matching the atlanta/SOCO precedent.
+    expect(iso('a build in Nashville')).toEqual(['SERC']);
+  });
+
+  it('second-tier name collisions are qualified, not guessed', () => {
+    const iso = (t) => _execConstraintIsoSet(t, {}, null);
+    expect(iso('a site in Portland, OR')).toEqual(['WECC']);
+    expect(iso('a site in Portland, ME')).toEqual([]);        // ISONE — different RTO
+    expect(iso('Quincy, WA data centers')).toEqual(['WECC']); // Grant County PUD
+    expect(iso('Quincy, IL substation')).toEqual(['MISO']);   // Ameren — the mirror entry
+    expect(iso('Mount Pleasant, WI')).toEqual(['MISO']);      // We Energies
+    expect(iso('Mount Pleasant, SC')).toEqual([]);            // Charleston, SERC
+    expect(iso('Mount Pleasant, TX')).toEqual([]);            // ERCOT
+  });
+
+  it('adding second-tier entries did not disturb the originals', () => {
+    // _execConstraintSlug returns the FIRST slugged match and
+    // _execConstraintIsoSet accumulates ALL of them, so new rows could have
+    // changed either. Appending them keeps every pre-existing route intact.
+    expect(_execConstraintSlug('find 100 MW near Dallas')).toBe('dallas-tx');
+    expect(_execConstraintSlug('overlap in Atlanta')).toBe('atlanta-ga');
+    expect(_execConstraintIso('overlap in Atlanta', {}, null)).toBe('SERC');
+    expect(_execConstraintIsoSet('compare Phoenix vs Dallas for power cost', {}, null))
+      .toEqual(['ERCOT', 'WECC']);
+    expect(_execConstraintIsoSet('rank markets for a 200 MW AI campus', {}, null)).toEqual([]);
+    // kansas city stays SPP on purpose (see the comment at the entry)
+    expect(_execConstraintIsoSet('find 100 MW in Kansas City', {}, null)).toEqual(['SPP']);
   });
 
   it('_execCityHit: `re` overrides the substring default, bare keys still work', () => {

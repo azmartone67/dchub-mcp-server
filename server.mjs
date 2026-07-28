@@ -5895,6 +5895,11 @@ export const _CITY_ISO_META = {
   richmond: { iso: 'PJM', slug: 'richmond-va' },
   columbus: { iso: 'PJM', slug: 'columbus-oh' },
   chicago: { iso: 'PJM', slug: 'chicago-il' },
+  // SERC is the reliability REGION; DC Hub's atlanta-ga record reports SOCO,
+  // the balancing authority (Southern Co). Benign — neither is an RTO so
+  // nothing is injected either way, and SOCO is not in the iso mint whitelist,
+  // so it could never be harvested. SERC is used because it IS whitelisted and
+  // therefore works as a constraint. Same treatment as 'nashville' below.
   atlanta: { iso: 'SERC', slug: 'atlanta-ga' },
   phoenix: { iso: 'WECC', slug: 'phoenix-az' },
   'salt lake': { iso: 'WECC', slug: 'salt-lake-city-ut' },
@@ -5951,9 +5956,52 @@ export const _CITY_ISO_META = {
   //     holds whichever is meant. Deliberately NOT adding 'normal' (its
   //     twin city) — it is an ordinary English word and would match
   //     "normal operations" in any intent.
+  // SPP is CORRECT and deliberate — do not "fix" this to match the data.
+  // Evergy Metro (formerly KCP&L) serves Kansas City and is an SPP member.
+  // DC Hub's own `kansas-city-mo` market record reports MISO, which is a defect
+  // in that table, not here (audited live 2026-07-28). It matters because both
+  // are RTOs: if this entry were flipped to MISO the executor would inject
+  // region_iso=MISO into the retirement/queue reads for a grid that is SPP.
   'kansas city': { iso: 'SPP', slug: 'kansas-city-mo' },
   tulsa: { iso: 'SPP', slug: 'tulsa-ok' },
-  'new albany': { iso: 'PJM', slug: 'new-albany-oh' } };
+  'new albany': { iso: 'PJM', slug: 'new-albany-oh' },
+  // ── second tier (2026-07-28) ────────────────────────────────────────────
+  // Every slug below was probed against LIVE get_market_dcpi_rank before it
+  // was written down, and every one resolves to the right city + state. The
+  // DECLARED iso is the physical grid, which is not always what the market
+  // record reports — same call as 'kansas city' above: where the two disagree,
+  // this table follows the grid, because this value gets INJECTED.
+  'portland': { iso: 'WECC', slug: 'portland-or',
+    re: /\bportland,?\s*(?:or\b|ore\b|oregon)|\bhillsboro,?\s*(?:or\b|oregon)/i },
+  //   ^ qualified: Portland MAINE is ISONE, a different RTO entirely. Bare
+  //     'hillsboro' is no safer (Hillsboro TX = ERCOT, Hillsboro OH = PJM).
+  seattle: { iso: 'WECC', slug: 'seattle-wa' },
+  denver: { iso: 'WECC', slug: 'denver-co' },
+  cheyenne: { iso: 'WECC', slug: 'cheyenne-wy' },
+  'quincy wa': { iso: 'WECC', slug: 'quincy-wa',
+    re: /\bquincy,?\s*(?:wa\b|wash\b|washington)/i },
+  //   ^ the mirror of 'quincy il' above — Grant County PUD, a real DC market.
+  //     Both Quincys are qualified so neither can claim a bare "Quincy".
+  charlotte: { iso: 'SERC', slug: 'charlotte-nc' },
+  //   ^ SERC, NOT PJM. DC Hub's charlotte-nc record reports PJM; Charlotte is
+  //     Duke Energy Carolinas, which is NOT an RTO member — PJM's Carolinas
+  //     footprint is Dominion's northeastern-NC area, not Charlotte. This one
+  //     matters more than kansas city: PJM is an RTO, so declaring it would
+  //     inject iso=PJM and hand back PJM queue projects for a Duke grid.
+  nashville: { iso: 'SERC', slug: 'nashville-tn' },
+  //   ^ DC Hub reports TVA — the balancing authority. Declared as the SERC
+  //     reliability region for the same reason 'atlanta' is SERC rather than
+  //     SOCO: neither BA label is in the iso mint whitelist, so a BA value
+  //     would reject every legitimate mint. Non-RTO either way, so nothing is
+  //     injected; this serves purely as a constraint.
+  omaha: { iso: 'SPP', slug: 'omaha-ne' },
+  'council bluffs': { iso: 'MISO', slug: 'council-bluffs-ia' },
+  minneapolis: { iso: 'MISO', slug: 'minneapolis-mn' },
+  milwaukee: { iso: 'MISO', slug: 'milwaukee-wi' },
+  'mount pleasant': { iso: 'MISO', slug: 'mount-pleasant-wi',
+    re: /\bmount\s+pleasant,?\s*(?:wi\b|wisc\w*)|\bracine\s+county\b/i } };
+  //   ^ qualified: Mount Pleasant SC is Charleston (SERC), Mount Pleasant TX
+  //     is ERCOT, Mount Pleasant MI is MISO — three states, three answers.
 export const _CITY_ISO = Object.fromEntries(
   Object.entries(_CITY_ISO_META).map(([k, v]) => [k, v.iso]));
 // Does this intent name this entry's geography? A key matches as a plain
