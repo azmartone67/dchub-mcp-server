@@ -5554,16 +5554,16 @@ const _PLAN_CLASSES = [
       [/\bisos?\b/i, 1.5], [/\bmw\s+availab/i, 2.5],
     ],
     rationale: 'With the ISO known all three grid reads share the same argument and run in one parallel wave; without it the free scoreboard must run first to pick the ISO the deep reads depend on.',
-    sequence: (d) => (d.iso ? [
+    sequence: (d) => ((d.iso || d.isoFromPlace) ? [
       { step: 1, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
         why: 'Deep single-ISO read: headroom, constraints, generation additions, time-to-power (recipe grid_and_queue).',
-        args_hint: { iso: d.iso } },
+        args_hint: { iso: (d.iso || d.isoFromPlace) } },
       { step: 2, tool: 'get_interconnection_queue', depends_on: [], estimated_calls: 1,
         why: 'Queue depth / GW aggregate for the same ISO — the leading indicator of where new power is coming online. Independent of step 1 — run in parallel.',
-        args_hint: { iso: d.iso } },
+        args_hint: { iso: (d.iso || d.isoFromPlace) } },
       { step: 3, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
         why: 'De-duplicated, filterable queue survivors (min_mw / fuel_type / max_ttp_months) — each mints a durable candidate_id for zero-drift chaining into analyze_site. Independent — run in parallel.',
-        args_hint: { iso: d.iso, ...(d.mw ? { min_mw: d.mw } : {}) } },
+        args_hint: { iso: (d.iso || d.isoFromPlace), ...(d.mw ? { min_mw: d.mw } : {}) } },
     ] : [
       { step: 1, tool: 'get_grid_scoreboard', depends_on: [], estimated_calls: 1,
         why: 'Live cross-ISO scoreboard (free, no key): demand, fuel mix, renewable share for every tracked grid (recipe grid_and_queue).',
@@ -6225,11 +6225,42 @@ export function _execConstraintIso(intentText, userCtx, signals) {
 export function _planSignals(intent, context) {
   const text = String(intent || '');
   const c = (context && typeof context === 'object' && !Array.isArray(context)) ? context : {};
+  // Explicit ISO only: caller-supplied context, or an ISO named in the text.
+  // ★ Deliberately does NOT include the place-name fallback below — `iso` feeds
+  // the grid_headroom CLASS BOOST (+1.5), and a named operator is strong
+  // evidence of a grid question while a place name is not: metros appear in
+  // fiber, site and market questions equally. Conflating them stole
+  // "where do fiber density and grid headroom overlap in Atlanta" from
+  // fiber_power_pairing into grid_headroom — caught by the class-stealing
+  // guards, which is exactly what they are for.
   const iso = (() => {
     const fromCtx = c.iso && String(c.iso).trim();
     if (fromCtx) return String(fromCtx).toUpperCase().replace(/[^A-Z0-9]/g, '');
     const m = text.match(_PLAN_ISO_RE);
     return m ? m[1].toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+  })();
+  // ★★ 2026-07-28: the ISO implied by a PLACE NAME, for ARGUMENT resolution only.
+  // _CITY_ISO_META already maps every tracked metro to its ISO and this planner
+  // already trusts it — but only for step-to-step hand-offs. Step 1 never read
+  // it, so an intent naming a metro instead of an operator left the args EMPTY.
+  // Measured on Mistral's own validation payload:
+  //   "show power availability in Northern Virginia"
+  //     -> get_grid_scoreboard {}  -> returned grid EU_NO_2 (Norway); zero
+  //        mentions of PJM / Virginia / Ashburn / Dominion.
+  //   "show power availability in PJM"
+  //     -> get_grid_intelligence {"iso":"PJM"}   <- already correct
+  // Same question; one names the operator, one names the place, only one worked.
+  // ★ LONGEST key first so "northern virginia" beats any shorter substring, and
+  // word-boundary matched so a city inside a larger word cannot trigger it.
+  const isoFromPlace = (() => {
+    if (iso) return null;                       // an explicit ISO always wins
+    let best = null;
+    for (const city of Object.keys(_CITY_ISO_META)) {
+      if (best && city.length <= best.length) continue;
+      const re = new RegExp('\\b' + city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+      if (re.test(text)) best = city;
+    }
+    return best ? String(_CITY_ISO_META[best].iso).toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
   })();
   const mw = (() => {
     if (Number.isFinite(Number(c.capacity_mw))) return Number(c.capacity_mw);
@@ -6287,7 +6318,7 @@ export function _planSignals(intent, context) {
   // class wins, or every Ohio/Illinois/Virginia intent would start drifting
   // toward the distribution layer. Routing stays on explicit feeder language.
   const hc = _planHostingCoverage(text, coords);
-  return { iso, mw, coords, state, candidateId, market, since, ai, comparePair, hc };
+  return { iso, isoFromPlace, mw, coords, state, candidateId, market, since, ai, comparePair, hc };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
