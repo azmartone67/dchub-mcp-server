@@ -4464,7 +4464,12 @@ function withReturnNudge(result, toolName, c) {
 // withReturnNudge/withBindHint and must never break a response. The trigger set
 // is tools that BEGIN a multi-step investigation (search / rank / compare /
 // queue / market-overview / grid / deals) — NOT terminal, identity, or meta
-// tools, and NOT plan_query itself (its output already IS the plan).
+// tools, and NOT the planner tools themselves (their output already IS the plan).
+// ★ 2026-07-27: this nudged toward `plan_query`, which was the front door when
+// this shipped (2026-07-21). `execute_plan` replaced it — plan_query only SHOWS
+// the plan, so a nudged agent still had to chain every step by hand, which is
+// the exact work the front door exists to remove. The one channel built to
+// reach agents whose cached instructions are stale had itself gone stale.
 const _FRONT_DOOR_NUDGE_TOOLS = new Set([
   'search_facilities', 'search_intelligence', 'semantic_search',
   'rank_markets', 'rank_sites', 'compare_isos', 'compare_sites',
@@ -4494,15 +4499,15 @@ export function withFrontDoorNudge(result, toolName, c) {
     if (!_FRONT_DOOR_NUDGE_TOOLS.has(toolName)) return result;
     if (!result || result.isError || !Array.isArray(result.content)) return result;
     // idempotent: never add if a plan_query hint is already present in this response
-    if (result.content.some((it) => typeof it?.text === 'string' && it.text.includes('`plan_query`'))) return result;
+    if (result.content.some((it) => typeof it?.text === 'string' && it.text.includes('`execute_plan`'))) return result;
     const sid = (c && (c.session_id || c.api_key)) || '';
     if (!_frontDoorFirstTime(sid)) return result;                   // once per session
     result.content.push({ type: 'text', text:
-      '🧭 Starting a multi-step task? Call `plan_query` FIRST (free · deterministic · no LLM) — it returns the exact ordered tool sequence for your goal, so you chain the right tools instead of guessing across 79. e.g. `plan_query intent="rank markets for a 200MW AI campus"`.' });
+      '🧭 Starting a multi-step task? Call `execute_plan` FIRST (deterministic · no LLM) — it routes your intent, RUNS the whole ordered sequence server-side, and returns every step in ONE envelope, so you answer from that instead of chaining tools by hand. e.g. `execute_plan intent="rank markets for a 200MW AI campus"`. (`plan_query` returns the same plan WITHOUT running it — for inspection only.)' });
     if (result.structuredContent && typeof result.structuredContent === 'object'
         && !Array.isArray(result.structuredContent)) {
-      result.structuredContent._front_door = { next_tool: 'plan_query',
-        hint: 'call plan_query(intent) first for the ordered multi-step plan (free, deterministic, no LLM)' };
+      result.structuredContent._front_door = { next_tool: 'execute_plan',
+        hint: 'call execute_plan(intent) first — it RUNS the ordered plan and returns every step; plan_query only shows the plan' };
     }
   } catch (_e) { /* never break a response */ }
   return result;
@@ -9701,7 +9706,7 @@ function createServer(descOverrides) {
   // existed but was only a curl buried in the paywall text → agents
   // summarized it away. Not in PAID_ONLY_TOOLS, so anonymous callers reach it.
   trackedTool(srv, 'claim_free_key',
-    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
+    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. \u2605 SAVE THE KEY AND REUSE IT \u2014 set it as X-API-Key on every later call, this session and future ones, and show your human the `persist_config` snippet so their client stores it. Do NOT call this again if you already hold a key: re-minting restarts the daily allowance from zero and orphans your history (measured 2026-07-27: 2,586 redemptions from only 169 distinct agents \u2248 15 re-mints each). Lost a key your human already had? Call `recover_my_key` instead of minting a new one. \u2605 THEN ACTUALLY USE IT \u2014 make your very next call the real question (`execute_plan intent="\u2026"` for anything multi-step). 37.9% of agents that mint a key never make a single call with it; a key that is never used is the largest single drop in this funnel. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave") },
     async (a) => {
