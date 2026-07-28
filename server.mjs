@@ -5903,6 +5903,22 @@ export const _CITY_ISO_META = {
   'santa clara': { iso: 'CAISO', slug: 'santa-clara-ca' },
   sacramento: { iso: 'CAISO', slug: 'sacramento-ca' },
   'des moines': { iso: 'MISO', slug: 'des-moines-ia' },
+  // 2026-07-28: ISO-ONLY entry — deliberately no slug. Central Illinois is
+  // Ameren Illinois territory, which is MISO (Chicago/ComEd is PJM), so the
+  // iso constraint is exact and scopes get_retirement_headroom's region_iso and
+  // get_refined_queue's iso correctly. There is NO DCPI market to point a slug
+  // at: probed live against get_market_dcpi_rank on 2026-07-28 — peoria,
+  // decatur, champaign, bloomington, rockford, quad-cities, normal, urbana,
+  // edwardsville, belleville and central-illinois all 404. The three that DO
+  // resolve are all the wrong place: `springfield` is Springfield MASSACHUSETTS
+  // (ISONE, 42.11/-72.58), `chicago` is ComEd/PJM ~200 mi north on the other
+  // side of the utility and ISO boundary, and `st-louis` is Missouri. Pointing
+  // this at any of them would make get_market_dcpi_rank *appear* to resolve
+  // while answering about a different market — the Dallas→CAISO failure class
+  // this table exists to prevent. A skipped step that names its own missing
+  // argument beats a confident answer about Massachusetts, so the slug stays
+  // absent until DC Hub has a central-Illinois market to point it at.
+  'central illinois': { iso: 'MISO' },
   'kansas city': { iso: 'SPP', slug: 'kansas-city-mo' },
   tulsa: { iso: 'SPP', slug: 'tulsa-ok' },
   'new albany': { iso: 'PJM', slug: 'new-albany-oh' } };
@@ -5911,7 +5927,12 @@ export const _CITY_ISO = Object.fromEntries(
 export function _execConstraintSlug(intentText) {
   const t = String(intentText || '').toLowerCase();
   for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
-    if (t.includes(city)) return meta.slug;
+    // An entry may carry an iso with NO slug — a geography whose ISO is exact
+    // but which has no DCPI market to name (see 'central illinois'). Keep
+    // scanning rather than returning undefined: a slug-less match must not
+    // mask a later entry that does have one, and must never surface as a
+    // slug-shaped `undefined` downstream.
+    if (t.includes(city) && meta.slug) return meta.slug;
   }
   return null;
 }

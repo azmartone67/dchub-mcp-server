@@ -145,6 +145,30 @@ describe('execute_plan invariants (live-battery regressions)', () => {
     expect(_execConstraintSlug('somewhere unnamed')).toBeNull();
   });
 
+  // ── 2026-07-28: an ISO-only entry (exact ISO, no DCPI market to name) ──
+  it('constrains central Illinois to MISO without inventing a market slug', () => {
+    // Central Illinois is Ameren Illinois = MISO. Chicago/ComEd is PJM, so the
+    // ISO is genuinely exact and worth injecting: it scopes region_iso/iso on
+    // the retirement + queue reads.
+    expect(_execConstraintIsoSet('site a 50 MW data center in central Illinois', {}, null))
+      .toEqual(['MISO']);
+    expect(_EXEC_IS_RTO('MISO')).toBe(true);          // ...so injection is allowed
+
+    // But there is NO central-Illinois DCPI market (probed live: peoria,
+    // decatur, champaign, rockford, quad-cities et al. all 404; `springfield`
+    // is MASSACHUSETTS, `st-louis` is Missouri). Returning any of those would
+    // make the step resolve to the wrong place — strictly worse than skipping.
+    expect(_execConstraintSlug('site a 50 MW data center in central Illinois')).toBeNull();
+    // never a slug-shaped undefined
+    expect(_execConstraintSlug('central illinois')).not.toBeUndefined();
+
+    // ...and a slug-less entry must not mask a later one that HAS a slug.
+    expect(_execConstraintSlug('compare central Illinois against Dallas')).toBe('dallas-tx');
+    // two geographies named → ambiguous → no single ISO to inject
+    expect(_execConstraintIsoSet('compare central Illinois against Dallas', {}, null))
+      .toEqual(['ERCOT', 'MISO']);
+  });
+
   // ── trap 3 (v2.7.3): display names are not slugs ───────────────────
   it('keeps the ai_capacity_index mint contract wired', () => {
     // Index rows carry 'market': 'Ashburn VA' — the generic key harvester
