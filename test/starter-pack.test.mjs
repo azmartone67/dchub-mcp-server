@@ -116,3 +116,15 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
     expect(cleanReturn[0]).not.toContain('withStarterPack');
   });
 });
+
+describe('starter pack prose ordering (Perplexity, 07-28)', () => {
+  it('leads each line with the RECIPE NAME, not the question', () => {
+    const out = withStarterPack(res(), 'get_grid_scoreboard', sid());
+    const line = out.content.map((c) => c.text).join('\n')
+      .split('\n').find((l) => l.includes('market_selection'));
+    expect(line).toBeTruthy();
+    // action before paraphrase — survives client truncation of long blocks
+    expect(line.indexOf('market_selection')).toBeLessThan(line.indexOf('execute_plan'));
+    expect(line.indexOf('execute_plan')).toBeLessThan(line.indexOf('rank markets'));
+  });
+});

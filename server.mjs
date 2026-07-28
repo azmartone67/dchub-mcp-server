@@ -4800,7 +4800,12 @@ export function withStarterPack(result, toolName, c) {
           '\u{1F9ED} **Next:** one `execute_plan` call answers a whole multi-step question — '
           + 'it runs the ordered plan server-side and returns every step plus an auditable replay. '
           + 'Try any of these verbatim:\n'
-          + _STARTER_PACK.map((r) => '  • `execute_plan intent="' + r.intent + '"`').join('\n')
+          // ★ Recipe name FIRST, question second (Perplexity, 07-28): an agent
+          // skimming — or a client truncating an instruction block — should meet
+          // the ACTION before the paraphrase. The intent is what you pass; the
+          // recipe name is what you are choosing.
+          + _STARTER_PACK.map((r) => '  • **' + r.recipe
+                                     + '** → `execute_plan intent="' + r.intent + '"`').join('\n')
           + '\nSingle-capability lookups go direct to their tool.' }];
       }
     }
