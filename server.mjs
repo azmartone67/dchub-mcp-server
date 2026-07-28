@@ -6668,7 +6668,7 @@ function trackedTool(srv, name, description, schema, handler) {
                   : '';
                 return {
                   content: [{ type: 'text', text: _fullText + _mapText + _autoMintText + _hiText }],
-                  structuredContent: {
+                  structuredContent: _dedupeAliasKeys({
                     trial_taste: true,
                     inline_full: true,
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
@@ -6676,7 +6676,7 @@ function trackedTool(srv, name, description, schema, handler) {
                     ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer ($49/mo).` } : {}),
                     ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
                     ..._hiSC,
-                  },
+                  }),
                 };
               }
             }
@@ -6873,7 +6873,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         return {
           content: [{ type: 'text', text: (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 + _hiText2 + promoText() }],
           isError: true,
-          structuredContent: {
+          structuredContent: _dedupeAliasKeys({
             error: 'paid_only',
             tool: name,
             current_tier: tier,
@@ -6883,7 +6883,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     ...buildPaywallExtras(name, 'free'), /* phase39_human_message */
     ..._autoMintSC2, /* r61-conv: present only when mint succeeded */
     ..._hiSC2,       /* 2026-06-07: present only when count>=3 high-intent */
-          },
+          }),
         };
       }
       const result = await handler(gate.params || args);
