@@ -11419,6 +11419,68 @@ app.use((req, res, next) => {
 
 const sessions          = new Map(); // sessionId → transport
 const sessionMeta       = new Map(); // sessionId → { api_key, platform, tier, developer_id }
+
+// ── PLATFORM RECALL: keep attribution alive after the session Map drops it ───
+// Measured 2026-07-28: 90% of real tool calls (2,967 of 3,301 over 7d, 62 of 82
+// agents) landed in the generic `mcp` bucket, so we could not tell any platform
+// what its users were doing — which is the precondition for an operator deal.
+//
+// ★ ROOT CAUSE, reproduced live. `clientInfo.name` — the ONLY reliable platform
+// signal — arrives on `initialize` and nowhere else. A `tools/call` has no
+// clientInfo, so when it takes the STATELESS path (session id not in this
+// replica's Map — evicted, or minted on another replica; the r-stateless-call
+// comment below documents Smithery/mcp-remote hosts firing dead ids for ~2/3 of
+// gateway calls) detectPlatformFromInit() has nothing to read and falls through
+// to UA detection. Most MCP clients send a generic UA ("node"), so it returns
+// the 'mcp' default. Proof, same client and UA, only the session id differing:
+//     live session id  -> platform = 'cursor'
+//     stale session id -> platform = 'mcp'
+//
+// So this is a SEPARATE, longer-lived memory keyed by session id, written once
+// at initialize while clientInfo is still in hand. It deliberately outlives
+// sessionMeta: the whole failure is that the session entry went away.
+//
+// ★★ SAFETY: recall can ONLY upgrade the generic bucket. A positive detection
+// (explicit header, or a UA we actually recognise) always wins, and recall is
+// consulted only when detection produced 'mcp'. It can therefore never
+// mis-attribute a call to the wrong platform — the worst case is that it does
+// nothing and we stay where we are today.
+//
+// Kill: DCHUB_PLATFORM_RECALL=0.
+const _PLATFORM_RECALL = new Map();       // sessionId → { platform, ts }
+const _PLATFORM_RECALL_MAX = 50000;
+const _PLATFORM_RECALL_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function _rememberPlatform(sid, platform) {
+  try {
+    if (!sid || !platform || platform === 'mcp') return;   // never cache the generic value
+    if (_PLATFORM_RECALL.size >= _PLATFORM_RECALL_MAX) {
+      // FIFO drop of the oldest tenth — same bounded pattern as _FRONT_DOOR_SEEN.
+      let i = 0; const drop = _PLATFORM_RECALL_MAX / 10;
+      for (const k of _PLATFORM_RECALL) { _PLATFORM_RECALL.delete(k[0] ?? k); if (++i >= drop) break; }
+    }
+    _PLATFORM_RECALL.set(String(sid), { platform, ts: Date.now() });
+  } catch (_e) { /* attribution must never break a request */ }
+}
+
+function _recallPlatform(sid) {
+  try {
+    if ((process.env.DCHUB_PLATFORM_RECALL || '') === '0') return null;
+    if (!sid) return null;
+    const hit = _PLATFORM_RECALL.get(String(sid));
+    if (!hit) return null;
+    if (Date.now() - hit.ts > _PLATFORM_RECALL_TTL_MS) { _PLATFORM_RECALL.delete(String(sid)); return null; }
+    return hit.platform || null;
+  } catch (_e) { return null; }
+}
+
+// Detection first, recall only to fill the generic gap. Order is the safety
+// property — see the SAFETY note above.
+export function _resolvePlatform(body, userAgent, platformHeader, sessionId) {
+  const detected = detectPlatformFromInit(body, userAgent, platformHeader);
+  if (detected && detected !== 'mcp') return detected;
+  return _recallPlatform(sessionId) || detected;
+}
 const sessionSrv        = new Map(); // sessionId → McpServer (qa-0704 url-elicit: elicitInput needs the per-session server instance)
 
 // r41-upgrade-stats (2026-05-25): session-upgrade counters so we can
@@ -11849,6 +11911,13 @@ app.post('/mcp', async (req, res) => {
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           sessions.set(sid, transport);
+          // ★ Remember the platform against the SERVER-minted session id.
+          // initialize is the only request carrying clientInfo, and the
+          // sessionMeta entry that holds it does not survive eviction. This is
+          // the correct hook: at the top of the initialize branch the client has
+          // no session id yet, and `sid` there is the callback param below —
+          // referencing it early is a ReferenceError node --check cannot see.
+          _rememberPlatform(sid, platform);
           sessionMeta.set(sid, {
             api_key: apiKey,
             platform,
@@ -11928,7 +11997,7 @@ app.post('/mcp', async (req, res) => {
     // mode is unchanged (enableJsonResponse left unset, matching the stateful
     // transport above) so Smithery's existing SSE consumption is unaffected.
     if (body?.method === 'tools/list' || body?.method === 'ping') {
-      const platform = detectPlatformFromInit(body, userAgent, platformHeader);
+      const platform = _resolvePlatform(body, userAgent, platformHeader, sessionId);
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
       // r-list-swr (2026-07-11): serve BOTH of these caller-independent methods
@@ -11995,7 +12064,7 @@ app.post('/mcp', async (req, res) => {
     // Kill switch: DCHUB_STATELESS_CALL_DISABLE=1 → falls back to the r-session-404.
     if (body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
-      const platform   = detectPlatformFromInit(body, userAgent, platformHeader);
+      const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
       let _descOverrides = null;
