@@ -12,7 +12,8 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   _execResolveArgs, _execHarvest, _execConstraintIso, _execConstraintSlug,
-  _execConstraintIsoSet, _EXEC_IS_RTO, _EXEC_TOOL_MINTS, _EXEC_ISO_ARG, _planQuery,
+  _execConstraintIsoSet, _execCityHit, _EXEC_IS_RTO, _EXEC_TOOL_MINTS, _EXEC_ISO_ARG,
+  _planQuery,
 } from '../server.mjs';
 
 describe('execute_plan invariants (live-battery regressions)', () => {
@@ -167,6 +168,49 @@ describe('execute_plan invariants (live-battery regressions)', () => {
     // two geographies named → ambiguous → no single ISO to inject
     expect(_execConstraintIsoSet('compare central Illinois against Dallas', {}, null))
       .toEqual(['ERCOT', 'MISO']);
+  });
+
+  // ── 2026-07-28: the rest of Ameren Illinois, and the name collisions ──
+  it('constrains the Ameren Illinois cities to MISO only when the STATE is named', () => {
+    const iso = (t) => _execConstraintIsoSet(t, {}, null);
+    for (const t of ['find 100 MW in Springfield, IL', 'a parcel near Peoria Illinois',
+                     'site 40 MW in Decatur, Illinois', 'Quincy IL substation capacity',
+                     'data center in Champaign', 'the Metro East across from St. Louis',
+                     'power for a build in Edwardsville']) {
+      expect(iso(t)).toEqual(['MISO']);
+    }
+    // Bloomington is the one safe BARE key — IL, IN (Duke Energy Indiana) and
+    // MN are all MISO, so the constraint holds whichever is meant.
+    expect(iso('find 50 MW near Bloomington')).toEqual(['MISO']);
+  });
+
+  it('refuses to constrain the same names OUTSIDE Illinois (the whole point)', () => {
+    const iso = (t) => _execConstraintIsoSet(t, {}, null);
+    // Every one of these is a real place in a DIFFERENT ISO, and injecting
+    // MISO into them is the Dallas->CAISO failure class. Not injecting merely
+    // leaves prior behavior — so the asymmetry decides it.
+    expect(iso('a site in Springfield, MA')).toEqual([]);        // ISONE — and it
+    expect(iso('what is the DCPI for springfield')).toEqual([]); // IS DC Hub's `springfield`
+    expect(iso('find 100 MW in Peoria, AZ')).toEqual([]);        // WECC, Phoenix metro
+    expect(iso('Decatur GA power availability')).toEqual([]);    // SERC, Atlanta metro
+    expect(iso('Quincy Washington data centers')).toEqual([]);   // WECC, a real DC market
+    expect(iso('Urbana, OH interconnection')).toEqual([]);       // PJM
+    // ...and 'normal' is deliberately absent: it is an ordinary English word.
+    expect(iso('grid under normal operating conditions')).toEqual([]);
+  });
+
+  it('_execCityHit: `re` overrides the substring default, bare keys still work', () => {
+    expect(_execCityHit('dallas', { iso: 'ERCOT' }, 'find 100 mw near dallas')).toBe(true);
+    expect(_execCityHit('dallas', { iso: 'ERCOT' }, 'find 100 mw near austin')).toBe(false);
+    const qualified = { iso: 'MISO', re: /\bpeoria,?\s*(?:il\b|illinois)/i };
+    expect(_execCityHit('peoria il', qualified, 'peoria, il')).toBe(true);
+    expect(_execCityHit('peoria il', qualified, 'peoria, az')).toBe(false);
+    // Once `re` is present the KEY is only a label — it is never substring-
+    // tested. (Shown with a synthetic entry whose key and regex do not overlap;
+    // for 'peoria il' the two happen to agree, so it cannot demonstrate this.)
+    const labelOnly = { iso: 'MISO', re: /\bedwardsville\b/i };
+    expect(_execCityHit('metro east', labelOnly, 'the metro east region')).toBe(false);
+    expect(_execCityHit('metro east', labelOnly, 'a site in edwardsville')).toBe(true);
   });
 
   // ── trap 3 (v2.7.3): display names are not slugs ───────────────────

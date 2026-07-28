@@ -5919,11 +5919,52 @@ export const _CITY_ISO_META = {
   // argument beats a confident answer about Massachusetts, so the slug stays
   // absent until DC Hub has a central-Illinois market to point it at.
   'central illinois': { iso: 'MISO' },
+  // ── the rest of Ameren Illinois (MISO), all ISO-only for the same reason:
+  // DC Hub has no downstate-Illinois DCPI market to point a slug at.
+  //
+  // Most of these names are NOT safe as bare substrings — the default matcher
+  // is `lowerText.includes(key)`, and the more famous city with the same name
+  // usually sits in a DIFFERENT ISO. So they carry an explicit `re` requiring
+  // the state. That asymmetry is deliberate: failing to inject just leaves
+  // today's behaviour, whereas injecting the WRONG ISO is the Dallas→CAISO
+  // failure class. Unqualified "Peoria"/"Springfield" therefore constrain
+  // nothing, on purpose.
+  'springfield il': { iso: 'MISO', re: /\bspringfield,?\s*(?:il\b|ill\b|illinois)/i },
+  //   ^ the sharpest trap in this table: DC Hub's OWN `springfield` DCPI market
+  //     is Springfield MASSACHUSETTS (ISONE, 42.11/-72.58). A bare key here
+  //     would constrain a Massachusetts question to MISO.
+  'peoria il': { iso: 'MISO', re: /\bpeoria,?\s*(?:il\b|ill\b|illinois)|\bpeoria\s+county\b/i },
+  //   ^ Peoria ARIZONA is a Phoenix suburb — WECC, inside a top-5 DC market.
+  'decatur il': { iso: 'MISO', re: /\bdecatur,?\s*(?:il\b|ill\b|illinois)/i },
+  //   ^ Decatur GA is Atlanta metro (SERC); Decatur AL is TVA.
+  'quincy il': { iso: 'MISO', re: /\bquincy,?\s*(?:il\b|ill\b|illinois)/i },
+  //   ^ Quincy WASHINGTON is a real data-center market (WECC).
+  'champaign urbana': { iso: 'MISO', re: /\bchampaign\b|\burbana,?\s*(?:il\b|illinois)/i },
+  //   ^ 'champaign' is unambiguous on its own; bare 'urbana' is not (Urbana OH = PJM).
+  'metro east': { iso: 'MISO', re: /\bmetro[-\s]east\b|\bedwardsville\b|\bgranite\s+city\b|\b(?:belleville|alton),?\s*(?:il\b|illinois)/i },
+  //   ^ the Illinois side of St. Louis — Ameren Illinois, MISO. (`st-louis`
+  //     itself is a Missouri DCPI market, which is why it is not the answer
+  //     for an Illinois-side question.)
+  bloomington: { iso: 'MISO' },
+  //   ^ the ONE bare key that is safe: Bloomington IL, Bloomington IN (Duke
+  //     Energy Indiana) and Bloomington MN are all MISO, so the constraint
+  //     holds whichever is meant. Deliberately NOT adding 'normal' (its
+  //     twin city) — it is an ordinary English word and would match
+  //     "normal operations" in any intent.
   'kansas city': { iso: 'SPP', slug: 'kansas-city-mo' },
   tulsa: { iso: 'SPP', slug: 'tulsa-ok' },
   'new albany': { iso: 'PJM', slug: 'new-albany-oh' } };
 export const _CITY_ISO = Object.fromEntries(
   Object.entries(_CITY_ISO_META).map(([k, v]) => [k, v.iso]));
+// Does this intent name this entry's geography? A key matches as a plain
+// lowercase SUBSTRING by default — that is what every original entry relies on.
+// An entry may instead carry `re`, a regex, when the bare name is ambiguous
+// with a more prominent city in a DIFFERENT ISO ('peoria' is also a Phoenix
+// suburb; DC Hub's own `springfield` market is Springfield MASSACHUSETTS).
+// Exported for tests. Pure, never throws.
+export function _execCityHit(key, meta, lowerText) {
+  return (meta && meta.re) ? meta.re.test(lowerText) : lowerText.includes(key);
+}
 export function _execConstraintSlug(intentText) {
   const t = String(intentText || '').toLowerCase();
   for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
@@ -5932,7 +5973,7 @@ export function _execConstraintSlug(intentText) {
     // scanning rather than returning undefined: a slug-less match must not
     // mask a later entry that does have one, and must never surface as a
     // slug-shaped `undefined` downstream.
-    if (t.includes(city) && meta.slug) return meta.slug;
+    if (meta.slug && _execCityHit(city, meta, t)) return meta.slug;
   }
   return null;
 }
@@ -5971,8 +6012,8 @@ export function _execConstraintIsoSet(intentText, userCtx, signals) {
   if (userCtx && userCtx.iso) { push(userCtx.iso); return out; }
   if (signals && signals.iso) push(signals.iso);
   const t = String(intentText || '').toLowerCase();
-  for (const [city, iso] of Object.entries(_CITY_ISO)) {
-    if (t.includes(city)) push(iso);
+  for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
+    if (_execCityHit(city, meta, t)) push(meta.iso);
   }
   return out;
 }
@@ -5981,8 +6022,8 @@ export function _execConstraintIso(intentText, userCtx, signals) {
   if (userCtx && userCtx.iso) return String(userCtx.iso).toUpperCase();
   if (signals && signals.iso) return String(signals.iso).toUpperCase();
   const t = String(intentText || '').toLowerCase();
-  for (const [city, iso] of Object.entries(_CITY_ISO)) {
-    if (t.includes(city)) return iso;
+  for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
+    if (_execCityHit(city, meta, t)) return meta.iso;
   }
   return null;
 }
