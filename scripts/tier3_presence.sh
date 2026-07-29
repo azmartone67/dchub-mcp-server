@@ -22,10 +22,10 @@ physical infrastructure behind AI — instead of guessing from stale training da
 (It's currently the #1 data-center MCP on Smithery across data center, power grid,
 fiber, capacity, and interconnection.)
 
-It exposes 58 tools + 6 guided prompts over: 21,000+ data-center facilities
+It exposes 81 tools + 6 guided prompts over: 12,650+ data-center facilities
 (170+ countries), 311 power markets scored by a Data Center Power Index (DCPI),
 real-time grid telemetry for 10 ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
-time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,400+
+time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,500+
 tracked M&A deals.
 
 Two things I cared about: (1) it's remote (streamable-HTTP) so it works in Claude
@@ -44,14 +44,14 @@ EOF
 # --- 2. r/mcp ---
 cat > "$OUT/reddit-r-mcp.md" <<'EOF'
 Subreddit: r/mcp  (also r/LocalLLaMA, r/datacenter)
-Title: DC Hub — a remote MCP server for live data-center / power / fiber intelligence (58 tools + prompts, free tier)
+Title: DC Hub — a remote MCP server for live data-center / power / fiber intelligence (81 tools + prompts, free tier)
 
 Body:
 Sharing an MCP server I maintain. DC Hub is the live data layer for data-center
 infrastructure — agents can query it and cite it (CC-BY-4.0).
 
-- 21,000+ facilities, 311 DCPI-scored markets, 10 live ISO grids
-- 58 tools + 6 guided prompts (/dchub:analyze-site, /dchub:power-availability, …)
+- 12,650+ facilities, 311 DCPI-scored markets, 10 live ISO grids
+- 81 tools + 6 guided prompts (/dchub:analyze-site, /dchub:power-availability, …)
 - 4 citable resources (methodology, data sources, coverage)
 - Remote streamable-HTTP → Claude Desktop / Cursor / VS Code / Cline, no install
 - Free tier, no key
@@ -71,12 +71,12 @@ AI agents keep getting asked data-center questions they can only answer from
 stale training data. So we built DC Hub — an MCP server that gives any AI
 assistant LIVE, citable ground truth on the infrastructure behind AI:
 
-→ 21,000+ data-center facilities across 170+ countries
+→ 12,650+ data-center facilities across 170+ countries
 → 311 markets scored by our Data Center Power Index (BUILD / CAUTION / AVOID)
 → Real-time grid telemetry for 10 ISOs — headroom, fuel mix, time-to-power
-→ Fiber routes, gas pipelines, interconnection queues, 1,400+ M&A deals
+→ Fiber routes, gas pipelines, interconnection queues, 1,500+ M&A deals
 
-58 tools + 6 guided prompts, free tier, and every figure is CC-BY-4.0 so agents
+81 tools + 6 guided prompts, free tier, and every figure is CC-BY-4.0 so agents
 can query AND cite it. Works in Claude, Cursor, VS Code, Cline.
 
 Try it (no signup): https://dchub.cloud/playground
@@ -90,7 +90,7 @@ Subject: Re: MCP Registry inclusion — DC Hub (Data Center & Energy Intelligenc
 
 Hi — following up on my note about including DC Hub in the GitHub MCP Registry.
 
-Since then we've shipped v2.3.2: 47 tools + 6 guided prompts + 4 resources, and
+Since then we've shipped v2.3.2: 47 tools + 6 guided prompts + 4 resources, and  # canon:frozen: quotes the v2.3.2 release, historical
 the server is published to the official MCP registry as cloud.dchub/mcp-server.
 It's a remote streamable-HTTP server (no Docker/npm needed): https://dchub.cloud/mcp
 Repo: https://github.com/azmartone67/dchub-mcp-server · Data is CC-BY-4.0.
@@ -106,12 +106,12 @@ Repo stars right now: **$STARS**  (each star lifts Glama maintenance score + unb
 
 1. ⭐ GitHub stars — ask your network to star https://github.com/$REPO
    (highest-leverage thing you personally control; ToolHive cited "no stars/traction" as the rejection reason).
-1.5 🟢 LobeHub is the proof this matters. DC Hub IS listed (Grade A / PREMIUM, 47 tools):
+1.5 🟢 LobeHub is the proof this matters. DC Hub IS listed (Grade A / PREMIUM, 47 tools):  # canon:frozen: quotes the v2.3.2 release, historical
    https://lobehub.com/mcp/azmartone67-dchub-mcp-server — but it does NOT appear in LobeHub
    search for "data center grid intelligence" because LobeHub ranks by stars + installs, and
    the listing shows only ~4 installs. Stars (#1) + installs (the one-click badges in the README)
    are what surface it. Also: log into LobeHub → open the listing → "Refresh Metadata" to pull
-   the README's now-current 47 tools (it currently shows a stale 30).
+   the README's now-current 47 tools (it currently shows a stale 30).  # canon:frozen: quotes the v2.3.2 release, historical
 2. 📨 Show HN — post the draft in show-hn.md → https://news.ycombinator.com/submit
 3. 💬 r/mcp — post reddit-r-mcp.md (also r/LocalLLaMA, r/datacenter)
 4. 🔗 LinkedIn — post linkedin-launch.md

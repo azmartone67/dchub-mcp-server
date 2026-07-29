@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DC Hub Actions",
-    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - 12,650+ facilities across 170+ countries, 311 DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,400+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is 10 calls/day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
+    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - 12,650+ facilities across 170+ countries, 311 DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,500+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is 10 calls/day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
     "version": "1.2.3",
     "contact": {
       "name": "DC Hub",
@@ -603,7 +603,7 @@
       "get": {
         "operationId": "getHyperscalerDeals",
         "summary": "Recent hyperscaler / $1B+ data-center deals (hyperscaler_activity)",
-        "description": "recipe hyperscaler_activity. Recent large-scale data-center and hyperscaler deals and news (actors, capacity, value_usd, source, published) from DC Hub's 1,400+ tracked M&A deals. Optionally cap with ?limit= or floor with ?min_value_usd=. Deeper deal autopsy detail may be gated. Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe hyperscaler_activity. Recent large-scale data-center and hyperscaler deals and news (actors, capacity, value_usd, source, published) from DC Hub's 1,500+ tracked M&A deals. Optionally cap with ?limit= or floor with ?min_value_usd=. Deeper deal autopsy detail may be gated. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "limit",
