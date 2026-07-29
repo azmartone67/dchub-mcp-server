@@ -77,7 +77,7 @@ describe('WIRING — the write must sit where the session id actually exists', (
     // At the top of that branch the client has no session id yet, and `sid` is
     // the callback parameter declared further down — referencing it there is a
     // ReferenceError that `node --check` cannot see.
-    const m = SRC.match(/onsessioninitialized:\s*\(sid\)\s*=>\s*\{[\s\S]{0,600}?_rememberPlatform\(sid, platform\)/);
+    const m = SRC.match(/onsessioninitialized:\s*\(sid\)\s*=>\s*\{[\s\S]{0,900}?_rememberPlatform\(sid,/);
     expect(m, '_rememberPlatform must be called inside onsessioninitialized').toBeTruthy();
   });
 
@@ -87,5 +87,62 @@ describe('WIRING — the write must sit where the session id actually exists', (
     expect(statelessCall[1]).toBe('_resolvePlatform');
     const statelessList = SRC.match(/tools\/list' \|\| body\?\.method === 'ping'[\s\S]{0,300}?const platform\s*=\s*(\w+)\(/);
     expect(statelessList[1]).toBe('_resolvePlatform');
+  });
+});
+
+describe('client_name recall — the 88% generic bucket', () => {
+  // The identity VIEW classifies on `client_name` FIRST (PLATFORM_CASE takes it
+  // verbatim when present and non-UUID), and telemetry sends
+  //   client_name: c.client_name_raw || c.platform
+  // The SESSION path spreads ...sessionMeta, so it carries client_name_raw.
+  // The STATELESS path built an explicit ctx object that never had it — so every
+  // stateless call fell back to the platform, which was the generic 'mcp'.
+  // Measured: 65 agents / 3,179 calls sitting in that one bucket.
+  it('remembers the RAW clientInfo.name, not just the normalized platform', async () => {
+    const { _rememberPlatform, _recallClientName, _recallPlatform } = await import('../server.mjs');
+    const sid = `s-${Math.random()}`;
+    _rememberPlatform(sid, 'claude', 'claude-ai');
+    expect(_recallPlatform(sid)).toBe('claude');      // normalized, for routing
+    expect(_recallClientName(sid)).toBe('claude-ai'); // raw, for the view
+  });
+
+  it('keeps the raw name even when the platform is the generic value', async () => {
+    // A client whose name we cannot normalize still has a usable RAW name —
+    // dropping it is exactly how distinct clients collapsed into one bucket.
+    const { _rememberPlatform, _recallClientName, _recallPlatform } = await import('../server.mjs');
+    const sid = `s-${Math.random()}`;
+    _rememberPlatform(sid, 'mcp', 'some-host-we-have-no-rule-for');
+    expect(_recallPlatform(sid)).toBeNull();                       // never cache generic
+    expect(_recallClientName(sid)).toBe('some-host-we-have-no-rule-for');
+  });
+
+  it('returns null rather than guessing for an unknown session', async () => {
+    const { _recallClientName } = await import('../server.mjs');
+    expect(_recallClientName(`s-${Math.random()}`)).toBeNull();
+    expect(_recallClientName(null)).toBeNull();
+  });
+
+  it('honours the kill switch', async () => {
+    const { _rememberPlatform, _recallClientName } = await import('../server.mjs');
+    const sid = `s-${Math.random()}`;
+    _rememberPlatform(sid, 'cursor', 'cursor-vscode');
+    const prev = process.env.DCHUB_PLATFORM_RECALL;
+    process.env.DCHUB_PLATFORM_RECALL = '0';
+    try { expect(_recallClientName(sid)).toBeNull(); }
+    finally {
+      if (prev === undefined) delete process.env.DCHUB_PLATFORM_RECALL;
+      else process.env.DCHUB_PLATFORM_RECALL = prev;
+    }
+  });
+
+  it('WIRING: the stateless tools/call ctx carries client_name_raw', () => {
+    // Without this the fix is inert — telemetry would still send the platform.
+    const m = SRC.match(/session_id: sessionId \|\| null,[\s\S]{0,400}?client_name_raw: _recallClientName\(sessionId\)/);
+    expect(m, 'stateless ctx must thread client_name_raw').toBeTruthy();
+  });
+
+  it('WIRING: initialize records both the platform and the raw name', () => {
+    const m = SRC.match(/_rememberPlatform\(sid, platform,[\s\S]{0,120}?clientInfo\?\.name/);
+    expect(m, 'initialize must record clientInfo.name alongside platform').toBeTruthy();
   });
 });

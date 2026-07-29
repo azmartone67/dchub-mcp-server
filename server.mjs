@@ -11451,19 +11451,47 @@ const _PLATFORM_RECALL = new Map();       // sessionId → { platform, ts }
 const _PLATFORM_RECALL_MAX = 50000;
 const _PLATFORM_RECALL_TTL_MS = 24 * 60 * 60 * 1000;
 
-export function _rememberPlatform(sid, platform) {
+export function _rememberPlatform(sid, platform, clientName) {
   try {
-    if (!sid || !platform || platform === 'mcp') return;   // never cache the generic value
+    if (!sid) return;
+    // ★ 2026-07-28: also remember the RAW clientInfo.name. The identity VIEW
+    // classifies on `client_name` FIRST (PLATFORM_CASE takes it verbatim when
+    // present and non-UUID), and telemetry sends
+    // `client_name: c.client_name_raw || c.platform`. The SESSION path spreads
+    // ...sessionMeta so it carries client_name_raw; the STATELESS path builds an
+    // explicit ctx object that never had it — so every stateless call fell back
+    // to the platform, which was the generic 'mcp'. That is the 88% bucket:
+    // 65 agents / 3,179 calls tagged 'mcp' in mcp_calls_identity.
+    if (clientName && String(clientName).trim()) {
+      const prev = _PLATFORM_RECALL.get(String(sid)) || {};
+      _PLATFORM_RECALL.set(String(sid),
+        { ...prev, clientName: String(clientName).slice(0, 200), ts: Date.now() });
+    }
+    if (!platform || platform === 'mcp') return;   // never cache the generic value
     if (_PLATFORM_RECALL.size >= _PLATFORM_RECALL_MAX) {
       // FIFO drop of the oldest tenth — same bounded pattern as _FRONT_DOOR_SEEN.
       let i = 0; const drop = _PLATFORM_RECALL_MAX / 10;
       for (const k of _PLATFORM_RECALL) { _PLATFORM_RECALL.delete(k[0] ?? k); if (++i >= drop) break; }
     }
-    _PLATFORM_RECALL.set(String(sid), { platform, ts: Date.now() });
+    const prev = _PLATFORM_RECALL.get(String(sid)) || {};
+    _PLATFORM_RECALL.set(String(sid), { ...prev, platform, ts: Date.now() });
   } catch (_e) { /* attribution must never break a request */ }
 }
 
-function _recallPlatform(sid) {
+// The raw clientInfo.name for a session, or null. Same fail-soft + TTL rules as
+// _recallPlatform; used ONLY to fill an absent client_name, never to override.
+export function _recallClientName(sid) {
+  try {
+    if ((process.env.DCHUB_PLATFORM_RECALL || '') === '0') return null;
+    if (!sid) return null;
+    const hit = _PLATFORM_RECALL.get(String(sid));
+    if (!hit) return null;
+    if (Date.now() - hit.ts > _PLATFORM_RECALL_TTL_MS) { _PLATFORM_RECALL.delete(String(sid)); return null; }
+    return hit.clientName || null;
+  } catch (_e) { return null; }
+}
+
+export function _recallPlatform(sid) {
   try {
     if ((process.env.DCHUB_PLATFORM_RECALL || '') === '0') return null;
     if (!sid) return null;
@@ -11917,7 +11945,8 @@ app.post('/mcp', async (req, res) => {
           // the correct hook: at the top of the initialize branch the client has
           // no session id yet, and `sid` there is the callback param below —
           // referencing it early is a ReferenceError node --check cannot see.
-          _rememberPlatform(sid, platform);
+          _rememberPlatform(sid, platform,
+                            (body?.params?.clientInfo?.name || '').toString());
           sessionMeta.set(sid, {
             api_key: apiKey,
             platform,
@@ -12082,6 +12111,10 @@ app.post('/mcp', async (req, res) => {
         developer_id: validation.developer_id || null,
         email: validation.email || null,
         session_id: sessionId || null,               // stale id → still the backend funnel key
+        // ★ Recovered raw clientInfo.name — without this the telemetry row's
+        // client_name falls back to the generic platform and the identity view
+        // classifies the call as 'mcp'.
+        client_name_raw: _recallClientName(sessionId),
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
       }, async () => {
