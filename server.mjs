@@ -9952,10 +9952,29 @@ function createServer(descOverrides) {
     });
 
   trackedTool(srv, 'save_to_shortlist',
-    'Save a site into a PERSISTENT, named shortlist that survives across conversations (Phase 5 statefulness). Snapshots the site\'s objectives + its current percentile objective_score, so you can re-score it later against the evolving national baseline. Use to build a durable siting shortlist across days/weeks; the list is scoped to your API key. Pair with get_shortlist to re-score + see drift. site should carry lat/lng/capacity_mw + the analyze_site metric fields (risk_resilience, fiber_connectivity, water score, etc.) you ranked on.',
-    { shortlist_name: S.describe('Name of the shortlist, e.g. "Q3-2026-1GW-targets" — created if new'),
-      site: z.any().describe('Site object: {site_ref?, lat, lng, capacity_mw, <metric fields from analyze_site>} — the metrics are what get re-scored later'),
-      objectives: z.any().describe('The {field: signedWeight} objectives this site was ranked under (+maximize/-minimize) — stored so re-scoring uses the same criteria'),
+    'Save a site into a PERSISTENT, named shortlist that survives across conversations (Phase 5 statefulness). Snapshots the site\'s objectives + its current percentile objective_score, so you can re-score it later against the evolving national baseline. Use to build a durable siting shortlist across days/weeks; the list is scoped to your API key. Pair with get_shortlist to re-score + see drift. MINIMAL call: save_to_shortlist(shortlist_name="my-targets", site={site_ref, lat, lng, capacity_mw}) — objectives are optional. If you DID rank the site (analyze_site / rank_sites), pass those metric fields inside site and your objectives map too, and the re-scoring reuses them. Requires an API key so the list is private to you and survives to your next conversation: call claim_free_key first if you have none.',
+    // ★2026-07-29 Persistence Shell #41 lane 2 — this schema and the backend
+    // required the INVERSE of each other, so the arg set that satisfied both was
+    // strictly larger than either needed:
+    //
+    //   schema  required: site, objectives   (shortlist_name OPTIONAL)
+    //   backend required: shortlist_name, site  ("objectives") or {} — optional)
+    //
+    // Nobody chose that. `S` is z.string().optional(), but a bare z.any() is
+    // REQUIRED in zod — so requiredness here was an artifact of which helper each
+    // field happened to use. The result: an agent obeying the published schema
+    // (site+objectives, no name) got a 400 from the backend, and an agent sending
+    // what the backend wants (name+site) was rejected by the schema. Only a caller
+    // passing all three — including a signed-weight map it usually does not have —
+    // could get through, which is why our OWN probes fail arg validation 14 times
+    // in 90d and why zero real external agents have ever completed a save.
+    //
+    // Now aligned to the backend exactly: name + site required, objectives
+    // optional (the backend defaults them to equal weights over the site's own
+    // numeric fields when absent).
+    { shortlist_name: z.string().describe('Name of the shortlist, e.g. "Q3-2026-1GW-targets" — created if new. REQUIRED.'),
+      site: z.any().describe('Site object. MINIMAL form is enough: {site_ref, lat, lng, capacity_mw}. Richer is better — add any analyze_site metric fields (risk_resilience, fiber_connectivity, water score…) and those become what gets re-scored later.'),
+      objectives: z.any().optional().describe('OPTIONAL {field: signedWeight} map (+maximize/-minimize) if this site was ranked under explicit objectives — stored so re-scoring reuses the same criteria. Omit it and DC Hub weights the site\'s own metric fields equally.'),
       notes: S.describe('Optional free-text note, e.g. "strong fiber, acceptable water"') },
     async (a) => {
       const data = await callAPI('/api/v1/shortlist/save', {}, { method: 'POST', body: { shortlist_name: a.shortlist_name, site: a.site, objectives: a.objectives, notes: a.notes } });

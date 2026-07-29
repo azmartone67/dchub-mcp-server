@@ -53,8 +53,41 @@ describe('intentionally-required z.any() params stay required', () => {
   it('save_to_shortlist: site is required (backend 400s "shortlist_name and site are required")', async () => {
     expect(await parses('save_to_shortlist', { shortlist_name: 'x', objectives: { a: 1 } })).toBe(false);
   });
-  it('save_to_shortlist: objectives is required (snapshot + re-rank contract depends on it)', async () => {
-    expect(await parses('save_to_shortlist', { shortlist_name: 'x', site: { lat: 1, lng: 2 } })).toBe(false);
+  // ★2026-07-29 (Persistence Shell #41 lane 2) — objectives MOVED to optional.
+  // This file's own rule for keeping a z.any() required is "the backend 400s
+  // legibly when it's absent, so loosening it would just move the error
+  // somewhere less helpful". That rule is correct, and it holds for `site`
+  // (/api/v1/shortlist/save does 400 "shortlist_name and site are required").
+  // It does NOT hold for objectives: the backend reads
+  // `body.get("objectives") or {}` and accepts absence SILENTLY. So the zod
+  // requirement was not backed by a legible 400 — it was the only thing
+  // rejecting the call, and it rejected the minimal, obvious payload.
+  //
+  // The other stated reason — the snapshot + re-rank contract needs objectives —
+  // is real, but the requirement never actually protected it: `objectives: {}`
+  // passed zod AND the backend and produced saved_score=null, i.e. exactly the
+  // degraded row the guard existed to prevent. A guard you can satisfy with an
+  // empty object is not guarding.
+  //
+  // Both are now closed at the layer that can actually enforce them: the backend
+  // derives EQUAL WEIGHTS over the site's own numeric metric fields whenever
+  // objectives is absent or empty, so saved_objectives is never empty and
+  // re-scoring always has criteria. See routes/shortlists.py.
+  it('save_to_shortlist: objectives is OPTIONAL (backend derives equal weights)', async () => {
+    expect(await parses('save_to_shortlist', { shortlist_name: 'x', site: { lat: 1, lng: 2 } })).toBe(true);
+  });
+  it('save_to_shortlist: the MINIMAL documented call parses', async () => {
+    // The call the tool description now advertises. If this ever regresses, the
+    // published example is a lie and the chain goes dead again.
+    expect(await parses('save_to_shortlist', {
+      shortlist_name: 'my-targets',
+      site: { site_ref: 'PJM-A1', lat: 39.95, lng: -76.72, capacity_mw: 100 },
+    })).toBe(true);
+  });
+  it('save_to_shortlist: shortlist_name is required (the backend hard-400s on it)', async () => {
+    // Was OPTIONAL at zod while the backend REQUIRED it — the inverse of the
+    // objectives bug, and the other half of why no arg set satisfied both.
+    expect(await parses('save_to_shortlist', { site: { lat: 1, lng: 2 } })).toBe(false);
   });
   it('save_to_shortlist: full payload passes', async () => {
     expect(await parses('save_to_shortlist',
