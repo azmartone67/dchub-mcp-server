@@ -4929,10 +4929,13 @@ const _TOOL_OUTPUT_SCHEMAS = {
   get_grid_scoreboard: z.looseObject({
     ..._ENVELOPE_SHAPE,
     ok: _oBool('true when the scoreboard build succeeded'),
-    count: _oNum('Number of fully-ranked grids in `grids`'),
+    count: _oNum('Ranked grids — the long-standing alias of zones_ranked (NOT grids.length, which also carries the unrankable rows)'),
+    zones_ranked: _oNum('Grid rows carrying a live renewable_share_pct, i.e. the ranked set'),
+    independent_sources: _oNum('Distinct upstream feeds behind those rows — far below zones_ranked because every EU bidding zone comes from ONE feed (ENTSO-E). null when the per-source tally failed'),
+    counts_basis: _oObj({}, 'What each count actually counts, plus per_source rows, eu_zones_live vs eu_zones_configured, and the unranked/unavailable tallies'),
     ranked_by: _oStr('Ranking criterion (renewable share = wind+solar+hydro, greenest first)'),
-    coverage: _oStr('Human-readable coverage line — which countries/grids are included'),
-    source: _oStr('Upstream feeds (EIA hourly RTO, Elexon, ENTSO-E, Taipower, OCCTO, KPX, ONS, AEMO, EMA)'),
+    coverage: _oStr('Coverage line GENERATED from the rows that actually ranked — a feed that returned nothing is absent from it'),
+    source: _oStr('Upstream feeds behind the rows in THIS response, generated (EIA hourly RTO, Elexon, ENTSO-E, Taipower, OCCTO, KPX, ONS, AEMO, EMA)'),
     grids: _oArr(_GRID_ROW, 'Fully-ranked grids, greenest (highest renewable share) first — US ISOs + GB + EU zones + TW + JP + KR + BR'),
     partial_grids: _oArr(_GRID_ROW, 'Grids listed UNRANKED because the feed has no full fuel split (Australia NEM, Singapore EMA)'),
     eu_gas_context: _oObj({}, 'EU gas-flow context: {active_countries, total_throughput_gwh_per_day, unit, source, note}'),
@@ -8432,8 +8435,80 @@ function createServer(descOverrides) {
   // AU in partial_grids. Brazil ranks by renewable share but reports NO gas
   // share: ONS's 'termica' bundles gas+coal+oil+biomass with no public
   // real-time split — exposed as fuel_mw.thermal_bundled, never as gas.
-  const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
+  // r-ws2-tier0 (2026-07-29): BPA and TVA added. Both are non-ISO BALANCING
+  // AUTHORITIES, not ISOs — the backend has served them for months
+  // (routes/iso_bpa.py, routes/iso_tva.py, both EIA-930) and both return the
+  // exact row shape this builder consumes; they were simply never in this list,
+  // so the scoreboard showed nothing for ~a third of US load. Verified live
+  // 2026-07-29 before adding: BPA 7 fuels / ~10.5 GW, TVA 15 fuels / ~23 GW.
+  // This is GENUINELY NEW COVERAGE, not a re-slice of an existing feed — the
+  // distinction the published zones_ranked vs independent_sources split exists
+  // to preserve. Both match the EIA feed on country==='US', so _FEEDS needs no
+  // change and the coverage sentence re-counts itself.
+  const _US_ISOS = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'BPA', 'TVA'];
   const _num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+  // r-ws2-counts (2026-07-29): the ONE place a ranked row is attributed to the
+  // upstream feed that produced it. `coverage`, `source` and the published
+  // independent_sources count are all GENERATED from this table plus the rows
+  // that ACTUALLY ranked — so a dead feed drops out of the sentence instead of
+  // still being claimed, and a new grid cannot leave it stale. Declaration
+  // order is the order the coverage line reads. A row matching NOTHING here
+  // still counts as its own source (see _tallyFeeds), so an unregistered new
+  // feed is counted and named on day one, not folded into a neighbour.
+  const _FEEDS = [
+    { key: 'EIA', test: (g) => g.country === 'US',
+      phrase: (n) => n + (n === 1 ? ' US grid operator' : ' US grid operators'),
+      src: 'US: EIA hourly RTO' },
+    { key: 'ENTSO-E', test: (g) => String(g.iso || '').startsWith('EU_'),
+      // Both readings, named: live zones ranked vs zones configured upstream. A
+      // zone whose EIC stops parsing returns None backend-side and simply never
+      // appears, so live < configured is the ONLY signal that it went missing.
+      phrase: (n, ctx) => n + (n === 1 ? ' EU bidding zone' : ' EU bidding zones')
+        + (ctx && ctx.euConfigured ? ' of ' + ctx.euConfigured + ' configured' : '') + ' (ENTSO-E)',
+      src: 'EU: ENTSO-E Transparency' },
+    { key: 'ELEXON',   test: (g) => g.iso === 'NGESO',    phrase: () => 'Great Britain (NESO)', src: 'GB: Elexon Insights' },
+    { key: 'TAIPOWER', test: (g) => g.iso === 'TAIPOWER', phrase: () => 'Taiwan (Taipower)',    src: 'TW: Taipower' },
+    { key: 'OCCTO',    test: (g) => g.iso === 'OCCTO',    phrase: () => 'Japan (OCCTO areas)',  src: 'JP: TSO eria_jukyu CSVs' },
+    { key: 'KPX',      test: (g) => g.iso === 'KEPCO-KR', phrase: () => 'South Korea (KPX)',    src: 'KR: KPX real-time' },
+    { key: 'ONS',      test: (g) => g.iso === 'ONS',      phrase: () => 'Brazil SIN (ONS)',     src: 'BR: ONS Balanço de Energia' },
+  ];
+  // partial_grids feeds — no full fuel split, so deliberately never ranked.
+  const _PARTIAL_FEEDS = [
+    { key: 'AEMO', test: (g) => g.iso === 'AEMO', phrase: () => 'Australia NEM (AEMO)', src: 'AU: AEMO NEM' },
+    { key: 'EMA',  test: (g) => g.iso === 'EMA',  phrase: () => 'Singapore (EMA/NEMS)', src: 'SG: EMA NEMS' },
+  ];
+  // Group rows by feed, preserving _FEEDS declaration order.
+  const _tallyFeeds = (rows, defs, ctx) => {
+    const byKey = new Map();
+    for (const g of rows || []) {
+      let def = null, threw = false;
+      for (const d of defs) {
+        // A malformed row (or a matcher that assumes a field) must not break the
+        // tally — but it must NOT quietly become its own "independent source"
+        // either, or a broken matcher would INFLATE the published count. Those
+        // rows collapse into one UNATTRIBUTED bucket, which under-reports (safe)
+        // and is visible in per_source.
+        try { if (d.test(g)) { def = d; break; } } catch (_e) { threw = true; }
+      }
+      const key = def ? def.key : (threw ? 'UNATTRIBUTED' : String((g && g.iso) || 'UNKNOWN'));
+      const e = byKey.get(key) || { key, n: 0, def, row: g, threw };
+      e.n++;
+      byKey.set(key, e);
+    }
+    const ordered = [];
+    for (const d of defs) { const e = byKey.get(d.key); if (e) ordered.push(e); }
+    for (const e of byKey.values()) { if (!e.def) ordered.push(e); }
+    return ordered.map(e => ({
+      key: e.key,
+      grids: e.n,
+      text: e.def ? e.def.phrase(e.n, ctx)
+        : e.threw ? (e.n + (e.n === 1 ? ' grid' : ' grids') + ' whose source could not be determined')
+        : ((e.row && e.row.region) || e.key) + (e.n > 1 ? ' (' + e.n + ')' : ''),
+      src:  e.def ? e.def.src
+        : e.threw ? ('source attribution failed for ' + e.n + (e.n === 1 ? ' row' : ' rows'))
+        : (e.key + ': feed not registered in _FEEDS'),
+    }));
+  };
   // r78: 90s assembled-payload cache for the no-argument scoreboard (see latency
   // note inside the handler). r-scoreboard-cache-hoist (2026-06-27): _SCOREBOARD_CACHE
   // now lives at MODULE scope (above createServer) so it is shared across ALL sessions,
@@ -8739,6 +8814,15 @@ function createServer(descOverrides) {
             });
             euCount++;
           }
+        } else {
+          // r-ws2-counts (2026-07-29): EU was the ONE feed with no else-branch.
+          // Every other international source pushes an explicit error row when
+          // it fails, so a dead or timed-out ENTSO-E fan-out silently took ~24
+          // zones out of `count` with nothing in the payload to say why (the
+          // 2/22-grid regression class). One row, so the loss is visible and the
+          // derived coverage line below names it instead of quietly shrinking.
+          grids.push({ iso: 'ENTSOE', region: 'EU bidding zones (ENTSO-E)',
+                       error: (eu && eu.error) || 'no live snapshot' });
         }
 
         const ranked = grids.filter(g => g.renewable_share_pct != null)
@@ -8821,12 +8905,65 @@ function createServer(descOverrides) {
             };
           }
         } catch (_e) { /* gas context is best-effort; scoreboard works without it */ }
+        // r-ws2-counts (2026-07-29): the scoreboard published ONE number
+        // (`count` = ranked rows) beside a coverage sentence that was literal
+        // prose — only euCount was live. Two honest-numbers defects. (1) Ranked
+        // rows and upstream feeds are DIFFERENT counts and `count` conflated
+        // them: ~24 of the ~36 rows are EU bidding zones off ONE ENTSO-E token,
+        // so "36 grids" read as 36 independent sources. Both are now published
+        // separately and named. (2) The sentence named Taiwan/Japan/Korea/Brazil
+        // whether or not they returned a row; `coverage` and `source` are now
+        // GENERATED from the rows that actually ranked, so a feed that
+        // contributed nothing is absent from the prose instead of claimed.
+        const _euCfg = (eu && typeof eu.zones_configured === 'number' && eu.zones_configured > 0)
+          ? eu.zones_configured : null;
+        let _feedErr = null, _rankedFeeds = [], _partialFeeds = [];
+        try {
+          _rankedFeeds  = _tallyFeeds(ranked, _FEEDS, { euConfigured: _euCfg });
+          _partialFeeds = _tallyFeeds(partial, _PARTIAL_FEEDS, { euConfigured: _euCfg });
+        } catch (e) {
+          // Prose must never break the scoreboard: degrade to the counts we can
+          // still prove, and say the per-source tally is what failed.
+          _feedErr = String((e && e.message) || e).slice(0, 120);
+          _rankedFeeds = []; _partialFeeds = [];
+        }
+        const _plural = (k, one, many) => k + ' ' + (k === 1 ? one : many);
+        const _coverage = _feedErr
+          ? _plural(ranked.length, 'grid', 'grids') + ' ranked greenest-first; per-source coverage unavailable this build (' + _feedErr + ')'
+          : _plural(ranked.length, 'grid', 'grids') + ' ranked greenest-first from '
+            + _plural(_rankedFeeds.length, 'independent source', 'independent sources') + ': '
+            + _rankedFeeds.map(f => f.text).join(' + ')
+            + (_partialFeeds.length ? '; partial (unranked, no full fuel split): ' + _partialFeeds.map(f => f.text).join(' + ') : '')
+            + (errored.length ? '; unavailable this cycle: ' + errored.map(g => (g && g.iso) || '?').join(', ') : '')
+            + (euGas ? '; + EU gas transmission (ENTSOG) as context, not a ranked peer' : '');
+        const _sourceLine = _feedErr
+          ? 'DC Hub — live grid-operator feeds (per-source list unavailable this build)'
+          : 'DC Hub — ' + _rankedFeeds.map(f => f.src).join('; ') + ' (live, ranked)'
+            + (_partialFeeds.length ? '; ' + _partialFeeds.map(f => f.src).join('; ') + ' (live, partial)' : '');
         const out = {
           ok: true,
           count: ranked.length,
+          zones_ranked: ranked.length,
+          independent_sources: _feedErr ? null : _rankedFeeds.length,
+          counts_basis: {
+            zones_ranked: 'grid rows carrying a live renewable_share_pct; `count` is the long-standing alias of this same number',
+            independent_sources: _feedErr
+              ? 'null: the per-source tally failed this build (' + _feedErr + ')'
+              : 'distinct upstream feeds that produced at least one ranked row — every EU bidding zone arrives from ONE feed (ENTSO-E), so this sits far below zones_ranked',
+            grids_len: grids.length,
+            grids_len_note: '`grids` is the ranked rows FOLLOWED BY rows that could not be ranked — index it by iso, never by count',
+            zones_unavailable: errored.length,
+            partial_unranked: partial.length,
+            eu_zones_live: euCount,
+            eu_zones_configured: _euCfg,
+            ...(_euCfg == null ? { eu_zones_configured_reason: (eu && eu.error)
+              ? 'the EU snapshot did not return this cycle (' + String(eu.error).slice(0, 80) + ')'
+              : 'this backend build does not report zones_configured on /api/v1/iso/eu/snapshot — live-vs-configured drift cannot be checked' } : {}),
+            per_source: _rankedFeeds.map(f => ({ source: f.key, zones_ranked: f.grids })),
+          },
           ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
-          coverage: '7 US ISOs + Great Britain (NESO) + ' + euCount + ' EU zones (ENTSO-E) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS) ranked; Australia NEM (AEMO) + Singapore (EMA) partial' + (euGas ? ' + EU gas transmission (ENTSOG)' : ''),
-          source: 'DC Hub — US: EIA hourly RTO; GB: Elexon Insights; EU: ENTSO-E Transparency; TW: Taipower; JP: TSO eria_jukyu CSVs; KR: KPX real-time; BR: ONS Balanço de Energia (all live, ranked); AU: AEMO NEM + SG: EMA NEMS (live, partial)',
+          coverage: _coverage,
+          source: _sourceLine,
           grids: [...ranked, ...errored],
           partial_grids: partial,
           eu_gas_context: euGas,
