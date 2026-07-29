@@ -133,7 +133,7 @@
     },
     {
       "name": "save_to_shortlist",
-      "description": "Save a site into a PERSISTENT, named shortlist that survives across conversations (Phase 5 statefulness). Snapshots the site's objectives + its current percentile objective_score, so you can re-score it later against the evolving national baseline. Use to build a durable siting shortlist across days/weeks; the list is scoped to your API key. Pair with get_shortlist to re-score + see drift. site should carry lat/lng/capacity_mw + the analyze_site metric fields (risk_resilience, fiber_connectivity, water score, etc.) you ranked on."
+      "description": "Save a site into a PERSISTENT, named shortlist that survives across conversations (Phase 5 statefulness). Snapshots the site's objectives + its current percentile objective_score, so you can re-score it later against the evolving national baseline. Use to build a durable siting shortlist across days/weeks; the list is scoped to your API key. Pair with get_shortlist to re-score + see drift. MINIMAL call: save_to_shortlist(shortlist_name=\"my-targets\", site={site_ref, lat, lng, capacity_mw}) — objectives are optional. If you DID rank the site (analyze_site / rank_sites), pass those metric fields inside site and your objectives map too, and the re-scoring reuses them. Requires an API key so the list is private to you and survives to your next conversation: call claim_free_key first if you have none."
     },
     {
       "name": "get_shortlist",
