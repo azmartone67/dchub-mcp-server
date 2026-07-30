@@ -285,11 +285,34 @@ def _reflex_kick():
     """INSURANCE ONLY. Recency has ~0 rank weight (createdAt is frozen at first-publish),
     so this republish does NOT recover rank — it only keeps `verified`/deployment/tool-catalog
     fresh so nothing structural rots while the real (relevance) remedy is applied. Local best-
-    effort; gated by RANK_AUTOHEAL_DISABLE. In CI, the workflow fires `gh workflow run` instead."""
+    effort; gated by RANK_AUTOHEAL_DISABLE.
+
+    ★★ IN CI, NOTHING FIRES — and this used to say it did. The workflow step that
+    dispatched a freshness run was REMOVED on 2026-07-13 (see the removal note in
+    .github/workflows/registry-rank-monitor.yml: a Smithery relevance slip is not
+    fixed by a republish, which is correct). This function was not updated, so
+    every CI-generated alert kept printing
+
+        auto-heal reflex: ci (workflow fires gh workflow run smithery-freshness.yml)
+
+    naming a step that no longer existed. That is the worst possible line to be
+    wrong: it tells the reader the system is handling it, so the owner-gated
+    remedy — the only thing that actually moves Smithery's score — never gets
+    done. CORE term `energy` sat at #2/#3 for days under that reassurance.
+
+    The CI branch now reports what is true and points at the real remedy, which
+    the ESCALATE line below already spells out. Guarded by
+    test/registry-reflex-honesty.test.mjs, which fails if this string ever again
+    claims a workflow fires without that workflow actually being dispatched.
+    """
     if os.environ.get("RANK_AUTOHEAL_DISABLE"):
         return "disabled (RANK_AUTOHEAL_DISABLE set)"
     if os.environ.get("GITHUB_OUTPUT"):
-        return "ci (workflow fires gh workflow run smithery-freshness.yml)"
+        return ("none in CI — no automated reflex exists for a relevance slip. "
+                "Recency has ~0 rank weight, so the freshness dispatch was "
+                "removed 2026-07-13 as ineffective. The remedy is OWNER-GATED: "
+                "paste scripts/smithery_description.txt into the Smithery owner "
+                "UI (see the ESCALATE line for the exact URL)")
     try:
         import subprocess
         uid = os.getuid()
