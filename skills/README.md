@@ -5,7 +5,7 @@ Agent Skills that teach Claude how to use the **DC Hub** MCP server
 
 | Skill | Description |
 |---|---|
-| [`dc-hub-data-center-intelligence`](./dc-hub-data-center-intelligence/SKILL.md) | Answer data-center, power/grid, site-selection, and M&A questions with **live** DC Hub data — 12,650+ facilities across 170+ countries, 311 DCPI markets, 10 ISO grids, fiber, and 1,500+ tracked deals — instead of stale training data. Includes a tool-selection map and honest-attribution guidance. |
+| [`dc-hub-data-center-intelligence`](./dc-hub-data-center-intelligence/SKILL.md) | Answer data-center, power/grid, site-selection, and M&A questions with **live** DC Hub data — 15,300+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, fiber, and 1,600+ tracked deals — instead of stale training data. Includes a tool-selection map and honest-attribution guidance. |
 
 Each skill is a self-contained folder with a `SKILL.md` (YAML frontmatter + instructions).
 Free anonymous tier; a free dev key at [dchub.cloud/signup](https://dchub.cloud/signup) unlocks full results.
