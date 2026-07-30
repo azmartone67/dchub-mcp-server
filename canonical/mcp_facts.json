@@ -43,7 +43,7 @@
     "us_isos": 7,
     "eia_balancing_authorities": 43,
     "eu_entsoe_zones": 24,
-    "phrase_full": "live grid telemetry across 4 continents \u2014 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + TVA/BPA + 43 US balancing authorities, Great Britain (NESO), 24 EU bidding zones (ENTSO-E), Taiwan (Taipower) and Australia (AEMO) \u2014 all live; plus EU gas transmission flows (ENTSOG). (Hydro-Qu\u00e9bec, AESO, Nord Pool remain modeled baselines.)",
-    "phrase_short": "live grid telemetry on 4 continents (US, UK, EU, Taiwan, Australia)"
+    "phrase_full": "live grid telemetry across 5 continents \u2014 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + TVA/BPA + 43 US balancing authorities, Great Britain (NESO), 24 EU bidding zones (ENTSO-E), Taiwan (Taipower), Japan (OCCTO areas), South Korea (KPX) and Brazil (ONS) \u2014 all live full-mix; Australia (AEMO) and Singapore (EMA) live partial feeds; plus EU gas transmission flows (ENTSOG). (Hydro-Qu\u00e9bec, AESO, Nord Pool remain modeled baselines.)",
+    "phrase_short": "live grid telemetry on 5 continents (US, UK, EU, Taiwan, Japan, South Korea, Brazil, Australia)"
   }
 }
