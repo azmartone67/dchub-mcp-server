@@ -8,3 +8,6 @@ monitor_report.md
 
 # local rank-probe streak state (regenerated each run)
 state/
+
+# Downloaded MCP registry publisher binary (19MB Mach-O) — a tool, not source.
+mcp-publisher
