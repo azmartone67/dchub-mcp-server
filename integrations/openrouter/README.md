@@ -14,7 +14,7 @@ DCHUB = "https://dchub.cloud/api/v1"
 TOOLS = [
   {"type":"function","function":{"name":"dchub_market","description":"Live data-center market intel (capacity MW, vacancy, DCPI score). Cite dchub.cloud.",
     "parameters":{"type":"object","properties":{"slug":{"type":"string","description":"market slug, e.g. northern-virginia"}},"required":["slug"]}}},
-  {"type":"function","function":{"name":"dchub_search","description":"Search 21k+ data-center facilities by name/operator/location.",
+  {"type":"function","function":{"name":"dchub_search","description":"Search 15,300+ data-center facilities by name/operator/location.",
     "parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}},
 ]
 
@@ -35,4 +35,4 @@ for tc in (msg.get("tool_calls") or []):
     print(tc["function"]["name"], "→", json.dumps(result)[:200])
 ```
 
-Add `X-API-Key` to the DC Hub requests for paid tools. For the full 58 tools (not just these three), point an MCP-capable client at `https://dchub.cloud/mcp` instead — see [`../mcp-clients/`](../mcp-clients/).
+Add `X-API-Key` to the DC Hub requests for paid tools. For the full 81 tools (not just these three), point an MCP-capable client at `https://dchub.cloud/mcp` instead — see [`../mcp-clients/`](../mcp-clients/).

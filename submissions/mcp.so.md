@@ -16,7 +16,7 @@ auto-populate; paste the values below where prompted.
 | Tags | data-center, energy, natural-gas, electricity-grid, infrastructure, market-intelligence, M&A |
 
 **Short description (≤300 chars):**
-> DC Hub is the live data-center & energy intelligence MCP: 21k+ facilities, 300+ markets, 10 ISO grids, the DCPI power index, the DCGI gas index, interconnection queues, M&A, fiber, water & tax. 58 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
+> DC Hub is the live data-center & energy intelligence MCP: 15,300+ facilities, 300+ markets, 10 ISO grids, the DCPI power index, the DCGI gas index, interconnection queues, M&A, fiber, water & tax. 81 tools an agent can query and cite (CC-BY-4.0). Free tier, no signup.
 
 **Config snippet (for the "usage" field):**
 ```json

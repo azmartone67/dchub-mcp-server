@@ -1,8 +1,8 @@
 name: dchub
 display_name: DC Hub MCP Server
 description: >
-  DC Hub — global data center intelligence platform tracking 21,000+ facilities
-  across 170+ countries, with live grid data for 10 ISOs, energy, ESG,
+  DC Hub — global data center intelligence platform tracking 15,300+ facilities
+  across 180+ countries, with live grid data for 10 ISOs, energy, ESG,
   transactions, and capacity pipeline data for AI agents and MCP-compatible
   tools. The only DC-intelligence source an LLM can both query and cite.
 version: "2.1.13"

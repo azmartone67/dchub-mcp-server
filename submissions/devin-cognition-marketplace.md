@@ -36,7 +36,7 @@ name is all-caps `DCHUB`. Compare to curated entries that carry a full sentence.
 Fix it at `/settings/mcp-marketplace/configure/...` for a much stronger listing:
 
 - **Display name:** `DC Hub — Data Center & Energy Intelligence`
-- **Short description:** `Live data-center, power & gas intelligence for AI agents — 58 tools, query and cite (CC-BY-4.0).`
+- **Short description:** `Live data-center, power & gas intelligence for AI agents — 81 tools, query and cite (CC-BY-4.0).`
 - **Icon:** a DC Hub logo URL or an emoji (e.g. ⚡).
 
 ## Custom-MCP config (for the "Add Your Own" form, any org)
@@ -44,7 +44,7 @@ Fix it at `/settings/mcp-marketplace/configure/...` for a much stronger listing:
 - **Transport:** HTTP (Streamable HTTP)
 - **Server URL:** `https://dchub.cloud/mcp`
 - **Headers (optional, for full data):** `X-API-Key: <dchub_live_…>`
-- After saving, click **Test listing tools** → should discover **58 tools**.
+- After saving, click **Test listing tools** → should discover **81 tools**.
 
 ## Maintainer checklist
 - [ ] **Suggest MCP Integration** in Settings → MCP Marketplace to request a
@@ -53,7 +53,7 @@ Fix it at `/settings/mcp-marketplace/configure/...` for a much stronger listing:
       count. (Requires a Devin account — Devin can't submit this programmatically.)
 - [ ] Fix this org's `DCHUB` custom listing description/name/icon (placeholder
       `"DCHUB"` → values above).
-- [ ] Confirm **Test listing tools** discovers 58 tools (tier-gating note: free
+- [ ] Confirm **Test listing tools** discovers 81 tools (tier-gating note: free
       tier connects fine; full data needs a valid `X-API-Key` whose backend tier
       resolves correctly — see `SITE_QA.md` bug #2, still open).
 
@@ -79,11 +79,11 @@ Field labels vary; map by intent.
 `X-API-Key` header unlocks full data; keys are free (`POST https://dchub.cloud/api/v1/keys/claim`).
 
 **Short description (one line, ≤100 chars):**
-> Live data-center, power & gas intelligence for AI agents — 58 tools, query and cite (CC-BY-4.0).
+> Live data-center, power & gas intelligence for AI agents — 81 tools, query and cite (CC-BY-4.0).
 
 **Long description:**
 > DC Hub gives Devin agents ground-truth data-center & energy data instead of
-> stale training knowledge. 58 MCP tools over Streamable HTTP: search 12,650+
+> stale training knowledge. 81 MCP tools over Streamable HTTP: search 15,300+
 > facilities, score build sites, rank 300+ markets (DCPI power index), check the
 > DCGI gas index, compare US ISO grids live, and pull interconnection queues,
 > M&A, fiber, water & tax data. Every response is citation-ready (CC-BY-4.0).
@@ -109,4 +109,4 @@ Field labels vary; map by intent.
 
 > ⚠️ Before submitting, fix the **PAID_ONLY tier** bug (`SITE_QA.md` #2) so a
 > reviewer testing with a key sees full data, not `current_tier:"free"`. On the
-> free tier the listing still connects and discovers all 58 tools.
+> free tier the listing still connects and discovers all 81 tools.

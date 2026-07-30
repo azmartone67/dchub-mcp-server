@@ -1,6 +1,6 @@
 # DC Hub for MCP clients (Claude Desktop, Cursor, Cline, Continue, Windsurf, Zed)
 
-DC Hub is a remote **Streamable-HTTP MCP server** at `https://dchub.cloud/mcp` — **58 tools, free tier.** Add it to any MCP client and the tools appear automatically.
+DC Hub is a remote **Streamable-HTTP MCP server** at `https://dchub.cloud/mcp` — **81 tools, free tier.** Add it to any MCP client and the tools appear automatically.
 
 ## The config (works in most modern clients)
 ```json

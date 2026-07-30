@@ -8,7 +8,7 @@ SSE response parsing) is wrapped so you can just write:
     dc.market("northern-virginia")
     dc.search(state="VA")
     dc.grid(iso="ERCOT")
-    dc.call("get_market_intel", market="dallas")   # any of the 38 tools
+    dc.call("get_market_intel", market="dallas")   # any of the 81 tools
     dc.tools()                          # list tool names
 
 Set DCHUB_API_KEY for full-tier data (sent as the X-API-Key header).

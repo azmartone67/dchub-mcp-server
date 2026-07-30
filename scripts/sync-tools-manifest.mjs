@@ -56,13 +56,24 @@ const names = new Set(tools.map((t) => t.name));
 // so the number lives in ONE place and the automated layer keeps it honest.
 // ★2026-07-28: was '1,400+' — stale since the 07-24 dedup rebase raised the
 // canonical floor to 1,500+ (live distinct = 1,553). See ai_surface_canon.
-const DEALS_FLOOR = '1,500+';
+// ★2026-07-30: '1,600+' — live deals_tracked = 1,610 (/api/v1/stats/canonical).
+const DEALS_FLOOR = '1,600+';
 
 // Facilities floor — the OTHER canonical quantity that appears in registry
 // prose. It had no entry here at all, which is why smithery.yaml advertised
 // "21,000+ facilities" (the pre-dedup RAW discovered_facilities row count)
 // for four days after canon moved to 12,650+ and nothing noticed.
-const FACILITIES_FLOOR = '12,650+';
+// ★2026-07-30: '15,300+' — live facilities_distinct = 15,367 (canonical stats;
+// distinct BUILDINGS via canonical_slug, the citable population).
+const FACILITIES_FLOOR = '15,300+';
+
+// ★2026-07-30: markets + countries join the derived-canon set. 311 was an
+// OVER-claim (live dcpi_markets_scored = 306 — 311 counted score ROWS, not
+// scored markets) — never re-introduce it; floors round DOWN, so the public
+// claim is 300+. Countries: live countries_covered = 186 → 180+ (several
+// surfaces still carried 170+ from the pre-dedup era).
+const MARKETS_FLOOR = '300+';
+const COUNTRIES_FLOOR = '180+';
 
 // --print-count: emit the live tool count (from server.mjs) and exit. Lets the
 // daily-manifest-sync workflow feed the SAME source-of-truth number into the
@@ -147,24 +158,36 @@ const pend = (f, content) => pending.set(f, content);
 // 81, so the manual repair path propagated stale copy too. The skills/ files
 // ship to agents and read "70 read-only tools". None of these carry changelog
 // history (the reason submission/ docs stay excluded), so the count heal is safe.
+// ★2026-07-30 widened again, same reason at a different altitude: the tool
+// count had rotted to "58 MCP tools" in integrations/README.md and "70 tools"
+// in docs/ distribution copy — surfaces the count heal never scanned.
 for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'REGISTRY-LISTINGS.md', 'skills/README.md',
                  'skills/dc-hub-data-center-intelligence/SKILL.md',
-                 'scripts/tier3_presence.sh']) {
+                 'scripts/tier3_presence.sh', 'integrations/README.md',
+                 'docs/distribution-targets.md', 'docs/canonical-workflows.md',
+                 'docs/outreach-emails.md', 'scripts/smithery_description.txt',
+                 'dxt/manifest.json', 'docs/one-click-install.md',
+                 'docs/contacts.md', 'docs/pilot-pack.md',
+                 'integrations/cohere/README.md', 'integrations/mcp-clients/README.md',
+                 'integrations/openrouter/README.md', 'integrations/poe/README.md',
+                 'integrations/gemini/README.md', 'integrations/youcom/README.md']) {
   const txt = readCur(f);
-  // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
-  // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
-  // separately the Tools badge said tools-48 while the body said 49 (2026-06-26).
+  // Match "N tools", "N MCP tools", "N read-only tools", AND the shields.io
+  // badge form "badge/tools-N-color". All slipped past CI before: the README
+  // body said "48 MCP tools" (2026-06-25), the Tools badge said tools-48 while
+  // the body said 49 (2026-06-26), and SKILL.md's "70 read-only tools" sat two
+  // canon bumps stale (2026-07-30) because the modifier broke adjacency.
   const live = liveLines(txt);   // historical (canon:frozen) lines are not claims about now
   const counts = [
-    ...[...live.matchAll(/(\d+)(?: MCP)? tools/g)].map((x) => Number(x[1])),
+    ...[...live.matchAll(/(\d+)(?: MCP| read-only)? tools/g)].map((x) => Number(x[1])),
     ...[...live.matchAll(/badge\/tools-(\d+)/g)].map((x) => Number(x[1])),
   ];
   const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
   if (wrong.length) {
     problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
     if (FIX) pend(f, healLines(txt, (ln) => ln
-      .replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
+      .replace(/\b(\d+)( MCP| read-only)? tools\b/g, (s, n, mod) => (Number(n) > 20 ? `${COUNT}${mod || ''} tools` : s))
       .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))));
   }
 }
@@ -211,7 +234,8 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 // (verified working, emits all 58). We therefore (1) assert glama.json stays
 // schema-valid, (2) keep server.json's positioning intact, and (3) lock the
 // coverage prose Glama re-derives from.
-const CANON = { markets: 311, dealsFloor: DEALS_FLOOR, facilitiesFloor: FACILITIES_FLOOR };
+const CANON = { marketsFloor: MARKETS_FLOOR, countriesFloor: COUNTRIES_FLOOR,
+                dealsFloor: DEALS_FLOOR, facilitiesFloor: FACILITIES_FLOOR };
 {
   // (1) glama.json must stay schema-valid — an invalid manifest makes Glama drop the listing
   try {
@@ -225,71 +249,97 @@ const CANON = { markets: 311, dealsFloor: DEALS_FLOOR, facilitiesFloor: FACILITI
   if (!/query and cite/i.test(sjDesc))
     problems.push('server.json: description lost canonical positioning ("… query and cite")');
 
-  // (3) COVERAGE prose: no stale market (2xx) or deal (2,000+) counts. Canonical:
-  // 311 markets · 3,000+ tracked deals. Scans HAND-AUTHORED prose ONLY — never
-  // server.mjs (operator-owned SoT for tool descriptions) and never mcp-server.json's
-  // derived tools[] (regenerated from server.mjs by --fix); for mcp-server.json we
-  // check the top-level .description field only. Tool-count drift in submission/
-  // integration docs is out of scope here (those files intermix changelog history);
-  // the canonical manifests' counts are locked by the smithery/README loop above.
-  // 2026-07-11: widened — "300+ markets" and "3,000+ deals" slipped through
-  // (the 07-10 honest-numbers pass moved canon to 311 / 4,000+ but these
-  // regexes only caught 2xx / 2,000+, so half the surfaces kept the old
-  // floors). 311 itself must NOT match.
-  const STALE = [
-    { rx: /\b(?:2\d{2}|300)\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
-  ];
-  // ★2026-07-28: the deal rule used to live in STALE as a DENYLIST of shapes —
+  // (3) COVERAGE prose: no stale canonical-quantity claims. Scans HAND-AUTHORED
+  // prose ONLY — never server.mjs (operator-owned SoT for tool descriptions) and
+  // never mcp-server.json's derived tools[] (regenerated from server.mjs by
+  // --fix); for mcp-server.json we check the top-level .description field only.
+  // ★2026-07-28: the deal rule used to live in a STALE DENYLIST of shapes —
   // /\b[2-9][,.]?000\+/, carrying the comment "never 1,400+ or 12,650+". It was
   // therefore written to PERMIT the exact value that went stale (1,400+ after
   // the 07-24 rebase to 1,500+), and it structurally cannot match "21,000+"
   // (after the leading 2 comes a 1, not a comma). Both stale numbers sat in
   // smithery.yaml — the file Smithery crawls — while this guard reported clean.
   //
-  // Replaced with a DERIVED rule: find every "<n>+ <noun>" for a canonical
+  // Replaced with a DERIVED rule: find every "<n>(+) <noun>" for a canonical
   // noun and flag any value that is not canon. A denylist has to predict the
   // wrong answers; this only has to know the right one, so it cannot be
   // written to permit a stale value.
+  // ★2026-07-30: markets + countries moved into the derived set (the markets
+  // rule was the LAST denylist here, and it enshrined 311 — an over-claim, see
+  // MARKETS_FLOOR). The number pattern now also matches bare values ("311
+  // markets", "186 countries" — no trailing +) with a >99 floor so small
+  // incidental counts ("top 10 markets") stay out of scope.
+  // `fill` = how many filler words may sit between the number and the noun.
+  // Countries get 0: a country count is always adjacent ("170+ countries"),
+  // and any filler allowance makes "15,300+ facilities by country" match the
+  // COUNTRIES rule and heal the facility figure to the country floor.
   const QUANTITIES = [
-    { noun: String.raw`tracked\s+(?:M&A\s+)?deals?|M&A\s+deals?|deals?\b`, canon: CANON.dealsFloor,      label: 'deal count' },
-    { noun: String.raw`facilit(?:y|ies)`,                                  canon: CANON.facilitiesFloor, label: 'facility count' },
+    { noun: String.raw`tracked\s+(?:M&A\s+)?(?:deals?|transactions?)|M&A\s+(?:deals?|transactions?)|deals?\b`,
+      fill: 3, canon: CANON.dealsFloor,      label: 'deal count' },
+    { noun: String.raw`facilit(?:y|ies)|data\s+cent(?:er|re)s?\b`,
+      fill: 3, canon: CANON.facilitiesFloor, label: 'facility count' },
+    { noun: String.raw`(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b`,
+      fill: 3, canon: CANON.marketsFloor,    label: 'market count' },
+    { noun: String.raw`countr(?:y|ies)`,     fill: 0, canon: CANON.countriesFloor,  label: 'country count' },
   ];
+  // \b guards the number's left edge: without it the digits inside a JSON
+  // unicode escape match — "— Data Center …" healed to "\u15,300+ Data
+  // Center …", corrupting the escape AND the file (hit dxt/manifest.json).
+  const NUM = String.raw`\b(\d[\d,]*k?\+?)`;
+  const numVal = (s) => Number(s.replace(/,/g, '').replace(/k\+?$/i, '000').replace(/\+$/, ''));
+  const qRx = (q) => String.raw`${NUM}\s+(?:[A-Za-z&/-]+\s+){0,${q.fill}}?(?:${q.noun})`;
   const scanQuantities = (txt) => {
     const found = [];
-    for (const { noun, canon, label } of QUANTITIES) {
-      const rx = new RegExp(String.raw`(\d[\d,]*k?\+)\s+(?:[A-Za-z&/-]+\s+){0,3}?(?:${noun})`, 'gi');
+    for (const q of QUANTITIES) {
+      const rx = new RegExp(qRx(q), 'gi');
       for (const mm of txt.matchAll(rx)) {
-        if (mm[1] !== canon) found.push(`"${mm[0].trim()}" — stale ${label} (canonical ${canon})`);
+        if (mm[1] !== q.canon && numVal(mm[1]) > 99)
+          found.push(`"${mm[0].trim()}" — stale ${q.label} (canonical ${q.canon})`);
       }
     }
     return found;
   };
+  // ★2026-07-30 widened: the 07-30 canon sweep found stale figures in every
+  // agent-facing surface OUTSIDE this list (integrations/, docs/ distribution
+  // copy, the legacy python server's docstrings, scripts/smithery_description.txt)
+  // — each rotted independently because nothing owned it. All are live paste/
+  // serve copy, not changelog history; historical lines use canon:frozen.
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
     'server.json', 'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
     'scripts/tier3_presence.sh', 'skills/README.md',
     'skills/dc-hub-data-center-intelligence/SKILL.md',
+    'integrations/README.md', 'integrations/chatgpt/README.md',
+    'integrations/cohere/README.md', 'integrations/copilot/dchub-mcp.yaml',
+    'integrations/openrouter/tools.json', 'integrations/langchain/dchub_tools.py',
+    'integrations/llamaindex/dchub_tools.py',
+    'docs/distribution-targets.md', 'docs/canonical-workflows.md',
+    'docs/outreach-emails.md', 'scripts/smithery_description.txt',
+    'dchub_mcp_server.py', 'toolspec.json', 'dxt/manifest.json',
+    'integrations/gemini/README.md', 'integrations/openrouter/README.md',
+    'integrations/mcp-clients/README.md', 'integrations/poe/README.md',
+    'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
+    'TELEGEOGRAPHY-OUTREACH.md',
   ];
   for (const f of COVERAGE) {
     let txt; try { txt = readCur(f); } catch { continue; }
-    for (const { rx, why } of STALE) { const m = txt.match(rx); if (m) problems.push(`${f}: "${m[0].trim()}" — ${why}`); }
     const q = scanQuantities(liveLines(txt));
     for (const why of q) problems.push(`${f}: ${why}`);
     // --fix heals the canonical quantities in place. Only the NUMBER is
     // rewritten; the surrounding prose is hand-authored and stays untouched.
     if (FIX && q.length) {
       let out = txt;
-      for (const { noun, canon } of QUANTITIES) {
+      for (const qq of QUANTITIES) {
         out = healLines(out, (ln) => ln.replace(
-          new RegExp(String.raw`(\d[\d,]*k?\+)(\s+(?:[A-Za-z&/-]+\s+){0,3}?(?:${noun}))`, 'gi'),
-          (s, num, rest) => (num === canon ? s : canon + rest)));
+          new RegExp(String.raw`${NUM}(\s+(?:[A-Za-z&/-]+\s+){0,${qq.fill}}?(?:${qq.noun}))`, 'gi'),
+          (s, num, rest) => (num === qq.canon || numVal(num) <= 99 ? s : qq.canon + rest)));
       }
       if (out !== txt) pend(f, out);
     }
   }
   // mcp-server.json: top-level description only (tools[] descriptions derive from server.mjs)
   const mDesc = (readJSON('mcp-server.json').description || '');
-  for (const { rx, why } of STALE) { const m = mDesc.match(rx); if (m) problems.push(`mcp-server.json (top-level description): "${m[0].trim()}" — ${why}`); }
+  for (const why of scanQuantities(mDesc)) problems.push(`mcp-server.json (top-level description): ${why}`);
 }
 
 // ---- canonical FACTS drift-guard (pricing / coverage) ----------------------

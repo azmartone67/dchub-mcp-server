@@ -52,8 +52,8 @@ should always honor:
 ---
 
 ## Partner outreach (honest — claim only what's live)
-> **DC Hub exposes 70 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
-> fiber, and M&A intelligence across 12,650+ facilities in 170+ countries, plus
+> **DC Hub exposes 81 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
+> fiber, and M&A intelligence across 15,300+ facilities in 180+ countries, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and
 > returns `unavailable` — never a fabricated number — when a factor's data isn't

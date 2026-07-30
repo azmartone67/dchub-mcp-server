@@ -5,7 +5,7 @@
 
 **Real-time data-center, power-grid, interconnection-queue, grid-capacity, fiber, natural-gas & hyperscale infrastructure intelligence for AI agents** — live telemetry across PJM, ERCOT, CAISO and every US ISO.
 
-👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against 12,650+ facilities, 311 markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
+👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against 15,300+ facilities, 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Cline, Continue, and any AI assistant doing data center site selection, energy analysis, or market research.
 
@@ -18,7 +18,7 @@ The only MCP server combining facility data, infrastructure, and live grid intel
 ## What you can do with it
 
 ```
-"What's the current grid headroom in PJM?"
+"Can I get 200 MW in PJM, and how long would it take?"
 "Show me AWS data center construction pipeline in Ohio"
 "Compare ERCOT vs PJM capacity prices over the last 30 days"
 "Find data centers within 50km of Northern Virginia substations >230kV"
@@ -32,15 +32,15 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## What's inside
 
-- **12,650+ data center facilities** across 170+ countries — operator, capacity, location, fiber connectivity
-- **126,427 substations** with voltage class, available capacity estimates
+- **15,300+ data center facilities** across 180+ countries — operator, capacity, location, fiber connectivity
+- **126,000+ substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
 - **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts — including live large-load queue depth where the ISO publishes it (ERCOT is the only US ISO with a public data-center-scale large-load feed)
-- **1,500+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
+- **1,600+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
-- **Market intelligence** — 311 markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
+- **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 180+ countries
 
 **81 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
@@ -52,17 +52,17 @@ Beyond the 81 tools, DC Hub ships **13 guided prompts** — they surface as slas
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
-- `/dchub:power-availability` — headroom + time-to-power for an ISO
+- `/dchub:power-availability` — power availability + time-to-power for an ISO
 - `/dchub:site-report` — premium one-page site brief (power · gas · fiber · market · risk)
 - `/dchub:compare-markets` — 2–4 markets head-to-head
 - `/dchub:fiber-plan` — diverse fibre lead-in routes to a carrier hotel
 - `/dchub:market_selection` — DCPI shortlist → per-finalist verdict → grid reality-check
-- `/dchub:grid_and_queue` — grid headroom + interconnection queue for an ISO
+- `/dchub:grid_and_queue` — power availability + interconnection queue for an ISO
 - `/dchub:site_analysis` — one site, multi-factor: composite score, FEMA hazards, water
 - `/dchub:water_risk` — water stress & hazard read for a site
 - `/dchub:hyperscaler_activity` — deals + forward pipeline: who is buying and building
 - `/dchub:whats_changed` — what moved since your last call (the return hook)
-- `/dchub:fiber_power_pairing` — where fiber density and grid headroom overlap in a market
+- `/dchub:fiber_power_pairing` — where fiber density and available power overlap in a market
 
 Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
 
