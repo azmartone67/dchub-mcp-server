@@ -5205,7 +5205,7 @@ const _TOOL_OUTPUT_SCHEMAS = {
     ..._ENVELOPE_SHAPE,
     ok: _oBool('true when the intent was routed'),
     intent: _oStr('The natural-language intent that was routed (echoed back)'),
-    intent_class: _oStr('The matched intent class (market_ranking | grid_headroom | interconnection_queue | water_climate | site_analysis | deals_ma | fiber | price | changes_delta | facility_search | unknown)'),
+    intent_class: _oStr('The matched intent class (market_ranking | capacity_search | market_comparison | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | changes_delta | facility_search | unknown)'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -5236,8 +5236,8 @@ const _TOOL_OUTPUT_SCHEMAS = {
     chaining: _oAny('Zero-drift chaining guidance (candidate_id contract) when the plan crosses get_refined_queue → analyze_site / rank_sites'),
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
-      schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.5) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class). Distinct from schema_version.'),
+      schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -5396,7 +5396,9 @@ export function _planHostingCoverage(text, coords) {
 //    it as the primary route — `when` still says when to override).
 // The router derives execution_waves / parallelizable / total estimated_calls /
 // dual confidences from these declarations — all deterministic, no LLM.
-const _PLAN_CLASSES = [
+// Exported so tests read the list the RUNTIME serves (the anchor-contract
+// lesson: a test that transcribes the table drifts with it).
+export const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
     patterns: [
@@ -5921,6 +5923,40 @@ const _PLAN_CLASSES = [
     coverage_notes: 'get_changes is free for everyone — the canonical re-entry loop. The portfolio block in list_saved_sites needs an API key with saved sites.',
   },
   {
+    // r-planner-v5.6 (2026-07-30): "tax incentives for data centers in <state>"
+    // routed to facility_search on its "data centers in" pattern —
+    // get_tax_incentives was registered but unroutable (no incentives class):
+    // the register≠routable trap. Reported by Meta AI as a top uncaptured
+    // intent; reproduced keyed before this class existed.
+    id: 'incentives_tax', recipe: null,
+    patterns: [
+      [/\btax(?:es)?\b/i, 3], [/\bincentives?\b/i, 3], [/\babatements?\b/i, 3],
+      [/\bexemptions?\b/i, 2.5], [/\btax\s+credits?\b/i, 3],
+      [/\bsubsid(?:y|ies|ize|ized)\b/i, 2], [/\bsales\s+tax\b/i, 3], [/\bproperty\s+tax\b/i, 3],
+    ],
+    rationale: 'Statutory incentive packages are state-keyed — read the state\'s data-center tax programs first, with the state\'s power-price context alongside: the tax package and the power rate are the two cost levers a siting model trades against each other.',
+    sequence: (d) => {
+      const st = d.state || d.stateFromPlace;
+      return [
+        { step: 1, tool: 'get_tax_incentives', depends_on: [], estimated_calls: 1,
+          why: 'The state\'s data-center tax-incentive programs — type, value, MW/jobs eligibility floors, minimum investment, expiration and source statute for each.',
+          args_hint: { state: st || '<2-letter US state, e.g. GA>' } },
+        { step: 2, tool: 'get_energy_prices', depends_on: [], estimated_calls: 1,
+          why: 'State-level power-price context — the opex lever next to the incentive package\'s capex lever. Independent — run in parallel.',
+          args_hint: { state: st || '<same 2-letter state>', data_type: 'retail' } },
+      ];
+    },
+    alternatives: [
+      { tool: 'rank_markets', when: 'You are comparing incentive-driven cost across MANY states or markets, not reading one state\'s package.',
+        rejected_because: 'A single state was named — the statutory read answers it directly; a national ranking answers a broader question than asked.' },
+      { tool: 'analyze_site', when: 'You have ONE lat/lon and want tax context folded into a full multi-factor site read.',
+        rejected_because: 'No coordinates were supplied — this is a state-level statutory question, not a site read.' },
+      { tool: 'get_market_intel', when: 'The question is one METRO\'s market report (vacancy / pricing / pipeline), not state statutes.',
+        rejected_because: 'Incentive programs are enacted at the state level — the metro market report does not carry the statute detail.' },
+    ],
+    coverage_notes: 'US states only — programs keyed by 2-letter state code, each row carrying its source_statute for citation. Non-US incentive regimes are not covered; say so rather than estimating.',
+  },
+  {
     id: 'facility_search', recipe: null,
     patterns: [
       [/\bfacilit(?:y|ies)\b/i, 3], [/\bdata\s*cent(?:er|re)s?\s+in\b/i, 3],
@@ -5932,7 +5968,7 @@ const _PLAN_CLASSES = [
     rationale: 'Search first to mint facility slugs, then the full-profile read keys on whichever slug you pick.',
     sequence: (d) => [
       { step: 1, tool: 'search_facilities', depends_on: [], estimated_calls: 1,
-        why: 'Filter the 12,650+ facility dataset by location / capacity / operator / status — each row carries a slug.',
+        why: 'Filter the full global facility dataset by location / capacity / operator / status — each row carries a slug.',
         args_hint: { ...(d.state ? { state: d.state } : {}), ...(d.mw ? { min_capacity_mw: d.mw } : {}) } },
       { step: 2, tool: 'get_facility', depends_on: [1], estimated_calls: 1,
         why: 'Full profile for the facility you picked (power, cooling, fiber carriers, peers).',
@@ -6232,6 +6268,27 @@ export function _execConstraintIso(intentText, userCtx, signals) {
 
 
 
+// r-planner-v5.6 (2026-07-30): US state names → 2-letter codes, for ARGUMENT
+// resolution only (get_tax_incentives / get_energy_prices key on the code;
+// agents phrase the ask with the name: "tax incentives … in Georgia"). Same
+// split discipline as isoFromPlace — NEVER a class boost: state names appear
+// in facility, market and site questions equally.
+const _PLAN_STATE_NAMES = {
+  'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR', 'california': 'CA',
+  'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE', 'florida': 'FL', 'georgia': 'GA',
+  'hawaii': 'HI', 'idaho': 'ID', 'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA',
+  'kansas': 'KS', 'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+  'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+  'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+  'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT', 'vermont': 'VT',
+  'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV', 'wisconsin': 'WI',
+  'wyoming': 'WY', 'district of columbia': 'DC', 'washington dc': 'DC', 'washington d.c.': 'DC',
+};
+const _PLAN_STATE_CODES = new Set(Object.values(_PLAN_STATE_NAMES));
+
 export function _planSignals(intent, context) {
   const text = String(intent || '');
   const c = (context && typeof context === 'object' && !Array.isArray(context)) ? context : {};
@@ -6290,6 +6347,25 @@ export function _planSignals(intent, context) {
     return null;
   })();
   const state = (c.state && /^[A-Za-z]{2}$/.test(String(c.state).trim())) ? String(c.state).trim().toUpperCase() : null;
+  // r-planner-v5.6 (2026-07-30): the state implied by the TEXT, args only.
+  // Names first (longest wins, so "West Virginia" beats "Virginia"); then an
+  // UPPERCASE 2-letter code anchored on "in "/"for " ("…in VA") — the anchor is
+  // what keeps ISO-NE's "NE" and prose words out. Explicit context always wins.
+  const stateFromPlace = (() => {
+    if (state) return null;
+    let best = null;
+    for (const nm of Object.keys(_PLAN_STATE_NAMES)) {
+      if (best && nm.length <= best.length) continue;
+      const re = new RegExp('\\b' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+      if (re.test(text)) best = nm;
+    }
+    if (best) return _PLAN_STATE_NAMES[best];
+    let code = null;
+    for (const m of text.matchAll(/\b(?:in|for)\s+([A-Z]{2})(?![A-Za-z])/g)) {
+      if (_PLAN_STATE_CODES.has(m[1])) code = m[1];
+    }
+    return code;
+  })();
   const candidateId = (typeof c.candidate_id === 'string' && c.candidate_id.trim())
     ? c.candidate_id.trim()
     : ((text.match(/\b(cand_[A-Za-z0-9_-]+)/) || [])[1] || null);
@@ -6328,7 +6404,7 @@ export function _planSignals(intent, context) {
   // class wins, or every Ohio/Illinois/Virginia intent would start drifting
   // toward the distribution layer. Routing stays on explicit feeder language.
   const hc = _planHostingCoverage(text, coords);
-  return { iso, isoFromPlace, mw, coords, state, candidateId, market, since, ai, comparePair, hc };
+  return { iso, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -6480,7 +6556,7 @@ export function _planWorkflowConfidence(seq, d) {
 //   5.5 = hosting_capacity class + conditional get_hosting_capacity steps in
 //         capacity_search / site_analysis; "site a N MW …" reaches
 //         capacity_search; alternatives filtered against the whole sequence.
-export const PLANNER_VERSION = '5.5';
+export const PLANNER_VERSION = '5.6';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
