@@ -11,3 +11,6 @@ state/
 
 # Downloaded MCP registry publisher binary (19MB Mach-O) — a tool, not source.
 mcp-publisher
+
+# never track dependencies — node_modules was a tracked self-referencing symlink until 2026-07-30
+node_modules/
