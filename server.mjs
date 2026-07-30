@@ -902,6 +902,15 @@ async function shouldMintClaim(sessionId, toolName) {
         // over our just-sent one). Prefer that for the rendered copy so
         // attribution + display stay consistent.
         variant: (data.variant || variant || 'generic').toLowerCase(),
+        // Shell #44 r-two-artifacts (2026-07-30): the HUMAN-audience view
+        // link (7d TTL, multi-open, binds nothing). This allowlist ate every
+        // undeclared backend field by design — thread it explicitly or the
+        // human link dies here and the funnel's human_acted v2 instrument
+        // measures a link nobody ever received (the exact _ENV_DROP-ate-the-
+        // key failure class from shell #38). Null-safe: old backends simply
+        // don't send it.
+        human_url: data.human_url || null,
+        human_note: data.human_note || null,
       };
     }
     return null;
@@ -1074,10 +1083,23 @@ async function buildHighIntentClaimBlock(claim, name) {
   const hiUpgradeUrl = redeemed && redeemed.api_key
     ? ('https://dchub.cloud/upgrade?key=' + encodeURIComponent(redeemed.api_key) + (name ? '&tool=' + encodeURIComponent(name) : ''))
     : devUrl;
-  const text = renderer(name, claim, devUrl);
+  // Shell #44 r-two-artifacts (2026-07-30): ONE appended line pointing at the
+  // durable HUMAN link. Every variant gets it — for machine-redeem variants
+  // the single-use claim burns in ~0.85s, so this is the only link a human
+  // can ever act on; for the claude (header-less) variant it's the fallback
+  // that outlives the clickable claim. Placement AFTER the variant copy so
+  // the measured A/B strings stay byte-stable up front.
+  const humanLine = claim.human_url
+    ? ('\n\u{1F464} Show your human their own link (multi-use, lives 7 days, '
+       + 'binds nothing on open): ' + claim.human_url + '\n')
+    : '';
+  const text = renderer(name, claim, devUrl) + humanLine;
   const sc = {
     high_intent_claim_url:      claim.claim_url,     // fallback / machine consumers
     high_intent_claim_token:    claim.claim_token,
+    // Shell #44: the human-audience view link, machine-readable (top-level
+    // name not in _ENV_DROP; same survival contract as for_your_human).
+    high_intent_human_url:      claim.human_url || null,
     // r-agent-redeem RESTORED: the working key + how to persist it, in-band for
     // machine consumers (null when the best-effort redeem failed → prose unchanged).
     high_intent_api_key:        redeemed ? redeemed.api_key : null,
@@ -12592,4 +12614,7 @@ export { createServer };
 // can assert the 3-list sync (this drift has now shipped twice — the 07-11 wave
 // and Kimi on 07-17). See [[reference_dchub_tuner_warmcache_platforms]].
 export { detectPlatform, detectPlatformFromInit, _DESC_KNOWN_PLATFORMS };
+// Shell #44 (2026-07-30): exported so the human-link threading is testable —
+// an unexported path is how test and real surfaces silently diverge.
+export { buildHighIntentClaimBlock };
 
