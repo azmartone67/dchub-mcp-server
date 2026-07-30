@@ -1,7 +1,7 @@
 {
   "_generated_by": "dchub-backend/mcp_facts_export.py",
-  "_warning": "CANONICAL \u2014 DO NOT HAND-EDIT. Regenerate via `python3 mcp_facts_export.py`. version + tool_count are owned by sync-tools-manifest.mjs (server.json / server.mjs). numbers are floors that round DOWN from /api/v1/stats/canonical + /api/v1/infrastructure/stats; server.mjs composes the initialize instructions from this file behind a freshness gate keyed on generated_at (see _composeInstructions).",
-  "generated_at": "2026-07-30T07:18:58Z",
+  "_warning": "CANONICAL \u2014 DO NOT HAND-EDIT. Regenerate via `python3 mcp_facts_export.py`. version + tool_count are owned by sync-tools-manifest.mjs (server.json / server.mjs). numbers are floors that round DOWN: the governance figures (facilities/countries/markets/deals) from canonical_stats, the asset layers from /api/v1/infrastructure/stats; server.mjs composes the initialize instructions from this file behind a freshness gate keyed on generated_at (see _composeInstructions).",
+  "generated_at": "2026-07-30T08:24:35Z",
   "description": "Real-time data-center, power-grid & energy intelligence for AI agents \u2014 the only MCP server an LLM can both query and cite.",
   "remote_url": "https://dchub.cloud/mcp",
   "repo": "github.com/azmartone67/dchub-mcp-server",
@@ -22,10 +22,6 @@
     "enterprise": 100000
   },
   "numbers": {
-    "facilities": "15,300+",
-    "countries": "180+",
-    "markets": "300+",
-    "deals": "1,600+",
     "substations": "126k",
     "infrastructure_assets_total": "320,000+",
     "transmission_lines": "94k",
@@ -37,6 +33,10 @@
     "generating_units_global": "182k",
     "live_feeds": 7,
     "grid_regions": 49,
+    "facilities": "15,300+",
+    "countries": "170+",
+    "markets": "300+",
+    "deals": "1,600+",
     "pipeline_gw": 369
   },
   "grid_coverage": {
@@ -47,3 +47,4 @@
     "phrase_short": "live grid telemetry on 5 continents (US, UK, EU, Taiwan, Japan, South Korea, Brazil, Australia)"
   }
 }
+

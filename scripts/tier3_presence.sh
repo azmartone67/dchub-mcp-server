@@ -23,7 +23,7 @@ physical infrastructure behind AI — instead of guessing from stale training da
 fiber, capacity, and interconnection.)
 
 It exposes 81 tools + 6 guided prompts over: 15,300+ data-center facilities
-(180+ countries), 300+ power markets scored by a Data Center Power Index (DCPI),
+(170+ countries), 300+ power markets scored by a Data Center Power Index (DCPI),
 real-time grid telemetry for 10 ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
 time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,600+
 tracked M&A deals.
@@ -71,7 +71,7 @@ AI agents keep getting asked data-center questions they can only answer from
 stale training data. So we built DC Hub — an MCP server that gives any AI
 assistant LIVE, citable ground truth on the infrastructure behind AI:
 
-→ 15,300+ data-center facilities across 180+ countries
+→ 15,300+ data-center facilities across 170+ countries
 → 300+ markets scored by our Data Center Power Index (BUILD / CAUTION / AVOID)
 → Real-time grid telemetry for 10 ISOs — headroom, fuel mix, time-to-power
 → Fiber routes, gas pipelines, interconnection queues, 1,600+ M&A deals

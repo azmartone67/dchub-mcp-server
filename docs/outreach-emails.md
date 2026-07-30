@@ -14,8 +14,8 @@ the AgentCore feedback channel)
 
 > Hi — AgentCore Gateway now supports existing MCP servers as a target type, and
 > DC Hub is a clean fit for any agent doing data-center / energy / site-selection
-> work. It's a remote HTTP MCP server (`https://dchub.cloud/mcp`, 81 tools) over
-> 15,300+ facilities, live ISO grid telemetry, DCPI market verdicts, plus
+> work. It's a remote HTTP MCP server (`https://dchub.cloud/mcp`, 70 tools) over
+> 12,650+ facilities, live ISO grid telemetry, DCPI market verdicts, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel.
 >
@@ -33,7 +33,7 @@ the AgentCore feedback channel)
 
 > Hi — Foundry agents can consume any MCP server, and Foundry Toolboxes bundle MCP
 > endpoints for a domain. DC Hub is the authoritative data layer for data-center &
-> power infrastructure: 81 MCP tools at `https://dchub.cloud/mcp` (facilities,
+> power infrastructure: 70 MCP tools at `https://dchub.cloud/mcp` (facilities,
 > grid, fiber, gas, M&A) plus composite site scoring, FEMA disaster risk, and
 > USGS/NOAA climate intel — each response provenance-stamped, with explicit
 > `unavailable` instead of invented fields.
@@ -48,7 +48,7 @@ the AgentCore feedback channel)
 
 > Hi {team} — your enterprise customers routing infrastructure / site-selection /
 > risk queries through curated MCP sets are exactly who DC Hub serves. It's a
-> remote HTTP MCP server (`https://dchub.cloud/mcp`, 81 tools) with a governance
+> remote HTTP MCP server (`https://dchub.cloud/mcp`, 70 tools) with a governance
 > story your buyers care about: authoritative federal/institutional sources (FEMA,
 > USGS, NOAA, WRI, EIA), provenance on every response, and explicit unknowns
 > instead of hallucinated fields — auditable end to end.
@@ -63,8 +63,8 @@ the AgentCore feedback channel)
 > Hi {team} — when your users ask "where should I build a data center", "what's the
 > water / hazard / grid risk at this site", or "who's buying whom in data-center
 > M&A" — that's a DC Hub call. We're the authoritative data layer for data-center &
-> power infrastructure: 81 MCP tools at `https://dchub.cloud/mcp`, one board-ready
-> composite site score, FEMA/USGS/NOAA risk, live grid telemetry, 1,600+ deals —
+> power infrastructure: 70 MCP tools at `https://dchub.cloud/mcp`, one board-ready
+> composite site score, FEMA/USGS/NOAA risk, live grid telemetry, 1,400+ deals —
 > every number traceable to a source, and honest "unavailable" when it isn't.
 >
 > One-click install for your agents (Cursor/Claude/VS Code) + a 4-workflow prompt
@@ -79,7 +79,7 @@ the AgentCore feedback channel)
 > One-click installers + zero-dependency SDKs. `dchub.cloud/mcp`
 
 ## Pilot acceptance checklist (attach to gateway emails)
-- 1-click install completes; `tools/list` returns **81 tools** in < 30 s.
+- 1-click install completes; `tools/list` returns **70 tools** in < 30 s.
 - Core tools used by default for the canonical workflows (site selection, site risk, deal triage).
 - **Honest-unknown checks pass:** FEMA disaster risk US-only (outside → `unavailable`); wet-bulb `null` when the station lacks it; water `unavailable` where WRI has no basin.
 - **≥ 30%** of relevant infrastructure queries routed to DC Hub during the window.

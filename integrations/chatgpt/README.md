@@ -20,7 +20,7 @@ Create a Custom GPT powered by DC Hub's data center intelligence platform with d
 
 ### Step 4: Configure Settings
 - **Name:** DC Hub Intelligence (or your preferred name)
-- **Description:** Data center market intelligence powered by DC Hub — facility search, energy pricing, M&A transactions, site scoring, and ESG analytics across 15,300+ facilities in 180+ countries.
+- **Description:** Data center market intelligence powered by DC Hub — facility search, energy pricing, M&A transactions, site scoring, and ESG analytics across 15,300+ facilities in 170+ countries.
 - **Conversation starters:**
   - "How many data centers are in Virginia?"
   - "Compare energy costs in Texas vs California for a new facility"

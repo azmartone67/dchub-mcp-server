@@ -87,6 +87,6 @@ describe('instructions compose gate', () => {
 
   it('committed facts carry no retired over-claims', () => {
     const n = JSON.stringify(FACTS.numbers);
-    expect(n).not.toMatch(/12,650|"311"|1,400\+|1,500\+|500,000\+|21,000\+|170\+/);
+    expect(n).not.toMatch(/12,650|"311"|1,400\+|1,500\+|500,000\+|21,000\+|180\+/);
   });
 });

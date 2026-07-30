@@ -18,10 +18,28 @@
 //     no auto-guessed categories.
 // ============================================================================
 
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const NAME = 'DC Hub';
 const HOMEPAGE = 'https://dchub.cloud/mcp';
+
+// ★2026-07-30: canon quantities resolve from the committed snapshot + derived
+// tool count — this file was a THIRD hand-pinned copy ("79 tools / 311 markets
+// / 1,400+ deals") and its refresh pass was actively rewriting external
+// listings back to stale numbers. Same resolution as sync-tools-manifest.mjs:
+// canonical/canon_phrases.json first (refreshed daily from
+// /api/v1/canon/phrases), pinned fallbacks only if the snapshot is unreadable.
+const _ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const _readJ = (f) => { try { return JSON.parse(readFileSync(path.join(_ROOT, f), 'utf8')); } catch { return null; } };
+const _snap = _readJ('canonical/canon_phrases.json') || {};
+const _phrase = (v, fb) => (typeof v === 'string' && /^\d[\d,]*\+$/.test(v) ? v : fb);
+const MARKETS = _phrase(_snap.markets, '300+');
+const DEALS = _phrase(_snap.deals, '1,600+');
+const N_TOOLS = (Number.isInteger(_snap.tools) && _snap.tools > 20 && _snap.tools < 500)
+  ? _snap.tools
+  : (_readJ('server.json')?._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.toolCount || 81);
 const REPO_URL = 'https://github.com/azmartone67/dchub-mcp-server';
 const HEAD_BRANCH = 'add-dchub-mcp';
 const MAX_PR_PER_RUN = Number(process.env.REGISTRY_PR_MAX || 1);
@@ -32,10 +50,7 @@ const DRY = !LIVE;
 // display-name used for the alphabetical guard + PR title
 // Counts kept current (was stale "70 tools / 300+ markets / 2,000+ deals" — the exact
 // pre-stale-entry bug the 07-13 audit flagged). Update alongside the honest-numbers.
-// ★2026-07-30: 81 tools / 300+ markets / 1,600+ deals — bound to the 07-30 live
-// canon (/api/v1/stats/canonical). 311 was an over-claim (score ROWS, not scored
-// markets; live = 306) — never re-introduce it; floors round DOWN.
-const DESC = 'Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — DC Hub Power Index (300+ markets scored), ISO grid telemetry, fiber routes, 81 tools. Remote MCP at ' + HOMEPAGE + ' — query and cite.';
+const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — DC Hub Power Index (${MARKETS} markets), ISO grid telemetry, fiber routes, ${N_TOOLS} tools. Remote MCP at ${HOMEPAGE} — query and cite.`;
 
 // PR-accepting, README-based awesome-mcp lists we're missing from. NB: wong2 +
 // appcypher were dropped 2026-07-10 — their owners DISABLED pull requests (the
@@ -58,7 +73,7 @@ const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (300+ markets scored, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, 1,600+ M&A deals; 81 tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (${MARKETS} US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, ${DEALS} M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
   },
   {
     // YuzeHao2023 (1051★, hand-curated, github-repo entries). Terse em-dash convention:
@@ -68,7 +83,7 @@ const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Category: Research & Data',   // header: "## Category: Research & Data (🧬)"
     alphabetical: false,                    // section isn't sorted — append at end
-    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across 300+ markets, ISO grid telemetry, fiber routes; 81 tools, free tier, no signup)`,
+    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, free tier, no signup)`,
   },
 ];
 
@@ -81,13 +96,10 @@ const REFRESH_TARGETS = [
 ];
 
 // Replace stale counts ONLY on lines that are our own entry (match the repo slug) so we
-// never touch another server's text. Current honest numbers: 81 tools / 300+ markets / 1,600+.
+// never touch another server's text. Honest numbers resolve from the canon snapshot above.
 // 2026-07-17: 4,000+ was an over-claim — it counted duplicate ROWS (the AUTO id embeds
 // the ingest date, so one deal accrues a row per day). ~1,420 distinct. See
 // canonical_stats.deals_phrase in dchub-backend.
-// ★2026-07-30: bound to the 07-30 live canon — 81 tools, 300+ markets (311 was
-// an over-claim: score rows, not scored markets; live = 306), 1,600+ deals
-// (live distinct = 1,610). Floors round DOWN.
 function refreshOurCounts(text) {
   const lines = text.split('\n');
   let changed = false;
@@ -95,9 +107,9 @@ function refreshOurCounts(text) {
     if (!/azmartone67\/dchub|dchub-mcp-server/i.test(lines[i])) continue;
     const before = lines[i];
     lines[i] = lines[i]
-      .replace(/\b\d{1,3}\s+tools\b/gi, '81 tools')
-      .replace(/\b\d{2,3}\+?\s+(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `300+ ${a}${b}markets`)
-      .replace(/\b[\d,]+\+?\s+(tracked\s+)?M&A\s+deals\b/gi, (m, tr = '') => `1,600+ ${tr}M&A deals`);
+      .replace(/\b\d{1,3}\s+tools\b/gi, `${N_TOOLS} tools`)
+      .replace(/\b\d{2,3}\+?\s+(US\s+)?(power\s+)?markets\b/gi, (m, a = '', b = '') => `${MARKETS} ${a}${b}markets`)
+      .replace(/\b[\d,]+\+?\s+(tracked\s+)?M&A\s+deals\b/gi, (m, tr = '') => `${DEALS} ${tr}M&A deals`);
     if (lines[i] !== before) changed = true;
   }
   return changed ? lines.join('\n') : null;
@@ -252,15 +264,15 @@ async function openPR(t, newContent, opts = {}) {
     if (!res.ok) { console.log(`  ~ ${t.key} (refresh): fetch ${res.status} — skip`); continue; }
     const refreshed = refreshOurCounts(await res.text());
     if (!refreshed) { console.log(`  ✓ ${t.key} (refresh): our entry already current — skip`); continue; }
-    console.log(`  ● ${t.key} (refresh): STALE → 81 tools / 300+ markets / 1,600+ deals`);
+    console.log(`  ● ${t.key} (refresh): STALE → ${N_TOOLS} tools / ${MARKETS} markets / ${DEALS} deals`);
     if (DRY) continue;
     if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
     try {
       const r = await openPR(t, refreshed, {
         branch: `refresh-dchub-${t.key}`,
-        title: 'Refresh DC Hub MCP entry (81 tools, 300+ markets, 1,600+ deals)',
+        title: `Refresh DC Hub MCP entry (${N_TOOLS} tools, ${MARKETS} markets, ${DEALS} deals)`,
         message: 'Refresh DC Hub stats',
-        body: `Updates the existing DC Hub entry to current stats: **81 tools**, **300+ markets scored** (DC Hub Power Index), **1,600+ M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
+        body: `Updates the existing DC Hub entry to current stats: **${N_TOOLS} tools**, **${MARKETS} markets** (DC Hub Power Index), **${DEALS} M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
       });
       if (r.skipped) console.log(`      skip: ${r.skipped}`);
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }
