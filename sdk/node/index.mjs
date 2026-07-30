@@ -9,7 +9,7 @@
  *   await dc.market("northern-virginia");
  *   await dc.search({ state: "VA" });
  *   await dc.grid("ERCOT");
- *   await dc.call("get_market_intel", { market: "dallas" });  // any of 38 tools
+ *   await dc.call("get_market_intel", { market: "dallas" });  // any of the 81 tools
  *   await dc.tools();                        // list tool names
  *
  * Zero runtime dependencies (uses global fetch, Node >= 18).

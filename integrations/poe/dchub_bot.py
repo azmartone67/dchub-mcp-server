@@ -68,7 +68,7 @@ class DCHubBot(fp.PoeBot):
                        "an operator, or a facility — I'll pull live capacity, vacancy, "
                        "DCPI scores, grid & more.")
         out.append("\n_Source: [dchub.cloud](https://dchub.cloud) — live data-center, "
-                   "power & grid intelligence (38 MCP tools, free tier)._")
+                   "power & grid intelligence (81 MCP tools, free tier)._")
         yield fp.PartialResponse(text="\n".join(out))
 
     async def get_settings(self, setting: fp.SettingsRequest) -> fp.SettingsResponse:

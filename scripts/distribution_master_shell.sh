@@ -63,9 +63,12 @@ log "registry-pr-submit (add missing + refresh stale) — armed=$([ -n "${REGIST
 "$NODE" scripts/registry-pr-submit.mjs >>"$LOG" 2>&1 || log "registry-pr-submit exited non-zero (continuing)"
 
 # ---- STAGE 3: ALERT pull-only stale surfaces (owner-refresh, no push API) ----
+# ★2026-07-30: the expected count was a hardcoded "79 tools" that went stale
+# when live moved to 81 — derive it from the same SoT the manifests use.
+LIVE_TOOLS="$("$NODE" scripts/sync-tools-manifest.mjs --print-count 2>/dev/null || echo '?')"
 LOBE=$(curl -s -A "Mozilla/5.0" "https://lobehub.com/mcp/azmartone67-dchub-mcp-server" 2>/dev/null | grep -oiE '[0-9]+ tools' | head -1)
-[ -n "$LOBE" ] && [ "$LOBE" != "79 tools" ] && \
-  log "ℹ️ LobeHub shows '$LOBE' (live=79) — owner: open the listing → 'Refresh Metadata' (no push API). Same for PulseMCP + Cursor.directory."
+[ -n "$LOBE" ] && [ "$LOBE" != "$LIVE_TOOLS tools" ] && \
+  log "ℹ️ LobeHub shows '$LOBE' (live=$LIVE_TOOLS) — owner: open the listing → 'Refresh Metadata' (no push API). Same for PulseMCP + Cursor.directory."
 
 # ---- STAGE 4: HEARTBEAT ----
 heartbeat "$SERVED_OK" "served=$SERVED canon=$CANON"

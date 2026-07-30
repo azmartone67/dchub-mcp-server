@@ -33,20 +33,29 @@ jobs:
       - name: Grep source files for forbidden stale numbers
         run: |
           set -e
-          # Canonical (the ONLY values allowed): 21,000+ facilities · 170+ countries
-          # · 1,400+ tracked deals · 311 markets · "DC Hub" (never "Nexus").
+          # Canonical (2026-07-30, floors round DOWN, verify /api/v1/stats/canonical):
+          # 81 tools · 15,300+ facilities · 300+ markets scored · 170+ countries
+          # (fleet spans 178 codes; the "186" was a legacy name/code double-count —
+          # backend #1949, so "180+" was an over-claim) · 1,600+ deals ·
+          # 320,000+ mapped assets · "DC Hub" (never "Nexus").
           FILES="mcp-server.json"
           [ -f integrations/chatgpt/openapi.json ] && FILES="$FILES integrations/chatgpt/openapi.json"
           [ -f README.md ] && FILES="$FILES README.md"
           [ -f server.json ] && FILES="$FILES server.json"
           echo "Scanning: $FILES"
           # Patterns that must NEVER appear (extended regex, case-insensitive).
-          # "232 …markets" is a hard-stale value that leaked to the Glama listing (canonical
-          # is 311). Deal-count 1,400+ is enforced by scripts/sync-tools-manifest.mjs instead
-          # (it scopes to the top-level description, skipping mcp-server.json's derived tools[]).
-          PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus|232 ?(US )?(power |DCPI-scored |DCPI[- ])?markets?'
+          # Every retired figure joins this list when the canon moves — a value that
+          # was once published WILL try to come back through a stale paste. 311 was
+          # an OVER-claim (score rows, not scored markets; live = 306); "500,000+
+          # mapped assets" predates the 07-29 wrong-table corrections (real total
+          # 323,494); "182k power plants" misstates generating UNITS across all
+          # statuses as plants. Broader quantity drift (any non-canon number before
+          # facilities/markets/deals/countries) is enforced by
+          # scripts/sync-tools-manifest.mjs; this denylist is the belt-and-braces
+          # layer for values known to have shipped.
+          PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus|232 ?(US )?(power |DCPI-scored |DCPI[- ])?markets?|21,000\+ ?facilit|12,650\+?|311 ?(US )?(power |DCPI-scored |DCPI[- ])?markets?|1,[45]00\+ ?(tracked ?)?(M&A ?)?(deals|transactions)|500,000\+ ?mapped|180\+ ?countr|182,?0?0?0?k? ?(\+ ?)?(global ?)?power plants'
           if grep -rEni "$PAT" $FILES ; then
-            echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical: 21,000+ facilities · 170+ countries · 1,400+ tracked deals · DC Hub (not Nexus). Fix before this reaches the public registries."
+            echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical (2026-07-30): 81 tools · 15,300+ facilities · 300+ markets scored · 170+ countries · 1,600+ deals · 320,000+ mapped assets · DC Hub (not Nexus). Fix before this reaches the public registries."
             exit 1
           fi
           echo "✅ registry source is clean — no stale numbers."

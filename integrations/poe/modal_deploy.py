@@ -60,7 +60,7 @@ def poe_app():
                 pass
             if not out:
                 out.append("Ask me about a US data-center market (e.g. *Northern Virginia*), an operator, or a facility.")
-            out.append("\n_Source: [dchub.cloud](https://dchub.cloud) — live data-center, power & grid intelligence (38 MCP tools, free)._")
+            out.append("\n_Source: [dchub.cloud](https://dchub.cloud) — live data-center, power & grid intelligence (81 MCP tools, free)._")
             yield fp.PartialResponse(text="\n".join(out))
 
         async def get_settings(self, setting):

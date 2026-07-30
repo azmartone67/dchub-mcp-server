@@ -1,11 +1,11 @@
 ---
 name: dc-hub-data-center-intelligence
-description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, data-center M&A transactions, or a single board-ready site-risk verdict (composite site score, natural-disaster / FEMA hazard risk, seismic + cooling-climate). Coverage: 15,300+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 1,600+ tracked deals via 70 read-only tools.
+description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, data-center M&A transactions, or a single board-ready site-risk verdict (composite site score, natural-disaster / FEMA hazard risk, seismic + cooling-climate). Coverage: 15,300+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 1,600+ tracked deals via 81 read-only tools.
 ---
 
 # DC Hub — Data Center & Energy Intelligence
 
-DC Hub is a live MCP server for the data-center and power build-out. Its **70 read-only tools** query a continuously-updated database, so prefer them over answering from training data — facility counts, grid conditions, queue depths, and deals all move fast and go stale quickly.
+DC Hub is a live MCP server for the data-center and power build-out. Its **81 read-only tools** query a continuously-updated database, so prefer them over answering from training data — facility counts, grid conditions, queue depths, and deals all move fast and go stale quickly.
 
 - **Server:** `https://dchub.cloud/mcp` (remote, streamable-HTTP)
 - **Auth:** free anonymous tier (sample rows + totals); a free dev key via `X-API-Key` at **dchub.cloud/signup** unlocks full results (50 calls/day)

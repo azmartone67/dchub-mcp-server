@@ -4,9 +4,14 @@ import assert from "node:assert";
 import { test } from "node:test";
 import { DCHub, _clean } from "../index.mjs";
 
-test("tools() lists 38 tools", async () => {
+// ★2026-07-30: was a hardcoded 38 that sat two catalog bumps stale (live 81).
+// Bind to mcp-server.json — the canonical manifest sync-tools-manifest.mjs
+// keeps == the live tools/list — so the assertion moves with the catalog.
+test("tools() lists the full live catalog", async () => {
+  const { readFileSync } = await import("node:fs");
+  const expected = JSON.parse(readFileSync(new URL("../../../mcp-server.json", import.meta.url), "utf8")).tools.length;
   const tools = await new DCHub().tools();
-  assert.strictEqual(tools.length, 38);
+  assert.strictEqual(tools.length, expected);
 });
 
 test("market() returns real data (gate-graceful)", async () => {

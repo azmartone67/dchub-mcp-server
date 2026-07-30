@@ -131,7 +131,8 @@ if (process.argv.includes('--print-deals')) { console.log(P.deals); process.exit
 // the skip.
 const NUM = String.raw`\d{1,3}(?:,\d{3})*k?\+?`;
 const QUANTITIES = [
-  { noun: String.raw`tracked\s+(?:M&A\s+)?deals?|M&A\s+deals?|deals?\b`, canon: () => P.deals, label: 'deal count' },
+  { noun: String.raw`tracked\s+(?:M&A\s+)?(?:deals?|transactions?)|M&A\s+(?:deals?|transactions?)|deals?\b`,
+    canon: () => P.deals, label: 'deal count' },  // transactions: README said "1,500+ tracked M&A transactions" and the deals-only noun missed it
   { noun: String.raw`facilit(?:y|ies)`, canon: () => P.facilities, label: 'facility count',
     skip: (m) => /\btracked\s+facilit/i.test(m) },
   { noun: String.raw`markets\b`,   canon: () => P.markets,   label: 'market count' },
@@ -322,24 +323,33 @@ const names = new Set(tools.map((t) => t.name));
 // 81, so the manual repair path propagated stale copy too. The skills/ files
 // ship to agents and read "70 read-only tools". None of these carry changelog
 // history (the reason submission/ docs stay excluded), so the count heal is safe.
+// ★2026-07-30 (PR #107) widened further: integrations/ + docs/ living copy and
+// the dxt manifest carried "58/70 tools" — same rot, surfaces the loop never
+// scanned. outreach-emails.md stays out (sent-mail record, not current copy).
 for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'REGISTRY-LISTINGS.md', 'skills/README.md',
                  'skills/dc-hub-data-center-intelligence/SKILL.md',
-                 'scripts/tier3_presence.sh']) {
+                 'scripts/tier3_presence.sh', 'integrations/README.md',
+                 'integrations/cohere/README.md', 'integrations/mcp-clients/README.md',
+                 'integrations/openrouter/README.md', 'integrations/poe/README.md',
+                 'integrations/gemini/README.md', 'integrations/youcom/README.md',
+                 'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
+                 'docs/distribution-targets.md', 'docs/canonical-workflows.md',
+                 'scripts/smithery_description.txt', 'dxt/manifest.json']) {
   const txt = readCur(f);
   // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
   // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
   // separately the Tools badge said tools-48 while the body said 49 (2026-06-26).
   const live = liveLines(txt);   // historical (canon:frozen) lines are not claims about now
   const counts = [
-    ...[...live.matchAll(/(\d+)(?: MCP)? tools/g)].map((x) => Number(x[1])),
+    ...[...live.matchAll(/(\d+)(?: MCP| read-only)? tools/g)].map((x) => Number(x[1])),
     ...[...live.matchAll(/badge\/tools-(\d+)/g)].map((x) => Number(x[1])),
   ];
   const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
   if (wrong.length) {
     problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
     if (FIX) pend(f, healLines(txt, (ln) => ln
-      .replace(/\b(\d+)( MCP)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
+      .replace(/\b(\d+)( MCP| read-only)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
       .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))));
   }
 }
@@ -420,6 +430,16 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     'integrations/openrouter/tools.json', 'dxt/manifest.json',
     'docs/canonical-workflows.md', 'docs/distribution-targets.md',
     'scripts/smithery_description.txt',
+    // ★2026-07-30 (PR #107) additions — current-claim copy the 07-30 sweep
+    // found stale (21k+/12,650+/58 tools era): per-platform integration
+    // READMEs, living docs/, the legacy python server's docstrings, the
+    // ChatGPT toolspec snapshot, and outreach one-pagers still to be sent.
+    'integrations/gemini/README.md', 'integrations/openrouter/README.md',
+    'integrations/mcp-clients/README.md', 'integrations/poe/README.md',
+    'integrations/youcom/README.md', 'integrations/langchain/dchub_tools.py',
+    'integrations/llamaindex/dchub_tools.py',
+    'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
+    'dchub_mcp_server.py', 'toolspec.json', 'TELEGEOGRAPHY-OUTREACH.md',
   ];
   for (const f of COVERAGE) {
     let txt; try { txt = readCur(f); } catch { continue; }
