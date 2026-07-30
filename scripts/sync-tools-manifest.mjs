@@ -12,6 +12,8 @@
 //
 // Canonical version  = server.json .version
 // Canonical tool set = name+description of every trackedTool(srv, '<name>', '<desc>', …) in server.mjs
+// Canonical phrase quantities = canonical/canon_phrases.json (the committed
+//   snapshot of /api/v1/canon/phrases — see scripts/refresh-canon-phrases.mjs)
 // ============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,6 +24,17 @@ const FIX = process.argv.includes('--fix');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const readJSON = (f) => JSON.parse(read(f));
 
+// Pending fixes keyed by file so multiple fixes to the SAME file chain instead
+// of clobbering each other (e.g. smithery.yaml gets both a version rewrite and
+// a tool-count rewrite). readCur() sees earlier pending fixes. Declared ABOVE
+// canonicalTools() since 2026-07-30: the server.mjs quantity heal runs BEFORE
+// the tool list is derived, so a single --fix regenerates mcp-server.json from
+// the HEALED descriptions instead of converging one run later.
+const problems = [];
+const pending = new Map();
+const readCur = (f) => pending.get(f) ?? read(f);
+const pend = (f, content) => pending.set(f, content);
+
 // ---- canonical version -----------------------------------------------------
 const VERSION = readJSON('server.json').version;
 
@@ -30,7 +43,7 @@ const VERSION = readJSON('server.json').version;
 // double quotes with escapes, across newlines. Falls back to the existing
 // description if a literal can't be safely evaluated (e.g. concatenation).
 function canonicalTools() {
-  const src = read('server.mjs');
+  const src = readCur('server.mjs');
   const re = /trackedTool\(\s*srv\s*,\s*'([a-z_]+)'\s*,\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g;
   const existing = Object.fromEntries((tryReadTools() || []).map((t) => [t.name, t.description]));
   const out = [];
@@ -45,24 +58,44 @@ function canonicalTools() {
 }
 function tryReadTools() { try { return readJSON('mcp-server.json').tools; } catch { return null; } }
 
-const tools = canonicalTools();
-const COUNT = tools.length;
-const names = new Set(tools.map((t) => t.name));
+// The COUNT is heal-invariant (quantity healing never adds or removes a
+// trackedTool registration), so it is safe to derive before the heal below.
+const COUNT = canonicalTools().length;
 
-// Single source for the honest M&A deal-count phrase: DEDUPED distinct deals.
-// The raw ~4.3k deal-table row count is a ~2.9x over-claim (AUTO-<date> ingest
-// re-inserts one deal per day — one atNorth deal held 945 rows). Referenced by
-// --print-deals (the daily About/manifest heal) AND the drift-guard CANON below,
-// so the number lives in ONE place and the automated layer keeps it honest.
-// ★2026-07-28: was '1,400+' — stale since the 07-24 dedup rebase raised the
-// canonical floor to 1,500+ (live distinct = 1,553). See ai_surface_canon.
-const DEALS_FLOOR = '1,500+';
-
-// Facilities floor — the OTHER canonical quantity that appears in registry
-// prose. It had no entry here at all, which is why smithery.yaml advertised
-// "21,000+ facilities" (the pre-dedup RAW discovered_facilities row count)
-// for four days after canon moved to 12,650+ and nothing noticed.
-const FACILITIES_FLOOR = '12,650+';
+// ---- canonical phrase quantities -------------------------------------------
+// ★2026-07-30 SNAPSHOT-DRIVEN. These constants used to BE the canon — and both
+// went stale (DEALS_FLOOR sat at '1,500+' after the floor moved to 1,600+;
+// FACILITIES_FLOOR sat at '12,650+' for six days after the fleet reached
+// 15,3xx), which means the --fix heal was actively rewriting registry surfaces
+// BACK to stale values while CI reported clean. A repo-local constant is just
+// one more copy that rots.
+//
+// The authority is now canonical/canon_phrases.json — a committed snapshot of
+// /api/v1/canon/phrases (the SAME owner endpoint the dchub-frontend heal
+// reads; backed by ai_surface_canon.resolve_canon(), every quantity self-heals
+// live from the DB — countries since dchub-backend PR #1949).
+// daily-manifest-sync refreshes the snapshot via
+// scripts/refresh-canon-phrases.mjs, then runs this script with --fix, then
+// commits the snapshot ATOMICALLY with every healed surface — so CHECK mode
+// stays deterministic (no network) and a canon move needs no edit here.
+//
+// The constants remain ONLY as the fail-closed fallback for a missing or
+// mangled snapshot, pinned to the 2026-07-30 verified canon. Keep the
+// `const X_FLOOR = '…'` declaration shapes: smithery-canon-guard.test.mjs
+// parses them as its own fallback resolution.
+const DEALS_FLOOR = '1,600+';       // DISTINCT deduped M&A (raw rows are ~2.9x dup-inflated)
+const FACILITIES_FLOOR = '15,300+'; // deduped fleet, DISTINCT canonical_slug (raw pile is ~23k)
+const MARKETS_FLOOR = '300+';       // DCPI floor form (the exact "311" over-claimed when live fell to 306)
+const COUNTRIES_FLOOR = '170+';     // fleet spans 178 distinct codes; the "186" that briefly bound surfaces to 180+ was the legacy table double-counting name/code pairs ("USA"+"US") — see dchub-backend PR #1949
+const isPhraseVal = (s) => typeof s === 'string' && /^\d[\d,]*\+$/.test(s);
+let SNAP = null;
+try { SNAP = readJSON('canonical/canon_phrases.json'); } catch { /* fall back to constants */ }
+const P = {
+  deals:      isPhraseVal(SNAP?.deals)      ? SNAP.deals      : DEALS_FLOOR,
+  facilities: isPhraseVal(SNAP?.facilities) ? SNAP.facilities : FACILITIES_FLOOR,
+  markets:    isPhraseVal(SNAP?.markets)    ? SNAP.markets    : MARKETS_FLOOR,
+  countries:  isPhraseVal(SNAP?.countries)  ? SNAP.countries  : COUNTRIES_FLOOR,
+};
 
 // --print-count: emit the live tool count (from server.mjs) and exit. Lets the
 // daily-manifest-sync workflow feed the SAME source-of-truth number into the
@@ -71,9 +104,48 @@ if (process.argv.includes('--print-count')) { console.log(COUNT); process.exit(0
 // --print-deals: emit the canonical deal-count phrase — same purpose. The daily
 // workflow heals the GitHub About deal count the same way it heals the tool count,
 // so the 2,000+ -> 4,000+ drift (that no auto-heal watched) cannot recur.
-if (process.argv.includes('--print-deals')) { console.log(DEALS_FLOOR); process.exit(0); }
+if (process.argv.includes('--print-deals')) { console.log(P.deals); process.exit(0); }
 
-// ---- surfaces to keep in sync ---------------------------------------------
+// ---- quantity guard (derived, not denylisted) ------------------------------
+// ★2026-07-28 (deals/facilities), ★2026-07-30 (markets/countries): the old
+// deal rule was a DENYLIST of shapes — /\b[2-9][,.]?000\+/, carrying the
+// comment "never 1,400+ or 12,650+". It was therefore written to PERMIT the
+// exact value that went stale, and it structurally could not match "21,000+".
+// A denylist has to predict the wrong answers; a derived rule only has to know
+// the right one, so it cannot be written to permit a stale value. markets
+// joined 2026-07-30: its old denylist /\b(?:2\d{2}|300)\+?\s+markets/ flagged
+// the CANONICAL floor form "300+" and permitted the stale exact "311" —
+// backwards on both ends.
+//
+// Number shape: proper thousands grouping with optional 'k' / '+' — the loose
+// [\d,]* form matched "100," inside "(0-100, per market)" and would have
+// "healed" a score range into a market count. Values below 50 are ignored so
+// ordinary prose ("compare 2 markets", "13 ready workflows") never trips the
+// guard. markets/countries are plural-only for the same reason ("per market").
+// The facilities rule SKIPS "tracked facilities": that phrase is the raw
+// discovery-pile basis of the verified-of-tracked provenance claims ("4,903
+// analyst-verified of 21,900+ tracked facilities"), a DIFFERENT quantity from
+// the deduped-fleet canon — healing it to the fleet figure would corrupt the
+// verified/tracked distinction. It has no canon key yet; if the raw-pile
+// phrase ever joins /api/v1/canon/phrases, wire it here instead of removing
+// the skip.
+const NUM = String.raw`\d{1,3}(?:,\d{3})*k?\+?`;
+const QUANTITIES = [
+  { noun: String.raw`tracked\s+(?:M&A\s+)?deals?|M&A\s+deals?|deals?\b`, canon: () => P.deals, label: 'deal count' },
+  { noun: String.raw`facilit(?:y|ies)`, canon: () => P.facilities, label: 'facility count',
+    skip: (m) => /\btracked\s+facilit/i.test(m) },
+  { noun: String.raw`markets\b`,   canon: () => P.markets,   label: 'market count' },
+  { noun: String.raw`countries\b`, canon: () => P.countries, label: 'country count' },
+];
+const quantityRx = (noun) => new RegExp(String.raw`(${NUM})(\s+(?:[A-Za-z&/-]+\s+){0,3}?(?:${noun}))`, 'gi');
+const qtyValue = (s) => {
+  const stripped = s.replace(/\+$/, '');
+  const k = /k$/i.test(stripped);
+  return Number(stripped.replace(/,/g, '').replace(/k$/i, '')) * (k ? 1000 : 1);
+};
+const bigEnough = (s) => qtyValue(s) >= 50;
+
+// ---- line-unit exclusions + span-aware matcher ------------------------------
 // ★2026-07-28: some registry-facing files intermix CURRENT paste-ready copy
 // with HISTORICAL narrative ("Since then we've shipped v2.3.2: 47 tools").
 // Healing those files wholesale would rewrite history into a lie; excluding
@@ -82,18 +154,116 @@ if (process.argv.includes('--print-deals')) { console.log(DEALS_FLOOR); process.
 // listing, kept advertising 79 tools and 21k+ facilities. So the unit of
 // exclusion is the LINE, not the file: a line carrying `canon:frozen` is a
 // deliberate historical statement and every heal below skips it.
+//
+// ★2026-07-30: scan and heal share ONE span-aware matcher. The previous
+// line-by-line heal could not fix a claim wrapped across a line break
+// ("1,500+\ntracked M&A deals" in tier3_presence.sh) that the full-text scan
+// DID flag — CHECK would fail forever on a claim --fix could not reach. The
+// matcher runs on the full text and consults every line the match touches:
+// any frozen line (or, when commentAware, any //-comment line) excludes it
+// from BOTH scan and heal, symmetrically.
 const FROZEN = /canon:frozen/;
 const healLines = (txt, fn) =>
   txt.split('\n').map((ln) => (FROZEN.test(ln) ? ln : fn(ln))).join('\n');
 const liveLines = (txt) => txt.split('\n').filter((ln) => !FROZEN.test(ln)).join('\n');
+const spanExcluded = (txt, m, commentAware) => {
+  const lineStart = txt.lastIndexOf('\n', m.index) + 1;
+  const endIdx = m.index + m[0].length;
+  const lineEnd = txt.indexOf('\n', endIdx);
+  const span = txt.slice(lineStart, lineEnd === -1 ? txt.length : lineEnd);
+  if (FROZEN.test(span)) return true;
+  if (commentAware && span.split('\n').some((l) => /^\s*\/\//.test(l))) return true;
+  return false;
+};
+// applyRx: run `rx` over `txt`; for each non-excluded match call decide(m) —
+// return a replacement string to heal it, or null to leave it. Returns the
+// (possibly) healed text; decide() does its own problem reporting.
+const applyRx = (txt, rx, decide, commentAware) => {
+  let out = '', last = 0;
+  for (const m of txt.matchAll(rx)) {
+    if (spanExcluded(txt, m, commentAware)) continue;
+    const rep = decide(m);
+    if (rep == null || rep === m[0]) continue;
+    out += txt.slice(last, m.index) + rep;
+    last = m.index + m[0].length;
+  }
+  return out + txt.slice(last);
+};
+// One quantity rule against one file: reports drift into `problems` and
+// returns healed text. Same code path for CHECK and FIX — they cannot diverge.
+const applyQuantities = (file, txt, rules, commentAware) => {
+  let out = txt;
+  for (const { noun, canon, label, skip } of rules) {
+    out = applyRx(out, quantityRx(noun), (m) => {
+      if (m[1] === canon() || !bigEnough(m[1])) return null;
+      if (skip && skip(m[0])) return null;
+      problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
+      return canon() + m[2];
+    }, commentAware);
+  }
+  return out;
+};
 
-const problems = [];
-// Pending fixes keyed by file so multiple fixes to the SAME file chain instead
-// of clobbering each other (e.g. smithery.yaml gets both a version rewrite and
-// a tool-count rewrite). readCur() sees earlier pending fixes.
-const pending = new Map();
-const readCur = (f) => pending.get(f) ?? read(f);
-const pend = (f, content) => pending.set(f, content);
+// ---- server.mjs — the live gateway's OWN prose quantities -------------------
+// ★2026-07-30: previously excluded as "operator-owned SoT". That policy let
+// six "12,650+" literals sit in tool DESCRIPTIONS for days after the
+// initialize instructions had been rebound to live canon — same file, same
+// figures, two truths. The PROSE stays operator-owned; the five phrase
+// QUANTITIES inside it are canon-owned now and heal from the snapshot.
+// Rules specific to this file:
+//   • COMMENT lines (^\s*//) are NEVER scanned or healed — the retired-over-
+//     claim history ("Retired over-claims: …") and dated rebind notes must
+//     stay true. (canon:frozen is honored too, via the shared matcher.)
+//   • countries heals ONLY in facilities-anchored shapes — "facilities across
+//     N+ countries", "facilities (N+ countries)", "**Facilities:** N+ across
+//     N+ countries". get_global_power's "182,000+ geolocated units across
+//     170+ countries" describes the GEM dataset's own coverage, not DC Hub's
+//     fleet, and must never track our canon.
+//   • "N tools" heals against COUNT — derived from this very file, so the
+//     initialize instructions can never disagree with tools/list.
+{
+  const f = 'server.mjs';
+  let txt = readCur(f);
+  const before = txt;
+  txt = applyQuantities(f, txt, QUANTITIES.filter((q) => q.label !== 'country count'), true);
+  // number-AFTER-noun shapes in the reference resources
+  const AFTER_NOUN = [
+    { rx: /(\*\*Facilities:\*\*\s+)(\d[\d,]*\+)/g, canon: () => P.facilities, label: 'facility count' },
+    { rx: /(\*\*Markets:\*\*\s+)(\d[\d,]*\+)/g,    canon: () => P.markets,    label: 'market count' },
+  ];
+  for (const { rx, canon, label } of AFTER_NOUN) {
+    txt = applyRx(txt, rx, (m) => {
+      if (m[2] === canon()) return null;
+      problems.push(`${f}: "${m[0].trim()}" — stale ${label} (canonical ${canon()})`);
+      return m[1] + canon();
+    }, true);
+  }
+  const C_ANCHORED = [
+    /(facilit(?:y|ies)\s+across\s+)(\d[\d,]*\+)(\s+countries)/gi,
+    /(facilit(?:y|ies)\s*\()(\d[\d,]*\+)(\s+countries\))/gi,
+    /(\*\*Facilities:\*\*\s+\d[\d,]*\+\s+across\s+)(\d[\d,]*\+)(\s+countries)/g,
+  ];
+  for (const rx of C_ANCHORED) {
+    txt = applyRx(txt, rx, (m) => {
+      if (m[2] === P.countries) return null;
+      problems.push(`${f}: "${m[0].trim()}" — stale country count (canonical ${P.countries})`);
+      return m[1] + P.countries + m[3];
+    }, true);
+  }
+  txt = applyRx(txt, /\b(\d+)((?: MCP)? tools)\b/g, (m) => {
+    if (Number(m[1]) <= 20 || Number(m[1]) === COUNT) return null;
+    problems.push(`${f}: "${m[0].trim()}" — stale tool count (live ${COUNT})`);
+    return `${COUNT}${m[2]}`;
+  }, true);
+  if (FIX && txt !== before) pend(f, txt);
+}
+
+// Tool list is derived AFTER the heal above (readCur sees the pending healed
+// content), so mcp-server.json ships the healed descriptions in the same run.
+const tools = canonicalTools();
+const names = new Set(tools.map((t) => t.name));
+
+// ---- surfaces to keep in sync ---------------------------------------------
 
 // server.json — the OFFICIAL-registry publish source (cascades to the GitHub MCP
 // Registry mirror). Its description is evergreen (no tool count to drift); the only
@@ -119,6 +289,11 @@ const pend = (f, content) => pending.set(f, content);
   if (m.version !== VERSION) problems.push(`mcp-server.json version ${m.version} != ${VERSION}`);
   if (missing.length) problems.push(`mcp-server.json MISSING ${missing.length} tools: ${missing.join(', ')}`);
   if (extra.length) problems.push(`mcp-server.json has ${extra.length} STALE tools: ${extra.join(', ')}`);
+  // ★2026-07-30: description drift counts too — the tools[] here is DERIVED,
+  // so a healed server.mjs description must propagate on the same run.
+  const curDesc = Object.fromEntries((m.tools || []).map((t) => [t.name, t.description]));
+  const descDrift = tools.filter((t) => t.description && curDesc[t.name] !== undefined && curDesc[t.name] !== t.description);
+  if (descDrift.length) problems.push(`mcp-server.json has ${descDrift.length} tool description(s) drifted from server.mjs: ${descDrift.slice(0, 5).map((t) => t.name).join(', ')}${descDrift.length > 5 ? ', …' : ''}`);
   if (FIX) { m.version = VERSION; m.tools = tools; if ('tools_count' in m) m.tools_count = COUNT;
     pend('mcp-server.json', JSON.stringify(m, null, 2) + '\n'); }
 }
@@ -201,8 +376,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 // server was v2.4.4 / 58 tools / 311 markets. Root cause: nothing scanned (a)
 // glama.json, (b) the human-facing COVERAGE prose (market + deal counts) that the
 // registries echo, or (c) server.json's evergreen description. This block locks
-// all three so the listing can't silently drift again (CHECK-only — coverage
-// prose is not auto-rewritten because these strings carry sentence context).
+// all three so the listing can't silently drift again.
 //
 // glama.json's schema (https://glama.ai/mcp/schemas/server.json) permits ONLY
 // `maintainers` — it CANNOT hold a description or a static tool list. So the Glama
@@ -211,7 +385,6 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 // (verified working, emits all 58). We therefore (1) assert glama.json stays
 // schema-valid, (2) keep server.json's positioning intact, and (3) lock the
 // coverage prose Glama re-derives from.
-const CANON = { markets: 311, dealsFloor: DEALS_FLOOR, facilitiesFloor: FACILITIES_FLOOR };
 {
   // (1) glama.json must stay schema-valid — an invalid manifest makes Glama drop the listing
   try {
@@ -225,71 +398,43 @@ const CANON = { markets: 311, dealsFloor: DEALS_FLOOR, facilitiesFloor: FACILITI
   if (!/query and cite/i.test(sjDesc))
     problems.push('server.json: description lost canonical positioning ("… query and cite")');
 
-  // (3) COVERAGE prose: no stale market (2xx) or deal (2,000+) counts. Canonical:
-  // 311 markets · 3,000+ tracked deals. Scans HAND-AUTHORED prose ONLY — never
-  // server.mjs (operator-owned SoT for tool descriptions) and never mcp-server.json's
-  // derived tools[] (regenerated from server.mjs by --fix); for mcp-server.json we
-  // check the top-level .description field only. Tool-count drift in submission/
-  // integration docs is out of scope here (those files intermix changelog history);
-  // the canonical manifests' counts are locked by the smithery/README loop above.
-  // 2026-07-11: widened — "300+ markets" and "3,000+ deals" slipped through
-  // (the 07-10 honest-numbers pass moved canon to 311 / 4,000+ but these
-  // regexes only caught 2xx / 2,000+, so half the surfaces kept the old
-  // floors). 311 itself must NOT match.
-  const STALE = [
-    { rx: /\b(?:2\d{2}|300)\+?\s+(?:US\s+)?(?:power\s+|DCPI[- ]?|DCPI-scored\s+)?markets?\b/i, why: `stale market count (canonical ${CANON.markets})` },
-  ];
-  // ★2026-07-28: the deal rule used to live in STALE as a DENYLIST of shapes —
-  // /\b[2-9][,.]?000\+/, carrying the comment "never 1,400+ or 12,650+". It was
-  // therefore written to PERMIT the exact value that went stale (1,400+ after
-  // the 07-24 rebase to 1,500+), and it structurally cannot match "21,000+"
-  // (after the leading 2 comes a 1, not a comma). Both stale numbers sat in
-  // smithery.yaml — the file Smithery crawls — while this guard reported clean.
-  //
-  // Replaced with a DERIVED rule: find every "<n>+ <noun>" for a canonical
-  // noun and flag any value that is not canon. A denylist has to predict the
-  // wrong answers; this only has to know the right one, so it cannot be
-  // written to permit a stale value.
-  const QUANTITIES = [
-    { noun: String.raw`tracked\s+(?:M&A\s+)?deals?|M&A\s+deals?|deals?\b`, canon: CANON.dealsFloor,      label: 'deal count' },
-    { noun: String.raw`facilit(?:y|ies)`,                                  canon: CANON.facilitiesFloor, label: 'facility count' },
-  ];
-  const scanQuantities = (txt) => {
-    const found = [];
-    for (const { noun, canon, label } of QUANTITIES) {
-      const rx = new RegExp(String.raw`(\d[\d,]*k?\+)\s+(?:[A-Za-z&/-]+\s+){0,3}?(?:${noun})`, 'gi');
-      for (const mm of txt.matchAll(rx)) {
-        if (mm[1] !== canon) found.push(`"${mm[0].trim()}" — stale ${label} (canonical ${canon})`);
-      }
-    }
-    return found;
-  };
+  // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
+  // countries — see QUANTITIES above) must equal the snapshot canon. Scans
+  // HAND-AUTHORED prose ONLY — never mcp-server.json's derived tools[]
+  // (regenerated from server.mjs by --fix; for mcp-server.json we check the
+  // top-level .description field only). server.mjs has its own dedicated
+  // block above (comment-skipping + GEM-safe anchored countries).
+  // ★2026-07-30 widened: the integrations/, dxt/ and living docs/ copy carried
+  // "12,650+ facilities … 170+ countries … 311 markets … 1,400+ deals" for
+  // days — every file that makes a CURRENT claim belongs here. Files that
+  // narrate history (docs/outreach-emails.md — records of emails actually
+  // sent) stay out: healing a record of what was said rewrites history.
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
     'server.json', 'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
     'scripts/tier3_presence.sh', 'skills/README.md',
     'skills/dc-hub-data-center-intelligence/SKILL.md',
+    // ★2026-07-30 additions — all pure current-claim copy:
+    'integrations/README.md', 'integrations/chatgpt/README.md',
+    'integrations/cohere/README.md', 'integrations/copilot/dchub-mcp.yaml',
+    'integrations/openrouter/tools.json', 'dxt/manifest.json',
+    'docs/canonical-workflows.md', 'docs/distribution-targets.md',
+    'scripts/smithery_description.txt',
   ];
   for (const f of COVERAGE) {
     let txt; try { txt = readCur(f); } catch { continue; }
-    for (const { rx, why } of STALE) { const m = txt.match(rx); if (m) problems.push(`${f}: "${m[0].trim()}" — ${why}`); }
-    const q = scanQuantities(liveLines(txt));
-    for (const why of q) problems.push(`${f}: ${why}`);
-    // --fix heals the canonical quantities in place. Only the NUMBER is
-    // rewritten; the surrounding prose is hand-authored and stays untouched.
-    if (FIX && q.length) {
-      let out = txt;
-      for (const { noun, canon } of QUANTITIES) {
-        out = healLines(out, (ln) => ln.replace(
-          new RegExp(String.raw`(\d[\d,]*k?\+)(\s+(?:[A-Za-z&/-]+\s+){0,3}?(?:${noun}))`, 'gi'),
-          (s, num, rest) => (num === canon ? s : canon + rest)));
-      }
-      if (out !== txt) pend(f, out);
+    const healed = applyQuantities(f, txt, QUANTITIES, false);
+    if (FIX && healed !== txt) pend(f, healed);
+  }
+  // mcp-server.json: top-level description only (tools[] descriptions derive
+  // from server.mjs). Check-only — the description is hand-authored JSON.
+  const mDesc = (readJSON('mcp-server.json').description || '');
+  for (const { noun, canon, label, skip } of QUANTITIES) {
+    for (const m of mDesc.matchAll(quantityRx(noun))) {
+      if (m[1] === canon() || !bigEnough(m[1]) || (skip && skip(m[0]))) continue;
+      problems.push(`mcp-server.json (top-level description): "${m[0].trim()}" — stale ${label} (canonical ${canon()})`);
     }
   }
-  // mcp-server.json: top-level description only (tools[] descriptions derive from server.mjs)
-  const mDesc = (readJSON('mcp-server.json').description || '');
-  for (const { rx, why } of STALE) { const m = mDesc.match(rx); if (m) problems.push(`mcp-server.json (top-level description): "${m[0].trim()}" — ${why}`); }
 }
 
 // ---- canonical FACTS drift-guard (pricing / coverage) ----------------------
@@ -299,6 +444,8 @@ const CANON = { markets: 311, dealsFloor: DEALS_FLOOR, facilitiesFloor: FACILITI
 // "Pro $199", "countries 140", and "EU ~12 zones" kept reappearing here. We CHECK
 // the registry surfaces against it. Auto-rewriting prose is fragile, so facts
 // drift FAILS CI but is NOT --fix'd: re-run the exporter + correct the surface.
+// (The phrase QUANTITIES moved to canonical/canon_phrases.json above — this
+// guard keeps the pricing + grid-coverage facts.)
 const factProblems = [];
 let facts = null;
 try { facts = readJSON('canonical/mcp_facts.json'); } catch { /* not generated yet */ }
@@ -317,11 +464,11 @@ if (facts) {
 // ---- apply / report --------------------------------------------------------
 if (FIX) {
   for (const [f, content] of pending) fs.writeFileSync(path.join(ROOT, f), content);
-  console.log(`✓ synced to v${VERSION} / ${COUNT} tools — wrote: ${[...pending.keys()].join(', ') || '(nothing)'}`);
+  console.log(`✓ synced to v${VERSION} / ${COUNT} tools / ${P.facilities} facilities · ${P.countries} countries · ${P.deals} deals · ${P.markets} markets — wrote: ${[...pending.keys()].join(', ') || '(nothing)'}`);
   if (factProblems.length) console.warn('⚠ FACTS DRIFT (not auto-fixable — re-run dchub-backend/mcp_facts_export.py, then edit the surface):\n  - ' + factProblems.join('\n  - '));
   process.exit(0);
 }
-console.log(`canonical: v${VERSION} / ${COUNT} tools`);
+console.log(`canonical: v${VERSION} / ${COUNT} tools / ${P.facilities} facilities · ${P.countries} countries · ${P.deals} deals · ${P.markets} markets${SNAP ? '' : ' (snapshot missing — fallback constants)'}`);
 const allProblems = [...problems, ...factProblems];
 if (allProblems.length) { console.error('MANIFEST/FACTS DRIFT:\n  - ' + allProblems.join('\n  - ') + '\n\nTool drift → node scripts/sync-tools-manifest.mjs --fix. Facts drift → match canonical/mcp_facts.json.'); process.exit(1); }
 console.log('✓ all manifest + facts surfaces consistent');

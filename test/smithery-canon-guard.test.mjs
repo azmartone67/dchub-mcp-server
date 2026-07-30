@@ -48,11 +48,22 @@ function withMutation(mutate, fn) {
   }
 }
 
-// Canon read FROM the script — never transcribed. If these stop resolving the
-// test fails loudly rather than silently checking nothing.
+// Canon read FROM the script + snapshot — never transcribed. Resolution
+// mirrors the script exactly (★2026-07-30): canonical/canon_phrases.json
+// (the committed snapshot of /api/v1/canon/phrases) wins; the script's
+// X_FLOOR constants are the fallback. If a floor constant stops parsing OR
+// the snapshot goes unreadable while present, the test fails loudly rather
+// than silently mutating a value the guard no longer checks.
 const src = fs.readFileSync(SCRIPT, 'utf8');
-const DEALS = src.match(/const DEALS_FLOOR\s*=\s*'([^']+)'/)?.[1];
-const FACILITIES = src.match(/const FACILITIES_FLOOR\s*=\s*'([^']+)'/)?.[1];
+const SNAP = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'canonical', 'canon_phrases.json'), 'utf8')); }
+  catch { return null; }
+})();
+const isPhrase = (v) => typeof v === 'string' && /^\d[\d,]*\+$/.test(v);
+const DEALS = (SNAP && isPhrase(SNAP.deals)) ? SNAP.deals
+  : src.match(/const DEALS_FLOOR\s*=\s*'([^']+)'/)?.[1];
+const FACILITIES = (SNAP && isPhrase(SNAP.facilities)) ? SNAP.facilities
+  : src.match(/const FACILITIES_FLOOR\s*=\s*'([^']+)'/)?.[1];
 
 describe('smithery.yaml canonical-quantity guard', () => {
   it('resolves the canonical floors from the script (not from this test)', () => {
@@ -96,6 +107,63 @@ describe('smithery.yaml canonical-quantity guard', () => {
       () => {
         const { ok, out } = check();
         expect(ok, `canon:frozen should exempt the line:\n${out}`).toBe(true);
+      });
+  });
+
+  // ── server.mjs controls (★2026-07-30) — the file the guard newly covers ──
+  // Six "12,650+" literals sat in tool DESCRIPTIONS while the initialize
+  // instructions had been rebound to live canon; the guard now scans
+  // server.mjs too. These controls prove all three edges of that coverage:
+  // it catches a stale description quantity, it NEVER tracks the GEM
+  // dataset's own "170+ countries" (a different dataset's coverage, not our
+  // canon), and it never rewrites comment-line history.
+  const SERVER = path.join(ROOT, 'server.mjs');
+  function withServerMutation(mutate, fn) {
+    const original = fs.readFileSync(SERVER, 'utf8');
+    try {
+      const next = mutate(original);
+      expect(next, 'server.mjs mutation was a no-op — control proves nothing').not.toBe(original);
+      fs.writeFileSync(SERVER, next);
+      return fn();
+    } finally {
+      fs.writeFileSync(SERVER, original);
+    }
+  }
+
+  it(`FAILS when a server.mjs tool description claims "12,650+ … facilities"`, () => {
+    withServerMutation(
+      (orig) => orig.replace(`${FACILITIES} global data center facilities`,
+        '12,650+ global data center facilities'),
+      () => {
+        const { ok, out } = check();
+        expect(ok, 'guard did NOT catch a stale facility count in server.mjs').toBe(false);
+        expect(out).toMatch(/server\.mjs: .*stale facility count/);
+      });
+  });
+
+  it("never flags GEM's own dataset coverage as a stale country count", () => {
+    withServerMutation(
+      (orig) => orig.replace('geolocated units across 170+ countries',
+        'geolocated units across 190+ countries'),
+      () => {
+        // NB: the overall check MAY fail here — mutating a live description
+        // legitimately trips the mcp-server.json description-drift guard
+        // (the derived manifest no longer matches). The property under test
+        // is narrower: the countries CANON rule must not claim the GEM
+        // dataset's own coverage figure, which is not our quantity.
+        const { out } = check();
+        expect(out, "the GEM dataset's own coverage claim must never track our canon")
+          .not.toMatch(/stale country count/);
+      });
+  });
+
+  it('PASSES when a // comment line carries a retired figure (history stays true)', () => {
+    withServerMutation(
+      (orig) => orig.replace('// r-honest-figures (2026-07-30): every figure below binds',
+        '// r-honest-figures (2026-07-30): once said 12,650+ facilities and 311 markets; every figure below binds'),
+      () => {
+        const { ok, out } = check();
+        expect(ok, `comment lines must never be scanned as claims:\n${out}`).toBe(true);
       });
   });
 

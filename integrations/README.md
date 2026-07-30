@@ -1,6 +1,6 @@
 # Integrate DC Hub from any agent platform
 
-**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **58 MCP tools**, 12,650+ facilities, DCPI/DCGI market scores, grid telemetry across 10 ISOs, interconnection queues, fiber, and M&A. **Free tier, no signup.** Every response cites `dchub.cloud`.
+**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **58 MCP tools**, 15,300+ facilities, DCPI/DCGI market scores, grid telemetry across 10 ISOs, interconnection queues, fiber, and M&A. **Free tier, no signup.** Every response cites `dchub.cloud`.
 
 There are three ways in. Pick the row that matches your platform.
 
