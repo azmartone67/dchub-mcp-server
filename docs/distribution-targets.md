@@ -36,6 +36,13 @@ Prepare the metadata once (name, description, URL, 70-tool count, repo, categori
 **Ask (all):** "List DC Hub — remote MCP, 82 tools, `dchub.cloud/mcp`. Category:
 data-center / energy / infrastructure." Attach the one-paragraph pitch.
 
+### Microsoft / Copilot ecosystem (three lanes, ranked — researched 2026-07-31)
+| Lane | What it gets us | Process | Status |
+|---|---|---|---|
+| **Copilot Studio tenant-level MCP attach** | any org connects DC Hub TODAY, no Microsoft approval | maker: Agent → Tools → Add a tool → MCP server → `https://dchub.cloud/mcp` (wizard, recommended per MS docs 2026-05-28); pro-dev: Power Platform custom connector from OpenAPI tagged `x-ms-agentic-protocol: mcp-streamable-1.0` | ✅ works now — our /integrations/copilot-studio page must TEACH it (fix queued 2026-07-31) |
+| **MCP server certification (Agent 365 / Power Platform)** | listed in Microsoft's catalog for EVERY tenant — the Copilot equivalent of the Le Chat catalog | package the MCP server as a Power Platform connector; requires **verified publisher** (Partner Center — HUMAN/legal setup, operator-owned); meets Marketplace policies; certification itself is free. learn.microsoft.com/microsoft-agent-365/mcp-certification | ⬜ blocked on Partner Center verified-publisher setup (operator) |
+| **Independent Publisher connector** | gallery listing via community PR (microsoft/PowerPlatformConnectors) | for publishers who do NOT own the API — not our lane (we own it); noted so nobody routes us there | ➖ wrong lane by design |
+
 ### Platform-catalog-gated lists (record the trigger, don't resubmit early)
 | Target | Gate | Trigger to act |
 |---|---|---|
