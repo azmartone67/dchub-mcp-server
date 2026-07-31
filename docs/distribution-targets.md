@@ -36,6 +36,11 @@ Prepare the metadata once (name, description, URL, 70-tool count, repo, categori
 **Ask (all):** "List DC Hub — remote MCP, 82 tools, `dchub.cloud/mcp`. Category:
 data-center / energy / infrastructure." Attach the one-paragraph pitch.
 
+### Platform-catalog-gated lists (record the trigger, don't resubmit early)
+| Target | Gate | Trigger to act |
+|---|---|---|
+| **awesome-mistral-connectors** (rdmgator12) | Scope ruling 2026-07-31 on [our PR #2](https://github.com/rdmgator12/awesome-mistral-connectors/pull/2): the list catalogs **Le Chat's own connector catalog** only; BYO custom MCP connectors are out of scope (routed to awesome-mcp-servers, where we're already listed — refresh [punkpeye#10161](https://github.com/punkpeye/awesome-mcp-servers/pull/10161) pending since 07-15). Maintainer: *"If DC Hub lands in the Le Chat catalog, we'd welcome a resubmission."* | **DC Hub appears in the Le Chat connector catalog** → resubmit with the catalog link. The catalog ask itself is the Mistral escalation (sent by Mistral's agent 2026-07-30); this closure is a new datum for the follow-up: even the community ecosystem defers to the catalog. |
+
 ## Tier B — Agent runtimes / clients (already connectable; ask = featuring)
 These already consume remote MCP, so DC Hub *works* today — the ask is **discovery
 placement**, not integration: Cursor, Cline, Continue, Windsurf, VS Code (Copilot
