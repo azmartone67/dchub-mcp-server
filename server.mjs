@@ -381,7 +381,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.9.3' }.version;  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.10.0' }.version;  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -735,6 +735,45 @@ async function pingRegistryHeartbeat(toolName, rowsAffected) {
   } catch (_) {
     // silent — heartbeat is best-effort, never blocks tool calls
   }
+}
+
+// ── Recipe lifecycle: first-class started/completed events ─────────────────
+//
+// r-recipe-lifecycle (2026-07-30, Perplexity round-5): recipe completion was
+// an INFERENCE over call rows (the execute_plan_steps pseudo-call + intent
+// grouping). These events make the lifecycle a fact: execute_plan runs the
+// whole graph server-side, so it emits `started` and `completed` from one
+// place, both carrying the same gateway-minted recipe_execution_id, POSTed
+// to /api/v1/mcp/track with event:'recipe_lifecycle'. The backend upserts
+// them into recipe_executions; a started row that never completes reads as
+// ABANDONED at the read layer (outcome NULL past its threshold) — which is
+// exactly what a crash or kill between the two events should read as.
+export function _recipeOutcome(counts) {
+  // completed = the envelope returned with ≥1 usable step result. Gated
+  // previews COUNT — they are working results at the caller's tier (the
+  // v2.7.1 lesson: preview-as-error is a serving channel, not a failure).
+  const ok = ((counts && counts.executed) || 0)
+    + ((counts && counts.gated_preview) || 0);
+  return ok > 0 ? 'completed' : 'failed';
+}
+
+export function _recipeLifecyclePayload(phase, fields, c) {
+  // Deliberately NO `tool` field: a backend without the recipe_lifecycle
+  // dispatch answers its missing-tool early-return and DROPS the event —
+  // deploy-skew safe — instead of logging a phantom tool call that would
+  // pollute the episode metrics these events exist to replace.
+  return {
+    event: 'recipe_lifecycle',
+    phase,
+    ...fields,
+    platform: (c && c.platform) || 'unknown',
+    client_name: (c && (c.client_name_raw || c.platform)) || null,
+    api_key: (c && c.api_key) || null,
+    tier: (c && c.tier) || null,
+    session_id: (c && c.session_id) || null,
+    user_agent: (c && c.user_agent) || null,
+    ip_address: (c && c.client_ip) || null,
+  };
 }
 
 // ── Paywall signal: fire-and-forget POST to /api/v1/mcp/signal-paywall ────
@@ -10125,6 +10164,22 @@ function createServer(descOverrides) {
       const c = getCtx();
       const userCtx = (a && typeof a.context === 'object' && a.context) || {};
       const sc = _planQuery(a && a.intent, a.context);
+      // r-recipe-lifecycle (2026-07-30): mint the execution id and declare the
+      // recipe STARTED before any step runs. The paired `completed` event
+      // fires from the planner-quality telemetry block below; if this run
+      // dies between the two, the backend reads the row as ABANDONED — that
+      // absence is the signal, so `started` must fire first, not alongside.
+      const _lcId = randomUUID();
+      const _lcStartedAt = new Date(t0).toISOString();
+      try {
+        trackToolCall(_recipeLifecyclePayload('started', {
+          recipe_execution_id: _lcId,
+          started_at: _lcStartedAt,
+          source: 'execute_plan',
+          intent: String((a && a.intent) || '').slice(0, 500),
+          intent_class: sc.intent_class || null,
+        }, c));
+      } catch (_e) { /* lifecycle telemetry never blocks the run */ }
       let _sig = null;
       try { _sig = _planSignals(String((a && a.intent) || ''), a.context); } catch (_e) {}
       const constraintIsoSet = _execConstraintIsoSet(a && a.intent, userCtx, _sig);
@@ -10306,6 +10361,23 @@ function createServer(descOverrides) {
           api_key: null, tier: null, session_id: (c && c.session_id) || null,
           status: 'success', duration_ms: Date.now() - t0,
         });
+        // r-recipe-lifecycle: the paired terminal event. Carries started_at
+        // again so a dropped `started` (track is fire-and-forget) is healed
+        // by the backend's completion upsert. Outcome is derived from what
+        // actually ran — never asserted.
+        trackToolCall(_recipeLifecyclePayload('completed', {
+          recipe_execution_id: _lcId,
+          started_at: _lcStartedAt,
+          completed_at: new Date().toISOString(),
+          outcome: _recipeOutcome(counts),
+          duration_ms: Date.now() - t0,
+          source: 'execute_plan',
+          intent: String((a && a.intent) || '').slice(0, 500),
+          intent_class: sc.intent_class || null,
+          planner_version: String(replay.planner_version || '') || null,
+          steps_planned: seq.length,
+          status_counts: counts,
+        }, c));
       } catch (_e) { /* planner-quality telemetry never blocks the answer */ }
       const out = {
         _entity: 'plan_execution', ok: true,
