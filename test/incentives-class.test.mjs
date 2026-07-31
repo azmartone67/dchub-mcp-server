@@ -49,6 +49,37 @@ describe('incentives_tax routes tax vocabulary to get_tax_incentives', () => {
   });
 });
 
+describe('r-planner-v5.7: ranking language does not get stolen by incentives_tax', () => {
+  // Grok's pressure-test (2026-07-31), reproduced by our own probe before
+  // fixing: "rank markets by tax incentives and grid headroom for a 150 MW
+  // data center" scored incentives_tax 6 vs market_ranking 3.5, then resolved
+  // no state and executed nothing. Ranking constructions demote the statutory
+  // class (the table's first negative weight); "rank markets by" credits
+  // market_ranking.
+  it('the Grok intent routes to market_ranking with a ranking lead tool', () => {
+    const r = first('rank markets by tax incentives and grid headroom for a 150 MW data center');
+    expect(r.cls).toBe('market_ranking');
+    expect(['rank_markets', 'ai_capacity_index']).toContain(r.tool);
+  });
+
+  it('"best markets for <factor>" is a ranking ask even when the factor is tax', () => {
+    const r = first('best markets for tax incentives in the southeast');
+    expect(r.cls).toBe('market_ranking');
+  });
+
+  it('a pure statutory ask with ranking flavor still routes to incentives_tax', () => {
+    const r = first('ranked list of state tax incentive programs');
+    expect(r.cls).toBe('incentives_tax');
+    expect(r.tool).toBe('get_tax_incentives');
+  });
+
+  it('the demotion never drags a plain tax ask below its rivals', () => {
+    const r = first('tax incentives for data centers in Georgia');
+    expect(r.cls).toBe('incentives_tax');
+    expect(r.args.state).toBe('GA');
+  });
+});
+
 describe('stateFromPlace signal (args only, never a class boost)', () => {
   it('extracts from the name, longest first', () => {
     expect(_planSignals('tax incentives in West Virginia', {}).stateFromPlace).toBe('WV');
