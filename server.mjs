@@ -1896,6 +1896,7 @@ const FREE_FULL_TOOLS = new Set([
   'research_task',
   'standing_intent',
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
+  'get_power_availability_timeline',  // composed timing view over the same public EIA-860M/LBNL facts — same free-citation class (shell 2026-07-30)
   'get_global_power',      // public GEM Global Integrated Power (CC-BY facts) — worldwide operating+planned power, same free-citation class
   // r-hosting-capacity (2026-07-28): utility-PUBLISHED feeder hosting capacity —
   // 278,799 records the utilities themselves publish as open GIS. Public-source
@@ -3767,6 +3768,7 @@ const _ENTITY_MAP = {
   get_renewable_energy: 'energy', get_tax_incentives: 'incentives', get_water_risk: 'risk',
   ai_capacity_index: 'index', get_intelligence_index: 'index', get_agent_registry: 'meta',
   get_changes: 'changes', get_pipeline: 'pipeline', get_power_pipeline: 'pipeline', get_global_power: 'pipeline',
+  get_power_availability_timeline: 'pipeline',
   get_hosting_capacity: 'hosting_capacity_feeders',
   get_infrastructure: 'infrastructure', export_dataset: 'export', get_backup_status: 'meta',
   why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
@@ -5977,6 +5979,50 @@ export const _PLAN_CLASSES = [
         rejected_because: 'Incentive programs are enacted at the state level — the metro market report does not carry the statute detail.' },
     ],
     coverage_notes: 'US states only — programs keyed by 2-letter state code, each row carrying its source_statute for citation. Non-US incentive regimes are not covered; say so rather than estimating.',
+  },
+  {
+    // Shell 2026-07-30 — power-delivery TIMING (the brain digest's most-
+    // endorsed build). Patterns are TEMPORAL-ONLY on purpose: no bare
+    // /power availability/ or /headroom/ — those belong to the grid classes
+    // and include published anchor intents ("power availability in ERCOT"
+    // must keep routing to grid_headroom; the anchor-contract suite pins it).
+    // This class fires only when the question carries a WHEN.
+    id: 'power_timeline', recipe: null,
+    patterns: [
+      [/\bwhen\s+(?:can|will|could|does|do|is|are)\b/i, 2.5],
+      [/\bby\s+(?:20\d\d|q[1-4]\s*20\d\d)\b/i, 3],
+      [/\benergi[sz]e\b/i, 3],
+      [/\btimelines?\b/i, 2.5],
+      [/\bhow\s+(?:long|soon)\s+(?:until|before|till)\b/i, 3],
+      [/\bcoming\s+online\b/i, 2.5],
+      [/\bcome\s+online\b/i, 2.5],
+      [/\bdeliverab(?:le|ility)\b/i, 2],
+      [/\bpower\s+(?:availability|delivery)\s+tim/i, 3],
+    ],
+    rationale: 'Timing questions need the DATED view: year-by-year new capacity by confidence class with retirements subtracted (the composed EIA-860M read), then today\'s live headroom as the baseline, then queue survivors as the risk check. Supply-side signals only — generation is not deliverable load, and the timeline says so rather than estimating utility study timelines.',
+    sequence: (d) => {
+      const st = d.state || d.stateFromPlace;
+      return [
+        { step: 1, tool: 'get_power_availability_timeline', depends_on: [], estimated_calls: 1,
+          why: 'The dated view: new capacity by planned online year split by confidence (under-construction vs planned vs testing), scheduled retirements as subtractions, queue depth as congestion context — with per-lane source vintages and the generation≠deliverable-load line declared.',
+          args_hint: { state: st || '<2-letter US state, e.g. OH>', ...(d.mw ? { mw: Math.round(d.mw) } : {}) } },
+        { step: 2, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
+          why: 'Today\'s baseline — live headroom and telemetry for the operator serving the state. Independent of step 1; run in parallel.',
+          args_hint: d.iso ? { iso: d.iso } : { iso: '<ISO serving the state — the timeline\'s iso_context names it>' } },
+        { step: 3, tool: 'get_refined_queue', depends_on: [], estimated_calls: 1,
+          why: 'Queue survivors — the entries that cleared refinement, the closest thing this data has to a completion-likelihood read on the congestion the timeline reports.',
+          args_hint: { ...(st ? { state: st } : {}) } },
+      ];
+    },
+    alternatives: [
+      { tool: 'get_power_pipeline', when: 'You want the raw generator LIST (names, coords, per-project MW), not the composed year-by-year timing view.',
+        rejected_because: 'The question asks WHEN — the composed timeline answers it in one call; the raw list would need hand-aggregation.' },
+      { tool: 'get_grid_intelligence', when: 'The question is about headroom TODAY, with no temporal horizon.',
+        rejected_because: 'A time horizon was named — today\'s headroom alone cannot answer it.' },
+      { tool: 'rank_markets', when: 'The question is WHERE to build, not WHEN power arrives somewhere already chosen.',
+        rejected_because: 'A place is already fixed here; ranking answers a different question.' },
+    ],
+    coverage_notes: 'US states only, supply-side signals only: generation ≠ deliverable load, and utility study timelines / large-load tariff processes / substation-grain delivery are declared out of coverage rather than estimated. Non-US timing is not covered.',
   },
   {
     id: 'facility_search', recipe: null,
@@ -9479,6 +9525,23 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
+  // Shell of 2026-07-30 (brain digest, six drafts, every adversary "build it"):
+  // power-delivery TIMING — the composed year-by-year view over the same
+  // EIA-860M + retirements + LBNL-queue data the neighbours expose raw.
+  // Registered AND routable: the power_timeline _PLAN_CLASSES entry ships in
+  // the same commit (register ≠ routable — three prior occurrences).
+  trackedTool(srv, 'get_power_availability_timeline',
+    'Power-availability TIMING for one US state — when power gets EASIER, year by year. Composes: new generation coming online from EIA-860M monthly, split by confidence class (under-construction vs planned vs testing — never blended); scheduled retirements as dated subtractions; LBNL interconnection-queue depth as congestion context (NO delivery dates — the feed has none and most queued MW never completes). The one derived number, cumulative_firm_signal_mw, counts ONLY under-construction+testing minus retirements — speculative permitting-stage MW is shown but never folded in. Answers "when is new capacity landing in Ohio", "what comes online in Georgia by 2027" with dated, sourced, per-lane-vintaged numbers. HONESTY LINE: supply-side signals, not a load-interconnection promise — generation ≠ deliverable load, and utility study timelines / large-load tariff processes / substation-grain delivery are declared out of coverage in constraint_coverage rather than estimated. Try: get_power_availability_timeline state=OH. Do NOT use for the raw project list (get_power_pipeline), live headroom today (get_grid_intelligence), queue survivors (get_refined_queue), or where-to-build ranking (rank_markets / ai_capacity_index) — this answers WHEN, for one state.',
+    { state: S.describe('2-letter US state code (required), e.g. OH, GA, TX — the timeline grain; a state can span ISOs and the response reports ISO membership as context'),
+      years: N.describe('Window in years from now, 1-6 (default 5)'),
+      mw: N.describe('Optional target MW for CONTEXT ONLY — echoed back with an explicit note; never converted into an energize-by date, which this data cannot honestly state') },
+    async (a) => {
+      const q = { state: String((a && a.state) || '').toUpperCase().slice(0, 2) };
+      if (a && a.years) q.years = a.years;
+      if (a && a.mw) q.mw = a.mw;
+      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/power/availability-timeline', q)) }] };
+    });
+
   // 2026-07-19: worldwide power (GEM Global Integrated Power Tracker, CC-BY) — the
   // international operating + planned/UC asset set the US-federal feeds don't cover.
   trackedTool(srv, 'get_global_power', 'Use when a user asks about power plants/units WORLDWIDE or in a NON-US country — operating AND the forward pipeline (announced / pre-construction / under-construction), across ALL fuels (coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal). Global Energy Monitor Global Integrated Power Tracker: 182,000+ geolocated units across 170+ countries, each with fuel, capacity (MW), status, start year, operator/owner and lat/lng. Filter by country (e.g. Germany, India, Brazil, Japan), fuel (comma-union: coal, oil/gas, nuclear, solar, wind, hydro), status, pipeline=true (JUST the forward set: announced + pre-construction + construction), bbox (minLng,minLat,maxLng,maxLat), or min_mw. Returns a summary (total MW by fuel + count by status) plus the largest units. Try: get_global_power country=India pipeline=true. Do NOT use for US grid telemetry/headroom (use get_grid_intelligence / get_grid_scoreboard) or the US planned-generator feed (use get_power_pipeline) — this is the GLOBAL asset inventory.',
@@ -9924,7 +9987,7 @@ function createServer(descOverrides) {
     // entry here; everything else in this family answers at transmission level,
     // hence the added feeder/distribution keywords.
     { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, energy pricing.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit'],
-      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','grid_transition_radar','get_energy_prices'] },
+      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices'] },
     { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
       tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
     { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+risk+tax+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select'],
@@ -11673,7 +11736,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 81 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 82 tools; start with get_grid_scoreboard (free, no key).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',

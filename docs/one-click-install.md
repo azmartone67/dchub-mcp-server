@@ -1,12 +1,12 @@
 # One-click install — DC Hub MCP
 
 DC Hub is a **remote, hosted HTTP MCP server** — nothing to clone, build, or
-npm-install. Connect with the URL `https://dchub.cloud/mcp` (81 tools, free
+npm-install. Connect with the URL `https://dchub.cloud/mcp` (82 tools, free
 anonymous tier, no signup). Below are one-click deep links + copy-paste configs
 for the major agent clients.
 
 > Acceptance test for any client: after connecting, ask **"list the dchub tools"** —
-> you should see **81 tools** including `get_composite_site_score`,
+> you should see **82 tools** including `get_composite_site_score`,
 > `get_disaster_risk`, `get_climate_intel`, `rank_markets`, `get_grid_scoreboard`.
 
 ## Deep links (one click)
@@ -61,7 +61,7 @@ A bare `/mcp` URL connects at the free tier. To use a plan you paid for:
 Your key is the `dch_live_…` from your welcome email or dashboard.
 
 ## Machine-readable discovery (for platforms & registries)
-- MCP manifest: `https://dchub.cloud/.well-known/mcp.json` (81 tools)
+- MCP manifest: `https://dchub.cloud/.well-known/mcp.json` (82 tools)
 - Server card: `https://dchub.cloud/.well-known/mcp/server-card.json`
 - Alt manifest: `https://dchub.cloud/mcp/manifest`
 - OpenAPI (REST mirror): `https://dchub.cloud/openapi.json`
