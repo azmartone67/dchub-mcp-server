@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { buildHighIntentClaimBlock } from '../server.mjs';
+import { buildHighIntentClaimBlock, _collapseEnvelope } from '../server.mjs';
 
 const SRC = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'server.mjs'), 'utf8');
@@ -63,5 +63,32 @@ describe('human relay artifact threading', () => {
     const dropBlock = SRC.slice(SRC.indexOf('const _ENV_DROP'),
                                 SRC.indexOf(']);', SRC.indexOf('const _ENV_DROP')));
     expect(dropBlock).not.toContain('high_intent_human_url');
+  });
+
+  it('POST-COLLAPSE placement: the human link nests under upgrade; '
+     + 'for_your_human alone keeps the top level', () => {
+    // #111's commit + comment said "top-level, same survival contract as
+    // for_your_human" — but the high_intent_* family rule in _collapseEnvelope
+    // nests the whole family. Pin the ACTUAL contract so a consumer (or a
+    // future session probing a deploy) reads sc.upgrade.high_intent_human_url,
+    // not sc.high_intent_human_url — the exact wrong-path near-miss that
+    // already happened once with sc.for_your_human on 2026-07-28. Behavior
+    // pin, not a source grep: comments satisfy grep; only behavior satisfies
+    // consumers.
+    const collapsed = _collapseEnvelope({
+      tool: 'rank_markets',                                   // _ENV_KEEP
+      for_your_human: 'https://dchub.cloud/upgrade/h/tokh',   // designated top-level
+      high_intent_human_url: 'https://dchub.cloud/relay/tok-human',
+      high_intent_claim_url: 'https://dchub.cloud/claim/tok-agent',
+    });
+    expect(collapsed.upgrade.high_intent_human_url)
+      .toBe('https://dchub.cloud/relay/tok-human');
+    expect(collapsed.high_intent_human_url).toBeUndefined();
+    expect(collapsed.for_your_human).toBe('https://dchub.cloud/upgrade/h/tokh');
+    expect(collapsed.tool).toBe('rank_markets');
+    // The agent's claim artifact rides the same nest — the split's two links
+    // stay adjacent for machine consumers.
+    expect(collapsed.upgrade.high_intent_claim_url)
+      .toBe('https://dchub.cloud/claim/tok-agent');
   });
 });
