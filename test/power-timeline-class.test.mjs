@@ -106,3 +106,32 @@ describe('power_timeline — honesty line', () => {
     expect(String(r).toLowerCase()).toContain('not deliverable load');
   });
 });
+
+describe('r-planner-v5.8: reversed-order timing vocabulary (Grok state batch, 2026-07-31)', () => {
+  // "timeline for power availability in Virginia for a 100 MW campus" scored
+  // power_timeline 2.5 vs grid_headroom 3 and led get_grid_scoreboard{} with
+  // a resolvable state sitting in the intent — the forward-order pattern
+  // ("power availability timeline") missed the reversed phrasing. Reproduced
+  // by probe before fixing.
+  it('state-phrased reversed order routes to the timeline with the state resolved', () => {
+    const p = _planQuery('timeline for power availability in Virginia for a 100 MW campus');
+    expect(p.intent_class).toBe('power_timeline');
+    const s1 = p.recommended_sequence[0];
+    expect(s1.tool).toBe('get_power_availability_timeline');
+    expect(s1.args_hint.state).toBe('VA');
+  });
+
+  it('operator-phrased reversed order STAYS on grid_headroom — the ISO boost is the guard', () => {
+    // Same reversed vocabulary, but a named OPERATOR: the +1.5 iso context
+    // boost keeps grid_headroom ahead (5.5 vs 4.5). This is the by-design
+    // rule from the class comment holding WITHOUT a special-case guard here.
+    const p = _planQuery('timeline for power delivery in ERCOT for a 100 MW campus');
+    expect(p.intent_class).toBe('grid_headroom');
+    expect(JSON.stringify(p.recommended_sequence[0])).toContain('ERCOT');
+  });
+
+  it('the state-phrased successes from the same batch keep routing here', () => {
+    expect(_planQuery('when is new capacity landing in Ohio').intent_class).toBe('power_timeline');
+    expect(_planQuery('when can a data center get power in Georgia').intent_class).toBe('power_timeline');
+  });
+});

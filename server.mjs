@@ -5261,7 +5261,7 @@ const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -6013,6 +6013,18 @@ export const _PLAN_CLASSES = [
       [/\bcome\s+online\b/i, 2.5],
       [/\bdeliverab(?:le|ility)\b/i, 2],
       [/\bpower\s+(?:availability|delivery)\s+tim/i, 3],
+      // r-planner-v5.8 (2026-07-31, Grok state-phrased batch): the line above
+      // only catches "power availability timeline" — the REVERSED order
+      // ("timeline for power availability in Virginia") scored 2.5 and lost to
+      // grid_headroom's 3, which then led get_grid_scoreboard{} with a
+      // perfectly resolvable state sitting in the intent. Weight is +1 ON
+      // PURPOSE: matched_classes scores are POST-boost, so the ERCOT phrasing
+      // reads grid_headroom 4 = base 2.5 + the 1.5 iso boost — at +2 this
+      // pattern would steal the operator-phrased case (4.5 vs 4) that the
+      // class comment pins to grid_headroom. At +1: Virginia 3.5 vs 3 (state
+      // path wins), ERCOT 3.5 vs 4 (operator path holds). Both margins are
+      // under 1 and the confidence formula reports that honestly.
+      [/\btimelines?\s+(?:for|of|to)\s+power\b/i, 1],
     ],
     rationale: 'Timing questions need the DATED view: year-by-year new capacity by confidence class with retirements subtracted (the composed EIA-860M read), then today\'s live headroom as the baseline, then queue survivors as the risk check. Supply-side signals only — generation is not deliverable load, and the timeline says so rather than estimating utility study timelines.',
     sequence: (d) => {
@@ -6639,7 +6651,7 @@ export function _planWorkflowConfidence(seq, d) {
 //   5.5 = hosting_capacity class + conditional get_hosting_capacity steps in
 //         capacity_search / site_analysis; "site a N MW …" reaches
 //         capacity_search; alternatives filtered against the whole sequence.
-export const PLANNER_VERSION = '5.7';
+export const PLANNER_VERSION = '5.8';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
