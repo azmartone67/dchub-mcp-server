@@ -87,7 +87,7 @@ describe('plan_query router (pure)', () => {
     // while the replay SHAPE never changed. A consumer pinning schema_version is
     // still safe; one pinning planner_version would have broken — by design.
     // (This literal is a deliberate speed bump: every routing rev must touch it.)
-    expect(r.planner_version).toBe('5.7');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.8');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated
