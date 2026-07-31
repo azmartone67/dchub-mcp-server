@@ -20,4 +20,4 @@ You.com is web-native, so the fastest path is a **Custom Assistant** primed to f
 Now the assistant pulls live DC Hub data on every data-center question and cites you.
 
 ## For developers (You.com API)
-If you're building on the You.com API, give your agent the same instructions and let it fetch the endpoints above, or register them as tools (see [`../openrouter/tools.json`](../openrouter/tools.json) for ready function specs). For the full 81 tools, point an MCP client at `https://dchub.cloud/mcp`.
+If you're building on the You.com API, give your agent the same instructions and let it fetch the endpoints above, or register them as tools (see [`../openrouter/tools.json`](../openrouter/tools.json) for ready function specs). For the full 82 tools, point an MCP client at `https://dchub.cloud/mcp`.

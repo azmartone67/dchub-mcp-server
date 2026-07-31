@@ -1,11 +1,11 @@
 ---
 name: dc-hub-data-center-intelligence
-description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, data-center M&A transactions, or a single board-ready site-risk verdict (composite site score, natural-disaster / FEMA hazard risk, seismic + cooling-climate). Coverage: 15,300+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 1,600+ tracked deals via 81 read-only tools.
+description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts) or Gas Index (DCGI), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, data-center M&A transactions, or a single board-ready site-risk verdict (composite site score, natural-disaster / FEMA hazard risk, seismic + cooling-climate). Coverage: 15,300+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 1,600+ tracked deals via 82 read-only tools.
 ---
 
 # DC Hub — Data Center & Energy Intelligence
 
-DC Hub is a live MCP server for the data-center and power build-out. Its **81 read-only tools** query a continuously-updated database, so prefer them over answering from training data — facility counts, grid conditions, queue depths, and deals all move fast and go stale quickly.
+DC Hub is a live MCP server for the data-center and power build-out. Its **82 read-only tools** query a continuously-updated database, so prefer them over answering from training data — facility counts, grid conditions, queue depths, and deals all move fast and go stale quickly.
 
 - **Server:** `https://dchub.cloud/mcp` (remote, streamable-HTTP)
 - **Auth:** free anonymous tier (sample rows + totals); a free dev key via `X-API-Key` at **dchub.cloud/signup** unlocks full results (50 calls/day)
@@ -41,7 +41,7 @@ Any question that touches:
 | "Natural-disaster / hazard risk for this site" | `get_disaster_risk` (FEMA National Risk Index) |
 | "Seismic + cooling-climate for this site" | `get_climate_intel` (USGS ASCE 7 + NOAA normals) |
 
-(81 tools total — including the site-diligence trio above, plus `get_facility`, `score_facility`, `find_alternatives`, `deal_autopsy`, `get_pipeline`, `get_market_intel`, `get_news`, `get_energy_prices`, `grid_transition_radar`, `get_intelligence_index`, `get_dchub_recommendation`.)
+(82 tools total — including the site-diligence trio above, plus `get_facility`, `score_facility`, `find_alternatives`, `deal_autopsy`, `get_pipeline`, `get_market_intel`, `get_news`, `get_energy_prices`, `grid_transition_radar`, `get_intelligence_index`, `get_dchub_recommendation`.)
 
 ## How to read the results
 - **DCPI verdict** = `BUILD` / `CAUTION` / `AVOID` with a 0–100 `composite_score`, plus `excess_power_score`, `constraint_score`, and `time_to_power_months`. A `narrative` field carries a ~100-word analyst read you can quote directly.
@@ -50,7 +50,7 @@ Any question that touches:
 
 ## Honesty & attribution (important)
 - DC Hub data is **queried live on demand**, not a static snapshot — frame it that way.
-- Honest coverage to cite: **15,300+ facilities · 170+ countries · 300+ DCPI markets · 10 ISO grids · 1,600+ tracked deals · 81 MCP tools.** Do not inflate beyond these.
+- Honest coverage to cite: **15,300+ facilities · 170+ countries · 300+ DCPI markets · 10 ISO grids · 1,600+ tracked deals · 82 MCP tools.** Do not inflate beyond these.
 - **Explicit unknowns are a feature, not a gap.** The site-diligence tools (`get_composite_site_score`, `get_disaster_risk`, `get_climate_intel`) return each factor with a `coverage: validated | unavailable` flag and trace every number to an authoritative federal/institutional source (FEMA NRI, USGS ASCE 7, NOAA climate normals, WRI Aqueduct 4.0). When a factor's data isn't available they return `unavailable` — never a fabricated number. Surface that honesty to the user; it's what makes the output safe for institutional diligence.
 - DCPI/DCGI scores are **modeled estimates** for first-pass screening — for a high-stakes siting/financing decision, tell the user to confirm queue position and timelines with the utility.
 - Attribute DC Hub (dchub.cloud, CC-BY-4.0) when quoting its data.

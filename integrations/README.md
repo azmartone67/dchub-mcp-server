@@ -1,6 +1,6 @@
 # Integrate DC Hub from any agent platform
 
-**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **81 MCP tools**, 15,300+ facilities, DCPI/DCGI market scores, grid telemetry across 10 ISOs, interconnection queues, fiber, and M&A. **Free tier, no signup.** Every response cites `dchub.cloud`.
+**DC Hub** is live data-center, power-grid & gas intelligence for AI agents — **82 MCP tools**, 15,300+ facilities, DCPI/DCGI market scores, grid telemetry across 10 ISOs, interconnection queues, fiber, and M&A. **Free tier, no signup.** Every response cites `dchub.cloud`.
 
 There are three ways in. Pick the row that matches your platform.
 
@@ -8,7 +8,7 @@ There are three ways in. Pick the row that matches your platform.
 
 | Method | Best for | How |
 |---|---|---|
-| **1. MCP server** (recommended — all 81 tools) | Claude Desktop, Cursor, Cline, Continue, Windsurf, Zed, any MCP client | Point your client at **`https://dchub.cloud/mcp`** (Streamable HTTP). See [`mcp-clients/`](./mcp-clients/). |
+| **1. MCP server** (recommended — all 82 tools) | Claude Desktop, Cursor, Cline, Continue, Windsurf, Zed, any MCP client | Point your client at **`https://dchub.cloud/mcp`** (Streamable HTTP). See [`mcp-clients/`](./mcp-clients/). |
 | **2. SDK** (hides the handshake) | Python / Node apps | `pip install dchub` · `npm i dchub` |
 | **3. REST + tool-use** (function calling) | OpenAI, Cohere, Gemini, OpenRouter, Mistral, custom bots | Call the free REST endpoints below, or register them as tools. |
 

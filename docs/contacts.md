@@ -9,14 +9,14 @@ real pilots).
 | Target | Exact action | Link |
 |---|---|---|
 | **Glama** | find DC Hub, sign in as `azmartone67`, **Claim + Refresh** (turns the bot's guess into a verified 70-tool listing) | [glama.ai](https://glama.ai/) → search "dchub" |
-| **mcp.so** | Submit form — name, one-line desc, **81 tools**, transport=Streamable HTTP, repo, homepage `dchub.cloud`, icon | [mcp.so](https://mcp.so/) (Submit) |
+| **mcp.so** | Submit form — name, one-line desc, **82 tools**, transport=Streamable HTTP, repo, homepage `dchub.cloud`, icon | [mcp.so](https://mcp.so/) (Submit) |
 | **awesome-mcp-servers** | fork → add DC Hub under a category → open PR | [github.com/punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) |
 | **MCP.Directory** | Submit form | [mcp.directory/submit](https://mcp.directory/submit) |
 | **PulseMCP** | auto-crawls; find + claim if a claim flow exists | pulsemcp.com |
 | **Official Registry / Smithery** | already listed — just confirm they show **70** | registry.modelcontextprotocol.io · smithery.ai |
 
 Metadata to paste everywhere (prepare once): **name** DC Hub · **desc** "Authoritative
-data-center & power infrastructure intelligence — 81 MCP tools, provenance +
+data-center & power infrastructure intelligence — 82 MCP tools, provenance +
 explicit unknowns" · **url** `https://dchub.cloud/mcp` · **transport** streamable-http
 · **repo** github.com/azmartone67/dchub-mcp-server · **categories** data-center,
 energy, grid, real-estate, infrastructure, finance.

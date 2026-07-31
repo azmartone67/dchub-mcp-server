@@ -36,7 +36,7 @@ curl -X POST https://dchub.cloud/api/v1/admin/partner-key/issue \
   $/MW-day, vacancy, grid headroom, DCPI BUILD/CAUTION/AVOID verdict, citation URL
 - `GET /api/v1/markets/compare` · `GET /api/v1/facilities` · `GET /api/v1/facilities/detail/{id}`
 - `GET /api/grid/fuel-mix` · OpenAPI: `https://dchub.cloud/openapi.json`
-- MCP server (81 tools): `https://dchub.cloud/mcp` (Streamable HTTP)
+- MCP server (82 tools): `https://dchub.cloud/mcp` (Streamable HTTP)
 - Integration map: `https://dchub.cloud/.well-known/ai-agents.json`
 
 > Note: it's `/api/v1/markets/<slug>`, NOT `/api/v1/market-intel` (that 404s).

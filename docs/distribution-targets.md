@@ -1,12 +1,12 @@
 # DC Hub MCP — Distribution Targets (turnkey outreach)
 
-The technical + artifact foundation is done (81 tools, discoverable, provenance,
+The technical + artifact foundation is done (82 tools, discoverable, provenance,
 installers, SDKs, pilot pack, trust page). This is the go-to-market shortlist —
 who to reach, why they fit, the exact ask, and how. Ordered by effort × payoff.
 
 ## The reusable one-paragraph pitch
 > **DC Hub is the authoritative data layer for data-center & power infrastructure —
-> 81 MCP tools at `dchub.cloud/mcp`** covering 15,300+ facilities in 170+ countries,
+> 82 MCP tools at `dchub.cloud/mcp`** covering 15,300+ facilities in 170+ countries,
 > live ISO grid telemetry, DCPI market verdicts, fiber, gas, 1,600+ M&A deals, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and
@@ -33,7 +33,7 @@ Prepare the metadata once (name, description, URL, 70-tool count, repo, categori
 | **Docker MCP Catalog** | container-workflow devs + enterprises | submit (note: DC Hub is remote HTTP, not a container — list as remote) | ⬜ submit |
 | **Cursor directory / MCP Market** | in-editor discovery | submit + the one-click deep link (`docs/one-click-install.md`) | ⬜ submit |
 
-**Ask (all):** "List DC Hub — remote MCP, 81 tools, `dchub.cloud/mcp`. Category:
+**Ask (all):** "List DC Hub — remote MCP, 82 tools, `dchub.cloud/mcp`. Category:
 data-center / energy / infrastructure." Attach the one-paragraph pitch.
 
 ## Tier B — Agent runtimes / clients (already connectable; ask = featuring)
