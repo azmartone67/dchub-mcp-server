@@ -1136,8 +1136,13 @@ async function buildHighIntentClaimBlock(claim, name) {
   const sc = {
     high_intent_claim_url:      claim.claim_url,     // fallback / machine consumers
     high_intent_claim_token:    claim.claim_token,
-    // Shell #44: the human-audience view link, machine-readable (top-level
-    // name not in _ENV_DROP; same survival contract as for_your_human).
+    // Shell #44: the human-audience view link, machine-readable. Survives the
+    // envelope collapse (not in _ENV_DROP) but the high_intent_* family rule
+    // in _collapseEnvelope NESTS it — the machine read path after collapse is
+    // structuredContent.upgrade.high_intent_human_url, NOT top-level (that
+    // slot stays for_your_human's, the ONE designated top-level human
+    // artifact). The top-level carrier of this link is the PROSE humanLine
+    // above. Placement pinned in test/human-relay-artifact.test.mjs.
     high_intent_human_url:      claim.human_url || null,
     // r-agent-redeem RESTORED: the working key + how to persist it, in-band for
     // machine consumers (null when the best-effort redeem failed → prose unchanged).
@@ -12779,4 +12784,10 @@ export { detectPlatform, detectPlatformFromInit, _DESC_KNOWN_PLATFORMS };
 // Shell #44 (2026-07-30): exported so the human-link threading is testable —
 // an unexported path is how test and real surfaces silently diverge.
 export { buildHighIntentClaimBlock };
+// Shell #44 follow-up (2026-07-31): the collapse itself is exported so the
+// human link's POST-collapse placement is pinned by behavior, not comment —
+// #111's comment claimed top-level while the high_intent_* family rule nests
+// it under `upgrade`; a session probing the wrong path after a good deploy
+// reads a working fix as broken (the sc.for_your_human near-miss, 07-28).
+export { _collapseEnvelope };
 
