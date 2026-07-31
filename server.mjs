@@ -5261,7 +5261,7 @@ const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -5428,6 +5428,12 @@ export const _PLAN_CLASSES = [
     patterns: [
       [/\brank(?:ing|ed)?\b/i, 2], [/\bbest\s+(?:overall\s+)?markets?\b/i, 3],
       [/\btop\s+(?:\d+\s+)?markets?\b/i, 3], [/\bmarkets?\b/i, 1.5],
+      // r-planner-v5.7 (2026-07-31, Grok pressure-test): "rank markets BY <factor>"
+      // is a ranking ask whatever the factor — without this credit, factor
+      // vocabulary (tax incentives 6 vs rank+markets 3.5) stole the intent into
+      // the single-state statutory class, which then resolved no state and
+      // executed nothing. Reproduced by probe before fixing.
+      [/\brank\s+markets?\s+by\b/i, 3],
       [/\bwhere\s+(?:should|can|do)\b/i, 2], [/\bshortlist\b/i, 2],
       [/\bmetros?\b/i, 1], [/\bdcpi\b/i, 2], [/\bbuild.*(campus|cluster|data\s*cent)/i, 1.5],
       [/\bsite\s+selection\b/i, 1.5], [/\bcompare\s+markets\b/i, 2],
@@ -5957,6 +5963,15 @@ export const _PLAN_CLASSES = [
       [/\btax(?:es)?\b/i, 3], [/\bincentives?\b/i, 3], [/\babatements?\b/i, 3],
       [/\bexemptions?\b/i, 2.5], [/\btax\s+credits?\b/i, 3],
       [/\bsubsid(?:y|ies|ize|ized)\b/i, 2], [/\bsales\s+tax\b/i, 3], [/\bproperty\s+tax\b/i, 3],
+      // r-planner-v5.7: FIRST NEGATIVE WEIGHT in this table (the scorer is a
+      // plain `score += w`, so it subtracts cleanly). Ranking constructions
+      // ("rank/ranked/ranking", "best markets", "top N markets") mean the ask
+      // is comparative across places — the single-state statutory read is the
+      // wrong shape even when tax words dominate. Demote; market_ranking's own
+      // patterns (incl. "rank markets by") carry the intent instead. A pure
+      // statutory ask ("ranked list of state tax incentive programs") still
+      // wins here: 4 vs market_ranking's 2.
+      [/\b(?:rank(?:ing|ed)?|best\s+markets?|top\s+\d*\s*markets?)\b/i, -2],
     ],
     rationale: 'Statutory incentive packages are state-keyed — read the state\'s data-center tax programs first, with the state\'s power-price context alongside: the tax package and the power rate are the two cost levers a siting model trades against each other.',
     sequence: (d) => {
@@ -6624,7 +6639,7 @@ export function _planWorkflowConfidence(seq, d) {
 //   5.5 = hosting_capacity class + conditional get_hosting_capacity steps in
 //         capacity_search / site_analysis; "site a N MW …" reaches
 //         capacity_search; alternatives filtered against the whole sequence.
-export const PLANNER_VERSION = '5.6';
+export const PLANNER_VERSION = '5.7';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
