@@ -31,12 +31,25 @@ LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
 #           These must NOT page (they'd fire a permanent false regression); we TRACK them and,
 #           when one slips/stays lost, emit the specific relevance remedy — never a freshness kick.
 # WATCH = popularity/brand-capped opportunities (cloudflare/vercel/gce out-USE us). Informational.
-CORE = ["data center", "data centers", "power grid", "fiber", "capacity",
-        "grid interconnection", "energy", "renewables", "power"]
-RECLAIM = ["interconnection", "interconnection queue", "hyperscale",
-           "natural gas", "PJM", "ERCOT", "CAISO"]
-WATCH = ["grid", "infrastructure", "hyperscaler", "datacenter",
-         "electricity", "renewable energy", "site selection", "transmission"]
+#
+# Recalibrated 2026-08-01 from a 35-term scan (we now hold #1 on 33/35). Moves:
+#   energy CORE→RECLAIM — 101 consecutive checks at #2 behind sawftware-apps/commodities-sh
+#     (useCount 60 vs our 3031, and "energy" is ALREADY prominent in our description) ⇒ a
+#     semantic-relevance loss we cannot fix with text = a permanent false page.
+#   interconnection / interconnection queue RECLAIM→CORE, datacenter WATCH→CORE — all held
+#     #1, all named in the canonical description, all dead-center our product.
+#   electricity + site selection WATCH→RECLAIM — both stuck at #9 behind an exact-name
+#     (zemloai/elecz) and an on-topic land server (erik-7clt/local-intel): structural gaps
+#     to reclaim with description text, not popularity caps.
+#   MISO added to RECLAIM (>50: bare token is noise — zoho_books leads it).
+CORE = ["data center", "data centers", "datacenter", "power grid", "fiber", "capacity",
+        "grid interconnection", "interconnection", "interconnection queue",
+        "renewables", "power"]
+RECLAIM = ["energy", "natural gas", "hyperscale", "PJM", "ERCOT", "CAISO", "MISO",
+           "electricity", "site selection"]
+WATCH = ["grid", "infrastructure", "hyperscaler", "renewable energy", "transmission",
+         "data center capacity", "grid capacity", "electricity grid",
+         "ai infrastructure", "compute capacity", "power plant", "substation", "DCPI"]
 
 # Per-CORE-term relevance remedy surfaced on a slip. The ONLY Smithery lever that moves the
 # top-level `score` is the UI-authored description (no CLI/registry write path reaches it —
