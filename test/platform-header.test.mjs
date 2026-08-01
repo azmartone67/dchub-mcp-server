@@ -47,3 +47,24 @@ describe('explicit platform header attribution', () => {
     expect(detectPlatformFromInit(init('claude-ai'), 'node', 'gemini')).toBe('gemini');
   });
 });
+
+describe('r-gemini-ident (2026-08-01): the X-Client-Info alias', () => {
+  it("Gemini's full committed signature resolves to gemini — including the dchub-mcp suffix", () => {
+    // Gemini committed to 'X-Client-Info: Gemini-Agent/2.5' ahead of the 08-04
+    // per-platform gate. The full string contains 'dchub-mcp'; it must resolve
+    // via the KNOWN vocabulary ('gemini' matches first) and never junk-screen.
+    expect(detectPlatformFromInit(init('mcp'), 'node',
+      'Gemini-Agent/2.5 (MCP-Client; dchub-mcp)')).toBe('gemini');
+  });
+
+  it('the transport extracts x-client-info as a third header alias (wiring pin)', () => {
+    // The hint above is pre-extracted; this pins that the HTTP layer actually
+    // reads the header. Source-level check, same style as the class pins.
+    const { readFileSync } = require('fs');
+    const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+    const at = src.indexOf("req.headers['x-client-info']");
+    expect(at).toBeGreaterThan(-1);
+    const near = src.slice(Math.max(0, at - 400), at);
+    expect(near).toContain("x-mcp-platform");
+  });
+});
