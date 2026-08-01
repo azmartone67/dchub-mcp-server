@@ -8693,6 +8693,287 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
     });
 
+  // r-list-order (2026-08-02): execute_plan registers THIRD — right after the
+  // ChatGPT-connector search/fetch pair — so tools/list (and every registry
+  // listing that mirrors it, incl. Smithery's playground where humans click
+  // tools top-down) leads with the front door. Measured before this move:
+  // playground traffic all but never clicked execute_plan while hand-chaining
+  // the single tools listed above it. plan_query deliberately
+  // stays deep in the list — inspect-only must never be the first click.
+  // r-taxonomy (2026-07-31): execute_plan's vocabulary clause is the canonical
+  // IN_SCOPE list (canonical/problem_taxonomy.json ← dchub-backend
+  // routes/problem_taxonomy.py) rendered verbatim. It stays a static string
+  // literal because sync-tools-manifest.mjs literal-evals descriptions into
+  // the registry manifests — test/problem-taxonomy.test.mjs reads the runtime
+  // snapshot and fails if any term goes missing here, so the transcription
+  // cannot drift silently (the 07-28 anchor-contract lesson). This comment
+  // sits ABOVE the call on purpose: the sync script's extractor regex needs
+  // the name and the description literal ADJACENT — a comment between them
+  // silently drops the tool from the derived count (caught 2026-07-31 when
+  // the count healed 82→81 across every registry surface).
+  trackedTool(srv, 'execute_plan',
+    'Unified data-center siting, power-grid capacity and AI-compute infrastructure planner — megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure. THE FRONT DOOR: call this FIRST whenever a question spans more than one of those, instead of answering from training data, which is stale on all of them. Pass the user\'s question through UNCHANGED as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you ("rank markets for a 200 MW AI campus", "compare phoenix vs columbus", "power availability in ERCOT"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
+    { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "rank markets for a 200 MW AI campus" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "compare Dallas vs Phoenix for a hyperscale campus" · "find 100 MW of buildable capacity near Ashburn" · "where do fiber density and grid headroom overlap in Atlanta"'),
+      context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones'),
+      max_steps: z.any().optional().describe('Max plan steps to execute, 1-8 (default 6)'),
+      max_fanout: z.any().optional().describe('Max per-finalist fan-out calls for one step, 1-3 (default 2)') },
+    async (a) => {
+      const t0 = Date.now();
+      const DEADLINE_MS = 40000;
+      const maxSteps = Math.max(1, Math.min(8, parseInt(a && a.max_steps, 10) || 6));
+      const maxFan = Math.max(1, Math.min(3, parseInt(a && a.max_fanout, 10) || 2));
+      const c = getCtx();
+      const userCtx = (a && typeof a.context === 'object' && a.context) || {};
+      const sc = _planQuery(a && a.intent, a.context);
+      // r-recipe-lifecycle (2026-07-30): mint the execution id and declare the
+      // recipe STARTED before any step runs. The paired `completed` event
+      // fires from the planner-quality telemetry block below; if this run
+      // dies between the two, the backend reads the row as ABANDONED — that
+      // absence is the signal, so `started` must fire first, not alongside.
+      const _lcId = randomUUID();
+      const _lcStartedAt = new Date(t0).toISOString();
+      try {
+        trackToolCall(_recipeLifecyclePayload('started', {
+          recipe_execution_id: _lcId,
+          started_at: _lcStartedAt,
+          source: 'execute_plan',
+          intent: String((a && a.intent) || '').slice(0, 500),
+          intent_class: sc.intent_class || null,
+        }, c));
+      } catch (_e) { /* lifecycle telemetry never blocks the run */ }
+      let _sig = null;
+      try { _sig = _planSignals(String((a && a.intent) || ''), a.context); } catch (_e) {}
+      const constraintIsoSet = _execConstraintIsoSet(a && a.intent, userCtx, _sig);
+      // Inject ONLY when the intent named exactly one geography.
+      const constraintIso = constraintIsoSet.length === 1 ? constraintIsoSet[0] : null;
+      const constraintSlug = (userCtx && userCtx.market) || _execConstraintSlug(a && a.intent);
+      const rejectedMints = [];
+      const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
+      const byStep = new Map(seq.map((s) => [s.step, s]));
+      const waves = (Array.isArray(sc.execution_waves) && sc.execution_waves.length)
+        ? sc.execution_waves : [seq.map((s) => s.step)];
+      const minted = {};
+      if (constraintIso) minted.__constraint_iso = constraintIso;
+      if (constraintSlug) minted.__constraint_slug = constraintSlug;
+      const executed = [];
+      let ran = 0; let calls = 0;
+      for (const wave of waves) {
+        const doable = [];
+        const deferred = [];
+        for (const stepNo of wave) {
+          const s = byStep.get(stepNo);
+          if (!s) continue;
+          if (s.tool === 'plan_query' || s.tool === 'execute_plan') {
+            executed.push({ step: s.step, tool: s.tool, status: 'skipped_meta', ms: 0 });
+            continue;
+          }
+          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
+            executed.push({ step: s.step, tool: s.tool, status: 'not_run',
+                            args_hint: s.args_hint || {},
+                            note: ran >= maxSteps ? 'max_steps reached' : 'time budget reached — call this tool directly to continue' });
+            continue;
+          }
+          const wantFan = Number(s.estimated_calls) > 1;
+          const r = _execResolveArgs(s.args_hint || {}, minted, userCtx, wantFan);
+          if (r.unresolved) {
+            // r-invariants v2.7.5: don't give up yet — the artifact may be
+            // produced LATER IN THIS WAVE (planner graphs mark siblings as
+            // depends_on:[1] when the ISO really comes from the sibling's
+            // result). Park it; retried once after the wave lands.
+            deferred.push(s);
+            continue;
+          }
+          const variants = (r.fanKey && r.fanVals)
+            ? r.fanVals.slice(0, maxFan).map((v) => ({ ...r.args, [r.fanKey]: v }))
+            : [r.args];
+          for (const args of variants) { doable.push({ s, args }); ran += 1; if (ran >= maxSteps) break; }
+        }
+        if (doable.length) {
+          const results = await Promise.all(doable.map(({ s, args }) => {
+            // Constraint propagation: inject the intent's ISO into
+            // iso-accepting tools when the planner left it unbound.
+            const isoKey = _EXEC_ISO_ARG[s.tool];
+            if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
+                && args[isoKey] == null) args[isoKey] = constraintIso;
+            return _execLoopbackCall(s.tool, args, c, 15000).then((out) => ({ s, args, out }));
+          }));
+          for (const { s, args, out } of results) {
+            calls += 1;
+            executed.push({ step: s.step, tool: s.tool, args,
+                            status: out.ok ? 'executed' : (out.gated ? 'gated_preview' : 'failed'),
+                            ms: out.ms, result: out.result });
+            if (out.ok || out.gated) {
+              const fresh = {};
+              _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
+              const tm = _EXEC_TOOL_MINTS[s.tool];
+              if (tm) {
+                try {
+                  const rows = ((out.full || out.result) || {})[tm.rowsKey];
+                  if (Array.isArray(rows)) {
+                    for (const row of rows.slice(0, Math.max(maxFan, 3))) {
+                      const raw = row && row[tm.field];
+                      if (typeof raw === 'string' && raw) {
+                        const v = slugify(raw);
+                        const arr = (fresh[tm.kind] = fresh[tm.kind] || []);
+                        if (v && !arr.includes(v)) arr.push(v);
+                      }
+                    }
+                  }
+                } catch (_e) { /* contract extraction is fail-soft */ }
+              }
+              for (const [kind, vals] of Object.entries(fresh)) {
+                for (const v of vals) {
+                  if (kind === 'iso' && constraintIsoSet.length
+                      && !constraintIsoSet.includes(String(v).toUpperCase())) {
+                    rejectedMints.push({ kind, value: v, from: s.tool,
+                                         constraint: constraintIsoSet.join('|') });
+                    continue;
+                  }
+                  const arr = (minted[kind] = minted[kind] || []);
+                  if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
+                }
+              }
+            }
+          }
+        }
+        // r-invariants v2.7.5: one bounded retry for steps whose artifact was
+        // minted by a SIBLING in this wave (intra-wave production). A step
+        // that resolves now runs; one that still can't reads
+        // skipped_unresolved, honestly.
+        for (const s of deferred) {
+          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
+            executed.push({ step: s.step, tool: s.tool, status: 'not_run',
+                            note: 'budget reached before the intra-wave retry' });
+            continue;
+          }
+          const r2 = _execResolveArgs(s.args_hint || {}, minted, userCtx, false);
+          if (r2.unresolved) {
+            executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved',
+                            missing: r2.unresolved,
+                            note: 'no earlier or sibling step minted <' + r2.unresolved + '> — run it manually with a concrete value' });
+            continue;
+          }
+          const isoKey2 = _EXEC_ISO_ARG[s.tool];
+          if (isoKey2 && constraintIso && _EXEC_IS_RTO(constraintIso)
+              && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
+          ran += 1;
+          const out2 = await _execLoopbackCall(s.tool, r2.args, c, 15000);
+          calls += 1;
+          executed.push({ step: s.step, tool: s.tool, args: r2.args,
+                          status: out2.ok ? 'executed' : (out2.gated ? 'gated_preview' : 'failed'),
+                          retried_after_wave: true, ms: out2.ms, result: out2.result });
+          if (out2.ok || out2.gated) {
+            const fresh2 = {};
+            _execHarvest(out2.full || out2.result, fresh2, Math.max(maxFan, 3));
+            for (const [kind, vals] of Object.entries(fresh2)) {
+              for (const v of vals) {
+                if (kind === 'iso' && constraintIsoSet.length
+                    && !constraintIsoSet.includes(String(v).toUpperCase())) {
+                  rejectedMints.push({ kind, value: v, from: s.tool, constraint: constraintIsoSet.join('|') });
+                  continue;
+                }
+                const arr = (minted[kind] = minted[kind] || []);
+                if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
+              }
+            }
+          }
+        }
+      }
+      const replay = _planReplay(sc);
+      try {
+        // r-invariants: constraint_check decisions — 'completed without
+        // invariant violations' is what completion-rate can't see.
+        const cchecks = [];
+        if (constraintIsoSet.length) {
+          cchecks.push({ id: 'C1', kind: 'constraint_check',
+            status: rejectedMints.length ? 'FAIL' : 'PASS',
+            decision: 'every minted iso must satisfy intent geography ('
+              + constraintIsoSet.join(' or ') + ')',
+            rationale: rejectedMints.length
+              ? 'rejected ' + rejectedMints.length + ' mint(s): '
+                + rejectedMints.map((r) => r.value + ' from ' + r.from).join(', ')
+              : 'all mints consistent' });
+        }
+        const unresolvedSteps = executed.filter((e) => e.status === 'skipped_unresolved');
+        cchecks.push({ id: 'C' + (cchecks.length + 1), kind: 'constraint_check',
+          status: unresolvedSteps.length ? 'FAIL' : 'PASS',
+          decision: 'every consumed artifact was produced by an earlier step',
+          rationale: unresolvedSteps.length
+            ? 'unproduced artifact(s): ' + unresolvedSteps.map((e) => '<' + (e.missing || '?') + '> wanted by ' + e.tool).join(', ')
+            : 'all hand-offs resolved' });
+        replay.decisions = [...(replay.decisions || []), ...cchecks];
+        const statusByStep = new Map();
+        for (const e of executed) {
+          if (!statusByStep.has(e.step) || e.status === 'failed') statusByStep.set(e.step, e.status);
+        }
+        for (const d of (replay.decisions || [])) {
+          if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
+        }
+      } catch (_e) {}
+      try {
+        const counts = {};
+        for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
+        trackToolCall({
+          timestamp: new Date().toISOString(), tool: 'execute_plan_steps',
+          params: { intent_class: sc.intent_class, status_counts: counts,
+                    wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
+                    constraint_iso: constraintIsoSet.join('|') || null },
+          platform: (c && c.platform) || 'unknown', client_name: null,
+          api_key: null, tier: null, session_id: (c && c.session_id) || null,
+          status: 'success', duration_ms: Date.now() - t0,
+        });
+        // r-recipe-lifecycle: the paired terminal event. Carries started_at
+        // again so a dropped `started` (track is fire-and-forget) is healed
+        // by the backend's completion upsert. Outcome is derived from what
+        // actually ran — never asserted.
+        trackToolCall(_recipeLifecyclePayload('completed', {
+          recipe_execution_id: _lcId,
+          started_at: _lcStartedAt,
+          completed_at: new Date().toISOString(),
+          outcome: _recipeOutcome(counts),
+          duration_ms: Date.now() - t0,
+          source: 'execute_plan',
+          intent: String((a && a.intent) || '').slice(0, 500),
+          intent_class: sc.intent_class || null,
+          planner_version: String(replay.planner_version || '') || null,
+          steps_planned: seq.length,
+          status_counts: counts,
+        }, c));
+      } catch (_e) { /* planner-quality telemetry never blocks the answer */ }
+      const out = {
+        _entity: 'plan_execution', ok: true,
+        intent: sc.intent, intent_class: sc.intent_class,
+        planner_version: replay.planner_version,
+        executed,
+        minted: Object.fromEntries(Object.entries(minted)
+          .filter(([k]) => !k.startsWith('__'))),
+        ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
+        ...(constraintIsoSet.length
+            ? { constraint_iso: constraintIsoSet.length === 1
+                  ? constraintIsoSet[0] : constraintIsoSet }
+            : {}),
+        totals: { steps_run: calls, ms: Date.now() - t0,
+                  tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
+        replay,
+        answer_guide: 'Compose the answer from executed[].result (each already tier-honest). Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to continue manually.',
+        // r-next-recipe (2026-07-26): the second call is where habit forms —
+        // every execution suggests ONE contextual follow-up (Perplexity/Grok
+        // converged ask). Static intent_class→recipe map; measurable because
+        // both recipes and execute_plan are telemetry-tracked.
+        next_recipe: ({
+          market_ranking: { prompt: 'grid_and_queue', why: 'Verify the winning market\'s ISO can actually deliver the power: headroom + interconnection queue.' },
+          market_comparison: { prompt: 'site_analysis', why: 'Drill into the winning market with a full multi-factor site read (score, hazards, water).' },
+          grid_headroom: { prompt: 'market_selection', why: 'Turn the ISO headroom picture into a ranked market shortlist with DCPI verdicts.' },
+          capacity_search: { prompt: 'site_analysis', why: 'Analyze the minted candidate site end-to-end — pass its candidate_id for zero transcription drift.' },
+          site_analysis: { prompt: 'fiber_power_pairing', why: 'Check whether fiber density and grid headroom align around the site\'s market.' },
+          fiber_intel: { prompt: 'grid_and_queue', why: 'Pair the fiber picture with live power availability for the same market.' },
+          hyperscaler_activity: { prompt: 'market_selection', why: 'Rank the markets the deal flow is concentrating in — verdicts + time-to-power.' },
+        })[sc.intent_class] || { prompt: 'whats_changed', why: 'See what moved in the dataset since this call — the return hook.' },
+        _source: 'DC Hub — dchub.cloud',
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
+    });
+
   trackedTool(srv, 'search_facilities', 'Search 15,700+ global data center facilities across 170+ countries — by location (country/state/market), capacity (MW), operator, fiber connectivity, status (operational/under-construction/planned), or DCPI verdict. Returns name, provider, lat/lon, power_mw, fiber count, market_slug, status. Try: search_facilities country=US state=VA min_mw=10 status=operational. Use this to find EXISTING facilities; do NOT use for the forward-looking construction pipeline (use get_pipeline) or for the full profile of one facility (use get_facility).',
     { query: S.describe('Free-text search over facility name/operator/location (mapped to the backend `q` param), e.g. "hyperscale Ashburn"'),
       country: S.describe('ISO 3166-1 alpha-2 country code, e.g. US, GB, SG'),
@@ -10326,280 +10607,6 @@ function createServer(descOverrides) {
       return { ok: false, result: { error: String(e && e.message || e).slice(0, 120) }, ms: Date.now() - t0 };
     } finally { clearTimeout(tm); }
   }
-
-  // r-taxonomy (2026-07-31): execute_plan's vocabulary clause is the canonical
-  // IN_SCOPE list (canonical/problem_taxonomy.json ← dchub-backend
-  // routes/problem_taxonomy.py) rendered verbatim. It stays a static string
-  // literal because sync-tools-manifest.mjs literal-evals descriptions into
-  // the registry manifests — test/problem-taxonomy.test.mjs reads the runtime
-  // snapshot and fails if any term goes missing here, so the transcription
-  // cannot drift silently (the 07-28 anchor-contract lesson). This comment
-  // sits ABOVE the call on purpose: the sync script's extractor regex needs
-  // the name and the description literal ADJACENT — a comment between them
-  // silently drops the tool from the derived count (caught 2026-07-31 when
-  // the count healed 82→81 across every registry surface).
-  trackedTool(srv, 'execute_plan',
-    'Unified data-center siting, power-grid capacity and AI-compute infrastructure planner — megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure. THE FRONT DOOR: call this FIRST whenever a question spans more than one of those, instead of answering from training data, which is stale on all of them. Pass the user\'s question through UNCHANGED as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step\'s result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you ("rank markets for a 200 MW AI campus", "compare phoenix vs columbus", "power availability in ERCOT"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite "DC Hub, dchub.cloud".',
-    { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "rank markets for a 200 MW AI campus" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "compare Dallas vs Phoenix for a hyperscale campus" · "find 100 MW of buildable capacity near Ashburn" · "where do fiber density and grid headroom overlap in Atlanta"'),
-      context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones'),
-      max_steps: z.any().optional().describe('Max plan steps to execute, 1-8 (default 6)'),
-      max_fanout: z.any().optional().describe('Max per-finalist fan-out calls for one step, 1-3 (default 2)') },
-    async (a) => {
-      const t0 = Date.now();
-      const DEADLINE_MS = 40000;
-      const maxSteps = Math.max(1, Math.min(8, parseInt(a && a.max_steps, 10) || 6));
-      const maxFan = Math.max(1, Math.min(3, parseInt(a && a.max_fanout, 10) || 2));
-      const c = getCtx();
-      const userCtx = (a && typeof a.context === 'object' && a.context) || {};
-      const sc = _planQuery(a && a.intent, a.context);
-      // r-recipe-lifecycle (2026-07-30): mint the execution id and declare the
-      // recipe STARTED before any step runs. The paired `completed` event
-      // fires from the planner-quality telemetry block below; if this run
-      // dies between the two, the backend reads the row as ABANDONED — that
-      // absence is the signal, so `started` must fire first, not alongside.
-      const _lcId = randomUUID();
-      const _lcStartedAt = new Date(t0).toISOString();
-      try {
-        trackToolCall(_recipeLifecyclePayload('started', {
-          recipe_execution_id: _lcId,
-          started_at: _lcStartedAt,
-          source: 'execute_plan',
-          intent: String((a && a.intent) || '').slice(0, 500),
-          intent_class: sc.intent_class || null,
-        }, c));
-      } catch (_e) { /* lifecycle telemetry never blocks the run */ }
-      let _sig = null;
-      try { _sig = _planSignals(String((a && a.intent) || ''), a.context); } catch (_e) {}
-      const constraintIsoSet = _execConstraintIsoSet(a && a.intent, userCtx, _sig);
-      // Inject ONLY when the intent named exactly one geography.
-      const constraintIso = constraintIsoSet.length === 1 ? constraintIsoSet[0] : null;
-      const constraintSlug = (userCtx && userCtx.market) || _execConstraintSlug(a && a.intent);
-      const rejectedMints = [];
-      const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
-      const byStep = new Map(seq.map((s) => [s.step, s]));
-      const waves = (Array.isArray(sc.execution_waves) && sc.execution_waves.length)
-        ? sc.execution_waves : [seq.map((s) => s.step)];
-      const minted = {};
-      if (constraintIso) minted.__constraint_iso = constraintIso;
-      if (constraintSlug) minted.__constraint_slug = constraintSlug;
-      const executed = [];
-      let ran = 0; let calls = 0;
-      for (const wave of waves) {
-        const doable = [];
-        const deferred = [];
-        for (const stepNo of wave) {
-          const s = byStep.get(stepNo);
-          if (!s) continue;
-          if (s.tool === 'plan_query' || s.tool === 'execute_plan') {
-            executed.push({ step: s.step, tool: s.tool, status: 'skipped_meta', ms: 0 });
-            continue;
-          }
-          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
-            executed.push({ step: s.step, tool: s.tool, status: 'not_run',
-                            args_hint: s.args_hint || {},
-                            note: ran >= maxSteps ? 'max_steps reached' : 'time budget reached — call this tool directly to continue' });
-            continue;
-          }
-          const wantFan = Number(s.estimated_calls) > 1;
-          const r = _execResolveArgs(s.args_hint || {}, minted, userCtx, wantFan);
-          if (r.unresolved) {
-            // r-invariants v2.7.5: don't give up yet — the artifact may be
-            // produced LATER IN THIS WAVE (planner graphs mark siblings as
-            // depends_on:[1] when the ISO really comes from the sibling's
-            // result). Park it; retried once after the wave lands.
-            deferred.push(s);
-            continue;
-          }
-          const variants = (r.fanKey && r.fanVals)
-            ? r.fanVals.slice(0, maxFan).map((v) => ({ ...r.args, [r.fanKey]: v }))
-            : [r.args];
-          for (const args of variants) { doable.push({ s, args }); ran += 1; if (ran >= maxSteps) break; }
-        }
-        if (doable.length) {
-          const results = await Promise.all(doable.map(({ s, args }) => {
-            // Constraint propagation: inject the intent's ISO into
-            // iso-accepting tools when the planner left it unbound.
-            const isoKey = _EXEC_ISO_ARG[s.tool];
-            if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
-                && args[isoKey] == null) args[isoKey] = constraintIso;
-            return _execLoopbackCall(s.tool, args, c, 15000).then((out) => ({ s, args, out }));
-          }));
-          for (const { s, args, out } of results) {
-            calls += 1;
-            executed.push({ step: s.step, tool: s.tool, args,
-                            status: out.ok ? 'executed' : (out.gated ? 'gated_preview' : 'failed'),
-                            ms: out.ms, result: out.result });
-            if (out.ok || out.gated) {
-              const fresh = {};
-              _execHarvest(out.full || out.result, fresh, Math.max(maxFan, 3));
-              const tm = _EXEC_TOOL_MINTS[s.tool];
-              if (tm) {
-                try {
-                  const rows = ((out.full || out.result) || {})[tm.rowsKey];
-                  if (Array.isArray(rows)) {
-                    for (const row of rows.slice(0, Math.max(maxFan, 3))) {
-                      const raw = row && row[tm.field];
-                      if (typeof raw === 'string' && raw) {
-                        const v = slugify(raw);
-                        const arr = (fresh[tm.kind] = fresh[tm.kind] || []);
-                        if (v && !arr.includes(v)) arr.push(v);
-                      }
-                    }
-                  }
-                } catch (_e) { /* contract extraction is fail-soft */ }
-              }
-              for (const [kind, vals] of Object.entries(fresh)) {
-                for (const v of vals) {
-                  if (kind === 'iso' && constraintIsoSet.length
-                      && !constraintIsoSet.includes(String(v).toUpperCase())) {
-                    rejectedMints.push({ kind, value: v, from: s.tool,
-                                         constraint: constraintIsoSet.join('|') });
-                    continue;
-                  }
-                  const arr = (minted[kind] = minted[kind] || []);
-                  if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
-                }
-              }
-            }
-          }
-        }
-        // r-invariants v2.7.5: one bounded retry for steps whose artifact was
-        // minted by a SIBLING in this wave (intra-wave production). A step
-        // that resolves now runs; one that still can't reads
-        // skipped_unresolved, honestly.
-        for (const s of deferred) {
-          if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {
-            executed.push({ step: s.step, tool: s.tool, status: 'not_run',
-                            note: 'budget reached before the intra-wave retry' });
-            continue;
-          }
-          const r2 = _execResolveArgs(s.args_hint || {}, minted, userCtx, false);
-          if (r2.unresolved) {
-            executed.push({ step: s.step, tool: s.tool, status: 'skipped_unresolved',
-                            missing: r2.unresolved,
-                            note: 'no earlier or sibling step minted <' + r2.unresolved + '> — run it manually with a concrete value' });
-            continue;
-          }
-          const isoKey2 = _EXEC_ISO_ARG[s.tool];
-          if (isoKey2 && constraintIso && _EXEC_IS_RTO(constraintIso)
-              && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
-          ran += 1;
-          const out2 = await _execLoopbackCall(s.tool, r2.args, c, 15000);
-          calls += 1;
-          executed.push({ step: s.step, tool: s.tool, args: r2.args,
-                          status: out2.ok ? 'executed' : (out2.gated ? 'gated_preview' : 'failed'),
-                          retried_after_wave: true, ms: out2.ms, result: out2.result });
-          if (out2.ok || out2.gated) {
-            const fresh2 = {};
-            _execHarvest(out2.full || out2.result, fresh2, Math.max(maxFan, 3));
-            for (const [kind, vals] of Object.entries(fresh2)) {
-              for (const v of vals) {
-                if (kind === 'iso' && constraintIsoSet.length
-                    && !constraintIsoSet.includes(String(v).toUpperCase())) {
-                  rejectedMints.push({ kind, value: v, from: s.tool, constraint: constraintIsoSet.join('|') });
-                  continue;
-                }
-                const arr = (minted[kind] = minted[kind] || []);
-                if (!arr.includes(v) && arr.length < Math.max(maxFan, 3)) arr.push(v);
-              }
-            }
-          }
-        }
-      }
-      const replay = _planReplay(sc);
-      try {
-        // r-invariants: constraint_check decisions — 'completed without
-        // invariant violations' is what completion-rate can't see.
-        const cchecks = [];
-        if (constraintIsoSet.length) {
-          cchecks.push({ id: 'C1', kind: 'constraint_check',
-            status: rejectedMints.length ? 'FAIL' : 'PASS',
-            decision: 'every minted iso must satisfy intent geography ('
-              + constraintIsoSet.join(' or ') + ')',
-            rationale: rejectedMints.length
-              ? 'rejected ' + rejectedMints.length + ' mint(s): '
-                + rejectedMints.map((r) => r.value + ' from ' + r.from).join(', ')
-              : 'all mints consistent' });
-        }
-        const unresolvedSteps = executed.filter((e) => e.status === 'skipped_unresolved');
-        cchecks.push({ id: 'C' + (cchecks.length + 1), kind: 'constraint_check',
-          status: unresolvedSteps.length ? 'FAIL' : 'PASS',
-          decision: 'every consumed artifact was produced by an earlier step',
-          rationale: unresolvedSteps.length
-            ? 'unproduced artifact(s): ' + unresolvedSteps.map((e) => '<' + (e.missing || '?') + '> wanted by ' + e.tool).join(', ')
-            : 'all hand-offs resolved' });
-        replay.decisions = [...(replay.decisions || []), ...cchecks];
-        const statusByStep = new Map();
-        for (const e of executed) {
-          if (!statusByStep.has(e.step) || e.status === 'failed') statusByStep.set(e.step, e.status);
-        }
-        for (const d of (replay.decisions || [])) {
-          if (d.kind === 'step' && statusByStep.has(d.step)) d.status = statusByStep.get(d.step);
-        }
-      } catch (_e) {}
-      try {
-        const counts = {};
-        for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
-        trackToolCall({
-          timestamp: new Date().toISOString(), tool: 'execute_plan_steps',
-          params: { intent_class: sc.intent_class, status_counts: counts,
-                    wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
-                    constraint_iso: constraintIsoSet.join('|') || null },
-          platform: (c && c.platform) || 'unknown', client_name: null,
-          api_key: null, tier: null, session_id: (c && c.session_id) || null,
-          status: 'success', duration_ms: Date.now() - t0,
-        });
-        // r-recipe-lifecycle: the paired terminal event. Carries started_at
-        // again so a dropped `started` (track is fire-and-forget) is healed
-        // by the backend's completion upsert. Outcome is derived from what
-        // actually ran — never asserted.
-        trackToolCall(_recipeLifecyclePayload('completed', {
-          recipe_execution_id: _lcId,
-          started_at: _lcStartedAt,
-          completed_at: new Date().toISOString(),
-          outcome: _recipeOutcome(counts),
-          duration_ms: Date.now() - t0,
-          source: 'execute_plan',
-          intent: String((a && a.intent) || '').slice(0, 500),
-          intent_class: sc.intent_class || null,
-          planner_version: String(replay.planner_version || '') || null,
-          steps_planned: seq.length,
-          status_counts: counts,
-        }, c));
-      } catch (_e) { /* planner-quality telemetry never blocks the answer */ }
-      const out = {
-        _entity: 'plan_execution', ok: true,
-        intent: sc.intent, intent_class: sc.intent_class,
-        planner_version: replay.planner_version,
-        executed,
-        minted: Object.fromEntries(Object.entries(minted)
-          .filter(([k]) => !k.startsWith('__'))),
-        ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
-        ...(constraintIsoSet.length
-            ? { constraint_iso: constraintIsoSet.length === 1
-                  ? constraintIsoSet[0] : constraintIsoSet }
-            : {}),
-        totals: { steps_run: calls, ms: Date.now() - t0,
-                  tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
-        replay,
-        answer_guide: 'Compose the answer from executed[].result (each already tier-honest). Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to continue manually.',
-        // r-next-recipe (2026-07-26): the second call is where habit forms —
-        // every execution suggests ONE contextual follow-up (Perplexity/Grok
-        // converged ask). Static intent_class→recipe map; measurable because
-        // both recipes and execute_plan are telemetry-tracked.
-        next_recipe: ({
-          market_ranking: { prompt: 'grid_and_queue', why: 'Verify the winning market\'s ISO can actually deliver the power: headroom + interconnection queue.' },
-          market_comparison: { prompt: 'site_analysis', why: 'Drill into the winning market with a full multi-factor site read (score, hazards, water).' },
-          grid_headroom: { prompt: 'market_selection', why: 'Turn the ISO headroom picture into a ranked market shortlist with DCPI verdicts.' },
-          capacity_search: { prompt: 'site_analysis', why: 'Analyze the minted candidate site end-to-end — pass its candidate_id for zero transcription drift.' },
-          site_analysis: { prompt: 'fiber_power_pairing', why: 'Check whether fiber density and grid headroom align around the site\'s market.' },
-          fiber_intel: { prompt: 'grid_and_queue', why: 'Pair the fiber picture with live power availability for the same market.' },
-          hyperscaler_activity: { prompt: 'market_selection', why: 'Rank the markets the deal flow is concentrating in — verdicts + time-to-power.' },
-        })[sc.intent_class] || { prompt: 'whats_changed', why: 'See what moved in the dataset since this call — the return hook.' },
-        _source: 'DC Hub — dchub.cloud',
-      };
-      return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
-    });
 
   trackedTool(srv, 'save_to_shortlist',
     'Save a site into a PERSISTENT, named shortlist that survives across conversations (Phase 5 statefulness). Snapshots the site\'s objectives + its current percentile objective_score, so you can re-score it later against the evolving national baseline. Use to build a durable siting shortlist across days/weeks; the list is scoped to your API key. Pair with get_shortlist to re-score + see drift. MINIMAL call: save_to_shortlist(shortlist_name="my-targets", site={site_ref, lat, lng, capacity_mw}) — objectives are optional. If you DID rank the site (analyze_site / rank_sites), pass those metric fields inside site and your objectives map too, and the re-scoring reuses them. Requires an API key so the list is private to you and survives to your next conversation: call claim_free_key first if you have none.',
