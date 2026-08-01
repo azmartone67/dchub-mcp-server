@@ -59,6 +59,16 @@ async function main() {
   if (!isCleanList(body?.in_scope, 8, 40)) bad.push('in_scope');
   if (!isCleanList(body?.out_of_scope, 5, 40)) bad.push('out_of_scope');
   if (typeof body?.not_for_note !== 'string' || body.not_for_note.length < 40 || /\d/.test(body.not_for_note)) bad.push('not_for_note');
+  // Taxonomy v2 (round-11): the enumerated live-data reason set. ENUM
+  // discipline enforced at sync time — snake_case requires_* codes, digit-free
+  // phrases, and a SMALL value space (an enum that grows a value per plan
+  // class stops being an aggregation axis).
+  const wlr = body?.why_live_reasons;
+  const wlrOk = wlr && typeof wlr === 'object' && !Array.isArray(wlr) &&
+    Object.keys(wlr).length >= 4 && Object.keys(wlr).length <= 12 &&
+    Object.entries(wlr).every(([k, v]) => /^requires_[a-z_]+$/.test(k) &&
+      typeof v === 'string' && v.length >= 20 && !/\d/.test(v));
+  if (!wlrOk) bad.push('why_live_reasons');
   if (bad.length) {
     console.log(`taxonomy refresh: invalid field(s) ${bad.join(', ')} — keeping the committed snapshot`);
     return;
@@ -73,7 +83,7 @@ async function main() {
   const snap = {
     _generated_by: 'scripts/refresh-problem-taxonomy.mjs',
     _source: URL_,
-    _warning: 'CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.',
+    _warning: 'CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for + why_live_code phrase resolution) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.',
     retrieved_at: new Date().toISOString(),
     version: body.version,
     contract_hash: body.contract_hash,
@@ -82,6 +92,7 @@ async function main() {
     in_scope: body.in_scope,
     out_of_scope: body.out_of_scope,
     not_for_note: body.not_for_note,
+    why_live_reasons: body.why_live_reasons,
   };
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(snap, null, 2) + '\n');

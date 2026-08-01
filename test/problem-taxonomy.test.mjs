@@ -101,30 +101,51 @@ describe('discover_tools not_for (the negative list in the navigation envelope)'
   });
 });
 
-describe('replay.why_live_data (planner v5.9, additive at replay schema 1)', () => {
-  it('every plan class has a reason — coverage in one assertion', () => {
+describe('replay.why_live_code + why_live_data (planner v5.10, additive at replay schema 1)', () => {
+  // ChatGPT round-11: an ENUM, not free text — stamped codes must aggregate
+  // ("N% of executions needed live queue data"), and that only works if the
+  // value space is small, stable, and canon-owned.
+  it('the snapshot carries a small, well-formed reason enum', () => {
+    const wlr = SNAP.why_live_reasons;
+    expect(wlr && typeof wlr).toBe('object');
+    const n = Object.keys(wlr).length;
+    expect(n).toBeGreaterThanOrEqual(4);
+    expect(n).toBeLessThanOrEqual(12);
+    for (const [code, phrase] of Object.entries(wlr)) {
+      expect(code).toMatch(/^requires_[a-z_]+$/);
+      expect(typeof phrase).toBe('string');
+      expect(phrase.length).toBeGreaterThan(20);
+      expect(phrase, `digit in phrase for ${code}`).not.toMatch(/\d/);
+    }
+  });
+
+  it('every plan class maps to a code, and every code exists in the canon enum', () => {
     for (const c of _PLAN_CLASSES) {
-      expect(_CLASS_WHY_LIVE[c.id], `class ${c.id} has no why_live reason`).toBeTruthy();
+      const code = _CLASS_WHY_LIVE[c.id];
+      expect(code, `class ${c.id} has no why_live code`).toBeTruthy();
+      expect(SNAP.why_live_reasons[code],
+        `class ${c.id} assigned code "${code}" that the canonical enum does not define — ` +
+        'add it to dchub-backend routes/problem_taxonomy.py WHY_LIVE_REASONS first').toBeTruthy();
     }
   });
 
-  it('reasons are short, count-free strings', () => {
-    for (const [id, w] of Object.entries(_CLASS_WHY_LIVE)) {
-      expect(typeof w, id).toBe('string');
-      expect(w.length, id).toBeGreaterThan(20);
-      expect(w.length, `${id} reason is bloating the envelope`).toBeLessThan(120);
-      expect(w, `digit in why_live for ${id}`).not.toMatch(/\d/);
-    }
+  it('the map stays an aggregation axis — several classes share codes', () => {
+    const used = new Set(Object.values(_CLASS_WHY_LIVE));
+    expect(used.size).toBeLessThan(Object.keys(_CLASS_WHY_LIVE).length);
   });
 
-  it('a routed plan carries the class reason; unknown carries none', () => {
+  it('a routed plan carries the code + the canon phrase; unknown carries neither', () => {
     const routed = _planQuery('rank markets for a 200 MW AI campus');
     const r = _planReplay(routed);
-    expect(r.why_live_data).toBe(_CLASS_WHY_LIVE[routed.intent_class]);
+    const code = _CLASS_WHY_LIVE[routed.intent_class];
+    expect(r.why_live_code).toBe(code);
+    expect(r.why_live_data).toBe(SNAP.why_live_reasons[code]);
 
     const un = _planQuery('xylophone lessons for beginners');
     expect(un.intent_class).toBe('unknown');
     // emit-only-when-real: no phantom live-data claim on an unrouted plan
-    expect('why_live_data' in _planReplay(un)).toBe(false);
+    const ur = _planReplay(un);
+    expect('why_live_code' in ur).toBe(false);
+    expect('why_live_data' in ur).toBe(false);
   });
 });
