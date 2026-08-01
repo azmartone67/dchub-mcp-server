@@ -115,6 +115,31 @@ describe('applyTierGate — tier access', () => {
     expect(g.allowed).toBe(true);
     expect(g.trial_taste).toBe(true);
   });
+  // r-paidtaste (2026-08-01): Starter/Developer must get AT LEAST the anon
+  // taste on the flagship pair — before this, a paying key got ZERO full
+  // answers ever on grid/fiber while anonymous callers got a daily full cap
+  // (paying < anonymous, the inversion the 2026-08-01 audit measured).
+  it('starter/developer keys get the capped paid taste on the Pro-only flagship pair', () => {
+    for (const tier of ['starter', 'developer']) {
+      for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
+        const g = applyTierGate(tool, {}, tier, true, false);
+        expect(g.allowed).toBe(true);
+        expect(g.trial_taste).toBe(true);
+        expect(g.paid_taste).toBe(true);
+      }
+    }
+  });
+  it('starter/developer stay WALLED on the deep Pro-only tools (owner: no full Pro access)', () => {
+    for (const tier of ['starter', 'developer']) {
+      for (const tool of ['analyze_site', 'compare_sites', 'get_dchub_recommendation', 'generate_site_analysis']) {
+        expect(applyTierGate(tool, {}, tier, true, false).allowed).toBe(false);
+      }
+    }
+  });
+  it('free/anon callers never get the paid_taste marker (anon cascade untouched)', () => {
+    expect(applyTierGate('get_grid_intelligence', {}, 'free', true, false).paid_taste).toBeUndefined();
+    expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).paid_taste).toBeUndefined();
+  });
 });
 
 describe('FREE_FULL_TOOLS — flagship hook exemption (regression guard: 2/22 grids)', () => {

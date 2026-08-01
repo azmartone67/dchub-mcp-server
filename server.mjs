@@ -2381,6 +2381,21 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
   if ((tier === 'free' || tier === 'identified') && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
     return { allowed: true, params, trial_taste: true };
   }
+  // r-paidtaste (2026-08-01): Starter ($9) / Developer ($49) on the Pro-only
+  // flagship preview tools (ALWAYS_PARTIAL_PREVIEW ∩ PRO_ONLY =
+  // get_grid_intelligence, get_fiber_intel — the two highest-demand tools).
+  // The r-starterdev-parity normalization deliberately leaves these tiers
+  // un-normalized on PRO_ONLY tools so the Pro wall holds — but that sent a
+  // PAYING customer to the permanent 1-of-N preview with ZERO full answers
+  // ever, while anon/free-keyed callers got TRIAL_DAILY_FULL_CAP full tastes
+  // per day (paying < anonymous — the r-inversion-fix violation, one tier up).
+  // Route them through the SAME capped trial_taste path at the higher
+  // PAID_DAILY_FULL_CAP; unlimited full depth on the pair stays Pro. The
+  // non-Pro ALWAYS_PARTIAL tools never reach this (normalized to 'paid' →
+  // short-circuited above), so this fires ONLY on the flagship pair.
+  if ((tier === 'starter' || tier === 'developer') && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+    return { allowed: true, params, trial_taste: true, paid_taste: true };
+  }
   // r46-conversion: keyed-free users get the 5 demand-tools through —
   // daily cap still applies at the worker layer (10/day).
   if ((tier === 'free' || tier === 'identified') && hasApiKey && KEYED_FREE_BONUS.has(toolName)) return { allowed: true, params, bonus: true }; // free-class: identified is the registration carrot (r-identified)
@@ -2655,6 +2670,14 @@ const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_D
 const IDENTIFIED_DAILY_FULL_CAP = Math.max(
   TRIAL_DAILY_FULL_CAP,
   parseInt(process.env.DCHUB_IDENTIFIED_TOOL_DAILY_FULL || '10', 10));
+// r-paidtaste (2026-08-01): daily full-answer allowance for Starter/Developer on
+// the Pro-only flagship preview pair (see applyTierGate). Math.max-guarded to the
+// identified cap so a PAYING tier can never see fewer full answers than a free
+// email-bound key (which is itself ≥ the anon cap) — paid ≥ identified ≥ anon
+// always holds. Unlimited depth on the pair stays Pro.
+const PAID_DAILY_FULL_CAP = Math.max(
+  IDENTIFIED_DAILY_FULL_CAP,
+  parseInt(process.env.DCHUB_PAID_TOOL_DAILY_FULL || '10', 10));
 // r-ladder (2026-06-25): Step 2, the re-rung. When DCHUB_LADDER_RERUNG=1 the anon
 // (unbound) inline-full taste tightens to DCHUB_LADDER_RERUNG_CAP (default 1) so
 // the fuller tier is EARNED by binding an email — fixing the inversion where an
@@ -8061,9 +8084,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // IDENTIFIED cap; unbound free keys stay at the base cap — so binding an
         // email buys a real, visible benefit (more full flagship answers/day).
         const _bound = !!c.email;
-        const _cap = _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
+        // r-paidtaste (2026-08-01): Starter/Developer taste on the Pro-only
+        // flagship pair — higher cap, and the count bucket keys on the API KEY
+        // (the entitlement belongs to the paid key, not the NAT the customer
+        // shares with anon callers). Free/anon buckets stay IP-keyed as before.
+        const _paidTaste = gate.paid_taste === true;
+        const _capId = _paidTaste ? (c.api_key || c.client_ip) : c.client_ip;
+        const _cap = _paidTaste ? PAID_DAILY_FULL_CAP
+                   : _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
         const _tasteExceeded = _cap > 0
-          && _trialFullCallsExceeded(c.client_ip, name, _cap,
+          && _trialFullCallsExceeded(_capId, name, _cap,
                                      c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
         if (_cap > 0 && !_tasteExceeded) {
           // r-metered-visible (2026-07-27 digest wave, "metered trial"): the
@@ -8077,18 +8107,23 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try {
             const _mtParsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (_mtParsed && typeof _mtParsed === 'object' && !Array.isArray(_mtParsed)) {
-              const _mtRemaining = _trialFullRemaining(c.client_ip, name, _cap);
+              const _mtRemaining = _trialFullRemaining(_capId, name, _cap);
               const _mtCall = Math.min(_cap, Math.max(1, _cap - _mtRemaining));
               _mtParsed._metered_trial = {
                 call: _mtCall,
                 of: _cap,
                 remaining_today: _mtRemaining,
-                note: 'Full-fidelity trial answer ' + _mtCall + ' of ' + _cap
-                  + ' today — keep or summarize these results for your human. '
-                  + 'After the last free call this tool returns a preview with '
-                  + 'one-click unlock options ($10 one-time = 1,000 calls'
-                  + (_bound ? '' : '; free: bind_email lifts your daily cap')
-                  + ').',
+                note: _paidTaste
+                  ? 'Full-fidelity answer ' + _mtCall + ' of the ' + _cap
+                    + ' included with your plan today on this Pro-depth tool. '
+                    + 'Unlimited full `' + name + '` depth is Pro — call '
+                    + 'unlock_more_data for one-click links.'
+                  : 'Full-fidelity trial answer ' + _mtCall + ' of ' + _cap
+                    + ' today — keep or summarize these results for your human. '
+                    + 'After the last free call this tool returns a preview with '
+                    + 'one-click unlock options ($10 one-time = 1,000 calls'
+                    + (_bound ? '' : '; free: bind_email lifts your daily cap')
+                    + ').',
               };
               result.content[0].text = JSON.stringify(_mtParsed);
             }
@@ -8101,7 +8136,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               const trimmed = trimForTrial(parsed);
               const _sid = c.session_id || 'no-session';
               trimmed._upgrade = {
-                tier: 'trial',
+                tier: _paidTaste ? String(_gateTier) : 'trial',
                 // r-pack10: this is THE deprivation moment (repeat caller, gated). Lead
                 // with the cheapest one-click: $10 = 1,000 API calls (owned balance,
                 // no subscription). The agent relays it; the human one-clicks; the next
@@ -8110,7 +8145,13 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // $10 pack LEADS (house rule), bind_email is the free ladder for unbound
                 // callers — and NO claim_free_key here: it re-mints another capped trial
                 // and cannot unlock depth, so it was a false promise on this surface.
-                message: `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the 1-of-N preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — the moment your human pays, your next call returns full data (no reconnect). Call \`unlock_more_data\` for one-click links (also ⚡ $9/mo Starter = 200 calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                // r-paidtaste (2026-08-01): a Starter/Developer over-cap is a PAYING
+                // customer — honest plan label, Pro is the upgrade, the $10 pack still
+                // works per-call (credit cascade serves PRO_ONLY full for pack holders),
+                // and NO bind_email (binding cannot lift the paid cap).
+                message: _paidTaste
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the 1-of-N preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro ($299/mo) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the 1-of-N preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — the moment your human pays, your next call returns full data (no reconnect). Call \`unlock_more_data\` for one-click links (also ⚡ $9/mo Starter = 200 calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
@@ -8133,15 +8174,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // r-honest-cap (2026-07-01): first sentence = the honest count; the
                 // $10 pack leads for everyone (house rule), bind_email is the free
                 // follow-up for unbound callers.
-                { type: 'text', text:
-                  '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
-                  '💳 **Unlock full depth now — $10 one-time = 1,000 API calls (no subscription):** ' +
-                  _packCheckoutUrl(_sid) + ' — your human one-clicks; your very next `' + name +
-                  '` call returns the complete result (no reconnect).' +
-                  (_bound
-                    ? ''
-                    : ' 🔑 Free: lift your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + ' full `' + name +
-                      '` answers/day — call `bind_email` with your human\'s email (no card).') },
+                { type: 'text', text: _paidTaste
+                  ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
+                    '⚡ **Unlimited full `' + name + '` depth is Pro ($299/mo):** ' + UPGRADE_URL +
+                    ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
+                    _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
+                  : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
+                    '💳 **Unlock full depth now — $10 one-time = 1,000 API calls (no subscription):** ' +
+                    _packCheckoutUrl(_sid) + ' — your human one-clicks; your very next `' + name +
+                    '` call returns the complete result (no reconnect).' +
+                    (_bound
+                      ? ''
+                      : ' 🔑 Free: lift your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + ' full `' + name +
+                        '` answers/day — call `bind_email` with your human\'s email (no card).') },
               ] };
             }
           } catch (_) { /* fall through to full data on parse failure */ }
@@ -8154,7 +8199,13 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // Nothing is withheld — this is additive metadata on a successful call.
         // Fail-soft + flag-killable (MPP_PREWALL_DISABLE=1); never blocks the
         // response. Recorded as a PASSIVE offer, never as `mpp_challenge`.
-        else if (_cap > 0) {
+        // r-paidtaste (2026-08-01): NOT for the Starter/Developer taste — a
+        // $0.50 pay-per-call offer on a subscriber's included answer is noise,
+        // and the mpp_offer_prewall status overwrite would pollute the
+        // free-class funnel metrics ( _GRANTED_ST etc.) with paid traffic.
+        // (Also: _rem below reads the client_ip bucket; the paid taste counts
+        // on the api_key bucket — the read would be wrong anyway.)
+        else if (_cap > 0 && !_paidTaste) {
           try {
             // ★ Counter semantics: _trialFullCallsExceeded ALREADY incremented
             // for this call in the `if` above (it increments, then compares), so
@@ -8193,15 +8244,23 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           if (typeof _ttxt === 'string' && Buffer.byteLength(_ttxt, 'utf8') > TRIAL_TASTE_MAX_BYTES) {
             const _bteased = _teaseDepth(JSON.parse(_ttxt), DEPTH_TEASE_KEEP);
             const _sid = c.session_id || 'no-session';
+            // r-paidtaste (2026-08-01): the Starter/Developer taste hits this same
+            // size bound (the ~20MB fiber dump stays Pro) — but label it honestly:
+            // the complete dataset lives in Pro, not "developer", and the caller
+            // is a subscriber, not a trial.
+            const _btPaid = gate.paid_taste === true;
             if (_bteased && typeof _bteased === 'object') {
-              _bteased._taste_bounded = true; _bteased._full_in_developer = true;
+              _bteased._taste_bounded = true;
+              if (_btPaid) { _bteased._full_in_pro = true; } else { _bteased._full_in_developer = true; }
               // r-taste-cta (2026-07-12): this trimmed >120KB taste carried NO upgrade
               // ask, while every other trim path (over-cap, depth-tease) does — the
               // biggest funnel hole for get_fiber_intel, whose full payload ALWAYS
               // trips this cap, so free callers got a silent trim with no way forward.
               _bteased._upgrade = {
-                tier: 'trial',
-                message: `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock the complete dataset: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
+                tier: _btPaid ? String(_gateTier) : 'trial',
+                message: _btPaid
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro ($299/mo) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock the complete dataset: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
               };
