@@ -381,7 +381,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.11.0' }.version;  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.11.1' }.version;  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -5314,7 +5314,7 @@ const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -5334,6 +5334,8 @@ const _TOOL_OUTPUT_SCHEMAS = {
         reason: _oStr('Why it was rejected — the deterministic rejected_because'),
       }), 'Roads not taken, with reasons — the "why not" half of the audit trail'),
       execution_graph: _oAny('{waves: number[][], parallel_groups: string[][]} — the concurrency graph the plan executes as'),
+      why_live_code: _oStr('ENUM (v5.10): why this plan needs LIVE data — one of the requires_* codes published in the canonical taxonomy (/api/v1/canon/taxonomy why_live_reasons). Enumerated so stamped replays aggregate ("N% of executions needed live queue data"); count THIS, not the phrase. Absent when intent_class=unknown.'),
+      why_live_data: _oStr('Human phrase for why_live_code, resolved from the same canonical taxonomy — display it, never parse it. Additive at schema v1 (introduced 5.9 as class-keyed prose; enum-backed since 5.10).'),
       note: _oStr('How to read + cite the replay; plan-only disclaimer'),
     }, 'FIRST-CLASS VERSIONED replay object (r-planner-v5.1, ChatGPT schema review): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each decision with a stable id + status, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
   }).describe('Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry — keyword/regex routing, no LLM, same intent → same plan — plus a versioned replay decision-trail, alongside the DC Hub envelope keys.'),
@@ -6136,31 +6138,39 @@ export const _PLAN_CLASSES = [
   },
 ];
 
-// r-taxonomy (2026-07-31, planner v5.9): one short "why does this need LIVE
-// data" reason per class, surfaced as replay.why_live_data on plan_query AND
-// execute_plan results (ChatGPT round-10 — the GEO argument, stated on the
-// result itself). ONE map, not a property scattered through the class entries,
-// so coverage is testable in one assertion (every class id has a reason).
-// Additive at replay schema_version 1; count-free by the taxonomy rule.
-// 'unknown' has no entry on purpose — a plan that routed nowhere earns no
-// live-data claim (emit-only-when-real, same as resolution_gap).
+// r-taxonomy (2026-07-31, planner v5.9; ENUM-ized v5.10 2026-08-01): why does
+// this plan need LIVE data — surfaced on plan_query AND execute_plan replays
+// as why_live_code (the ENUM value) + why_live_data (its human phrase).
+// ChatGPT round-11: an ENUM, not free text, because the stamped codes become
+// a countable corpus ("N% of executions needed live queue data") usable to
+// debug planner over/under-routing — prose can't be aggregated. The CODE
+// VOCABULARY is canon-owned (canonical/problem_taxonomy.json why_live_reasons
+// ← dchub-backend routes/problem_taxonomy.py, taxonomy v2); THIS map owns
+// only which plan class earns which code — the publication-vs-meaning split
+// the anchor contract established. Phrases are resolved from the snapshot at
+// emit time, so a reworded phrase ships without touching this file; a code
+// assigned here but absent from the snapshot emits the code alone (the test
+// asserts the sets reconcile, so that state is a failing CI, not a silent
+// live gap). ONE map so coverage is one assertion. 'unknown' has no entry on
+// purpose — a plan that routed nowhere earns no live-data claim
+// (emit-only-when-real, same as resolution_gap).
 export const _CLASS_WHY_LIVE = {
-  market_ranking: 'requires live DCPI market scores and time-to-power (re-scored daily)',
-  capacity_search: 'requires live retirement openings, queue survivors and substation proximity',
-  market_comparison: 'requires live per-market DCPI scores — both sides move daily',
-  grid_headroom: 'requires real-time grid telemetry and current headroom reads',
-  interconnection_queue: 'requires live interconnection-queue data — positions and withdrawals move weekly',
-  hosting_capacity: 'requires current utility hosting-capacity maps and feeder reads',
-  water_climate: 'requires current water-stress and climate-risk layers',
-  site_analysis: 'requires live parcel, grid and constraint reads for the named site',
-  deals_ma: 'requires the current tracked M&A ledger — deals close and re-price continuously',
-  fiber_power_pairing: 'requires live fiber-route and grid overlays for the named metro',
-  fiber: 'requires current fiber-route and metro fiber-density data',
-  price: 'requires live wholesale energy prices and PPA benchmarks',
-  changes_delta: 'requires the live change ledger — the question is literally what changed',
-  incentives_tax: 'requires current statute-level incentive programs and expirations',
-  power_timeline: 'requires live queue and buildout timing for the named state',
-  facility_search: 'requires the live facility registry — tenants, capacity and status change continuously',
+  market_ranking: 'requires_current_market_scoring',
+  market_comparison: 'requires_current_market_scoring',
+  capacity_search: 'requires_live_queue_data',
+  interconnection_queue: 'requires_live_queue_data',
+  power_timeline: 'requires_live_queue_data',
+  grid_headroom: 'requires_live_grid_telemetry',
+  hosting_capacity: 'requires_current_infrastructure_layers',
+  water_climate: 'requires_current_infrastructure_layers',
+  site_analysis: 'requires_current_infrastructure_layers',
+  fiber: 'requires_current_infrastructure_layers',
+  fiber_power_pairing: 'requires_current_infrastructure_layers',
+  price: 'requires_current_market_pricing',
+  deals_ma: 'requires_live_change_ledger',
+  changes_delta: 'requires_live_change_ledger',
+  incentives_tax: 'requires_current_statute_data',
+  facility_search: 'requires_facility_registry_data',
 };
 // Extract deterministic signals from intent + context (never throws).
 
@@ -6734,7 +6744,11 @@ export function _planWorkflowConfidence(seq, d) {
 //   5.9 = replay.why_live_data — additive per-class "why this answer needed
 //         LIVE data" reason from _CLASS_WHY_LIVE (r-taxonomy, ChatGPT
 //         round-10). OUTPUT-only rev: routing unchanged, schema stays 1.
-export const PLANNER_VERSION = '5.9';
+//  5.10 = why_live ENUM-ized (round-11): _CLASS_WHY_LIVE maps class → a
+//         requires_* code from the canonical taxonomy (why_live_reasons);
+//         replay adds why_live_code, why_live_data becomes the code's canon
+//         phrase. OUTPUT-only rev: routing unchanged, schema stays 1.
+export const PLANNER_VERSION = '5.10';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -6865,11 +6879,16 @@ export function _planReplay(sc, signals) {
       waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
       parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
     ...(_gap ? { resolution_gap: _gap } : {}),
-    // r-taxonomy (v5.9): why this answer needed LIVE data — additive at
-    // schema v1, one short class-keyed reason, absent for 'unknown'
-    // (emit-only-when-real, like resolution_gap above).
-    ...(_CLASS_WHY_LIVE[sc.intent_class]
-      ? { why_live_data: _CLASS_WHY_LIVE[sc.intent_class] } : {}),
+    // r-taxonomy (v5.9, enum v5.10): why this answer needed LIVE data —
+    // additive at schema v1, absent for 'unknown' (emit-only-when-real, like
+    // resolution_gap above). why_live_code = the canon ENUM value (count it);
+    // why_live_data = its human phrase resolved from the taxonomy snapshot.
+    ...(() => {
+      const code = _CLASS_WHY_LIVE[sc.intent_class];
+      if (!code) return {};
+      const phrase = _TAXONOMY && _TAXONOMY.why_live_reasons && _TAXONOMY.why_live_reasons[code];
+      return { why_live_code: code, ...(typeof phrase === 'string' && phrase ? { why_live_data: phrase } : {}) };
+    })(),
     note: 'Auditable planning trail: decisions (D0 = routing, D1..Dn = per-step selections; status is one of ' + REPLAY_DECISION_STATUSES.join('/') + ' — only "planned" is emitted today, plan_query never executes) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". schema_version pins the SHAPE (independent of planner_version); execution/evidence IDs are minted by the caller at run time.',
   };
 }
