@@ -12161,7 +12161,12 @@ app.post('/mcp', async (req, res) => {
     // (Gemini enterprise). Only a KNOWN-platform value is honored (see
     // detectPlatformFromInit); an unknown value is ignored, so it can't mint a
     // platform or brand-attribute crawl. The CF worker forwards custom X- headers.
-    const platformHeader = (req.headers['x-mcp-platform'] || req.headers['x-client-source'] || '').toString();
+    const platformHeader = (req.headers['x-mcp-platform'] || req.headers['x-client-source']
+      // r-gemini-ident (2026-08-01): Gemini committed to shipping X-Client-Info
+      // ('Gemini-Agent/2.5') ahead of the 08-04 per-platform gate — honor it as a
+      // third alias of the same explicit-attribution channel. Same rules apply:
+      // only a KNOWN-platform value is honored, unknown values fall through.
+      || req.headers['x-client-info'] || '').toString();
     try { _chEnsureFlusher(); } catch (_) { /* r-oauth-funnel: never affect the handler */ }
     // r-alias (2026-07-10): normalize a GUESSED tool name to the real one here —
     // BEFORE the session/stateless branch — so it applies on EVERY tools/call
