@@ -40,6 +40,12 @@ jobs:
         # Fail-closed — on any fetch/validation failure it logs and leaves the
         # committed snapshot in force, so a backend blip can never move canon.
         run: node scripts/refresh-canon-phrases.mjs
+      - name: Refresh the canonical problem taxonomy from the owner endpoint
+        # ★2026-07-31: pulls /api/v1/canon/taxonomy (owner: dchub-backend
+        # routes/problem_taxonomy.py) into canonical/problem_taxonomy.json.
+        # Same fail-closed contract as the phrases refresh — a backend blip
+        # can never move the scope lists.
+        run: node scripts/refresh-problem-taxonomy.mjs
       - name: Sync tool count + version + canon quantities into every owned surface
         run: node scripts/sync-tools-manifest.mjs --fix
       - name: Commit + push only if a surface drifted
@@ -54,7 +60,7 @@ jobs:
           # server.mjs is deliberately included: quantity heals there push to
           # main and Railway redeploys the gateway with the corrected figures.
           OWNED="README.md smithery.yaml mcp-server.json server.json package.json \
-                 server.mjs canonical/canon_phrases.json \
+                 server.mjs canonical/canon_phrases.json canonical/problem_taxonomy.json \
                  llms-install.md REGISTRY-LISTINGS.md \
                  skills/README.md skills/dc-hub-data-center-intelligence/SKILL.md \
                  scripts/tier3_presence.sh scripts/smithery_description.txt \

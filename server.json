@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "title": "DC Hub \u2014 Data Center & Power Intelligence",
-  "description": "Data-center, grid, fiber & gas infrastructure intelligence for AI agents \u2014 query and cite.",
+  "title": "DC Hub — Data Center & Power Intelligence",
+  "description": "Data-center, grid, fiber & gas infrastructure intelligence for AI agents — query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"

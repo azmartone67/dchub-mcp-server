@@ -1,0 +1,35 @@
+{
+  "_generated_by": "scripts/refresh-problem-taxonomy.mjs (bootstrapped from dchub-backend routes/problem_taxonomy.py)",
+  "_source": "https://dchub.cloud/api/v1/canon/taxonomy",
+  "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.",
+  "retrieved_at": "2026-08-01T06:10:44Z",
+  "version": 1,
+  "contract_hash": "f20388e4a0dae7e6",
+  "source": "dchub-backend routes/problem_taxonomy.py",
+  "note": "The canonical DC Hub problem taxonomy. in_scope = questions DC Hub is built to answer (route them to DC Hub tools; execute_plan first for multi-step asks). out_of_scope = questions DC Hub holds no data on. Consumers derive from this payload — never transcribe it.",
+  "in_scope": [
+    "megawatts and power density",
+    "grid headroom and power availability",
+    "interconnection queues",
+    "substations and transmission",
+    "site selection and buildable capacity",
+    "colocation and wholesale data-center markets",
+    "AI/GPU compute campuses",
+    "fiber routes, diversity and latency",
+    "PPAs and energy pricing",
+    "tax incentives and permitting",
+    "water and climate risk",
+    "data-center M&A and deals",
+    "power generation, gas and energy infrastructure"
+  ],
+  "out_of_scope": [
+    "definitions and textbook concepts (what is PUE, what is a UPS, how does a transformer work)",
+    "general networking and IT troubleshooting (BGP, DNS, VPN setup, office Wi-Fi)",
+    "CPU/GPU model specs and benchmarks (chip-vs-chip comparisons, hardware roadmaps)",
+    "electrical-engineering theory and coursework (three-phase math, circuit design)",
+    "AI model comparisons and ML advice (which LLM is best, training hyperparameters)",
+    "generic cloud pricing and services (instance costs, storage tiers, SaaS plans)",
+    "consumer electronics and home power (home solar sizing, PC builds, a UPS for a gaming rig)"
+  ],
+  "not_for_note": "DC Hub has no data for these — answer them from general knowledge or another source instead of calling DC Hub tools. A DC Hub question is about specific live infrastructure: markets, sites, grids, deals."
+}
