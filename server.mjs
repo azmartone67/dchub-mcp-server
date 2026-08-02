@@ -5500,6 +5500,60 @@ export function _planHostingCoverage(text, coords) {
 // dual confidences from these declarations — all deterministic, no LLM.
 // Exported so tests read the list the RUNTIME serves (the anchor-contract
 // lesson: a test that transcribes the table drifts with it).
+// r-discovery-coverage (2026-08-02): the family navigator behind
+// discover_tools. Moved to module scope and EXPORTED for the same reason
+// _PLAN_CLASSES is — a test that transcribes the table drifts with it, and
+// this table had drifted badly: it covered 50 of 82 registered tools, and
+// `execute_plan` — the front door every instruction surface points at — was
+// in NO family. An agent that bound its capability map from discover_tools
+// (a documented default for at least one platform) could not see the front
+// door, the incremental-sync tool, the composite/hazard/climate layer, or
+// the entire saved-work surface. Same class as the get_hosting_capacity
+// note below, three surfaces later: registered ≠ discoverable.
+// The coverage guard in test/discovery-coverage.test.mjs now fails the build
+// when a newly registered tool joins no family and claims no exemption.
+export const _TOOL_FAMILIES_TABLE = [
+  { family: 'facility', when: 'Find, profile, or score a specific data-center facility — including what CHANGED in its risk profile.', keywords: ['facility','operator','tenant','colo','building','risk delta','changed'],
+    tools: ['search_facilities','get_facility','find_alternatives','score_facility','get_facility_risk_delta'] },
+  { family: 'market', when: 'Compare or rank the 300+ metro markets (DC Hub Power Index / DCPI), brief a whole market, forecast it, or re-score under your own assumptions.', keywords: ['market','metro','dcpi','rank','vacancy','pricing','forecast','trajectory','what-if','scenario','pipeline','announced','permitted'],
+    tools: ['rank_markets','get_market_intel','get_market_dcpi_rank','ai_capacity_index','get_intelligence_index','get_market_context','predict_market_trajectory','simulate_scenario','get_pipeline'] },
+  // r-planner-v5.5: get_hosting_capacity was missing from the family navigator
+  // for the same reason it was missing from _PLAN_CLASSES — registered, live,
+  // and reachable by NO navigation surface. It is the only DISTRIBUTION-level
+  // entry here; everything else in this family answers at transmission level,
+  // hence the added feeder/distribution keywords.
+  { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, energy pricing, whole-ISO briefings, and non-US generation.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit','global','worldwide','plant'],
+    tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices','get_iso_context','get_global_power'] },
+  { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
+    tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
+  { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+hazard+climate+tax+permitting+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select','hazard','flood','wildfire','seismic','climate','permitting','moratorium','composite','verdict'],
+    tools: ['analyze_site','analyze_parcel','rank_sites','compare_sites','get_water_risk','get_tax_incentives','get_dchub_recommendation','site_selection_canvas','generate_site_analysis','get_infrastructure','get_renewable_energy','get_composite_site_score','get_disaster_risk','get_climate_intel','get_permitting_intel'] },
+  { family: 'fiber', when: 'Fiber routes, carrier connectivity, lead-in planning, latency clustering, metro-level fiber depth.', keywords: ['fiber','carrier','connectivity','dark fiber','lead-in','longhaul','latency','cluster','metro'],
+    tools: ['get_fiber_intel','get_fiber_readiness','plan_fiber_leadin','cluster_sites_by_latency','get_metro_fiber'] },
+  { family: 'deals_news', when: 'M&A transactions, hyperscaler capex, industry news, and commissioned research dossiers.', keywords: ['deal','m&a','acquisition','transaction','hyperscaler','capex','news','research','dossier'],
+    tools: ['list_transactions','deal_autopsy','hyperscaler_deals','get_news','research_task'] },
+  // r-discovery-coverage: an ENTIRE product surface (Phase 5 statefulness —
+  // saved shortlists, drift alerts, digests, webhook standing intents,
+  // exports) was registered and reachable by no navigation surface. Eleven
+  // tools that let an agent stop polling and keep state across conversations,
+  // invisible to the tool an agent calls to learn what DC Hub does.
+  { family: 'saved_work', when: 'Keep state across conversations: save sites/shortlists, re-score them on refresh, arm drift alerts, subscribe your human to digests, register webhook standing queries, or export what you saved.', keywords: ['save','saved','shortlist','alert','watch','notify','digest','subscribe','webhook','standing','export','track','monitor','drift','reallocate'],
+    tools: ['save_site','save_to_shortlist','get_shortlist','list_saved_sites','set_site_alert','set_market_alert','set_shortlist_alert','subscribe_digest','standing_intent','suggest_reallocation','export_dataset'] },
+  { family: 'account_meta', when: 'Keys/access + recovery, semantic search across DC Hub, and why-use meta.', keywords: ['key','access','unlock','billing','semantic','search','why','email','recover','intelligence'],
+    tools: ['claim_free_key','unlock_more_data','semantic_search','search_intelligence','why_dchub','get_agent_registry','discover_tools','plan_query','bind_email','recover_my_key'] },
+];
+
+// r-discovery-coverage: tools that intentionally belong to NO family, with
+// the reason stated. The coverage guard reads this — an exemption is a
+// deliberate, reviewable choice, never a silent omission.
+export const _DISCOVERY_EXEMPT = {
+  execute_plan: 'The front door itself — surfaced as front_door at the TOP of the discover_tools envelope, above the families, because it spans them.',
+  get_changes: 'Cross-cutting refresh — surfaced as front_door.refresh; it belongs to no single family because it syncs all of them.',
+  search: 'OpenAI Deep Research / ChatGPT connector protocol pair — required shape, not a DC Hub capability an agent chooses by topic.',
+  fetch: 'OpenAI Deep Research / ChatGPT connector protocol pair — see search.',
+  get_backup_status: 'Platform health/ops introspection, not a siting capability — deliberately not advertised as an answer surface.',
+};
+
 export const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
@@ -10479,32 +10533,10 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
 
-  const _TOOL_FAMILIES = [
-    { family: 'facility', when: 'Find, profile, or score a specific data-center facility.', keywords: ['facility','operator','tenant','colo','building'],
-      tools: ['search_facilities','get_facility','find_alternatives','score_facility'] },
-    { family: 'market', when: 'Compare or rank the 300+ metro markets (DC Hub Power Index / DCPI).', keywords: ['market','metro','dcpi','rank','vacancy','pricing'],
-      tools: ['rank_markets','get_market_intel','get_market_dcpi_rank','ai_capacity_index','get_intelligence_index'] },
-    // r-planner-v5.5: get_hosting_capacity was missing from the family navigator
-    // for the same reason it was missing from _PLAN_CLASSES — registered, live,
-    // and reachable by NO navigation surface. It is the only DISTRIBUTION-level
-    // entry here; everything else in this family answers at transmission level,
-    // hence the added feeder/distribution keywords.
-    { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, energy pricing.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit'],
-      tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices'] },
-    { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
-      tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
-    { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+risk+tax+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select'],
-      tools: ['analyze_site','analyze_parcel','rank_sites','compare_sites','get_water_risk','get_tax_incentives','get_dchub_recommendation','site_selection_canvas','generate_site_analysis','get_infrastructure','get_renewable_energy'] },
-    { family: 'fiber', when: 'Fiber routes, carrier connectivity, lead-in planning, latency clustering.', keywords: ['fiber','carrier','connectivity','dark fiber','lead-in','longhaul','latency','cluster'],
-      tools: ['get_fiber_intel','get_fiber_readiness','plan_fiber_leadin','cluster_sites_by_latency'] },
-    { family: 'deals_news', when: 'M&A transactions, hyperscaler capex, industry news.', keywords: ['deal','m&a','acquisition','transaction','hyperscaler','capex','news'],
-      tools: ['list_transactions','deal_autopsy','hyperscaler_deals','get_news'] },
-    { family: 'account_meta', when: 'Keys/access, semantic search across DC Hub, and why-use meta.', keywords: ['key','access','unlock','billing','semantic','search','why'],
-      tools: ['claim_free_key','unlock_more_data','semantic_search','why_dchub','get_agent_registry','discover_tools','plan_query'] },
-  ];
+  const _TOOL_FAMILIES = _TOOL_FAMILIES_TABLE;
 
   trackedTool(srv, 'discover_tools',
-    'Meta-tool: navigate DC Hub\'s 60+ tools by FAMILY instead of scanning the whole list. Returns _entity=tool_families — each family has a when-to-use note + its flagship tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, account_meta), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical.',
+    'Meta-tool: navigate DC Hub\'s tool catalog by FAMILY instead of scanning the whole list. Returns _entity=tool_families — a front_door block (execute_plan for any multi-capability question, get_changes to refresh) plus families with a when-to-use note + their tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, saved_work, account_meta), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical, and if you are BINDING a capability map, bind it from tools/list, not from here.',
     { query: S.describe('Optional keyword to filter families/tools, e.g. "site selection", "grid queue", "fiber", "deals", "market"') },
     async (a) => {
       const q = (a.query || '').toLowerCase().trim();
@@ -10513,6 +10545,19 @@ function createServer(descOverrides) {
       const hits = _TOOL_FAMILIES.filter(match);
       const sc = { _entity: 'tool_families', ok: true,
         query: a.query || null,
+        // r-discovery-coverage (2026-08-02): execute_plan spans every family,
+        // so it lived in none of them and was invisible to any agent that
+        // navigated by family. It leads the envelope now — before `families`,
+        // unconditional, and unaffected by `query` — because the front door
+        // is the answer to most multi-capability questions that bring an
+        // agent here in the first place.
+        front_door: {
+          tool: 'execute_plan',
+          when: 'Any question spanning more than one capability below (site selection, market ranking, "find N MW in <market>", "compare A vs B", grid + queue). Pass the user\'s question through unchanged as intent — one call plans, executes, and returns an auditable replay.',
+          refresh: 'get_changes',
+          refresh_when: 'You already pulled data and want only what moved since a timestamp — incremental sync, not a re-pull.',
+          binding_note: 'These two are not in any family because they cross all of them. If you are building a capability map, bind it from tools/list — this navigator is curated, not exhaustive.',
+        },
         count: (hits.length ? hits : _TOOL_FAMILIES).length,
         families: hits.length ? hits : _TOOL_FAMILIES,
         note: 'Flagship tools per family are the front door for planners; call tools/list for the complete, always-current catalog + full schemas. If nothing matched your query, all families are returned.',
