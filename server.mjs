@@ -1526,6 +1526,63 @@ function cacheKey(api_key, result) {
   return v;
 }
 
+// r-upstream-contract (2026-08-03): a non-2xx from the backend used to
+// collapse to `{ error: "API 404", detail: <500 chars of raw body> }` — every
+// structured field the backend had already produced was DISCARDED. Measured
+// 2026-08-02 from the caller's seat: 3 of 5 error responses carried an
+// `_error_mitigation` block and two carried nothing, so an agent that had
+// bound "errors are actionable, not terminal" as a default (a partner
+// published exactly that on 08-02) hit a dead end and ended the session.
+//
+// ★ The fix invents NOTHING. The backend already answers these errors well —
+// a bad market slug returns `code:"NOT_FOUND"` with `detail:"Use a valid
+// market slug. Call rank_markets…"`, and a missing-arg call returns `hint`
+// plus `suggestions`. We were throwing that away and replacing it with a
+// status number. This preserves the backend's own words and only DERIVES the
+// wrapper (code + severity) from the HTTP status when the backend did not
+// name one. The generic fallback hints are deliberately about the CONTRACT
+// (re-read inputSchema / re-discover the identifier) rather than guessing at
+// the caller's intent — a fabricated hint on an error we do not understand is
+// worse than no hint (the wrong-evidence class, shell #39).
+//
+// severity vocabulary is the backend's, not a new one: parameter_adjustment /
+// transient_backoff / fatal (routes/error_mitigation.py::_REGISTRY).
+export function _upstreamError(status, text) {
+  const out = { error: `API ${status}` };
+  let body = null;
+  try { body = JSON.parse(text); } catch { /* non-JSON upstream body */ }
+  const isObj = body && typeof body === 'object' && !Array.isArray(body);
+  // Preserve what the backend actually said. `detail` prefers a real sentence
+  // over a raw body slice, but the slice remains the fallback so nothing is
+  // ever LESS informative than before this change.
+  out.detail = (isObj && (body.detail || body.hint || (typeof body.error === 'string' ? body.error : null)))
+    || text.slice(0, 500);
+  if (isObj) {
+    for (const k of ['code', 'hint', 'suggestions', 'id', 'path']) {
+      if (body[k] !== undefined) out[k] = body[k];
+    }
+  }
+  const upstreamHint = isObj ? (body.hint || body.detail) : null;
+  const code = (isObj && typeof body.code === 'string' && body.code) ||
+    (status === 404 ? 'upstream_not_found'
+      : (status === 400 || status === 422) ? 'invalid_parameter'
+        : status >= 500 ? 'upstream_unavailable' : null);
+  if (code) {
+    out.error_version = 1;
+    out._error_mitigation = {
+      error_code: code,
+      severity: status >= 500 ? 'transient_backoff' : 'parameter_adjustment',
+      deterministic_hint: upstreamHint || (
+        status === 404
+          ? 'That identifier did not resolve. Re-discover it with this entity\'s search tool (search_facilities for a facility slug, rank_markets for a market slug) instead of retrying the same value.'
+          : (status === 400 || status === 422)
+            ? 'A parameter was rejected. Re-read this tool\'s inputSchema in tools/list and re-send with the declared types — do not retry the same arguments.'
+            : 'The upstream data service is unavailable for this query. Retry after a short backoff; if it persists, report the data as temporarily inaccessible rather than substituting an estimate.'),
+    };
+  }
+  return out;
+}
+
 // ── Backend API helper: forwards user's API key when present ───────────────
 async function callAPI(path, params = {}, opts = {}) {
   const url = new URL(path, API_BASE);
@@ -1559,7 +1616,7 @@ async function callAPI(path, params = {}, opts = {}) {
   try {
     const resp = await fetch(url.toString(), fetchOpts);
     const text = await resp.text();
-    if (!resp.ok) return { error: `API ${resp.status}`, detail: text.slice(0, 500) };
+    if (!resp.ok) return _upstreamError(resp.status, text);
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
   } catch (err) { return { error: err.message }; }
 }
@@ -1594,7 +1651,7 @@ async function callAPIWrite(path, body = {}, opts = {}) {
       signal: AbortSignal.timeout(30000),
     });
     const text = await resp.text();
-    if (!resp.ok) return { error: `API ${resp.status}`, detail: text.slice(0, 500) };
+    if (!resp.ok) return _upstreamError(resp.status, text);
     try { return JSON.parse(text); } catch { return { raw: text.slice(0, 2000) }; }
   } catch (err) { return { error: err.message }; }
 }
