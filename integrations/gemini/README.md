@@ -16,7 +16,7 @@ def dchub_market(slug: str) -> dict:
     return requests.get(f"{DCHUB}/markets/{slug}", timeout=20).json()
 
 def dchub_search_facilities(q: str) -> dict:
-    """Search 15,700+ data-center facilities by name/operator/location."""
+    """Search 15,900+ data-center facilities by name/operator/location."""
     return requests.get(f"{DCHUB}/facilities", params={"q": q, "limit": 5}, timeout=20).json()
 
 resp = client.models.generate_content(
