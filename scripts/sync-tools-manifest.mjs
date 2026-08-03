@@ -295,6 +295,21 @@ const names = new Set(tools.map((t) => t.name));
   const curDesc = Object.fromEntries((m.tools || []).map((t) => [t.name, t.description]));
   const descDrift = tools.filter((t) => t.description && curDesc[t.name] !== undefined && curDesc[t.name] !== t.description);
   if (descDrift.length) problems.push(`mcp-server.json has ${descDrift.length} tool description(s) drifted from server.mjs: ${descDrift.slice(0, 5).map((t) => t.name).join(', ')}${descDrift.length > 5 ? ', …' : ''}`);
+  // ★2026-08-03: the TOP-LEVEL description is canon-owned now. It used to be
+  // scanned check-only ("hand-authored JSON"), which meant every canon roll
+  // left it stale and waiting for a human — and since the guard fails CI, it
+  // blocked the next unrelated PR until someone hand-edited one sentence. That
+  // happened on two consecutive days (15,700+ -> 15,900+, then 15,900+ ->
+  // 16,100+). "Hand-authored" was never a real obstacle: this block already
+  // machine-writes version, tools[] and tools_count into the same file.
+  // The PROSE stays operator-owned; only the five phrase QUANTITIES inside it
+  // heal, through the exact helper the other eight surfaces use — so this
+  // sentence can no longer drift, and no longer taxes an unrelated change.
+  if (typeof m.description === 'string' && m.description) {
+    const healedDesc = applyQuantities('mcp-server.json (top-level description)',
+                                       m.description, QUANTITIES, false);
+    if (FIX) m.description = healedDesc;
+  }
   if (FIX) { m.version = VERSION; m.tools = tools; if ('tools_count' in m) m.tools_count = COUNT;
     pend('mcp-server.json', JSON.stringify(m, null, 2) + '\n'); }
 }
@@ -446,15 +461,11 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     const healed = applyQuantities(f, txt, QUANTITIES, false);
     if (FIX && healed !== txt) pend(f, healed);
   }
-  // mcp-server.json: top-level description only (tools[] descriptions derive
-  // from server.mjs). Check-only — the description is hand-authored JSON.
-  const mDesc = (readJSON('mcp-server.json').description || '');
-  for (const { noun, canon, label, skip } of QUANTITIES) {
-    for (const m of mDesc.matchAll(quantityRx(noun))) {
-      if (m[1] === canon() || !bigEnough(m[1]) || (skip && skip(m[0]))) continue;
-      problems.push(`mcp-server.json (top-level description): "${m[0].trim()}" — stale ${label} (canonical ${canon()})`);
-    }
-  }
+  // ★2026-08-03: the mcp-server.json top-level description USED to be scanned
+  // here, check-only. It is now HEALED in the mcp-server.json block above,
+  // which is also the block that writes the file — one pend, one write, no
+  // second scan reporting the same sentence twice (a doubled problem line
+  // reads as two stale surfaces and inflates every drift report).
 }
 
 // ---- canonical FACTS drift-guard (pricing / coverage) ----------------------
