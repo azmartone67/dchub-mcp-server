@@ -59,6 +59,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // _validateToolArgs invalid-args path emit ONE identical machine-readable shape,
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
+import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
 // tool surface and invent plausible-but-wrong names. A live cross-platform test
@@ -8479,7 +8480,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // r-front-door-inband: surface plan_query in-band on the first workflow-
       // entry tool of a session (inside withReturnNudge so its line sits ABOVE
       // the get_changes re-entry line).
-      return withReturnNudge(withCookbookHint(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c), name, c);
+      // ★ _honestCallerTier is OUTERMOST on purpose: it must see the final
+      //   envelope, after every wrapper that could re-attach a stale tier.
+      return _honestCallerTier(
+        withReturnNudge(withCookbookHint(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c), name, c),
+        c);
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown

@@ -111,7 +111,14 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
 
   it('is NOT attached beside withFrontDoorNudge on the clean-only path', () => {
     // If it were, it would inherit exactly the reachability bug it exists to fix.
-    const cleanReturn = SRC.match(/return withReturnNudge\(withCookbookHint\(withFrontDoorNudge\([^\n]*/);
+    //
+    // ★ Anchored on the CHAIN, not on `return ` (2026-08-05). The pattern used
+    //   to require the literal "return withReturnNudge(", so adding ANY outer
+    //   wrapper at the chokepoint made the match null and the test failed with
+    //   "expected null to be truthy" — a failure that says nothing about
+    //   withStarterPack, which is the only thing this test is about. The
+    //   assertion below is unchanged and still the whole point.
+    const cleanReturn = SRC.match(/withReturnNudge\(withCookbookHint\(withFrontDoorNudge\([^\n]*/);
     expect(cleanReturn).toBeTruthy();
     expect(cleanReturn[0]).not.toContain('withStarterPack');
   });
