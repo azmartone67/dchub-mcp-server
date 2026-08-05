@@ -218,6 +218,91 @@ describe('smithery.yaml canonical-quantity guard', () => {
       });
   });
 
+  // ── noun-coverage controls (★2026-08-05) ──
+  // The facilities rule knew exactly one word for the thing it counts. So
+  // REGISTRY-LISTINGS.md — the file a human pastes from to correct a listing —
+  // advertised "15,300+ data centers worldwide", "search 15,300+ data centers
+  // across 170+ countries" and "facility search (15,300+)" against a canon of
+  // 16,500+, and `node scripts/sync-tools-manifest.mjs` called the tree clean
+  // while this very suite passed. A guard blind to the commonest phrasing of
+  // its own subject is not a guard, so each blind spot gets a control that
+  // fails without the fix.
+  const LISTINGS = path.join(ROOT, 'REGISTRY-LISTINGS.md');
+  function withFileMutation(file, mutate, fn) {
+    const original = fs.readFileSync(file, 'utf8');
+    try {
+      const next = mutate(original);
+      expect(next, `mutation of ${path.basename(file)} was a no-op — control proves nothing`)
+        .not.toBe(original);
+      fs.writeFileSync(file, next);
+      return fn();
+    } finally {
+      fs.writeFileSync(file, original);
+    }
+  }
+
+  // (a) the "data center(s)" noun — number FIRST
+  it('FAILS when a listing claims a stale "N data centers" (the noun the rule lacked)', () => {
+    withFileMutation(LISTINGS,
+      (orig) => orig.replace(`${FACILITIES} data centers`, '15,300+ data centers'),
+      () => {
+        const { ok, out } = check();
+        expect(ok, 'guard did NOT catch a stale "data centers" count — the noun gap is back').toBe(false);
+        expect(out).toMatch(/REGISTRY-LISTINGS\.md: .*stale facility count/);
+      });
+  });
+
+  // (b) number AFTER the noun — "facility search (15,300+)"
+  it('FAILS when the quantity trails the noun — "facility search (15,300+)"', () => {
+    withFileMutation(LISTINGS,
+      (orig) => orig.replace(`facility search (${FACILITIES})`, 'facility search (15,300+)'),
+      () => {
+        const { ok, out } = check();
+        expect(ok, 'guard did NOT catch a trailing parenthesised quantity').toBe(false);
+        expect(out).toMatch(/facility search \(15,300\+\)/);
+      });
+  });
+
+  // (c) the head noun ELIDED — "1,600+ tracked M&A," with no "deals" after it
+  it('FAILS when a deal count elides its head noun ("N tracked M&A,")', () => {
+    withFileMutation(LISTINGS,
+      (orig) => orig.replace(`${DEALS} tracked M&A,`, '1,600+ tracked M&A,'),
+      () => {
+        const { ok, out } = check();
+        expect(ok, 'guard did NOT catch "N tracked M&A" with the head noun elided').toBe(false);
+        expect(out).toMatch(/stale deal count/);
+      });
+  });
+
+  // (d) the hazard the widened noun introduces: "a 100 MW data center" is a
+  // CAPACITY claim, not a fleet count. It sits in server.mjs sample intents —
+  // a file this guard HEALS — and 100 clears the >=50 floor, so without the
+  // capacity-unit skip `--fix` would write "16,500+ MW data center" into the
+  // live gateway. Verified 2026-08-05: removing the skip makes the guard report
+  // exactly that, twice. Asserted against the committed tree, with a
+  // non-vacuity check that the hazard phrase is really in the scanned file.
+  it('never heals "N MW data center" — a capacity claim is not a fleet count', () => {
+    const server = fs.readFileSync(SERVER, 'utf8');
+    expect(server, 'no "N MW data center" left in server.mjs — this control is vacuous')
+      .toMatch(/\d{2,4} MW data cent/);
+    const { ok, out } = check();
+    expect(ok, `a capacity claim must not read as a stale count:\n${out}`).toBe(true);
+  });
+
+  // (e) the raw-discovery-pile phrase must stay exempt under the WIDER noun —
+  // "~4,900 of 21,900+ tracked facilities" is the verified-of-tracked basis, a
+  // different quantity from the deduped fleet. Healing it to the fleet figure
+  // would erase the distinction.
+  it('still exempts the raw-pile "N tracked facilities" provenance phrase', () => {
+    withFileMutation(LISTINGS,
+      (orig) => orig.replace('## Categories / tags',
+        '~4,900 analyst-verified of 21,900+ tracked facilities.\n\n## Categories / tags'),
+      () => {
+        const { ok, out } = check();
+        expect(ok, `the raw-pile phrase must never track the fleet canon:\n${out}`).toBe(true);
+      });
+  });
+
   it('the tools: list matches the live catalog count', () => {
     const yaml = fs.readFileSync(YAML, 'utf8');
     const block = yaml.match(/^tools:\n((?:[ \t]*-[ \t]+\S+\n)+)/m);
