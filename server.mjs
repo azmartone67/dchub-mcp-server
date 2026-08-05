@@ -4284,7 +4284,26 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     min_mw:                   (gi && !gi.error) ? _n(gi.min_mw) : null,
     load_factor:              (gi && !gi.error) ? _n(gi.load_factor) : null,
     demand_24h:               (gi && !gi.error && Array.isArray(gi.demand_24h)) ? gi.demand_24h : null,
+    // ★2026-08-05 (backend #2259): this shaper WHITELISTS grid fields, so a new
+    // backend field reaches no agent until it is named here. generation_mix_stale_hours
+    // used to carry (demand_period − generation_mix_period) — a lag between two fields
+    // of the SAME snapshot, which excludes the snapshot's own age and so under-reported
+    // true mix age by >2x (ERCOT reported 13 against a true 27.8h on 2026-08-05T07:50Z).
+    // The backend now measures it against the wall clock. Pass the companion fields
+    // through too: without them the correction would land silently and an agent could
+    // not tell WHICH clock the number is against — the exact ambiguity that let the
+    // old value read as reassuring.
     generation_mix_stale_hours: (gi && !gi.error) ? _n(gi.generation_mix_stale_hours) : null,
+    generation_mix_age_hours: (gi && !gi.error) ? _n(gi.generation_mix_age_hours) : null,
+    generation_mix_lag_at_snapshot_hours: (gi && !gi.error) ? _n(gi.generation_mix_lag_at_snapshot_hours) : null,
+    generation_mix_freshness_basis: (gi && !gi.error && gi.generation_mix_freshness_basis) ? gi.generation_mix_freshness_basis : null,
+    // ★2026-08-05: generation_mix_note was NEVER whitelisted here. The backend has
+    // composed it since 2026-06-23 for the express purpose of stopping an agent from
+    // narrating a stale overnight mix as the current one ("wind 38% right now", caught
+    // live) — and this shaper dropped it, so the warning has reached no MCP caller in
+    // the six weeks since. Verified absent from a live ERCOT response on
+    // 2026-08-05 whose stale-hours was 10, well over the note's own >=3h threshold.
+    generation_mix_note: (gi && !gi.error && gi.generation_mix_note) ? gi.generation_mix_note : null,
     data_center_load:         (gi && !gi.error && gi.data_center_load) ? gi.data_center_load : null,
     headroom:                 (gi && !gi.error && gi.headroom) ? gi.headroom : null,
     headroom_preview:         (gi && !gi.error && gi.headroom_preview) ? gi.headroom_preview : null,
