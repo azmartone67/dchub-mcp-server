@@ -63,12 +63,13 @@ function tryReadTools() { try { return readJSON('mcp-server.json').tools; } catc
 const COUNT = canonicalTools().length;
 
 // ---- canonical phrase quantities -------------------------------------------
-// ★2026-07-30 SNAPSHOT-DRIVEN. These constants used to BE the canon — and both
-// went stale (DEALS_FLOOR sat at '1,500+' after the floor moved to 1,600+;
-// FACILITIES_FLOOR sat at '12,650+' for six days after the fleet reached
-// 15,3xx), which means the --fix heal was actively rewriting registry surfaces
-// BACK to stale values while CI reported clean. A repo-local constant is just
-// one more copy that rots.
+// ★2026-07-30 SNAPSHOT-DRIVEN. Repo-local constants used to BE the canon — and
+// they went stale twice (DEALS_FLOOR sat at '1,500+' after the floor moved to
+// 1,600+; FACILITIES_FLOOR sat at '12,650+' for six days after the fleet
+// reached 15,3xx), which means the --fix heal was actively rewriting registry
+// surfaces BACK to stale values while CI reported clean. A repo-local constant
+// is just one more copy that rots — and it rotted a third time before being
+// removed outright on 2026-08-05 (see below).
 //
 // The authority is now canonical/canon_phrases.json — a committed snapshot of
 // /api/v1/canon/phrases (the SAME owner endpoint the dchub-frontend heal
@@ -79,23 +80,44 @@ const COUNT = canonicalTools().length;
 // commits the snapshot ATOMICALLY with every healed surface — so CHECK mode
 // stays deterministic (no network) and a canon move needs no edit here.
 //
-// The constants remain ONLY as the fail-closed fallback for a missing or
-// mangled snapshot, pinned to the 2026-07-30 verified canon. Keep the
-// `const X_FLOOR = '…'` declaration shapes: smithery-canon-guard.test.mjs
-// parses them as its own fallback resolution.
-const DEALS_FLOOR = '1,600+';       // DISTINCT deduped M&A (raw rows are ~2.9x dup-inflated)
-const FACILITIES_FLOOR = '15,300+'; // deduped fleet, DISTINCT canonical_slug (raw pile is ~23k)
-const MARKETS_FLOOR = '300+';       // DCPI floor form (the exact "311" over-claimed when live fell to 306)
-const COUNTRIES_FLOOR = '170+';     // fleet spans 178 distinct codes; the "186" that briefly bound surfaces to 180+ was the legacy table double-counting name/code pairs ("USA"+"US") — see dchub-backend PR #1949
+// ★2026-08-05 SNAPSHOT-ONLY. The X_FLOOR constants are GONE. They were
+// documented as "the fail-closed fallback for a missing or mangled snapshot",
+// but falling back to a frozen number fails OPEN: it lets the heal go on
+// publishing a quantity nobody re-verified, which is the precise failure this
+// whole mechanism exists to prevent. And it recurred — FACILITIES_FLOOR was
+// still '15,300+' on 2026-08-05 against a live canon of 16,500+, so the one
+// script whose job is healing counts to canon carried a stale count of its own.
+//
+// The "floor DOWN, never inflate" semantic those constants expressed is
+// preserved, but it lives UPSTREAM where it belongs: resolve_canon() emits the
+// already-rounded floor form ('16,500+' for a 16,5xx fleet). This script's job
+// is to CONSUME that floor, never to re-freeze it — a floor pinned in source is
+// a floor that stops tracking the thing it is a floor of.
+//
+// So an unusable snapshot is a hard stop. No number is better than a stale one:
+// exiting non-zero fails the CI guard loudly instead of silently healing every
+// registry surface to whatever this file last remembered.
+const CANON_FILE = 'canonical/canon_phrases.json';
 const isPhraseVal = (s) => typeof s === 'string' && /^\d[\d,]*\+$/.test(s);
-let SNAP = null;
-try { SNAP = readJSON('canonical/canon_phrases.json'); } catch { /* fall back to constants */ }
-const P = {
-  deals:      isPhraseVal(SNAP?.deals)      ? SNAP.deals      : DEALS_FLOOR,
-  facilities: isPhraseVal(SNAP?.facilities) ? SNAP.facilities : FACILITIES_FLOOR,
-  markets:    isPhraseVal(SNAP?.markets)    ? SNAP.markets    : MARKETS_FLOOR,
-  countries:  isPhraseVal(SNAP?.countries)  ? SNAP.countries  : COUNTRIES_FLOOR,
+const canonFatal = (msg) => {
+  console.error(`FATAL (canon): ${msg}\n` +
+    `${CANON_FILE} is the ONLY source of canonical phrase quantities — there is\n` +
+    `deliberately no hardcoded fallback, because a frozen number republishes stale\n` +
+    `canon under a green check. Restore the file from git, or regenerate it:\n` +
+    `  node scripts/refresh-canon-phrases.mjs`);
+  process.exit(2);
 };
+let SNAP = null;
+try { SNAP = readJSON(CANON_FILE); }
+catch (e) { canonFatal(`cannot read the canon snapshot — ${e.message}`); }
+const P = {};
+for (const key of ['deals', 'facilities', 'markets', 'countries']) {
+  if (!isPhraseVal(SNAP[key])) {
+    canonFatal(`key "${key}" is ${JSON.stringify(SNAP[key])}, not a floor phrase like "16,500+". ` +
+      `Refusing to heal registry surfaces from a malformed snapshot.`);
+  }
+  P[key] = SNAP[key];
+}
 
 // --print-count: emit the live tool count (from server.mjs) and exit. Lets the
 // daily-manifest-sync workflow feed the SAME source-of-truth number into the

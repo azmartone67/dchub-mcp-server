@@ -48,27 +48,78 @@ function withMutation(mutate, fn) {
   }
 }
 
-// Canon read FROM the script + snapshot — never transcribed. Resolution
-// mirrors the script exactly (★2026-07-30): canonical/canon_phrases.json
-// (the committed snapshot of /api/v1/canon/phrases) wins; the script's
-// X_FLOOR constants are the fallback. If a floor constant stops parsing OR
-// the snapshot goes unreadable while present, the test fails loudly rather
-// than silently mutating a value the guard no longer checks.
-const src = fs.readFileSync(SCRIPT, 'utf8');
+// Canon read FROM the snapshot — never transcribed. Resolution mirrors the
+// script exactly (★2026-08-05): canonical/canon_phrases.json is the ONLY
+// source. It used to fall back to the script's X_FLOOR constants, but those
+// were deleted — a frozen fallback fails OPEN, and FACILITIES_FLOOR had itself
+// drifted to '15,300+' against a live canon of 16,500+. A test that can fall
+// back to a stale constant is a test that can certify stale canon.
+const CANON_PATH = path.join(ROOT, 'canonical', 'canon_phrases.json');
 const SNAP = (() => {
-  try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'canonical', 'canon_phrases.json'), 'utf8')); }
+  try { return JSON.parse(fs.readFileSync(CANON_PATH, 'utf8')); }
   catch { return null; }
 })();
 const isPhrase = (v) => typeof v === 'string' && /^\d[\d,]*\+$/.test(v);
-const DEALS = (SNAP && isPhrase(SNAP.deals)) ? SNAP.deals
-  : src.match(/const DEALS_FLOOR\s*=\s*'([^']+)'/)?.[1];
-const FACILITIES = (SNAP && isPhrase(SNAP.facilities)) ? SNAP.facilities
-  : src.match(/const FACILITIES_FLOOR\s*=\s*'([^']+)'/)?.[1];
+const DEALS = (SNAP && isPhrase(SNAP.deals)) ? SNAP.deals : null;
+const FACILITIES = (SNAP && isPhrase(SNAP.facilities)) ? SNAP.facilities : null;
+
+/** Temporarily replace the canon snapshot, run fn, always restore. */
+function withCanonMutation(mutate, fn) {
+  const original = fs.readFileSync(CANON_PATH, 'utf8');
+  try {
+    fs.writeFileSync(CANON_PATH, mutate(original));
+    return fn();
+  } finally {
+    fs.writeFileSync(CANON_PATH, original);
+  }
+}
 
 describe('smithery.yaml canonical-quantity guard', () => {
-  it('resolves the canonical floors from the script (not from this test)', () => {
-    expect(DEALS, 'DEALS_FLOOR no longer parseable — the guard test is blind').toBeTruthy();
-    expect(FACILITIES, 'FACILITIES_FLOOR no longer parseable — the guard test is blind').toBeTruthy();
+  it('resolves the canonical floors from the snapshot (not from this test)', () => {
+    expect(DEALS, `deals missing/malformed in ${CANON_PATH} — the guard test is blind`).toBeTruthy();
+    expect(FACILITIES, `facilities missing/malformed in ${CANON_PATH} — the guard test is blind`).toBeTruthy();
+  });
+
+  // ── the fail-closed controls (★2026-08-05) ──
+  // The guard must refuse to run on an unusable snapshot rather than heal every
+  // registry surface to a number frozen in source. These prove it: without them
+  // a future "just add a sensible default" would sail through review.
+  it('REFUSES to run when the canon snapshot is unreadable (no frozen fallback)', () => {
+    withCanonMutation(() => '{ not json', () => {
+      const { ok, out } = check();
+      expect(ok, 'guard ran anyway — it must not heal from a hardcoded fallback').toBe(false);
+      expect(out).toMatch(/FATAL \(canon\)/);
+    });
+  });
+
+  it('REFUSES to run when a canon quantity is not a floor phrase', () => {
+    withCanonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.facilities = 16500; // a number, not the "16,500+" floor form
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'guard accepted a malformed canon quantity').toBe(false);
+      expect(out).toMatch(/not a floor phrase/);
+    });
+  });
+
+  it('tracks the snapshot rather than any number frozen in the script', () => {
+    // Move canon to a value that appears nowhere in the repo. The guard must
+    // now report the COMMITTED surfaces as drifted against it — proving the
+    // quantities it enforces come from the snapshot, not from source.
+    withCanonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.facilities = '19,900+';
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'guard ignored a moved canon — it is not snapshot-driven').toBe(false);
+      expect(out).toMatch(/19,900\+/);
+    });
+    // And no source file was left carrying the throwaway value.
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+    expect(script).not.toMatch(/19,900\+/);
   });
 
   it('reports the committed tree as clean', () => {
