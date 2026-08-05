@@ -18,6 +18,11 @@ on:
       - 'mcp-server.json'
       - 'integrations/**'
       - 'server.json'
+      - 'README.md'
+      # The guard reads canon from the snapshot, so a canon move must re-run it —
+      # otherwise a figure that just became canonical stays judged by the old one.
+      - 'canonical/canon_phrases.json'
+      - 'scripts/registry_stale_guard.py'
   workflow_dispatch:
 
 permissions:
@@ -30,35 +35,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Grep source files for forbidden stale numbers
-        run: |
-          set -e
-          # Canonical (2026-07-30, floors round DOWN, verify /api/v1/stats/canonical):
-          # 81 tools · 15,300+ facilities · 300+ markets scored · 170+ countries
-          # (fleet spans 178 codes; the "186" was a legacy name/code double-count —
-          # backend #1949, so "180+" was an over-claim) · 1,600+ deals ·
-          # 320,000+ mapped assets · "DC Hub" (never "Nexus").
-          FILES="mcp-server.json"
-          [ -f integrations/chatgpt/openapi.json ] && FILES="$FILES integrations/chatgpt/openapi.json"
-          [ -f README.md ] && FILES="$FILES README.md"
-          [ -f server.json ] && FILES="$FILES server.json"
-          echo "Scanning: $FILES"
-          # Patterns that must NEVER appear (extended regex, case-insensitive).
-          # Every retired figure joins this list when the canon moves — a value that
-          # was once published WILL try to come back through a stale paste. 311 was
-          # an OVER-claim (score rows, not scored markets; live = 306); "500,000+
-          # mapped assets" predates the 07-29 wrong-table corrections (real total
-          # 323,494); "182k power plants" misstates generating UNITS across all
-          # statuses as plants. Broader quantity drift (any non-canon number before
-          # facilities/markets/deals/countries) is enforced by
-          # scripts/sync-tools-manifest.mjs; this denylist is the belt-and-braces
-          # layer for values known to have shipped.
-          PAT='\$?324B|\$324 ?billion|20,000\+ ?facilit|20,534|17,000\+ ?facilit|140\+ ?countr|50,000\+ ?facilit|DC Hub Nexus|232 ?(US )?(power |DCPI-scored |DCPI[- ])?markets?|21,000\+ ?facilit|12,650\+?|311 ?(US )?(power |DCPI-scored |DCPI[- ])?markets?|1,[45]00\+ ?(tracked ?)?(M&A ?)?(deals|transactions)|500,000\+ ?mapped|180\+ ?countr|182,?0?0?0?k? ?(\+ ?)?(global ?)?power plants'
-          if grep -rEni "$PAT" $FILES ; then
-            echo "::error::Stale/inflated number reintroduced in a registry-source file. Canonical (2026-07-30): 81 tools · 15,300+ facilities · 300+ markets scored · 170+ countries · 1,600+ deals · 320,000+ mapped assets · DC Hub (not Nexus). Fix before this reaches the public registries."
-            exit 1
-          fi
-          echo "✅ registry source is clean — no stale numbers."
+      # ★2026-08-05: the guard body moved to scripts/registry_stale_guard.py and
+      # now READS canon from canonical/canon_phrases.json. It used to carry the
+      # canonical figures twice inline — in a comment and in its own ::error::
+      # message — both frozen at 2026-07-30 ("81 tools · 15,300+ facilities")
+      # while live canon had moved to 82 / 16,500+. A guard written to stop
+      # stale numbers was publishing two of them, in the exact message a human
+      # reads to learn the right number. It also forbade "17,000+ facilit"
+      # outright, so the day the fleet crosses 17,000 it would have rejected the
+      # TRUE count. See the script's docstring for the full rationale.
+      - name: Guard registry sources against retired/stale numbers
+        run: python3 scripts/registry_stale_guard.py
       - name: Validate JSON well-formedness
         run: |
           python3 -c "import json,glob,sys

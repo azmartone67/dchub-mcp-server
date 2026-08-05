@@ -59,6 +59,15 @@ jobs:
           # that writes a file this list omits is a no-op with a green log.
           # server.mjs is deliberately included: quantity heals there push to
           # main and Railway redeploys the gateway with the corrected figures.
+          # ★2026-08-05: the seven entries in the second block below were MISSING,
+          # and the warning above had come true again — verbatim. --fix wrote all
+          # seven every single day ("wrote: … integrations/gemini/README.md,
+          # dchub_mcp_server.py, toolspec.json …"), this list omitted them, so
+          # `git add $OWNED` discarded the heal every time and the job logged a
+          # green "✓ healed registry surfaces". Net effect: those surfaces sat at
+          # 16,300+ against a canon of 16,500+ and could never converge, which is
+          # what turned smithery-canon-guard's "reports the committed tree as
+          # clean" red on main. If you add a file to the heal, add it HERE.
           OWNED="README.md smithery.yaml mcp-server.json server.json package.json \
                  server.mjs canonical/canon_phrases.json canonical/problem_taxonomy.json \
                  llms-install.md REGISTRY-LISTINGS.md \
@@ -68,7 +77,27 @@ jobs:
                  integrations/chatgpt/openapi.json integrations/chatgpt/instructions.txt \
                  integrations/cohere/README.md integrations/copilot/dchub-mcp.yaml \
                  integrations/openrouter/tools.json dxt/manifest.json \
-                 docs/canonical-workflows.md docs/distribution-targets.md"
+                 docs/canonical-workflows.md docs/distribution-targets.md \
+                 toolspec.json dchub_mcp_server.py TELEGEOGRAPHY-OUTREACH.md \
+                 integrations/gemini/README.md integrations/openrouter/README.md \
+                 integrations/langchain/dchub_tools.py \
+                 integrations/llamaindex/dchub_tools.py"
+          # ★2026-08-05 UNOWNED-HEAL GATE. The comment above warned that a heal
+          # writing a file this list omits is a no-op with a green log — and then
+          # it happened here for seven files, undetected for days, because
+          # nothing ever compared what --fix WROTE against what this list STAGES.
+          # Maintaining two lists by hand is what failed; so compare them. Any
+          # file the heal modified that $OWNED does not cover is a hard error,
+          # not a silent discard.
+          UNOWNED=$(comm -23 \
+            <(git diff --name-only | sort -u) \
+            <(printf '%s\n' $OWNED | sort -u))
+          if [ -n "$UNOWNED" ]; then
+            echo "::error::--fix modified files that \$OWNED does not stage, so this job would"
+            echo "::error::silently DISCARD those heals and report success. Add them to \$OWNED:"
+            printf '  %s\n' $UNOWNED
+            exit 1
+          fi
           if git diff --quiet -- $OWNED; then
             echo "✓ no drift — all registry surfaces already in sync"
             echo "server_json=no" >> "$GITHUB_OUTPUT"
