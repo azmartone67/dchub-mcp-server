@@ -1,6 +1,8 @@
 <!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/cloud.dchub%2Fmcp-server.svg)](https://mcptoplist.com/server/cloud.dchub%2Fmcp-server)
+
 [![MCP Badge](https://lobehub.com/badge/mcp-full/azmartone67-dchub-mcp-server)](https://lobehub.com/mcp/azmartone67-dchub-mcp-server)
 
 **Real-time data-center, power-grid, interconnection-queue, grid-capacity, fiber, natural-gas & hyperscale infrastructure intelligence for AI agents** — live telemetry across PJM, ERCOT, CAISO and every US ISO.
