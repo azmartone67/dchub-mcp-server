@@ -31,8 +31,17 @@ jobs:
       # live-API suite runs INFORMATIONAL (non-blocking) — still executes + uploads
       # output for diagnostics, but transient live blips don't fail the build. Set
       # the MCP_API_KEY repo secret to a valid ENTERPRISE key for the live suite.
+      # ★2026-08-05: smithery-canon-guard was added to this line because NOTHING
+      # ran it. `npm test` (whole suite) is invoked by no workflow, and this gate
+      # names its files explicitly — so the guard's must-fail controls, the ones
+      # that exist to prove the drift check can be made to fail, had never
+      # executed in CI. A control that never runs certifies nothing; that is the
+      # same silent-green shape the canon guard itself was written to catch.
+      # It qualifies for the HARD gate on the stated criterion: deterministic,
+      # no network (it shells out to sync-tools-manifest.mjs, which reads only
+      # committed files) — and it restores every file it mutates.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true

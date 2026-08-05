@@ -151,12 +151,50 @@ if (process.argv.includes('--print-deals')) { console.log(P.deals); process.exit
 // verified/tracked distinction. It has no canon key yet; if the raw-pile
 // phrase ever joins /api/v1/canon/phrases, wire it here instead of removing
 // the skip.
+//
+// ★2026-08-05 NOUN COVERAGE. The facilities rule knew exactly one word for the
+// thing it counts — `facilit(y|ies)` — so the fleet count went stale in the
+// plainest English there is. REGISTRY-LISTINGS.md, the file a human pastes
+// from to correct a listing by hand, advertised "15,300+ data centers
+// worldwide" and "search 15,300+ data centers across 170+ countries" against a
+// canon of 16,500+, and BOTH scan and heal were blind to it — CHECK said the
+// tree was clean. Two distinct holes:
+//   • no "data center(s)" noun — the marketing word for a facility;
+//   • number-AFTER-noun — "facility search (15,300+)" puts the quantity in a
+//     trailing parenthesis, a shape the number-first matcher structurally
+//     cannot see (the same class of hole the server.mjs AFTER_NOUN rules
+//     already close for "**Facilities:** N+").
+// Both are closed below, through the SAME helper for scan and heal.
+//
+// The widened noun brings one hazard the old one could not have: "a 100 MW
+// data center" is a CAPACITY claim, not a fleet count, and it appears verbatim
+// in server.mjs sample intents ("how much power is available in ERCOT for a
+// 100 MW data center") — a file this guard heals. 100 clears bigEnough, so
+// without a guard the heal would have written "16,500+ MW data center" into
+// the live gateway. A power unit anywhere between the number and the noun
+// means the number sizes a BUILD, not the fleet: never a count, always skipped.
 const NUM = String.raw`\d{1,3}(?:,\d{3})*k?\+?`;
+// FLOOR = the "16,500+" claim shape — NUM with the '+' REQUIRED. Used only by
+// the number-after-noun rules, where a bare parenthesised integer is far more
+// likely to be a scale, a score range or an ID than a fleet claim.
+const FLOOR = String.raw`\d{1,3}(?:,\d{3})*k?\+`;
+const FACILITY_NOUN = String.raw`facilit(?:y|ies)|data[\s-]+cent(?:er|re)s?`;
+const CAPACITY_UNIT = /\b(?:[kKmMgGtT]?W|[kKmMgGtT]?Wh|[kKmM]?VA)\b/;
+const RAW_PILE = /\btracked\s+(?:facilit|data[\s-]+cent)/i;
 const QUANTITIES = [
-  { noun: String.raw`tracked\s+(?:M&A\s+)?(?:deals?|transactions?)|M&A\s+(?:deals?|transactions?)|deals?\b`,
-    canon: () => P.deals, label: 'deal count' },  // transactions: README said "1,500+ tracked M&A transactions" and the deals-only noun missed it
-  { noun: String.raw`facilit(?:y|ies)`, canon: () => P.facilities, label: 'facility count',
-    skip: (m) => /\btracked\s+facilit/i.test(m) },
+  // transactions: README said "1,500+ tracked M&A transactions" and the deals-only noun missed it.
+  // ★2026-08-05 `tracked M&A` with the head noun ELIDED — REGISTRY-LISTINGS.md
+  // line 134 reads "…reach hyperscaler $1B+ deals, 1,600+ tracked M&A, gas-vs-grid
+  // economics…". Same sentence as one of the stale facility claims below, same
+  // root cause (a noun the rule did not know), invisible for the same reason.
+  // Listed LAST so the fuller "tracked M&A deals" alternative still wins the match.
+  { noun: String.raw`tracked\s+(?:M&A\s+)?(?:deals?|transactions?)|M&A\s+(?:deals?|transactions?)|deals?\b|tracked\s+M&A\b`,
+    canon: () => P.deals, label: 'deal count' },
+  { noun: FACILITY_NOUN, canon: () => P.facilities, label: 'facility count',
+    skip: (m) => RAW_PILE.test(m) || CAPACITY_UNIT.test(m),
+    // number-AFTER-noun: "facility search (15,300+)" / "data centers (16,500+)"
+    after: [new RegExp(
+      String.raw`((?:${FACILITY_NOUN})(?:\s+[A-Za-z&/-]+){0,3}\s*\()(${FLOOR})(\))`, 'gi')] },
   { noun: String.raw`markets\b`,   canon: () => P.markets,   label: 'market count' },
   { noun: String.raw`countries\b`, canon: () => P.countries, label: 'country count' },
 ];
@@ -216,13 +254,24 @@ const applyRx = (txt, rx, decide, commentAware) => {
 // returns healed text. Same code path for CHECK and FIX — they cannot diverge.
 const applyQuantities = (file, txt, rules, commentAware) => {
   let out = txt;
-  for (const { noun, canon, label, skip } of rules) {
+  for (const { noun, canon, label, skip, after } of rules) {
     out = applyRx(out, quantityRx(noun), (m) => {
       if (m[1] === canon() || !bigEnough(m[1])) return null;
       if (skip && skip(m[0])) return null;
       problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
       return canon() + m[2];
     }, commentAware);
+    // ★2026-08-05 number-AFTER-noun rules (3 groups: prefix, number, suffix).
+    // Same file, same skip, same report — a claim must not become invisible
+    // just because the copywriter put the quantity in a trailing parenthesis.
+    for (const rx of after || []) {
+      out = applyRx(out, rx, (m) => {
+        if (m[2] === canon() || !bigEnough(m[2])) return null;
+        if (skip && skip(m[0])) return null;
+        problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
+        return m[1] + canon() + m[3];
+      }, commentAware);
+    }
   }
   return out;
 };
