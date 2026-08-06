@@ -20,7 +20,7 @@
 
 import { appendFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const NAME = 'DC Hub';
 const HOMEPAGE = 'https://dchub.cloud/mcp';
@@ -58,7 +58,7 @@ const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber
 // auto-skips any future repo that disables PRs. TensorBlock (docs/<cat>.md
 // subfiles + its own indexer) and toolsdk-ai (JSON registry) use different
 // submission mechanisms — add them with bespoke handling later.
-const TARGETS = [
+export const TARGETS = [
   {
     key: 'mobinx', upstream: 'MobinX/awesome-mcp-list', base: 'main', path: 'README.md',
     listedRe: /dchub|dc[\s-]?hub/i,
@@ -91,7 +91,7 @@ const TARGETS = [
 // (registry-pr-submit was ADD-only — the 07-14 audit found our biggest list, punkpeye
 // (~180K users), still reads "33 tools / 232 markets / 2,000 deals".) This refreshes
 // an existing entry IN PLACE. prCheck()/idempotency/blocked-fallback all still apply.
-const REFRESH_TARGETS = [
+export const REFRESH_TARGETS = [
   { key: 'punkpeye', upstream: 'punkpeye/awesome-mcp-servers', base: 'main', path: 'README.md' },
 ];
 
@@ -230,7 +230,16 @@ async function openPR(t, newContent, opts = {}) {
   return { blocked: `${pr.status} ${JSON.stringify(pr.json).slice(0, 90)}`, compare };
 }
 
-(async () => {
+// ★ ENTRYPOINT GUARD (2026-08-05). TARGETS/REFRESH_TARGETS are now exported so
+// the listing VERIFIER can read the same table the submitter writes from — two
+// copies of that table would drift, and a verifier checking a stale target list
+// is worse than none. But this file is one top-level IIFE, so importing it USED
+// TO RUN THE WHOLE SUBMITTER as a side effect of reading a constant. Only run
+// when executed directly.
+const _IS_MAIN = process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (_IS_MAIN) (async () => {
   console.log(`▶ registry-pr-submit — mode=${DRY ? 'DRY-RUN' : 'LIVE'} (PAT=${PAT ? 'set' : 'absent'}, LIVE=${LIVE}), max ${MAX_PR_PER_RUN}/run\n`);
   let opened = 0;
   const readyLinks = [];   // blocked-but-ready: {key, compare} for the run summary
