@@ -142,3 +142,38 @@ jobs:
                 f"deployment is stuck.")
           sys.exit(1)
           PY
+
+      # ★ BEAT THE DEAD-MAN LEDGER — but ONLY ON SUCCESS.
+      #
+      # This lane is the only DAILY-updating registry channel there is, and on
+      # 2026-08-03 and 08-04 it failed on `stale_desc=['search_facilities']`
+      # (Smithery's cached description for one tool would not refresh; retried
+      # 20x, gave up). It failed correctly and LOUDLY — into a log nobody reads.
+      # Two days passed before anyone noticed.
+      #
+      # ★★ NO `if: always()` HERE, and that is the whole point. The ledger's own
+      # contract says it "records its last SUCCESSFUL run"; beating on failure
+      # would keep the feed looking alive while it was broken — a dead-man switch
+      # that reports health when the operator has stopped breathing. Only a real
+      # success beats, so a failed day leaves the feed to go OVERDUE on
+      # /api/v1/ops/deadman, which is exactly the signal that was missing.
+      #
+      # Fail-soft on the beat itself (`|| true`): a ledger outage must never turn
+      # a healthy publish into a red run — the beat reports the work, it is not
+      # the work.
+      - name: Beat the dead-man ledger (success only)
+        if: success()
+        env:
+          DCHUB_ADMIN_KEY: ${{ secrets.DCHUB_ADMIN_KEY }}
+        run: |
+          if [ -z "$DCHUB_ADMIN_KEY" ]; then
+            echo "::warning::no DCHUB_ADMIN_KEY — cannot beat; this lane stays invisible on the dead-man board"
+            exit 0
+          fi
+          curl -fsS -X POST "https://dchub.cloud/api/v1/admin/ingest-runs/beat" \
+            -H "Content-Type: application/json" \
+            -H "X-Admin-Key: $DCHUB_ADMIN_KEY" \
+            -H "User-Agent: dchub-smithery-freshness/1.0" \
+            -d '{"feed":"smithery-freshness","status":"success","cadence_hours":24,
+                 "note":"daily Smithery re-publish + listing convergence verified"}' \
+            && echo "  ✓ beat recorded" || echo "::warning::beat failed (publish still succeeded)"
