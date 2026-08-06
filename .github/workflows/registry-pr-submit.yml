@@ -48,3 +48,20 @@ jobs:
           LIVE_FLAG="${{ vars.REGISTRY_PR_LIVE }}"
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then LIVE_FLAG=""; fi
           env REGISTRY_PR_LIVE="$LIVE_FLAG" node scripts/registry-pr-submit.mjs
+
+      # ★ Runs AFTER the submit, ALWAYS (if: always()), because the outcome is the
+      #   point and a submit failure must not hide it. For four consecutive weeks
+      #   this workflow reported `success` while two of its three targets were not
+      #   listed at all — "success" meant a branch was prepared, never that a
+      #   maintainer accepted it. This step reports what is true on the wire.
+      #
+      #   It exits non-zero ONLY when a list has no entry AND no PR of ours (the
+      #   lane genuinely did not submit). A PR pending a maintainer is reported,
+      #   not failed — failing on it would train everyone to ignore this step,
+      #   and the genuinely-broken case would go with it.
+      - name: Verify the listings actually landed
+        if: always()
+        env:
+          REGISTRY_PAT: ${{ secrets.REGISTRY_PR_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/registry-verify-listed.mjs
