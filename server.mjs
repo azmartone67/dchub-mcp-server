@@ -8305,6 +8305,24 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           } catch (_e) { /* annotation must never break a full answer */ }
         }
         if (_tasteExceeded) {
+          // ★ LABEL THE WALL. This branch is THE deprivation moment — the free
+          //   ration for this tool is spent and the caller is handed a trimmed
+          //   payload. It assigned no status, so `status` stayed 'ok' from the
+          //   top of the handler and the backend's metric bucketing
+          //   (agent_pay_master_shell _GRANTED_ST contains 'ok') counted every
+          //   one of these as GRANTED.
+          //
+          //   That is why "11 gated vs 9,031 granted = 0.12%" read as "there is
+          //   effectively no paywall" — the one branch that actually means "you
+          //   were stopped" was invisible to the number used to decide whether
+          //   the paywall works. A wall nobody can count is a wall nobody can
+          //   tune.
+          //
+          //   NOT reusing 'anon_daily_cap' (assigned at :7950): that is the
+          //   separate DCHUB_ANON_DAILY_CAP soft cap, and collapsing two
+          //   different walls onto one label would trade this blind spot for an
+          //   ambiguous one.
+          status = 'trial_cap_exceeded';
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
