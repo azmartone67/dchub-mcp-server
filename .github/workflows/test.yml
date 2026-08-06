@@ -40,8 +40,16 @@ jobs:
       # It qualifies for the HARD gate on the stated criterion: deterministic,
       # no network (it shells out to sync-tools-manifest.mjs, which reads only
       # committed files) — and it restores every file it mutates.
+      # ★2026-08-05 (r-cohort): execute-plan-cohort is named here for the SAME
+      # reason smithery-canon-guard was added a few hours earlier — this gate
+      # lists its files explicitly and `npm test` is invoked by no workflow, so
+      # a new test file is dead on arrival unless it is added to this line. The
+      # cohort guard's whole job is to prove the experiment tag cannot reach the
+      # planner; a guard that never executes proves nothing. Qualifies for the
+      # HARD gate: deterministic, no network (pure exported functions plus a
+      # read of the committed server.mjs), mutates nothing.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true

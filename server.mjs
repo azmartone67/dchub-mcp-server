@@ -7189,6 +7189,38 @@ export function _planQuery(intent, context) {
   return sc;
 }
 
+// ── r-cohort (2026-08-05): the routing-experiment tag ──────────────────────
+//
+// A caller may tag an execute_plan call with a cohort so per-cohort adoption
+// and retention become measurable. The board's finding that motivated it:
+// ZERO of the 7 returning agents opened with the front door, so
+// "execute_plan-first improves retention" is a HYPOTHESIS, not a result. The
+// tag is how each routing hypothesis gets isolated.
+//
+// ★ INERT BY CONSTRUCTION. The first manifest proposed carrying the tag
+//   INSIDE the intent string (intent: "cohort.front_door:composite_reasoning").
+//   That would have broken every tagged call: _planQuery scores regex patterns
+//   against the intent TEXT (\bvs\b, \bcompare\b, \bbetween X and Y\b) and
+//   _execConstraintIsoSet extracts geography from that SAME string, so a
+//   tag-only intent classifies `unknown` and routes nowhere. The agreed
+//   contract keeps the user's verbatim question in `intent` and the tag in its
+//   own parameter, which NOTHING in the planner reads. See
+//   test/execute-plan-cohort.test.mjs — the inertness guard proves both halves:
+//   the tag-in-intent shape DOES change classification (which is why the
+//   contract exists), and the tag-as-parameter shape does NOT.
+//
+// Normalized HERE — in the wrapper, before the tier gate copies args and
+// before the handler runs — so the value we LOG is the value we validated. A
+// malformed tag is dropped silently and the call proceeds: an experiment tag
+// must never fail a user's real query.
+const _COHORT_MAX_LEN = 64;
+export function _normalizeCohort(v) {
+  if (typeof v !== 'string') return null;          // numbers/objects/null → dropped, never thrown
+  const s = v.trim().toLowerCase();
+  if (!s || s.length > _COHORT_MAX_LEN) return null;
+  return /^[a-z0-9._-]+$/.test(s) ? s : null;
+}
+
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
   // r-error-envelope: capture this tool's declared param names (ZodRawShape keys)
@@ -7227,6 +7259,18 @@ function trackedTool(srv, name, description, schema, handler) {
     ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false, ..._accessTag }
     : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false, ..._accessTag };
   const _stamped = _stampEntityCb(name, async (args, extra) => {
+    // r-cohort: normalize the experiment tag on the ORIGINAL args object,
+    // before the tier gate (which may hand the handler a spread COPY via
+    // `gate.params || args`) and before any track call fires. Every
+    // trackToolCall below logs `params: args`, so normalizing here is what
+    // makes the logged tag the validated one — a 5,000-char or mixed-case tag
+    // can neither reach the log nor split one cohort into two buckets.
+    // Malformed → the key is removed entirely, so the call is counted as
+    // UNTAGGED rather than as a phantom cohort.
+    if (args && typeof args === 'object' && !Array.isArray(args) && 'cohort' in args) {
+      const _ct = _normalizeCohort(args.cohort);
+      if (_ct) args.cohort = _ct; else delete args.cohort;
+    }
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
@@ -8889,7 +8933,12 @@ function createServer(descOverrides) {
     { intent: z.string().describe('The user\'s infrastructure question, passed through UNCHANGED. Examples: "rank markets for a 200 MW AI campus" · "evaluate 100 MW power headroom for a GPU training cluster in PJM" · "compare Dallas vs Phoenix for a hyperscale campus" · "find 100 MW of buildable capacity near Ashburn" · "where do fiber density and grid headroom overlap in Atlanta"'),
       context: z.any().optional().describe('Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones'),
       max_steps: z.any().optional().describe('Max plan steps to execute, 1-8 (default 6)'),
-      max_fanout: z.any().optional().describe('Max per-finalist fan-out calls for one step, 1-3 (default 2)') },
+      max_fanout: z.any().optional().describe('Max per-finalist fan-out calls for one step, 1-3 (default 2)'),
+      // r-cohort (2026-08-05): OPTIONAL routing-experiment tag. Declared
+      // z.any() (not z.string()) on purpose — a wrong-typed tag must be DROPPED,
+      // not rejected by zod, because a rejection would fail the user's real
+      // question over a telemetry label. Normalized in trackedTool.
+      cohort: z.any().optional().describe('Optional experiment tag for adoption/retention measurement, e.g. "cohort.front_door". Has NO effect on routing, planning, geography or results — it is recorded only. Put your user\'s question in `intent` and the tag HERE; never inside the intent string, which would break classification. Max 64 chars, [a-z0-9._-]; a malformed tag is ignored, never an error.') },
     async (a) => {
       const t0 = Date.now();
       const DEADLINE_MS = 40000;
