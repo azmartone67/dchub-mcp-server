@@ -483,6 +483,55 @@ function _stripeWithKey(url, apiKey) {
   }
 }
 
+// ── r-go-click (2026-08-07): route relayed checkout links through /go/c ────
+// Every checkout link we hand a human was a DIRECT buy.stripe.com URL, so the
+// click was structurally unobservable: the admin waterfall reads
+// "26 agents saw an offer → ??? → 0 paid" and the ??? is measured NOWHERE.
+// (funnel.stripe_clicked_30d looks like it covers this but does not — it reads
+// mcp_pair_codes, the /connect landing flow, which minted 1 code in 30d.) That
+// gap is the whole diagnosis: it cannot distinguish "the agent never relayed
+// the link" from "a human opened it and declined", and those want opposite
+// fixes.
+//
+// _goUrl() takes a FULLY-BUILT stripe URL (client_reference_id already
+// appended by _stripeWithKey/_stripeWithSession/_subCheckoutUrl) and returns a
+// signed https://dchub.cloud/go/c/<payload>.<sig> link. The backend
+// (routes/checkout_click_tracker.py) stamps mcp_checkout_clicks then 302s to
+// the canonical Stripe link resolved from its OWN allowlist — we send a plan
+// NAME, never a URL, so this can never become an open redirect.
+//
+// Attribution is unchanged: the same client_reference_id reaches Stripe, so
+// Fix-E session-bind and the r-durable-key pk-/k- branches behave identically.
+//
+// FAIL-OPEN, twice over: no DCHUB_INTERNAL_KEY (nothing could verify the sig),
+// an unrecognised link, or any throw → return the DIRECT link, i.e. exactly
+// today's behaviour. Kill switch DCHUB_GO_LINKS=0 reverts every link with no
+// redeploy. This can degrade to un-measured; it cannot degrade to un-payable.
+const _GO_PLAN_BY_LINK = {
+  '9B69AU08y2FfbSR55UaZi0i': 'metered',    // $10 one-time = 1,000 calls
+  '8x2dRa5sS0x75uteGuaZi0g': 'starter',    // $9/mo
+  '7sY5kE8F4fs13ml0PEaZi0c': 'developer',  // $49/mo
+  '7sY7sM9J8enX7CB69YaZi0l': 'pro',        // $299/mo
+};
+function _goUrl(url) {
+  try {
+    if (!url) return url;
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GO_LINKS || ''))) return url;
+    const secret = process.env.DCHUB_INTERNAL_KEY || '';
+    if (!secret) return url;
+    const m = /buy\.stripe\.com\/([A-Za-z0-9]+)/.exec(url);
+    const plan = m && _GO_PLAN_BY_LINK[m[1]];
+    if (!plan) return url;                     // unknown link → leave it alone
+    const r = /[?&]client_reference_id=([^&#]*)/.exec(url);
+    const ref = r ? decodeURIComponent(r[1]) : '';
+    const payload = Buffer.from(plan + '|' + ref).toString('base64url');
+    const sig = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
+    return 'https://dchub.cloud/go/c/' + payload + '.' + sig;
+  } catch (_) {
+    return url;                                // never break a checkout link
+  }
+}
+
 // Pack ($10 / 1,000-call) checkout URL, identity-aware. Keyed caller → durable-key-bound
 // (pk-); keyless → byte-for-byte the previous session-bound link. Reads api_key from
 // AsyncLocalStorage so the many pack-link call sites don't have to thread it. ONLY the
@@ -491,7 +540,7 @@ function _stripeWithKey(url, apiKey) {
 function _packCheckoutUrl(sessionId) {
   let _k = '';
   try { _k = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
-  return _k ? _stripeWithKey(CREDITS_URL, _k) : _stripeWithSession(CREDITS_URL, sessionId);
+  return _goUrl(_k ? _stripeWithKey(CREDITS_URL, _k) : _stripeWithSession(CREDITS_URL, sessionId));
 }
 
 // r-durable-sub-key (2026-07-13): bind a keyed caller's SUBSCRIPTION checkout
@@ -505,15 +554,15 @@ function _packCheckoutUrl(sessionId) {
 function _subCheckoutUrl(url, sessionId) {
   let _k = '';
   try { _k = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
-  if (!_k) return _stripeWithSession(url, sessionId);
+  if (!_k) return _goUrl(_stripeWithSession(url, sessionId));
   try {
     if (!url) return url;
-    if (/[?&]client_reference_id=/.test(url)) return url;  // idempotent
+    if (/[?&]client_reference_id=/.test(url)) return _goUrl(url);  // idempotent
     const h = createHash('sha256').update(String(_k)).digest('hex');
     const sep = url.includes('?') ? '&' : '?';
-    return url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h);
+    return _goUrl(url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h));
   } catch (_) {
-    return _stripeWithSession(url, sessionId);
+    return _goUrl(_stripeWithSession(url, sessionId));
   }
 }
 
@@ -13252,4 +13301,11 @@ export { buildHighIntentClaimBlock };
 // it under `upgrade`; a session probing the wrong path after a good deploy
 // reads a working fix as broken (the sc.for_your_human near-miss, 07-28).
 export { _collapseEnvelope };
+// r-go-click (2026-08-07): the checkout-link wrapper is exported so its
+// FAIL-OPEN paths are pinned by test rather than by comment. Every branch that
+// returns the URL unchanged is a branch where a human can still pay but we stop
+// measuring — the exact failure this change exists to end, so it must be the
+// tested one. _packCheckoutUrl/_subCheckoutUrl read AsyncLocalStorage and so
+// are not unit-testable in isolation; _goUrl is the pure part.
+export { _goUrl };
 

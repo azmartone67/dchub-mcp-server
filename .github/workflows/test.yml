@@ -48,8 +48,14 @@ jobs:
       # planner; a guard that never executes proves nothing. Qualifies for the
       # HARD gate: deterministic, no network (pure exported functions plus a
       # read of the committed server.mjs), mutates nothing.
+      # ★2026-08-07 (r-go-click): go-checkout-link is named here for the THIRD
+      # time this rule has had to be restated — a test file this gate does not
+      # list is never executed by anything, since `npm test` is invoked by no
+      # workflow. Its subject is the checkout link itself, so a silently
+      # unexecuted guard here would let a broken link ship as green. Qualifies
+      # for the HARD gate: deterministic, no network (pure exported function).
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
