@@ -3,6 +3,8 @@
 
 [![MCP Badge](https://lobehub.com/badge/mcp-full/azmartone67-dchub-mcp-server)](https://lobehub.com/mcp/azmartone67-dchub-mcp-server)
 
+<a href="https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server"><img width="380" height="200" src="https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badge" alt="DC Hub MCP server — Glama" /></a>
+
 **Real-time data-center, power-grid, interconnection-queue, grid-capacity, fiber, natural-gas & hyperscale infrastructure intelligence for AI agents** — live telemetry across PJM, ERCOT, CAISO and every US ISO.
 
 👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against 16,900+ facilities, 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
