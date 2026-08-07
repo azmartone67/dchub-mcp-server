@@ -12535,6 +12535,54 @@ registerOAuthRoutes(app, {
   },
 });
 
+// ── the canonical discovery block, straight from the repo ──────────────────
+// WHY (2026-08-07). Every pull-based MCP registry — Smithery, LobeHub, Glama,
+// PulseMCP — auto-discovers from https://dchub.cloud/.well-known/mcp.json.
+// That URL is NOT served from any repo: it is composed by the out-of-repo
+// Cloudflare zone worker (x-dc-worker-version 4.9.x), edited by hand in the
+// dashboard. It had frozen at version 2.5.0 / "15,700+ facilities" /
+// "1,600+ tracked M&A" while source was 2.11.1 / 16,700+ / 1,700+, so every
+// registry faithfully republished six-minor-versions-old numbers. LobeHub's
+// listing read 2.5.0 for exactly this reason. The registries were correct;
+// we were the stale source.
+//
+// daily-manifest-sync already keeps mcp-server.json honest every day and
+// simply could not reach the worker. This endpoint closes that gap: the worker
+// fetches THIS, spreads it over its own envelope, and falls back to its
+// hardcoded constant if we are unreachable. After that one dashboard edit the
+// manifest tracks the repo forever and cannot rot again.
+//
+// Deliberately NOT the full manifest. Pricing, anchor_intents and
+// problem_taxonomy are composed by the worker from other owners; duplicating
+// them here would create a second copy to rot. This serves only the fields
+// that drifted — the ones this repo is the true owner of.
+app.get('/.well-known/mcp-canonical.json', (req, res) => {
+  try {
+    const m = JSON.parse(
+      readFileSync(new URL('./mcp-server.json', import.meta.url), 'utf8'));
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({
+      // SERVER_VERSION is the source of truth (server.mjs); mcp-server.json is
+      // synced to it daily. Prefer SERVER_VERSION so a sync lag cannot publish
+      // a version this process is not actually running.
+      version: SERVER_VERSION,
+      name: m.name,
+      description: m.description,
+      transport: m.transport,
+      endpoint: m.endpoint,
+      tools_count: CANONICAL_TOOL_COUNT,
+      tools: (m.tools || []).map((t) => t.name || t).filter(Boolean),
+      _source: 'dchub-mcp-server mcp-server.json + SERVER_VERSION',
+      _consumed_by: 'the dchub.cloud zone worker, to build /.well-known/mcp.json',
+    });
+  } catch (e) {
+    // Fail LOUD. A 500 makes the worker keep its hardcoded fallback, which is
+    // stale but valid. Silently emitting a partial manifest would be worse:
+    // registries would republish the gaps.
+    res.status(500).json({ error: 'canonical_manifest_unavailable', detail: String(e && e.message || e) });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
