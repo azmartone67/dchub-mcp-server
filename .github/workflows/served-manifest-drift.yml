@@ -1,0 +1,84 @@
+name: Served manifest drift (what registries actually read)
+
+# WHY: /.well-known/mcp.json is the one artifact every MCP registry scrapes.
+# On 2026-08-06 it was serving version 2.5.0 / "15,700+ facilities" /
+# "1,600+ tracked M&A" while source was 2.11.1 / 16,700+ / 1,700+. LobeHub and
+# every other registry reading it republished those numbers faithfully — we
+# were the stale source, not them.
+#
+# daily-manifest-sync already keeps every REPO surface honest. It cannot fix
+# this one: /.well-known/mcp.json is served by the out-of-repo Cloudflare zone
+# worker (x-dc-worker-version 4.9.x), edited in the CF dashboard. Nothing
+# compared the served bytes to the source, so the drift stayed invisible while
+# every downstream listing quietly rotted.
+#
+# This job deliberately does NOT fail the build. A red X every day for
+# something only a dashboard edit can clear is noise that gets ignored. It
+# maintains ONE issue instead, and closes it when the manifest catches up.
+
+on:
+  schedule:
+    - cron: '47 15 * * *'   # daily, after daily-manifest-sync (14:2x) has settled
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  ISSUE_TITLE: 'Served /.well-known/mcp.json is behind source — registries are republishing stale values'
+
+jobs:
+  served-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '22' }
+
+      - name: Compare the served manifest against source
+        id: check
+        run: |
+          set +e
+          node scripts/check-served-manifest.mjs > /tmp/served.txt 2>&1
+          code=$?
+          set -e
+          cat /tmp/served.txt
+          # exit 1 = real drift. exit 0 = OK *or* UNOBSERVED, which are not the
+          # same thing: an unreachable endpoint must never be filed as drift,
+          # and must never close the issue either.
+          if [ "$code" = "1" ]; then
+            echo "state=drift" >> "$GITHUB_OUTPUT"
+          elif grep -q '^UNOBSERVED' /tmp/served.txt; then
+            echo "state=unobserved" >> "$GITHUB_OUTPUT"
+          else
+            echo "state=ok" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the drift issue
+        if: steps.check.outputs.state == 'drift'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          N=$(gh issue list --state open --search "in:title \"$ISSUE_TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh issue edit "$N" --body-file served-manifest-report.md
+            echo "updated issue #$N"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body-file served-manifest-report.md
+          fi
+
+      - name: Close the issue once the served manifest catches up
+        if: steps.check.outputs.state == 'ok'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          N=$(gh issue list --state open --search "in:title \"$ISSUE_TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh issue close "$N" --comment "Served manifest now matches source — verified by served-manifest-drift."
+            echo "closed #$N"
+          fi
+
+      - name: Note when the check could not observe anything
+        if: steps.check.outputs.state == 'unobserved'
+        run: echo "::warning::Could not read the served manifest or the canon endpoint. No claim made; the open issue (if any) is left untouched."
