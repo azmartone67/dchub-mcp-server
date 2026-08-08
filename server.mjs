@@ -4472,6 +4472,138 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   return out;
 }
 
+// ── shapeScoreboardUsRow: one US row of get_grid_scoreboard ──────────────────
+// r-scoreboard-freshness (2026-08-08). Two defects, both of them the SHAPER
+// dropping disclosure that the backend already returns one field away.
+//
+// (1) FRESHNESS. get_grid_intelligence carries demand_period,
+//     generation_mix_age_hours, generation_mix_lag_at_snapshot_hours,
+//     generation_mix_freshness_basis and generation_mix_note — the last of
+//     which exists expressly to stop an agent narrating a stale overnight mix
+//     as the current one. The scoreboard published `mix_period` and nothing
+//     else, next to a demand figure from a DIFFERENT and much fresher hour,
+//     under a tool description that said "RIGHT NOW". Measured 2026-08-08T03:17Z:
+//     ERCOT mix_period 2026-08-07T04 (22.9h old) paired with demand from
+//     2026-08-08T02 (~1.3h old); 85 MW of solar across all nine US grids
+//     because 04:00 UTC is the middle of the night; and the mismatched pairing
+//     implied a 5.3 GW import into a grid with ~1.2 GW of DC ties.
+//
+// (2) renewable_share_pct DEFINITION. The tool promised "wind+solar+hydro
+//     (apples-to-apples)" and the ranking compares all rows head-to-head, but
+//     the US rows counted geothermal in the numerator while the 33 ENTSO-E
+//     rows (routes/iso_eu_entsoe._RENEWABLE_CATS = wind/solar/hydro) did not.
+//     CAISO published 31.5% where the stated definition gives 29.0% — enough
+//     to move it in a greenest-first ranking. The ranked metric now matches
+//     the stated definition on every feed; the geothermal-inclusive figure is
+//     kept as its own clearly-named field because get_grid_intelligence
+//     publishes that one, and the two must not silently disagree.
+//
+// PURE: no fetch, no ctx. `nowMs` is injected so ages are deterministic in test.
+const _SCOREBOARD_STORAGE_FUELS = new Set(['BAT', 'PS']);
+const _SCOREBOARD_RANKED_RENEWABLES = new Set(['WND', 'SUN', 'WAT']);
+const SCOREBOARD_RENEWABLE_DEFINITION =
+  'wind+solar+hydro / total non-storage generation. Identical on every ranked '
+  + 'feed (US, GB, ENTSO-E, TW, JP, KR, BR) so the greenest-first order is '
+  + 'apples-to-apples. Geothermal and biomass are reported separately, NOT in '
+  + 'this numerator. get_grid_intelligence publishes the geothermal-INCLUSIVE '
+  + 'share for US ISOs — where they differ, this row also carries '
+  + 'renewable_share_incl_geothermal_pct so the two are reconcilable.';
+
+// EIA hour stamp "YYYY-MM-DDTHH" (UTC) -> epoch ms, or null.
+function _eiaPeriodMs(p) {
+  if (typeof p !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})$/.exec(p.trim());
+  if (!m) {
+    const t = Date.parse(p);
+    return Number.isFinite(t) ? t : null;
+  }
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4]);
+}
+
+function _ageHours(periodMs, nowMs) {
+  if (periodMs == null || !Number.isFinite(nowMs)) return null;
+  return Math.round(((nowMs - periodMs) / 3_600_000) * 10) / 10;
+}
+
+// A mix this old must not be narrated as the current minute's mix. 3h matches
+// the backend's own generation_mix_note threshold, so the two agree.
+const SCOREBOARD_STALE_MIX_HOURS = 3;
+
+function shapeScoreboardUsRow(iso, gi, nowMs) {
+  const n = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : 0; };
+  const nn = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? x : null; };
+  const gm = (gi && gi.generation_mix) || {};
+  const posv = (k) => { const v = n(gm[k] && gm[k].mw); return v > 0 ? v : 0; };
+  let total = 0, renew = 0;
+  for (const k of Object.keys(gm)) {
+    if (k === 'period') continue;
+    const p = posv(k);
+    if (!_SCOREBOARD_STORAGE_FUELS.has(k)) total += p;
+    if (_SCOREBOARD_RANKED_RENEWABLES.has(k)) renew += p;
+  }
+  const ng = posv('NG'), nuc = posv('NUC'), col = posv('COL');
+  const sun = posv('SUN'), wnd = posv('WND'), wat = posv('WAT'), oth = posv('OTH');
+  const geo = posv('GEO'), oil = posv('OIL');
+  const pct = (x) => total > 0 ? Math.round((x / total) * 1000) / 10 : null;
+
+  const mixPeriod = (gi && gi.generation_mix_period) || (gm.NG && gm.NG.period) || null;
+  const demandPeriod = (gi && gi.demand_period) || null;
+  // Prefer the backend's own wall-clock measurement; derive it if this backend
+  // build predates that field, so a row can never ship with no age at all.
+  const mixAge = nn(gi && gi.generation_mix_age_hours);
+  const mixAgeHours = mixAge != null ? mixAge : _ageHours(_eiaPeriodMs(mixPeriod), nowMs);
+  const demandAgeHours = _ageHours(_eiaPeriodMs(demandPeriod), nowMs);
+  const lagBackend = nn(gi && gi.generation_mix_lag_at_snapshot_hours);
+  const lagHours = lagBackend != null ? lagBackend
+    : (demandAgeHours != null && mixAgeHours != null
+        ? Math.round((mixAgeHours - demandAgeHours) * 10) / 10 : null);
+  const staleMix = mixAgeHours != null && mixAgeHours >= SCOREBOARD_STALE_MIX_HOURS;
+
+  const row = {
+    iso,
+    region: (gi && gi.region) || iso,
+    country: 'US',
+    demand_mw: nn(gi && gi.demand_mw),
+    renewable_share_pct: pct(renew),
+    gas_share_pct: pct(ng),
+    renewable_definition: SCOREBOARD_RENEWABLE_DEFINITION,
+    // Both clocks, always — never one period standing in for the whole row.
+    mix_period: mixPeriod,
+    mix_age_hours: mixAgeHours,
+    demand_period: demandPeriod,
+    demand_age_hours: demandAgeHours,
+    demand_vs_mix_lag_hours: lagHours,
+    freshness_basis: (gi && gi.generation_mix_freshness_basis)
+      || 'mix_age_hours and demand_age_hours are measured against the CURRENT '
+         + 'UTC clock at build time. demand_vs_mix_lag_hours is how far the fuel '
+         + 'mix trails the demand reading INSIDE this row — the two figures on '
+         + 'this row are from different hours.',
+    fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, geothermal: geo, oil: oil, other: oth },
+    fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
+  };
+  if (geo > 0) row.renewable_share_incl_geothermal_pct = pct(renew + geo);
+  if (staleMix) {
+    row.mix_is_stale = true;
+    // The backend composes this warning for exactly this situation. Carry it
+    // verbatim when present rather than paraphrasing it.
+    row.mix_note = (gi && gi.generation_mix_note)
+      || ('Fuel mix is EIA\'s latest PUBLISHED hour (' + (mixPeriod || 'unknown')
+          + '), ~' + mixAgeHours + 'h old. Treat the mix and the renewable/gas '
+          + 'shares as a snapshot from that hour, NOT the current minute — do not '
+          + 'narrate it as "right now". demand_mw is the fresher reading'
+          + (demandPeriod ? ' (' + demandPeriod + ')' : '') + '.');
+    // Generation and demand on this row are from different hours, so their
+    // difference is not an import/export figure. Say so where it would be read.
+    if (lagHours != null && Math.abs(lagHours) >= 1) {
+      row.mix_vs_demand_warning =
+        'generation_total and demand_mw are ' + Math.abs(lagHours) + 'h apart. '
+        + 'Do NOT subtract one from the other — the difference is the gap between '
+        + 'two clocks, not net imports or a supply shortfall.';
+    }
+  }
+  return row;
+}
+
 // r71: human-readable titles + readOnlyHint annotations for every MCP tool
 // (required by the Anthropic MCP Directory; ALL DC Hub tools are read-only).
 const _TOOL_TITLE_OVERRIDES = {
@@ -5240,7 +5372,17 @@ const _GRID_ROW = z.looseObject({
   renewable_share_pct: _oNum('Wind+solar+hydro share of generation, % (the ranking key)'),
   variable_renewable_pct: _oNum('Wind+solar-only share, % (partial feeds)'),
   gas_share_pct: _oNum('Gas share of generation, % (null where the feed cannot honestly split gas out, e.g. Brazil ONS thermal)'),
+  renewable_share_incl_geothermal_pct: _oNum('Same share WITH geothermal in the numerator — present only where geothermal > 0. This is the figure get_grid_intelligence publishes for US ISOs; renewable_share_pct above is the cross-feed-comparable one used for the ranking'),
+  renewable_definition: _oStr('Exactly what renewable_share_pct counts, identical on every ranked feed'),
   mix_period: _oStr('Timestamp / period of the fuel-mix reading'),
+  mix_age_hours: _oNum('How old the fuel-mix reading is against the CURRENT UTC clock. US rows are routinely 18-24h overnight — check this before calling a row current'),
+  demand_period: _oStr('Period of the demand reading — a DIFFERENT clock from mix_period on US rows'),
+  demand_age_hours: _oNum('Age of the demand reading against the current UTC clock'),
+  demand_vs_mix_lag_hours: _oNum('How far the fuel mix trails demand WITHIN this row. Non-zero means the two figures are from different hours'),
+  freshness_basis: _oStr('Which clock the ages on this row are measured against'),
+  mix_is_stale: _oBool('Set when mix_age_hours is at or over the stale threshold — do not narrate this row as the mix "right now"'),
+  mix_note: _oStr('Plain-language warning composed for a stale mix reading'),
+  mix_vs_demand_warning: _oStr('Present when generation and demand are hours apart: their difference is a clock gap, NOT net imports'),
   fuel_mw: _oObj({}, 'Fuel mix in MW, e.g. {gas, nuclear, coal, wind, solar, hydro, …}'),
   generation_total_mw: _oNum('Total generation in MW'),
   avg_price_usd_per_mwh: _oNum('Average wholesale price in USD/MWh (where the feed carries price)'),
@@ -5256,7 +5398,8 @@ const _TOOL_OUTPUT_SCHEMAS = {
     zones_ranked: _oNum('Grid rows carrying a live renewable_share_pct, i.e. the ranked set'),
     independent_sources: _oNum('Distinct upstream feeds behind those rows — far below zones_ranked because every EU bidding zone comes from ONE feed (ENTSO-E). null when the per-source tally failed'),
     counts_basis: _oObj({}, 'What each count actually counts, plus per_source rows, eu_zones_live vs eu_zones_configured, and the unranked/unavailable tallies'),
-    ranked_by: _oStr('Ranking criterion (renewable share = wind+solar+hydro, greenest first)'),
+    ranked_by: _oStr('Ranking criterion (renewable share = wind+solar+hydro, greenest first) plus the full definition — identical on every feed, geothermal and biomass excluded from the numerator'),
+    freshness: _oObj({}, 'Rows are each feed\'s LATEST PUBLISHED reading, NOT a synchronized snapshot: {basis, us_mix_source, stale_mix_threshold_hours, stale_mix_rows[], how_to_read}. Read this before narrating any row as current'),
     coverage: _oStr('Coverage line GENERATED from the rows that actually ranked — a feed that returned nothing is absent from it'),
     source: _oStr('Upstream feeds behind the rows in THIS response, generated (EIA hourly RTO, Elexon, ENTSO-E, Taipower, OCCTO, KPX, ONS, AEMO, EMA)'),
     grids: _oArr(_GRID_ROW, 'Fully-ranked grids, greenest (highest renewable share) first — US ISOs + GB + EU zones + TW + JP + KR + BR'),
@@ -9686,7 +9829,7 @@ function createServer(descOverrides) {
   // now lives at MODULE scope (above createServer) so it is shared across ALL sessions,
   // not re-created cold per session — see the note there.
   trackedTool(srv, 'get_grid_scoreboard',
-    'Live GLOBAL grid scoreboard — 7 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Great Britain (NESO) + ~24 European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side RIGHT NOW: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Every ranked grid scores renewable as wind+solar+hydro share (apples-to-apples); Brazil ranks by renewable share but reports NO gas share (ONS bundles gas/coal/oil/biomass into one thermal figure — never presented as gas); Australia NEM (AEMO) + Singapore (EMA) are listed unranked in partial_grids (no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; TW = Taipower; JP = TSO eria_jukyu CSVs; KR = KPX real-time; BR = ONS Balanço de Energia; AU = AEMO NEM; SG = EMA NEMS — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
+    'GLOBAL grid scoreboard — 9 US grid operators (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, BPA, TVA) + Great Britain (NESO) + the European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E; the exact live-vs-configured count is in counts_basis.eu_zones_live / eu_zones_configured, measured per call rather than asserted here) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side on each feed\'s LATEST PUBLISHED reading: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. ★FRESHNESS IS NOT UNIFORM and every row says so: each carries mix_period, mix_age_hours and freshness_basis. The US rows come from EIA hourly RTO, which publishes the FUEL-TYPE BREAKDOWN several hours behind aggregate demand — an overnight mix reading is routinely 18-24h old (it will show near-zero solar) while demand on the same row is ~1-2h old. Read mix_age_hours before narrating any row as current, and NEVER describe a row as the mix "right now" unless its mix_age_hours is small; demand_period and mix_period are separate clocks and the row reports both plus demand_vs_mix_lag_hours. One call answers "which grid worldwide is greenest, or most gas-reliant, for siting a data center?" — vs compare_isos (pairwise) or get_grid_data (single ISO). Every ranked grid scores renewable_share_pct as wind+solar+hydro (apples-to-apples across all feeds; geothermal is reported separately and, where it exists, also as renewable_share_incl_geothermal_pct — note get_grid_intelligence uses that geothermal-inclusive figure for US ISOs); Brazil ranks by renewable share but reports NO gas share (ONS bundles gas/coal/oil/biomass into one thermal figure — never presented as gas); Australia NEM (AEMO) + Singapore (EMA) are listed unranked in partial_grids (no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; TW = Taipower; JP = TSO eria_jukyu CSVs; KR = KPX real-time; BR = ONS Balanço de Energia; AU = AEMO NEM; SG = EMA NEMS — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Try: get_grid_scoreboard.',
     {},
     async (a) => {
       // r78 LATENCY FIX: this tool averaged 45.7s. Two causes: (1) the 7
@@ -9728,38 +9871,17 @@ function createServer(descOverrides) {
             .then(d => ({ iso, d }))
             .catch(e => ({ iso, err: String(e).slice(0, 120) }))));
         const grids = [];
+        // r-scoreboard-freshness (2026-08-08): the whole row (fuel maths + the
+        // freshness the backend already returns + the ranked renewable
+        // definition) is built by the PURE shapeScoreboardUsRow, so it is
+        // covered by a network-free unit test. The old inline version dropped
+        // demand_period, every age, and the backend's own "do not narrate this
+        // as right now" note, and counted geothermal as renewable where no
+        // other feed did. See the block comment on the function.
+        const _nowMs = Date.now();
         for (const { iso, d, err } of results) {
           if (err || !d || !d.generation_mix) { grids.push({ iso, error: err || 'no generation_mix' }); continue; }
-          const gm = d.generation_mix;
-          // ROBUSTNESS (2026-06-19): the EIA feed now returns ALL fuels — sum the
-          // FULL non-storage generation (incl geothermal GEO + oil OIL the old
-          // 7-fuel sum dropped), clamp negatives (charging storage / artifacts),
-          // count GEO as renewable. Storage (BAT/PS) excluded from the denominator.
-          const _STOR = new Set(['BAT', 'PS']);
-          const _REN  = new Set(['WND', 'SUN', 'WAT', 'GEO']);
-          const posv = (k) => { const n = _num(gm[k] && gm[k].mw); return (Number.isFinite(n) && n > 0) ? n : 0; };
-          let total = 0, renew = 0;
-          for (const k of Object.keys(gm)) {
-            if (k === 'period') continue;
-            const p = posv(k);
-            if (!_STOR.has(k)) total += p;
-            if (_REN.has(k)) renew += p;
-          }
-          const ng = posv('NG'), nuc = posv('NUC'), col = posv('COL');
-          const sun = posv('SUN'), wnd = posv('WND'), wat = posv('WAT'), oth = posv('OTH');
-          const geo = posv('GEO'), oil = posv('OIL');
-          const pct = (x) => total > 0 ? Math.round((x / total) * 1000) / 10 : null;
-          grids.push({
-            iso,
-            region: d.region || iso,
-            country: 'US',
-            demand_mw: _num(d.demand_mw) || null,
-            renewable_share_pct: pct(renew),
-            gas_share_pct: pct(ng),
-            mix_period: gm.NG && gm.NG.period || null,
-            fuel_mw: { gas: ng, nuclear: nuc, coal: col, wind: wnd, solar: sun, hydro: wat, geothermal: geo, oil: oil, other: oth },
-            fuel_pct: { gas: pct(ng), nuclear: pct(nuc), coal: pct(col), wind: pct(wnd), solar: pct(sun), hydro: pct(wat), other: pct(oth) },
-          });
+          grids.push(shapeScoreboardUsRow(iso, d, _nowMs));
         }
 
         // --- LIVE international grids (#60, r65) ---
@@ -10133,7 +10255,25 @@ function createServer(descOverrides) {
               : 'this backend build does not report zones_configured on /api/v1/iso/eu/snapshot — live-vs-configured drift cannot be checked' } : {}),
             per_source: _rankedFeeds.map(f => ({ source: f.key, zones_ranked: f.grids })),
           },
-          ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first)',
+          ranked_by: 'renewable_share_pct = wind+solar+hydro share (greenest first). ' + SCOREBOARD_RENEWABLE_DEFINITION,
+          // r-scoreboard-freshness (2026-08-08): the rows are NOT one moment in
+          // time and the payload has to say so before anything quotes it.
+          freshness: {
+            basis: 'Every ranked row carries its own mix_period + mix_age_hours; '
+              + 'US rows also carry demand_period + demand_age_hours because EIA '
+              + 'publishes the fuel-type breakdown hours behind aggregate demand. '
+              + 'Rows are each feed\'s LATEST PUBLISHED reading, not a synchronized snapshot.',
+            us_mix_source: 'EIA hourly RTO. An overnight US mix reading is routinely '
+              + '18-24h old and will show near-zero solar; that is the publication '
+              + 'lag, not the grid.',
+            stale_mix_threshold_hours: SCOREBOARD_STALE_MIX_HOURS,
+            stale_mix_rows: ranked.filter(g => g && g.mix_is_stale)
+              .map(g => ({ iso: g.iso, mix_period: g.mix_period, mix_age_hours: g.mix_age_hours })),
+            how_to_read: 'Check mix_age_hours before narrating any row as current. '
+              + 'Never subtract a row\'s generation total from its demand_mw when '
+              + 'demand_vs_mix_lag_hours is non-zero — the difference is two clocks, '
+              + 'not net imports.',
+          },
           coverage: _coverage,
           source: _sourceLine,
           grids: [...ranked, ...errored],
@@ -13441,6 +13581,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
 export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible };
+export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
 // rank_sites objectives bugs were both invisible to handler-level tests
