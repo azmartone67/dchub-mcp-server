@@ -1304,6 +1304,103 @@ async function _validateKeyUncached(api_key) {
   }
 }
 
+// ── Monthly quota: the GATEWAY CONSUMER of /api/v1/mcp/monthly-usage ──────
+//
+// The backend shipped the monthly-quota decision on 2026-08-06 (PR #2289) and
+// its own docstring names the missing half: "The gateway is expected to
+// consult `allowed` and, when it is false, serve `message` through the MCP
+// error channel." Nothing did — so MONTHLY_QUOTA_ENFORCE=1 blocked NOBODY on
+// public /mcp, because the only code path that could block never asked. This
+// is that consumer.
+//
+// ★ PASS THE RAW TIER, NEVER THE GATE TIER. `_gateTier` normalizes
+//   starter/developer → 'paid' for non-Pro tools (r-starterdev-parity), and
+//   the backend resolves 'paid' → PRO (60,000/mo). Passing the normalized
+//   value would hand every $9 Starter customer a Pro-sized quota — a 10x
+//   under-enforcement of the exact tier this wall exists to meter. We pass
+//   c.tier (what the backend actually stamped) and let the backend's
+//   _best_quota_tier take the highest-of-both, so a stale gateway value can
+//   never strand a paying customer on a smaller quota either.
+//
+// ★ FAIL OPEN, ALWAYS. Timeout, non-2xx, parse error, missing key → allowed.
+//   A quota is a billing nicety; a false wall is a customer outage. Failures
+//   are never cached, so the next call self-heals (same rule validateKey uses
+//   for tier downgrades).
+//
+// ★ ADAPTIVE TTL so this does not add a round-trip to all 82 tools. Callers
+//   nowhere near their wall are cached for 5 min; callers approaching it are
+//   re-checked often; a BLOCKED caller is re-checked every 30s so an upgrade
+//   takes effect almost immediately instead of after a stale allow-window.
+//   Worst-case overshoot at the wall is ~10s of calls, not a month's worth.
+const QUOTA_CACHE = new Map();          // api_key → { d, exp }
+const _quotaInflight = new Map();       // api_key → Promise<decision>
+
+// Tools that must NEVER be walled: the ways a caller identifies themselves,
+// recovers a lost key, learns what we are, or PAYS US. Blocking
+// `unlock_more_data` at the quota wall would mean the customer cannot buy
+// their way past the wall — the wall would defeat its own purpose.
+export const QUOTA_EXEMPT_TOOLS = new Set([
+  'claim_free_key', 'bind_email', 'recover_my_key',
+  'unlock_more_data', 'why_dchub', 'discover_tools',
+]);
+
+export function _quotaTtlMs(d) {
+  if (!d || d.allowed === false) return 30_000;   // blocked → re-check fast
+  const rem = d.remaining;
+  if (rem === null || rem === undefined) return 300_000;  // nothing to enforce
+  if (rem > 500) return 300_000;
+  if (rem > 50)  return 60_000;
+  return 10_000;                                   // close to the wall
+}
+
+export const _QUOTA_OPEN = { allowed: true, reason: 'gateway_fail_open' };
+
+// Injectable for tests: the ONLY network hop this feature makes.
+export let _quotaFetchImpl = null;
+export function _setQuotaFetchImpl(fn) { _quotaFetchImpl = fn; }
+
+async function _monthlyQuotaUncached(api_key, tier) {
+  if (_quotaFetchImpl) return _quotaFetchImpl(api_key, tier);
+  const url = new URL('/api/v1/mcp/monthly-usage', API_BASE);
+  url.searchParams.set('api_key', api_key);
+  if (tier) url.searchParams.set('tier', String(tier).toLowerCase());
+  const resp = await fetch(url.toString(), {
+    headers: { 'X-Internal-Key': INTERNAL_KEY },
+    signal: AbortSignal.timeout(1500),
+  });
+  if (!resp.ok) throw new Error(`monthly-usage ${resp.status}`);
+  return await resp.json();
+}
+
+export async function checkMonthlyQuota(api_key, tier) {
+  if (!api_key) return _QUOTA_OPEN;               // anon has its own budget
+  const hit = QUOTA_CACHE.get(api_key);
+  if (hit && hit.exp > Date.now()) return hit.d;
+  const inflight = _quotaInflight.get(api_key);
+  if (inflight) return inflight;                  // collapse a burst into one hop
+  const p = (async () => {
+    try {
+      const d = await _monthlyQuotaUncached(api_key, tier);
+      QUOTA_CACHE.set(api_key, { d, exp: Date.now() + _quotaTtlMs(d) });
+      return d;
+    } catch (err) {
+      // Never cache a failure — see the fail-open note above.
+      console.error('[monthlyQuota] failed, allowing call:', err.message);
+      return _QUOTA_OPEN;
+    } finally {
+      _quotaInflight.delete(api_key);
+    }
+  })();
+  _quotaInflight.set(api_key, p);
+  return p;
+}
+
+// A paid upgrade or a credit top-up must clear the wall on the NEXT call, not
+// after the cached window expires (same reasoning as _dropCreditCache).
+export function _dropQuotaCache(api_key) {
+  if (api_key) QUOTA_CACHE.delete(api_key);
+}
+
 // ── Trial mode: has this session already consumed its free preview for this tool? ──
 //
 // r41 (2026-05-25): timeout reduced 3000→1500ms. trial_check IS on the
@@ -7431,6 +7528,68 @@ function trackedTool(srv, name, description, schema, handler) {
       // applyTierGate below blocks them for the un-normalized 'developer'/'starter' tier).
       if ((_gateTier === 'developer' || _gateTier === 'starter') && !PRO_ONLY_TOOLS.has(name)) {
         _gateTier = 'paid';
+      }
+      // r-monthly-quota (2026-08-08, DARK): the monthly CALL wall — the gateway
+      // consumer the backend's phase-2 decision (PR #2289) was written for and
+      // never got. Placed BEFORE applyTierGate on purpose: a monthly quota
+      // meters CALL VOLUME, not content depth, so it applies to every tool
+      // (including the free-full flagships) rather than only the gated ones.
+      //
+      // Inert until the backend's MONTHLY_QUOTA_ENFORCE=1 — while the switch is
+      // off quota_decision always returns allowed:true (reason
+      // over_quota_log_only for a key that WOULD have been walled), so merging
+      // this changes nothing observable. Exempt keys, unresolvable tiers, DB
+      // errors and any gateway failure all fail OPEN.
+      //
+      // ★ c.tier, NOT _gateTier — see the note on checkMonthlyQuota. The line
+      //   directly above just rewrote starter/developer to 'paid'.
+      if (c && c.api_key && !QUOTA_EXEMPT_TOOLS.has(name)) {
+        let _q = _QUOTA_OPEN;
+        try { _q = await checkMonthlyQuota(c.api_key, c.tier || _gateTier); } catch (_) {}
+        if (_q && _q.allowed === false) {
+          // A prepaid-pack holder bought a call bundle outright; their tier is
+          // still 'free' (300/mo), so walling them here would confiscate calls
+          // they already paid for. Checked ONLY on the blocked path, so the
+          // common case adds no credit lookup.
+          let _qc = { credits: 0, had_pack: false };
+          try { _qc = await _getCredits(c); } catch (_) {}
+          if ((_qc.credits || 0) > 0) {
+            _dropQuotaCache(c.api_key);   // let the pack carry them past the wall
+          } else {
+            const _sidQ = (c && c.session_id) || 'no-session';
+            try {
+              signalPaywall({
+                tool: name, args, signal_type: 'monthly_quota_exhausted',
+                session_id: _sidQ, mcp_client: c.platform || 'mcp',
+                user_agent: c.client_ua || null, ip_address: c.client_ip || null,
+                api_key: c.api_key || null, tier_current: c.tier || _gateTier || 'free',
+                tier_required: _q.quota_tier || 'paid', message_shown: 'monthly_quota',
+              });
+            } catch (_) {}
+            status = 'monthly_quota_blocked';
+            // Content IS the error channel on this path (an agent reads
+            // content[0].text; isError makes clients surface it rather than
+            // silently swallowing a 200 with a refusal inside).
+            return {
+              content: [{ type: 'text', text: JSON.stringify({
+                monthly_quota_exhausted: true,
+                tool: name,
+                message: _q.message || 'Monthly call quota reached.',
+                used: _q.used, quota: _q.quota, month: _q.month,
+                upgrade_url: _q.upgrade_url, pricing_url: _q.pricing_url,
+                next_tool: 'unlock_more_data',
+              }) }],
+              isError: true,
+              structuredContent: {
+                monthly_quota_exhausted: true, tool: name,
+                used: _q.used, quota: _q.quota, remaining: 0,
+                month: _q.month, tier: _q.quota_tier || null,
+                message: _q.message || 'Monthly call quota reached.',
+                upgrade_url: _q.upgrade_url, pricing_url: _q.pricing_url,
+              },
+            };
+          }
+        }
       }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
