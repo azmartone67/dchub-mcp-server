@@ -106,7 +106,13 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
   });
 
   it('wraps the fully-processed result, so it sees every return path', () => {
-    expect(SRC).toMatch(/withStarterPack\(\s*_scrubCommerce\(_ensureStructured\(await _stamped/);
+    // ★ Tolerates additional envelope-correcting wrappers between
+    //   _scrubCommerce and _ensureStructured (2026-08-08: _honestCallerTier
+    //   moved into this chain) — same re-anchor rationale as the clean-path
+    //   guard below: the assertion is that withStarterPack sits at the
+    //   callback wrapping the processed _stamped result, not that no other
+    //   wrapper may ever join the chain.
+    expect(SRC).toMatch(/withStarterPack\(\s*_scrubCommerce\((?:\w+\()*_ensureStructured\(await _stamped/);
   });
 
   it('is NOT attached beside withFrontDoorNudge on the clean-only path', () => {
