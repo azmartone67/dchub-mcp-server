@@ -13001,6 +13001,30 @@ app.get('/.well-known/mcp-canonical.json', (req, res) => {
   }
 });
 
+// The FULL registry-schema server.json (what mcp-publisher publishes), served
+// LIVE. This is what the dchub-backend FAILOVER publisher fetches so it can
+// source the canonical from the running server instead of GitHub raw — with
+// GitHub raw kept as its fallback, so neither source is a single point of
+// failure. Unlike /.well-known/mcp-canonical.json (a partial manifest for the
+// zone worker), this is the complete publishable body.
+//
+// version is overridden to SERVER_VERSION (the source of truth) so a
+// server.json file-sync lag can never advertise a version this process is not
+// actually running — same principle as the canonical-manifest route above.
+app.get('/server.json', (req, res) => {
+  try {
+    const s = JSON.parse(
+      readFileSync(new URL('./server.json', import.meta.url), 'utf8'));
+    s.version = SERVER_VERSION;
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(s);
+  } catch (e) {
+    // Fail LOUD (500). A partial/empty body must never be published to the
+    // official registry — a failing fetch makes the backend publish nothing.
+    res.status(500).json({ error: 'server_json_unavailable', detail: String(e && e.message || e) });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
