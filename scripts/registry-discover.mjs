@@ -50,6 +50,146 @@ const PR_ENABLED = !['1', 'true', 'yes'].includes(String(process.env.DISCOVER_PR
 //                                    on regen); win4r/Awesome-Claude (tiny 112-line list,
 //                                    no data/energy category — poor fit); mctrinh
 //                                    (44★, low reach — deferred, not worth a PR)
+// ── RELEVANCE GATE (2026-08-08) ─────────────────────────────────────────────
+// WHY: the crawl was healthy and useless. Its 2026-08-06 run surfaced 12
+// candidates -- Chinese-language resources, DevOps twice, security, web3,
+// crypto, medical, OSINT, Korea, Solana, and awesome-mcp-CLIENTS (we are a
+// server) -- and not one of them lists anything like DC Hub. A human opened
+// issue #73, correctly concluded "none of these", and the roster never grew.
+// Ranking by stars finds the BIGGEST lists, not the ones we belong on.
+//
+// ★ THE SPLIT THAT MAKES THIS WORK: niche is tested against the repo NAME and
+// DESCRIPTION only -- never the README body. A general-purpose list's README
+// legitimately contains the words "crypto" and "medical" as SECTION HEADERS;
+// testing the body would reject exactly the lists we most want. The name and
+// description are where a list DECLARES its scope. Domain terms, by contrast,
+// are searched in the body too: a general list carrying an Energy or Data
+// section is a list we fit into.
+const DOMAIN_RE = new RegExp([
+  'data[\\s-]?cent(er|re)', 'datacent', 'power[\\s-]?grid', 'electric',
+  'energy', 'fiber[\\s-]?optic|fibre', 'colocation', 'hyperscale',
+  'telecom', 'interconnect', 'renewab', 'substation', 'megawatt|\\bMW\\b',
+  // NOT 'utilit': it matched "testing utilities" on a devtools list and let
+  // punkpeye/awesome-mcp-devtools through as a domain match. NOT 'fiber' bare
+  // and NOT 'infrastructur': "infrastructure-as-code" is a DevOps list.
+].join('|'), 'i');
+
+// A scope that structurally EXCLUDES a data-center/energy server. "client" is
+// here because awesome-mcp-clients catalogues MCP clients and we ship a server.
+const NICHE_RE = new RegExp([
+  'crypto', 'web3', 'solana', 'blockchain', 'defi', 'nft',
+  'medical', 'health', 'clinical', 'bio',
+  'osint', 'security', 'pentest', 'hacking',
+  'devops', 'kubernetes', 'k8s', 'sre',
+  'korea', 'japan', 'chinese', 'zh\\b', '-zh$', 'espa', 'brasil',
+  'client', 'devtool', 'sdk', 'framework',
+  'game|gaming', 'music', 'trading', 'legal', 'academic', 'finance|fintech',
+  // Regional scopes: '-cn' and 'mainland' are how a China-only list names
+  // itself; 'zh' alone missed LeslieLeung/awesome-mcp-server-cn.
+  '\\bcn\\b|-cn$|mainland',
+  // Frontend/mobile stacks — an Ionic/React list carries UI tooling, not a
+  // remote infrastructure server.
+  'ionic|react|vue|angular|flutter|mobile[\\s-]?app',
+  // Language- and vendor-scoped lists: a .NET or Swift list will not carry a
+  // remote data-center server, and a single-product list (oceanbase) is that
+  // vendor's own catalogue.
+  'swift', 'dotnet|\\.net\\b', '\\bjava\\b', '\\bruby\\b', 'golang|\\bgo\\b',
+  'reverse[\\s-]?eng|\\bre-mcp', 'bug[\\s-]?bounty', 'oceanbase',
+  'database|postgres|mysql|mongo',
+].join('|'), 'i');
+
+// Verdict for one candidate. Returns {keep, why} — `why` is printed and shown
+// in the tracking issue so a rejection is auditable, never silent.
+function relevance(nameAndDesc, readmeBody) {
+  if (DOMAIN_RE.test(nameAndDesc)) return { keep: true, why: 'domain match (name/desc)' };
+  const niche = NICHE_RE.exec(nameAndDesc);
+  if (niche) return { keep: false, why: `scoped to "${niche[0]}" — excludes a data-center server` };
+  // ★ A SECTION, NOT A MENTION. The first cut tested DOMAIN_RE against the whole
+  // README, so one stray "energy" anywhere in a long document passed a bug-bounty
+  // list. What actually matters is whether the list has a HEADING we could be
+  // filed under — that is the difference between "this word appears" and "there
+  // is a place for us here".
+  const heading = readmeBody &&
+    readmeBody.split('\n').find((ln) => /^#{1,4}\s/.test(ln) && DOMAIN_RE.test(ln));
+  if (heading) {
+    return { keep: true, why: `has section "${heading.replace(/^#+\s*/, '').trim().slice(0, 40)}"` };
+  }
+  return { keep: true, why: 'general-purpose list' };
+}
+
+// ── INSTALL SURFACES (2026-08-08) ───────────────────────────────────────────
+// WHY THIS IS A SEPARATE MODE: the GitHub crawl above searches for `awesome-mcp*`
+// repos. Docker's MCP Catalog, Glama, Smithery and PulseMCP are none of those
+// things, so the crawl STRUCTURALLY CANNOT SEE THEM -- which is why the Docker
+// catalog, the one surface that one-click-installs into Claude Desktop, Cursor
+// and VS Code, went unnoticed until a human went looking.
+//
+// A reading surface earns a ranking. An INSTALL surface produces an agent. This
+// mode enumerates the install surfaces explicitly and checks presence, because
+// the universe of them is small and knowable -- unlike awesome-lists, you cannot
+// find them by searching for a naming convention.
+//
+// present=false is a WORK ORDER, not an error. Unreadable is neither: a probe we
+// could not fetch renders null and is reported as unknown, never as missing.
+const INSTALL_SURFACES = [
+  {
+    id: 'docker_mcp_catalog',
+    name: 'Docker MCP Catalog (ships in Docker Desktop MCP Toolkit)',
+    url: 'https://raw.githubusercontent.com/docker/mcp-registry/main/servers/dchub/server.yaml',
+    submit: 'https://github.com/docker/mcp-registry/pulls',
+    note: 'one-click install into Claude Desktop / Cursor / VS Code',
+  },
+  {
+    id: 'official_mcp_registry',
+    name: 'Official MCP Registry',
+    url: 'https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub',
+    submit: 'https://github.com/modelcontextprotocol/registry',
+    note: 'consumed by the VS Code / Copilot MCP gallery',
+  },
+  {
+    id: 'smithery',
+    name: 'Smithery',
+    // r-smitheryslug (2026-08-08): was /server/<...>, which 301s to /servers/.
+    // Found by this file's own redirect guard on its first run.
+    url: 'https://smithery.ai/servers/azmartone67/dchub',
+    submit: 'https://smithery.ai/new',
+    note: 'hosted proxy + one-click connect',
+  },
+  {
+    id: 'glama',
+    name: 'Glama',
+    url: 'https://glama.ai/api/mcp/v1/servers/azmartone67/dchub-mcp-server',
+    submit: 'https://glama.ai/mcp/servers',
+    note: 'read surface; its copy feeds other listings',
+  },
+];
+
+// Probe one install surface. Three-valued by construction: true (present),
+// false (readable and we are absent), null (could not read -- NOT absence).
+async function probeSurface(sfc) {
+  try {
+    const r = await fetch(sfc.url, {
+      headers: { 'User-Agent': 'dchub-registry-discover/2.0 (+https://dchub.cloud)' },
+      redirect: 'follow',
+    });
+    if (r.status === 404) return { present: false, detail: 'HTTP 404 — not listed' };
+    if (!r.ok) return { present: null, detail: `HTTP ${r.status} — UNREADABLE, absence not concluded` };
+    // A redirect to a different PATH means we asked about the wrong resource.
+    try {
+      const asked = new URL(sfc.url), got = new URL(r.url);
+      if (asked.pathname.replace(/\/$/, '') !== got.pathname.replace(/\/$/, '')) {
+        return { present: null, detail: `redirected to ${r.url} — probe URL has rotted` };
+      }
+    } catch { /* unparseable — fall through and score the body */ }
+    const body = await r.text();
+    return LISTED_RE.test(body)
+      ? { present: true, detail: 'listed' }
+      : { present: false, detail: 'readable but DC Hub absent' };
+  } catch (e) {
+    return { present: null, detail: `fetch failed: ${String(e.message).slice(0, 60)} — UNREADABLE` };
+  }
+}
+
 const KNOWN = new Set([
   'mobinx/awesome-mcp-list',
   'tensorblock/awesome-mcp-servers',
@@ -198,6 +338,7 @@ async function openScaffoldPR(candidates) {
 
   // 2) filter to genuinely-new, joinable, missing-us lists
   const candidates = [];
+  const rejected = [];   // audited, never silent
   for (const item of seen.values()) {
     const full = item.full_name;
     const low = full.toLowerCase();
@@ -209,8 +350,13 @@ async function openScaffoldPR(candidates) {
     const rm = await readme(full, item.default_branch || 'main');
     if (rm == null) continue;                              // no README → not a curated list we can PR
     if (LISTED_RE.test(rm)) continue;                      // already lists DC Hub
+    // Relevance BEFORE the PR-enabled probe: an extra API call per candidate we
+    // were going to discard anyway is pure rate-limit burn.
+    const rel = relevance(`${full} ${item.description || ''}`, rm);
+    if (!rel.keep) { rejected.push({ full, why: rel.why }); continue; }
     if (!(await prsEnabled(full))) { console.log(`  – ${full}: PRs disabled — skip`); continue; }
     candidates.push({
+      relevance: rel.why,
       full, stars: item.stargazers_count || 0, url: item.html_url,
       base: item.default_branch || 'main',
       desc: (item.description || '').slice(0, 100),
@@ -219,23 +365,86 @@ async function openScaffoldPR(candidates) {
   }
   candidates.sort((a, b) => b.stars - a.stars);
 
-  if (!candidates.length) {
-    console.log('  ✓ no new registries — coverage is complete for known PR-based lists.');
+  // Never a silent cap: a filtered-out candidate is printed with its reason, so
+  // "0 candidates" can always be told apart from "the gate ate everything".
+  if (rejected.length) {
+    console.log(`  ⊘ ${rejected.length} filtered as off-domain:`);
+    for (const r of rejected) console.log(`      ${r.full} — ${r.why}`);
+    console.log('');
+  }
+
+  // ── install-surface sweep (runs regardless of what the list crawl found) ──
+  console.log('▶ install surfaces:');
+  const surfaces = [];
+  for (const sfc of INSTALL_SURFACES) {
+    const res = await probeSurface(sfc);
+    surfaces.push({ ...sfc, ...res });
+    const mark = res.present === true ? '✓' : res.present === false ? '✗' : '?';
+    console.log(`  ${mark} ${sfc.name} — ${res.detail}`);
+  }
+  const missingSurfaces = surfaces.filter((x) => x.present === false);
+  const unknownSurfaces = surfaces.filter((x) => x.present === null);
+  console.log(`  → ${surfaces.length - missingSurfaces.length - unknownSurfaces.length} present, `
+    + `${missingSurfaces.length} MISSING, ${unknownSurfaces.length} unreadable\n`);
+
+  if (!candidates.length && !missingSurfaces.length) {
+    console.log('  ✓ no new registries and every install surface carries DC Hub.');
     return;
   }
-  console.log(`  ● ${candidates.length} NEW registry candidate(s):`);
-  for (const c of candidates) console.log(`      ★${c.stars}  ${c.full} — ${c.desc}`);
+  if (candidates.length) {
+    console.log(`  ● ${candidates.length} NEW registry candidate(s):`);
+    for (const c of candidates) console.log(`      ★${c.stars}  ${c.full} — ${c.desc}  [${c.relevance}]`);
+  } else {
+    console.log('  ✓ no new on-domain lists — but an install surface needs work (below).');
+  }
 
   // 3) file / refresh ONE tracking issue on our own repo (LIVE only)
+  const surfaceRow = (x) => `| ${x.present === true ? '✓' : x.present === false ? '**✗**' : '?'} `
+    + `| [${x.name}](${x.url}) | ${x.detail} | ${x.present === false ? `[submit](${x.submit})` : '—'} |`;
+
   const body = [
-    'Auto-discovered curated MCP lists that **accept PRs**, **don\'t yet list DC Hub**, and are **not** in `TARGETS`',
-    '(`scripts/registry-pr-submit.mjs`). Vet each, then add a curated entry to `TARGETS` — do **not** bulk-submit.',
+    '## Install surfaces',
     '',
-    '| ★ | List | What it is |',
-    '|---:|---|---|',
-    ...candidates.map((c) => `| ${c.stars} | [${c.full}](${c.url}) | ${c.desc || '—'} |`),
+    'An install surface produces an agent; a reading surface earns a ranking. These are',
+    'enumerated explicitly because they are NOT `awesome-mcp*` repos — the GitHub crawl',
+    'below structurally cannot find them, which is how the Docker catalog went unnoticed.',
     '',
-    '<sub>Refreshed by `registry-discover.mjs`. Close this issue once triaged; it reopens/updates if new lists appear.</sub>',
+    '| | Surface | State | |',
+    '|:-:|---|---|---|',
+    ...surfaces.map(surfaceRow),
+    '',
+    missingSurfaces.length
+      ? `**${missingSurfaces.length} install surface(s) missing DC Hub — this is the highest-value row in this issue.**`
+      : '_Every install surface carries DC Hub._',
+    unknownSurfaces.length
+      ? `\n_${unknownSurfaces.length} unreadable — absence NOT concluded._`
+      : '',
+    '',
+    '## New list candidates',
+    '',
+    candidates.length
+      ? 'Curated MCP lists that **accept PRs**, **don\'t yet list DC Hub**, are **not** in `TARGETS`,'
+        + ' and survived the domain-relevance gate. Vet each, then add a curated entry — do **not** bulk-submit.'
+      : '_No on-domain list candidates this run._',
+    '',
+    ...(candidates.length ? [
+      '| ★ | List | What it is | Why it passed |',
+      '|---:|---|---|---|',
+      ...candidates.map((c) => `| ${c.stars} | [${c.full}](${c.url}) | ${c.desc || '—'} | ${c.relevance} |`),
+      '',
+    ] : []),
+    ...(rejected.length ? [
+      '<details><summary>' + `${rejected.length} filtered as off-domain` + '</summary>',
+      '',
+      '| List | Reason |', '|---|---|',
+      ...rejected.map((r) => `| ${r.full} | ${r.why} |`),
+      '',
+      'Scope is read from the repo NAME and DESCRIPTION only — never the README body,',
+      'since a general list legitimately carries "crypto" and "medical" as section headers.',
+      '</details>',
+      '',
+    ] : []),
+    '<sub>Refreshed by `registry-discover.mjs`. Close once triaged; it reopens/updates if new lists or missing surfaces appear.</sub>',
   ].join('\n');
 
   if (!LIVE) {
@@ -259,9 +468,11 @@ async function openScaffoldPR(candidates) {
   // disabled TARGETS stub for the top candidate, gated for human merge. This is
   // the "discover -> onboard" close: discovery no longer stops at a tracking
   // issue a human must hand-translate into code.
-  if (PR_ENABLED) {
+  if (PR_ENABLED && candidates.length) {
     console.log('\n▶ scaffold onboarding PR:');
     await openScaffoldPR(candidates);
+  } else if (PR_ENABLED) {
+    console.log('\n  (no on-domain candidate to scaffold — install-surface work is tracked in the issue)');
   } else {
     console.log('\n  (scaffold PR disabled via DISCOVER_PR_DISABLE)');
   }
