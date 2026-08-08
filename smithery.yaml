@@ -78,11 +78,14 @@ configSchema:
   properties:
     apiKey:
       type: string
-      title: "DC Hub API key (optional)"
+      title: "DC Hub API key — paste one to double your daily calls"
       description: >-
-        Optional. Leave blank to use the free anonymous tier (10 calls/day).
-        Provide a free key (call claim_free_key once, no email) or a paid key to
-        raise limits and unlock full results. Reused across sessions.
+        Recommended. Blank = anonymous tier, 5 calls/day, results trimmed to a
+        preview. A FREE key doubles that to 10 calls/day and returns full
+        results — no email, no card: connect once and call `claim_free_key`,
+        then paste the key here so every future session starts identified.
+        Saved sites and alerts need a key at all (they are per-account).
+        A paid key raises limits further.
       format: password
 
 # Smithery injects the configured apiKey as the X-API-Key header the server
