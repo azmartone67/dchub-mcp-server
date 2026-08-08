@@ -695,6 +695,15 @@ function _KNOWN_PLATFORM_FROM_NAME(name) {
   return '';
 }
 
+// Self-IDs that name the PROTOCOL or nothing at all — never a platform. A
+// client sending one of these has told us as much as sending no clientInfo.
+// Keep lowercase; matched after .trim().
+export const _GENERIC_CLIENT_NAMES = new Set([
+  'mcp', 'mcp-client', 'mcpclient', 'client', 'default', 'agent',
+  'unknown', 'none', 'n/a', 'server', 'app',
+]);
+
+
 function detectPlatformFromInit(body, ua = '', explicitHint = '') {
   // r-platform-header (2026-07-20): an explicit platform header
   // (X-MCP-Platform / X-Client-Source) wins FIRST — but ONLY when it names a
@@ -706,7 +715,7 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
   const hinted = _KNOWN_PLATFORM_FROM_NAME(explicitHint);
   if (hinted) return hinted;
   const clientName = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
-  if (clientName) {
+  if (clientName && !_GENERIC_CLIENT_NAMES.has(clientName.trim())) {
     const known = _KNOWN_PLATFORM_FROM_NAME(clientName);
     if (known) return known;
     // Else: ship the raw clientInfo.name as the platform tag (lowercase,
@@ -727,7 +736,27 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
     }
     if (safe) return safe;
   }
-  return detectPlatform(ua);
+  // ★ A GENERIC clientInfo.name is an ABSENCE, not a platform. Measured
+  //   2026-08-08: 229 of 281 new agents/30d carried platform='mcp' — and the
+  //   old code reached `return safe` with safe='mcp', so detectPlatform(ua)
+  //   below NEVER RAN for any of them. Two costs:
+  //     · Baiduspider-render and headless-Chrome UAs were tagged 'mcp' and
+  //       counted as MCP agents — crawl traffic inflating the agent count,
+  //       which the explicit-hint branch above already refuses to allow.
+  //     · The residual bucket was named after the protocol, so "81%
+  //       unattributed" read as lost attribution rather than as what it is:
+  //       bare programmatic clients (220 of 229 send UA 'node').
+  //   Now a generic self-ID falls through to UA detection, and only the
+  //   genuinely unidentifiable land in an honestly-named bucket.
+  // ★ detectPlatform's OWN default is 'mcp' (not 'unknown') — that is the
+  //   sentinel for "the UA named nothing", and mistaking it cost a test round.
+  const byUa = detectPlatform(ua);
+  if (byUa && byUa !== 'mcp') return byUa;
+  // Neither the self-ID nor the UA named a platform. Say so honestly rather
+  // than tagging the caller with the protocol's own name.
+  return clientName && _GENERIC_CLIENT_NAMES.has(clientName.trim())
+    ? 'mcp-generic-client'
+    : byUa;
 }
 
 // ── Telemetry: POST every tool invocation to the backend ───────────────────

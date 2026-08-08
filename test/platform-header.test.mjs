@@ -20,8 +20,17 @@ describe('explicit platform header attribution', () => {
   });
 
   it('an UNKNOWN header value cannot mint a platform or brand-attribute crawl', () => {
-    expect(detectPlatformFromInit(init('mcp'), 'node', 'randomcorp')).toBe('mcp');
-    expect(detectPlatformFromInit(init('mcp'), 'node', 'totally-made-up')).toBe('mcp');
+    // ★ Assert the INVARIANT this test is named for, not the literal bucket.
+    //   The unnamed-caller bucket was renamed 'mcp' -> 'mcp-generic-client'
+    //   (2026-08-08) because a generic clientInfo was short-circuiting UA
+    //   detection; neither string is a minted platform or a brand, so the
+    //   guarantee is unchanged. Checking "the hint did not become the
+    //   platform" survives the next rename too.
+    for (const hint of ['randomcorp', 'totally-made-up']) {
+      const got = detectPlatformFromInit(init('mcp'), 'node', hint);
+      expect(got).not.toBe(hint);              // the hint cannot MINT a platform
+      expect(got).toBe('mcp-generic-client');  // ...it lands in the unnamed bucket
+    }
     // empty / whitespace hint is a no-op
     expect(detectPlatformFromInit(init('gemini'), 'node', '')).toBe('gemini');
     expect(detectPlatformFromInit(init('gemini'), 'node', '   ')).toBe('gemini');
