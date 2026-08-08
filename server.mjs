@@ -2393,7 +2393,9 @@ function _teaseDepth(parsed, keep) {
   return out;
 }
 // Build the depth-teased response (or null if the payload isn't JSON to trim).
-async function buildDepthTease(name, result, ctx, tier) {
+// Exported for test/anon-seat-fence.test.mjs — the tease envelope must carry
+// the data its own message claims to show.
+export async function buildDepthTease(name, result, ctx, tier) {
   let parsed;
   try { parsed = JSON.parse(result?.content?.[0]?.text ?? 'null'); } catch { return null; }
   if (parsed === null || typeof parsed !== 'object') return null;
@@ -2554,7 +2556,15 @@ async function buildDepthTease(name, result, ctx, tier) {
   return {
     content: _content,
     isError: PREVIEW_ISERROR,   // r-agent-friendly-preview: served preview, not a failure — gated by DCHUB_PREVIEW_ISERROR (default preserves r51)
-    structuredContent: { tease: true, tool: name, upgrade: teased._upgrade, next_session: _NEXT_SESSION },
+    // ★ structuredContent carries the TEASED DATA, not just the upsell.
+    //   Every tool declares an outputSchema, so schema-aware clients read
+    //   structuredContent as THE result — the old {tease, tool, upgrade}
+    //   envelope meant get_iso_context's "showing the headline + top 3"
+    //   message arrived alongside ZERO sections (audit 2026-08-07,
+    //   envelope-honesty #2): the message named data the envelope withheld.
+    //   Spread the same payload content[0] renders; the tease markers ride
+    //   on top so existing consumers of .upgrade/.tease keep working.
+    structuredContent: { ...teased, tease: true, tool: name, upgrade: teased._upgrade, next_session: _NEXT_SESSION },
   };
 }
 
@@ -8906,11 +8916,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // r-front-door-inband: surface plan_query in-band on the first workflow-
       // entry tool of a session (inside withReturnNudge so its line sits ABOVE
       // the get_changes re-entry line).
-      // ★ _honestCallerTier is OUTERMOST on purpose: it must see the final
-      //   envelope, after every wrapper that could re-attach a stale tier.
-      return _honestCallerTier(
-        withReturnNudge(withCookbookHint(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c), name, c),
-        c);
+      // (caller_tier honesty moved OUT of this return: this is only the
+      //  clean full-data path, and the tier lie lived on the early preview
+      //  returns above it. _honestCallerTier now wraps the registerTool
+      //  callback, where every return path has merged.)
+      return withReturnNudge(withCookbookHint(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c), name, c);
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
@@ -8979,8 +8989,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     // + all-optional, so neither can reject a real payload.
     outputSchema: _TOOL_OUTPUT_SCHEMAS[name] || _OUTPUT_ENVELOPE,
     annotations: _annot,
+  // ★ _honestCallerTier sits HERE — at the one point every return path from
+  //   _stamped has merged — not on the clean-data return inside the handler.
+  //   The handler exits early on a dozen preview/tease/wall branches (anon
+  //   trim, anon daily cap, gate.capped, depth tease, paywall, monthly
+  //   quota), and each of those envelopes carries the backend's caller_tier
+  //   — the tier of THIS SERVER's credentials, not the agent's. A single
+  //   inner call site covered only the full-data path, so exactly the
+  //   callers being gated to previews were the ones told they were 'pro'
+  //   (audit 2026-08-07, envelope-honesty #1). After _ensureStructured so
+  //   both channels are corrected; _scrubCommerce/withStarterPack never
+  //   touch tier claims.
   }, async (args, extra) => withStarterPack(
-       _scrubCommerce(_ensureStructured(await _stamped(args, extra))), name, getCtx()));
+       _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())), name, getCtx()));
 }
 
 // r-chatgpt-commerce-scrub (2026-07-19): OpenAI's App Directory supports
@@ -12052,6 +12073,42 @@ function createServer(descOverrides) {
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave") },
     async (a) => {
+      // r-claim-idempotent (2026-08-08, audit P0#3 key persistence): a caller
+      // that ALREADY holds a durable key gets THAT key back — never a fresh
+      // sibling. The ~19x re-mint per distinct agent means identity resets
+      // before any wall can accumulate usage; the backend dedupes
+      // same-(client_name, ip) mints for 30d, but a KEYED session re-claiming
+      // (agent lost track of its key, or a stale playbook says "get a key")
+      // sailed straight past that into a new mint under a new client_name.
+      // Trial keys (dch_trial_) fall through on purpose: claiming a durable
+      // dch_live_ key from a 7-day trial is an upgrade, and the backend's
+      // counter-carry keeps the meter. Fail-soft: any ctx error → normal mint.
+      try {
+        const _c0 = getCtx();
+        const _held = _c0 && _c0.api_key;
+        if (_held && !String(_held).startsWith('dch_trial_')) {
+          return {
+            content: [{ type: 'text', text:
+              '🔑 **You already hold a DC Hub key — returning THAT key instead of minting a sibling.** ' +
+              'Re-minting orphans your usage history and restarts the daily allowance from zero; it never resets any meter.\n\n' +
+              '**Your key:** `' + _held + '`\n\n' +
+              'SAVE it to your MCP client config as the `X-API-Key` header so every future session reuses it. ' +
+              'Lost a key bound to your human’s email? Call `recover_my_key` {email} — it re-sends the original key to that inbox. ' +
+              'Need more depth or volume? Call `unlock_more_data` ($10 one-time = 1,000 API calls).' }],
+            structuredContent: {
+              api_key:        _held,
+              tier:           (_c0.tier || 'free'),
+              header:         'X-API-Key',
+              reused:         true,
+              already_keyed:  true,
+              persist_config: _persistConfig(_held),
+              recover_tool:   'recover_my_key',
+              next_tool:      'unlock_more_data',
+              note: 'This caller already holds a key, so claim_free_key is idempotent: the held key is returned. Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth.',
+            },
+          };
+        }
+      } catch (_) { /* fall through to the normal mint */ }
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
       const body = { client_name: cn };
       if (a.email) body.email = String(a.email).trim().slice(0, 200);
