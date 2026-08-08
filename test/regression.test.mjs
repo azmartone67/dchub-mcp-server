@@ -382,12 +382,26 @@ describe('MCP regression suite', () => {
       expect(hasVerdict).toBeTruthy();
     }, 20000);
 
-    it('get_gas_index returns dcgi score + state', async () => {
+    it('get_gas_index returns a DCGI score, or an honest reason it does not', async () => {
+      // ★2026-08-08: the DCGI composite is WITHDRAWN. This assertion used to
+      // demand a score, which would now fail for the RIGHT reason and read as
+      // a regression. Inverted deliberately: the contract is no longer "a
+      // number comes back", it is "a number OR a stated reason comes back".
+      // A bare empty/200 with neither still fails, which is the case that
+      // matters — silently returning nothing is the failure mode a withdrawal
+      // is most likely to introduce.
       const r = await callTool('get_gas_index', { state: 'TX' });
       if (isGated(r)) return;
       const hasDcgi = r?.score?.dcgi != null || r?.score?.verdict ||
                       r?.dcgi != null || r?.verdict;
-      expect(hasDcgi).toBeTruthy();
+      const hasReason = typeof r?.unavailable_reason === 'string' &&
+                        r.unavailable_reason.length > 0;
+      expect(hasDcgi || hasReason).toBeTruthy();
+      // If it withheld the score it must say WHY, not just omit it.
+      if (!hasDcgi) {
+        expect(hasReason).toBe(true);
+        expect(r.unavailable_reason.toLowerCase()).toContain('interstate');
+      }
     }, 20000);
 
     it('get_grid_scoreboard returns grids array with iso + fuel data', async () => {
