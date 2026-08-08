@@ -4408,7 +4408,20 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     gas_share_pct:            genTot > 0 ? pctOf(gasMw) : null,
     constraint_score:         row ? _n(row.avg_constraint)            : null,
     excess_power_score:       row ? _n(row.avg_excess)                : null,
-    avg_time_to_power_months: row ? _n(row.avg_queue_wait_months)     : null,
+    // ★ r-one-ttp (2026-08-08). This read row.avg_queue_wait_months — the
+    // depth-derived interconnection-wait PROXY (12 + 0.6/GW, clipped 12-66) —
+    // and published it under the time-to-power name. Measured 2026-08-08T03:17Z:
+    // get_grid_intelligence said ERCOT avg_time_to_power_months 71.5 while
+    // /api/v1/iso/ERCOT/snapshot said 55.3, same field name, same instant.
+    // Backend #2384 added the real aggregate to /api/v1/dcpi/iso-comparison;
+    // both surfaces now read that one column. NO fallback to the proxy: if the
+    // field is ever absent this must go null, because silently substituting a
+    // different measurement is the whole defect.
+    avg_time_to_power_months: row ? _n(row.avg_time_to_power_months) : null,
+    // The proxy is still useful — it is the live queue-DEPTH signal, which
+    // time_to_power_months is not — so it keeps its own honest name rather
+    // than being deleted.
+    avg_queue_wait_months:    row ? _n(row.avg_queue_wait_months)     : null,
     curtailment_pct:          row ? _n(row.avg_curtailment_pct)       : null,
     reserve_margin_pct:       row ? _n(row.avg_reserve_margin_pct)    : null,
     retail_price_cents_kwh:   row ? _n(row.avg_kwh_cents)             : null,
@@ -10329,7 +10342,7 @@ function createServer(descOverrides) {
   // "every ISO looks identical" bug). HYDROQUEBEC/AESO/NORDPOOL are dropped:
   // they are modeled baselines (not live) and error on /grid/intelligence.
   trackedTool(srv, 'compare_isos',
-    'Use when a user wants a side-by-side of 2-4 ISO grids — fuel mix, demand, renewable/gas share, interconnection-queue depth, time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: "Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from the 7 live US ISOs: "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE". Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence).',
+    'Use when a user wants a side-by-side of 2-4 ISO grids — fuel mix, demand, renewable/gas share, interconnection-queue depth, time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: "Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from the 7 live US ISOs: "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE". Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, avg_queue_wait_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. ★avg_time_to_power_months (DCPI per-market estimate, ISO-averaged) and avg_queue_wait_months (proxy from live queue DEPTH) are DIFFERENT measurements — quote whichever you mean by name. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence).',
     { isos: S.describe('Comma-separated list of 2-4 US ISO/RTO grid regions to compare, e.g. "PJM,ERCOT,CAISO" (valid: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE)') },
     async (a) => {
       const SUPPORTED = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
@@ -11564,7 +11577,7 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', q)) }] };
     });
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
+  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, avg_queue_wait_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. ★avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements and are not interchangeable: time-to-power is the DCPI per-market estimate averaged over the ISO, while queue-wait is a proxy derived from live interconnection-queue DEPTH (12 + 0.6 months per GW, clipped 12-66) and is the one that saturates on the deepest queues. Quote whichever you mean by name. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for live Ashburn / Northern Virginia zone load + real-time LMP (the world\'s #1 DC market, invisible in EIA)'),
       iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
       region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code') },

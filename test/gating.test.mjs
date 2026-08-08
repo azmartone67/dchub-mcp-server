@@ -170,8 +170,14 @@ describe('shapeGridIntelligence — non-empty per-ISO payload (regression guard:
     },
   };
   const CMP = { isos: [
+    // r-one-ttp (2026-08-08): the fixture used to carry avg_queue_wait_months
+    // alone and the assertion below read it as avg_time_to_power_months —
+    // encoding the very substitution that made ERCOT read 71.5 here and 55.3
+    // on /api/v1/iso/<region>/snapshot. Both aggregates are now supplied, with
+    // DIFFERENT values, and each is asserted against its own field.
     { iso: 'PJM', iso_name: 'PJM Interconnection (mid-Atlantic + Ohio Valley)',
-      avg_constraint: 55.4, avg_excess: 18.7, avg_queue_wait_months: 47.8,
+      avg_constraint: 55.4, avg_excess: 18.7,
+      avg_queue_wait_months: 47.8, avg_time_to_power_months: 32.4,
       avg_curtailment_pct: 1.2, avg_reserve_margin_pct: 14.4, avg_kwh_cents: 14.12,
       total_stranded_capacity_mw: 1200.0, sum_emergency_30d: 0,
       market_count: 71, build_count: 1, latest_computed_at: '2026-06-13T01:25:38Z' },
@@ -194,7 +200,8 @@ describe('shapeGridIntelligence — non-empty per-ISO payload (regression guard:
     // DCPI Power Index row
     expect(out.constraint_score).toBe(55.4);
     expect(out.excess_power_score).toBe(18.7);
-    expect(out.avg_time_to_power_months).toBe(47.8);
+    expect(out.avg_time_to_power_months).toBe(32.4);   // the time-to-power column
+    expect(out.avg_queue_wait_months).toBe(47.8);      // the queue-DEPTH proxy
     expect(out.build_rate_pct).toBeCloseTo(1.4, 1);          // 1/71
     // live interconnection queue (matched to the RIGHT iso, not the first row)
     expect(out.queue_depth_gw).toBe(172.6);
