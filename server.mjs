@@ -3456,6 +3456,23 @@ function trimForTrial(parsed) {
       out[k] = v;
     }
   }
+  // r-anon-note-honesty (SH52-023, 2026-08-08): the backend stamps a
+  // "Free tier: showing N of M matching …" note sized for the UNtrimmed free
+  // payload (e.g. 5 rows). When this pass then trims the row array down to a
+  // single teaser (stamping _<key>_total_in_pro) and nulls the count/total,
+  // that note's "showing N" becomes a lie on the wire — search_facilities
+  // returned note "showing 5 of 41" while data[] held 1 row and count was
+  // null. Only fire when an array was actually trimmed here, so a genuine
+  // "showing 1 of 1" note (nothing trimmed) is left untouched. The
+  // _<key>_total_in_pro side fields + the _upgrade block already state the
+  // real gap honestly, so drop the stale count claim rather than reprint it.
+  if (typeof out.note === 'string'
+      && /showing\s+\d+\s+of\s+\d+/i.test(out.note)
+      && Object.keys(out).some((k) => k.endsWith('_total_in_pro'))) {
+    out.note = 'Free tier preview — a single teaser row is shown. Call '
+      + 'claim_free_key (no email) for the free tier, or unlock_more_data '
+      + 'for full results.';
+  }
   return out;
 }
 

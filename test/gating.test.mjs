@@ -71,6 +71,32 @@ describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)
     expect(trimForTrial(5)).toBe(5);
     expect(trimForTrial('hello')).toBe('hello');
   });
+
+  // SH52-023: the backend note is sized for the untrimmed free payload; once
+  // this pass trims the row array to a single teaser, "showing N of M" is a
+  // lie on the wire (search_facilities: note said "showing 5 of 41" while
+  // data[] held 1 row).
+  it('rewrites a stale "showing N of M" note when it trims the row array (SH52-023)', () => {
+    const out = trimForTrial({
+      data: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }],
+      count: 5,
+      total_matching: 41,
+      note: 'Free tier: showing 5 of 41 matching facilities with basic fields. Upgrade for full data including capacity, coordinates, and detailed specs.',
+    });
+    expect(out.data).toHaveLength(1);          // trimmed to a single teaser row
+    expect(out._data_total_in_pro).toBe(5);    // honest side field still stamped
+    expect(out.count).toBe(null);              // count nulled by the metric mask
+    expect(out.note).not.toMatch(/showing\s+5\s+of\s+41/i);  // the stale claim is gone
+    expect(out.note).toMatch(/claim_free_key/);              // still an honest CTA
+  });
+
+  it('leaves a "showing N of M" note untouched when NOTHING was trimmed', () => {
+    const out = trimForTrial({
+      data: [{ id: 1 }],
+      note: 'Free tier: showing 1 of 1 matching facilities.',
+    });
+    expect(out.note).toMatch(/showing 1 of 1/);  // no array trimmed → note is honest as-is
+  });
 });
 
 describe('_isMetricKey', () => {
