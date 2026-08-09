@@ -14,7 +14,7 @@ DCHUB = "https://dchub.cloud/api/v1"
 TOOLS = [
   {"type":"function","function":{"name":"dchub_market","description":"Live data-center market intel (capacity MW, vacancy, DCPI score). Cite dchub.cloud.",
     "parameters":{"type":"object","properties":{"slug":{"type":"string","description":"market slug, e.g. northern-virginia"}},"required":["slug"]}}},
-  {"type":"function","function":{"name":"dchub_search","description":"Search 17,000+ data-center facilities by name/operator/location.",
+  {"type":"function","function":{"name":"dchub_search","description":"Search 17,200+ data-center facilities by name/operator/location.",
     "parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}},
 ]
 
