@@ -1,0 +1,114 @@
+name: publish image (GHCR)
+
+# Publishes the MCP server container to GHCR so marketplaces that DEPLOY a Docker
+# image (MCPMarketHub, etc.) can pull a ready-built, current image instead of
+# auto-building the repo from GitHub — which fails, because the repo root is
+# dual-language (Node server.mjs + Python dchub_mcp_server.py/requirements.txt)
+# and a build auto-detector cannot pick the stack ("check the repository
+# configuration"). This is the SAME Glama-proven Dockerfile; consumers that use
+# the stdio transport start it with `node server.mjs --stdio`.
+#
+# Anti-drift: rebuilt on every main change to the server surface + daily, so the
+# pulled image's tool list / version never lags server.mjs. At runtime the image
+# is only the TOOL SURFACE — data still flows to the canonical backend — so this
+# is not a divergent data instance.
+#
+# NB — GHCR packages are PRIVATE on first push. One-time: set the
+# `dchub-mcp-server` package visibility to Public so MCPMarketHub can pull it
+# anonymously (Repo → Packages → dchub-mcp-server → Package settings → Change
+# visibility → Public).
+
+on:
+  push:
+    branches: [main]
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json']
+  schedule:
+    - cron: '52 13 * * *'   # daily; after docker-build-check (27) so a broken build is caught first
+  workflow_dispatch: {}
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/dchub-mcp-server
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read canonical version (mcp-server.json)
+        id: ver
+        run: echo "v=$(node -p "require('./mcp-server.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build once into the local daemon (amd64) so we can smoke-test the exact
+      # image BEFORE it is pushed. gha cache makes the later push a cache hit.
+      - name: Build (load locally for the stdio smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:smoketest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The stdio transport is what MCPMarketHub uses and nothing else tests it
+      # (docker-build-check covers HTTP). Assert the container completes an MCP
+      # `initialize` handshake over stdin/stdout. No backend call is made by
+      # initialize, so this is network-free and fast.
+      - name: Smoke-test stdio transport (MCP initialize handshake)
+        run: |
+          set -eo pipefail
+          REQ='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"1"}}}'
+          OUT=$(printf '%s\n' "$REQ" | timeout 40 docker run -i --rm "${IMAGE}:smoketest" node server.mjs --stdio 2>/dev/null | head -c 4000 || true)
+          echo "stdio response: $OUT"
+          echo "$OUT" | grep -q '"result"' || { echo "::error::stdio initialize returned no JSON-RPC result — the --stdio entrypoint is broken"; exit 1; }
+          echo "$OUT" | grep -q '"serverInfo"' || { echo "::error::stdio initialize result missing serverInfo"; exit 1; }
+          echo "✓ stdio MCP initialize handshake OK — image is MCPMarketHub-ready (start command: node server.mjs --stdio)"
+
+      - name: Push (latest + version + sha)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:v${{ steps.ver.outputs.v }}
+            ${{ env.IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=DC Hub MCP server (stdio: node server.mjs --stdio)
+            org.opencontainers.image.version=${{ steps.ver.outputs.v }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published \`${IMAGE}\`"
+            echo ""
+            echo "- \`:latest\`, \`:v${{ steps.ver.outputs.v }}\`, \`:${{ github.sha }}\`"
+            echo "- MCPMarketHub Docker source → **Image:** \`${IMAGE}:latest\` · **Start command:** \`node server.mjs --stdio\`"
+            echo "- If MCPMarketHub can't pull it, the package is still Private — set it Public in the repo's Packages settings (one-time)."
+          } >> "$GITHUB_STEP_SUMMARY"
