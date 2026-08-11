@@ -5917,7 +5917,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -6141,9 +6141,35 @@ export const _DISCOVERY_EXEMPT = {
   get_backup_status: 'Platform health/ops introspection, not a siting capability — deliberately not advertised as an answer surface.',
 };
 
+// ── _planStateScope (r-planner-v5.11, 2026-08-10) ──────────────────────────
+// Returns the 2-letter US state a ranking intent is scoped to, or null.
+// Gated on _STATE_ISO_META membership, NOT on "signals produced a string":
+// a state we cannot resolve to any market must fall through to the national
+// route rather than be passed to a tool as an unrecognized region filter —
+// silently returning zero rows is a worse failure than answering nationally
+// and saying so. Pure, never throws.
+export function _planStateScope(d) {
+  const st = d && (d.state || d.stateFromPlace);
+  const up = st ? String(st).toUpperCase() : null;
+  if (up && Object.prototype.hasOwnProperty.call(_STATE_ISO_META, up)) return up;
+  // A named CITY is geography too, and it had the identical defect: "rank
+  // markets … in Dallas" also led with the state-blind ai_capacity_index and
+  // ranked nationally. _CITY_ISO_META already carries the state in its slug
+  // ('dallas-tx'), so scope to that state rather than adding a second map.
+  // Slugs without a 2-letter state suffix ('northern-virginia',
+  // 'central illinois') correctly yield null and fall through to the national
+  // route — a slug we cannot resolve must not become a bogus region filter.
+  const slug = d && d.__citySlug;
+  const m = typeof slug === 'string' ? /-([a-z]{2})$/.exec(slug) : null;
+  const fromCity = m ? m[1].toUpperCase() : null;
+  return (fromCity && Object.prototype.hasOwnProperty.call(_STATE_ISO_META, fromCity))
+    ? fromCity : null;
+}
+
 export const _PLAN_CLASSES = [
   {
     id: 'market_ranking', recipe: 'market_selection',
+    // (see _planStateScope above the class table)
     patterns: [
       [/\brank(?:ing|ed)?\b/i, 2], [/\bbest\s+(?:overall\s+)?markets?\b/i, 3],
       [/\btop\s+(?:\d+\s+)?markets?\b/i, 3], [/\bmarkets?\b/i, 1.5],
@@ -6165,10 +6191,35 @@ export const _PLAN_CLASSES = [
     // markets, which are often AVOID for new load — the exact miss the partner
     // grading panel (Grok/Sonar/Mistral) flagged. General ranking stays the
     // primary route for non-AI market questions.
-    rationale: (d) => d.ai
+    rationale: (d) => _planStateScope(d)
+      ? 'The intent names a US state, so the ranking must be SCOPED to it. ai_capacity_index and rank_markets cannot express a state — ai_capacity_index takes only horizon/limit, and rank_markets\' region accepts only global/us/canada/eu/apac/americas — so leading with either silently answers a national question and returns out-of-state markets. site_selection_canvas is the one ranking path that takes a state code (region=' + _planStateScope(d) + '), and it carries the same AI-campus axis: DCPI verdict, excess-power headroom and time-to-power.'
+      : d.ai
       ? 'AI campuses are power-availability and time-to-power bound, not installed-capacity bound — so lead with ai_capacity_index (ranks where AI load can LAND), then reality-check each finalist on the live DCPI verdict and grid headroom. rank_markets\' installed-build-out ranking is the alternative, not the lead, because the most-built-out markets are frequently AVOID for new load.'
       : 'Shortlist first so every deeper read is scoped to minted metro_slugs — then the per-finalist DCPI and grid reality-checks fan out from one cheap ranking call.',
-    sequence: (d) => d.ai ? [
+    // r-planner-v5.11 (2026-08-10): the STATE-SCOPED branch, ahead of both.
+    // Repro before the fix (live, keyless):
+    //   execute_plan(intent="rank markets for a 200 MW AI campus in Texas
+    //                        within 24 months")
+    //   → step 1 ai_capacity_index args {horizon:90, limit:10}   ← no geography
+    //   → rank 1 Ashburn, VA · PJM
+    // The args_hint for "…in Texas" and "…in Ohio" were byte-identical. This is
+    // not a ranking-quality miss, it is a wrong answer: neither of the two
+    // ranking tools has a parameter that can carry a US state, so ANY
+    // state-scoped ranking intent was answered nationally.
+    // site_selection_canvas does take one, and honors it — verified against the
+    // live origin: region=TX → Midland–Odessa, TX · ERCOT · BUILD.
+    sequence: (d) => (_planStateScope(d) ? [
+      { step: 1, tool: 'site_selection_canvas', depends_on: [], estimated_calls: 1,
+        why: 'State-scoped ranked shortlist for ' + _planStateScope(d) + ' — DCPI verdict, excess-power headroom, time-to-power and ISO per market. The only ranking tool that accepts a US state, so it is the only one that can answer this intent inside the geography that was asked for.',
+        args_hint: { region: _planStateScope(d),
+                     ...(d.mw ? { capacity_mw: Math.round(d.mw) } : {}) } },
+      { step: 2, tool: 'get_market_dcpi_rank', depends_on: [1], estimated_calls: 3,
+        why: 'Full DCPI breakdown for each in-state finalist from step 1 — the same BUILD/CAUTION/AVOID reality-check the national route applies, scoped to the requested state.',
+        args_hint: { market_slug: '<slug from a step-1 finalist>' } },
+      { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 2,
+        why: 'Grid headroom + time-to-power for the finalists\' ISOs — an AI campus lives or dies on firm-power delivery date.',
+        args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
+    ] : d.ai ? [
       { step: 1, tool: 'ai_capacity_index', depends_on: [], estimated_calls: 1,
         why: 'AI-campus deployability ranking: where AI training capacity can LAND in the next 30/60/90 days (depth + diversity + power composite, hyperscale_ready flag) — the AI-workload-specific view that rank_markets\' installed-capacity ranking misses. The index is normalized to a 100 MW block; scale for a larger campus (e.g. ' + (d.mw ? Math.round(d.mw) + ' MW ≈ ' + Math.max(1, Math.round(d.mw / 100)) + '× the base block' : '200 MW ≈ 2× the base block') + ').',
         args_hint: { horizon: 90, limit: 10 } },
@@ -6188,7 +6239,7 @@ export const _PLAN_CLASSES = [
       { step: 3, tool: 'get_grid_intelligence', depends_on: d.iso ? [] : [1], estimated_calls: d.iso ? 1 : 3,
         why: 'Grid headroom + time-to-power reality-check for the finalists\' ISOs (canonical 100MW-in-90-days workflow)' + (d.iso ? '.' : ' — one call per distinct finalist ISO (est. ~3), all parallel.'),
         args_hint: { iso: d.iso || '<ISO serving the finalist market>' } },
-    ],
+    ]),
     alternatives: [
       { tool: 'rank_markets', args_hint: { criteria: 'ai_ready', region: 'us', limit: 10 },
         when: 'You want the FULL buildability-ranked market table (all 300+ DCPI markets, not just the ai_capacity_index deployment-horizon view) — rank_markets criteria=ai_ready ranks by DCPI buildability (excess-power + time-to-power + verdict), the AI-campus axis.',
@@ -7052,6 +7103,62 @@ export const _CITY_ISO = Object.fromEntries(
 export function _execCityHit(key, meta, lowerText) {
   return (meta && meta.re) ? meta.re.test(lowerText) : lowerText.includes(key);
 }
+
+// ── _STATE_ISO_META (r-planner-v5.11, 2026-08-10) ──────────────────────────
+// THE BUG THIS EXISTS FOR. _execConstraintIsoSet resolved geography from only
+// three sources: an explicit userCtx.iso, an ISO named in the text, or a CITY
+// in _CITY_ISO_META. A US STATE matched none of them — so:
+//
+//   execute_plan(intent="rank markets for a 200 MW AI campus in Texas
+//                        within 24 months")
+//   → rank 1: Ashburn, VA · minted.iso: ["PJM"]
+//
+// The planner extracted the capacity (200 MW) and dropped the state entirely.
+// With an empty constraint set, the PJM mint had nothing to violate, so the
+// C1 constraint_check never fired either — the invariant that exists to catch
+// exactly this could not see it. _planSignals ALREADY resolved stateFromPlace
+// = 'TX' correctly; nothing downstream consulted it.
+//
+// HONESTY CONTRACT — the reason this is a SET, not a lookup. US states do not
+// map 1:1 to ISOs, and pretending they do would be the same class of error as
+// the wrong answer above. A state that genuinely spans several markets emits
+// ALL of them: the constraint then rejects mints outside that set without
+// forcing one wrong ISO into a tool argument (injection requires exactly one —
+// see `constraintIsoSet.length === 1` at the execute_plan call site).
+//
+// Non-RTO states carry SERC / WECC, matching the existing atlanta→SERC and
+// phoenix→WECC precedent in _CITY_ISO_META: both are whitelisted so they WORK
+// as constraints, and neither is in _EXEC_RTOS, so neither is ever injected as
+// an `iso` argument. That keeps the Southeast and the non-CAISO West honest —
+// they are constrained, not assigned a market they do not have.
+export const _STATE_ISO_META = {
+  // Whole-state, single market.
+  OH: ['PJM'], PA: ['PJM'], NJ: ['PJM'], MD: ['PJM'], DE: ['PJM'],
+  DC: ['PJM'], WV: ['PJM'],
+  NY: ['NYISO'],
+  ME: ['ISONE'], NH: ['ISONE'], VT: ['ISONE'],
+  MA: ['ISONE'], RI: ['ISONE'], CT: ['ISONE'],
+  KS: ['SPP'], OK: ['SPP'], NE: ['SPP'],
+  MN: ['MISO'], IA: ['MISO'], WI: ['MISO'],
+  AR: ['MISO'], MS: ['MISO'], LA: ['MISO'],
+  CA: ['CAISO'],
+
+  // Split states — the set is the honest answer. TX is the load-bearing case:
+  // ERCOT carries the large majority of Texas load, but the Panhandle is SPP,
+  // far-east Texas is MISO and El Paso is WECC. Emitting ['ERCOT'] alone would
+  // silently discard real Texas geography; emitting the set constrains the
+  // answer to Texas without inventing a single-market claim.
+  TX: ['ERCOT', 'SPP', 'MISO', 'WECC'],
+  IL: ['PJM', 'MISO'], IN: ['PJM', 'MISO'], MI: ['PJM', 'MISO'],
+  MO: ['SPP', 'MISO'], ND: ['SPP', 'MISO'], SD: ['SPP', 'MISO'],
+  VA: ['PJM', 'SERC'], NC: ['PJM', 'SERC'], KY: ['PJM', 'SERC'],
+  NM: ['SPP', 'WECC'],
+
+  // Non-RTO. Constrained, never injected (SERC/WECC are not in _EXEC_RTOS).
+  GA: ['SERC'], AL: ['SERC'], SC: ['SERC'], FL: ['SERC'], TN: ['SERC'],
+  WA: ['WECC'], OR: ['WECC'], ID: ['WECC'], MT: ['WECC'], WY: ['WECC'],
+  UT: ['WECC'], NV: ['WECC'], AZ: ['WECC'], CO: ['WECC'],
+};
 export function _execConstraintSlug(intentText) {
   const t = String(intentText || '').toLowerCase();
   for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
@@ -7152,6 +7259,14 @@ export function _execConstraintIsoSet(intentText, userCtx, signals) {
   const t = String(intentText || '').toLowerCase();
   for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
     if (_execCityHit(city, meta, t)) push(meta.iso);
+  }
+  // r-planner-v5.11: a named US STATE is geography too. Consulted only when a
+  // city/ISO did not already pin the answer — a city is strictly more specific
+  // ("Dallas, Texas" must stay ERCOT, not widen to all four Texas markets).
+  if (!out.length) {
+    const st = (signals && (signals.state || signals.stateFromPlace)) || null;
+    const isos = st ? _STATE_ISO_META[String(st).toUpperCase()] : null;
+    if (isos) for (const v of isos) push(v);
   }
   return out;
 }
@@ -7304,7 +7419,12 @@ export function _planSignals(intent, context) {
   // class wins, or every Ohio/Illinois/Virginia intent would start drifting
   // toward the distribution layer. Routing stays on explicit feeder language.
   const hc = _planHostingCoverage(text, coords);
-  return { iso, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc };
+  // r-planner-v5.11: the matched city's canonical slug, so _planStateScope can
+  // recover the state a named metro sits in without a second lookup table.
+  // Underscore-prefixed: an internal routing signal, not part of the published
+  // signals contract.
+  const __citySlug = _execConstraintSlug(text);
+  return { iso, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -7463,7 +7583,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         requires_* code from the canonical taxonomy (why_live_reasons);
 //         replay adds why_live_code, why_live_data becomes the code's canon
 //         phrase. OUTPUT-only rev: routing unchanged, schema stays 1.
-export const PLANNER_VERSION = '5.10';
+export const PLANNER_VERSION = '5.11';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
