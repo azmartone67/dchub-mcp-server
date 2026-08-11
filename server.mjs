@@ -3912,6 +3912,48 @@ setInterval(() => {
 // the trial, anon-masked, blocked and scraper paths keep their own upgrade CTAs.
 const _CITE_SOURCE = 'DC Hub — dchub.cloud';
 const _CITE_LINE   = 'Data: DC Hub (dchub.cloud), CC-BY-4.0 — cite as "DC Hub, dchub.cloud"';
+
+// ── _normalizeCitation (r-cite-shape, 2026-08-10) ──────────────────────────
+// PRODUCTION OUTAGE FIXED HERE. The envelope declares `citation` as an OBJECT
+// (z.looseObject), and the SDK validates structuredContent against
+// outputSchema on every success result. But three call sites below guarded on
+// mere PRESENCE (`'citation' in obj`, `!sc.citation`), so a payload that
+// already carried a citation of the WRONG TYPE was passed through untouched.
+//
+// Live repro (2026-08-10, keyless dchub.cloud/mcp):
+//   site_selection_canvas capacity_mw=200 region=TX max_months=24
+//   → MCP error -32602: Output validation error … path ["citation"]
+//     expected object, received string
+// Upstream confirmed: GET /api/v1/site-selection/canvas returns
+//   "citation": "DC Hub Site Selection Canvas — dchub.cloud/site-selection (CC BY 4.0)"
+// i.e. a STRING. Every strict client (the Claude connector included) got a
+// protocol error instead of a result — the tool was unreachable, not gated.
+//
+// Same class of bug as the site_evaluation_handoff array/object break above,
+// and it takes the same two-sided fix: WIDEN the schema so a real payload can
+// never be rejected (see _ENVELOPE_SHAPE.citation), and NORMALIZE here so the
+// documented object shape is what actually ships. A string citation is real,
+// meaningful attribution text — it is preserved verbatim as `cite_as`, never
+// discarded.
+const _CITATION_CANON = () => ({
+  source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0',
+  cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString(),
+});
+export function _normalizeCitation(value) {
+  // Already the documented shape → idempotent pass-through (no re-stamp, so
+  // retrieved_at stays the producer's).
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const base = _CITATION_CANON();
+  // A non-empty string IS the attribution — keep the upstream wording as the
+  // quotable line rather than replacing it with the generic one.
+  if (typeof value === 'string' && value.trim()) {
+    return { ..._CITATION_CANON(), cite_as: value.trim(), _normalized_from: 'string' };
+  }
+  // Arrays / numbers / booleans / null / undefined: no recoverable attribution
+  // text, so emit the canonical object. Flagged when we replaced something.
+  if (value !== undefined && value !== null) return { ...base, _normalized_from: typeof value };
+  return base;
+}
 function _embedSourceInContent0(content) {
   // Returns a (possibly new) content array with _source/_cite embedded inside
   // content[0]'s JSON object when safe; otherwise returns the original array.
@@ -3925,7 +3967,12 @@ function _embedSourceInContent0(content) {
     let obj;
     try { obj = JSON.parse(first.text); } catch { return content; } // not JSON → leave intact
     if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return content;
-    if ('_source' in obj && '_cite' in obj && 'citation' in obj) return content; // already embedded
+    // r-cite-shape: "already embedded" must mean already VALID, not merely
+    // present — the old presence-only check let a string citation short-circuit
+    // the whole normalizer and reach the SDK validator unmodified.
+    if ('_source' in obj && '_cite' in obj
+        && obj.citation && typeof obj.citation === 'object'
+        && !Array.isArray(obj.citation)) return content; // already embedded
     // Inject without disturbing existing keys/values.
     if (!('_source' in obj)) obj._source = _CITE_SOURCE;
     if (!('_cite' in obj))   obj._cite   = _CITE_LINE;
@@ -3936,10 +3983,9 @@ function _embedSourceInContent0(content) {
     // canary caught get_gas_index/why_dchub bare while get_grid_scoreboard —
     // whose handler builds its own sc — carried it). Additive key; the
     // envelope is additionalProperties:true.
-    if (!('citation' in obj)) {
-      obj.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0',
-                       cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString() };
-    }
+    // r-cite-shape: normalize, do NOT merely fill. A pre-existing citation of
+    // the wrong type used to survive this guard and break output validation.
+    obj.citation = _normalizeCitation(obj.citation);
     // Re-serialize with the same producer the tools use → still JSON.parses.
     const rebuilt = { ...first, text: JSON.stringify(obj) };
     return [rebuilt, ...content.slice(1)];
@@ -4281,9 +4327,14 @@ function withCitation(result, toolName) {
       // nudge — stamp it on this branch too, same rule as the provenance mirror.
       const sc0 = (base.structuredContent && typeof base.structuredContent === 'object'
                    && !Array.isArray(base.structuredContent)) ? { ...base.structuredContent } : null;
-      if (sc0 && !sc0.citation) {
-        sc0.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString() };
-        return _withNextSession(_withProvenance({ ...base, structuredContent: sc0 }, toolName));
+      // r-cite-shape: normalize unconditionally. The old `!sc0.citation` guard
+      // skipped any truthy value, so a string sailed through to the validator.
+      if (sc0) {
+        const norm0 = _normalizeCitation(sc0.citation);
+        if (norm0 !== sc0.citation) {
+          sc0.citation = norm0;
+          return _withNextSession(_withProvenance({ ...base, structuredContent: sc0 }, toolName));
+        }
       }
       return _withNextSession(_withProvenance(base, toolName));
     }
@@ -4293,9 +4344,13 @@ function withCitation(result, toolName) {
     const out = { ...result, content: [...embedded, { type: 'text', text: ATTR }] };
     const sc = (result.structuredContent && typeof result.structuredContent === 'object')
       ? { ...result.structuredContent } : null;
-    if (sc && !sc.citation) {
-      sc.citation = { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud', retrieved_at: new Date().toISOString() };
-      out.structuredContent = sc;
+    if (sc) {
+      // r-cite-shape: same normalize-don't-fill rule as the branch above.
+      const norm = _normalizeCitation(sc.citation);
+      if (norm !== sc.citation) {
+        sc.citation = norm;
+        out.structuredContent = sc;
+      }
     }
     return _withNextSession(_withProvenance(out, toolName));
   } catch (_) {
@@ -5397,8 +5452,16 @@ const _ENVELOPE_SHAPE = {
     'Collection-level provenance block: {source, method, as_of, verification_counts, cite_url_template, license, cite_as}. Quote the verification level when citing.'),
   quota: z.looseObject({}).optional().describe(
     'Caller quota state (remaining calls, tier) when available.'),
-  citation: z.looseObject({}).optional().describe(
-    'Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload.'),
+  // r-cite-shape (2026-08-10): accept BOTH shapes, exactly like
+  // site_evaluation_handoff above and for exactly the same reason — a schema
+  // that can reject a real payload is a production outage. _normalizeCitation
+  // coerces upstream strings to the object form before this ever validates, so
+  // the string arm is belt-and-braces for any path that bypasses the stamper.
+  citation: z.union([
+    z.looseObject({}),
+    z.string(),
+  ]).optional().describe(
+    'Machine-readable citation: how to attribute DC Hub (dchub.cloud) for this payload. Normally an OBJECT {source, url, license, cite_as, retrieved_at}; a bare string is accepted and carries the attribution line itself.'),
   site_evaluation_handoff: z.union([
     z.array(z.looseObject({})),
     z.looseObject({}),
@@ -5409,7 +5472,7 @@ const _ENVELOPE_SHAPE = {
   _front_door: z.looseObject({}).optional().describe(
     'In-band front-door hint (first workflow-entry tool of a session): call plan_query(intent) first for the ordered multi-step plan.'),
 };
-const _OUTPUT_ENVELOPE = z.looseObject(_ENVELOPE_SHAPE).describe(
+export const _OUTPUT_ENVELOPE = z.looseObject(_ENVELOPE_SHAPE).describe(
   'DC Hub envelope: structuredContent mirrors the JSON payload in content[0].text — tool-specific data fields ride at the top level alongside these envelope keys.');
 
 // ── _TOOL_OUTPUT_SCHEMAS (r-output-schema-typed, 2026-07-17) ───────────────
@@ -5459,7 +5522,7 @@ const _GRID_ROW = z.looseObject({
   note: _oStr('Per-grid caveat'),
 });
 
-const _TOOL_OUTPUT_SCHEMAS = {
+export const _TOOL_OUTPUT_SCHEMAS = {
   get_grid_scoreboard: z.looseObject({
     ..._ENVELOPE_SHAPE,
     ok: _oBool('true when the scoreboard build succeeded'),
@@ -5795,7 +5858,14 @@ const _TOOL_OUTPUT_SCHEMAS = {
       why_live_code: _oStr('ENUM (v5.10): why this plan needs LIVE data — one of the requires_* codes published in the canonical taxonomy (/api/v1/canon/taxonomy why_live_reasons). Enumerated so stamped replays aggregate ("N% of executions needed live queue data"); count THIS, not the phrase. Absent when intent_class=unknown.'),
       why_live_data: _oStr('Human phrase for why_live_code, resolved from the same canonical taxonomy — display it, never parse it. Additive at schema v1 (introduced 5.9 as class-keyed prose; enum-backed since 5.10).'),
       note: _oStr('How to read + cite the replay; plan-only disclaimer'),
-    }, 'FIRST-CLASS VERSIONED replay object (r-planner-v5.1, ChatGPT schema review): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each decision with a stable id + status, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
+    // r-cite-shape sweep (2026-08-10): this was the ONE required field in any
+    // typed schema — every other leaf is optional by the stated leniency
+    // contract ("these schemas document, they must never reject a real
+    // payload"). Both plan_query return paths do attach sc.replay today, so
+    // nothing was failing live, but a required field means any future
+    // fail-soft return that skips the stamp turns into a client-side -32602
+    // instead of a degraded-but-usable plan. Optional, like its siblings.
+    }).optional().describe('FIRST-CLASS VERSIONED replay object (r-planner-v5.1, ChatGPT schema review): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each decision with a stable id + status, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
   }).describe('Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry — keyword/regex routing, no LLM, same intent → same plan — plus a versioned replay decision-trail, alongside the DC Hub envelope keys.'),
 };
 
