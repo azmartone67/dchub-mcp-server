@@ -21,7 +21,11 @@ name: publish image (GHCR)
 on:
   push:
     branches: [main]
-    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json']
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json', '.github/workflows/publish-image.yml']
+  pull_request:
+    # PRs BUILD + stdio-smoke-test the image but never push (login/push steps are
+    # gated below) — so a broken image or stdio entrypoint is caught before merge.
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json', '.github/workflows/publish-image.yml']
   schedule:
     - cron: '52 13 * * *'   # daily; after docker-build-check (27) so a broken build is caught first
   workflow_dispatch: {}
@@ -52,6 +56,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -86,6 +91,7 @@ jobs:
           echo "✓ stdio MCP initialize handshake OK — image is MCPMarketHub-ready (start command: node server.mjs --stdio)"
 
       - name: Push (latest + version + sha)
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -104,6 +110,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Summary
+        if: github.event_name != 'pull_request'
         run: |
           {
             echo "### Published \`${IMAGE}\`"
