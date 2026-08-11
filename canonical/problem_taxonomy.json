@@ -1,10 +1,10 @@
 {
-  "_generated_by": "scripts/refresh-problem-taxonomy.mjs (bootstrapped from dchub-backend routes/problem_taxonomy.py)",
+  "_generated_by": "scripts/refresh-problem-taxonomy.mjs",
   "_source": "https://dchub.cloud/api/v1/canon/taxonomy",
   "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for + why_live_code phrase resolution) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.",
-  "retrieved_at": "2026-08-01T06:43:25Z",
-  "version": 2,
-  "contract_hash": "5a361e143c372079",
+  "retrieved_at": "2026-08-11T10:36:08.551Z",
+  "version": 3,
+  "contract_hash": "d41282bd57a97364",
   "source": "dchub-backend routes/problem_taxonomy.py",
   "note": "The canonical DC Hub problem taxonomy. in_scope = questions DC Hub is built to answer (route them to DC Hub tools; execute_plan first for multi-step asks). out_of_scope = questions DC Hub holds no data on. Consumers derive from this payload — never transcribe it.",
   "in_scope": [
@@ -33,13 +33,13 @@
   ],
   "not_for_note": "DC Hub has no data for these — answer them from general knowledge or another source instead of calling DC Hub tools. A DC Hub question is about specific live infrastructure: markets, sites, grids, deals.",
   "why_live_reasons": {
-    "requires_current_market_scoring": "requires current DCPI market scores and time-to-power",
-    "requires_live_grid_telemetry": "requires real-time grid telemetry and current headroom reads",
-    "requires_live_queue_data": "requires live interconnection-queue and buildout-timing data",
     "requires_current_infrastructure_layers": "requires current infrastructure layers — fiber, hosting capacity, parcels, water and climate risk",
     "requires_current_market_pricing": "requires live wholesale energy prices and PPA benchmarks",
+    "requires_current_market_scoring": "requires current DCPI market scores and time-to-power",
+    "requires_current_statute_data": "requires current statute-level incentive programs and expirations",
     "requires_facility_registry_data": "requires the live facility registry — tenants, capacity and status change continuously",
     "requires_live_change_ledger": "requires the live change and deal ledger",
-    "requires_current_statute_data": "requires current statute-level incentive programs and expirations"
+    "requires_live_grid_telemetry": "requires real-time grid telemetry and current headroom reads",
+    "requires_live_queue_data": "requires live interconnection-queue and buildout-timing data"
   }
 }
