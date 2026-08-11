@@ -1,6 +1,8 @@
 <!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/cloud.dchub%2Fmcp-server.svg)](https://mcptoplist.com/server/cloud.dchub%2Fmcp-server)
+
 [![MCP Badge](https://lobehub.com/badge/mcp-full/azmartone67-dchub-mcp-server)](https://lobehub.com/mcp/azmartone67-dchub-mcp-server)
 
 <a href="https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server"><img width="380" height="200" src="https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badge" alt="DC Hub MCP server — Glama" /></a>
