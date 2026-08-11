@@ -9972,9 +9972,31 @@ function createServer(descOverrides) {
         minted: Object.fromEntries(Object.entries(minted)
           .filter(([k]) => !k.startsWith('__'))),
         ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
+        // r-constraint-iso-shape (2026-08-11): ALWAYS an array. This used to
+        // emit a bare STRING when exactly one ISO resolved and an ARRAY
+        // otherwise, so the field that exists to prove we stayed inside the
+        // requested geography was itself polymorphic — the same defect class
+        // as the citation string/object break, in the honesty field.
+        //
+        // Live, same deploy, same intent shape:
+        //   "…in Texas" → constraint_iso ["ERCOT"]        (array)
+        //   "…in Ohio"  → constraint_iso "PJM"            (string)
+        //
+        // What that costs an agent: `constraint_iso.length` returns 3 for
+        // "PJM" — a character count presented as an ISO count — and
+        // `"PJM".includes("PJ")` is true, so substring semantics silently
+        // replace membership semantics. Both read as working code.
+        //
+        // Worse in combination with the anon trim: Texas resolves to four
+        // ISOs (ERCOT/SPP/MISO/WECC), the trim truncates the array to one and
+        // adds _constraint_iso_total_in_pro, so a free-tier caller cannot tell
+        // "one ISO" from "four, trimmed" by shape alone. Reading the array as
+        // exhaustive is wrong; the _total_in_pro key is the tell.
+        //
+        // Narrowing, not widening: no consumer could have been safely reading
+        // this as a scalar, because it was never reliably a scalar.
         ...(constraintIsoSet.length
-            ? { constraint_iso: constraintIsoSet.length === 1
-                  ? constraintIsoSet[0] : constraintIsoSet }
+            ? { constraint_iso: [...constraintIsoSet] }
             : {}),
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
