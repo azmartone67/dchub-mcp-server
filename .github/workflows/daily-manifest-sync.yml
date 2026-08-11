@@ -21,6 +21,11 @@ on:
 
 permissions:
   contents: write
+  # ★2026-08-11 — needed to PATCH the repo DESCRIPTION, which is metadata
+  # rather than a file. Without this the push below 403s; the step is
+  # fail-soft, so a missing permission logs the manual command and never
+  # fails the daily job.
+  administration: write
 
 concurrency:
   group: daily-manifest-sync
@@ -40,6 +45,43 @@ jobs:
         # Fail-closed — on any fetch/validation failure it logs and leaves the
         # committed snapshot in force, so a backend blip can never move canon.
         run: node scripts/refresh-canon-phrases.mjs
+      - name: Push the healed GitHub repo description
+        # ★2026-08-11 — THE SURFACE NO FILE-WALKING GUARD COULD SEE.
+        #
+        # This job's own header says it heals the "source files" that Glama,
+        # PulseMCP and the GitHub MCP Registry scrape. The repo DESCRIPTION is
+        # scraped by all of them and is not a file — it is GitHub metadata. So
+        # `git grep 16,900` returned nothing, COVERAGE could not list it, and
+        # it sat at "16,900+ facilities" against a canon of 17,300+ until a
+        # third-party listing copied it in good faith and inherited the drift.
+        #
+        # canonical/github_description.txt is now healed by the same engine as
+        # every other surface (same rules, one place). This step is the only
+        # new part: push those bytes to the metadata field.
+        #
+        # FAIL-SOFT, like every other step here: no token permission, an API
+        # error, or an over-long description logs the exact manual command and
+        # exits 0. A metadata blip must never fail the daily heal.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DESC="$(cat canonical/github_description.txt)"
+          LIVE="$(gh repo view "$GITHUB_REPOSITORY" --json description --jq .description || echo '')"
+          if [ "$DESC" = "$LIVE" ]; then
+            echo "[gh-desc] in sync — no push needed"
+            exit 0
+          fi
+          if [ "${#DESC}" -gt 350 ]; then
+            echo "[gh-desc] REFUSING: ${#DESC} chars exceeds GitHub's limit — shorten the file"
+            exit 0
+          fi
+          echo "[gh-desc] drift detected, pushing canon-healed description"
+          if gh api -X PATCH "repos/$GITHUB_REPOSITORY" -f description="$DESC" >/dev/null; then
+            echo "[gh-desc] pushed"
+          else
+            echo "[gh-desc] PUSH FAILED (permission or API). Run this manually:"
+            echo "  gh api -X PATCH repos/$GITHUB_REPOSITORY -f description=\"\$(cat canonical/github_description.txt)\""
+          fi
       - name: Refresh the canonical problem taxonomy from the owner endpoint
         # ★2026-07-31: pulls /api/v1/canon/taxonomy (owner: dchub-backend
         # routes/problem_taxonomy.py) into canonical/problem_taxonomy.json.

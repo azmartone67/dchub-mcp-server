@@ -421,7 +421,17 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'integrations/gemini/README.md', 'integrations/youcom/README.md',
                  'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
                  'docs/distribution-targets.md', 'docs/canonical-workflows.md',
-                 'scripts/smithery_description.txt', 'dxt/manifest.json']) {
+                 'scripts/smithery_description.txt', 'dxt/manifest.json',
+                 // ★2026-08-11 — the GitHub repo DESCRIPTION. It is METADATA, not
+                 // a file, so no guard that walks the working tree could ever see
+                 // it: git grep returns nothing and COVERAGE could not list it.
+                 // It sat at "16,900+ facilities" against a canon of 17,300+ and
+                 // propagated to a third-party listing that copied it in good
+                 // faith. Mirrored here so this engine reaches it; the daily
+                 // workflow PATCHes GitHub from this file. The file holds the
+                 // description VERBATIM — no header, no comment — because its
+                 // bytes are pushed as-is.
+                 'canonical/github_description.txt']) {
   const txt = readCur(f);
   // Match "N tools", "N MCP tools", AND the shields.io badge form "badge/tools-N-color".
   // Both slipped past CI before: the README body said "48 MCP tools" (2026-06-25) and
@@ -507,6 +517,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // sent) stay out: healing a record of what was said rewrites history.
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
+    'canonical/github_description.txt',
     'server.json', 'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
     'scripts/tier3_presence.sh', 'skills/README.md',
     'skills/dc-hub-data-center-intelligence/SKILL.md',
