@@ -4137,6 +4137,18 @@ function _buildQuotaHint(toolName) {
     if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
       q.full_answers_cap_today = ANON_FULL_CAP;
       q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP);
+      // r-quota-truth (2026-08-10): this counter and _upgrade.remaining_today
+      // measure DIFFERENT things, and a live envelope carried both —
+      //     quota.full_answers_remaining_today: 2
+      //     _upgrade.remaining_today: 0
+      // alongside retry_instructions telling the agent it had "2 more full
+      // answers today". Both numbers were correct; together they were
+      // unreadable, and the guidance was actively wrong, because the IP-wide
+      // cap binds first. An agent that retries on the 2 burns a call and hits
+      // the wall again. Neither counter said what it counted, so say it.
+      q.full_answers_basis = 'PER-TOOL full-answer budget for `' + toolName + '` today. '
+        + 'A separate ANONYMOUS PER-IP cap across all tools can bind before this one — '
+        + 'if _upgrade.remaining_today is 0, that cap is what is stopping you, not this number.';
     }
     return q;
   } catch (_) { return null; }
@@ -6927,6 +6939,57 @@ export const _EXEC_TOOL_MINTS = {
 // get_interconnection_queue fail. They still serve as CONSTRAINTS (a
 // WECC-region intent must not mint an ERCOT hand-off).
 export const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','ISO-NE','ISONE']);
+
+// ── _execDedupeUpsell (r-payload-diet, 2026-08-10) ─────────────────────────
+// Collapse per-step upsell blocks that are byte-identical to each other.
+//
+// These keys are SESSION-scoped, not step-scoped: the same trial key, the same
+// checkout links, the same "call claim_free_key" nudge, re-serialized once per
+// gated step. Only exact duplicates are collapsed — a step that gates
+// differently (different tool, different tier message) keeps its own copy,
+// because that difference is real information about which step hit which wall.
+//
+// Mutates `executed` in place and returns what it did, so the envelope can
+// declare the collapse rather than leaving an agent to wonder where a field
+// went. Never throws: a diet must never cost an answer.
+const _EXEC_UPSELL_KEYS = ['_upgrade', 'upgrade', 'retry_instructions', 'persist_command',
+  'first_call_nudge', 'auto_trial_key', 'retry_with_header', 'unlocked_tools'];
+export function _execDedupeUpsell(executed) {
+  const summary = { keys: [], steps: 0, bytes_saved: 0,
+    note: 'Identical per-step upsell blocks were collapsed to one copy. The first step that carried each key still has it; later identical copies were replaced with a pointer. No offer was removed.' };
+  try {
+    if (!Array.isArray(executed)) return { collapsed: false, summary };
+    const seen = new Map();               // key -> JSON of the first copy
+    for (const step of executed) {
+      const r = step && step.result;
+      if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+      for (const k of _EXEC_UPSELL_KEYS) {
+        if (!(k in r)) continue;
+        let ser;
+        try { ser = JSON.stringify(r[k]); } catch (_e) { continue; }
+        if (!seen.has(k)) { seen.set(k, ser); continue; }
+        if (seen.get(k) !== ser) continue;   // genuinely different → keep it
+        const pointer = { _same_as: 'executed[].' + k + ' on the first step that carried it' };
+        const gain = ser.length - JSON.stringify(pointer).length;
+        // A pointer is ~70B. Collapsing anything SMALLER than that makes the
+        // payload BIGGER — auto_trial_key ("k1") is 4B. Skip those: a diet that
+        // silently grows the response is worse than no diet, and clamping the
+        // reported saving at 0 would have hidden it.
+        if (gain <= 0) continue;
+        // NET, not gross: the substituted pointer costs bytes too. Reporting
+        // the gross figure would overstate the saving in our own telemetry —
+        // the same class of error we refuse to make about MW.
+        summary.bytes_saved += gain;
+        summary.steps += 1;
+        if (!summary.keys.includes(k)) summary.keys.push(k);
+        r[k] = pointer;
+      }
+    }
+    return { collapsed: summary.steps > 0, summary };
+  } catch (_e) {
+    return { collapsed: false, summary };   // never break an execution
+  }
+}
 export const _EXEC_IS_RTO = (v) => _EXEC_RTOS.has(String(v || '').toUpperCase());
 export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
   get_interconnection_queue: 'iso', get_refined_queue: 'iso',
@@ -7401,7 +7464,13 @@ export function _planReplay(sc, signals) {
       const phrase = _TAXONOMY && _TAXONOMY.why_live_reasons && _TAXONOMY.why_live_reasons[code];
       return { why_live_code: code, ...(typeof phrase === 'string' && phrase ? { why_live_data: phrase } : {}) };
     })(),
-    note: 'Auditable planning trail: decisions (D0 = routing, D1..Dn = per-step selections; status is one of ' + REPLAY_DECISION_STATUSES.join('/') + ' — only "planned" is emitted today, plan_query never executes) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". schema_version pins the SHAPE (independent of planner_version); execution/evidence IDs are minted by the caller at run time.',
+    // r-payload-diet (2026-08-10): this was 442B of prose that is byte-identical
+    // on every call — 24% of the whole replay object, explaining how to READ
+    // replay rather than saying anything about THIS run. Static documentation
+    // belongs in a doc an agent fetches once, not in every response forever.
+    // The auditable content (decisions / rejected / execution_graph) is
+    // untouched; only the how-to-read text moved behind a pointer.
+    note: 'decisions (D0 routing, D1..Dn per-step) + rejected (R1..Rn) + execution_graph. Cite as "Decision D2 called rank_markets because…". Field guide: https://dchub.cloud/integrations/mcp#replay',
   };
 }
 
@@ -8557,6 +8626,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_url: _packCheckoutUrl(_sidc),
               credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest unlock.',
               remaining_today: 0,
+              // r-quota-truth (2026-08-10): name what this zero counts. It is
+              // the IP-wide anonymous cap across ALL tools — a different
+              // counter from quota.full_answers_remaining_today, which can
+              // legitimately read 2 in the same envelope. This one binds.
+              remaining_today_basis: 'ANONYMOUS PER-IP calls across ALL tools today. This is the limit currently stopping you — it binds BEFORE any per-tool budget, so ignore a non-zero quota.full_answers_remaining_today in this same response and do not retry until you claim a key.',
+              binding_limit: 'anon_ip_daily',
             };
             // 2026-07-24 growthfix: mirror the payload into structuredContent.
             // Every tool declares an outputSchema, so schema-aware clients read
@@ -9611,11 +9686,29 @@ function createServer(descOverrides) {
           status_counts: counts,
         }, c));
       } catch (_e) { /* planner-quality telemetry never blocks the answer */ }
+      // r-payload-diet (2026-08-10): every gated step carries its OWN copy of
+      // the upsell block, and the envelope carries one more. Measured on a live
+      // 1-step run: 9,028B total, of which the nested _upgrade was 1,167B (13%)
+      // duplicating the envelope's own 758B. A 3-step paid plan pays that three
+      // times, for zero added information.
+      //
+      // Agents have token budgets. A tool that costs thousands of tokens to
+      // return one row gets quietly deprioritized — no error, no signal to us,
+      // just a falling call count. That is a plausible mechanical contributor
+      // to 5,348 → 2,091 that has nothing to do with discovery.
+      //
+      // LOSSLESS: identical copies are collapsed, never dropped. A step whose
+      // upsell differs from the envelope's keeps its own (different tools gate
+      // differently, and that difference is real information). Each collapsed
+      // step gets a pointer so nothing silently disappears.
+      const _upsellDedupe = _execDedupeUpsell(executed);
       const out = {
         _entity: 'plan_execution', ok: true,
         intent: sc.intent, intent_class: sc.intent_class,
         planner_version: replay.planner_version,
         executed,
+        ...(_upsellDedupe.collapsed
+            ? { upsell_deduped: _upsellDedupe.summary } : {}),
         minted: Object.fromEntries(Object.entries(minted)
           .filter(([k]) => !k.startsWith('__'))),
         ...(rejectedMints.length ? { rejected_mints: rejectedMints } : {}),
