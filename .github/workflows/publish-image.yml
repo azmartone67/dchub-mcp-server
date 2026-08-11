@@ -21,7 +21,11 @@ name: publish image (GHCR)
 on:
   push:
     branches: [main]
-    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json']
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json', '.github/workflows/publish-image.yml']
+  pull_request:
+    # PRs BUILD + stdio-smoke-test the image but never push (login/push steps are
+    # gated below) — so a broken image or stdio entrypoint is caught before merge.
+    paths: ['server.mjs', 'Dockerfile', 'package.json', 'package-lock.json', 'mcp-server.json', '.github/workflows/publish-image.yml']
   schedule:
     - cron: '52 13 * * *'   # daily; after docker-build-check (27) so a broken build is caught first
   workflow_dispatch: {}
@@ -52,6 +56,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -73,19 +78,25 @@ jobs:
 
       # The stdio transport is what MCPMarketHub uses and nothing else tests it
       # (docker-build-check covers HTTP). Assert the container completes an MCP
-      # `initialize` handshake over stdin/stdout. No backend call is made by
-      # initialize, so this is network-free and fast.
+      # `initialize` handshake over stdin/stdout. `initialize` makes no backend
+      # call, so this is network-free.
+      #
+      # HANG-PROOF: the stdio server does NOT exit on stdin EOF, so bound it with
+      # `timeout -k` (SIGTERM at 30s, SIGKILL at 38s) and redirect stdout to a
+      # FILE — no pipe-to-`head`, which risks SIGPIPE/pipefail races that can stall
+      # the step. The response is written well before the timeout; we grep the file.
       - name: Smoke-test stdio transport (MCP initialize handshake)
         run: |
           set -eo pipefail
-          REQ='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"1"}}}'
-          OUT=$(printf '%s\n' "$REQ" | timeout 40 docker run -i --rm "${IMAGE}:smoketest" node server.mjs --stdio 2>/dev/null | head -c 4000 || true)
-          echo "stdio response: $OUT"
-          echo "$OUT" | grep -q '"result"' || { echo "::error::stdio initialize returned no JSON-RPC result — the --stdio entrypoint is broken"; exit 1; }
-          echo "$OUT" | grep -q '"serverInfo"' || { echo "::error::stdio initialize result missing serverInfo"; exit 1; }
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"1"}}}' > req.json
+          timeout -k 8 30 docker run -i --rm "${IMAGE}:smoketest" node server.mjs --stdio < req.json > out.json 2>/dev/null || true
+          echo "stdio response (first 400 chars):"; head -c 400 out.json; echo
+          grep -q '"result"'     out.json || { echo "::error::stdio initialize returned no JSON-RPC result — the --stdio entrypoint is broken"; exit 1; }
+          grep -q '"serverInfo"' out.json || { echo "::error::stdio initialize result missing serverInfo"; exit 1; }
           echo "✓ stdio MCP initialize handshake OK — image is MCPMarketHub-ready (start command: node server.mjs --stdio)"
 
       - name: Push (latest + version + sha)
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -104,6 +115,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Summary
+        if: github.event_name != 'pull_request'
         run: |
           {
             echo "### Published \`${IMAGE}\`"
