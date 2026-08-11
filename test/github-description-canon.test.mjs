@@ -87,8 +87,43 @@ describe('the push step is wired and fail-soft', () => {
     expect(WF).toContain('cat canonical/github_description.txt');
   });
 
-  it('has the permission the metadata PATCH needs', () => {
-    expect(WF).toMatch(/administration:\s*write/);
+  it('declares NO invalid permission key — this test used to enforce the bug', () => {
+    // ★ THE MISTAKE THIS ENCODES. The first version of this test asserted
+    // `administration: write`. That is not a valid Actions permissions key, so
+    // the assertion PINNED an invalid workflow: YAML parsed fine, the test went
+    // green, and the file was unloadable by GitHub — which took the ENTIRE
+    // daily canon heal offline, not just the step it was added for.
+    //
+    // A test that asserts the presence of a wrong value is worse than no test:
+    // it converts a typo into a guarded invariant.
+    const VALID = new Set(['actions', 'attestations', 'checks', 'contents',
+      'deployments', 'discussions', 'id-token', 'issues', 'packages', 'pages',
+      'pull-requests', 'repository-projects', 'security-events', 'statuses']);
+    const block = WF.slice(WF.indexOf('\npermissions:') + 1);
+    const body = block.slice(0, block.indexOf('\n\n'));
+    for (const line of body.split('\n').slice(1)) {
+      const m = /^\s{2}([a-z-]+):\s*(read|write|none)\s*$/.exec(line);
+      if (!m) continue;                       // comments and blanks
+      expect(VALID.has(m[1]), `invalid Actions permission key: ${m[1]}`).toBe(true);
+    }
+  });
+
+  it('does not pretend GITHUB_TOKEN can write repo metadata', () => {
+    // Repo description is outside every Actions permission scope. The step must
+    // say so and route to a PAT, or it silently no-ops forever.
+    expect(WF).toContain('REPO_ADMIN_TOKEN');
+    expect(WF).toMatch(/GITHUB_TOKEN (has no metadata scope|CANNOT do)/);
+  });
+
+  it('still REPORTS drift when it cannot push', () => {
+    // The point of the file was to make an invisible drift visible. A step that
+    // goes quiet without a PAT would recreate exactly the silence that let
+    // "16,900+" sit on a public surface and propagate.
+    const step = WF.slice(WF.indexOf('Push the healed GitHub repo description'),
+                          WF.indexOf('Refresh the canonical problem taxonomy'));
+    expect(step).toContain('[gh-desc] DRIFT');
+    expect(step).toContain('live:');
+    expect(step).toContain('want:');
   });
 
   it('never fails the daily heal', () => {
