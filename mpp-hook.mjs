@@ -30,6 +30,10 @@ const MPP_PRICE = {
   get_grid_intelligence: '0.50', get_fiber_intel: '0.50', get_market_intel: '0.50',
 };
 const MPP_TOOLS = new Set(Object.keys(MPP_PRICE));
+// r-mpp-at-wall (2026-08-10): the covered list was ALSO hardcoded a second time
+// inside unlock_more_data's machine_pay block, so the two could drift and an
+// agent could be told a tool was payable when it was not. One source now.
+export const MPP_COVERED_TOOLS = Object.freeze(Object.keys(MPP_PRICE));
 
 export function mppEnabled() {
   return process.env.MPP_ENABLED === '1' && !!(process.env.MPP_SIDECAR_URL || '').trim();
