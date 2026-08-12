@@ -72,7 +72,7 @@ describe('MPP consent: no opt-in, no charge', () => {
     expect(mpp.mppWantsChallenge(quoteOnly, {})).toBe(true);
     // ...but a challenge is a signed price quote, not authority to charge. The
     // settle path keys off mppCredential alone, which must stay null here.
-    expect(mpp.mppCredential(quoteOnly)).toBe('MUSTFAIL_CI_PROBE');  // deliberate CI must-fail probe
+    expect(mpp.mppCredential(quoteOnly)).toBeNull();
   });
 
   it('does not infer consent from the tool being payable', () => {
