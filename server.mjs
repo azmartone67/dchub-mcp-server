@@ -773,8 +773,31 @@ export const _GENERIC_CLIENT_NAMES = new Set([
   'unknown', 'none', 'n/a', 'server', 'app',
 ]);
 
+// r-source-tag (2026-08-11): a DEPLOYMENT-source tag set by the OPERATOR via env
+// attributes ALL traffic from a single-tenant hosted deployment to its
+// distribution CHANNEL. e.g. the MCPMarketHub connector runs
+// `DCHUB_SOURCE_PLATFORM=mcpmarket node server.mjs --stdio`; without this its
+// traffic arrives with the gateway's generic clientInfo and lands in the
+// unattributed bucket, so the mcpmarket listing reads 0 real calls forever —
+// the exact listing-attribution blind spot the growth funnel can't see through.
+// Operator-set (trusted) but still sanitized so a typo can't inject markup, and
+// screened against the generic set so it can't masquerade as 'mcp'. Computed
+// once at load; EMPTY (a full no-op) unless the deployment opted in — so the
+// canonical dchub.cloud/mcp server is completely unaffected.
+const _SOURCE_PLATFORM = (() => {
+  const raw = (process.env.DCHUB_SOURCE_PLATFORM || '').toString().trim().toLowerCase();
+  const safe = raw.replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+  return (safe && !_GENERIC_CLIENT_NAMES.has(safe)) ? safe : '';
+})();
+
 
 function detectPlatformFromInit(body, ua = '', explicitHint = '') {
+  // A deployment-source tag (operator env) names the CHANNEL the traffic came
+  // through and WINS: on a hosted single-tenant deployment every session IS that
+  // channel regardless of the gateway's forwarded clientInfo, and "which
+  // distribution surface drove this call" is exactly the listing-attribution
+  // question. No-op (empty) on the canonical server, so nothing else changes.
+  if (_SOURCE_PLATFORM) return _SOURCE_PLATFORM;
   // r-platform-header (2026-07-20): an explicit platform header
   // (X-MCP-Platform / X-Client-Source) wins FIRST — but ONLY when it names a
   // KNOWN platform, through the SAME vocabulary as clientInfo. Enterprise
