@@ -45,7 +45,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
 // error codes, so payment challenge/failure are surfaced as structured TOOL
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
-import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppOffer, mppPrewallOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS } from './mpp-hook.mjs';
+import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppOffer, mppPrewallOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
@@ -8264,19 +8264,36 @@ function trackedTool(srv, name, description, schema, handler) {
       // Sidecar unreachable → falls through to the normal cascade (no regression).
       // mppEnabled() is false by default → the whole block is a no-op until flipped on.
       if (mppEnabled() && isMppTool(name) && !gate.allowed) {
+        // ★ r-mpp-abandonment (2026-08-12): the branch below opens on the RETURN
+        // event — the caller came back and presented something. It is stamped as
+        // its own counter on the FIRST line inside, before mppVerify(), because
+        // that is the event: "a credential was returned" is true the moment it is
+        // in hand, independent of what the settle then does with it. Stamping it
+        // after verify would make it a synonym for its own outcome — the exact
+        // defect (`mpp_challenge` naming an event it does not record) this split
+        // exists to end. Telemetry-only: `status` is read by nothing but the
+        // trackToolCall payload in the finally block, so no response, no gate and
+        // no money changes. It is overwritten by the terminal status below, so a
+        // row that KEEPS it is a credential that was presented and never reached
+        // a terminal outcome (throw / abort mid-settle) — previously invisible.
+        // NOTE: the comment lives OUT here on purpose. mpp-consent.test.mjs walks
+        // back 8 lines from every mppVerify() call site to prove it is nested
+        // under `if (_mppCred)`; a long comment inside the branch pushes the call
+        // out of that window and fails the consent guard.
         const _mppCred = mppCredential(extra);
         if (_mppCred) {
+          status = MPP_FUNNEL_STATUS.CREDENTIAL_RETURNED;
           const _mppV = await mppVerify(name, _mppCred);
           if (!_mppV.ok) {
             // SDK swallows custom McpError codes → return a structured result.
-            status = 'mpp_verify_failed';
+            status = MPP_FUNNEL_STATUS.VERIFY_FAILED;
             return {
               isError: true,
               content: [{ type: 'text', text: `Payment verification failed for ${name}: ${_mppV.error}` }],
               structuredContent: { payment_failed: true, code: MPP_PAYMENT_FAILED, tool: name, error: _mppV.error },
             };
           }
-          status = 'mpp_paid';
+          status = MPP_FUNNEL_STATUS.PAID;
           const _mppR = await handler(gate.params || args);
           const _mppFull = withCitation(_mppR, name);
           try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
@@ -8293,7 +8310,10 @@ function trackedTool(srv, name, description, schema, handler) {
           if (_mppErr) {
             // Payment-required challenge as a structured tool result (the SDK would
             // mis-tag a thrown -32042 as UrlElicitationRequired and discard others).
-            status = 'mpp_challenge';
+            // ★ This records QUOTE ISSUANCE — a signed price was handed to the
+            // caller. It is NOT an attempt to pay and never has been; see
+            // MPP_FUNNEL_BASIS.mpp_challenge. The return event is stamped above.
+            status = MPP_FUNNEL_STATUS.QUOTE_ISSUED;
             return {
               isError: true,
               content: [{ type: 'text', text: _mppErr.message }],
@@ -8636,7 +8656,7 @@ function trackedTool(srv, name, description, schema, handler) {
                     const _pre = await mppPrewallOffer(name, _remainingFull);
                     if (_pre) {
                       _preSC = { agent_payment: _pre };
-                      status = 'mpp_offer_prewall';   // NOT mpp_challenge — passive offer
+                      status = MPP_FUNNEL_STATUS.OFFER_PREWALL;   // NOT the quote-issued counter — passive offer
                     }
                   } catch (_) { /* offer is a bonus; a failure must never cost the answer */ }
                 }
@@ -9197,7 +9217,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 result.content = [{ type: 'text', text: JSON.stringify(_p) }];
                 result.structuredContent = { ...(result.structuredContent || {}),
                                              agent_payment: _pre };
-                status = 'mpp_offer_prewall';   // NOT mpp_challenge — passive offer
+                status = MPP_FUNNEL_STATUS.OFFER_PREWALL;   // NOT the quote-issued counter — passive offer
               }
             }
           } catch (_) { /* offer is a bonus; a failure must never cost the answer */ }
