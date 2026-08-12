@@ -35,6 +35,82 @@ const MPP_TOOLS = new Set(Object.keys(MPP_PRICE));
 // agent could be told a tool was payable when it was not. One source now.
 export const MPP_COVERED_TOOLS = Object.freeze(Object.keys(MPP_PRICE));
 
+/**
+ * ── AGENT-PAY FUNNEL CANON (r-mpp-abandonment, 2026-08-12) ────────────────
+ *
+ * WHY THIS EXISTS. `mpp_challenge` records "a signed quote was ISSUED to the
+ * caller". It was read everywhere — including DC Hub's own agent brief — as
+ * "the agent attempted to pay". Those are different events, and the funnel had
+ * no counter between them, so a quote that was issued and never came back was
+ * indistinguishable from one the caller returned and failed on. Over 120d that
+ * left 13 quotes and exactly 1 verify failure with no way to say whether the
+ * other 12 tried and broke, or saw a price and left. The two diagnoses point at
+ * opposite fixes (settlement path vs price/framing), so the gap had to become a
+ * counter rather than an inference.
+ *
+ * THE RULE THIS ENFORCES: one status per DISTINCT event, and the status name
+ * must not imply an event it does not record. Each entry below carries a BASIS
+ * string naming the exact line of code that stamps it. If you add a status,
+ * add its basis in the same commit — a counter without a basis is the defect
+ * this block exists to prevent.
+ *
+ * WIRE-COMPATIBILITY: `mpp_challenge` keeps its name. It is already published
+ * on /api/v1/admin/agent-pay-events and quoted externally, and renaming it
+ * would silently zero every existing reader. It is aliased to the honest name
+ * `quote_issued` in the published funnel instead — same rows, clearer label.
+ */
+export const MPP_FUNNEL_STATUS = Object.freeze({
+  /** passive pre-wall offer attached to a call that SUCCEEDED */
+  OFFER_PREWALL:       'mpp_offer_prewall',
+  /** a signed quote was ISSUED to the caller (NOT an attempt to pay) */
+  QUOTE_ISSUED:        'mpp_challenge',
+  /** the caller CAME BACK and presented a credential (the missing event) */
+  CREDENTIAL_RETURNED: 'mpp_credential_returned',
+  /** a presented credential failed verify/settle */
+  VERIFY_FAILED:       'mpp_verify_failed',
+  /** a presented credential verified and settled — real money */
+  PAID:                'mpp_paid',
+});
+
+/**
+ * One line per counter stating EXACTLY which event increments it. Keyed by the
+ * wire status so a reader can join basis→rows without a lookup table.
+ */
+export const MPP_FUNNEL_BASIS = Object.freeze({
+  mpp_offer_prewall:
+    'Increments when mppPrewallOffer() returned an offer that was attached to a SUCCESSFUL '
+    + 'tool result. The caller was NOT gated and paid nothing. Passive — not pay-intent.',
+  mpp_challenge:
+    'Increments when the gateway MINTED and RETURNED a signed price quote (challenge) to a '
+    + 'gated caller that asked for one (_meta.mpp_pay or MPP_HARD_GATE). It records ISSUANCE '
+    + 'of a quote, NOT an attempt to pay. Nothing came back at this point.',
+  mpp_credential_returned:
+    'Increments the instant mppCredential(extra) returns non-null on a gated MPP tool call — '
+    + 'i.e. the caller CAME BACK and presented a credential. Stamped BEFORE mppVerify() runs, '
+    + 'so it counts the return even when the settle never reaches a terminal state.',
+  mpp_verify_failed:
+    'Increments when a credential WAS presented and mppVerify() returned ok:false. Strictly '
+    + 'downstream of mpp_credential_returned — it cannot fire without a returned credential.',
+  mpp_paid:
+    'Increments when a credential WAS presented and mppVerify() returned ok:true — money '
+    + 'moved. Strictly downstream of mpp_credential_returned.',
+});
+
+/**
+ * Events this rail structurally CANNOT count, stated so a zero is never read as
+ * a measurement. Three-valued: absent from this list means measured.
+ */
+export const MPP_FUNNEL_UNMEASURED = Object.freeze([
+  'A credential presented on a call the gate ALLOWED (gate.allowed === true) is never counted: '
+  + 'the MPP block does not execute on an ungated call, so no status is stamped. Such a caller '
+  + 'gets its answer free and its return is invisible.',
+  'A credential presented while the rail is dark (MPP_ENABLED unset / no sidecar) is never '
+  + 'counted, for the same reason.',
+  'No correlation id links a returned credential to the quote that produced it — challenge.id '
+  + 'is not persisted on the call row. Every issued-vs-returned gap is therefore a POPULATION '
+  + 'difference over a window, not a per-quote join.',
+]);
+
 export function mppEnabled() {
   return process.env.MPP_ENABLED === '1' && !!(process.env.MPP_SIDECAR_URL || '').trim();
 }

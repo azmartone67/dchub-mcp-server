@@ -86,8 +86,24 @@ jobs:
       # 127.0.0.1 stub sidecar; the rest read only committed source and exported
       # pure functions. Verified 3 consecutive identical runs (51 passed) before
       # merge, and each was mutation-proven red on the real run path.
+      # ★2026-08-12 (r-mpp-abandonment): SIXTH restatement — mpp-funnel-split is
+      # named here because a file this gate does not list is executed by nothing
+      # (`npm test` is invoked by no workflow). Its subject is the agent-pay
+      # funnel's counter-to-event mapping: that the caller-returned-a-credential
+      # event has its own counter, that PAID cannot fire on the verify-FAILURE
+      # branch, and that quote ISSUANCE is never counted as a return. Those are
+      # exactly the confusions that produced a wrong public read of the funnel
+      # ("13 agents reached the pay step" for 13 quotes that were merely issued),
+      # so an unexecuted guard here would let the counters silently re-merge.
+      # Qualifies for the HARD gate: deterministic, no network (pure exported
+      # canon plus brace-depth containment over the committed server.mjs),
+      # mutates nothing. Mutation-proven red on 10 mutations of the real run
+      # path — including three that keep exactly one call site and only MOVE it
+      # into the wrong branch, so the containment logic itself is exercised and
+      # not just the anchor count — plus a vacuity control that ERRORS when its
+      # anchor is missing rather than passing on an empty slice.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/mpp-funnel-split.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
