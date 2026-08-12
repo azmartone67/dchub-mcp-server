@@ -54,8 +54,22 @@ jobs:
       # workflow. Its subject is the checkout link itself, so a silently
       # unexecuted guard here would let a broken link ship as green. Qualifies
       # for the HARD gate: deterministic, no network (pure exported function).
+      # ★2026-08-12 (r-oauth-first): oauth-first-copy is named here for the
+      # FOURTH restatement of this rule — `npm test` is invoked by no workflow
+      # and this gate lists its files explicitly, so an unlisted test file is
+      # dead on arrival. Its subject is the honesty of the identity
+      # recommendation itself: the assertions that OAuth's human cost and its
+      # "not offered to your client" caveat travel WITH the recommendation, and
+      # that the keyless free tier is not quietly traded away for identity
+      # capture. A silently unexecuted guard here would let copy ship that
+      # sends unchallenged agents hunting for a door that does not open for
+      # them. Qualifies for the HARD gate: deterministic, no network (reads
+      # only the committed server.mjs), mutates nothing. Mutation-proven red on
+      # 4 controls before merge (anti-wall clause, durable-key overclaim,
+      # keyless promise, and a missing-anchor vacuity check that ERRORS rather
+      # than passing on an empty slice).
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
