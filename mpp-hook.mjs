@@ -13,6 +13,8 @@
  * paywall hits land — so the live fiat rail and real demand actually overlap.
  * Constants mirror mppx's Mcp module (hardcoded so we don't import it).
  */
+import { createHash } from 'node:crypto';
+
 export const MPP_CRED_KEY         = 'org.paymentauth/credential';
 export const MPP_RECEIPT_KEY      = 'org.paymentauth/receipt';
 export const MPP_PAYMENT_REQUIRED = -32042;   // mppx Mcp.paymentRequiredCode
@@ -70,6 +72,19 @@ export const MPP_FUNNEL_STATUS = Object.freeze({
   VERIFY_FAILED:       'mpp_verify_failed',
   /** a presented credential verified and settled — real money */
   PAID:                'mpp_paid',
+  // ── r-mpp-receipt-replay (2026-08-12) ──────────────────────────────────
+  // Two events the retry fix makes REACHABLE, and which the five statuses
+  // above cannot express without lying. Added with their BASIS lines in the
+  // same change, per the rule stated at the top of this block.
+  //
+  // NOTE ON THE KEY NAME: deliberately REPLAY_SERVED, not PAID_REPLAY. The
+  // funnel-split guard anchors the PAID counter with an unanchored
+  // /status\s*=\s*MPP_FUNNEL_STATUS\.PAID/ and demands exactly one hit, so any
+  // key beginning "PAID" would match twice and take that guard out.
+  /** an ALREADY-paid credential was re-served its original answer — no new money */
+  REPLAY_SERVED:       'mpp_paid_replay',
+  /** money moved, but the paid result could not be resolved — NOT a verify failure */
+  REPLAY_UNRESOLVED:   'mpp_replay_unresolved',
 });
 
 /**
@@ -92,8 +107,18 @@ export const MPP_FUNNEL_BASIS = Object.freeze({
     'Increments when a credential WAS presented and mppVerify() returned ok:false. Strictly '
     + 'downstream of mpp_credential_returned — it cannot fire without a returned credential.',
   mpp_paid:
-    'Increments when a credential WAS presented and mppVerify() returned ok:true — money '
-    + 'moved. Strictly downstream of mpp_credential_returned.',
+    'Increments when a credential WAS presented and mppVerify() returned ok:true and the '
+    + 'settle was FRESH (replayed:false) — money moved now. Strictly downstream of '
+    + 'mpp_credential_returned.',
+  mpp_paid_replay:
+    'Increments when mppVerify() returned ok:true with replayed:true — a duplicate retry of a '
+    + 'call that was ALREADY paid for, re-served its original receipt. NO new money moved, so '
+    + 'it is kept out of mpp_paid: counting it there would book settled revenue twice.',
+  mpp_replay_unresolved:
+    'Increments when mppVerify() returned ok:false with replayed:true — the payment settled '
+    + '(exactly once) but the paid result could not be re-served, or the credential was spent '
+    + 'on a DIFFERENT call. Kept out of mpp_verify_failed on purpose: no verification failed '
+    + 'here, and a settle-failure metric must not absorb a money-moved-but-unresolved case.',
 });
 
 /**
@@ -153,13 +178,74 @@ export async function mppChallengeError(name) {
   } catch { return null; }
 }
 
-/** Verify+settle a presented SPT via the sidecar. {ok:true, receipt} | {ok:false, error}. */
-export async function mppVerify(name, credential) {
+/**
+ * r-mpp-receipt-replay (2026-08-12): canonical, key-order-independent digest of
+ * the CALL a payment is being spent on.
+ *
+ * $0.50 buys ONE call. The sidecar records this digest at first settle; a
+ * duplicate retry must present the SAME digest to be re-served the answer it
+ * paid for. Without it, fixing the retry defect would open a worse one — pay
+ * once, then replay the credential with different args for unlimited free
+ * answers inside the challenge's 5-minute life.
+ *
+ * NOT bound into the challenge on purpose: the pre-wall offer ships a challenge
+ * with a call that SUCCEEDS, and the agent spends it on the NEXT call — whose
+ * args are legitimately different. Binding at MINT time would break the shipped
+ * product; binding at SPEND time is what "one payment, one call" actually means.
+ */
+export function mppCallDigest(name, args) {
+  return createHash('sha256')
+    .update('dchub-mpp-call\u0000' + String(name) + '\u0000' + _canonJson(args))
+    .digest('hex');
+}
+function _canonJson(v) {
+  if (v === undefined) return 'u';
+  if (v === null) return 'null';
+  if (typeof v !== 'object') return JSON.stringify(v) ?? 'u';
+  if (Array.isArray(v)) return '[' + v.map(_canonJson).join(',') + ']';
+  return '{' + Object.keys(v).sort()
+    .map((k) => JSON.stringify(k) + ':' + _canonJson(v[k])).join(',') + '}';
+}
+
+/** Older sidecars have no `replayed` flag — recognise the mppx reason text so an un-upgraded sidecar still yields the actionable error instead of a bare payment_failed. */
+const _MPPX_REPLAY_TEXT = /already been processed/i;
+
+/**
+ * Verify+settle a presented SPT via the sidecar.
+ *
+ *   {ok:true,  receipt, replayed:false}                     → settled now
+ *   {ok:true,  receipt, replayed:true, payment_reference}   → ALREADY PAID; Stripe
+ *        charged nothing extra and the sidecar resolved the original receipt.
+ *        The caller paid → serve the data. This is the retry fix.
+ *   {ok:false, replayed:true,  reason, payment_reference}   → paid, but the paid
+ *        result could not be resolved (receipt expired / sidecar restarted) or the
+ *        credential was already spent on a DIFFERENT call. Actionable, never generic.
+ *   {ok:false, replayed:false, reason}                      → genuinely not paid.
+ */
+export async function mppVerify(name, credential, callDigest) {
   try {
-    const j = await _post('/mpp/verify', { tool: name, amount: mppPrice(name), credential });
-    return j && j.ok ? { ok: true, receipt: j.receipt }
-                     : { ok: false, error: (j && j.error) || 'verification failed' };
-  } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 160) }; }
+    const j = await _post('/mpp/verify', {
+      tool: name, amount: mppPrice(name), credential,
+      ...(callDigest ? { call_digest: callDigest } : {}),
+    });
+    if (j && j.ok) {
+      return {
+        ok: true, receipt: j.receipt, replayed: !!j.replayed,
+        settled_at: j.settled_at || null, payment_reference: j.payment_reference || null,
+      };
+    }
+    const error = (j && j.error) || 'verification failed';
+    return {
+      ok: false, error,
+      reason: (j && j.reason) || 'verification_failed',
+      replayed: !!(j && j.replayed) || _MPPX_REPLAY_TEXT.test(String(error)),
+      payment_reference: (j && j.payment_reference) || null,
+    };
+  } catch (e) {
+    // Sidecar unreachable: we cannot know whether money moved. Fail closed and
+    // say nothing we cannot prove.
+    return { ok: false, error: String(e?.message || e).slice(0, 160), reason: 'sidecar_unreachable', replayed: false, payment_reference: null };
+  }
 }
 
 /**
