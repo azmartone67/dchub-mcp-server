@@ -68,8 +68,26 @@ jobs:
       # 4 controls before merge (anti-wall clause, durable-key overclaim,
       # keyless promise, and a missing-anchor vacuity check that ERRORS rather
       # than passing on an empty slice).
+      # ★2026-08-12 (r-mpp-guards): FIFTH restatement — and the widest miss yet.
+      # An audit of the agent-pay rail found that NOT ONE of its guards had ever
+      # executed in CI: mpp-consent, mpp-onestep, mpp-prewall, wall-exits and
+      # human-relay-artifact were all absent from this line, and `npm test` is
+      # invoked by no workflow. 60 test files exist; this gate ran 7 of them.
+      #
+      # That is the worst place in the repo to have unexecuted guards. This rail
+      # settles against a LIVE Stripe key, so its failure mode is not a broken
+      # link or stale copy — it is money moving for a caller who never opted in,
+      # or an advertised price the gate cannot honour. The consent invariant in
+      # particular ("no opt-in, no charge") is the one assertion that must never
+      # be allowed to rot silently.
+      #
+      # All five qualify for the HARD gate on the stated criterion: deterministic
+      # and no external network. mpp-onestep / mpp-prewall stand up a local
+      # 127.0.0.1 stub sidecar; the rest read only committed source and exported
+      # pure functions. Verified 3 consecutive identical runs (51 passed) before
+      # merge, and each was mutation-proven red on the real run path.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
