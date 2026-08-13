@@ -152,7 +152,8 @@ jobs:
                  toolspec.json dchub_mcp_server.py TELEGEOGRAPHY-OUTREACH.md \
                  integrations/gemini/README.md integrations/openrouter/README.md \
                  integrations/langchain/dchub_tools.py \
-                 integrations/llamaindex/dchub_tools.py"
+                 integrations/llamaindex/dchub_tools.py \
+                 canonical/github_description.txt"
           # ★2026-08-05 UNOWNED-HEAL GATE. The comment above warned that a heal
           # writing a file this list omits is a no-op with a green log — and then
           # it happened here for seven files, undetected for days, because
