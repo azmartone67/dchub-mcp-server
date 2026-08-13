@@ -45,7 +45,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
 // error codes, so payment challenge/failure are surfaced as structured TOOL
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
-import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppWantsChallenge, mppOffer, mppPrewallOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
+import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppCallDigest, mppWantsChallenge, mppOffer, mppPrewallOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
@@ -8305,12 +8305,64 @@ function trackedTool(srv, name, description, schema, handler) {
         // back 8 lines from every mppVerify() call site to prove it is nested
         // under `if (_mppCred)`; a long comment inside the branch pushes the call
         // out of that window and fails the consent guard.
+        //
+        // r-mpp-receipt-replay (2026-08-12): A CALLER WHO PAID MUST GET THEIR ANSWER.
+        //
+        // BEFORE: a duplicate retry → Stripe correctly deduped on (challenge.id,
+        // spt) → mppx threw "Payment has already been processed." → the settle
+        // branch below stamped mpp_verify_failed and returned payment_failed
+        // WITH NO DATA. Charged exactly once, answered zero times.
+        //
+        // AFTER: the sidecar resolves a Stripe-confirmed replay to the ORIGINAL
+        // paid receipt, so `ok` is true and the paid answer is served. The call
+        // digest scopes the replay to the call that was actually paid for —
+        // one payment, one call — so the fix cannot become a free-answer hole.
+        //
+        // (This comment obeys the SAME 8-line containment rule as the block
+        // above it: everything explanatory sits OUT here, above `if (_mppCred)`,
+        // so the settle call stays inside the consent guard's walk-back window.)
         const _mppCred = mppCredential(extra);
         if (_mppCred) {
           status = MPP_FUNNEL_STATUS.CREDENTIAL_RETURNED;
-          const _mppV = await mppVerify(name, _mppCred);
+          const _mppV = await mppVerify(name, _mppCred, mppCallDigest(name, args));
           if (!_mppV.ok) {
             // SDK swallows custom McpError codes → return a structured result.
+            if (_mppV.replayed) {
+              // Money DID move (exactly once) but the paid result can't be
+              // re-served. Never a generic payment_failed — name the receipt and
+              // the way out. NOT counted as mpp_verify_failed: no verification
+              // failed here and a settle-failure metric must not absorb it.
+              // Canon symbol, not a literal: every agent-pay counter must carry
+              // a BASIS line (MPP_FUNNEL_BASIS) or it is exactly the unnamed
+              // counter the funnel split exists to end.
+              status = MPP_FUNNEL_STATUS.REPLAY_UNRESOLVED;
+              const _ref = _mppV.payment_reference;
+              const _mismatch = _mppV.reason === 'receipt_scope_mismatch';
+              return {
+                isError: true,
+                content: [{ type: 'text', text:
+                  (_mismatch
+                    ? `This payment was already spent on a different \`${name}\` call — one payment covers one call. `
+                    : `Your payment for \`${name}\` settled and you were NOT charged again, but the paid result is no longer recoverable. `) +
+                  (_ref ? `Stripe payment reference: ${_ref}. ` : '') +
+                  `Next step: request a fresh challenge (retry with _meta.mpp_pay=true) and pay once more, or contact support@dchub.cloud quoting that reference for a refund or a manual re-run. Details: ${_mppV.error}` }],
+                structuredContent: {
+                  payment_already_processed: true,
+                  payment_failed: false,
+                  code: MPP_PAYMENT_FAILED,
+                  reason: _mppV.reason,
+                  tool: name,
+                  payment_reference: _ref,
+                  charged_again: false,
+                  recover: {
+                    retry_with: { '_meta.mpp_pay': true },
+                    support: 'support@dchub.cloud',
+                    quote_reference: _ref,
+                  },
+                  error: _mppV.error,
+                },
+              };
+            }
             status = MPP_FUNNEL_STATUS.VERIFY_FAILED;
             return {
               isError: true,
@@ -8318,10 +8370,33 @@ function trackedTool(srv, name, description, schema, handler) {
               structuredContent: { payment_failed: true, code: MPP_PAYMENT_FAILED, tool: name, error: _mppV.error },
             };
           }
-          status = MPP_FUNNEL_STATUS.PAID;
+          // A replay is NOT a new payment. Stamping mpp_paid again would inflate
+          // settled-revenue counts with money that never moved — the exact
+          // "counter lies by omission" class this rail already suffers from.
+          // Expressed as an if/else over CANON symbols rather than a ternary over
+          // bare literals, for two reasons the funnel split makes binding: a
+          // literal bypasses MPP_FUNNEL_BASIS entirely, and the split guard
+          // anchors on a sole `status = MPP_FUNNEL_STATUS.PAID` statement.
+          if (_mppV.replayed) {
+            status = MPP_FUNNEL_STATUS.REPLAY_SERVED;
+          } else {
+            status = MPP_FUNNEL_STATUS.PAID;
+          }
           const _mppR = await handler(gate.params || args);
           const _mppFull = withCitation(_mppR, name);
           try { _mppFull._meta = { ...(_mppFull._meta || {}), [MPP_RECEIPT_KEY]: _mppV.receipt }; } catch (_) { /* additive only */ }
+          if (_mppV.replayed) {
+            // Be explicit that this is the previously-paid call being re-served,
+            // so an agent reconciling its own spend does not book it twice.
+            try {
+              _mppFull.structuredContent = {
+                ...(_mppFull.structuredContent || {}),
+                payment_replay: true, charged_again: false,
+                payment_reference: _mppV.payment_reference || null,
+                settled_at: _mppV.settled_at || null,
+              };
+            } catch (_) { /* additive only */ }
+          }
           // #4 (2026-06-28): fuse pay → durable identity — the paying agent returns paid on day 2.
           try {
             const _cred = await _mintDurableForPaidAgent('mpp_paid');

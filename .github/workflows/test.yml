@@ -102,8 +102,24 @@ jobs:
       # into the wrong branch, so the containment logic itself is exercised and
       # not just the anchor count — plus a vacuity control that ERRORS when its
       # anchor is missing rather than passing on an empty slice.
+      #
+      # ★2026-08-12 (r-mpp-receipt-replay): mpp-receipt-replay added ON THE SAME
+      # COMMIT as the code it guards — this line is the whole reason a guard runs
+      # at all, and a new agent-pay guard that is not on it has never executed.
+      # Its subject is the retry defect: a caller charged EXACTLY ONCE and
+      # answered ZERO times because Stripe's correct dedupe was turned into
+      # payment_failed with no data. The guards pin (i) the call digest that
+      # scopes a payment to ONE call, (ii) that an already-paid failure never
+      # collapses into generic payment_failed, and (iii) that a replay is NOT
+      # re-booked as revenue. Deterministic, 127.0.0.1 stub sidecar only, no
+      # Stripe, no money. Mutation-proven red on 7 controls before merge.
+      #
+      # ★UNION NOTE (rebase of #178 onto #177/#179): both restatements above
+      # added a file to THIS list, and the list is the only thing that makes a
+      # guard execute. Dropping either name would silently disarm that guard, so
+      # mpp-funnel-split AND mpp-receipt-replay are both named below.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/mpp-funnel-split.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/mpp-funnel-split.test.mjs test/mpp-receipt-replay.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
