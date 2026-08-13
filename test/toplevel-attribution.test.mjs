@@ -88,6 +88,25 @@ const GRID_GATED_WITH_BACKEND_PROV = {
   _upgrade: { tier: 'free', next_tool: 'unlock_more_data' },
 };
 
+// ★ The PAYWALL / TRIAL-PREVIEW family, transcribed from a real keyless
+// analyze_site response on 2026-08-12 (probed AFTER the first deploy). This
+// family uses BARE keys — `preview_is_partial`, `trial_preview`, `locked`,
+// `upgrade` — where trimForTrial uses underscored ones, so the first version of
+// detectGating read it as ungated and reported completeness "unknown" on a
+// response that is plainly a 1-of-N preview.
+const ANALYZE_SITE_PAYWALL = {
+  _entity: 'site',
+  preview_is_partial: true,
+  site_headline: 'Composite 62 — CAUTION',
+  trial_preview: true,
+  composite_score: 62,
+  verdict: 'CAUTION',
+  limiting_factor: 'interconnection queue depth',
+  locked: ['water_risk_detail', 'fiber_paths', 'headroom_mw'],
+  tool: 'analyze_site',
+  upgrade: { tier: 'free', message: 'Unlock the full site analysis.', next_tool: 'unlock_more_data' },
+};
+
 const asResult = (payload) => ({
   content: [{ type: 'text', text: JSON.stringify(payload) }],
   structuredContent: { ...payload },
@@ -235,6 +254,34 @@ describe('gated / preview responses declare their own partiality', () => {
     expect(p.completeness).toBe('partial_preview');
     const c = buildCitation(EXECUTE_PLAN_LIVE, { tier: 'free' }, p);
     expect(c.cite_as).toMatch(/PARTIAL/);
+  });
+
+  it('detects the BARE-key paywall/trial-preview family (live analyze_site shape)', () => {
+    // The regression this pins: bare `preview_is_partial` / `trial_preview` /
+    // `locked` / `upgrade` used to read as ungated, so a paywalled 1-of-N
+    // preview reported completeness "unknown" instead of partial_preview.
+    const g = detectGating(ANALYZE_SITE_PAYWALL);
+    expect(g).not.toBeNull();
+    expect(g.unlock_tool).toBe('unlock_more_data');
+    const p = buildProvenance(ANALYZE_SITE_PAYWALL, { tier: 'free' });
+    expect(p.completeness).toBe('partial_preview');
+    expect(buildCitation(ANALYZE_SITE_PAYWALL, { tier: 'free' }, p).cite_as).toMatch(/PARTIAL/);
+  });
+
+  it('each bare marker independently flags the response', () => {
+    for (const one of [{ preview_is_partial: true }, { trial_preview: true },
+                       { locked: ['a'] }, { upgrade: { next_tool: 'x' } }]) {
+      expect(detectGating({ _entity: 'x', ...one }), JSON.stringify(one)).not.toBeNull();
+    }
+  });
+
+  it('does NOT fire on lookalikes that withhold nothing', () => {
+    // An empty `locked` means nothing was locked; a scalar `upgrade` is not a
+    // CTA object. Neither may manufacture a partial claim.
+    expect(detectGating({ _entity: 'x', locked: [] })).toBeNull();
+    expect(detectGating({ _entity: 'x', locked: {} })).toBeNull();
+    expect(detectGating({ _entity: 'x', upgrade: 'https://dchub.cloud/pricing' })).toBeNull();
+    expect(detectGating({ _entity: 'x', preview_is_partial: false })).toBeNull();
   });
 
   it('completeness is three-valued and never claims more than it knows', () => {
