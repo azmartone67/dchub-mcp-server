@@ -23,6 +23,18 @@ on:
       # otherwise a figure that just became canonical stays judged by the old one.
       - 'canonical/canon_phrases.json'
       - 'scripts/registry_stale_guard.py'
+  # 2026-08-13: external refresh hook. Every listing target that is not a
+  # PR-submit has to be poked from OUTSIDE the repo — a registry UI, a cron
+  # elsewhere, or a human with a curl. There was no such entry point: both sync
+  # workflows were schedule + manual-only, so an external service asking to
+  # trigger a refresh had nothing to call. Payload is ignored; the job always
+  # does the same full heal.
+  #   curl -X POST -H "Authorization: Bearer $GH_PAT" \
+  #     -H "Accept: application/vnd.github+json" \
+  #     https://api.github.com/repos/azmartone67/dchub-mcp-server/dispatches \
+  #     -d '{"event_type":"refresh-listings"}'
+  repository_dispatch:
+    types: [refresh-listings]
   workflow_dispatch:
 
 permissions:

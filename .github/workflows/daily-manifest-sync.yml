@@ -17,6 +17,18 @@ name: daily manifest + README sync
 on:
   schedule:
     - cron: '41 13 * * *'     # DAILY 13:41 UTC (offset from smithery 14:23 / registry-refresh Mon 06:30)
+  # 2026-08-13: external refresh hook. Every listing target that is not a
+  # PR-submit has to be poked from OUTSIDE the repo — a registry UI, a cron
+  # elsewhere, or a human with a curl. There was no such entry point: both sync
+  # workflows were schedule + manual-only, so an external service asking to
+  # trigger a refresh had nothing to call. Payload is ignored; the job always
+  # does the same full heal.
+  #   curl -X POST -H "Authorization: Bearer $GH_PAT" \
+  #     -H "Accept: application/vnd.github+json" \
+  #     https://api.github.com/repos/azmartone67/dchub-mcp-server/dispatches \
+  #     -d '{"event_type":"refresh-listings"}'
+  repository_dispatch:
+    types: [refresh-listings]
   workflow_dispatch:
 
 permissions:
@@ -152,7 +164,8 @@ jobs:
                  toolspec.json dchub_mcp_server.py TELEGEOGRAPHY-OUTREACH.md \
                  integrations/gemini/README.md integrations/openrouter/README.md \
                  integrations/langchain/dchub_tools.py \
-                 integrations/llamaindex/dchub_tools.py"
+                 integrations/llamaindex/dchub_tools.py \
+                 canonical/github_description.txt"
           # ★2026-08-05 UNOWNED-HEAL GATE. The comment above warned that a heal
           # writing a file this list omits is a no-op with a green log — and then
           # it happened here for seven files, undetected for days, because
