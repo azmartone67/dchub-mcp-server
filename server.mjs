@@ -465,7 +465,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
 // regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
-const SERVER_VERSION = { version: '2.11.1' }.version;  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.12.0' }.version;  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -5011,11 +5011,25 @@ async function _buildToolsListResult(descOverrides) {
           : 'free_preview';   // free-tier depth with paid full-fidelity
         const tag = { access, pricing_url: 'https://dchub.cloud/pricing' };
         t._meta = { ...(t._meta || {}), 'cloud.dchub/access': tag };
-        t.annotations = { ...(t.annotations || {}), ...tag };
+        // r-maturity (2026-08-12): re-applied here for the SAME reason the
+        // access tag is — this path builds the result through an SDK Client
+        // probe, and the SDK's ToolAnnotationsSchema is a plain zod object, so
+        // it STRIPS every key outside the five spec hints. Registration-time
+        // annotations reach the wire on the sessioned path but not through
+        // this probe. Same function as registration (never a second
+        // derivation), so the two paths cannot disagree. Annotations only, no
+        // _meta mirror: an agent parses this every session and the mirror
+        // would double the cost for nothing.
+        t.annotations = { ...(t.annotations || {}), ...tag, ..._maturityAnnotation(t.name, t.description) };
       }
     } catch (_e) { /* tags are additive — never break tools/list */ }
     console.log(`[tools-list-cache] built ${r.tools.length} tools in ${Date.now() - t0}ms`);
-    return { tools: r.tools };
+    // r-maturity: carry the result-level _meta through. This used to return
+    // `{ tools }` alone, which silently dropped anything the handler attached
+    // to the result itself — the maturity BASIS block would have shipped on
+    // the sessioned path and vanished on the stateless one, i.e. absent from
+    // exactly the surface registries and agents scan.
+    return r._meta ? { tools: r.tools, _meta: r._meta } : { tools: r.tools };
   } finally {
     try { await probe.close(); } catch (_) {}
     try { await srv.close(); } catch (_) {}
@@ -7990,9 +8004,19 @@ function trackedTool(srv, name, description, schema, handler) {
     : METERED_ENFORCE_TOOLS.has(name) ? 'metered'
     : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
   const _accessTag = { access: _access, pricing_url: 'https://dchub.cloud/pricing' };
+  // r-maturity (2026-08-12): maturity + the published coverage limits ride
+  // here for the same reason the access tag does — declared AT REGISTRATION so
+  // the SDK-sessioned tools/list (Claude Desktop et al.) carries them too. The
+  // post-parse injection in _buildToolsListResult only ever covered the
+  // stateless cached path: access tags shipped 80/80 stateless and 0/80
+  // sessioned until that was found. Derived from the canonical snapshot, so
+  // the declaration cannot drift from the owner endpoints. _desc (not
+  // `description`) so a per-platform override carrying a WITHDRAWN marker is
+  // the text the withdrawal verdict reads.
+  const _maturityTag = _maturityAnnotation(name, _desc);
   const _annot = WRITE_TOOLS.has(name)
-    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false, ..._accessTag }
-    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false, ..._accessTag };
+    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false, ..._accessTag, ..._maturityTag }
+    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false, ..._accessTag, ..._maturityTag };
   const _stamped = _stampEntityCb(name, async (args, extra) => {
     // r-cohort: normalize the experiment tag on the ORIGINAL args object,
     // before the tier gate (which may hand the handler a spread COPY via
@@ -9718,6 +9742,190 @@ export function _composeScopeSection(tax) {
 const _TAXONOMY = (() => {
   try { return JSON.parse(readFileSync(new URL('./canonical/problem_taxonomy.json', import.meta.url), 'utf8')); } catch { return null; /* soft — scope section renders empty */ }
 })();
+
+// ══ r-maturity (2026-08-12) — maturity + the real coverage limits INLINE on
+// every tool in tools/list ══════════════════════════════════════════════════
+//
+// THE GAP, named by ChatGPT: "surface maturity and coverage so an agent knows
+// not just that a capability exists, but how complete and battle-tested it
+// is." Both signals already EXISTED and neither was where an agent looks —
+// maturity/limits at /api/v1/canon/coverage, measured execution in the
+// canonical benchmark report, and tools/list carrying neither. So choosing
+// well cost two extra round-trips, and the measurement says nobody pays it:
+// 254 of 265 agents never ran a workflow in 30d, 15,906 lookups against 39
+// workflows, 191 agents hand-calling rank_markets. A signal that arrives
+// AFTER selection is a signal that does not arrive.
+//
+// ★ DERIVED, NEVER RESTATED. Nothing below contains a maturity value or a
+// limit string. Every one is read out of canonical/tool_maturity.json, which
+// scripts/refresh-tool-maturity.mjs fetches verbatim from the owner
+// endpoints. A second hand-authored maturity list is a second source of truth
+// and it will drift — that is the defect that had Glama publishing "33 tools"
+// for months. test/tool-maturity-annotation.test.mjs re-derives every served
+// value from the snapshot and fails on any tool whose annotation it cannot
+// reproduce, which is what makes "derived" checkable rather than asserted.
+//
+// ★ UNKNOWN IS A VALUE. A tool the coverage map does not mention renders
+// maturity "unknown". Not "mature", not omitted — omitted reads as "fine" to
+// a scanner, and a flattering default is the exact shape of the /ai activity
+// feed that rendered "Just now" for a platform with one lifetime request.
+const _MATURITY_SNAPSHOT = (() => {
+  try { return JSON.parse(readFileSync(new URL('./canonical/tool_maturity.json', import.meta.url), 'utf8')); } catch { return null; /* soft — every tool renders unknown */ }
+})();
+
+// Least-flattering-wins ordering over the canonical status enum. `partial`
+// (only part of the question is covered) sits below `expanding` (answerable,
+// but a named input is a proxy), which sits below `mature`.
+const _MATURITY_RANK = { partial: 0, expanding: 1, mature: 2 };
+export const _MATURITY_UNKNOWN = 'unknown';
+
+// A capability WITHDRAWN for being measurably wrong must say so at selection
+// time — agents were explicitly told to quote our published limits, so an
+// agent that cannot see the withdrawal will quote a number we retracted.
+// Derived from the tool's OWN description, which already carries the marker
+// and the reason (get_gas_index, get_gas_economics, get_gas_intelligence,
+// 2026-08-08); no second list to fall out of step with the prose.
+export function _withdrawnFromDescription(desc) {
+  const s = String(desc || '');
+  const i = s.indexOf('WITHDRAWN');
+  if (i < 0) return null;
+  // "this tool no longer returns a score" ⇒ the capability is gone.
+  // "<named fields> are NO LONGER RETURNED" ⇒ the tool still answers, minus
+  // the retracted part. Read only the clause that follows the marker so an
+  // unrelated later sentence cannot flip the verdict.
+  const clause = s.slice(i, i + 400);
+  return /\bthis tool (?:no longer|does not) return/i.test(clause)
+    ? 'withdrawn' : 'partially_withdrawn';
+}
+
+// Build the per-tool index from the snapshot. Exported so the guard can call
+// it with a DELIBERATELY EMPTY canonical source and prove the annotations
+// collapse to unknown — a guard that cannot fail on missing canon is a guard
+// that would pass if the snapshot silently emptied.
+export function _buildMaturityIndex(snap) {
+  const idx = new Map();
+  const cov = Array.isArray(snap?.coverage) ? snap.coverage : [];
+  const known = snap?.statuses && typeof snap.statuses === 'object' ? snap.statuses : {};
+  const deferred = new Set(
+    Array.isArray(snap?.capture_evidence?.deferred_tools) ? snap.capture_evidence.deferred_tools : []);
+
+  const acc = new Map();
+  for (const e of cov) {
+    if (!e || typeof e !== 'object') continue;
+    // A status outside the published enum is NOT evidence. Passing an
+    // unrecognised label through would let a backend typo become an agent's
+    // routing input.
+    if (!(e.status in known) || !(e.status in _MATURITY_RANK)) continue;
+    const tools = new Set(
+      [e.entry_tool, ...(Array.isArray(e.workflow) ? e.workflow : [])]
+        .filter((t) => typeof t === 'string' && t));
+    for (const t of tools) {
+      const cur = acc.get(t) || { statuses: [], problems: [], limits: [], entries: new Set() };
+      cur.statuses.push(e.status);
+      if (typeof e.problem === 'string' && e.problem && !cur.problems.includes(e.problem)) cur.problems.push(e.problem);
+      for (const l of (Array.isArray(e.limits) ? e.limits : [])) {
+        if (typeof l === 'string' && l && !cur.limits.includes(l)) cur.limits.push(l);
+      }
+      if (typeof e.entry_tool === 'string' && e.entry_tool) cur.entries.add(e.entry_tool);
+      acc.set(t, cur);
+    }
+  }
+
+  for (const [t, c] of acc) {
+    // A tool that serves several problems inherits the LEAST mature of them.
+    // The other direction — best-of — is how a tool with one strong route and
+    // three weak ones advertises as strong.
+    let st = c.statuses.reduce((a, b) => (_MATURITY_RANK[b] < _MATURITY_RANK[a] ? b : a));
+    // MEASURED EVIDENCE, DEMOTE-ONLY. A step a real keyed capture recorded and
+    // could not execute is not mature, whatever the map declares. This can
+    // only ever move a tool down: a measurement allowed to promote would be a
+    // flattering-default generator, and an empty deferred list (the state a
+    // benchmark outage produces) would then read as "everything executed".
+    if (deferred.has(t) && _MATURITY_RANK[st] > _MATURITY_RANK.expanding) st = 'expanding';
+    // The one call to make for this problem. When it is not this tool, the
+    // agent has been handed the routing decision inline — which is the whole
+    // point: problem-category routing becomes automatic as a side effect of
+    // reading tools/list. execute_plan wins when any served problem names it,
+    // because it is the front door for anything spanning capabilities.
+    const others = [...c.entries].filter((x) => x !== t);
+    const front = c.entries.has('execute_plan') && t !== 'execute_plan' ? 'execute_plan'
+      : (others.length === 1 ? others[0] : null);
+    idx.set(t, {
+      maturity: st,
+      problem: c.problems.join('; '),
+      limits: c.limits,
+      front_door: front,
+    });
+  }
+  return idx;
+}
+
+const _MATURITY_INDEX = _buildMaturityIndex(_MATURITY_SNAPSHOT);
+
+// The per-tool annotation. Kept SMALL on purpose — an agent parses tools/list
+// every session and a bloated list is a real cost. maturity is always present
+// (that is what the guard asserts); problem / limits / front_door / withdrawn
+// appear only when the canonical source actually carries them.
+export function _maturityAnnotation(name, desc, idx = _MATURITY_INDEX) {
+  const e = idx && typeof idx.get === 'function' ? idx.get(name) : null;
+  const out = { maturity: e ? e.maturity : _MATURITY_UNKNOWN };
+  if (e) {
+    if (e.problem) out.problem = e.problem;
+    // Verbatim. NEVER paraphrased and never softened — a limit rewritten to
+    // sound gentler is a new claim, and agents were told to quote ours.
+    if (e.limits.length) out.limits = e.limits.join(' · ');
+    if (e.front_door) out.front_door = e.front_door;
+  }
+  const w = _withdrawnFromDescription(desc);
+  if (w) {
+    out.withdrawn = w;
+    // A partial withdrawal IS the canonical definition of `partial` — "only
+    // part of the question is covered; the rest is declared unavailable
+    // rather than estimated". Demote-only again: a tool with no declared
+    // status stays unknown rather than being talked up to partial.
+    if (out.maturity in _MATURITY_RANK && _MATURITY_RANK[out.maturity] > _MATURITY_RANK.partial) {
+      out.maturity = 'partial';
+    }
+  }
+  return out;
+}
+
+// ★ THE BASIS, STATED ONCE PER PAYLOAD — not per tool, both because it would
+// be 80 copies of the same paragraph and because the honest version of it is
+// a caveat about the whole label, not about any one tool. It says what earned
+// the word "mature", and — the part that matters — what did NOT.
+export function _maturityBasis(snap = _MATURITY_SNAPSHOT) {
+  return {
+    what: 'Per-tool `maturity`, `limits`, `problem` and `front_door` on each '
+        + 'tool\'s annotations object, so the signal arrives at SELECTION time '
+        + 'instead of costing two extra round-trips after it.',
+    derived_from: snap?._sources || null,
+    owner: snap?.source || null,
+    snapshot_retrieved_at: snap?.retrieved_at || null,
+    contract_hash: snap?.contract_hash || null,
+    values: {
+      ...(snap?.statuses && typeof snap.statuses === 'object' ? snap.statuses : {}),
+      unknown: 'the coverage map does not name this tool, so no maturity '
+             + 'evidence exists for it. Deliberately not a default of "mature".',
+    },
+    how: 'A tool inherits the LEAST mature status of every problem whose entry '
+       + 'call or workflow names it. A tool a real keyed capture recorded as a '
+       + 'planned step and could NOT execute is demoted; measured evidence can '
+       + 'only ever demote, never promote. A withdrawn or partially withdrawn '
+       + 'capability is capped at `partial` and flagged with `withdrawn`.',
+    what_this_label_is_not:
+      'It is NOT a claim that external callers have exercised this specific '
+      + 'tool, and it is NOT earned by having tests. `mature` means the '
+      + 'published coverage contract declares a dedicated planner route whose '
+      + 'workflow runs end-to-end from one entry call, and that no captured '
+      + 'run deferred this step. Per-tool external-caller volume is not '
+      + 'measured here and is not what this word means.',
+    measured_evidence: snap?.capture_evidence || null,
+    limits_are_verbatim:
+      'Every string in `limits` is copied unchanged from the published '
+      + 'coverage contract. None is paraphrased, shortened or softened.',
+  };
+}
 // Exported so test/problem-taxonomy.test.mjs can assert the WIRING (the scope
 // section actually reaches the served instructions), not just the composer.
 // ★2026-08-05: the initialize instructions — the FIRST thing every connecting
@@ -13306,6 +13514,30 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions
+
+  // r-maturity (2026-08-12): the BASIS of the maturity label, once per
+  // tools/list payload. Wrapping the SDK's own handler puts it on BOTH served
+  // paths — the sessioned one AND the stateless cache, since
+  // _buildToolsListResult probes this very server over an in-process
+  // transport. Strictly additive and fail-soft: if the SDK ever stops exposing
+  // its handler map, the per-tool annotations are unaffected and tools/list is
+  // unchanged. Never throws into a list request.
+  try {
+    const _hm = srv.server && srv.server._requestHandlers;
+    const _orig = _hm && typeof _hm.get === 'function' ? _hm.get('tools/list') : null;
+    if (typeof _orig === 'function') {
+      _hm.set('tools/list', async (req, extra) => {
+        const r = await _orig(req, extra);
+        try {
+          if (r && typeof r === 'object') {
+            r._meta = { ...(r._meta || {}), 'cloud.dchub/maturity_basis': _maturityBasis() };
+          }
+        } catch (_e) { /* additive only */ }
+        return r;
+      });
+    }
+  } catch (_e) { /* additive only */ }
+
   return srv;
 }
 
@@ -14271,6 +14503,11 @@ export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE
 // rank_sites objectives bugs were both invisible to handler-level tests
 // because the SDK rejected the call (-32602) before any handler ran.
 export { createServer };
+// Exported for test/tool-maturity-annotation.test.mjs: the guard must read the
+// STATELESS path's actual served result (what dchub.cloud/mcp returns), not
+// just the registration map — the SDK probe in the middle strips annotation
+// keys, and that difference is exactly where the access tags were once lost.
+export { _buildToolsListResult };
 // r-tuner-kimi-driftgate (2026-07-18): the platform-detection maps + the
 // tuned-description fetch list are exported so test/platform-desc-sync.test.mjs
 // can assert the 3-list sync (this drift has now shipped twice — the 07-11 wave

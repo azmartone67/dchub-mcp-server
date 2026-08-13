@@ -4,7 +4,7 @@
   "title": "DC Hub — Data Center & Power Intelligence",
   "description": "Data-center, grid, fiber & gas infrastructure intelligence for AI agents — query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.11.1",
+  "version": "2.12.0",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
