@@ -55,7 +55,49 @@ describe('the liveness claim is wired to something that answers', () => {
   });
 });
 
+// The clause now NAMES the response fields, because an agent that had to guess
+// them guessed wrong in public: it published `feed_name` / `last_success_at` /
+// `rows_written` — none of which exist — and anyone who copied that code got a
+// clean-looking script reading undefined. Documenting the shape only helps if
+// the documentation is true, so it is checked against the live payload.
+function documentedFields() {
+  const i = SRC.indexOf('LIVENESS IS THE PRODUCT');
+  const clause = SRC.slice(i, i + 1800);
+  const groups = [...clause.matchAll(/`\{([^}]+)\}`/g)].map(m => m[1]);
+  const split = g => new Set(g.split(',').map(x => x.trim().replace(/\[\]$/, '')));
+  return { top: split(groups[0]), feed: split(groups[1]) };
+}
+
+describe('the documented response shape', () => {
+  it('names fields at both levels', () => {
+    const { top, feed } = documentedFields();
+    expect(top.size).toBeGreaterThan(3);
+    expect(feed.has('feed')).toBe(true);
+    expect(feed.has('rows_inserted')).toBe(true);
+    expect(feed.has('last_run')).toBe(true);
+  });
+
+  it('does not document the names that were hallucinated', () => {
+    const { feed } = documentedFields();
+    for (const wrong of ['feed_name', 'last_success_at', 'rows_written']) {
+      expect(feed.has(wrong)).toBe(false);
+    }
+  });
+});
+
 describe.runIf(process.env.LIVE_PROBE === '1')('the proof endpoint actually answers', () => {
+  it('serves exactly the fields we documented', async () => {
+    const r = await fetch(`${PROOF_URL}?_=${Math.floor(Date.now() / 1000)}`);
+    const d = await r.json();
+    const { top, feed } = documentedFields();
+    const actualTop = new Set(Object.keys(d));
+    const actualFeed = new Set(Object.keys(d.feeds[0]));
+    // Documenting a field that does not exist is the defect being prevented.
+    // The reverse (a real field we chose not to list) is fine.
+    for (const f of top) expect(actualTop.has(f), `top-level '${f}' is documented but absent`).toBe(true);
+    for (const f of feed) expect(actualFeed.has(f), `feed field '${f}' is documented but absent`).toBe(true);
+  }, 30000);
+
   it('returns keyless JSON carrying per-feed freshness', async () => {
     const r = await fetch(`${PROOF_URL}?_=${Math.floor(Date.now() / 1000)}`);
     expect(r.status).toBe(200);
