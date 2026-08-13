@@ -106,6 +106,16 @@ jobs:
         # Same fail-closed contract as the phrases refresh — a backend blip
         # can never move the scope lists.
         run: node scripts/refresh-problem-taxonomy.mjs
+      - name: Refresh per-tool maturity + coverage limits from the owner endpoints
+        # ★2026-08-12: pulls /api/v1/canon/coverage (owner: dchub-backend
+        # routes/problem_taxonomy.py) and the measured deferrals from
+        # /api/v1/reports/canonical-benchmarks into canonical/tool_maturity.json,
+        # which server.mjs derives every tool's maturity/limits annotation from.
+        # Same fail-closed contract: a backend blip keeps the committed
+        # snapshot rather than half-writing one — an empty deferred list is the
+        # FLATTERING state (it demotes nobody), so it must never arrive by
+        # accident.
+        run: node scripts/refresh-tool-maturity.mjs
       - name: Sync tool count + version + canon quantities into every owned surface
         run: node scripts/sync-tools-manifest.mjs --fix
       - name: Commit + push only if a surface drifted
@@ -130,6 +140,7 @@ jobs:
           # clean" red on main. If you add a file to the heal, add it HERE.
           OWNED="README.md smithery.yaml mcp-server.json server.json package.json \
                  server.mjs canonical/canon_phrases.json canonical/problem_taxonomy.json \
+                 canonical/tool_maturity.json \
                  llms-install.md REGISTRY-LISTINGS.md \
                  skills/README.md skills/dc-hub-data-center-intelligence/SKILL.md \
                  scripts/tier3_presence.sh scripts/smithery_description.txt \

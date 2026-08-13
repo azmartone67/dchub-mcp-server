@@ -1,0 +1,220 @@
+{
+  "_generated_by": "scripts/refresh-tool-maturity.mjs",
+  "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Every value here is fetched verbatim from the owner endpoints named in _sources. server.mjs derives the per-tool maturity/limits annotations on tools/list from this file; test/tool-maturity-annotation.test.mjs asserts the served annotations match a re-derivation from it, so a hand-edit here moves what agents read. The owners are dchub-backend routes/problem_taxonomy.py (coverage) and routes/canonical_benchmarks.py (capture evidence).",
+  "_sources": {
+    "coverage": "https://dchub.cloud/api/v1/canon/coverage",
+    "capture_evidence": "https://dchub.cloud/api/v1/reports/canonical-benchmarks"
+  },
+  "retrieved_at": "2026-08-13T00:29:03.576Z",
+  "contract_hash": "d41282bd57a97364",
+  "version": 3,
+  "source": "dchub-backend routes/problem_taxonomy.py",
+  "statuses": {
+    "expanding": "answerable, but a named input is still a proxy or estimate",
+    "mature": "a dedicated planner route exists and the workflow runs end-to-end from one entry call",
+    "partial": "only part of the question is covered; the rest is declared unavailable rather than estimated"
+  },
+  "note": "Route on this, not on tool count. A tool COUNT is a supply metric an agent cannot convert into a decision. entry_tool is the ONE call to make; workflow is what runs behind it; limits are what DC Hub will not answer, and why. A `mature` entry may carry limits — publishing a limit is honesty, not immaturity.",
+  "coverage": [
+    {
+      "entry_tool": "execute_plan",
+      "has_published_limits": true,
+      "limits": [
+        "supply-side signals, not a load-interconnection promise — generation is not deliverable load",
+        "utility study timelines, large-load tariff processes and substation-grain delivery are declared out of coverage rather than estimated"
+      ],
+      "problem": "grid headroom and power availability",
+      "status": "mature",
+      "step_count": 3,
+      "workflow": [
+        "get_grid_intelligence",
+        "get_interconnection_queue",
+        "get_power_availability_timeline"
+      ]
+    },
+    {
+      "entry_tool": "execute_plan",
+      "has_published_limits": true,
+      "limits": [
+        "a state-scoped ranking needs a state the planner can resolve; an unresolved geography answers nationally and says so"
+      ],
+      "problem": "site selection and buildable capacity",
+      "status": "mature",
+      "step_count": 3,
+      "workflow": [
+        "site_selection_canvas",
+        "get_market_dcpi_rank",
+        "get_grid_intelligence"
+      ]
+    },
+    {
+      "entry_tool": "rank_markets",
+      "has_published_limits": false,
+      "limits": [],
+      "problem": "colocation and wholesale data-center markets",
+      "status": "mature",
+      "step_count": 3,
+      "workflow": [
+        "rank_markets",
+        "get_market_dcpi_rank",
+        "get_market_intel"
+      ]
+    },
+    {
+      "entry_tool": "ai_capacity_index",
+      "has_published_limits": true,
+      "limits": [
+        "ai_ready_mw is a market-level PROXY from disclosed installed capacity — no per-rack power density or cooling type is ingested, because no public source publishes it. Directional, not a spec claim",
+        "deployable_mw is an estimate from market depth, not a measured interconnect result"
+      ],
+      "problem": "AI/GPU compute campuses",
+      "status": "expanding",
+      "step_count": 2,
+      "workflow": [
+        "ai_capacity_index",
+        "get_market_dcpi_rank"
+      ]
+    },
+    {
+      "entry_tool": "get_composite_site_score",
+      "has_published_limits": true,
+      "limits": [
+        "water is declared unavailable outside WRI Aqueduct basin coverage rather than imputed"
+      ],
+      "problem": "water and climate risk",
+      "status": "mature",
+      "step_count": 4,
+      "workflow": [
+        "get_composite_site_score",
+        "get_water_risk",
+        "get_disaster_risk",
+        "get_climate_intel"
+      ]
+    },
+    {
+      "entry_tool": "get_fiber_intel",
+      "has_published_limits": false,
+      "limits": [],
+      "problem": "fiber routes, diversity and latency",
+      "status": "mature",
+      "step_count": 4,
+      "workflow": [
+        "get_fiber_intel",
+        "get_metro_fiber",
+        "get_fiber_readiness",
+        "cluster_sites_by_latency"
+      ]
+    },
+    {
+      "entry_tool": "get_interconnection_queue",
+      "has_published_limits": true,
+      "limits": [
+        "the queue feed carries no delivery dates, and most queued MW never completes — queue depth is congestion context, not a timeline"
+      ],
+      "problem": "interconnection queues",
+      "status": "mature",
+      "step_count": 2,
+      "workflow": [
+        "get_interconnection_queue",
+        "get_refined_queue"
+      ]
+    },
+    {
+      "entry_tool": "get_tax_incentives",
+      "has_published_limits": true,
+      "limits": [
+        "permitting records are human-curated and stage-tagged (enacted / proposed / speculative) — read the stage before treating a record as in force"
+      ],
+      "problem": "tax incentives and permitting",
+      "status": "mature",
+      "step_count": 2,
+      "workflow": [
+        "get_tax_incentives",
+        "get_permitting_intel"
+      ]
+    },
+    {
+      "entry_tool": "list_transactions",
+      "has_published_limits": false,
+      "limits": [],
+      "problem": "data-center M&A and deals",
+      "status": "mature",
+      "step_count": 3,
+      "workflow": [
+        "list_transactions",
+        "deal_autopsy",
+        "hyperscaler_deals"
+      ]
+    },
+    {
+      "entry_tool": "get_energy_prices",
+      "has_published_limits": false,
+      "limits": [],
+      "problem": "PPAs and energy pricing",
+      "status": "mature",
+      "step_count": 2,
+      "workflow": [
+        "get_energy_prices",
+        "get_gas_economics"
+      ]
+    },
+    {
+      "entry_tool": "get_infrastructure",
+      "has_published_limits": true,
+      "limits": [
+        "utility-published feeder hosting capacity covers a named subset of utilities in the Northeast, Mid-Atlantic and Midwest — not nationwide, and absence of a feeder is not absence of capacity",
+        "published feeder capacities are single-digit to low-tens of MW and the rows are GIS vertices — read distinct_feeders, never the row count"
+      ],
+      "problem": "substations and transmission",
+      "status": "partial",
+      "step_count": 2,
+      "workflow": [
+        "get_infrastructure",
+        "get_hosting_capacity"
+      ]
+    },
+    {
+      "entry_tool": "get_facility",
+      "has_published_limits": true,
+      "limits": [
+        "disclosed MW is populated on a minority of facility rows, so a facility count is a PRESENCE signal and not a capacity one — metered_facility_count reports the share that carries MW",
+        "no per-rack power density is ingested; there is no public source"
+      ],
+      "problem": "megawatts and power density",
+      "status": "partial",
+      "step_count": 3,
+      "workflow": [
+        "search_facilities",
+        "get_facility",
+        "score_facility"
+      ]
+    },
+    {
+      "entry_tool": "get_power_pipeline",
+      "has_published_limits": true,
+      "limits": [
+        "the generating-unit inventory counts UNITS across all statuses (operating, planned, cancelled, shelved, retired) — it is not a plant count and not an operating fleet"
+      ],
+      "problem": "power generation, gas and energy infrastructure",
+      "status": "mature",
+      "step_count": 4,
+      "workflow": [
+        "get_power_pipeline",
+        "get_global_power",
+        "get_gas_intelligence",
+        "get_retirement_headroom"
+      ]
+    }
+  ],
+  "capture_evidence": {
+    "source": "https://dchub.cloud/api/v1/reports/canonical-benchmarks",
+    "captures_measured": 7,
+    "captures_contracted": 7,
+    "last_successful_execution": "2026-08-10T08:02:31Z",
+    "deferred_tools": [
+      "get_fiber_readiness",
+      "plan_fiber_leadin"
+    ],
+    "means": "tools a real keyed capture RECORDED as a planned step and could not execute. Used only to DEMOTE a declared maturity, never to raise one."
+  }
+}
