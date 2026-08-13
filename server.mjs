@@ -60,6 +60,19 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
+// r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
+// envelope, gated ones included. Measured: a live keyless execute_plan came
+// back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
+// anywhere in the response — attribution an agent would have to walk a step
+// tree to find, i.e. attribution that never reaches the human. The existing
+// withCitation/withProvenance stampers sit INSIDE the tool body, which exits
+// early on a dozen preview/tease/wall branches, so precisely the GATED
+// responses went out bare. This one stamps at the merged choke point and
+// DERIVES the block from the payload — see lib/attribution.mjs for the
+// anti-inflation contract (as_of is read out of the data or reported
+// UNMEASURED; verification counts are omitted rather than zero-filled; a
+// tier-gated partial says PARTIAL in the cite_as an agent quotes).
+import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
 // tool surface and invent plausible-but-wrong names. A live cross-platform test
@@ -8715,7 +8728,12 @@ function trackedTool(srv, name, description, schema, handler) {
                   tool: name,
                   note: 'Free preview — a sample is shown. For the complete result, sign in to DC Hub or call claim_free_key (free, no email, one call).',
                   upgrade_url: _refUrl(SIGNUP_URL),
-                  citation: 'According to DC Hub (dchub.cloud)',
+                  // r-cite-toplevel (2026-08-12): was a bare STRING here while
+                  // every other surface emitted an OBJECT — the exact "handle
+                  // either shape" split we told partner agents to absorb. One
+                  // shape is emitted now (object); the string arm stays ACCEPTED
+                  // on input so nothing upstream can break.
+                  citation: _normalizeCitation('According to DC Hub (dchub.cloud)'),
                 },
               };
             }
@@ -9007,7 +9025,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             if (_isCleanPlatform()) {
               trimmed._note = 'Free preview — a sample is shown. For complete data, call claim_free_key (free, no email) or sign in to DC Hub.';
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
-                       structuredContent: { tier: 'free', tool: name, upgrade_url: SIGNUP_URL, citation: 'According to DC Hub (dchub.cloud)' } };
+                       // r-cite-toplevel: object shape, same reason as above.
+                       structuredContent: { tier: 'free', tool: name, upgrade_url: SIGNUP_URL,
+                                            citation: _normalizeCitation('According to DC Hub (dchub.cloud)') } };
             }
             const _sid = c.session_id || 'no-session';
             // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL.
@@ -9436,8 +9456,20 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   (audit 2026-08-07, envelope-honesty #1). After _ensureStructured so
   //   both channels are corrected; _scrubCommerce/withStarterPack never
   //   touch tier claims.
-  }, async (args, extra) => withStarterPack(
-       _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())), name, getCtx()));
+  // ★ _stampAttribution sits OUTERMOST — after withStarterPack/_scrubCommerce,
+  //   so nothing downstream can rebuild content and drop it, and after EVERY
+  //   early return inside _stamped has merged. That placement is the fix: the
+  //   inner withCitation only ever covered the clean full-data path, so the
+  //   anon-trim / daily-cap / gate.capped / depth-tease / paywall branches —
+  //   the responses that most need to declare "1 of N" — shipped with no
+  //   top-level citation and no provenance at all (verified live 2026-08-12).
+  //   The caller's tier is passed so `completeness` can only read
+  //   'unrestricted' when the tier genuinely removes the gates.
+  }, async (args, extra) => _stampAttribution(
+       withStarterPack(
+         _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
+         name, getCtx()),
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }));
 }
 
 // r-chatgpt-commerce-scrub (2026-07-19): OpenAI's App Directory supports

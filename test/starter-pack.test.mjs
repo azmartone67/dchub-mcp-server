@@ -101,7 +101,15 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
   // the nudge never ran for them — verified live 2026-07-28. These assertions
   // pin the fix at the OUTERMOST callback, where all return paths have merged.
   it('is applied at the registerTool callback, not on one inner return', () => {
-    const m = SRC.match(/}\s*,\s*async \(args, extra\) => withStarterPack\(/);
+    // ★ Re-anchored to tolerate an OUTER wrapper (2026-08-12: _stampAttribution
+    //   joined the chain outermost, so top-level citation+provenance survive
+    //   every content rebuild below it). This is the THIRD time this assertion
+    //   family has been re-anchored for the same reason — see the two ★ notes
+    //   below. The thing under test is that withStarterPack sits at the
+    //   registerTool callback where all return paths have merged, NOT that it
+    //   must be the outermost call; "not on one inner return" is still pinned
+    //   exactly, by the clean-only-path assertion at the bottom of this block.
+    const m = SRC.match(/}\s*,\s*async \(args, extra\) =>\s*(?:\w+\(\s*)*withStarterPack\(/);
     expect(m, 'withStarterPack must wrap the registerTool callback').toBeTruthy();
   });
 
