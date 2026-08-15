@@ -45,7 +45,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
 // error codes, so payment challenge/failure are surfaced as structured TOOL
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
-import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppCallDigest, mppWantsChallenge, mppOffer, mppPrewallOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
+import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppCallDigest, mppWantsChallenge, mppOffer, mppPrewallOffer, mppUndercapOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
@@ -2990,6 +2990,30 @@ function _trialFullRemaining(ipKey, tool, cap) {
     const n = _trialDayCounts.get(`${ipKey || 'anon'}:${tool}:${day}`) || 0;
     return Math.max(0, cap - n);
   } catch (_) { return 0; }
+}
+
+// ── r-undercap-offer (2026-08-15): bounded schedule for the compact under-cap
+// pay offer (mppUndercapOffer). The offer rides the FIRST under-cap full answer
+// per (session, tool) — NOT every call (response bloat), and NEVER on:
+//   • FREE_FULL_TOOLS — free-by-design data must not carry a pay offer;
+//   • the Starter/Developer paid taste — a pay-per-call ask on a subscriber's
+//     included answer is noise (same reason the r-prewall block excludes it);
+//   • any gate without trial_taste — paid/enterprise full answers never enter
+//     the taste path, and this guard keeps that true even if the call site moves.
+// CONSUMES the once-marker, so call it only when the offer will actually attach
+// (i.e. after mppUndercapOffer returned non-null).
+const _undercapOffered = new Set();   // `${session-or-ip}:${tool}` — once per session per tool
+function _undercapOfferDue(name, sessionKey, gate) {
+  try {
+    if (!gate || gate.trial_taste !== true) return false;
+    if (gate.paid_taste === true) return false;
+    if (FREE_FULL_TOOLS.has(name)) return false;
+    const key = `${sessionKey || 'anon'}:${name}`;
+    if (_undercapOffered.has(key)) return false;
+    if (_undercapOffered.size > 50000) _undercapOffered.clear();  // unbounded-growth guard (same as _trialDayCounts)
+    _undercapOffered.add(key);
+    return true;
+  } catch (_) { return false; }
 }
 
 // ── Returning-key reward (DCHUB_RETURN_REWARD) ──────────────────────────────
@@ -9469,6 +9493,28 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                                              agent_payment: _pre };
                 status = MPP_FUNNEL_STATUS.OFFER_PREWALL;   // NOT the quote-issued counter — passive offer
               }
+            } else {
+              // r-undercap-offer (2026-08-15): _pre is null on MOST under-cap
+              // calls (mppPrewallOffer fires only at remaining <= MPP_PREWALL_AT,
+              // default 1) — which is exactly why reachability re-measured 0.4%
+              // on 07-31: the earlier under-cap answers carried the human
+              // _metered_trial copy but NO machine-payable envelope (no price,
+              // no _meta recipe). Attach the COMPACT sync offer here, once per
+              // (session, tool) — _undercapOfferDue consumes the once-marker,
+              // so it runs only after mppUndercapOffer returned a real offer.
+              // Free data untouched; caps untouched; counted under its OWN
+              // status (mpp_offer_undercap) so mpp_offer_prewall stays clean.
+              const _uc = mppUndercapOffer(name, _rem);
+              if (_uc && _undercapOfferDue(name, c.session_id || c.client_ip, gate)) {
+                const _p2 = JSON.parse(result.content?.[0]?.text || '{}');
+                if (_p2 && typeof _p2 === 'object' && !Array.isArray(_p2)) {
+                  _p2.agent_payment = _uc;
+                  result.content = [{ type: 'text', text: JSON.stringify(_p2) }];
+                  result.structuredContent = { ...(result.structuredContent || {}),
+                                               agent_payment: _uc };
+                  status = MPP_FUNNEL_STATUS.OFFER_UNDERCAP;   // distinct passive counter — never OFFER_PREWALL
+                }
+              }
             }
           } catch (_) { /* offer is a bonus; a failure must never cost the answer */ }
         }
@@ -14621,7 +14667,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible };
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _undercapOfferDue };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
