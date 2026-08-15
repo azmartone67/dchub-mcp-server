@@ -1906,10 +1906,19 @@ function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, 
 //               claude.ai web connector (generic "node").
 //   · recalled — _recallPlatform(sid).clientName, remembered AT initialize and
 //               the only identity a later tools/call can be judged on.
-export function _resolveClaudeConnector({ ua, ciName, recalledClientName }) {
+export function _resolveClaudeConnector({ ua, ciName, sessionId, recalledClientName }) {
   if (/Claude-User/i.test(String(ua || ''))) return true;
   if (String(ciName || '').trim().toLowerCase() === 'claude-ai') return true;
-  if (String(recalledClientName || '').trim().toLowerCase() === 'claude-ai') return true;
+  // ★The recall lookup lives INSIDE this function on purpose. Twice now the bug
+  // was in the wiring that produced this value, not in the comparison — first
+  // the call site never looked the identity up at all, then it looked it up on
+  // _recallPlatform (a STRING) and read `.clientName` off it. Both times the
+  // unit tests passed a hand-written recalledClientName and went green. A seam
+  // the tests cannot reach is where this bug lives, so there is no longer a
+  // seam: callers pass a sessionId, and the tests drive the same path prod does.
+  // (recalledClientName stays as a test/override input; sessionId wins when set.)
+  const recalled = sessionId != null ? _recallClientName(sessionId) : recalledClientName;
+  if (String(recalled || '').trim().toLowerCase() === 'claude-ai') return true;
   return false;
 }
 
@@ -14390,7 +14399,7 @@ app.post('/mcp', async (req, res) => {
     const _isClaudeConnectorNow = _resolveClaudeConnector({
       ua: userAgent,
       ciName: _ciName,
-      recalledClientName: (_recallPlatform(sessionId) || {}).clientName,
+      sessionId,
     });
     const _anonCallsSoFar = _anonCallCount(sessionId);
     if (_workosEnabled() && !_challengeDisabled && _claudeChallengeEligible({
