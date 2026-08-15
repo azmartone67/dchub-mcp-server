@@ -40,6 +40,12 @@ describe('human line is FIRST', () => {
     expect(first).toMatch(/^→ \*\*For your human:\*\* open https:\/\/dchub\.cloud\//);
     expect(first).toContain('unlock');          // says what the link does
     expect(first.length).toBeLessThan(200);     // quotable, not a paragraph
+    // HONESTY (2026-08-15 review): the line rides ALL gated branches, where the
+    // link shows what was found + purchase options — it does not unlock
+    // on open, and no measurement backs a duration claim. Ban both.
+    expect(first).not.toContain('30-second');
+    expect(first).not.toMatch(/\d+[- ]second/);
+    expect(first.toLowerCase()).toContain('see what your agent found');
     expect(line).toMatch(/VERBATIM/);           // the explicit relay instruction
     expect(line.toLowerCase()).toContain('first line of');
   });

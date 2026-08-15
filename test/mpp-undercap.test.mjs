@@ -192,21 +192,57 @@ describe('mpp_offer_undercap — a DISTINCT counter, wired like the other mpp_* 
     throw new Error(`ANCHOR ${label}: block opened at line ${openLine} never closes`);
   };
 
-  it('server.mjs stamps OFFER_UNDERCAP exactly once, INSIDE the schedule-guarded block', () => {
-    const stamp = soleLine(/status\s*=\s*MPP_FUNNEL_STATUS\.OFFER_UNDERCAP/, 'OFFER_UNDERCAP stamp');
-    const guardOpen = soleLine(/if\s*\(\s*_uc\s*&&\s*_undercapOfferDue\(/, 'if (_uc && _undercapOfferDue(');
-    const guardClose = blockEnd(guardOpen, 'schedule guard block');
-    expect(stamp).toBeGreaterThan(guardOpen);
-    expect(stamp).toBeLessThan(guardClose);
+  // DELIBERATE anchor change (2026-08-15 review fixes): there are now TWO
+  // stamp sites — the KEYED trial_taste branch AND the anon inline-full
+  // cascade (r-undercap-anon: the keyed branch is the code path r-prewall-anon
+  // measured as unreachable for ~95% of real flagship traffic, so the offer
+  // is now wired where that traffic actually lands). Each stamp must still
+  // sit INSIDE a block guarded by _undercapOfferDue, and — per the 2026-08-15
+  // once-marker fix — the guard must run AFTER the offer exists (marker is
+  // consumed only when the attach is assured).
+  const allLines = (re, label) => {
+    const hits = LINES.map((t, i) => ({ n: i + 1, t }))
+      .filter((r) => re.test(r.t) && !/^\s*(\/\/|\*)/.test(r.t));
+    if (hits.length === 0) throw new Error(`ANCHOR ${label}: no match for ${re}`);
+    return hits.map((r) => r.n);
+  };
+
+  it('server.mjs stamps OFFER_UNDERCAP exactly twice (keyed + anon cascade), each INSIDE a schedule-guarded block', () => {
+    const stamps = allLines(/status\s*=\s*MPP_FUNNEL_STATUS\.OFFER_UNDERCAP/, 'OFFER_UNDERCAP stamp');
+    expect(stamps.length).toBe(2);
+    const guards = allLines(/&&\s*_undercapOfferDue\(/, '&& _undercapOfferDue( guard');
+    expect(guards.length).toBe(2);
+    for (const stamp of stamps) {
+      // the nearest guard line ABOVE this stamp opens the block the stamp sits in
+      const guardOpen = guards.filter((g) => g < stamp).pop();
+      if (!guardOpen || stamp - guardOpen > 12) {
+        throw new Error(`ANCHOR: stamp at ${stamp} has no _undercapOfferDue guard within 12 lines above`);
+      }
+      const guardClose = blockEnd(guardOpen, `schedule guard block @${guardOpen}`);
+      expect(stamp).toBeGreaterThan(guardOpen);
+      expect(stamp).toBeLessThan(guardClose);
+    }
   });
 
-  it('the stamp is NOT the prewall stamp — the two counters cannot re-merge', () => {
+  it('the once-marker is consumed LAST — never before the offer object exists', () => {
+    // Source pin on the 2026-08-15 fix: _undercapOfferDue must appear only as
+    // the TRAILING `&& _undercapOfferDue(` clause of an attach guard — a
+    // leading `if (_undercapOfferDue(` call site would burn the (session, tool)
+    // marker before the attach is assured (parse throw / array payload), losing
+    // the offer for that pair forever.
+    const leadingConsume = LINES
+      .map((t, i) => ({ n: i + 1, t }))
+      .filter((r) => /if\s*\(\s*_undercapOfferDue\(/.test(r.t) && !/^\s*(\/\/|\*)/.test(r.t));
+    expect(leadingConsume, 'a call site consumes the once-marker FIRST').toEqual([]);
+  });
+
+  it('the stamps are NOT the prewall stamps — the two counters cannot re-merge', () => {
     const prewallSites = LINES
       .map((t, i) => ({ n: i + 1, t }))
       .filter((r) => /status\s*=\s*MPP_FUNNEL_STATUS\.OFFER_PREWALL/.test(r.t))
       .map((r) => r.n);
-    const undercap = soleLine(/status\s*=\s*MPP_FUNNEL_STATUS\.OFFER_UNDERCAP/, 'OFFER_UNDERCAP stamp');
+    const undercapSites = allLines(/status\s*=\s*MPP_FUNNEL_STATUS\.OFFER_UNDERCAP/, 'OFFER_UNDERCAP stamp');
     expect(prewallSites.length, 'no OFFER_PREWALL site found — guard is vacuous').toBeGreaterThan(0);
-    expect(prewallSites).not.toContain(undercap);
+    for (const u of undercapSites) expect(prewallSites).not.toContain(u);
   });
 });

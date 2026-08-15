@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { withEndOfBurstHook, END_OF_BURST_TOOLS, _composeInstructions } from '../server.mjs';
+import { withEndOfBurstHook, END_OF_BURST_TOOLS, END_OF_BURST_MARKER, _composeInstructions } from '../server.mjs';
+import { MPP_COVERED_TOOLS } from '../mpp-hook.mjs';
 
 const SRC = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'server.mjs'), 'utf8');
@@ -43,12 +44,52 @@ describe('end-of-burst hook — present on completion tools', () => {
     expect(r.content.filter((it) => it.text && it.text.includes('whats_changed')).length).toBe(1);
   });
 
-  it('unbound caller gets the bind_email keep-alive clause; bound/paid does NOT', () => {
+  // 2026-08-15 REGRESSION (review finding): the idempotency guard originally
+  // scanned content text for the substring 'whats_changed' — which
+  // execute_plan's OWN payload serializes whenever its next_recipe FALLBACK
+  // fires ({ prompt: 'whats_changed' } for any intent_class outside the 7
+  // mapped ones, i.e. the flagship tool's DEFAULT path). The hook read its own
+  // input as "already hooked" and silently self-suppressed. The guard now keys
+  // on the hook's OWN marker (END_OF_BURST_MARKER) + the structured flag.
+  it("attaches on execute_plan's real fallback payload (next_recipe contains 'whats_changed')", () => {
+    const sc = {
+      _entity: 'plan_execution',
+      executed: [],
+      next_recipe: { prompt: 'whats_changed', why: 'See what moved in the dataset since this call — the return hook.' },
+    };
+    const real = {
+      content: [{ type: 'text', text: JSON.stringify(sc) }],
+      structuredContent: sc,
+    };
+    const r = withEndOfBurstHook(real, 'execute_plan', PAID);
+    expect(r.structuredContent._end_of_burst).toBeTruthy();
+    expect(r.content.filter((it) => it.text && it.text.includes(END_OF_BURST_MARKER)).length).toBe(1);
+    // second pass on the real payload: still exactly one hook line
+    const r2 = withEndOfBurstHook(r, 'execute_plan', PAID);
+    expect(r2.content.filter((it) => it.text && it.text.includes(END_OF_BURST_MARKER)).length).toBe(1);
+  });
+
+  it('the hook line begins with the marker the idempotency guard keys on', () => {
+    const r = withEndOfBurstHook(ok(), 'execute_plan', PAID);
+    const hook = r.content.find((it) => it.text && it.text.includes(END_OF_BURST_MARKER));
+    expect(hook.text.startsWith(END_OF_BURST_MARKER)).toBe(true);
+    // and the marker is NOT a substring a tool payload can innocently contain
+    expect(END_OF_BURST_MARKER).not.toBe('whats_changed');
+  });
+
+  it('unbound caller gets the bind_email recoverability clause; bound/paid does NOT', () => {
     const anon = withEndOfBurstHook(ok(), 'get_shortlist', ANON);
     const anonHook = anon.content.find((it) => it.text && it.text.includes('whats_changed'));
     expect(anonHook.text).toContain('bind_email');
     expect(anonHook.text).toContain('saved work');
+    // HONESTY (2026-08-15 review): bind_email's own description says binding
+    // makes a key RECOVERABLE, not durable — "keeps this key alive" was the
+    // exact durability claim it disclaims. Pin the honest verb, ban the old one.
+    expect(anonHook.text).toContain('recoverable');
+    expect(anonHook.text).not.toContain('alive');
     expect(anon.structuredContent._end_of_burst.bind_hint).toContain('bind_email');
+    expect(anon.structuredContent._end_of_burst.bind_hint).toContain('recoverable');
+    expect(anon.structuredContent._end_of_burst.bind_hint).not.toContain('alive');
 
     const paid = withEndOfBurstHook(ok(), 'get_shortlist', PAID);
     const paidHook = paid.content.find((it) => it.text && it.text.includes('whats_changed'));
@@ -99,6 +140,18 @@ describe('end-of-burst hook — absent elsewhere', () => {
     expect(SRC).toContain("}, 'get_shortlist', null);");
     expect(SRC).toContain("}, 'generate_site_analysis', null);");
   });
+
+  // Latent-coupling pin (2026-08-15 review): the prewall/undercap offer attach
+  // REPLACES result.content wholesale, which would drop an appended hook line
+  // if a hooked tool ever became MPP-payable. Today the sets are disjoint —
+  // pin it so a pricing edit cannot silently create the collision.
+  it('END_OF_BURST_TOOLS stay disjoint from the MPP payable set', () => {
+    expect(MPP_COVERED_TOOLS.length, 'MPP payable set is empty — pin is vacuous').toBeGreaterThan(0);
+    for (const tool of END_OF_BURST_TOOLS) {
+      expect(MPP_COVERED_TOOLS.includes(tool),
+        `${tool} is both END_OF_BURST and MPP-payable — the offer attach would drop the hook line`).toBe(false);
+    }
+  });
 });
 
 describe('initialize instructions carry BOTH doctrines', () => {
@@ -125,8 +178,15 @@ describe('initialize instructions carry BOTH doctrines', () => {
       expect(out).toContain('whats_changed');
       expect(out).toContain('get_changes');
       expect(out).toContain('bind_email');
-      // honesty: the doctrines promise no digest/email sends
-      expect(out.split('END OF BURST')[1] || '').not.toContain('digest');
+      // honesty: the doctrines promise no digest/email sends. Hardened
+      // (2026-08-15 review): assert the heading EXISTS before slicing after
+      // it, so a heading rename can never make this check pass vacuously.
+      const parts = out.split('END OF BURST');
+      expect(parts.length, 'END OF BURST heading missing from instructions').toBeGreaterThan(1);
+      expect(parts[1]).not.toContain('digest');
+      // honesty: bind_email makes a key recoverable — never "keeps it alive"
+      expect(parts[1]).toContain('recoverable');
+      expect(parts[1]).not.toContain('alive');
     }
   });
 });
