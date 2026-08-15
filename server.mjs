@@ -1844,6 +1844,33 @@ function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, m
   return true;
 }
 
+// ── r-challenge-after-value (2026-08-15) — the Claude-connector 401 challenge ──
+// Pure decision function (unit-tested in test/claude-challenge-method.test.mjs).
+// Env gates (_workosEnabled / DCHUB_OAUTH_CHALLENGE_DISABLE) stay at the call
+// site, same split as _invalidBearerEligible.
+//
+// ★WHY tools/call AND NOT initialize. The 07-03 fix exempted discovery so the
+// tool catalog could render — but `initialize` is the first message of the MCP
+// handshake, so a connector 401'd there never reaches the exempt path. The
+// exemption was unreachable for this cohort from the day it shipped. Measured
+// 2026-08-15: 4,356 connector-init challenges / 30d against 3 new durable
+// identities (1,452 asks per identity), and NOT ONE
+// `claude_connector/tools/call` row in the whole series — the cohort dies at the
+// handshake ~145×/day and never writes to mcp_calls_identity, which is exactly
+// why it read as "Claude-User went silent" in every call-grain surface.
+// Challenging only tools/call lets the connector attach, list all 82 tools and
+// take one answer before it is asked to sign in; the MCP auth spec is satisfied
+// either way, since 401 + WWW-Authenticate starts the same flow on either method.
+function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, hasSession }) {
+  if (!isClaudeConnector) return false;
+  if (method !== 'tools/call') return false;          // ★never on initialize — ask after value
+  if (hasApiKeyHeader) return false;
+  if (workosAuthed) return false;
+  if (/^Bearer\s+\S/i.test(String(authHeader || ''))) return false;  // r-api-connector-bearer
+  if (hasSession) return false;
+  return true;
+}
+
 function cacheKey(api_key, result) {
   const v = { ...result, exp: Date.now() + KEY_CACHE_TTL };
   keyCache.set(api_key, v);
@@ -14236,6 +14263,41 @@ app.post('/mcp', async (req, res) => {
     // already served statelessly below — challenge only where identity actually
     // matters: initialize (starts the OAuth handshake) and tools/call.
     const _challengeMethod = req.body?.method === 'initialize' || req.body?.method === 'tools/call';
+    // ── r-challenge-after-value (2026-08-15) ────────────────────────────────
+    // ★THE 07-03 DISCOVERY EXEMPTION WAS NULLIFIED BY ITS OWN SIBLING. That fix
+    // let tools/list through so the catalog could render — but `initialize` is
+    // the FIRST message of the MCP handshake and precedes everything, so a
+    // connector 401'd there never reaches the exempt path. The exemption has
+    // been unreachable for this cohort since the day it shipped.
+    //
+    // What that cost, measured 2026-08-15 (GET /api/v1/mcp/oauth-challenge/state
+    // + /api/v1/mcp/retention): 4,356 connector-init challenges in 30d against 3
+    // new durable identities — an index of 1,452 asks per identity. There is not
+    // one `claude_connector/tools/call` row in the entire series: the cohort dies
+    // at the handshake, every time, ~145/day, and therefore never writes a row to
+    // mcp_calls_identity either — which is why this looked like "Claude-User went
+    // silent on 08-01" in every call-grain surface. It was never silent. It was
+    // being turned away before it could speak.
+    //
+    // So: ask AFTER value, not before it. Challenging only tools/call lets the
+    // connector attach, render all 82 tools, and take one answer — and the MCP
+    // auth spec is satisfied either way, because a 401 + WWW-Authenticate on
+    // tools/call starts the same OAuth flow it would have started on initialize.
+    // We keep the lever (oauth_durable returns 55.6% vs key_only 2.4%), we stop
+    // spending the entire cohort to pull it.
+    //
+    // ★Deliberately a SEPARATE constant. `_challengeMethod` above is also the
+    // ChatGPT passive instrument's denominator (r-chatgpt-instrument), and that
+    // is a measurement mid-flight — narrowing it here would silently redefine
+    // what a months-old series counts. Instruments do not get edited to match
+    // the thing they are measuring.
+    //
+    // ★Watch after deploy: `oauth_challenges_connector_init_30d` will decay to 0
+    // over 30d BY DESIGN, and the `_beat` row keeps `gateway_reporting` true so
+    // that zero reads as DISARMED-ON-INIT rather than DORMANT. The live series
+    // moves to kind=claude_connector, method=tools/call — backend PR teaches
+    // mcp_retention.py to publish both so the funnel stays measurable across the
+    // switch. Kill switch is unchanged: DCHUB_OAUTH_CHALLENGE_DISABLE=1.
     // r-chatgpt-instrument (2026-07-17) — PASSIVE Phase-0 measurement. Issues NO 401 and
     // changes NO behavior: it only COUNTS the anonymous, keyless, sessionless ChatGPT
     // connector inits/calls that WOULD be challenge-eligible IF the OAuth challenge were
@@ -14263,10 +14325,14 @@ app.post('/mcp', async (req, res) => {
     // does it correctly (validateKey() → valid key rides as X-API-Key → 200;
     // junk/expired → 401 invalid_token). Keyless claude.ai web stays
     // challenged exactly as designed.
-    if (_workosEnabled() && !_challengeDisabled && _isClaudeConnector && _challengeMethod
-        && !req.headers['x-api-key'] && !_workosAuthed
-        && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))
-        && !(sessionId && sessions.has(sessionId))) {
+    if (_workosEnabled() && !_challengeDisabled && _claudeChallengeEligible({
+          isClaudeConnector: _isClaudeConnector,
+          method: req.body?.method,
+          hasApiKeyHeader: !!req.headers['x-api-key'],
+          workosAuthed: _workosAuthed,
+          authHeader: req.headers['authorization'],
+          hasSession: !!(sessionId && sessions.has(sessionId)),
+        })) {
       // resource_metadata points at the FLASK-served document (not the stale CF
       // worker at /.well-known/*, which advertises custom scopes WorkOS rejects).
       // The Flask doc advertises the standard OIDC scopes WorkOS issues. scope=
@@ -14725,7 +14791,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _undercapOfferDue };
+export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
