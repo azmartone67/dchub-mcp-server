@@ -35,12 +35,30 @@ describe('human relay artifact threading', () => {
     expect(SRC).toContain('human_note: data.human_note || null');
   });
 
-  it('the rendered block shows the human link with its contract', async () => {
+  // r-human-first (2026-08-15, conversion item 1): DELIBERATE pin change. The
+  // old contract — a TRAILING humanLine appended by this builder — is retired:
+  // trailing lines are what agents summarize away (131 relays minted → 0 humans
+  // acted). The human link's ONE prose carrier is now the human-FIRST line the
+  // response sites compose via composeHumanFirst (pinned in
+  // human-line-first.test.mjs). This builder must NOT emit its own copy, or a
+  // response would stack two human-link lines.
+  it('the builder no longer appends its own trailing human line '
+     + '(single-carrier rule; the link leads the response instead)', async () => {
     const { text, sc } = await buildHighIntentClaimBlock(CLAIM, 'rank_markets');
-    expect(text).toContain('https://dchub.cloud/relay/tok-human');
-    expect(text.toLowerCase()).toContain('multi-use');
-    expect(text.toLowerCase()).toContain('binds nothing');
+    expect(text).not.toContain('https://dchub.cloud/relay/tok-human');
+    // machine consumers keep the structured field — unchanged
     expect(sc.high_intent_human_url).toBe('https://dchub.cloud/relay/tok-human');
+  });
+
+  it('every gated response site hoists claim.human_url to the FIRST line', () => {
+    // Source pin: the three anon-cascade/hard-block sites compose their prose
+    // through composeHumanFirst with the high-intent human link as the
+    // preferred URL. If a site drops the composer, the link goes back to
+    // dying inside the agent context.
+    const sites = SRC.match(/composeHumanFirst\(/g) || [];
+    expect(sites.length).toBeGreaterThanOrEqual(4); // 3 cascade sites + metered wall (+1 def)
+    expect(SRC).toContain('_hiClaim && _hiClaim.human_url');
+    expect(SRC).toContain('_hiClaim2 && _hiClaim2.human_url');
   });
 
   it('no human_url → block is byte-identical to the old world', async () => {
