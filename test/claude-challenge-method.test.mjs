@@ -109,3 +109,48 @@ describe('_resolveClaudeConnector — who counts as the Claude connector', () =>
     }
   });
 });
+
+// ── THE WIRING, not just the predicate ─────────────────────────────────────
+// Both earlier passes of this change were "green and mutation-verified" and both
+// shipped a challenge that fired for nobody, because every test supplied
+// recalledClientName BY HAND. The value's real producer — _rememberPlatform at
+// initialize, read back on a later tools/call — was never once exercised. The
+// second defect was reading `.clientName` off _recallPlatform(), which returns a
+// STRING; `.clientName` on a string is undefined, forever, silently.
+//
+// So: drive the round trip. This is the test that would have caught it.
+import { _rememberPlatform, _recallClientName, _recallPlatform } from '../server.mjs';
+
+describe('identity round-trip: what initialize remembers, tools/call must recall', () => {
+  it('THE SHIPPED DEFECT: _recallPlatform returns a STRING — .clientName on it is undefined', () => {
+    _rememberPlatform('sid-web', 'mcp', 'claude-ai');
+    const recalled = _recallPlatform('sid-web');
+    expect(typeof recalled === 'string' || recalled === null).toBe(true);
+    expect(recalled?.clientName).toBeUndefined();          // the exact bug, pinned
+    expect(_recallClientName('sid-web')).toBe('claude-ai'); // the accessor that works
+  });
+
+  // ★Drives the SAME path production drives: a sessionId in, the recall lookup
+  // happening inside the resolver. No hand-fed recalledClientName — that is what
+  // let two broken call sites go green.
+  it('a claude.ai web session is resolvable on a later tools/call', () => {
+    _rememberPlatform('sid-web-2', 'mcp', 'claude-ai');
+    expect(_resolveClaudeConnector({
+      ua: 'node', ciName: '', sessionId: 'sid-web-2',      // the real tools/call wire shape
+    })).toBe(true);
+  });
+
+  it('an unknown session resolves to nothing and is never challenged', () => {
+    expect(_recallClientName('sid-never-seen')).toBe(null);
+    expect(_resolveClaudeConnector({
+      ua: 'node', ciName: '', sessionId: 'sid-never-seen',
+    })).toBe(false);
+  });
+
+  it('another platform’s session does not resolve as Claude', () => {
+    _rememberPlatform('sid-cursor', 'cursor', 'cursor');
+    expect(_resolveClaudeConnector({
+      ua: 'node', ciName: '', sessionId: 'sid-cursor',
+    })).toBe(false);
+  });
+});
