@@ -64,6 +64,11 @@ export const MPP_COVERED_TOOLS = Object.freeze(Object.keys(MPP_PRICE));
 export const MPP_FUNNEL_STATUS = Object.freeze({
   /** passive pre-wall offer attached to a call that SUCCEEDED */
   OFFER_PREWALL:       'mpp_offer_prewall',
+  /** passive COMPACT offer on the FIRST under-cap full answer per (session, tool) —
+   *  distinct from OFFER_PREWALL on purpose: prewall means "at/near the last free
+   *  answer" (remaining <= MPP_PREWALL_AT), undercap means "earlier in the free
+   *  ration". Merging them would re-create the issued-vs-challenged conflation. */
+  OFFER_UNDERCAP:      'mpp_offer_undercap',
   /** a signed quote was ISSUED to the caller (NOT an attempt to pay) */
   QUOTE_ISSUED:        'mpp_challenge',
   /** the caller CAME BACK and presented a credential (the missing event) */
@@ -95,6 +100,12 @@ export const MPP_FUNNEL_BASIS = Object.freeze({
   mpp_offer_prewall:
     'Increments when mppPrewallOffer() returned an offer that was attached to a SUCCESSFUL '
     + 'tool result. The caller was NOT gated and paid nothing. Passive — not pay-intent.',
+  mpp_offer_undercap:
+    'Increments when mppUndercapOffer() returned a compact offer that was attached to a '
+    + 'SUCCESSFUL under-cap full answer — the first under-cap call per (session, tool), with '
+    + 'free answers still remaining (remaining > MPP_PREWALL_AT). The caller was NOT gated '
+    + 'and paid nothing. Passive — not pay-intent, and NOT mpp_offer_prewall (that counter '
+    + 'means at/near the LAST free answer and must stay uncontaminated).',
   mpp_challenge:
     'Increments when the gateway MINTED and RETURNED a signed price quote (challenge) to a '
     + 'gated caller that asked for one (_meta.mpp_pay or MPP_HARD_GATE). It records ISSUANCE '
@@ -390,5 +401,45 @@ export async function mppPrewallOffer(name, remaining) {
     note: last
       ? `This was your LAST free full \`${name}\` answer today. The next one is $${mppPrice(name)} — payable in one retry with the challenge below, no key and no human needed.`
       : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that it is $${mppPrice(name)} per call — payable in one retry with the challenge below, no key and no human needed.`,
+  };
+}
+
+/**
+ * r-undercap-offer (2026-08-15): COMPACT under-cap offer — the machine-payable
+ * option announced EARLY in the free ration, not only at/near its end.
+ *
+ * WHY: reachability re-measured 0.4% on 07-31 even after r-prewall/r-prewall-anon,
+ * because mppPrewallOffer only fires at remaining <= MPP_PREWALL_AT (default 1).
+ * With a 4/day/tool cap and agents doing one deep burst across ~8 payable tools
+ * then LEAVING, most under-cap calls carry only the _metered_trial human copy —
+ * no price, no _meta recipe — so a machine that wanted to pay in-turn was never
+ * told how until a per-tool moment ~99.6% of sessions never reach.
+ *
+ * DELIBERATELY SYNC AND COMPACT: no sidecar mint (the inline challenge stays
+ * reserved for the near-wall mppPrewallOffer). This is the advertise-hint shape —
+ * price_usd + the literal _meta keys/steps + ONE human line — small enough to
+ * ride every scheduled response without bloat. The SCHEDULE (first under-cap
+ * call per session per tool) lives in server.mjs (_undercapOfferDue), not here.
+ *
+ * ★ METRIC CONTRACT: passive, never `mpp_challenge`, and counted under its OWN
+ * status `mpp_offer_undercap` — NOT `mpp_offer_prewall`, which must keep meaning
+ * "offer at/near the last free answer" (see the 07-27 counter-name lesson:
+ * issued ≠ challenged; never conflate two events on one counter).
+ *
+ * @param {string} name       tool name
+ * @param {number} remaining  full answers left today AFTER this one (peek, no burn)
+ * @returns {object|null}     compact offer for structuredContent.agent_payment
+ */
+export function mppUndercapOffer(name, remaining) {
+  if (String(process.env.MPP_PREWALL_DISABLE || '') === '1') return null;   // family kill switch
+  if (String(process.env.MPP_UNDERCAP_DISABLE || '') === '1') return null;  // own kill switch
+  const base = mppAdvertiseHint(name);   // null unless MPP is live AND a payable tool
+  if (!base) return null;
+  return {
+    ...base,   // protocol, price_usd, machine_payable, how (the literal _meta recipe), credential_meta_key
+    offer_type: 'under_cap',                   // passive — NOT pay-intent, NOT the near-wall pre_wall offer
+    passive: true,
+    ...(Number.isFinite(remaining) ? { free_full_answers_remaining: remaining } : {}),
+    note: `Heads up while your free \`${name}\` answers last: any call — including after today's free cap — can be paid in-turn for $${mppPrice(name)} (no key, no subscription; see \`how\`).`,
   };
 }
