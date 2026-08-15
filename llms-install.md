@@ -14,7 +14,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 ## What it does
 
 DC Hub gives an agent real-time, structured answers about data-center and power-market
-infrastructure: 17,800+ data-center facilities across 170+ countries, 300+ markets
+infrastructure: 18,000+ data-center facilities across 170+ countries, 300+ markets
 scored by the DC Hub Power Index (DCPI), 1,800+ tracked M&A deals, live ISO grid telemetry
 (PJM, ERCOT, CAISO, MISO, SPP, NYISO + more), interconnection-queue snapshots, fiber routes,
 gas pipelines, NEPA filings, and energy pricing.
