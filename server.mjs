@@ -1861,14 +1861,74 @@ function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, m
 // Challenging only tools/call lets the connector attach, list all 82 tools and
 // take one answer before it is asked to sign in; the MCP auth spec is satisfied
 // either way, since 401 + WWW-Authenticate starts the same flow on either method.
-function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, hasSession }) {
+// ★★ r-challenge-identity (2026-08-15, same day, SECOND pass — the first pass
+// SILENTLY DISARMED THE CHALLENGE and a live probe caught it):
+//
+//   1. IDENTITY IS ONLY VISIBLE AT initialize. `_ciName` reads
+//      req.body.params.clientInfo.name, and a tools/call has no clientInfo. The
+//      claude.ai web connector ships a GENERIC user-agent (mostly "node"), so
+//      /Claude-User/ does not match it either — the exact inertness
+//      r-workos-challenge-clientinfo fixed for initialize in June, reintroduced
+//      at the other end by moving the method. Live probe after deploy:
+//      initialize 200, tools/call 200, no 401 anywhere. Resolve identity from
+//      _recallPlatform(sid) instead — which exists precisely because
+//      "initialize is the only request carrying clientInfo".
+//   2. hasSession CANNOT be an exemption here. The connector initializes, gets a
+//      session, and every later tools/call carries it — so a hasSession bail
+//      means the challenge never fires for anyone who completed a handshake,
+//      i.e. everyone. The credential checks (no X-API-Key, no Bearer, not
+//      WorkOS-authed) are what actually scope this to the anonymous cohort.
+//
+// ★priorAnonCalls is the "after value" in ask-after-value, made literal: the
+// FIRST anonymous tool call in a session is always served, and the challenge
+// arrives from the second on — the connector has an answer in hand before it is
+// asked to sign in. The counter is per-replica and lost on deploy, so a caller
+// bounced to a fresh replica gets another free call. That bias is deliberate and
+// one-directional: it UNDER-challenges, never over-challenges, matching the
+// ledger's own "a failed flush undercounts" rule.
+function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, priorAnonCalls }) {
   if (!isClaudeConnector) return false;
   if (method !== 'tools/call') return false;          // ★never on initialize — ask after value
   if (hasApiKeyHeader) return false;
   if (workosAuthed) return false;
   if (/^Bearer\s+\S/i.test(String(authHeader || ''))) return false;  // r-api-connector-bearer
-  if (hasSession) return false;
+  if (!(Number(priorAnonCalls) >= 1)) return false;   // first answer is free, always
   return true;
+}
+
+// ★Identity resolution, extracted so it is TESTABLE. It has to be: the first
+// pass of this change left the call site reading only clientInfo + UA, which are
+// both absent on a tools/call, and the pure-predicate tests passed anyway — a
+// mutation that reinstated exactly that defect went green across all 10 of them.
+// A guard that cannot fail on the bug it exists for is not a guard.
+//   · ciName  — req.body.params.clientInfo.name; present on initialize ONLY.
+//   · ua      — Claude-User, worn by the Messages-API connector but NOT by the
+//               claude.ai web connector (generic "node").
+//   · recalled — _recallPlatform(sid).clientName, remembered AT initialize and
+//               the only identity a later tools/call can be judged on.
+export function _resolveClaudeConnector({ ua, ciName, recalledClientName }) {
+  if (/Claude-User/i.test(String(ua || ''))) return true;
+  if (String(ciName || '').trim().toLowerCase() === 'claude-ai') return true;
+  if (String(recalledClientName || '').trim().toLowerCase() === 'claude-ai') return true;
+  return false;
+}
+
+// Bounded per-session count of anonymous tool calls already SERVED to a Claude
+// connector. Same FIFO-drop shape as _PLATFORM_RECALL; never a source of truth
+// for anything but this challenge.
+const _ANON_CALLS = new Map();
+const _ANON_CALLS_MAX = 5000;
+function _anonCallCount(sid) {
+  if (!sid) return 0;
+  return Number(_ANON_CALLS.get(String(sid)) || 0);
+}
+function _bumpAnonCall(sid) {
+  if (!sid) return;
+  if (_ANON_CALLS.size >= _ANON_CALLS_MAX) {
+    let i = 0; const drop = _ANON_CALLS_MAX / 10;
+    for (const k of _ANON_CALLS.keys()) { _ANON_CALLS.delete(k); if (++i >= drop) break; }
+  }
+  _ANON_CALLS.set(String(sid), _anonCallCount(sid) + 1);
 }
 
 function cacheKey(api_key, result) {
@@ -14325,13 +14385,21 @@ app.post('/mcp', async (req, res) => {
     // does it correctly (validateKey() → valid key rides as X-API-Key → 200;
     // junk/expired → 401 invalid_token). Keyless claude.ai web stays
     // challenged exactly as designed.
+    // ★_isClaudeConnector alone is INERT on tools/call — no clientInfo on the
+    // wire and a generic UA. Fold in the identity remembered from initialize.
+    const _isClaudeConnectorNow = _resolveClaudeConnector({
+      ua: userAgent,
+      ciName: _ciName,
+      recalledClientName: (_recallPlatform(sessionId) || {}).clientName,
+    });
+    const _anonCallsSoFar = _anonCallCount(sessionId);
     if (_workosEnabled() && !_challengeDisabled && _claudeChallengeEligible({
-          isClaudeConnector: _isClaudeConnector,
+          isClaudeConnector: _isClaudeConnectorNow,
           method: req.body?.method,
           hasApiKeyHeader: !!req.headers['x-api-key'],
           workosAuthed: _workosAuthed,
           authHeader: req.headers['authorization'],
-          hasSession: !!(sessionId && sessions.has(sessionId)),
+          priorAnonCalls: _anonCallsSoFar,
         })) {
       // resource_metadata points at the FLASK-served document (not the stale CF
       // worker at /.well-known/*, which advertises custom scopes WorkOS rejects).
@@ -14351,6 +14419,17 @@ app.post('/mcp', async (req, res) => {
         error: { code: -32001, message: 'Authorization required — sign in to DC Hub to continue.' },
         id: (req.body && req.body.id) ?? null,
       });
+    }
+    // Not challenged, and this is an anonymous Claude-connector tool call → it is
+    // about to be SERVED. Count it, so the next one in this session meets the
+    // wall with an answer already in hand. Bumped here rather than after the
+    // handler because every path below this point serves the call; a bump that
+    // waited for success would need to thread through the stateless transport,
+    // and under-counting there would silently restore "never challenge".
+    if (req.body?.method === 'tools/call' && _isClaudeConnectorNow
+        && !req.headers['x-api-key'] && !_workosAuthed
+        && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))) {
+      _bumpAnonCall(sessionId);
     }
     // ── r-invalid-bearer-401 (2026-07-16): present-but-invalid Bearer → 401 ──
     // See _invalidBearerEligible for the full decision table + rationale.
@@ -14791,7 +14870,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue };
+export { _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
