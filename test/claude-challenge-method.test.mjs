@@ -20,7 +20,7 @@ const base = {
   hasApiKeyHeader: false,
   workosAuthed: false,
   authHeader: undefined,
-  hasSession: false,
+  priorAnonCalls: 1,   // the first anonymous answer in a session is always free
 };
 
 describe('_claudeChallengeEligible — ask after value, not before it', () => {
@@ -58,8 +58,17 @@ describe('_claudeChallengeEligible — ask after value, not before it', () => {
     expect(_claudeChallengeEligible({ ...base, authHeader: 'Bearer junk' })).toBe(false);
   });
 
-  it('an established session is never yanked mid-flight', () => {
-    expect(_claudeChallengeEligible({ ...base, hasSession: true })).toBe(false);
+  // ★The defect the first pass shipped: hasSession was an exemption, and the
+  // connector holds a session on every call after initialize — so the challenge
+  // fired for nobody. A live probe (initialize 200 -> tools/call 200) caught it.
+  it('THE ASK-AFTER-VALUE GUARD: the first anonymous call in a session is free', () => {
+    expect(_claudeChallengeEligible({ ...base, priorAnonCalls: 0 })).toBe(false);
+    expect(_claudeChallengeEligible({ ...base, priorAnonCalls: undefined })).toBe(false);
+  });
+
+  it('the second call onward IS challenged', () => {
+    expect(_claudeChallengeEligible({ ...base, priorAnonCalls: 1 })).toBe(true);
+    expect(_claudeChallengeEligible({ ...base, priorAnonCalls: 7 })).toBe(true);
   });
 
   // Guard against the lazy refactor that reinstates the old behaviour by
@@ -68,6 +77,35 @@ describe('_claudeChallengeEligible — ask after value, not before it', () => {
     for (const m of ['initialize', 'tools/list', 'ping', 'resources/list',
                      'prompts/list', 'notifications/initialized', undefined, '']) {
       expect(_claudeChallengeEligible({ ...base, method: m })).toBe(false);
+    }
+  });
+});
+
+// ── identity resolution ────────────────────────────────────────────────────
+// These exist because a mutation that made identity resolution inert again —
+// the precise defect the first pass of this change shipped to production —
+// passed every test above. The pure predicate never sees clientInfo or the UA,
+// so it could not.
+import { _resolveClaudeConnector } from '../server.mjs';
+
+describe('_resolveClaudeConnector — who counts as the Claude connector', () => {
+  it('THE SHIPPED DEFECT: a tools/call has NO clientInfo and a generic UA — the web connector is identifiable ONLY by what initialize remembered', () => {
+    expect(_resolveClaudeConnector({ ua: 'node', ciName: '', recalledClientName: 'claude-ai' })).toBe(true);
+    expect(_resolveClaudeConnector({ ua: 'node', ciName: '', recalledClientName: '' })).toBe(false);
+  });
+
+  it('initialize still resolves from clientInfo directly', () => {
+    expect(_resolveClaudeConnector({ ua: 'node', ciName: 'claude-ai' })).toBe(true);
+    expect(_resolveClaudeConnector({ ua: 'node', ciName: 'Claude-AI' })).toBe(true);
+  });
+
+  it('the Messages-API connector is still caught by its UA', () => {
+    expect(_resolveClaudeConnector({ ua: 'Claude-User/1.0', ciName: '' })).toBe(true);
+  });
+
+  it('every other client resolves false', () => {
+    for (const c of ['cursor', 'cline', 'chatgpt', 'smithery', 'mcp', '', undefined]) {
+      expect(_resolveClaudeConnector({ ua: 'node', ciName: c, recalledClientName: c })).toBe(false);
     }
   });
 });
