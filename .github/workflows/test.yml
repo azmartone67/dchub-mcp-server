@@ -142,7 +142,7 @@ jobs:
       # to actually run IN CI on this PR, not merely locally — a red run on a
       # deliberate mutation of that clause, then green on its revert.
       - name: Unit gate — gating logic (HARD gate, no network)
-        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/mpp-funnel-split.test.mjs test/mpp-receipt-replay.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs test/front-door-routing-descriptions.test.mjs test/retired-claims.test.mjs
+        run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/mpp-funnel-split.test.mjs test/mpp-receipt-replay.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs test/front-door-routing-descriptions.test.mjs test/retired-claims.test.mjs test/free-key-arbitrage.test.mjs test/invalid-bearer.test.mjs
 
       - name: Live MCP suite — informational (non-blocking)
         continue-on-error: true
