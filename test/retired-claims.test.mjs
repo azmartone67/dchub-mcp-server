@@ -27,6 +27,14 @@ const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', '.next']);
 const RETIRED = [
   { pattern: /369\s*GW/i, why: 'retired pipeline capacity figure' },
   { pattern: /540\+\s*projects/i, why: 'retired pipeline project count' },
+  // Unscoped CC-BY over the whole corpus. DATA-LICENSE.md §3 grants NO
+  // redistribution right on the facility inventory (OpenStreetMap is ODbL
+  // share-alike; several upstreams are terms-unconfirmed), so a blanket
+  // "open CC-BY-4.0 cited data" beside an 18,000+ facilities claim asserts a
+  // grant we do not hold. CC-BY-4.0 itself is CORRECT and must stay legal on
+  // the DCPI/grid/energy/tax tools (§1, §2) — only the unscoped phrasing is
+  // banned, which is why this is a phrase ban and not a token ban.
+  { pattern: /open CC-BY-4\.0 cited data/i, why: 'unscoped CC-BY grant over the facility corpus (DATA-LICENSE.md §3)' },
 ];
 
 function* files(dir) {
