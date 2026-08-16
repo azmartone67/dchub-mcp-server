@@ -1247,9 +1247,36 @@ const VARIANT_COPY = {
 // brake) and surface the key inline for the agent to save into its MCP config.
 // Fail-soft: any failure leaves the original relay-to-human copy untouched.
 // Kill-switch: DCHUB_AUTO_REDEEM_DISABLE=1.
-const _autoRedeemDisabled = process.env.DCHUB_AUTO_REDEEM_DISABLE === '1';
+//
+// ── r-stop-arbitrage (2026-08-16) — AUTO-REDEEM IS NOW OPT-IN ──────────────
+// ★MEASURED on GET /api/v1/admin/relay-watch, in a 7d window lying ENTIRELY
+// after the 2026-07-30 two-artifact split: 560 claims minted → 537 redeemed BY
+// MACHINE at a median gap of 0.79s (500 of them inside 2s) → machine_arbitrage
+// 95.9%, 554 free keys issued, human_opened 0, conversions 0. The 14d window
+// reads the same (96.3% @ 0.85s median). The dashboard note declaring "the
+// token race is already fixed … the remaining loss is delivery or appeal, not
+// the token" is therefore wrong: splitting the artifacts never removed the
+// thing that CONSUMES one of them, which is this call.
+//
+// r-agent-redeem's stated benefit was retention — "drives repeat usage +
+// retention". That is now measurable, and it is false: /api/v1/mcp/retention
+// puts free-key cross-week return at 0.5% (1 of a 200-key mature cohort)
+// against 55.6% for an OAuth identity (n=9) and 2.4% for durable keys overall.
+// We were spending the entire human handoff to buy a key that does not retain.
+//
+// NOT disabled by deletion — the machinery, the variant plumbing and the
+// backend endpoint all stay put behind DCHUB_AUTO_REDEEM_ENABLE=1, so this is
+// one Railway env var to reverse. An already-set DCHUB_AUTO_REDEEM_DISABLE=1
+// remains honoured by construction, since the default is now disabled anyway.
+//
+// ★Deliberately a FUNCTION, not a module-load const. That is #192's lesson:
+// a const evaluated at import time cannot be re-read after a test sets the
+// env, so the guard pins nothing and goes silently green.
+function _autoRedeemEnabled() {
+  return process.env.DCHUB_AUTO_REDEEM_ENABLE === '1';
+}
 async function _autoRedeemClaim(claimToken, variant) {
-  if (!claimToken || _autoRedeemDisabled) return null;
+  if (!claimToken || !_autoRedeemEnabled()) return null;
   try {
     const r = await fetch(new URL('/api/v1/mcp/high-intent/redeem', API_BASE).toString(), {
       method: 'POST',
@@ -14879,7 +14906,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue };
+export { _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
