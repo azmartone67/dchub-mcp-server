@@ -2,9 +2,9 @@
   "_generated_by": "scripts/refresh-canon-phrases.mjs",
   "_source": "https://dchub.cloud/api/v1/canon/phrases",
   "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by sync-tools-manifest.mjs (and the smithery-canon-guard test) as the source for every phrase quantity in server.mjs + the registry files.",
-  "retrieved_at": "2026-08-16T13:48:56.789Z",
+  "retrieved_at": "2026-08-17T13:53:28.048Z",
   "tools": 82,
-  "facilities": "18,100+",
+  "facilities": "18,300+",
   "countries": "170+",
   "deals": "1,800+",
   "markets": "300+"
