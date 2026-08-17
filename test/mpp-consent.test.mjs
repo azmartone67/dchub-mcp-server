@@ -75,6 +75,16 @@ describe('MPP consent: no opt-in, no charge', () => {
     expect(mpp.mppCredential(quoteOnly)).toBeNull();
   });
 
+  it('holds identically on the ARGUMENT channel (r-mpp-arg-channel, 2026-08-17)', () => {
+    // The 'quote opt-in via args' row above was a placeholder that passed `{_meta:{}}`
+    // and tested nothing — args were not a channel yet, because zod stripped the
+    // undeclared key. Now that MPP tools DECLARE mpp_pay, the invariant has a
+    // second door and must be asserted at it.
+    const sig = mpp.mppTakeArgSignal({ [mpp.MPP_ARG_PAY]: true });
+    expect(mpp.mppWantsChallenge(undefined, sig)).toBe(true);
+    expect(mpp.mppCredential(undefined, sig), 'a quote request must never authorize a charge').toBeNull();
+  });
+
   it('does not infer consent from the tool being payable', () => {
     // Being on the rail is not consent. Both must be true to settle, and the
     // second one is the caller's decision.
@@ -115,11 +125,17 @@ describe('MPP consent: the settle call stays behind its guard', () => {
     }
   });
 
-  it('the credential that guards the settle comes from mppCredential(extra)', () => {
+  it('the credential that guards the settle comes from mppCredential(extra, …)', () => {
     const src = readFileSync(SERVER, 'utf8');
     // Pins the SOURCE of the guard value. Without this, `_mppCred` could be
     // reassigned from something permissive (e.g. a default-true flag) and the
     // structural test above would still pass.
-    expect(src).toMatch(/const\s+_mppCred\s*=\s*mppCredential\s*\(\s*extra\s*\)/);
+    //
+    // r-mpp-arg-channel (2026-08-17): this pinned the exact arity
+    // `mppCredential(extra)`, so adding the model-writable argument channel — a
+    // legitimate change — failed the guard that existed to catch a DIFFERENT
+    // thing. Loosened to the actual invariant: the guard value comes from
+    // mppCredential over `extra` FIRST. Anything permissive still fails.
+    expect(src).toMatch(/const\s+_mppCred\s*=\s*mppCredential\s*\(\s*extra\b/);
   });
 });
