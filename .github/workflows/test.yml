@@ -141,6 +141,24 @@ jobs:
       # committed server.mjs plus one exported table), mutates nothing. Proven
       # to actually run IN CI on this PR, not merely locally — a red run on a
       # deliberate mutation of that clause, then green on its revert.
+      # ★2026-08-17 (r-sandbox) — READ THIS BEFORE ADDING A FILE-MUTATING TEST
+      # TO THIS LINE. vitest runs these files in PARALLEL workers. Several of
+      # them readFileSync server.mjs at module load and assert on its source,
+      # and smithery-canon-guard used to mutate-and-restore server.mjs (~1 MB)
+      # in the shared working tree. Measured at 3e73cd0: a sampler reading
+      # server.mjs alongside six canon-guard runs saw the guard's transient
+      # "190+ countries" / "12,650+ … facilities" strings in 307 of 8,233
+      # samples, and saw the file at ZERO BYTES once (writeFileSync opens
+      # O_TRUNC, then writes). anon-seat-fence went red on that in 2 of 3
+      # full-suite runs; 0 of 3 after the fix. Same shape as PR #180, run
+      # 31653502482 (execute-plan-cohort: "expected -1 to be greater than -1",
+      # green on `gh run rerun --failed` at the identical commit).
+      # The flake was the mild half; a clobbered mutation also makes the canon
+      # guard's must-fail controls pass VACUOUSLY, which ships real drift green.
+      # The gate stays parallel because the mutation moved off the shared tree
+      # entirely — see test/helpers/repo-sandbox.mjs. Any new test here that
+      # writes to disk MUST use createRepoSandbox(); smithery-canon-guard has a
+      # control that fails the gate if another test file calls an fs write.
       - name: Unit gate — gating logic (HARD gate, no network)
         run: npx vitest run test/gating.test.mjs test/oauth.test.mjs test/platform-desc-sync.test.mjs test/smithery-canon-guard.test.mjs test/execute-plan-cohort.test.mjs test/go-checkout-link.test.mjs test/oauth-first-copy.test.mjs test/mpp-consent.test.mjs test/mpp-onestep.test.mjs test/mpp-prewall.test.mjs test/mpp-funnel-split.test.mjs test/mpp-receipt-replay.test.mjs test/wall-exits.test.mjs test/human-relay-artifact.test.mjs test/front-door-routing-descriptions.test.mjs test/retired-claims.test.mjs test/free-key-arbitrage.test.mjs test/invalid-bearer.test.mjs test/hyperscaler-deals-schema.test.mjs
 

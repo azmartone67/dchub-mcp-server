@@ -18,13 +18,50 @@
 // It deliberately does NOT restate the canonical numbers. It reads them from
 // the script itself, so raising a floor updates the test automatically and a
 // stale copy here can never certify a stale copy there.
-import { describe, it, expect } from 'vitest';
+//
+// ★2026-08-17 (r-sandbox): every mutation below used to happen IN THE SHARED
+// WORKING TREE. It no longer does — see test/helpers/repo-sandbox.mjs for the
+// full autopsy. Short version: vitest runs test FILES in parallel and several
+// siblings readFileSync server.mjs at module load, so they could observe this
+// file's transient "190+ countries" / "12,650+ … facilities" mutations and
+// fail on drift nobody introduced. Measured on this repo at 3e73cd0: a sampler
+// reading server.mjs alongside six canon-guard runs caught the stale claims in
+// 307 of 8,233 samples, and caught the file at ZERO BYTES once (writeFileSync
+// opens O_TRUNC then writes, and server.mjs is ~1 MB).
+// The flake was the visible half. The invisible half is that a clobbered
+// mutation or an early restore makes the must-fail controls below pass
+// VACUOUSLY — a guard certifying canon it never actually broke. So the
+// mutations now run against a private copy of the working tree, through a
+// writer that REFUSES any path outside it. The refusal is the guarantee; the
+// tree fingerprint at the bottom of this file is only a backstop, and a weak
+// one (see the note on the isolation controls).
+import { describe, it, expect, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRepoSandbox, fingerprintTree, fingerprintDiff } from './helpers/repo-sandbox.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REAL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// Fingerprint the shared tree BEFORE anything runs, so the afterAll control
+// below can prove nothing here touched it.
+const TREE_BEFORE = fingerprintTree(REAL_ROOT);
+
+// Every path this file reads or writes points INTO the sandbox. The sync
+// script derives its ROOT from its own location and never reads process.cwd,
+// so invoking the sandbox copy roots the whole check inside the sandbox.
+const SANDBOX = createRepoSandbox(REAL_ROOT);
+const ROOT = SANDBOX.root;
+afterAll(() => SANDBOX.cleanup());
+
+// The single write primitive every mutation below uses. It REFUSES any path
+// outside the sandbox, which is what makes the isolation deterministic rather
+// than merely observed: a mutate-and-restore aimed at the shared tree is
+// invisible to an after-the-fact tree comparison (the restore heals it before
+// anyone looks) but cannot get past this.
+const sandboxWrite = SANDBOX.write;
+
 const SCRIPT = path.join(ROOT, 'scripts', 'sync-tools-manifest.mjs');
 const YAML = path.join(ROOT, 'smithery.yaml');
 
@@ -41,10 +78,10 @@ function check() {
 function withMutation(mutate, fn) {
   const original = fs.readFileSync(YAML, 'utf8');
   try {
-    fs.writeFileSync(YAML, mutate(original));
+    sandboxWrite(YAML, mutate(original));
     return fn();
   } finally {
-    fs.writeFileSync(YAML, original);
+    sandboxWrite(YAML, original);
   }
 }
 
@@ -67,10 +104,10 @@ const FACILITIES = (SNAP && isPhrase(SNAP.facilities)) ? SNAP.facilities : null;
 function withCanonMutation(mutate, fn) {
   const original = fs.readFileSync(CANON_PATH, 'utf8');
   try {
-    fs.writeFileSync(CANON_PATH, mutate(original));
+    sandboxWrite(CANON_PATH, mutate(original));
     return fn();
   } finally {
-    fs.writeFileSync(CANON_PATH, original);
+    sandboxWrite(CANON_PATH, original);
   }
 }
 
@@ -174,10 +211,10 @@ describe('smithery.yaml canonical-quantity guard', () => {
     try {
       const next = mutate(original);
       expect(next, 'server.mjs mutation was a no-op — control proves nothing').not.toBe(original);
-      fs.writeFileSync(SERVER, next);
+      sandboxWrite(SERVER, next);
       return fn();
     } finally {
-      fs.writeFileSync(SERVER, original);
+      sandboxWrite(SERVER, original);
     }
   }
 
@@ -234,10 +271,10 @@ describe('smithery.yaml canonical-quantity guard', () => {
       const next = mutate(original);
       expect(next, `mutation of ${path.basename(file)} was a no-op — control proves nothing`)
         .not.toBe(original);
-      fs.writeFileSync(file, next);
+      sandboxWrite(file, next);
       return fn();
     } finally {
-      fs.writeFileSync(file, original);
+      sandboxWrite(file, original);
     }
   }
 
@@ -313,4 +350,83 @@ describe('smithery.yaml canonical-quantity guard', () => {
     expect(count).toBeGreaterThan(20);
     expect(listed.length, 'smithery.yaml tools: list drifted from the live catalog').toBe(count);
   });
+
+  // ── isolation controls (★2026-08-17) ──
+  // Isolation is enforced in three places, weakest last, because the first two
+  // are the ones that hold:
+  //   1. SANDBOX.write() REFUSES a path outside the sandbox — deterministic,
+  //      at the write site. This is the real guarantee.
+  //   2. the static scan below — no OTHER test file may write to disk at all.
+  //   3. the tree fingerprint — an after-the-fact backstop.
+  // (3) is listed last on purpose. It does catch a mutate-and-restore in THIS
+  // file's own run window — verified 2026-08-17 by bypassing (1) with a raw
+  // fs.writeFileSync at the real server.mjs, which it flagged, because it signs
+  // mtime/ctime/inode and not just content. But it reports only after the
+  // window has already been open, and it cannot see a SIBLING file's write at
+  // all. Reading it as the guarantee would be exactly the vacuous-control
+  // mistake this file exists to prevent.
+
+  it('refuses to write outside the sandbox (the write-site guarantee)', () => {
+    expect(ROOT, 'the sandbox must not be the repo itself').not.toBe(REAL_ROOT);
+    expect(SANDBOX.inside(path.join(ROOT, 'server.mjs')), 'sandbox paths must be writable')
+      .toBe(true);
+    expect(() => sandboxWrite(path.join(REAL_ROOT, 'server.mjs'), 'x'))
+      .toThrow(/refusing to write OUTSIDE the sandbox/);
+    // …including the sandbox's own parent, and any path that merely shares a prefix.
+    expect(() => sandboxWrite(`${ROOT}-sibling/server.mjs`, 'x'))
+      .toThrow(/refusing to write OUTSIDE the sandbox/);
+    expect(() => sandboxWrite(path.join(ROOT, '..', 'escape.txt'), 'x'))
+      .toThrow(/refusing to write OUTSIDE the sandbox/);
+  });
+
+  it('left the shared working tree untouched', () => {
+    const changed = fingerprintDiff(TREE_BEFORE, fingerprintTree(REAL_ROOT));
+    expect(changed.join(', '),
+      'a test wrote to the shared working tree — that is the race this file was ' +
+      'isolated to close (mutate the sandbox copy, never the repo)').toBe('');
+    // Non-vacuity: the fingerprint must actually be able to see the files the
+    // controls above mutate, or "unchanged" means nothing.
+    for (const rel of ['server.mjs', 'smithery.yaml', 'canonical/canon_phrases.json',
+                       'REGISTRY-LISTINGS.md']) {
+      expect(TREE_BEFORE.has(rel), `${rel} is not fingerprinted — this control is blind`).toBe(true);
+    }
+  });
+
+  // Source-level companion, and the only one of the three that can see a
+  // SIBLING test file: neither the write-site check nor the fingerprint can
+  // reliably catch another worker's mutate-and-restore.
+  it('no other test file writes to the shared working tree', () => {
+    const TEST_DIR = path.join(REAL_ROOT, 'test');
+    // Exactly ONE exemption: the sandbox helper, whose whole job is the temp
+    // copy. This file is NOT exempt — it writes only through SANDBOX.write(),
+    // so a raw fs write reintroduced here gets caught like anyone else's.
+    const ALLOWED = new Set(['helpers/repo-sandbox.mjs']);
+    const WRITES = /\bfs(?:p|\.promises)?\.(writeFileSync|writeFile|appendFileSync|appendFile|rmSync|rm|unlinkSync|unlink|renameSync|rename|copyFileSync|copyFile|cpSync|cp|truncateSync|truncate|createWriteStream)\s*\(/;
+
+    const walk = (dir, prefix = '') => fs.readdirSync(dir, { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory()
+        ? walk(path.join(dir, e.name), `${prefix}${e.name}/`)
+        : (e.name.endsWith('.mjs') ? [`${prefix}${e.name}`] : [])));
+    const files = walk(TEST_DIR);
+
+    // Non-vacuity: the pattern must fire on the file that legitimately writes.
+    const helper = fs.readFileSync(path.join(TEST_DIR, 'helpers', 'repo-sandbox.mjs'), 'utf8');
+    expect(WRITES.test(helper), 'the write-detector matches nothing — this control is vacuous')
+      .toBe(true);
+
+    const offenders = files.filter((rel) => !ALLOWED.has(rel)
+      && WRITES.test(fs.readFileSync(path.join(TEST_DIR, rel), 'utf8')));
+    expect(offenders.join(', '),
+      'these test files mutate files on disk — vitest runs test FILES in parallel, so a ' +
+      'sibling reading the same path can observe it mid-write (fs.writeFileSync truncates ' +
+      'first). Use createRepoSandbox() from test/helpers/repo-sandbox.mjs instead.').toBe('');
+  });
+});
+
+// Order-proof backstop for the isolation control above.
+afterAll(() => {
+  const changed = fingerprintDiff(TREE_BEFORE, fingerprintTree(REAL_ROOT));
+  if (changed.length) {
+    throw new Error(`the shared working tree was modified during this run: ${changed.join(', ')}`);
+  }
 });
