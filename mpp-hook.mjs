@@ -14,11 +14,64 @@
  * Constants mirror mppx's Mcp module (hardcoded so we don't import it).
  */
 import { createHash } from 'node:crypto';
+import { z } from 'zod';   // for mppArgShape() only — server.mjs already depends on it
 
 export const MPP_CRED_KEY         = 'org.paymentauth/credential';
 export const MPP_RECEIPT_KEY      = 'org.paymentauth/receipt';
 export const MPP_PAYMENT_REQUIRED = -32042;   // mppx Mcp.paymentRequiredCode
 export const MPP_PAYMENT_FAILED   = -32043;   // mppx Mcp.paymentVerificationFailedCode
+
+/**
+ * ── THE ARGUMENT CHANNEL (r-mpp-arg-channel, 2026-08-17) ───────────────────
+ *
+ * WHAT WAS WRONG. Every instruction this rail publishes told the agent to put
+ * the payment signal in `_meta` — `_meta.mpp_pay=true`, then
+ * `_meta["org.paymentauth/credential"]`. `_meta` is JSON-RPC PARAMS-level
+ * (`params._meta`), set by the MCP client library. A model emitting a tool call
+ * controls exactly one thing: `arguments`. So the recipe was addressed to an
+ * audience that cannot follow it — the host SDK would have to know about DC
+ * Hub's flag and choose to forward it.
+ *
+ * Verified live 2026-08-17 on free-tier analyze_site:
+ *   params._meta.mpp_pay=true      → payment_required + challenge  (works, but
+ *                                    only a CLIENT can send it)
+ *   arguments._meta.mpp_pay=true   → no-op, response byte-identical to baseline
+ *   arguments.mpp_pay=true         → no-op
+ *
+ * The last one is the sharp part. `mppWantsChallenge` has read
+ * `args.mpp_pay` since f845d94 (2026-06-21), so the argument channel looked
+ * implemented for ~2 months. It could never fire: the SDK validates
+ * `params.arguments` with `safeParseAsync(z.object(shape))` and hands the
+ * callback `parseResult.data` — zod STRIPS undeclared keys. A payment param
+ * that is not in the tool's inputSchema is deleted before any DC Hub code sees
+ * it. Reading an arg is not the same as DECLARING it, and only the declaration
+ * makes it survive validation.
+ *
+ * So the names live here, as one source, and are declared into the schema of
+ * every MPP tool at registration (server.mjs trackedTool). `_meta` keeps
+ * working for SDK-level clients; these give the MODEL a channel it can reach.
+ */
+export const MPP_ARG_PAY  = 'mpp_pay';
+export const MPP_ARG_CRED = 'mpp_credential';
+export const MPP_ARG_KEYS = Object.freeze([MPP_ARG_PAY, MPP_ARG_CRED]);
+
+/**
+ * The zod raw shape server.mjs merges into every payable tool's inputSchema.
+ *
+ * It lives HERE, next to the names and the price table, so the DECLARATION and
+ * the READER cannot drift — the two-month dead-code window existed precisely
+ * because they lived apart and nothing tied them together. Exported so the guard
+ * can register a real tool with this exact shape and prove the params survive
+ * SDK validation, rather than asserting zod's behaviour from memory.
+ */
+export function mppArgShape() {
+  return {
+    [MPP_ARG_PAY]: z.boolean().optional().describe(
+      'Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.'),
+    [MPP_ARG_CRED]: z.string().optional().describe(
+      'Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.'),
+  };
+}
 
 const MPP_PRICE = {
   analyze_site: '0.50', compare_sites: '0.50',
@@ -108,10 +161,10 @@ export const MPP_FUNNEL_BASIS = Object.freeze({
     + 'means at/near the LAST free answer and must stay uncontaminated).',
   mpp_challenge:
     'Increments when the gateway MINTED and RETURNED a signed price quote (challenge) to a '
-    + 'gated caller that asked for one (_meta.mpp_pay or MPP_HARD_GATE). It records ISSUANCE '
-    + 'of a quote, NOT an attempt to pay. Nothing came back at this point.',
+    + 'gated caller that asked for one (the mpp_pay ARGUMENT, _meta.mpp_pay, or MPP_HARD_GATE). '
+    + 'It records ISSUANCE of a quote, NOT an attempt to pay. Nothing came back at this point.',
   mpp_credential_returned:
-    'Increments the instant mppCredential(extra) returns non-null on a gated MPP tool call — '
+    'Increments the instant mppCredential(extra, argSignal) returns non-null on a gated MPP tool call — '
     + 'i.e. the caller CAME BACK and presented a credential. Stamped BEFORE mppVerify() runs, '
     + 'so it counts the return even when the settle never reaches a terminal state.',
   mpp_verify_failed:
@@ -153,11 +206,56 @@ export function mppEnabled() {
 export function isMppTool(name) { return MPP_TOOLS.has(name); }
 export function mppPrice(name) { return MPP_PRICE[name] || '0.50'; }
 
-/** Pull an SPT credential out of the MCP request _meta (the SDK handler's `extra` arg). */
-export function mppCredential(extra) {
+/**
+ * Lift the payment signal OUT of the tool arguments, DELETING the keys as it goes.
+ *
+ * Destructive on purpose, and it must run before anything else touches `args`:
+ *
+ *  - THE CREDENTIAL MUST NOT REACH THE HANDLER. Handlers forward their args to
+ *    the REST twin (`callAPI('/api/site-score', args)`), so a credential left in
+ *    place would be copied into a backend query string — a bearer secret in a URL.
+ *  - THE CALL DIGEST MUST NOT SEE IT. mppCallDigest() hashes `args` to scope one
+ *    payment to one call. If the signal stayed in, the SAME logical call would
+ *    digest differently depending on how the agent happened to signal payment,
+ *    and an honest retry would read as "spent on a DIFFERENT call".
+ *  - TELEMETRY MUST NOT LOG IT. trackToolCall logs `params: args`.
+ *
+ * Mirrors the cohort normalization in server.mjs: mutate the ORIGINAL args object
+ * early, so every later reader (gate, digest, handler, track) sees one clean shape.
+ *
+ * @returns {{mpp_pay: boolean, mpp_credential: (string|object|null)}} the lifted signal
+ */
+export function mppTakeArgSignal(args) {
+  const out = { [MPP_ARG_PAY]: false, [MPP_ARG_CRED]: null };
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return out;
+  if (MPP_ARG_PAY in args) {
+    out[MPP_ARG_PAY] = args[MPP_ARG_PAY] === true || args[MPP_ARG_PAY] === 'true';
+    delete args[MPP_ARG_PAY];
+  }
+  if (MPP_ARG_CRED in args) {
+    const v = args[MPP_ARG_CRED];
+    if (typeof v === 'string' ? v.trim() !== '' : !!(v && typeof v === 'object')) out[MPP_ARG_CRED] = v;
+    delete args[MPP_ARG_CRED];
+  }
+  return out;
+}
+
+/**
+ * Pull an SPT credential out of the MCP request _meta (the SDK handler's `extra`
+ * arg), or out of the lifted argument signal (see mppTakeArgSignal) — the only
+ * channel a MODEL can write. `_meta` wins: an SDK-level client that sets it is
+ * being more explicit than a model filling in a tool parameter.
+ *
+ * CONSENT IS UNCHANGED BY THE SECOND CHANNEL. Only an explicit credential
+ * returns non-null. `mpp_pay` — in `_meta` OR in args — is quote-intent and must
+ * keep reading as null here; see mpp-consent.test.mjs.
+ */
+export function mppCredential(extra, argSignal) {
   const m = extra && (extra._meta || extra.meta || (extra.requestInfo && extra.requestInfo._meta));
   const v = m && m[MPP_CRED_KEY];
-  return (typeof v === 'string' || (v && typeof v === 'object')) ? v : null;
+  if (typeof v === 'string' || (v && typeof v === 'object')) return v;
+  const a = argSignal && argSignal[MPP_ARG_CRED];
+  return (typeof a === 'string' || (a && typeof a === 'object')) ? a : null;
 }
 
 async function _post(path, payload, ms = 8000) {
@@ -263,10 +361,16 @@ export async function mppVerify(name, credential, callDigest) {
  * Per-call opt-in: did the agent ask for an MPP payment challenge on THIS call?
  * Lets an MPP-capable agent get a 402 challenge without the global MPP_HARD_GATE —
  * so humans (who never set this) keep their normal trial/preview funnel.
+ *
+ * Second arg is the LIFTED signal from mppTakeArgSignal(), not raw arguments. The
+ * `args.mpp_pay` clause has existed since 2026-06-21 and was unreachable for two
+ * months because zod stripped the undeclared key before this ran (see the
+ * ARGUMENT CHANNEL block at the top). It fires only now that MPP tools DECLARE
+ * `mpp_pay` — reading a param is not declaring it.
  */
 export function mppWantsChallenge(extra, args) {
   const m = (extra && (extra._meta || extra.meta || (extra.requestInfo && extra.requestInfo._meta))) || {};
-  return !!(m.mpp_pay || m['org.paymentauth/pay'] || (args && args.mpp_pay));
+  return !!(m.mpp_pay || m['org.paymentauth/pay'] || (args && args[MPP_ARG_PAY]));
 }
 
 /**
@@ -287,7 +391,9 @@ export function mppAdvertiseHint(name) {
     price_usd: price,
     machine_payable: true,
     note: `Machine-payable: pay $${price} for this single \`${name}\` call (no key, no subscription) via Stripe MPP — a Shared Payment Token — to unlock the full result.`,
-    how: `Step 1: retry this exact call with _meta.mpp_pay=true to receive a payment challenge (in structuredContent.payment_required). Step 2: mint a Shared Payment Token from that challenge and retry once more with it in _meta[${JSON.stringify(MPP_CRED_KEY)}] — you get full data + a payment receipt.`,
+    how: `Step 1: retry this exact call with the ARGUMENT ${MPP_ARG_PAY}=true to receive a payment challenge (in structuredContent.payment_required). Step 2: mint a Shared Payment Token from that challenge and retry once more with it in the ARGUMENT ${MPP_ARG_CRED} — you get full data + a payment receipt. Both are ordinary declared parameters of this tool, so you can set them yourself. (MCP clients that control params._meta may use _meta.mpp_pay / _meta[${JSON.stringify(MPP_CRED_KEY)}] instead — same rail.)`,
+    credential_arg: MPP_ARG_CRED,
+    pay_arg: MPP_ARG_PAY,
     credential_meta_key: MPP_CRED_KEY,
   };
 }
@@ -341,9 +447,11 @@ export async function mppOffer(name, ms = 1200) {
   return {
     ...base,
     // The whole point: no flag to discover, no extra round trip.
-    how: `ONE STEP: mint a Shared Payment Token for \`challenges[0]\` below, then retry this exact call with the token in _meta[${JSON.stringify(MPP_CRED_KEY)}]. You get the full result plus a payment receipt in _meta[${JSON.stringify(MPP_RECEIPT_KEY)}]. No key, no account, no human.`,
+    how: `ONE STEP: mint a Shared Payment Token for \`challenges[0]\` below, then retry this exact call with the token in the ARGUMENT ${MPP_ARG_CRED} — a declared parameter of this tool, so you can set it yourself. You get the full result plus a payment receipt in _meta[${JSON.stringify(MPP_RECEIPT_KEY)}]. No key, no account, no human. (Clients that control params._meta may send _meta[${JSON.stringify(MPP_CRED_KEY)}] instead.)`,
     challenges: [challenge],
     pay_now: {
+      credential_arg: MPP_ARG_CRED,
+      pay_arg: MPP_ARG_PAY,
       credential_meta_key: MPP_CRED_KEY,
       receipt_meta_key: MPP_RECEIPT_KEY,
       retry_tool: name,
@@ -352,11 +460,11 @@ export async function mppOffer(name, ms = 1200) {
       steps: [
         'Take challenges[0] from this object.',
         'Mint a Shared Payment Token (Stripe MPP) satisfying that challenge.',
-        `Retry the identical \`${name}\` call with _meta[${JSON.stringify(MPP_CRED_KEY)}] = <the token>.`,
+        `Retry the identical \`${name}\` call with the argument ${MPP_ARG_CRED} = <the token>.`,
       ],
     },
     // Fallback for an agent that lets this challenge expire: ask for a fresh one.
-    refresh_challenge: 'retry this call with _meta.mpp_pay=true for a new challenge',
+    refresh_challenge: `retry this call with the argument ${MPP_ARG_PAY}=true for a new challenge`,
   };
 }
 
