@@ -6050,7 +6050,17 @@ export const _TOOL_OUTPUT_SCHEMAS = {
       source: _oStr('Publication'),
       published: _oStr('Publication timestamp'),
       actors: _oAny('Classified actors (OpenAI, Microsoft, Oracle, NVIDIA, sovereign-AI, …)'),
-      value_usd: _oNum('Extracted deal value in USD (regex-extracted; null when undisclosed)'),
+      // r-value-object (2026-08-17): the SAME enrichment that hit `capacity`
+      // below in July also landed on `value_usd` — backend
+      // routes/hyperscaler_deals.py::_extract_dollars now returns
+      // {value:35600000000.0, display:"$35.6B"}. The _oNum schema rejected the
+      // object, so EVERY call carrying a disclosed deal value failed output
+      // validation (-32602) for EVERY tier, paying keys included. Measured
+      // live 2026-08-17: anon, free-trial and enterprise keys all got
+      // "Invalid structured content ... path deals.0.value_usd" and no data.
+      // Both fields are _oAny for the same reason; see the pinning test in
+      // test/hyperscaler-deals-schema.test.mjs.
+      value_usd: _oAny('Extracted deal value when present — {display:"$35.6B", value:35600000000.0} object; null when undisclosed (was a bare number pre-2026-08)'),
       // r-capacity-object (2026-07-19): the backend enriched `capacity` from a
       // bare number into {display:"1.6 GW", value:1600.0} — the number schema
       // made EVERY hyperscaler_deals call fail output validation (-32602).
