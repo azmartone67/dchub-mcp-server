@@ -4586,10 +4586,51 @@ const QUOTA_HINT = ['1', 'true', 'on', 'yes'].includes(
 function _buildQuotaHint(toolName) {
   try {
     const c = getCtx();
-    const q = { tier: (c && c.tier) || 'free', resets_at: 'next 00:00 UTC' };
+    // r-quota-charged (2026-08-18): a DURABLE identity is what makes this meter
+    // spendable. The auto-mint path binds a trial into `sessionMeta` and its own
+    // log line says "full taste on NEXT call" — so from the call after the bind
+    // onward ctx carries `api_key`, and before it there is none. That is exactly
+    // the boundary the counter is charged across, so key the whole block on it.
+    const _durable = !!(c && c.api_key);
+    const q = {
+      // `(c && c.tier) || 'free'` labelled an UNBOUND ANONYMOUS caller 'free'
+      // while _upgrade.tier in the SAME envelope said 'anonymous'. Two tiers,
+      // one response, and the one the agent reads first was the wrong one.
+      tier: (c && c.tier) || (_durable ? 'free' : 'anonymous'),
+      resets_at: 'next 00:00 UTC',
+    };
     if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
-      q.full_answers_cap_today = ANON_FULL_CAP;
-      q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP);
+      // ★★★ THE METER MUST ONLY APPEAR WHERE IT IS CHARGED.
+      // `_trialDayCounts` is incremented in exactly one place —
+      // `_trialFullCallsExceeded`, reached only when
+      //     _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name)
+      // This block asserted the RIGHT half of that condition and silently
+      // dropped `_mintBound`, so an UNBOUND anonymous seat — which is served a
+      // partial preview, never a full answer, and therefore never charges the
+      // counter — was shown a budget it was structurally incapable of spending.
+      //
+      // MEASURED 2026-08-18: two get_gas_intelligence calls 9s apart from one
+      // anonymous seat (state TX, then PA) both returned
+      //     full_answers_cap_today: 2, full_answers_remaining_today: 2
+      // The number was not stale and no write had failed — nothing had been
+      // spent, because nothing at that seat can spend it. Read from the other
+      // end, the same defect is why /api/v1/mcp/funnel reported 0 quota wall
+      // hits and 0 distinct keys at quota for a full month with enforce ON.
+      //
+      // A frozen meter is worse than no meter: it tells a self-governing agent
+      // it has headroom forever, so it never claims a key and never converts.
+      if (_durable) {
+        q.full_answers_cap_today = ANON_FULL_CAP;
+        q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP);
+      } else {
+        q.full_answers_cap_today = null;
+        q.full_answers_remaining_today = null;
+        q.full_answers_unavailable_reason = 'NOT YET APPLICABLE at an anonymous seat. '
+          + 'The per-tool full-answer budget is a FREE-TIER benefit and is only charged once a '
+          + 'durable key is bound; anonymous callers are served partial previews, so this counter '
+          + 'would read full forever and mean nothing. Call `claim_free_key` (no email, one call) '
+          + 'to open the budget, then this field reports a number that actually moves.';
+      }
       // r-quota-truth (2026-08-10): this counter and _upgrade.remaining_today
       // measure DIFFERENT things, and a live envelope carried both —
       //     quota.full_answers_remaining_today: 2
@@ -4599,9 +4640,13 @@ function _buildQuotaHint(toolName) {
       // unreadable, and the guidance was actively wrong, because the IP-wide
       // cap binds first. An agent that retries on the 2 burns a call and hits
       // the wall again. Neither counter said what it counted, so say it.
-      q.full_answers_basis = 'PER-TOOL full-answer budget for `' + toolName + '` today. '
-        + 'A separate ANONYMOUS PER-IP cap across all tools can bind before this one — '
-        + 'if _upgrade.remaining_today is 0, that cap is what is stopping you, not this number.';
+      // 2026-08-18: only meaningful alongside a real number — an anonymous seat
+      // gets `full_answers_unavailable_reason` above instead of a basis for a null.
+      if (_durable) {
+        q.full_answers_basis = 'PER-TOOL full-answer budget for `' + toolName + '` today. '
+          + 'A separate ANONYMOUS PER-IP cap across all tools can bind before this one — '
+          + 'if _upgrade.remaining_today is 0, that cap is what is stopping you, not this number.';
+      }
     }
     return q;
   } catch (_) { return null; }
@@ -15067,6 +15112,11 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // test/gating.test.mjs.
 export { _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
+// r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
+// `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous
+// vs durable — is the ONLY input that decides whether the meter may be shown,
+// and it is not reachable any other way from a unit test.
+export { _buildQuotaHint, ctx as _ctxALS };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
 // rank_sites objectives bugs were both invisible to handler-level tests
