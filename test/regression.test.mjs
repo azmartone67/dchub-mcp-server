@@ -46,9 +46,16 @@ describe('version consistency across publish surfaces', () => {
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
 
+// r-ci-selftag (2026-08-18): this suite runs against LIVE prod on every push,
+// and its clientInfo self-ID below is only read at initialize — a tools/call
+// routed to a replica that never saw that initialize lost the tag and was
+// published as anonymous EXTERNAL demand (80.4% of 7d real calls / 72.1% of
+// real agents, since rotating runner IPs mint a new agent_id per run). The
+// header rides EVERY request, so replica routing cannot lose it.
 const HEADERS = {
   'Content-Type': 'application/json',
   'Accept': 'application/json, text/event-stream',
+  'X-MCP-Platform': 'dchub-regression-test',
   ...(process.env.MCP_API_KEY ? { 'X-API-Key': process.env.MCP_API_KEY } : {}),
 };
 

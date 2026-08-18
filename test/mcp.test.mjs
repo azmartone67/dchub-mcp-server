@@ -20,9 +20,13 @@ const PROTOCOL_VERSION = '2025-11-25';
 // paid data path. Set the MCP_API_KEY secret to a valid enterprise MCP
 // key in CI. (If a valid key STILL returns trial_preview, that's the
 // paywall-auth bug in the MCP worker, not a test problem.)
+// r-ci-selftag (2026-08-18): see the note in regression.test.mjs — the
+// clientInfo self-ID is session-scoped and is lost whenever a tools/call lands
+// on a replica that never saw the initialize. This header rides every request.
 const HEADERS = {
   'Content-Type': 'application/json',
   'Accept': 'application/json, text/event-stream',
+  'X-MCP-Platform': 'dchub-mcp-test',
   ...(process.env.MCP_API_KEY ? { 'X-API-Key': process.env.MCP_API_KEY } : {}),
 };
 

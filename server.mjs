@@ -787,6 +787,58 @@ function detectPlatform(ua = '') {
 //   "windsurf"            → Windsurf IDE
 //   "openai-chat"         → ChatGPT (when MCP-enabled)
 //   ...etc
+// r-ci-selftag (2026-08-18): the OUR-OWN-TRAFFIC rule, lifted out of
+// detectPlatformFromInit's clientInfo branch so the explicit-header channel can
+// run the SAME vocabulary instead of restating it. Restating it is the
+// regex-twin drift this file keeps paying for (see the _roster_key note in
+// ai_tracking.get_mcp_calls_by_roster_platform).
+//
+// ★ WHY THIS HAD TO BECOME PER-REQUEST. Our own live smoke suite
+// (test/regression.test.mjs, run against https://dchub.cloud/mcp on every push)
+// DOES self-identify — clientInfo.name='dchub-regression-test' — and that tag
+// works when it survives: an out-in replay of the handshake, anon and keyed,
+// wrote ZERO telemetry rows both times (classified internal, write skipped).
+// But clientInfo arrives ONCE, at initialize, and the only memory of it is
+// _PLATFORM_RECALL — an in-process Map keyed by session id. A tools/call served
+// by a process that never saw that initialize (another replica, or one
+// restarted since) finds nothing to recall, falls through to UA detection, and
+// lands in the generic 'mcp' bucket as anonymous EXTERNAL demand.
+// ★ The tag is UNRELIABLE, not broken, which is why reading the leak rate off a
+// local run would have cleared it: the same two suites run from a laptop kept
+// the tag on 100% of calls (sessions of 50 and 14, all 'dchub-internal'), while
+// the CI run of the same commit split INSIDE one session — measured
+// 2026-08-18 in mcp_call_log:
+//     b5821b64 → 2 calls 'dchub-internal', 48 calls 'mcp'
+//     a0bc2e37 → 2 calls 'dchub-internal', 12 calls 'mcp'
+// Aggregate cost, canonical population (is_public_ip AND is_real_external),
+// every IP checked against api.github.com/meta `actions`:
+//     7d  — 1,700 of 2,114 calls (80.4%) and 49 of 68 agents (72.1%)
+//     30d — 8,138 of 15,665 calls (52.0%) and 183 of 252 agents (72.6%)
+// Runner IPs rotate and agent_id = md5(first XFF token), so every CI run minted
+// a brand-new "distinct agent". That, not a missing vendor rule, was the 86%
+// unattributed bucket: removing CI moves the generic share 86.1% → 37.0% (7d).
+//
+// A header rides EVERY request, so no replica routing can lose it.
+// ★ SAFETY: this can only route traffic INTO the excluded bucket. It never
+// returns a brand, so an attacker-supplied header cannot mis-attribute a call
+// to a platform — the worst case is a caller excluding itself from our own
+// counts, which is the conservative direction for a number we publish.
+function _INTERNAL_SELF_TAG(name) {
+  const safe = (name || '').toString().toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+  if (!safe) return '';
+  // 1-2 char names ('v','p','t','w','c','fv') are ad-hoc curl/debug tags, and
+  // the QA-family / known-scraper names are harness self-IDs — neither is a
+  // real platform. The Flask track endpoint applies the same rewrite at write
+  // time (mcp_calls_deloop.normalize_write_platform) — keep the two aligned.
+  if (safe.length <= 2
+      || /(dchub|verify|probe|audit|harness|test|check|diag|sweep|selfheal|canary|smoke|regression)/.test(safe)
+      || /^(clawith|value-harness|dbg|raw|full|f5r|fv|rev|final|vinline|qa|qa-mozilla|fix2-v2|mcp-vouch|capwall2|pipeline_mcp|dchubhealer)$/.test(safe)) {
+    return 'dchub-internal';
+  }
+  return '';
+}
+
 function _KNOWN_PLATFORM_FROM_NAME(name) {
   // r-platform-header (2026-07-20): the KNOWN-platform substring vocabulary,
   // shared by clientInfo detection AND the explicit platform header. Returns a
@@ -861,6 +913,13 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
   // clientInfo / UA detection, so crawl traffic can't be brand-attributed.
   const hinted = _KNOWN_PLATFORM_FROM_NAME(explicitHint);
   if (hinted) return hinted;
+  // r-ci-selftag (2026-08-18): an explicit hint may also name OUR OWN traffic.
+  // Same vocabulary as the clientInfo branch below, but read per-request, so a
+  // harness tag cannot be lost by session eviction or replica routing the way
+  // clientInfo is. Screened AFTER the known-platform check so a caller can
+  // still name a real platform, and it can only ever return 'dchub-internal'.
+  const hintedInternal = _INTERNAL_SELF_TAG(explicitHint);
+  if (hintedInternal) return hintedInternal;
   const clientName = (body?.params?.clientInfo?.name || '').toString().toLowerCase();
   if (clientName && !_GENERIC_CLIENT_NAMES.has(clientName.trim())) {
     const known = _KNOWN_PLATFORM_FROM_NAME(clientName);
@@ -873,14 +932,12 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
     // are ad-hoc curl/debug tags, and QA-family / known-scraper names
     // ('clawith', verify/probe/test/…) are harness self-IDs — neither is a
     // real platform. Tag them 'dchub-internal' (every backend read predicate
-    // already excludes %dchub%) instead of minting a distinct platform per
-    // tag. The Flask track endpoint applies the same rewrite at write time
-    // (mcp_calls_deloop.normalize_write_platform) — keep the two aligned.
-    if (safe && (safe.length <= 2
-        || /(dchub|verify|probe|audit|harness|test|check|diag|sweep|selfheal|canary|smoke|regression)/.test(safe)
-        || /^(clawith|value-harness|dbg|raw|full|f5r|fv|rev|final|vinline|qa|qa-mozilla|fix2-v2|mcp-vouch|capwall2|pipeline_mcp|dchubhealer)$/.test(safe))) {
-      return 'dchub-internal';
-    }
+    // already excludes %dchub%) instead of minting a distinct platform per tag.
+    // r-ci-selftag (2026-08-18): the rule itself now lives in
+    // _INTERNAL_SELF_TAG so the explicit-header channel runs THIS vocabulary
+    // rather than a second copy of it.
+    const internal = _INTERNAL_SELF_TAG(safe);
+    if (internal) return internal;
     if (safe) return safe;
   }
   // ★ A GENERIC clientInfo.name is an ABSENCE, not a platform. Measured
