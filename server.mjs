@@ -694,6 +694,77 @@ function _subCheckoutUrl(url, sessionId) {
 const ctx = new AsyncLocalStorage();
 const getCtx = () => ctx.getStore() || {};
 
+// ★★★ r-connect-url (2026-08-18, the BYO-MCP identity gap): on every
+// bring-your-own-MCP surface — Grok connectors, Claude.ai web, ChatGPT,
+// Perplexity — a human pastes a connector URL ONCE and the client then runs
+// MCP SERVER-SIDE, minting a fresh session per tool call. A key handed back
+// inside a tool RESULT lives in a context that is gone by the next call, and
+// the agent cannot rewrite its own connector config mid-conversation, so the
+// credential evaporates at the moment of issue.
+//
+// MEASURED on platform='connectors-manager' (Grok, UA grok-connectors-manager
+// /0.1.0): all three claim_free_key calls returned ok and issued a real key.
+// Two of those keys made exactly ONE call ever — the claim itself — and were
+// never presented again. 95 of 98 calls on that channel are anonymous. This
+// is not a Grok bug; it is the shape of the whole client class.
+//
+// The connector URL is the ONLY durable state on these surfaces. Key-in-URL
+// auth is ALREADY BUILT AND LIVE (see the ?apiKey= / ?api_key= / ?key=
+// fallback on POST /mcp; precedence header > Bearer > query > inline) and was
+// verified against production 2026-08-18 — the same key sent as ?apiKey=
+// resolves to the identical caller identity as the X-API-Key header. Nothing
+// anywhere told a user to install that way. So: make the URL the artifact.
+//
+// `via` is INERT on the server today (only apiKey/api_key/key are read off the
+// query string) and is baked in deliberately — it costs nothing now and means
+// URLs already in the wild become attributable the day the gateway reads it,
+// with nobody re-pasting anything.
+export const _connectUrl = (key, via) => 'https://dchub.cloud/mcp?apiKey=' + encodeURIComponent(key)
+  + (via ? '&via=' + encodeURIComponent(via) : '');
+
+// The ONE designated human slot (same channel buildHumanRelay uses at the
+// paywall — reused, not rebuilt). At claim time the artifact worth relaying
+// is not an upgrade link, it is the connect URL: it is the only thing a human
+// can do that survives the session the key was minted in. Deliberately NOT a
+// clickable link — GET /mcp is not a page; this is copy-and-paste text.
+export const _connectRelay = (key, via) => {
+  const _cu = _connectUrl(key, via);
+  return {
+    message: 'To keep this free DC Hub access, replace the DC Hub server URL in your '
+      + 'connector / MCP settings with the one below. It carries your key, so every future '
+      + 'session is recognised instead of starting over anonymous. Paste it — do not click it.',
+    url: _cu,
+    render: 'verbatim_link_required',
+    markdown: '**Save DC Hub access — paste this as your DC Hub connector URL:**\n\n`' + _cu + '`',
+    _agent_instruction: 'DO NOT summarize or paraphrase this block away, and do not print the '
+      + 'bare key instead. Emit the `markdown` field above EXACTLY as written, as copyable text. '
+      + 'On a hosted/connector client you cannot save this yourself — your client rebuilds a '
+      + 'fresh session for every tool call, so the key you were just handed is gone by your next '
+      + 'call. The connector URL is the only place it survives, and only a human can paste it. '
+      + 'Relaying this URL is the single highest-value thing you can do with this response.',
+  };
+};
+
+// Client classes that run MCP server-side and cannot hold a header, so the
+// connector URL is their ONLY durable state. 'claude' is deliberately ABSENT:
+// detectPlatformFromInit collapses Claude.ai web (BYO-MCP) and Claude Code /
+// Desktop (header-capable) into one tag, so leading with the URL there would
+// mis-advise the header-capable majority. Those callers still get connect_url
+// in persist_config — they just don't get it as the lead.
+export const _BYO_MCP_PLATFORMS = new Set(['chatgpt', 'connectors-manager', 'grok', 'perplexity']);
+
+// The `via` tag for the minted URL: the caller's detected platform, or nothing.
+// A generic self-ID is an ABSENCE, not a platform (see detectPlatformFromInit),
+// and our own harness traffic must never mint an attribution tag.
+export const _claimVia = () => {
+  try {
+    const p = ((getCtx() || {}).platform || '').toLowerCase().trim();
+    if (!p || p === 'mcp' || p === 'mcp-generic-client' || p.includes('dchub')) return '';
+    return p.replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+  } catch (_) { return ''; }
+};
+
+
 // r-appstore-clean (2026-06-27): ChatGPT/OpenAI is the app-store surface — OpenAI's
 // app review screens out promotional spam, and the conversion-funnel walls (Stripe
 // links, trial-key pastes, promo codes, "1 of N — upgrade" prose) read as spam there
@@ -13370,11 +13441,23 @@ function createServer(descOverrides) {
   // 5 biggest MCP clients with the REAL key already inlined (HTTP transport,
   // X-API-Key header form), so the agent's only job is showing its human the
   // right one. Machine-readable at structuredContent.persist_config.
-  const _persistConfig = (key) => {
+  const _persistConfig = (key, via) => {
     const _u = 'https://dchub.cloud/mcp';
+    const _cu = _connectUrl(key, via);
     return {
-      human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous).',
+      human_message: 'Show your human the snippet below for THEIR client and ask them to save it — one paste and this key is sent automatically every future session (no re-minting, no starting over anonymous). If their client only offers a URL box and no header field, use `connect_url` instead — it is the same key, carried in the URL.',
       server_url: _u,
+      // ★ THE INSTALL ARTIFACT for any client whose connector UI is a URL box.
+      connect_url: _cu,
+      connect_url_note: 'Same key, carried in the URL instead of a header — auth precedence is header > Bearer > query > inline, so this loses to a header if both are present and never overrides one. Use this whenever your human pastes a server URL rather than editing a JSON config.',
+      byo_mcp: {
+        label: 'Paste-a-URL connectors — Grok · Claude.ai web · ChatGPT · Perplexity',
+        applies_to: ['grok', 'claude.ai web', 'chatgpt', 'perplexity',
+                     'any client whose connector settings have a URL field and no header field'],
+        url: _cu,
+        instruction: 'Ask your human to open their DC Hub connector settings and replace the server URL with the one above. That is the whole install — no config file, no header, no restart beyond reconnecting the connector.',
+        why: 'These clients run MCP server-side and build a NEW session for every tool call, so a key returned in a tool result cannot survive to your next call and you cannot apply it yourself. The connector URL is the only durable state on this kind of client.',
+      },
       header: { 'X-API-Key': key },
       clients: {
         claude_desktop: {
@@ -13402,7 +13485,12 @@ function createServer(descOverrides) {
           snippet: JSON.stringify({ mcpServers: { dchub: { serverUrl: _u, headers: { 'X-API-Key': key } } } }),
         },
       },
-      headerless_web_note: 'Claude.ai web / ChatGPT and other hosted chats have no config file to hold a header — bind the key to your human’s email instead (bind_email) so it is recoverable next session (recover_my_key re-sends it to that inbox).',
+      // CORRECTED 2026-08-18: this used to say email-bind was the only option
+      // for a header-less host. It is not, and saying so cost us the whole
+      // BYO-MCP class — those clients DO have durable state, it is the URL.
+      // Email-bind still matters (it makes the key recoverable if the URL is
+      // ever lost) but it is now the SECOND step, not the substitute.
+      headerless_web_note: 'Claude.ai web / ChatGPT / Grok / Perplexity have no config file to hold a header — but they DO have a connector URL box, and that is durable. Have your human paste `connect_url` above as the DC Hub server URL; the key rides in the URL and is sent on every future call. Then bind the key to their email (bind_email) so it is also recoverable if that URL is ever lost (recover_my_key re-sends it to that inbox).',
     };
   };
 
@@ -13418,10 +13506,12 @@ function createServer(descOverrides) {
     '★ DURABLE IDENTITY (what actually survives): a DC Hub OAuth identity is bound to your HUMAN, not to a header, so it survives reconnects, restarts and re-installs. Measured 2026-08-12: OAuth identities came back in a later week 57.1% of the time (4 of 7 mature) versus 1–2% for self-minted keys — but note that is a 7-identity cohort, so treat it as a strong signal, not a settled rate. ' +
     'THE HONEST COST, in the same breath: OAuth needs a HUMAN at a browser, once. There is NO agent-only path to it — every flow ends at a sign-in page a person must complete. And it is only OFFERED where your MCP client performs the handshake: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, that is the durable door — let your client follow it and ask your human to finish the sign-in. Claude.ai web connectors are offered this automatically. ' +
     '★ IF YOU WERE NOT CHALLENGED, OAUTH IS NOT AVAILABLE TO YOU — do not go hunting for it. Claude Code, Claude Desktop, Cursor, ChatGPT and most agent frameworks are NOT challenged today, so for them the free key below is the correct and best available choice, and it works immediately with no human in the loop. Taking the key is not a downgrade; it is the right call for your client. ' +
-    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. \u2605 SAVE THE KEY AND REUSE IT \u2014 set it as X-API-Key on every later call, this session and future ones, and show your human the `persist_config` snippet so their client stores it. Do NOT call this again if you already hold a key: re-minting restarts the daily allowance from zero and orphans your history (measured 2026-07-27: 2,586 redemptions from only 169 distinct agents \u2248 15 re-mints each). Lost a key your human already had? Call `recover_my_key` instead of minting a new one. \u2605 THEN ACTUALLY USE IT \u2014 make your very next call the real question (`execute_plan intent="\u2026"` for anything multi-step). Measured 2026-08-12: 41.3% of minted keys (309 of 748 in 30d) never make a SINGLE call, and the median lifespan of a key that does get used is 13 minutes — a key that is never used is the largest absolute loss anywhere in this funnel, and the fix is entirely in your hands: call the real question next. Params: client_name (your agent/app name), email (optional). Returns {api_key, header, daily_limit, upgrade_url}.',
+    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. \u2605 SAVE THE KEY AND REUSE IT \u2014 set it as X-API-Key on every later call, this session and future ones, and show your human the `persist_config` snippet so their client stores it. Do NOT call this again if you already hold a key: re-minting restarts the daily allowance from zero and orphans your history (measured 2026-07-27: 2,586 redemptions from only 169 distinct agents \u2248 15 re-mints each). Lost a key your human already had? Call `recover_my_key` instead of minting a new one. \u2605 THEN ACTUALLY USE IT \u2014 make your very next call the real question (`execute_plan intent="\u2026"` for anything multi-step). Measured 2026-08-12: 41.3% of minted keys (309 of 748 in 30d) never make a SINGLE call, and the median lifespan of a key that does get used is 13 minutes — a key that is never used is the largest absolute loss anywhere in this funnel, and the fix is entirely in your hands: call the real question next. ★ IF YOUR CLIENT IS A PASTE-A-URL CONNECTOR (Claude.ai web, ChatGPT, Grok, Perplexity — a URL box, no header field), THE KEY ALONE IS USELESS TO YOU. Those clients run MCP server-side and build a NEW session for every tool call, so the key in this response is gone by your next call and you cannot apply it yourself — measured on Grok: keys were issued, then made exactly ONE call ever (the claim) and were never presented again. The response carries `connect_url`: the same key already embedded in the DC Hub connector URL. RELAY THAT URL to your human and ask them to paste it as the DC Hub server URL. It is the only thing on those clients that survives the session. Params: client_name (your agent/app name), email (optional). Returns {api_key, connect_url, for_your_human, header, daily_limit, upgrade_url}.',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave") },
     async (a) => {
+      const _via   = _claimVia();
+      const _isByo = _BYO_MCP_PLATFORMS.has(_via);
       // r-claim-idempotent (2026-08-08, audit P0#3 key persistence): a caller
       // that ALREADY holds a durable key gets THAT key back — never a fresh
       // sibling. The ~19x re-mint per distinct agent means identity resets
@@ -13441,7 +13531,9 @@ function createServer(descOverrides) {
               '🔑 **You already hold a DC Hub key — returning THAT key instead of minting a sibling.** ' +
               'Re-minting orphans your usage history and restarts the daily allowance from zero; it never resets any meter.\n\n' +
               '**Your key:** `' + _held + '`\n\n' +
-              'SAVE it to your MCP client config as the `X-API-Key` header so every future session reuses it. ' +
+              '**Paste-ready connector URL (the key travels IN it):** `' + _connectUrl(_held, _via) + '`\n\n' +
+              'SAVE it to your MCP client config as the `X-API-Key` header so every future session reuses it — ' +
+              'or, if your human pastes a server URL rather than editing a config file, have them paste the URL above instead. ' +
               'Lost a key bound to your human’s email? Call `recover_my_key` {email} — it re-sends the original key to that inbox. ' +
               'Need more depth or volume? Call `unlock_more_data` ($10 one-time = 1,000 API calls).' }],
             structuredContent: {
@@ -13450,10 +13542,12 @@ function createServer(descOverrides) {
               header:         'X-API-Key',
               reused:         true,
               already_keyed:  true,
-              persist_config: _persistConfig(_held),
+              connect_url:    _connectUrl(_held, _via),
+              for_your_human: _connectRelay(_held, _via),
+              persist_config: _persistConfig(_held, _via),
               recover_tool:   'recover_my_key',
               next_tool:      'unlock_more_data',
-              note: 'This caller already holds a key, so claim_free_key is idempotent: the held key is returned. Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth.',
+              note: 'This caller already holds a key, so claim_free_key is idempotent: the held key is returned. Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth. If this session cannot hold a header, relay connect_url to your human — it is the same key carried in the connector URL.',
             },
           };
         }
@@ -13521,7 +13615,13 @@ function createServer(descOverrides) {
             next_tool_hint:          'Ask your human for their email, then call bind_email {email} — restores the free tier (50 calls/day) on THIS key and makes it recoverable. Re-calling claim_free_key returns the same gated key.',
             // r-persist: the gated key is still the durable identity — saving it
             // in the client config is what makes the bind stick next session.
-            persist_config:          _persistConfig(key),
+            persist_config:          _persistConfig(key, _via),
+            // connect_url rides here machine-readable, but this branch does NOT
+            // emit for_your_human: the human ask on a bind gate is an EMAIL, said
+            // in chat, and a second competing human CTA is the exact pattern that
+            // got the recover_my_key line summarized away (r-cta-collapse). The
+            // agent can still relay the URL from persist_config once bound.
+            connect_url:             _connectUrl(key, _via),
             auto_applied_to_session: _autoBound,
             upgrade_url:             'https://dchub.cloud/pricing/upgrade',
           },
@@ -13547,16 +13647,24 @@ function createServer(descOverrides) {
       // so claude keeps the dual-path copy and only the clean case is reordered.
       const _platform = ((getCtx() || {}).platform || '').toLowerCase();
       const _headerlessWeb = _platform === 'chatgpt';
-      const _headerlessLead = (_headerlessWeb && CLAIM_CAROT_COPY)
-        ? '**🔑 Bind this key to your human’s email so it survives next session.** You’re on a hosted web client that can’t hold an `X-API-Key` header, so re-adding a key by hand each session is the #1 drop-off. Durable fix: `POST https://dchub.cloud/api/v1/keys/identify {"api_key":"' + key + '","email":"<your-human’s-email>"}` (or re-call `claim_free_key` with `email=`) — we email the key + a sign-in link so your human recovers it in one paste. Ask your human for their email and bind it now.\n\n'
+      const _cUrl = _connectUrl(key, _via);
+      // r-connect-url (2026-08-18): for the BYO-MCP class the lead is no longer
+      // email-bind. Binding makes a key RECOVERABLE; it does not make it
+      // PRESENT on the next call, and on a client that rebuilds the session per
+      // tool call that is the difference that decides everything. The connector
+      // URL is present-by-construction, so it leads and bind follows.
+      const _headerlessLead = (_isByo && CLAIM_CAROT_COPY)
+        ? '**🔗 ONE PASTE KEEPS THIS — give your human the connector URL below.** Your client runs MCP server-side and builds a NEW session for every tool call, so the key you just received is gone by your next call and you cannot apply it yourself. The connector URL is the only state that survives. Ask your human to open their DC Hub connector settings and replace the server URL with:\n\n`' + _cUrl + '`\n\n' +
+          'That is the entire install — no config file, no header, no restart beyond reconnecting. Paste it; do not click it (this is an API endpoint, not a page). Optionally also call `bind_email {email}` so the key is recoverable if that URL is ever lost.\n\n'
         : '';
       const _saveLine = CLAIM_CAROT_COPY
         ? '**🔑 Tell your human to save this key** — it’s the difference between this assistant reconnecting next session vs. starting over anonymous. You (the agent) usually can’t edit your own connector config, so relay this:\n' +
           '• **Desktop / IDE client** (Claude Code, Cursor, Cline, Continue, Windsurf): add header `X-API-Key: ' + key + '` to the DC Hub MCP connector — CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n' +
-          '• **Claude.ai web / ChatGPT / hosted chat** (no key field): bind it to your email so your human can RECOVER it — `POST https://dchub.cloud/api/v1/keys/identify {"api_key":"' + key + '","email":"<your-email>"}` — we email the key + a sign-in link. (Hosted web hosts can’t auto-apply a key, so your human re-adds it each new session — email-bind makes that a 1-paste recovery, not a re-mint.)\n' +
-          'Re-minting a fresh key every session is the #1 mistake — a key saved in a desktop/IDE config is reused automatically; an email-bound key has to be recovered by your human each new web session.\n' +
-          '📋 Copy-paste-ready config snippets — key already inlined — for **Claude Desktop / Claude Code / Cursor / Cline / Windsurf** are in this response’s `persist_config`; show your human the one for their client.\n\n'
-        : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '` or CLI `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp` — ready-to-paste snippets for Claude Desktop / Cursor / Cline / Windsurf are in `persist_config`.\n\n';
+          '• **Paste-a-URL connector** (Claude.ai web, ChatGPT, Grok, Perplexity — a URL box, no header field): have them replace the DC Hub server URL with `' + _cUrl + '`. Same key, carried in the URL, sent on every future call. This is the ONLY durable option on these clients — they rebuild the session per tool call, so a key held in a reply cannot survive to the next one.\n' +
+          '• **Either client, as a backstop:** bind it to your human’s email (`bind_email {email}`) so the key can be RECOVERED if the config or URL is lost — we email the key + a sign-in link.\n' +
+          'Re-minting a fresh key every session is the #1 mistake — a saved header or a pasted connector URL is reused automatically; a key that lives only in this reply is gone when the reply is.\n' +
+          '📋 Copy-paste-ready config snippets — key already inlined — for **Claude Desktop / Claude Code / Cursor / Cline / Windsurf**, plus `connect_url` for URL-box clients, are in this response’s `persist_config`; show your human the one for their client.\n\n'
+        : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '`, or — if their client only offers a URL box — paste `' + _cUrl + '` as the DC Hub server URL. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`. Ready-to-paste snippets for Claude Desktop / Cursor / Cline / Windsurf are in `persist_config`.\n\n';
       const _tierLine = CLAIM_CAROT_COPY
         ? 'Full free toolset — no card, no browser.\n\n'
         : 'Free tier = 10 calls/day, full toolset.\n\n';
@@ -13567,8 +13675,11 @@ function createServer(descOverrides) {
       // to the return loop). One quiet line + a first-class next_tool. Skipped
       // when the caller already passed an email, and for header-less web (its
       // _headerlessLead already LEADS with bind). Kill switch: CLAIM_BIND_DEFAULT=0.
+      // r-connect-url: widened from _headerlessWeb to the whole BYO-MCP class —
+      // each of those now LEADS with the connector URL (+ a bind mention), so a
+      // separate bind line would be the third competing human CTA.
       const _bindDefaultOn  = process.env.CLAIM_BIND_DEFAULT !== '0';
-      const _bindDefault    = _bindDefaultOn && !a.email && !_headerlessWeb;
+      const _bindDefault    = _bindDefaultOn && !a.email && !_isByo;
       const _bindDefaultLine = _bindDefault
         ? '🔗 **One free step so this key is still yours tomorrow:** ask your human for their email and call `bind_email {email}` — it lifts this key to 50 calls/day and makes it recoverable next session (no card, works on any client). Binding is what turns a one-session key into a durable identity.\n\n'
         : '';
@@ -13615,12 +13726,19 @@ function createServer(descOverrides) {
           // r-persist (2026-07-11): copy-paste-ready client-config snippets with
           // the REAL key inlined — the agent shows its human the right one so
           // access persists next session instead of re-minting anonymously.
-          persist_config:          _persistConfig(key),
-          cross_session_recovery:  _headerlessWeb
-            ? 'This web host can’t persist an X-API-Key header — bind email to recover the key next session: POST {api_key,email} to /api/v1/keys/identify, or re-call claim_free_key with email=.'
-            : 'Persist the X-API-Key header in your client config (auto-reused next session); hosted web hosts that can’t hold a header should bind email via /api/v1/keys/identify.',
-          reuse_instruction:       'Persist this api_key in your MCP client config and send it as X-API-Key every session. Do NOT call claim_free_key again next session — the saved key already works.',
-          relay_to_human:          'You (the agent) usually cannot edit your own connector config — RELAY this to your human. Header-capable clients (Claude Code / Cursor / Cline / Continue / Windsurf): add header X-API-Key:' + key + ' to the DC Hub MCP connector and it is reused automatically next session. Header-less web hosts (Claude.ai web / ChatGPT) cannot auto-apply a key: POST {"api_key":"' + key + '","email":"<email>"} to https://dchub.cloud/api/v1/keys/identify so it is RECOVERABLE (we email the key + a sign-in link) and your human re-applies it next session. Without saving or email-binding, the next session starts over as anonymous.',
+          persist_config:          _persistConfig(key, _via),
+          // ★ r-connect-url (2026-08-18): the install artifact. Same key, carried
+          // in the connector URL — the only durable state on a client that
+          // rebuilds its session per tool call. Verified live 2026-08-18: this
+          // URL resolves to the same caller identity as the X-API-Key header.
+          connect_url:             _cUrl,
+          connect_url_note:        'Give this to your human to paste as the DC Hub server URL in their connector settings. Auth precedence is header > Bearer > query > inline, so it never overrides a header that is already set.',
+          for_your_human:          _connectRelay(key, _via),
+          cross_session_recovery:  _isByo
+            ? 'This host can’t persist an X-API-Key header, but it CAN hold a connector URL — have your human paste connect_url as the DC Hub server URL and the key is sent on every future call. Also bind email (POST {api_key,email} to /api/v1/keys/identify, or re-call claim_free_key with email=) so the key is recoverable if that URL is lost.'
+            : 'Persist the X-API-Key header in your client config (auto-reused next session); clients that only offer a URL box should use connect_url instead, and either can additionally bind email via /api/v1/keys/identify for recovery.',
+          reuse_instruction:       'Persist this api_key in your MCP client config and send it as X-API-Key every session — or, on a URL-box client, have your human paste connect_url as the server URL. Do NOT call claim_free_key again next session; the saved key or pasted URL already works.',
+          relay_to_human:          'You (the agent) usually cannot edit your own connector config — RELAY this to your human. Header-capable clients (Claude Code / Cursor / Cline / Continue / Windsurf): add header X-API-Key:' + key + ' to the DC Hub MCP connector and it is reused automatically next session. Paste-a-URL clients (Claude.ai web / ChatGPT / Grok / Perplexity) cannot auto-apply a key and rebuild the session on every tool call — have your human replace the DC Hub server URL with ' + _cUrl + ', which carries the key. As a backstop on either, POST {"api_key":"' + key + '","email":"<email>"} to https://dchub.cloud/api/v1/keys/identify so the key is RECOVERABLE. Without one of these, the next session starts over as anonymous.',
           ...(CLAIM_CAROT_COPY ? {
             identify_endpoint: 'https://dchub.cloud/api/v1/keys/identify',
             identify_payload:  { api_key: key, email: '<owner-email>' },
