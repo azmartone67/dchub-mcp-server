@@ -3436,6 +3436,51 @@ function _collapseEnvelope(obj) {
   } catch { return obj; }
 }
 
+// ── Anonymous return affordance (r-return-anon, 2026-08-17) ─────────────────
+// ★★★ THE RETENTION AFFORDANCE WAS SCOPED TO THE COHORT THAT ALREADY RETURNS.
+// `_NEXT_SESSION` says so in its own header: "Scoped exactly to withCitation's
+// full-data gate (keyed/paid only)." But ~95% of real traffic is ANONYMOUS and
+// returns out of the auto-mint cascade below, which never reaches that gate —
+// so the one block that tells an agent HOW to come back was withheld from
+// precisely the callers who don't.
+//
+// Measured live 2026-08-17 with fresh-session anonymous probes holding no key
+// (search_facilities, get_grid_intelligence, rank_markets, all `taste:true`):
+//   upsell markers present  : _upgrade, upgrade_url, quota, starter_pack,
+//                             agent_payment, for_your_human
+//   retention markers present: NONE — no next_session, no get_changes,
+//                             set_market_alert, subscribe_digest or save_site
+//                             anywhere in the result.
+// Both DCHUB_RETENTION_PITCH_ENABLED=1 and DCHUB_RETURN_REWARD=1 are set in
+// production, so this was never a switch — it was reachability.
+//
+// Retention has sat at 5-8 returning agents/week for six consecutive weeks
+// (canonical agent grain) while ~350 distinct agents passed through.
+//
+// This is the THIRD time this exact wrong-code-path shape has bitten this file:
+// r-prewall-anon (07-28) and r-undercap-anon (08-15) both shipped into the
+// keyed branch and were no-ops for real traffic until re-wired here. The offer
+// blocks below are the proven pattern — this rides beside them.
+//
+// structuredContent ONLY: this path's content[0].text is JSON + appended prose
+// and must never be reparsed (see the ★ note at the attach site). No prose line
+// by design — "louder reminders don't move it; mechanical discoverability of
+// the value-laden return path does". Once per (session, tool) so a chatty
+// session is not repeatedly padded. Fail-soft: a bonus, never the answer.
+const _nextSessionSeen = new Set();
+const _NEXT_SESSION_SEEN_CAP = 50000;
+function _anonNextSessionDue(tool, sessionKey) {
+  try {
+    if (!sessionKey) return false;
+    if ((process.env.DCHUB_ANON_NEXT_SESSION_DISABLE || '') === '1') return false;
+    const key = `${sessionKey}:${tool}`;
+    if (_nextSessionSeen.has(key)) return false;
+    if (_nextSessionSeen.size > _NEXT_SESSION_SEEN_CAP) _nextSessionSeen.clear();
+    _nextSessionSeen.add(key);
+    return true;
+  } catch (_) { return false; }
+}
+
 function _dedupeAliasKeys(obj) {
   try {
     if (!obj || typeof obj !== 'object') return obj;
@@ -9125,6 +9170,15 @@ function trackedTool(srv, name, description, schema, handler) {
                     trial_taste: true,
                     inline_full: true,
                     ..._preSC,
+                    // r-return-anon (2026-08-17): the return affordance, on the
+                    // cascade 95% of real traffic actually takes. See the block
+                    // comment at _anonNextSessionDue for the measurement.
+                    // `next_session` is in neither _ENV_MOVE nor _ENV_DROP, so
+                    // _collapseEnvelope keeps it at TOP LEVEL — the same
+                    // placement `for_your_human` was restored to on 07-28 after
+                    // burial under `upgrade` was found to work against it.
+                    ...(_anonNextSessionDue(name, c.session_id || c.client_ip)
+                        ? { next_session: _NEXT_SESSION } : {}),
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
                     tool: name,
                     ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer ($49/mo).` } : {}),
@@ -9200,6 +9254,15 @@ function trackedTool(srv, name, description, schema, handler) {
                     ? (Array.isArray(_previewObj) ? { results: _previewObj } : _previewObj)
                     : {}),
                 preview_is_partial: true,
+                // r-return-anon (2026-08-17): the WALLED anon caller needs the
+                // return path most — this response withholds depth, so "come
+                // back when it moved" is the only honest next step it can offer.
+                // Measured 07-28 under cap=4, this branch (`trial_used`) carried
+                // 68 of 86 real anon flagship calls; the cap is now 2, so its
+                // share is higher, not lower. Same once-per-(session,tool) gate
+                // and same top-level placement as the granted branch above.
+                ...(_anonNextSessionDue(name, c.session_id || c.client_ip)
+                    ? { next_session: _NEXT_SESSION } : {}),
                 // r-site-headline: expose the clean, machine-readable headline fields
                 // (composite_score/verdict/limiting_factor/citation) for consumers that
                 // read structuredContent — while still riding the full conversion CTA
