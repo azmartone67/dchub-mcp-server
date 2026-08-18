@@ -73,9 +73,27 @@ export function mppArgShape() {
   };
 }
 
+// ★ EVERY KEY HERE MUST BE A REGISTERED TOOL NAME (r-mpp-phantom, 2026-08-18).
+// MPP_COVERED_TOOLS is derived from these keys and is PUBLISHED TO AGENTS in
+// two places (`_wallMachinePay`, and unlock_more_data's machine_pay block),
+// under a note that reads "The tools in covered_tools ARE [payable] — if one
+// of them ...". So a key that is not a real tool does not sit inert: it tells
+// an agent at the paywall to re-route to a tool that does not exist, and the
+// call comes back unknown-tool. That is a dead end handed out at the exact
+// moment the agent was willing to pay.
+//
+// `get_site_capacity_report` (zero occurrences anywhere in server.mjs) and
+// `get_developer_brief` (server.mjs:5587 already said in a comment that it
+// "does not exist") were advertised this way from 2026-06-21 until today.
+// Live probe 2026-08-18: tools/list serves 82 tools; 6 declare mpp_pay —
+// exactly the exposed members of this 8-entry table.
+//
+// test/mpp-covered-tools-exist.test.mjs reads the trackedTool() registrations
+// out of server.mjs and fails the build if this table ever names a tool that
+// is not registered. Do not re-add a name here in anticipation of a tool;
+// price it when it ships.
 const MPP_PRICE = {
   analyze_site: '0.50', compare_sites: '0.50',
-  get_site_capacity_report: '0.50', get_developer_brief: '0.50',
   site_selection_canvas: '0.50',
   // r-mpp-flagships (2026-06-28): extend the LIVE fiat rail onto the high-traffic
   // value-moment tools (~4,540 paywall hits/30d landed here) — previously assigned
