@@ -8286,6 +8286,91 @@ export function _resolutionGap(text, signals, intentClass) {
   } catch (_e) { return null; }
 }
 
+// ★★★ H4 — a NOUN the intent named that NO step covers, and that `rejected`
+// never mentions either. The silent-omission defect.
+//
+// MEASURED 2026-08-19, two independent live runs of the same composite intent
+// ("find 100 MW of buildable capacity near Ashburn with fiber and grid
+// headroom"):
+//
+//   run A (ours, class grid_headroom):  fiber appeared in `rejected` as R5 —
+//     "Scored 4 vs 4.5 — the deterministic margin favored grid_headroom"
+//   run B (xAI, class capacity_search): fiber appeared in NEITHER `executed`
+//     NOR `rejected`. It vanished without a trace.
+//
+// `rejected` is built from `alternatives`, which carries the RUNNER-UP class
+// only. So whether a dropped constraint is auditable depends on which class
+// happened to place second — an agent reading the replay cannot tell the
+// difference between "fiber was considered and rejected" and "fiber was never
+// considered at all". Both render as absence.
+//
+// ★ That is the same class as every false-zero in this codebase: absence of a
+// counter is UNKNOWN, never zero. A planner that drops a constraint the user
+// NAMED must say so, or an agent will present a partial answer as a whole one.
+//
+// Emitted ONLY when it fires, exactly like _resolutionGap above — an
+// always-present empty array reads as a field the consumer must handle when
+// the honest default is "nothing to report".
+//
+// ★ Detection only. This does NOT change routing, step selection, latency or
+// quota — it reports what the router already decided.
+const _CONSTRAINT_NOUNS = [
+  { key: 'fiber',        re: /\b(fiber|fibre|dark fiber|latency|connectivity)\b/i,
+    tools: ['get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness', 'plan_fiber_leadin', 'cluster_sites_by_latency'] },
+  { key: 'water',        re: /\b(water|drought|aquifer|cooling water)\b/i,
+    tools: ['get_water_risk'] },
+  { key: 'tax',          re: /\b(tax|incentive|abatement)\b/i,
+    tools: ['get_tax_incentives'] },
+  { key: 'gas',          re: /\b(gas|lng|pipeline gas|behind.the.meter|btm)\b/i,
+    tools: ['get_gas_index', 'get_gas_economics', 'get_gas_intelligence'] },
+  { key: 'permitting',   re: /\b(permit|permitting|moratorium|zoning)\b/i,
+    tools: ['get_permitting_intel'] },
+  { key: 'climate',      re: /\b(climate|heat|temperature)\b/i,
+    tools: ['get_climate_intel'] },
+  { key: 'hazard',       re: /\b(flood|seismic|earthquake|wildfire|hurricane|hazard|disaster)\b/i,
+    tools: ['get_disaster_risk'] },
+  { key: 'renewables',   the: 1, re: /\b(renewable|solar|wind|carbon)\b/i,
+    tools: ['get_renewable_energy'] },
+  { key: 'queue',        re: /\b(queue|interconnect|interconnection)\b/i,
+    tools: ['get_interconnection_queue', 'get_refined_queue'] },
+  { key: 'deals',        re: /\b(m&a|acquisition|acquire|deal flow|transaction)\b/i,
+    tools: ['list_transactions', 'hyperscaler_deals', 'deal_autopsy'] },
+];
+
+export function _uncoveredConstraints(text, sc) {
+  try {
+    const t = String(text || '');
+    if (!t) return null;
+    // Every tool the plan can be said to have CONSIDERED: executed steps plus
+    // anything named in alternatives/rejected. A tool in `rejected` is
+    // auditable — the agent can see it was weighed. That is not an omission.
+    const considered = new Set();
+    for (const s of (Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [])) {
+      if (s && s.tool) considered.add(s.tool);
+    }
+    for (const a of (Array.isArray(sc.alternatives) ? sc.alternatives : [])) {
+      if (a && a.tool) considered.add(a.tool);
+    }
+    if (sc.best_tool) considered.add(sc.best_tool);
+
+    const out = [];
+    for (const n of _CONSTRAINT_NOUNS) {
+      if (!n.re.test(t)) continue;
+      if (n.tools.some((tool) => considered.has(tool))) continue;   // covered or weighed
+      out.push({ constraint: n.key,
+                 tools_that_would_cover_it: n.tools.slice(0, 3),
+                 note: `The intent named "${n.key}" but no step covers it and no `
+                     + 'alternative weighed it. This answer is PARTIAL with respect '
+                     + 'to that constraint — say so, or call one of the listed tools.' });
+    }
+    if (!out.length) return null;
+    return { code: 'H4', intent_class: sc.intent_class || null, uncovered: out,
+             note: 'Constraints named in the intent that the plan neither ran nor '
+                 + 'rejected. Absence in `rejected` does NOT mean a constraint was '
+                 + 'considered — until now it meant nothing at all.' };
+  } catch (_e) { return null; }
+}
+
 export function _planReplay(sc, signals) {
   const seq = Array.isArray(sc.recommended_sequence) ? sc.recommended_sequence : [];
   // H3 check: a Tier-1 spatial class that named a place and bound nothing.
@@ -8323,6 +8408,8 @@ export function _planReplay(sc, signals) {
       waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
       parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
     ...(_gap ? { resolution_gap: _gap } : {}),
+    ...(() => { const u = _uncoveredConstraints(sc.intent, sc);
+                return u ? { uncovered_constraints: u } : {}; })(),
     // r-taxonomy (v5.9, enum v5.10): why this answer needed LIVE data —
     // additive at schema v1, absent for 'unknown' (emit-only-when-real, like
     // resolution_gap above). why_live_code = the canon ENUM value (count it);
