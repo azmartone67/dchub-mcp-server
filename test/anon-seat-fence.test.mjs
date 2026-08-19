@@ -129,7 +129,15 @@ describe('anon-seat fence — identity accumulates (claim_free_key is idempotent
   it('a caller already holding a durable key is handed THAT key, before any mint', () => {
     const claimIdx = SRC.indexOf("trackedTool(srv, 'claim_free_key'");
     expect(claimIdx).toBeGreaterThan(-1);
-    const seg = SRC.slice(claimIdx, claimIdx + 8000);
+    // r-guard-window (2026-08-19): was a fixed `claimIdx + 8000`. That is an
+    // arbitrary proxy for "the claim_free_key body", and any legitimate growth
+    // in this branch pushes `already_keyed` or the mint call out of the slice —
+    // silently blinding an ORDERING guard for a reason that has nothing to do
+    // with ordering. Bound on the next tool registration instead, so the window
+    // is exactly this tool no matter how the body evolves. Every assertion below
+    // is unchanged; only the extraction got honest.
+    const nextTool = SRC.indexOf('trackedTool(srv, ', claimIdx + 20);
+    const seg = SRC.slice(claimIdx, nextTool > -1 ? nextTool : claimIdx + 8000);
     expect(seg, 'keyed-caller short-circuit missing').toMatch(/already_keyed:\s*true/);
     expect(seg, 'trial keys must fall through (durable upgrade path)').toMatch(/startsWith\('dch_trial_'\)/);
     const mintAt = seg.indexOf("callAPIWrite('/api/v1/keys/claim'");

@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { _connectUrl, _connectRelay, _BYO_MCP_PLATFORMS, _claimVia } from '../server.mjs';
+import { _connectUrl, _connectRelay, _BYO_MCP_PLATFORMS, _claimVia, _VIA_TRANSPORT_TAGS } from '../server.mjs';
 
 const SRC = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'server.mjs'), 'utf8');
@@ -66,8 +66,21 @@ describe('_claimVia — never mints an attribution tag from an absence', () => {
     // 'dchub' is our own harness. None of those may become a via= tag, or our
     // own probes would show up as an install channel — the 88e20dac class.
     for (const bad of ['mcp', 'mcp-generic-client', 'dchub-internal', 'dchub-selfheal']) {
-      expect(SRC).toContain("p === 'mcp'");
       expect(_BYO_MCP_PLATFORMS.has(bad)).toBe(false);
+    }
+    expect(SRC).toContain('_VIA_TRANSPORT_TAGS.has(p)');
+    expect(SRC).toContain("p.includes('dchub')");
+  });
+
+  // r-via-transport (2026-08-19): observed live — a curl probe minted via=curl.
+  it('a bare HTTP client name is a TRANSPORT, not an install channel', () => {
+    // "which install channel sent this agent" must never answer "curl".
+    // Assert the SET, not a substring of the file — 'curl' appears in unrelated
+    // copy elsewhere in server.mjs, so a toContain pin here is vacuous and
+    // survives deleting the tag (verified: it did).
+    for (const t of ['curl', 'node', 'python-requests', 'wget', 'unknown']) {
+      expect(_VIA_TRANSPORT_TAGS.has(t)).toBe(true);
+      expect(_BYO_MCP_PLATFORMS.has(t)).toBe(false);
     }
   });
 });
@@ -100,6 +113,31 @@ describe('claim_free_key wiring — every keyed branch ships the artifact', () =
     // minted URL while still looking correct.
     expect(SRC).not.toMatch(/_persistConfig\((?:_held|key)\)/);
     expect((SRC.match(/_persistConfig\((?:_held|key), _via\)/g) || []).length).toBe(3);
+  });
+
+  // r-validate-artifact (2026-08-19)
+  it('the idempotent branch validates the held key before issuing an install URL', () => {
+    // Pre-existing: the branch echoed whatever key was presented. Harmless as
+    // prose; NOT harmless once a permanent connector URL is built from it.
+    expect(SRC).toContain('_heldOk = !!(await validateKey(_held)).valid');
+    expect(SRC).toContain('key_confirmed:  _heldOk');
+    expect(SRC).toContain('connect_url_withheld');
+  });
+
+  it('an unconfirmed key must NOT get connect_url or for_your_human', () => {
+    // The emission has to be inside the _heldOk branch, not unconditional.
+    const idx = SRC.indexOf('...(_heldOk ? {');
+    expect(idx).toBeGreaterThan(-1);
+    const block = SRC.slice(idx, idx + 400);
+    expect(block).toContain('connect_url:    _connectUrl(_held, _via)');
+    expect(block).toContain('for_your_human: _connectRelay(_held, _via)');
+  });
+
+  it('does NOT fall through to a mint on !valid (backend flap would re-mint)', () => {
+    // validateKey returns valid:false for a transient backend failure too, so
+    // minting on it would re-mint a real holder's identity on every blip.
+    expect(SRC).toContain('We deliberately do NOT fall through to a mint on !valid');
+    expect(SRC).toContain('_CONNECT_URL_NOTES');
   });
 
   it('the two key-issuing branches emit for_your_human with the connect URL', () => {
