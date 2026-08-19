@@ -751,15 +751,66 @@ export const _connectRelay = (key, via) => {
 // Desktop (header-capable) into one tag, so leading with the URL there would
 // mis-advise the header-capable majority. Those callers still get connect_url
 // in persist_config — they just don't get it as the lead.
+// ★★★ _CONNECT_URL_NOTES — r-validate-artifact (2026-08-19).
+// claim_free_key's idempotent branch echoes whatever key the caller PRESENTED,
+// without validating it (pre-existing, r-claim-idempotent 2026-08-08). That was
+// harmless while the response was prose. It is NOT harmless once #204 builds a
+// PERMANENT connector URL from that key: a typo'd, expired or revoked key
+// becomes an install artifact a human is told to paste into their connector
+// settings, and it then silently never works — we look broken rather than the
+// key looking wrong. Verified live 2026-08-19: a junk dch_live_ key came back
+// already_keyed=true wrapped in a connect_url, via the HEADER as well as via
+// the query, so this is the idempotent branch and not the key-in-URL path.
+//
+// ★ We deliberately do NOT fall through to a mint on !valid. validateKey
+// returns {valid:false, tier:'free'} for a TRANSIENT backend failure too — it
+// refuses to cache that downgrade precisely because it cannot tell "bad key"
+// from "backend flapped". Minting on it would re-mint a legitimate holder's
+// identity on every blip, which is the exact leak the idempotent branch exists
+// to stop. So the held key is still returned unchanged and only the INSTALL
+// ARTIFACT is withheld until confirmed. Worst case on a flap is one response
+// without a paste-ready URL; worst case the other way is a human installing a
+// dead credential.
+//
+// ★ Kept OUT of the tool body on purpose: anon-seat-fence.test.mjs pins the
+// keyed short-circuit inside SRC.slice(claimIdx, claimIdx + 8000), so a long
+// comment in that branch pushes `already_keyed` past the window and blinds a
+// guard that is about ordering, not prose. Explanation lives here; the branch
+// carries a pointer.
+
+// The held-key prose and the withheld-artifact explanation live here rather
+// than inline, for the same 8000-char guard-window reason noted above.
+export const _CONNECT_URL_WITHHELD = 'This key did not validate on this call, so no paste-ready connector URL was issued for it. A connector URL is a PERMANENT install — issuing one around an unconfirmed key hands a human something that silently never works. Retry; if it still does not validate, use recover_my_key instead of pasting this anywhere.';
+export const _heldKeyUrlLine = (ok, url) => ok
+  ? '**Paste-ready connector URL (the key travels IN it):** `' + url + '`\n\n'
+    + 'SAVE it to your MCP client config as the `X-API-Key` header so every future session reuses it — '
+    + 'or, if your human pastes a server URL rather than editing a config file, have them paste the URL above instead. '
+  : '⚠️ **We could not confirm this key just now**, so no connector URL is issued for it — pasting an unconfirmed key '
+    + 'into a connector is how a human ends up with an install that never works. If the key is genuinely yours, keep '
+    + 'using it (a transient validation failure is harmless and self-heals on your next call). If it is not recognised '
+    + 'on a retry, call `recover_my_key` {email} rather than pasting this anywhere. ';
+
 export const _BYO_MCP_PLATFORMS = new Set(['chatgpt', 'connectors-manager', 'grok', 'perplexity']);
 
 // The `via` tag for the minted URL: the caller's detected platform, or nothing.
 // A generic self-ID is an ABSENCE, not a platform (see detectPlatformFromInit),
 // and our own harness traffic must never mint an attribution tag.
+//
+// ★ r-via-transport (2026-08-19): observed live on the first production read —
+// a curl probe minted `via=curl`. detectPlatform falls through to UA detection,
+// and a bare HTTP client's name is a TRANSPORT, not a distribution channel:
+// tagging it would answer "which install channel sent this agent" with "curl".
+// Memory of the same shape: 220 of 229 generic clients send UA 'node'. These
+// are absences wearing a name, so they are excluded alongside the generic
+// self-IDs rather than allowed to become install-channel attribution.
+export const _VIA_TRANSPORT_TAGS = new Set([
+  'mcp', 'mcp-generic-client', 'curl', 'node', 'python-requests', 'axios',
+  'go-http-client', 'okhttp', 'wget', 'unknown', 'other',
+]);
 export const _claimVia = () => {
   try {
     const p = ((getCtx() || {}).platform || '').toLowerCase().trim();
-    if (!p || p === 'mcp' || p === 'mcp-generic-client' || p.includes('dchub')) return '';
+    if (!p || _VIA_TRANSPORT_TAGS.has(p) || p.includes('dchub')) return '';
     return p.replace(/[^a-z0-9_-]/g, '').slice(0, 40);
   } catch (_) { return ''; }
 };
@@ -13526,14 +13577,17 @@ function createServer(descOverrides) {
         const _c0 = getCtx();
         const _held = _c0 && _c0.api_key;
         if (_held && !String(_held).startsWith('dch_trial_')) {
+          // r-validate-artifact (2026-08-19) — rationale at _CONNECT_URL_NOTES.
+          // Confirm the presented key before issuing an install artifact from it.
+          let _heldOk = false;
+          try { _heldOk = !!(await validateKey(_held)).valid; } catch (_) { _heldOk = false; }
+          const _urlLine = _heldKeyUrlLine(_heldOk, _connectUrl(_held, _via));
           return {
             content: [{ type: 'text', text:
               '🔑 **You already hold a DC Hub key — returning THAT key instead of minting a sibling.** ' +
               'Re-minting orphans your usage history and restarts the daily allowance from zero; it never resets any meter.\n\n' +
               '**Your key:** `' + _held + '`\n\n' +
-              '**Paste-ready connector URL (the key travels IN it):** `' + _connectUrl(_held, _via) + '`\n\n' +
-              'SAVE it to your MCP client config as the `X-API-Key` header so every future session reuses it — ' +
-              'or, if your human pastes a server URL rather than editing a config file, have them paste the URL above instead. ' +
+              _urlLine +
               'Lost a key bound to your human’s email? Call `recover_my_key` {email} — it re-sends the original key to that inbox. ' +
               'Need more depth or volume? Call `unlock_more_data` ($10 one-time = 1,000 API calls).' }],
             structuredContent: {
@@ -13542,12 +13596,19 @@ function createServer(descOverrides) {
               header:         'X-API-Key',
               reused:         true,
               already_keyed:  true,
-              connect_url:    _connectUrl(_held, _via),
-              for_your_human: _connectRelay(_held, _via),
-              persist_config: _persistConfig(_held, _via),
+              key_confirmed:  _heldOk,
+              // The install artifact is emitted ONLY for a confirmed key.
+              ...(_heldOk ? {
+                connect_url:    _connectUrl(_held, _via),
+                for_your_human: _connectRelay(_held, _via),
+                persist_config: _persistConfig(_held, _via),
+              } : {
+                connect_url_withheld: _CONNECT_URL_WITHHELD,
+              }),
               recover_tool:   'recover_my_key',
               next_tool:      'unlock_more_data',
-              note: 'This caller already holds a key, so claim_free_key is idempotent: the held key is returned. Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth. If this session cannot hold a header, relay connect_url to your human — it is the same key carried in the connector URL.',
+              note: 'This caller already holds a key, so claim_free_key is idempotent: the held key is returned. Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth.'
+                + (_heldOk ? ' If this session cannot hold a header, relay connect_url to your human — it is the same key carried in the connector URL.' : ''),
             },
           };
         }
