@@ -8339,12 +8339,45 @@ export function _resolutionGap(text, signals, intentClass) {
   } catch (_e) { return null; }
 }
 
-// ★2026-08-19 [4]: the per-step budget was 15000ms — EXACTLY Cloudflare's 15s
-// ROUTE_TIMEOUTS ceiling. Racing the edge to the same millisecond is how you get
-// an abort instead of an answer: measured live by xAI, get_refined_queue died at
-// **15004 ms** with "This operation was aborted" and no usable status. Sitting
-// below the ceiling lets the edge's own response arrive and be recorded.
-const _EXEC_STEP_TIMEOUT_MS = 12000;
+// ★2026-08-21 [#210]: 12000ms sat INSIDE get_refined_queue's own latency band,
+// so the most specific step of a PJM plan aborted on a coin flip. Measured live
+// (get_refined_queue{iso:PJM,min_mw:100}, six external samples):
+//   10983 / 11603 / 12128 / 12300 / 12399 / 13164 ms
+// and 11524 ms as an in-plan step that PASSED with 476ms to spare. xAI reported
+// the same step aborting at 12002 ms. A deadline placed inside a tool's latency
+// distribution bounds nothing — it randomises whether the caller gets an answer.
+// The tool was never hanging: it returns 11,218 bytes of real rows every time.
+//
+// ★ THE NOTE THIS REPLACES WAS WRONG ON ITS CENTRAL FACT. It read a 15004 ms
+// death as "EXACTLY Cloudflare's 15s ROUTE_TIMEOUTS ceiling" and lowered the
+// budget to duck under it. 15004 ms is the signature of the 15000 ms step budget
+// THEN IN FORCE firing on itself — the same shape as today's 12002 ms against
+// 12000. The edge does not cut /mcp at 15s and never did:
+//   dchub-frontend/_worker.js ROUTE_TIMEOUTS['/mcp'] = 45_000, and POST /mcp is
+//   absent from IDEMPOTENT_POST_PATHS, so nonIdempotentWrite is TRUE and
+//   primaryTimeout = timeoutMs — it skips the 5s/15s split entirely.
+//   Proved live 2026-08-21: research_task returned HTTP 200, isError:none,
+//   ok:true at 15893 ms THROUGH the edge. Ducking the ceiling was never the
+//   problem being solved; the change moved our own deadline into the tool.
+//
+// 20000 clears the observed spread with room. Every step is ALSO clamped to what
+// remains of the plan's deadline (_execStepBudget), so the worst case stays
+// DEADLINE_MS rather than DEADLINE_MS + this value.
+const _EXEC_STEP_TIMEOUT_MS = 20000;
+
+/**
+ * What a single loopback step is allowed to take: the step budget, clamped to
+ * whatever is LEFT of the plan's own deadline.
+ *
+ * Without the clamp, DEADLINE_MS is only a START gate — it is checked before a
+ * step is admitted and never again. A step admitted at 39.9s against a 40s
+ * deadline could then run its full budget and land at 59.9s, past the 45s edge
+ * budget, losing the WHOLE envelope instead of one leg. Exported so the guard
+ * can pin the arithmetic directly rather than inferring it from a live run.
+ */
+export function _execStepBudget(elapsedMs, deadlineMs, stepMs = _EXEC_STEP_TIMEOUT_MS) {
+  return Math.max(0, Math.min(stepMs, deadlineMs - elapsedMs));
+}
 
 // ★2026-08-19 [2]: answer_guide was a byte-identical static string on every
 // call. When a run actually produced a BUILD/CAUTION/AVOID verdict, nothing told
@@ -8356,7 +8389,9 @@ export function _execAnswerGuide(executed) {
   const BASE = 'Compose the answer from executed[].result (each already tier-honest). '
     + 'Quote concrete numbers, name the limiting factor, and cite "DC Hub, dchub.cloud" '
     + 'with as_of dates. Steps marked not_run/skipped_unresolved list exactly how to '
-    + 'continue manually.';
+    + 'continue manually. A step marked timed_out is NOT a failure and NOT an absence '
+    + 'of data — DC Hub stopped waiting while that tool was still running. Say so and '
+    + 'name the tool to call directly; never report its subject as unavailable.';
   try {
     const found = [];
     const scan = (o, depth) => {
@@ -11073,12 +11108,14 @@ function createServer(descOverrides) {
             const isoKey = _EXEC_ISO_ARG[s.tool];
             if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
                 && args[isoKey] == null) args[isoKey] = constraintIso;
-            return _execLoopbackCall(s.tool, args, c, _EXEC_STEP_TIMEOUT_MS).then((out) => ({ s, args, out }));
+            return _execLoopbackCall(s.tool, args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS)).then((out) => ({ s, args, out }));
           }));
           for (const { s, args, out } of results) {
             calls += 1;
             executed.push({ step: s.step, tool: s.tool, args,
-                            status: out.ok ? 'executed' : (out.gated ? 'gated_preview' : 'failed'),
+                            status: out.ok ? 'executed'
+                                  : (out.gated ? 'gated_preview'
+                                  : (out.timed_out ? 'timed_out' : 'failed')),
                             ms: out.ms, result: out.result });
             if (out.ok || out.gated) {
               const fresh = {};
@@ -11135,10 +11172,15 @@ function createServer(descOverrides) {
           if (isoKey2 && constraintIso && _EXEC_IS_RTO(constraintIso)
               && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
           ran += 1;
-          const out2 = await _execLoopbackCall(s.tool, r2.args, c, 15000);
+          // [#210] was a hardcoded 15000 — it escaped _EXEC_STEP_TIMEOUT_MS entirely,
+          // and because this retry is sequential AFTER the parallel wave, its budget
+          // STACKED on the wave's rather than sharing it.
+          const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS));
           calls += 1;
           executed.push({ step: s.step, tool: s.tool, args: r2.args,
-                          status: out2.ok ? 'executed' : (out2.gated ? 'gated_preview' : 'failed'),
+                          status: out2.ok ? 'executed'
+                                : (out2.gated ? 'gated_preview'
+                                : (out2.timed_out ? 'timed_out' : 'failed')),
                           retried_after_wave: true, ms: out2.ms, result: out2.result });
           if (out2.ok || out2.gated) {
             const fresh2 = {};
@@ -12861,7 +12903,10 @@ function createServer(descOverrides) {
   async function _execLoopbackCall(name, args, c, timeoutMs) {
     const t0 = Date.now();
     const ctl = new AbortController();
-    const tm = setTimeout(() => ctl.abort(), timeoutMs);
+    // [#210] Flagged from the timer callback rather than sniffed off the error
+    // name, so an abort arriving from any OTHER source stays plain 'failed'.
+    let timedOut = false;
+    const tm = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs);
     try {
       const headers = { 'Content-Type': 'application/json',
                         'Accept': 'application/json, text/event-stream' };
@@ -12912,7 +12957,19 @@ function createServer(descOverrides) {
       // nothing and downstream steps skipped. Harvest full, store slim.
       return { ok, gated, result: slim, full: out, ms: Date.now() - t0 };
     } catch (e) {
-      return { ok: false, result: { error: String(e && e.message || e).slice(0, 120) }, ms: Date.now() - t0 };
+      // [#210] OUR deadline firing is not the tool failing. Both used to land as
+      // status:'failed', so an agent could not tell "works, we stopped waiting —
+      // call it directly" from "this tool is broken" and would report the subject
+      // as unavailable.
+      const err = { error: String(e && e.message || e).slice(0, 120) };
+      if (timedOut) {
+        err.timed_out_after_ms = timeoutMs;
+        err.note = 'DC Hub stopped waiting at ' + timeoutMs + 'ms — ' + name
+                 + ' was still running, NOT broken and NOT empty. Call ' + name
+                 + ' directly for this leg and report its result; do not describe '
+                 + 'its subject as unavailable.';
+      }
+      return { ok: false, timed_out: timedOut, result: err, ms: Date.now() - t0 };
     } finally { clearTimeout(tm); }
   }
 
