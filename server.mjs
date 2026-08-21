@@ -524,8 +524,47 @@ const KEY_CACHE_TTL = parseInt(process.env.DCHUB_KEY_CACHE_TTL_MS || '300000', 1
 // SUCCESS channel WITHOUT a redeploy. Default '1' PRESERVES r51 behavior; set
 // DCHUB_PREVIEW_ISERROR=0 to make previews agent-friendly. ONLY the transport flag
 // changes — trim depth, _upgrade content and paywall economics are untouched. Hard
-// blocks (blocked_paid_only, daily-cap) keep isError:true regardless.
+// blocks (blocked_paid_only, daily-cap) are NOT covered by this flag — they carry
+// their own transport gate, see _wallIsError() directly below.
 const PREVIEW_ISERROR = (process.env.DCHUB_PREVIEW_ISERROR ?? '1') !== '0';
+
+// r-wall-transport (2026-08-20): the two PAYWALL walls — `paid_only` (r50) and
+// `metered_enforced` — are the ONLY responses that carry `for_your_human`, the one
+// link a human can act on. Both shipped `isError: true` as a LITERAL, so neither
+// ever saw DCHUB_PREVIEW_ISERROR — including in production, where the operator has
+// had it set to 0 since before 2026-08-20. r50's reasoning was measured and real:
+// soft content got summarized away ("I can't access that tool") and 990 sessions
+// hit the wall with 0 keys claimed. But the r51 comment above records the OPPOSITE
+// failure on other clients — Grok and Mistral Le Chat read isError as a HARD
+// failure and bail on a served preview. Both are true; they are different clients,
+// which is why this is not one global boolean.
+//
+// Measured 7d (2026-08-20): 146 relays minted → 15 redeemed → 0 verified human
+// acted. Wall transport is the leading UNTESTED explanation for that 131-relay gap.
+//
+// Default '1' is a NO-OP — every wall keeps exact r50 behavior on merge. Set
+// DCHUB_WALL_ISERROR=0 for the success channel globally, or leave it at 1 and list
+// platform substrings in DCHUB_WALL_SUCCESS_PLATFORMS (e.g. "grok,mistral") to flip
+// only the clients that bail. Env-only, no redeploy — same operator ergonomics as
+// PREVIEW_ISERROR, same substring matching as _isCleanPlatform. ONLY the transport
+// changes: prose, relay URL, _upgrade content and paywall economics are untouched.
+// Evaluated PER-REQUEST (not a module-load const, same reasoning as promoActive()
+// above) so flipping the Railway variable takes effect on the next call rather than
+// the next restart — and so the guard is directly testable.
+function _wallIsError() {
+  try {
+    if ((process.env.DCHUB_WALL_ISERROR ?? '1') === '0') return false;
+    const list = (process.env.DCHUB_WALL_SUCCESS_PLATFORMS || '').toLowerCase()
+      .split(',').map(s => s.trim()).filter(Boolean);
+    // Fast path only — behaviorally identical to the .some() below, which is
+    // already false for an empty list. Kept because an unset list is the DEFAULT
+    // production path, so this skips an AsyncLocalStorage read on every wall.
+    if (!list.length) return true;
+    const p = (getCtx()?.platform || '').toLowerCase();
+    if (!p) return true;
+    return !list.some(s => p.includes(s));
+  } catch (_) { return true; }   // fail-safe: any error preserves r50 behavior
+}
 
 // ── Launch promo (DCMCP50_LAUNCH) ──────────────────────────────────────────
 // 50% off first 3 months on Stripe Payment Links (Starter $9, Developer $49).
@@ -9025,7 +9064,7 @@ function trackedTool(srv, name, description, schema, handler) {
               'calls, no subscription** → ' + _packCheckoutUrl(_sidM) +
               ' — the moment your human pays, your next `' + name + '` call returns full data (no ' +
               'reconnect). Call `unlock_more_data` for one-click links.' + promoText()) }],
-            isError: true,
+            isError: _wallIsError(),   // r-wall-transport: carries for_your_human
             structuredContent: {
               error: 'metered_over_threshold',
               tool: name,
@@ -9806,7 +9845,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           || (_pwx2 && _pwx2.for_your_human && _pwx2.for_your_human.url) || null;
         return {
           content: [{ type: 'text', text: composeHumanFirst(_humanUrlC, (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 + _hiText2 + promoText()) }],
-          isError: true,
+          isError: _wallIsError(),   // r-wall-transport: carries for_your_human
           structuredContent: _collapseEnvelope(_dedupeAliasKeys({
             error: 'paid_only',
             tool: name,
@@ -15489,6 +15528,7 @@ export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE
 // vs durable — is the ONLY input that decides whether the meter may be shown,
 // and it is not reachable any other way from a unit test.
 export { _buildQuotaHint, ctx as _ctxALS };
+export { _wallIsError };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and
 // rank_sites objectives bugs were both invisible to handler-level tests
