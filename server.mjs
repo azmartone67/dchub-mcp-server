@@ -7977,11 +7977,20 @@ export function _planSignals(intent, context) {
   // "where do fiber density and grid headroom overlap in Atlanta" from
   // fiber_power_pairing into grid_headroom — caught by the class-stealing
   // guards, which is exactly what they are for.
+  // ★★★2026-08-21 [#209]: `iso` deliberately conflates two DIFFERENT things —
+  // an operator the TEXT named (evidence about the question) and one the CALLER
+  // TYPED (scope for an already-stated question). That is right for ARGUMENT
+  // binding, where both mean the same thing, and wrong for CLASS SCORING, where
+  // they do not. `isoFromText` keeps them apart; `iso` is unchanged, so every
+  // argument-resolution path behaves exactly as before.
+  const isoFromText = (() => {
+    const m = text.match(_PLAN_ISO_RE);
+    return m ? m[1].toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+  })();
   const iso = (() => {
     const fromCtx = c.iso && String(c.iso).trim();
     if (fromCtx) return String(fromCtx).toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const m = text.match(_PLAN_ISO_RE);
-    return m ? m[1].toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
+    return isoFromText;
   })();
   // ★★ 2026-07-28: the ISO implied by a PLACE NAME, for ARGUMENT resolution only.
   // _CITY_ISO_META already maps every tracked metro to its ISO and this planner
@@ -8086,7 +8095,7 @@ export function _planSignals(intent, context) {
   // Underscore-prefixed: an internal routing signal, not part of the published
   // signals contract.
   const __citySlug = _execConstraintSlug(text);
-  return { iso, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug };
+  return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -8669,9 +8678,21 @@ export function _planQuery(intent, context) {
     return { cls, score, hits };
   });
   // Context boosts — structured context outweighs weak keyword overlap.
+  // ★★★[#209] `_anyTextMatch` must be read BEFORE any boost is applied, or a
+  // boost would count as its own evidence that the text matched.
+  const _anyTextMatch = scored.some((s) => s.score > 0);
   for (const s of scored) {
     if (s.cls.id === 'site_analysis' && (d.coords || d.candidateId)) s.score += 2;
-    if (s.cls.id === 'grid_headroom' && d.iso) s.score += 1.5;
+    // ★★★[#209] A TYPED iso is SCOPE, not evidence about the question. It may
+    //  RESCUE an intent the text could not route at all, but it must never
+    //  OVERRULE a class the text itself established. Measured: adding iso=PJM
+    //  to "find 100 MW of buildable capacity near Ashburn…" flipped
+    //  capacity_search -> grid_headroom (+1.5), and grid_headroom's sequence is
+    //  ISO-scoped, so the market slug stopped being minted — a caller who
+    //  supplied MORE correct information got a worse plan, silently.
+    //  An ISO the TEXT names is different and still boosts: naming the operator
+    //  IS evidence of a grid question, which is what the +1.5 was for.
+    if (s.cls.id === 'grid_headroom' && d.iso && (d.isoFromText || !_anyTextMatch)) s.score += 1.5;
     if (s.cls.id === 'market_ranking' && d.market) s.score += 1.5;
     if (s.cls.id === 'market_comparison' && d.comparePair) s.score += 1.5;
     if (s.cls.id === 'changes_delta' && d.since) s.score += 2;
