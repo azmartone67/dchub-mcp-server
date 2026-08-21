@@ -8410,28 +8410,122 @@ export function _execAnswerGuide(executed) {
 //
 // ★ Detection only. This does NOT change routing, step selection, latency or
 // quota — it reports what the router already decided.
+//
+// ★★★2026-08-21 [#211]: `lead` MAKES THIS TABLE ROUTE. The comment above used to
+// end at "Detection only", and that was the whole defect: the mechanism that
+// knew the user said "fiber" would not act, and the mechanism that acts (the
+// dual-class margin) keys on a runner-up CLASS SCORE, not on what was named.
+// Two orthogonal mechanisms with a gap between them — Grok's Ashburn run fell
+// straight through it. `lead(d)` returns the ONE step that answers the named
+// constraint, and lives on the SAME ROW as the regex and the tool list so the
+// detector and the router cannot drift apart. (That drift is exactly how
+// `args.mpp_pay` sat readable-but-undeclared for two months.)
+// A row with no `lead` is still detected and still reported by H4 — detection
+// without routing stays available, it just stopped being the only option.
 const _CONSTRAINT_NOUNS = [
   { key: 'fiber',        re: /\b(fiber|fibre|dark fiber|latency|connectivity)\b/i,
-    tools: ['get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness', 'plan_fiber_leadin', 'cluster_sites_by_latency'] },
+    tools: ['get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness', 'plan_fiber_leadin', 'cluster_sites_by_latency'],
+    lead: (d) => (d.coords
+      ? { tool: 'get_fiber_readiness', args_hint: { lat: d.coords.lat, lon: d.coords.lon } }
+      : { tool: 'get_fiber_intel', args_hint: { market: d.market || '<metro slug named in the intent>' } }) },
   { key: 'water',        re: /\b(water|drought|aquifer|cooling water)\b/i,
-    tools: ['get_water_risk'] },
+    tools: ['get_water_risk'],
+    lead: (d) => ({ tool: 'get_water_risk', args_hint: d.coords
+      ? { lat: d.coords.lat, lon: d.coords.lon }
+      : { lat: '<site lat>', lon: '<site lon>' } }) },
   { key: 'tax',          re: /\b(tax|incentive|abatement)\b/i,
-    tools: ['get_tax_incentives'] },
+    tools: ['get_tax_incentives'],
+    lead: (d) => ({ tool: 'get_tax_incentives',
+      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
   { key: 'gas',          re: /\b(gas|lng|pipeline gas|behind.the.meter|btm)\b/i,
-    tools: ['get_gas_index', 'get_gas_economics', 'get_gas_intelligence'] },
+    tools: ['get_gas_index', 'get_gas_economics', 'get_gas_intelligence'],
+    lead: (d) => ({ tool: 'get_gas_index',
+      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
   { key: 'permitting',   re: /\b(permit|permitting|moratorium|zoning)\b/i,
-    tools: ['get_permitting_intel'] },
+    tools: ['get_permitting_intel'],
+    lead: (d) => ({ tool: 'get_permitting_intel',
+      args_hint: { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
   { key: 'climate',      re: /\b(climate|heat|temperature)\b/i,
-    tools: ['get_climate_intel'] },
+    tools: ['get_climate_intel'],
+    lead: (d) => ({ tool: 'get_climate_intel', args_hint: d.coords
+      ? { lat: d.coords.lat, lon: d.coords.lon }
+      : { lat: '<site lat>', lon: '<site lon>' } }) },
   { key: 'hazard',       re: /\b(flood|seismic|earthquake|wildfire|hurricane|hazard|disaster)\b/i,
-    tools: ['get_disaster_risk'] },
-  { key: 'renewables',   the: 1, re: /\b(renewable|solar|wind|carbon)\b/i,
-    tools: ['get_renewable_energy'] },
+    tools: ['get_disaster_risk'],
+    lead: (d) => ({ tool: 'get_disaster_risk', args_hint: d.coords
+      ? { lat: d.coords.lat, lon: d.coords.lon }
+      : { lat: '<site lat>', lon: '<site lon>' } }) },
+  // ★ the stray `the: 1` here was a typo, dead since the table shipped.
+  { key: 'renewables',   re: /\b(renewable|solar|wind|carbon)\b/i,
+    tools: ['get_renewable_energy'],
+    lead: (d) => ({ tool: 'get_renewable_energy', args_hint: d.coords
+      ? { lat: d.coords.lat, lon: d.coords.lon }
+      : { state: d.state || d.stateFromPlace || '<2-letter US state, e.g. VA>' } }) },
   { key: 'queue',        re: /\b(queue|interconnect|interconnection)\b/i,
-    tools: ['get_interconnection_queue', 'get_refined_queue'] },
+    tools: ['get_interconnection_queue', 'get_refined_queue'],
+    // No ISO placeholder: _EXEC_ISO_ARG injects the plan's constraint ISO into
+    // this tool at execution time, so an empty hint resolves where a literal
+    // `<ISO>` would have to be minted by an earlier step first.
+    lead: (d) => ({ tool: 'get_interconnection_queue', args_hint: d.iso ? { iso: d.iso } : {} }) },
   { key: 'deals',        re: /\b(m&a|acquisition|acquire|deal flow|transaction)\b/i,
-    tools: ['list_transactions', 'hyperscaler_deals', 'deal_autopsy'] },
+    tools: ['list_transactions', 'hyperscaler_deals', 'deal_autopsy'],
+    lead: () => ({ tool: 'list_transactions', args_hint: { limit: 10 } }) },
 ];
+
+/**
+ * How many NAMED constraints may add a step to one plan.
+ *
+ * ★ The issue asked for this to be decided deliberately rather than by default,
+ * so: TWO. Each appended step is a real tools/call against the caller's own
+ * quota (execute_plan is tier-honest), which is the cost that argues for a
+ * bound. Two covers the intents actually observed — "capacity … with fiber and
+ * grid headroom", "site with water and tax" — while capping quota growth at +2.
+ * It is deliberately LOOSER than the dual-class rule's single step, because a
+ * noun the user typed is a stronger signal than a runner-up class score.
+ * Anything past the cap is NOT silently dropped: H4 `uncovered_constraints`
+ * still names it and lists the tools that would cover it, which is the same
+ * honest report this whole path exists to produce.
+ */
+export const _CONSTRAINT_LEAD_CAP = 2;
+
+/**
+ * The steps a plan should append because the INTENT NAMED those constraints and
+ * nothing in the plan covers them.
+ *
+ * `considered` must be every tool the plan can be said to have weighed — the
+ * sequence plus the runner-up alternative — because that is the exact predicate
+ * `_uncoveredConstraints` uses to decide something is uncovered. Sharing it is
+ * the point: a constraint this function covers is one H4 then stops reporting,
+ * with no second definition of "covered" to fall out of sync.
+ *
+ * Pure. Never throws — routing degrades to today's behaviour rather than
+ * failing the user's question.
+ */
+export function _constraintLeadSteps(text, d, considered) {
+  const out = [];
+  try {
+    const t = String(text || '');
+    if (!t) return out;
+    const seen = new Set(Array.isArray(considered) ? considered : []);
+    const sig = (d && typeof d === 'object') ? d : {};
+    for (const n of _CONSTRAINT_NOUNS) {
+      if (out.length >= _CONSTRAINT_LEAD_CAP) break;
+      if (!n.re.test(t)) continue;
+      if (n.tools.some((tool) => seen.has(tool))) continue;   // covered or weighed
+      if (typeof n.lead !== 'function') continue;
+      let step = null;
+      try { step = n.lead(sig); } catch (_e) { step = null; }
+      if (!step || !step.tool || seen.has(step.tool)) continue;
+      seen.add(step.tool);
+      out.push({ tool: step.tool, args_hint: step.args_hint || {}, estimated_calls: 1,
+        constraint: n.key,
+        why: `The intent NAMED "${n.key}" and no step in the routed plan covers it. `
+           + 'Appended so a constraint the user asked for is ANSWERED rather than reported '
+           + 'as uncovered. One step, the constraint\'s lead tool only, never a duplicate.' });
+    }
+  } catch (_e) { /* routing must never throw */ }
+  return out;
+}
 
 export function _uncoveredConstraints(text, sc) {
   try {
@@ -8623,6 +8717,32 @@ export function _planQuery(intent, context) {
       }
     } catch (_e) { /* routing must never throw */ }
   }
+  // ★★★2026-08-21 [#211]: ROUTE ON THE NOUN THE USER NAMED.
+  //  The margin rule above closed CLASS ambiguity. Ashburn was never a class
+  //  ambiguity bug: "find 100 MW near Ashburn WITH FIBER and grid headroom"
+  //  appended get_grid_intelligence because grid_headroom placed second — not
+  //  because anyone asked about grid — and fiber, which the user typed, stayed
+  //  in `uncovered_constraints` and nothing else. The two mechanisms are
+  //  orthogonal, so fixing the first left the reported symptom untouched.
+  //  Placed HERE, before waves/estimates/confidence are derived, so an appended
+  //  step is a first-class member of the plan rather than a late attachment the
+  //  execution preview does not know about.
+  try {
+    const consideredTools = seq.map((x) => x.tool);
+    if (second && second.score > 0) {
+      // Mirror the `runnerUp` alternative built below. A tool merely WEIGHED is
+      // auditable in `rejected`, and _uncoveredConstraints already counts it as
+      // considered — so counting it here too is what keeps the router and the
+      // detector from disagreeing about the word "covered".
+      try {
+        const ru = second.cls.sequence(d).filter(Boolean)[0];
+        if (ru && ru.tool) consideredTools.push(ru.tool);
+      } catch (_e) { /* an unbuildable runner-up simply is not considered */ }
+    }
+    for (const cs of _constraintLeadSteps(text, d, consideredTools)) {
+      seq.push({ ...cs, step: seq.length + 1, depends_on: [] });
+    }
+  } catch (_e) { /* routing must never throw */ }
   // intent_confidence: deterministic function of the winning score + margin.
   // 0.35 base + 0.06/score-point, capped 0.95; ambiguous margins (<1) pay -0.1.
   // (v1 exposed this as `confidence` — kept as an alias for back-compat.)
