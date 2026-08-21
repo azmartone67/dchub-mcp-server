@@ -40,6 +40,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 // to what the SDK would serve. No network, pure public SDK API.
 import { Client as McpProbeClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 // MPP per-call rail (DARK unless MPP_ENABLED=1 + MPP_SIDECAR_URL). Pure hook (no
 // mppx in the gateway) — calls the isolated sidecar over HTTP. NOTE: the MCP SDK
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
@@ -11025,6 +11026,37 @@ export const _INSTRUCTIONS = (() => {
 // descOverrides: optional { tool_name: description } map from the per-platform
 // tuner. Set into the module-level _activeDescOverrides for the SYNCHRONOUS
 // registration block below, then cleared before return (see trackedTool).
+// ── r-schema-dialect-neutral (2026-08-21) ───────────────────────────────────
+// The SDK converts every zod schema with target 'draft-7' and stamps
+//   "$schema": "http://json-schema.org/draft-07/schema#"
+// onto BOTH inputSchema and outputSchema in tools/list. Claude Code 2.1.x and
+// Claude Desktop's bundled MCP client validate structuredContent against
+// outputSchema with a 2020-12-only Ajv and REFUSE any schema that DECLARES a
+// dialect outside their supported set — verbatim from the bundle:
+//   if ('$schema' in e && !SUPPORTED.has(e.$schema.replace(/#$/, '')))
+//     throw Error('JSON Schema declares an unsupported dialect (…)')
+// Measured 2026-08-21 from a Claude Code 2.1.237 seat: EVERY one of the 82
+// tools errored before the handler's result was even read, for paid keys too.
+// The Python QA super-user, the value harness and mcp_tool_calls could not see
+// it — none of them run the official TS client.
+//
+// The check fires only when $schema is PRESENT. A schema with no $schema is
+// read in the validator's own default dialect, and all 164 served schemas
+// compile clean under Ajv 2020-12 strict=true with the key removed
+// (test/schema-dialect-neutral.test.mjs). Emitting 2020-12 instead would fix
+// Claude and break every older draft-07-default client, so: declare NO dialect.
+//
+// The SDK offers no hook for the conversion target, so tools/list is wrapped
+// after registration and the stamp is dropped from each schema on the way out.
+// Nothing else changes — same keywords, same shape, same zod validation of
+// structuredContent on the server side.
+export function stripSchemaDialect(schema) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+  if (!Object.prototype.hasOwnProperty.call(schema, '$schema')) return schema;
+  const { $schema: _dropped, ...rest } = schema;
+  return rest;
+}
+
 function createServer(descOverrides) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
@@ -14702,6 +14734,23 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       });
     }
   } catch (_e) { /* additive only */ }
+
+  // r-schema-dialect-neutral: see stripSchemaDialect() above. The SDK installs
+  // its tools/list handler on the first registerTool(); replace it with a
+  // wrapper that strips the draft-07 stamp from every listed schema.
+  const _sdkListTools = srv.server._requestHandlers?.get?.('tools/list');
+  if (typeof _sdkListTools === 'function') {
+    srv.server.setRequestHandler(ListToolsRequestSchema, async (req, extra) => {
+      const res = await _sdkListTools(req, extra);
+      for (const t of (res && Array.isArray(res.tools)) ? res.tools : []) {
+        t.inputSchema = stripSchemaDialect(t.inputSchema);
+        if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
+      }
+      return res;
+    });
+  } else {
+    console.error('[schema-dialect] SDK tools/list handler not found — draft-07 $schema will be served; Claude clients will reject outputSchema');
+  }
 
   return srv;
 }
