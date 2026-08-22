@@ -14,11 +14,11 @@ Hi [name],
 
 I run DC Hub (dchub.cloud) and I'm also on the data-center side at CBRE — so I've spent real time inside your Data Center Research Service. The Market Connectivity Score and your interconnection/colocation-pricing depth are the best in the business, and they're exactly the half of the picture we *don't* build.
 
-We built the other half: live power & energy intelligence — real-time ISO grid data across 10 operators, our DCPI (power) and DCGI (gas) market indices, interconnection-queue depth and time-to-power, substation/transmission proximity. It updates continuously and it's structured so AI agents can both query and cite it.
+We built the other half: live power & energy intelligence — real-time ISO grid data across 10 operators, our DCPI power market index, interconnection-queue depth and time-to-power, substation/transmission proximity. It updates continuously and it's structured so AI agents can both query and cite it.
 
 The two datasets are genuinely complementary — your network/pricing layer plus our power/energy layer is the full site-selection answer your customers are already asking for as AI load reshapes the map. A few ways that could work:
 
-1. **Power/energy module inside your research** — we supply DCPI/DCGI + live grid/queue as a feed your subscribers see alongside your connectivity data.
+1. **Power/energy module inside your research** — we supply DCPI + live grid/queue as a feed your subscribers see alongside your connectivity data.
 2. **Data exchange** — we'd license your geocoded map/IX layer for our site-selection map; you reference our live power data where it strengthens yours.
 3. Start smaller — co-citation / cross-link to test the fit.
 
@@ -32,15 +32,15 @@ Jonathan
 
 ## SHORTER VARIANT (if a warm intro / LinkedIn DM)
 
-Hi [name] — I run DC Hub (dchub.cloud) and I'm in DC-land at CBRE too. Your Data Center Research Service nails network/interconnection/pricing; we built the live power & energy layer next to it (real-time ISO grids, DCPI power index, DCGI gas index, interconnection-queue/time-to-power) — and it's structured so AI agents can cite it. Feels complementary, not competitive. Open to a quick call on whether our power data could plug into your research, or a data exchange? Can send a live sample first.
+Hi [name] — I run DC Hub (dchub.cloud) and I'm in DC-land at CBRE too. Your Data Center Research Service nails network/interconnection/pricing; we built the live power & energy layer next to it (real-time ISO grids, DCPI power index, per-state gas pipeline/operator presence, interconnection-queue/time-to-power) — and it's structured so AI agents can cite it. Feels complementary, not competitive. Open to a quick call on whether our power data could plug into your research, or a data exchange? Can send a live sample first.
 
 ---
 
 ## TALKING POINTS (for the call, if it happens)
-- **Proof we're real/live:** dchub.cloud/mcp (81-tool MCP server, cited by ChatGPT/Claude/Gemini/Perplexity); 18,500+ facilities; DCPI 300+ markets; DCGI per-state gas index; 10 ISOs.
+- **Proof we're real/live:** dchub.cloud/mcp (82-tool MCP server, cited by ChatGPT/Claude/Gemini/Perplexity); 18,500+ facilities; DCPI 300+ markets; per-state gas pipeline/operator presence (the DCGI score was withdrawn 2026-08-08 rather than published wrong); 10 ISOs.
 - **Why now:** AI load makes *power* the binding constraint on siting — their network-first customers increasingly need a power answer they don't have.
 - **What we'd want from them:** their geocoded IX/network/cloud-onramp layer (they already sell it as a GeoJSON→S3 feed) to overlay on the land+power map.
-- **What we'd give:** live DCPI/DCGI + grid/queue feed; attribution; co-marketing.
+- **What we'd give:** live DCPI + grid/queue feed; attribution; co-marketing.
 - **Honest tension to navigate:** our model is open/citable (CC-BY, MCP), theirs is closed enterprise-license. A deal has to respect that — likely a licensed/contracted feed exchange, not our usual open release. Don't promise their premium data goes out CC-BY-free.
 - **Posture:** complementary supplier + peer, not a startup asking for a lifeline.
 

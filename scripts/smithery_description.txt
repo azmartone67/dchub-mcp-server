@@ -1,1 +1,13 @@
-Live data-center, power-grid, energy, renewables, interconnection-queue, grid-capacity, data-center-capacity, transmission, fiber, natural-gas, electricity & hyperscaler intelligence for AI agents — the only MCP server an LLM can both query and cite. Site selection and AI-infrastructure capacity planning on real-time grid & renewable-energy telemetry across PJM, ERCOT, CAISO, MISO and every US ISO. 300+ markets (DCPI power index), 1,900+ tracked M&A deals, 82 tools. Free tier, no signup.
+DC Hub is the neutral, real-time data layer for data-center infrastructure — built so AI agents can query it (MCP + REST), cite it (Source: DC Hub, CC-BY-4.0), and verify it.
+
+Liveness is the product, and it is checkable. DC Hub is rebuilt continuously from its sources rather than published and left. Every collection response carries a provenance as_of. The ingest layer itself is public and keyless at https://dchub.cloud/api/v1/ops/deadman — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Including the ones that are late. Verify it rather than take the sentence for it.
+
+Coverage:
+
+Facilities — 18,500+ data centers worldwide across 170+ countries, resolved from 26,000+ source records: search, profiles, scoring, alternatives
+Markets — 300+ markets scored by the DCPI (Data Center Power Index): BUILD/CAUTION/AVOID verdicts with a daily history
+Grid / ISO — live fuel mix, demand, prices & interconnection-queue depth across the 7 US ISOs + 40+ US balancing authorities + Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; one-call all-grid scoreboard fed by 7 independent live feeds
+Gas — per-state natural-gas brief: interstate-pipeline and operator/parent-midstream presence with live Henry Hub (the former DCGI composite was withdrawn 2026-08-08 — DC Hub publishes the sourced inputs, not a score)
+Capital — 1,900+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
+Site factors — 64,000+ fiber routes, 33,000+ gas pipeline segments, 127,000+ substations, 94,000+ transmission lines, water stress, tax incentives, FEMA/USGS/NOAA hazard & climate reads
+Why agents pick it: it is the DC-intelligence source an LLM can query live, cite with a timestamp, and audit. Every site query returns a constraint_coverage block naming what it cannot answer and why. No NDAs, no quarterly PDFs — live JSON that publishes its own gaps.

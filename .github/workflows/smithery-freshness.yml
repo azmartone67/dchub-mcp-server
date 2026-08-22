@@ -177,3 +177,42 @@ jobs:
             -d '{"feed":"smithery-freshness","status":"success","cadence_hours":24,
                  "note":"daily Smithery re-publish + listing convergence verified"}' \
             && echo "  ✓ beat recorded" || echo "::warning::beat failed (publish still succeeded)"
+
+      # ★ 2026-08-22 — the listing COPY is owner-pasted and nothing compared it.
+      # `smithery mcp publish` refreshes tools/verification; the `description`
+      # Smithery serves is whatever was last pasted into the owner UI. On
+      # 2026-08-21 the live text still advertised the DCGI (withdrawn 08-08),
+      # "2,000+ tracked M&A deals" against a canon of 1,900+, "17,700+" data
+      # centers against 18,500+, and "65 tracked feeds" against a live 70 — on
+      # the ONE channel with measured volume (72.7% of external calls) — and
+      # every monitor read green because none of them read that field.
+      # This step reads it. scripts/smithery_description.txt is the single
+      # origin (the quantity healer keeps its canon numbers current); a
+      # mismatch is RED and names the owner action. UNREADABLE is not DRIFT:
+      # an API failure warns and exits 0. Runs after the beat on purpose —
+      # a copy mismatch must not make the publish lane read dead.
+      - name: Listing copy equals scripts/smithery_description.txt (owner-pasted)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, re, sys, urllib.request
+          REG = "https://registry.smithery.ai/servers/azmartone67/dchub"
+          want = open("scripts/smithery_description.txt", encoding="utf-8").read()
+          norm = lambda t: re.sub(r"\s+", " ", t.replace("\\&", "&")).strip()
+          try:
+              req = urllib.request.Request(REG, headers={"User-Agent": "dchub-smithery-freshness-verify/1.0"})
+              live = (json.load(urllib.request.urlopen(req, timeout=30)).get("description") or "")
+          except Exception as e:
+              print(f"::warning::registry unreadable ({e}) — listing copy UNMEASURED, not drift"); sys.exit(0)
+          if not live.strip():
+              print("::warning::registry served an empty description — UNMEASURED"); sys.exit(0)
+          stale = [m for m in (r"\bDCGI\b(?![^.]*withdrawn)", r"\b\d+ tracked feeds\b") if re.search(m, live, re.I)]
+          if norm(live) == norm(want) and not stale:
+              print(f"::notice::Smithery listing copy matches scripts/smithery_description.txt ({len(live)} chars)"); sys.exit(0)
+          print("::error::Smithery listing DESCRIPTION drifted from scripts/smithery_description.txt"
+                + (f" (stale markers in the live text: {stale})" if stale else "")
+                + ". OWNER ACTION: open https://smithery.ai/servers/azmartone67/dchub -> Edit and paste "
+                  "scripts/smithery_description.txt verbatim. The file is the single origin; the publish CLI "
+                  "does not carry the description. This step stays red until the paste lands.")
+          sys.exit(1)
+          PY
