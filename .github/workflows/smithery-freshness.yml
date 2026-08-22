@@ -278,7 +278,7 @@ jobs:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
         run: |
           python3 - <<'PY'
-          import json, re, sys, urllib.request
+          import json, os, re, sys, urllib.request
           # ★2026-08-22: read api.smithery.ai (authed) — the AUTHORITATIVE store the
           # auto-write step targets. registry.smithery.ai is an eventually-consistent
           # projection that flaps across edges and false-failed this check. Fall back
