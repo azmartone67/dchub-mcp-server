@@ -32,6 +32,15 @@ jobs:
   republish:
     runs-on: ubuntu-latest
     steps:
+      # ★ 2026-08-22: this job never checked the repo out — the publish and
+      # convergence steps only ever needed the CLI and the live server. The
+      # listing-copy step below reads scripts/smithery_description.txt, and its
+      # first run died on FileNotFoundError *before* it could print the owner
+      # action it exists to print. A red step that names no remedy is the
+      # failure mode this lane was built to end. Shallow checkout, read-only.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
