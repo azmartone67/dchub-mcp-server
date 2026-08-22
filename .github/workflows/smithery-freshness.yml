@@ -200,16 +200,98 @@ jobs:
       # mismatch is RED and names the owner action. UNREADABLE is not DRIFT:
       # an API failure warns and exits 0. Runs after the beat on purpose —
       # a copy mismatch must not make the publish lane read dead.
+      # ★ 2026-08-22 — WHITE-GLOVE WRITES the Smithery description itself.
+      # Smithery exposes a real authenticated write the publish CLI never surfaced:
+      #   PATCH https://api.smithery.ai/servers/<ns>/<server>  {"description": ...}
+      #   Authorization: Bearer $SMITHERY_API_KEY   -> {"success": true}
+      # (the same token this workflow already uses to publish). The blurb was
+      # owner-pasted and drifted for weeks on the #1 channel (72.7% of external
+      # calls) — DCGI-as-live, "2,000+ deals", "17,700+", "65 tracked feeds".
+      # This pushes scripts/smithery_description.txt (the single origin the
+      # healer keeps current) and CONFIRMS the write on api.smithery.ai, the
+      # authoritative store — NOT registry.smithery.ai, which is an
+      # eventually-consistent read projection that flaps across edges (a single
+      # read there was measured stale seconds after a confirmed write). success:true
+      # is never trusted alone (the fake-push landmine). Idempotent. No key ⇒
+      # warn+skip. Kill: repo/org var WHITE_GLOVE_SMITHERY_AUTOWRITE=0.
+      - name: White-glove — auto-write the Smithery description (api.smithery.ai PATCH)
+        if: always()
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+          WHITE_GLOVE_SMITHERY_AUTOWRITE: ${{ vars.WHITE_GLOVE_SMITHERY_AUTOWRITE }}
+        run: |
+          if [ "${WHITE_GLOVE_SMITHERY_AUTOWRITE:-1}" = "0" ]; then
+            echo "::notice::white-glove Smithery auto-write disabled by var"; exit 0
+          fi
+          if [ -z "${SMITHERY_API_KEY:-}" ]; then
+            echo "::warning::no SMITHERY_API_KEY — cannot auto-write; the copy-check below names the owner-paste fallback"; exit 0
+          fi
+          python3 - <<'PY_WG'
+          import json, os, re, sys, time, urllib.request, urllib.error
+          KEY = os.environ["SMITHERY_API_KEY"]
+          WANT = open("scripts/smithery_description.txt", encoding="utf-8").read()
+          NS, SRV = "azmartone67", "dchub"
+          API = f"https://api.smithery.ai/servers/{NS}/{SRV}"
+          REG = f"https://registry.smithery.ai/servers/{NS}/{SRV}"
+          norm = lambda t: re.sub(r"\s+", " ", (t or "").replace("\\&", "&")).strip()
+          STALE = [r"\bDCGI\b(?![^.]*withdrawn)", r"\b\d+ tracked feeds\b"]
+          def get(url, auth):
+              h = {"User-Agent": "dchub-white-glove/1.0"}
+              if auth: h["Authorization"] = f"Bearer {KEY}"
+              return json.load(urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=30))
+          def clean(desc): return norm(desc) == norm(WANT) and not any(re.search(p, desc, re.I) for p in STALE)
+          # already in sync on the authoritative store?
+          try:
+              if clean(get(API, True).get("description") or ""):
+                  print("::notice::Smithery description already matches scripts/smithery_description.txt (api.smithery.ai) — no write")
+                  sys.exit(0)
+          except Exception as e:
+              print(f"::warning::could not pre-read api.smithery.ai ({e}) — proceeding to PATCH")
+          # write
+          req = urllib.request.Request(API, data=json.dumps({"description": WANT}).encode(), method="PATCH",
+                headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json", "User-Agent": "dchub-white-glove/1.0"})
+          try:
+              resp = json.load(urllib.request.urlopen(req, timeout=30))
+          except urllib.error.HTTPError as e:
+              print(f"::error::Smithery PATCH failed HTTP {e.code}: {e.read().decode('utf-8','replace')[:200]} — check SMITHERY_API_KEY write scope"); sys.exit(1)
+          if not resp.get("success"):
+              print(f"::error::Smithery PATCH did not report success: {resp}"); sys.exit(1)
+          # AUTHORITATIVE verify on api.smithery.ai (consistent; never trust success:true)
+          time.sleep(2)
+          got = get(API, True).get("description") or ""
+          if not clean(got):
+              print(f"::error::Smithery PATCH returned success but api.smithery.ai did not reflect the new description ({len(got)} chars, stale markers may persist)"); sys.exit(1)
+          print(f"::notice::white-glove wrote the Smithery description and confirmed it on api.smithery.ai ({len(got)} chars)")
+          # best-effort: nudge the public registry projection (it lags & flaps — a warning, never a failure)
+          for _ in range(6):
+              time.sleep(5)
+              try:
+                  if clean(get(REG, False).get("description") or ""): print("::notice::public registry projection converged"); break
+              except Exception: pass
+          else:
+              print("::warning::public registry.smithery.ai projection has not yet reflected the write (it lags api.smithery.ai) — the authoritative store is correct; the listing page will catch up")
+          PY_WG
+
       - name: Listing copy equals scripts/smithery_description.txt (owner-pasted)
         if: always()
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
         run: |
           python3 - <<'PY'
-          import json, re, sys, urllib.request
-          REG = "https://registry.smithery.ai/servers/azmartone67/dchub"
+          import json, os, re, sys, urllib.request
+          # ★2026-08-22: read api.smithery.ai (authed) — the AUTHORITATIVE store the
+          # auto-write step targets. registry.smithery.ai is an eventually-consistent
+          # projection that flaps across edges and false-failed this check. Fall back
+          # to the public registry only when no key is present.
+          KEY = os.environ.get("SMITHERY_API_KEY", "")
+          REG = ("https://api.smithery.ai/servers/azmartone67/dchub" if KEY
+                 else "https://registry.smithery.ai/servers/azmartone67/dchub")
           want = open("scripts/smithery_description.txt", encoding="utf-8").read()
           norm = lambda t: re.sub(r"\s+", " ", t.replace("\\&", "&")).strip()
           try:
-              req = urllib.request.Request(REG, headers={"User-Agent": "dchub-smithery-freshness-verify/1.0"})
+              _h = {"User-Agent": "dchub-smithery-freshness-verify/1.0"}
+              if KEY: _h["Authorization"] = f"Bearer {KEY}"
+              req = urllib.request.Request(REG, headers=_h)
               live = (json.load(urllib.request.urlopen(req, timeout=30)).get("description") or "")
           except Exception as e:
               print(f"::warning::registry unreadable ({e}) — listing copy UNMEASURED, not drift"); sys.exit(0)
@@ -220,8 +302,8 @@ jobs:
               print(f"::notice::Smithery listing copy matches scripts/smithery_description.txt ({len(live)} chars)"); sys.exit(0)
           print("::error::Smithery listing DESCRIPTION drifted from scripts/smithery_description.txt"
                 + (f" (stale markers in the live text: {stale})" if stale else "")
-                + ". OWNER ACTION: open https://smithery.ai/servers/azmartone67/dchub -> Edit and paste "
-                  "scripts/smithery_description.txt verbatim. The file is the single origin; the publish CLI "
-                  "does not carry the description. This step stays red until the paste lands.")
+                + ". The white-glove auto-write step above pushes this via api.smithery.ai; a RED here means that "
+                  "write failed or was skipped (no SMITHERY_API_KEY / disabled var). Check that step; the "
+                  "owner-paste at https://smithery.ai/servers/azmartone67/dchub -> Edit is the fallback.")
           sys.exit(1)
           PY
