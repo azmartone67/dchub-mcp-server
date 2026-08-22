@@ -4139,7 +4139,7 @@ function phase9L_clean_preview(header, body) {
 // Stripe Payment Links (verified 2026-05-25 against routes/_stripe_links.py):
 //   Starter $9      → 8x2dRa5sS0x75uteGuaZi0g
 //   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
-//   Pro $299        → eVq5kE4oOfs13mleGuaZi0h
+//   Pro $299        → 7sY7sM9J8enX7CB69YaZi0l
 const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();
 
 // r-pack10 (2026-06-25, owner): the old usage-based / metered SKU is RETIRED.

@@ -11,7 +11,7 @@
 |--------|---------|
 | ✅ WORKS | Returns real, useful data on the free key |
 | 🔒 GATED | Returns `paid_only` / `trial_preview` / upgrade stub on free key — real data expected on paid |
-| 🔒 PRO | Returns 402 `upgrade_required` — requires PRO tier ($199/mo) |
+| 🔒 PRO | Returns 402 `upgrade_required` — requires PRO tier ($299/mo) |
 | ⚠️ BUG | Tool runs but returns incorrect/default data (param ignored) |
 | ❌ BROKEN | Returns 404 or unexpected error regardless of tier |
 
@@ -33,10 +33,10 @@
 | 12 | `get_interconnection_queue` | 🔒 GATED | `{iso:"ERCOT"}` → `trial_preview` stub (numbers masked) |
 | 13 | `get_grid_data` | ⚠️ BUG | `{iso:"ERCOT"}` and `{iso:"PJM"}` both return **identical** CO location (lat 39.74, lon −105.17). **`iso` param ignored.** See § Backend Bugs. |
 | 14 | `get_changes` | ✅ WORKS | `{since:"7d"}` → DCPI movers, new facilities, new deals delta |
-| 15 | `save_site` | 🔒 PRO | `{lat:39.04, lon:-77.48}` → 402 `upgrade_required` (PRO $199/mo) |
-| 16 | `list_saved_sites` | 🔒 PRO | `{}` → 402 `upgrade_required` (PRO $199/mo) |
+| 15 | `save_site` | 🔒 PRO | `{lat:39.04, lon:-77.48}` → 402 `upgrade_required` (PRO $299/mo) |
+| 16 | `list_saved_sites` | 🔒 PRO | `{}` → 402 `upgrade_required` (PRO $299/mo) |
 | 17 | `set_market_alert` | ✅ WORKS | `{market:"northern-virginia", channel:"webhook", destination:"https://…"}` → `{ok:true, subscription_id}` |
-| 18 | `export_dataset` | 🔒 PRO | `{format:"csv"}` → 402 `upgrade_required` (PRO $199/mo) |
+| 18 | `export_dataset` | 🔒 PRO | `{format:"csv"}` → 402 `upgrade_required` (PRO $299/mo) |
 | 19 | `analyze_site` | 🔒 GATED | `{lat:33.45, lon:-112.07}` → `trial_preview` stub |
 | 20 | `compare_sites` | 🔒 GATED | `{locations:"33.45,-112.07;39.04,-77.48"}` → `trial_preview` stub |
 | 21 | `get_infrastructure` | 🔒 GATED | `{lat:39.96, lon:-82.99, radius_km:30}` → `trial_preview` stub |
@@ -64,7 +64,7 @@
 |----------|-------|-------|
 | ✅ WORKS (free) | 17 | search_facilities, get_market_intel, get_gas_index, get_grid_scoreboard, get_news, get_changes, set_market_alert, get_energy_prices, get_renewable_energy, get_water_risk, get_agent_registry, get_backup_status, site_selection_canvas, grid_transition_radar, deal_autopsy, get_grid_data (with bug caveat) |
 | 🔒 GATED (paid) | 15 | get_facility, compare_isos, get_intelligence_index, list_transactions, get_pipeline, get_interconnection_queue, analyze_site, compare_sites, get_infrastructure, get_fiber_intel, get_tax_incentives, get_grid_intelligence, get_dchub_recommendation, rank_markets, ai_capacity_index, hyperscaler_deals |
-| 🔒 PRO ($199/mo) | 3 | save_site, list_saved_sites, export_dataset |
+| 🔒 PRO ($299/mo) | 3 | save_site, list_saved_sites, export_dataset |
 | ❌ BROKEN | 3 | get_market_dcpi_rank (404), score_facility (404), find_alternatives (404) |
 | ⚠️ BUG | 1 | get_grid_data (iso param ignored) |
 
