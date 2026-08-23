@@ -1,0 +1,103 @@
+// Every published calls/day claim must come from the canonical ladder.
+//
+// ★2026-08-23. This repo advertised the free tier as 10 calls/day (×12
+// places), 50 calls/day, AND 100 calls/day — three numbers for one product —
+// while the canonical ladder (dchub-backend tier_registry.TIER_LIMITS, served
+// at /api/v1/tiers) says anonymous=5, free=10, identified=50. The anonymous
+// figure moved 10 → 5 on 2026-08-03 specifically to restore a real first rung
+// (anon 5 → free 10 → identified 50 → starter 200); every surface still saying
+// 10 erased the rung that change existed to create and over-claimed 2x on the
+// entry tier. smithery.yaml already said 5 in ONE line and 10 in three others.
+//
+// The canon is a committed snapshot (canonical/tier_limits.json, refreshed by
+// scripts/refresh-tier-limits.mjs) so this gate is deterministic and
+// network-free — the same contract as tool_maturity.json and canon_phrases.json.
+//
+// This is a GATE, not a healer: the prose shapes vary too much to auto-rewrite
+// safely, and a wrong auto-rewrite of published copy is worse than a red build.
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const read = (p) => readFileSync(join(ROOT, p), "utf8");
+const CANON = JSON.parse(read("canonical/tier_limits.json")).calls_per_day;
+
+// Everything an agent, a registry or an installing human actually reads.
+const SURFACES = [
+  "README.md", "llms-install.md", "DATA_QUALITY.md", "smithery.yaml",
+  "mcp-server.json", "dxt/manifest.json", "integrations/README.md",
+  "integrations/cohere/README.md", "integrations/chatgpt/README.md",
+  "integrations/chatgpt/openapi.json",
+];
+
+const CLAIM = /([\d,]+)\s*calls?\/day/gi;
+const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|no key needed/i;
+const num = (s) => Number(String(s).replace(/,/g, ""));
+
+function claims() {
+  const out = [];
+  for (const f of SURFACES) {
+    const txt = read(f);
+    txt.split("\n").forEach((line, i) => {
+      for (const m of line.matchAll(CLAIM)) {
+        out.push({ file: f, line: i + 1, n: num(m[1]), text: line.trim() });
+      }
+    });
+  }
+  return out;
+}
+
+describe("published calls/day claims", () => {
+  it("finds claims at all (guards against a vacuous pass)", () => {
+    expect(CANON.anonymous).toBe(5);
+    expect(claims().length).toBeGreaterThan(10);
+  });
+
+  it("every number is a rung on the canonical ladder", () => {
+    const allowed = new Set(Object.values(CANON));
+    const bad = claims().filter((c) => !allowed.has(c.n));
+    expect(bad.map((b) => `${b.file}:${b.line} → ${b.n} calls/day`)).toEqual([]);
+  });
+
+  it("an anonymous/keyless claim states the anonymous rung", () => {
+    // THE regression. `10 calls/day` is a real rung (free), so a
+    // ladder-membership check alone cannot catch "anonymous: 10 calls/day".
+    const bad = claims().filter(
+      (c) => ANON_CTX.test(c.text) && c.n !== CANON.anonymous,
+    );
+    expect(bad.map((b) => `${b.file}:${b.line} → ${b.n}, expected ${CANON.anonymous} — ${b.text.slice(0, 70)}`))
+      .toEqual([]);
+  });
+
+  it("no surface claims a free tier larger than the identified rung", () => {
+    // "100 calls/day" for a free key matched no tier at all and outran even
+    // the email-bound rung.
+    const bad = claims().filter(
+      (c) => /free tier|free key|dch_live_/i.test(c.text) && c.n > CANON.identified,
+    );
+    expect(bad.map((b) => `${b.file}:${b.line} → ${b.n}`)).toEqual([]);
+  });
+});
+
+describe("the canon snapshot itself", () => {
+  it("is a monotonic ladder", () => {
+    const order = ["anonymous", "free", "identified", "starter", "developer", "pro", "enterprise"];
+    for (let i = 1; i < order.length; i++) {
+      expect(CANON[order[i]]).toBeGreaterThanOrEqual(CANON[order[i - 1]]);
+    }
+  });
+
+  it("is derived, and says so", () => {
+    const snap = JSON.parse(read("canonical/tier_limits.json"));
+    expect(snap.source).toBe("/api/v1/tiers");
+    expect(snap._comment).toMatch(/do not hand-edit/i);
+  });
+
+  it("every JSON surface it governs still parses", () => {
+    for (const f of SURFACES.filter((f) => f.endsWith(".json"))) {
+      expect(() => JSON.parse(read(f))).not.toThrow();
+    }
+  });
+});

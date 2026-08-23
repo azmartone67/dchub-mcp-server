@@ -128,6 +128,15 @@ jobs:
         # FLATTERING state (it demotes nobody), so it must never arrive by
         # accident.
         run: node scripts/refresh-tool-maturity.mjs
+      - name: Refresh the canonical per-tier daily call ladder
+        # ★2026-08-23: this repo advertised the free tier as 10 calls/day (x12),
+        # 50/day AND 100/day — three numbers for one product — against a canon
+        # (tier_registry.TIER_LIMITS, served at /api/v1/tiers) that says
+        # anonymous=5 since 2026-08-03. Same fail-closed contract as the two
+        # refreshes above: a backend blip keeps the committed snapshot rather
+        # than half-writing one, because a bad snapshot would move every
+        # published claim at once. test/free-tier-claims.test.mjs gates on it.
+        run: node scripts/refresh-tier-limits.mjs
       - name: Sync tool count + version + canon quantities into every owned surface
         run: node scripts/sync-tools-manifest.mjs --fix
       - name: Commit + push only if a surface drifted
@@ -165,7 +174,7 @@ jobs:
                  integrations/gemini/README.md integrations/openrouter/README.md \
                  integrations/langchain/dchub_tools.py \
                  integrations/llamaindex/dchub_tools.py \
-                 canonical/github_description.txt"
+                 canonical/github_description.txt canonical/tier_limits.json"
           # ★2026-08-05 UNOWNED-HEAL GATE. The comment above warned that a heal
           # writing a file this list omits is a no-op with a green log — and then
           # it happened here for seven files, undetected for days, because

@@ -14425,7 +14425,7 @@ function createServer(descOverrides) {
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a 1-of-N preview, a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click — after which your very next call returns full data (no reconnect; the checkout binds to this session). Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · $49/mo Developer · $299/mo Pro. Want the FREE identified tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a 1-of-N preview, a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click — after which your very next call returns full data (no reconnect; the checkout binds to this session). Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · $49/mo Developer · $299/mo Pro. Want the FREE tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => {
       const _ctx = getCtx();

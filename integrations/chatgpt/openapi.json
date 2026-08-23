@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DC Hub Actions",
-    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - 18,500+ facilities across 170+ countries, 300+ DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,900+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is 10 calls/day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
+    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - 18,500+ facilities across 170+ countries, 300+ DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,900+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is 5 calls/day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
     "version": "1.2.3",
     "contact": {
       "name": "DC Hub",
@@ -298,7 +298,7 @@
       "get": {
         "operationId": "getGridIntelligence",
         "summary": "Full grid intelligence for one ISO/region (grid_and_queue)",
-        "description": "recipe grid_and_queue. Deep grid intelligence for a single ISO/region: headroom, constraints, generation additions, and forward signals. Free tier is capped at 10 calls/day for this tool. Pass a region id such as 'ercot', 'pjm', 'caiso', 'miso', 'spp', 'nyiso', 'isone', 'uk', 'eu', 'au'. Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe grid_and_queue. Deep grid intelligence for a single ISO/region: headroom, constraints, generation additions, and forward signals. Free tier is capped at 5 calls/day for this tool. Pass a region id such as 'ercot', 'pjm', 'caiso', 'miso', 'spp', 'nyiso', 'isone', 'uk', 'eu', 'au'. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "region_id",
@@ -505,7 +505,7 @@
       "get": {
         "operationId": "getFiberIntel",
         "summary": "Dark / long-haul fiber intelligence for a state or area",
-        "description": ". Fiber-route intelligence - long-haul and metro dark-fiber corridors, carriers, and route density for a state or bounding box. Free tier is capped at 10 calls/day for this tool; deeper detail is gated (surface 'message'/upgrade_url on 402 or gated bodies). Pass ?state= (e.g. 'VA') or ?bbox=w,s,e,n. Cite 'DC Hub, dchub.cloud'.",
+        "description": ". Fiber-route intelligence - long-haul and metro dark-fiber corridors, carriers, and route density for a state or bounding box. Free tier is capped at 5 calls/day for this tool; deeper detail is gated (surface 'message'/upgrade_url on 402 or gated bodies). Pass ?state= (e.g. 'VA') or ?bbox=w,s,e,n. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "state",
