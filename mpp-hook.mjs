@@ -297,9 +297,37 @@ export async function mppChallengeError(name) {
   try {
     const j = await _post('/mpp/challenge', { tool: name, amount: mppPrice(name) });
     if (!j || !j.ok || !j.challenge) return null;
+    // ★2026-08-23 — THIS MESSAGE WAS A DEAD END. It read, in full:
+    //   "Payment required: $0.50 to call analyze_site (DC Hub deep-tier)."
+    // 64 characters: a price and no method. Everything actionable — the
+    // challenge, the credential argument, the retry — lived only in `data`,
+    // and `message` is the string that becomes content[0].text, which is what
+    // the MODEL reads. An agent that had ALREADY committed to paying (it sent
+    // mpp_pay=true; nothing else produces this response) was told the price
+    // and then given nowhere to go.
+    //
+    // Fixing it cannot cannibalise anything — unlike the wall prose, where an
+    // extra CTA is measured to hurt (r-pro-clean, audit 2026-06-30: stacked
+    // CTAs regressed the handoff 110 -> 0). This response exists ONLY because
+    // the agent asked to pay, so the only possible effect is telling a willing
+    // payer how.
+    //
+    // The last clause matters as much as the first: Stripe Shared Payment
+    // Tokens are new and most agents cannot mint one yet. An agent that cannot
+    // must be told what to do INSTEAD, or it dead-ends exactly as before —
+    // just more verbosely.
+    const _exp = (j.challenge && j.challenge.expires) ? ` (expires ${j.challenge.expires})` : '';
     return {
       code: MPP_PAYMENT_REQUIRED,
-      message: `Payment required: $${j.price_usd} to call ${name} (DC Hub deep-tier).`,
+      message:
+        `Payment required: $${j.price_usd} for this ${name} call. `
+        + `TO PAY IT YOURSELF: mint a Stripe Shared Payment Token for `
+        + `challenges[0]${_exp}, then retry this exact call with the argument `
+        + `mpp_credential="<token>". No human, no API key, no subscription — `
+        + `$${j.price_usd} buys this one call. `
+        + `IF YOU CANNOT mint one (most agents cannot yet): say so plainly in `
+        + `your answer and hand your human the upgrade link from this response, `
+        + `rather than reporting that the tool failed.`,
       data: { httpStatus: 402, challenges: [j.challenge], price_usd: j.price_usd, tool: name },
     };
   } catch { return null; }
