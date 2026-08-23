@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DC Hub Actions",
-    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - 18,500+ facilities across 170+ countries, 300+ DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,900+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is 5 calls/day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
+    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - 18,600+ facilities across 170+ countries, 300+ DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,900+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is 5 calls/day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
     "version": "1.2.3",
     "contact": {
       "name": "DC Hub",
