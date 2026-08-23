@@ -6,7 +6,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 
 - **Server URL:** `https://dchub.cloud/mcp`
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
-- **Auth:** none required for the free anonymous tier (10 calls/day). For higher limits,
+- **Auth:** none required for the free anonymous tier (5 calls/day). For higher limits,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
 - **Tools exposed:** 70 (facility search, market intelligence, grid + interconnection,
   site analysis + board-ready site-risk scoring, M&A deals, infrastructure).
@@ -92,7 +92,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key (higher limits)
 
-The anonymous tier allows **10 calls/day**. To raise limits, get a free key
+The anonymous tier allows **5 calls/day**. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 

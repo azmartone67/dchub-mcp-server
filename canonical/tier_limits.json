@@ -1,0 +1,13 @@
+{
+  "_comment": "DERIVED — do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs",
+  "source": "/api/v1/tiers",
+  "calls_per_day": {
+    "anonymous": 5,
+    "free": 10,
+    "identified": 50,
+    "starter": 200,
+    "developer": 500,
+    "pro": 2000,
+    "enterprise": 100000
+  }
+}

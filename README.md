@@ -122,7 +122,7 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 
 ## Pricing
 
-- **Anonymous:** 10 calls/day, no API key needed
+- **Anonymous:** 5 calls/day, no API key needed
 - **Free key (email signup, ~60 sec):** [https://dchub.cloud/signup](https://dchub.cloud/signup) — 50 calls/day
 - **Starter ($9/mo):** 200 calls/day → [Stripe](https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g)
 - **Developer ($49/mo):** 500 calls/day, full field access → [Stripe](https://buy.stripe.com/7sY5kE8F4fs13mI0PEaZi0c)
