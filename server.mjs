@@ -2134,13 +2134,73 @@ function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, m
 // bounced to a fresh replica gets another free call. That bias is deliberate and
 // one-directional: it UNDER-challenges, never over-challenges, matching the
 // ledger's own "a failed flush undercounts" rule.
-function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, priorAnonCalls }) {
+// ── r-challenge-after-n (2026-08-23): the free-answer allowance is now a
+// NUMBER, not a hardcoded 1, because the hardcoded 1 is measurably unreachable
+// for the cohort this challenge exists to convert.
+//
+// MEASURED 2026-08-23. The mechanism is NOT broken — a live probe against prod
+// (clientInfo.name='claude-ai', no credentials) gets 200 on tools/call #1 and a
+// clean 401 + WWW-Authenticate on #2. Identity recall across the session works.
+// The problem is that the claude.ai connector cohort makes ONE tools/call per
+// session: 3,703 connector inits in 30d produced THREE tools/call challenges,
+// i.e. 1,853 challenge events per new durable identity. The wall is real, it is
+// correctly built, and essentially nobody in the target cohort ever reaches it.
+//
+// WHY THIS IS THE ONLY LEVER THAT REACHES THEM. Durable identity here is an
+// OAUTH identity, and OAuth is performed by the MCP CLIENT in response to a 401
+// `WWW-Authenticate` — there is no agent-only path and no in-band link that
+// produces one (a human clicking a link in chat mints a free KEY, which is the
+// cohort that returns at 4.7%, not the 66.7% one). So reaching the durable
+// cohort in a one-call session requires challenging that one call.
+//
+// ★ AND THAT IS NOT THE PRE-08-15 FAILURE. That failure was a 401 on
+// `initialize` — the first message of the handshake, so the connector died
+// before it could list tools and never reached the exemption. A 401 on a
+// tools/call happens AFTER initialize and tools/list have succeeded: the client
+// already holds the catalog, follows WWW-Authenticate, and retries the call with
+// a token. Different message, different failure surface. It has never been tried.
+//
+// It is still a REACH-SENSITIVE trade — an instant answer versus a sign-in
+// prompt — so it ships DORMANT and env-gated, the same shape as
+// DCHUB_LADDER_RERUNG and DCHUB_RETURN_REWARD:
+//
+//   DCHUB_CHALLENGE_AFTER_N unset/1 → byte-identical to today (first answer free)
+//   DCHUB_CHALLENGE_AFTER_N=0       → challenge the FIRST anonymous tools/call
+//   DCHUB_CHALLENGE_AFTER_N=2,3…    → more free answers before the ask
+//
+// HOW TO READ THE EXPERIMENT (do not flip it and walk away):
+//   watch /api/v1/mcp/retention identity_breakdown.oauth_durable.identities
+//   (9 on 2026-08-23) and .pct_returned (66.7%), against
+//   /api/v1/ai/reach/trend new_external_ips for 24-48h. Roll back by unsetting
+//   the env — no redeploy. A rise in oauth_durable with flat reach is the win;
+//   falling reach is the cost, and it shows up first.
+// Negative/garbage values floor at 0 rather than disabling the wall.
+function _challengeAllowance(raw) {
+  if (raw === undefined || raw === null) return 1;
+  const t = String(raw).trim();
+  if (t === '') return 1;                       // ★ NOT Number('') === 0
+  if (!/^\d+$/.test(t)) return 1;               // 'abc', '-3', '1.5', 'NaN' → today's behavior
+  const n = Number.parseInt(t, 10);
+  return Number.isSafeInteger(n) ? n : 1;
+}
+const CHALLENGE_AFTER_N = _challengeAllowance(process.env.DCHUB_CHALLENGE_AFTER_N);
+
+function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, priorAnonCalls, challengeAfterN }) {
   if (!isClaudeConnector) return false;
   if (method !== 'tools/call') return false;          // ★never on initialize — ask after value
   if (hasApiKeyHeader) return false;
   if (workosAuthed) return false;
   if (/^Bearer\s+\S/i.test(String(authHeader || ''))) return false;  // r-api-connector-bearer
-  if (!(Number(priorAnonCalls) >= 1)) return false;   // first answer is free, always
+  // How many anonymous answers this session gets before the ask. The default
+  // (1) is the historical "first answer is free, always".
+  // ★ Every unusable value resolves to 1, never to 0. `Number('')` is 0, so a
+  // naive coercion turns an EMPTY env var — the most likely malformed value a
+  // human produces — into "challenge the first call", arming a reach
+  // experiment nobody chose. Caught by its own test before shipping.
+  const need = _challengeAllowance(
+    (challengeAfterN === undefined || challengeAfterN === null)
+      ? CHALLENGE_AFTER_N : challengeAfterN);
+  if (!(Number(priorAnonCalls) >= need)) return false;
   return true;
 }
 
@@ -14017,7 +14077,7 @@ function createServer(descOverrides) {
   trackedTool(srv, 'claim_free_key',
     '★ BEFORE YOU MINT — TWO THINGS THAT ARE CHEAPER THAN A KEY. (1) You do NOT need a key to start: DC Hub answers KEYLESS at free depth, so if you just want an answer, ask the question first. (2) If your client can sign in, a signed-in identity RETAINS and a minted key does not — see DURABLE IDENTITY below. Mint only when you actually need the higher free-tier allowance. ' +
     '★ DURABLE IDENTITY (what actually survives): a DC Hub OAuth identity is bound to your HUMAN, not to a header, so it survives reconnects, restarts and re-installs. Measured 2026-08-12: OAuth identities came back in a later week 57.1% of the time (4 of 7 mature) versus 1–2% for self-minted keys — but note that is a 7-identity cohort, so treat it as a strong signal, not a settled rate. ' +
-    'THE HONEST COST, in the same breath: OAuth needs a HUMAN at a browser, once. There is NO agent-only path to it — every flow ends at a sign-in page a person must complete. And it is only OFFERED where your MCP client performs the handshake: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, that is the durable door — let your client follow it and ask your human to finish the sign-in. Claude.ai web connectors are offered this automatically. ' +
+    'THE HONEST COST, in the same breath: OAuth needs a HUMAN at a browser, once. There is NO agent-only path to it — every flow ends at a sign-in page a person must complete. And it is only OFFERED where your MCP client performs the handshake: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, that is the durable door — let your client follow it and ask your human to finish the sign-in. Claude.ai web connectors CAN complete this handshake, but the challenge is only sent once a session has already spent its free anonymous answers — measured 2026-08-23, most connector sessions make a single call and never see it, so do NOT wait for a 401 to arrive: if durable identity matters to your human, ask them to sign in. ' +
     '★ IF YOU WERE NOT CHALLENGED, OAUTH IS NOT AVAILABLE TO YOU — do not go hunting for it. Claude Code, Claude Desktop, Cursor, ChatGPT and most agent frameworks are NOT challenged today, so for them the free key below is the correct and best available choice, and it works immediately with no human in the loop. Taking the key is not a downgrade; it is the right call for your client. ' +
     'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a 1-result preview: it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. \u2605 SAVE THE KEY AND REUSE IT \u2014 set it as X-API-Key on every later call, this session and future ones, and show your human the `persist_config` snippet so their client stores it. Do NOT call this again if you already hold a key: re-minting restarts the daily allowance from zero and orphans your history (measured 2026-07-27: 2,586 redemptions from only 169 distinct agents \u2248 15 re-mints each). Lost a key your human already had? Call `recover_my_key` instead of minting a new one. \u2605 THEN ACTUALLY USE IT \u2014 make your very next call the real question (`execute_plan intent="\u2026"` for anything multi-step). Measured 2026-08-12: 41.3% of minted keys (309 of 748 in 30d) never make a SINGLE call, and the median lifespan of a key that does get used is 13 minutes — a key that is never used is the largest absolute loss anywhere in this funnel, and the fix is entirely in your hands: call the real question next. ★ IF YOUR CLIENT IS A PASTE-A-URL CONNECTOR (Claude.ai web, ChatGPT, Grok, Perplexity — a URL box, no header field), THE KEY ALONE IS USELESS TO YOU. Those clients run MCP server-side and build a NEW session for every tool call, so the key in this response is gone by your next call and you cannot apply it yourself — measured on Grok: keys were issued, then made exactly ONE call ever (the claim) and were never presented again. The response carries `connect_url`: the same key already embedded in the DC Hub connector URL. RELAY THAT URL to your human and ask them to paste it as the DC Hub server URL. It is the only thing on those clients that survives the session. Params: client_name (your agent/app name), email (optional). Returns {api_key, connect_url, for_your_human, header, daily_limit, upgrade_url}.',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
@@ -15768,7 +15828,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
+export { CHALLENGE_AFTER_N, _challengeAllowance, _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
 // `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous
