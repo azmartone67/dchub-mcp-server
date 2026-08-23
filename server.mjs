@@ -2185,7 +2185,77 @@ function _challengeAllowance(raw) {
 }
 const CHALLENGE_AFTER_N = _challengeAllowance(process.env.DCHUB_CHALLENGE_AFTER_N);
 
-function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, priorAnonCalls, challengeAfterN }) {
+// ── r-challenge-bound (2026-08-23): a challenge that can never stop is a
+// LOCKOUT, not a nudge.
+//
+// FOUND BY RUNNING IT. With DCHUB_CHALLENGE_AFTER_N=0 armed in production, the
+// challenge branch `return`s BEFORE _bumpAnonCall, so a challenged call never
+// increments the counter: call 1 -> 401, call 2 -> priorAnonCalls still 0 ->
+// 401, forever. claude.ai completes the handshake so it converts, but
+// `Claude-User` — the Messages-API connector — has NO human at a browser to
+// finish a sign-in, and 43 of its calls across 10 IPs landed in the last 7d.
+// Those callers were bricked for as long as the flag was on. Rolled back
+// within the hour; this is the fix that makes arming it safe.
+//
+// After CHALLENGE_MAX challenges the call is SERVED. A client that can do
+// OAuth converts on the first one and never reaches the bound; a client that
+// cannot loses CHALLENGE_MAX calls and then works forever.
+//
+// ★ THE KEY ASYMMETRY, and why the two counters use different identities:
+//   · the TRIGGER is session-keyed. Coarse identity there fails CLOSED — it
+//     401s a stranger's genuine first call because someone behind the same
+//     egress already called. That is the pre-08-15 failure.
+//   · the BOUND is caller-keyed (IP). Coarse identity here fails OPEN — it
+//     serves MORE calls than strictly needed. Over-counting is harmless.
+// Same table, opposite blast radius, so they must not share a key.
+const _CHALLENGES_ISSUED = new Map();
+const _CHALLENGES_MAX_KEYS = 5000;
+function _challengeMax(raw) {
+  if (raw === undefined || raw === null) return 3;
+  const t = String(raw).trim();
+  if (t === '' || !/^\d+$/.test(t)) return 3;    // never Number('') === 0
+  const n = Number.parseInt(t, 10);
+  return Number.isSafeInteger(n) ? n : 3;        // 0 = never challenge (kill switch)
+}
+const CHALLENGE_MAX = _challengeMax(process.env.DCHUB_CHALLENGE_MAX);
+function _challengesIssued(key) {
+  if (!key) return 0;
+  return Number(_CHALLENGES_ISSUED.get(String(key)) || 0);
+}
+function _bumpChallengeIssued(key) {
+  if (!key) return;
+  if (_CHALLENGES_ISSUED.size >= _CHALLENGES_MAX_KEYS) {
+    let i = 0; const drop = _CHALLENGES_MAX_KEYS / 10;
+    for (const k of _CHALLENGES_ISSUED.keys()) { _CHALLENGES_ISSUED.delete(k); if (++i >= drop) break; }
+  }
+  _CHALLENGES_ISSUED.set(String(key), _challengesIssued(key) + 1);
+}
+
+// ── r-challenge-widen (2026-08-23): WHICH clients may be challenged.
+// The challenge is Claude-only because OAuth is client-performed and we knew
+// claude.ai does it. The measured reason to widen: durable identity returns
+// cross-week at 66.7% (n=9) against 4.6% key-only and 1.0% for free keys, and
+// the largest real cohort is 158 generic-MCP agents we cannot identify at all.
+// Allowlist, not a heuristic — an env the operator widens one client at a time
+// and measures, because a client that cannot complete OAuth pays CHALLENGE_MAX
+// calls for our experiment. Default 'claude' is exactly today's behavior.
+function _challengeClientAllowed(clientName, allowRaw) {
+  const raw = (allowRaw === undefined || allowRaw === null)
+    ? (process.env.DCHUB_CHALLENGE_CLIENTS ?? 'claude') : allowRaw;
+  const list = String(raw).split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (!list.length) return false;
+  // ★ The nameless check runs BEFORE '*'. A caller that sends no clientInfo at
+  // all is the one we understand least — we cannot tell whether it can complete
+  // OAuth, cannot allowlist it, and cannot debug it when it breaks. '*' means
+  // "every IDENTIFIED client", never "everything including the unidentifiable".
+  const n = String(clientName || '').trim().toLowerCase();
+  if (!n) return false;
+  if (list.includes('*')) return true;
+  return list.some((entry) => entry === n
+    || (entry === 'claude' && (n === 'claude-ai' || n === 'claude' || n === 'claude-user')));
+}
+
+function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, priorAnonCalls, challengeAfterN, challengesIssued, challengeMax }) {
   if (!isClaudeConnector) return false;
   if (method !== 'tools/call') return false;          // ★never on initialize — ask after value
   if (hasApiKeyHeader) return false;
@@ -2201,6 +2271,15 @@ function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, 
     (challengeAfterN === undefined || challengeAfterN === null)
       ? CHALLENGE_AFTER_N : challengeAfterN);
   if (!(Number(priorAnonCalls) >= need)) return false;
+  // ★ The bound. Past it we SERVE — a client that cannot complete the handshake
+  // must not be locked out of the product forever.
+  const cap = _challengeMax(
+    (challengeMax === undefined || challengeMax === null) ? CHALLENGE_MAX : challengeMax);
+  // cap 0 is the kill switch and needs no branch of its own: 0 issued >= 0
+  // allowed is already false. (A dedicated `cap === 0` line was unreachable —
+  // mutation testing caught it surviving, which is what an unreachable guard
+  // looks like.)
+  if (Number(challengesIssued || 0) >= cap) return false;
   return true;
 }
 
@@ -15351,13 +15430,26 @@ app.post('/mcp', async (req, res) => {
       sessionId,
     });
     const _anonCallsSoFar = _anonCallCount(sessionId);
+    // r-challenge-widen: the allowlist widens PAST Claude one client at a time.
+    // A client is challengeable if it is the Claude connector (today's behavior)
+    // OR its remembered clientInfo.name is on DCHUB_CHALLENGE_CLIENTS.
+    const _chClientName = _recallClientName(sessionId) || _ciName || '';
+    const _chAllowed = _isClaudeConnectorNow || _challengeClientAllowed(_chClientName);
+    // r-challenge-bound: keyed on the CALLER, not the session — the bound must
+    // survive the one-call-per-session pattern it exists to protect, and a
+    // coarse key here fails OPEN (serves more). Same expression as `clientIp`
+    // below, which is not in scope yet at this point in the handler.
+    const _chCallerKey = (req.headers['x-dc-client-ip'] || '').trim()
+                      || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+                      || sessionId || '';
     if (_workosEnabled() && !_challengeDisabled && _claudeChallengeEligible({
-          isClaudeConnector: _isClaudeConnectorNow,
+          isClaudeConnector: _chAllowed,
           method: req.body?.method,
           hasApiKeyHeader: !!req.headers['x-api-key'],
           workosAuthed: _workosAuthed,
           authHeader: req.headers['authorization'],
           priorAnonCalls: _anonCallsSoFar,
+          challengesIssued: _challengesIssued(_chCallerKey),
         })) {
       // resource_metadata points at the FLASK-served document (not the stale CF
       // worker at /.well-known/*, which advertises custom scopes WorkOS rejects).
@@ -15371,6 +15463,10 @@ app.post('/mcp', async (req, res) => {
         'Bearer resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource", '
         + 'scope="openid profile email offline_access"');
       _chBump('claude_connector', req.body?.method);   // r-oauth-funnel: Map bump only
+      // ★ Count the challenge we are about to ISSUE. Without this the bound can
+      // never be reached and the 401 repeats forever — the lockout this whole
+      // block exists to prevent. Bumped BEFORE the return, like _chBump.
+      _bumpChallengeIssued(_chCallerKey);
       console.log('[oauth] 401 challenge → Claude.ai connector (no token) — triggering WorkOS sign-in');
       return res.status(401).json({
         jsonrpc: '2.0',
@@ -15384,7 +15480,7 @@ app.post('/mcp', async (req, res) => {
     // handler because every path below this point serves the call; a bump that
     // waited for success would need to thread through the stateless transport,
     // and under-counting there would silently restore "never challenge".
-    if (req.body?.method === 'tools/call' && _isClaudeConnectorNow
+    if (req.body?.method === 'tools/call' && _chAllowed
         && !req.headers['x-api-key'] && !_workosAuthed
         && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))) {
       _bumpAnonCall(sessionId);
@@ -15828,7 +15924,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { CHALLENGE_AFTER_N, _challengeAllowance, _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
+export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
 // `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous
