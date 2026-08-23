@@ -22,7 +22,8 @@ jobs:
           cache: "npm"
 
       - name: Install
-        run: npm install --no-audit --no-fund
+        # npm ci so CI tests the SAME dependency tree the image ships.
+        run: npm ci --no-audit --no-fund
 
       # r77 (2026-06-07): the live-API suite hits the 1-replica MCP behind CF and is
       # inherently flaky under burst (empty-body / "No session" / 429 / 503, esp.
