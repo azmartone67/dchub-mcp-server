@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install"
+buildCommand = "npm ci"
 
 [deploy]
 startCommand = "node server.mjs"
