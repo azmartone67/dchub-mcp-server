@@ -10768,7 +10768,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
        withStarterPack(
          _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), args, _toolParamKeys(name)), name));
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name));
 }
 
 // ★★★ STAGE 0a — request_interpretation (2026-08-25).
@@ -10805,32 +10805,74 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 // ★ Silent when there is nothing to report. This tail is already enormous and a
 // payload-diet change shipped the same month; a block on every clean call would
 // be pure cost. It appears only when an argument was actually dropped.
-export function _requestInterpretation(args, declared) {
-  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
-  if (!declared || typeof declared.has !== 'function') return null;  // unknown tool: say nothing
-  const unsupported = Object.keys(args).filter((k) => !declared.has(k));
+export function _requestInterpretation(rawKeys, declared) {
+  if (!Array.isArray(rawKeys)) return null;                 // not captured: say nothing
+  if (!declared || typeof declared.has !== 'function') return null;  // unknown tool
+  const unsupported = rawKeys.filter((k) => !declared.has(k));
   if (!unsupported.length) return null;
   return {
     unsupported_arguments: unsupported.sort(),
-    basis: 'sent MINUS this tool\'s declared inputSchema properties. An undeclared argument never reached the handler — true by construction, not inferred.',
+    basis: 'sent MINUS this tool\'s declared inputSchema properties, read from the RAW JSON-RPC params.arguments before schema validation. An undeclared argument never reached the handler — true by construction, not inferred.',
     what_to_do: 'Re-read this tool\'s inputSchema in tools/list and re-send. The rest of your call still ran; the result below is the answer WITHOUT the argument(s) named here.',
     caveat: 'This block cannot tell you that a DECLARED argument was APPLIED. Only the handler knows that, and where it publishes one, `constraint_coverage` with shape `argument_disposition` reports it per argument (applied/reason/instead).',
   };
 }
 
-// ★ Takes the DECLARED SET, not a tool name. Resolving _toolParamKeys() inside
-// made this untestable: a unit test can only pass an unregistered name, so
-// _toolParamKeys returned null, no block was ever computed, and the
-// "never overwrite the handler's own block" guard was never exercised —
-// deleting that guard passed clean (mutation-tested 2026-08-25). A function
-// that reaches into a module registry cannot be tested at its own boundary.
-export function _stampRequestInterpretation(result, args, declared) {
+// ★★★ WHY THE KEYS COME FROM THE REQUEST CONTEXT AND NOT FROM `args` (2026-08-25,
+// same day, second pass). The first cut of this read `Object.keys(args)` inside
+// the tool callback. It could never fire, and the reason is already written down
+// in this repo: the SDK validates params.arguments with
+// safeParseAsync(z.object(shape)) and hands the callback parseResult.data, and
+// **zod STRIPS undeclared keys**. By the time a handler runs, an undeclared
+// argument is GONE — so "sent MINUS declared" computed there is ALWAYS empty.
+//
+// That is the identical mechanism test/mpp-arg-channel.test.mjs pinned on
+// 2026-08-17 ("reading a param is not declaring it — and only the declaration
+// survives validation"), where it had already cost the payment rail two months.
+// The MPP fix was to DECLARE the params. That fix cannot apply here by
+// definition: this feature's entire subject matter is arguments nobody declared.
+//
+// So the keys are captured upstream of validation, off the raw JSON-RPC body, and
+// ride the request's AsyncLocalStorage entry as `raw_arg_keys`.
+//
+// ★ Fail-soft in one direction only. No capture (stdio transport, an unparsed
+// body, a batch that names one tool twice with different arguments) yields null
+// and the block is simply omitted. It can under-report; it cannot invent an
+// argument the caller did not send.
+export function _rawArgKeysFromBody(body) {
+  const out = new Map();
+  const msgs = Array.isArray(body) ? body : [body];
+  for (const m of msgs) {
+    if (!m || typeof m !== 'object' || m.method !== 'tools/call') continue;
+    const params = m.params;
+    if (!params || typeof params !== 'object' || typeof params.name !== 'string') continue;
+    const a = params.arguments;
+    const keys = (a && typeof a === 'object' && !Array.isArray(a)) ? Object.keys(a) : [];
+    if (out.has(params.name)) { out.set(params.name, null); continue; }  // ambiguous batch
+    out.set(params.name, keys);
+  }
+  return out;
+}
+
+// Reads the capture for ONE tool out of the active request ctx. null => silent.
+const _ctxRawArgKeys = (name) => {
+  const m = (getCtx() || {}).raw_arg_keys;
+  if (!m || typeof m.get !== 'function') return null;
+  return m.get(name) || null;
+};
+
+// ★ Takes the CAPTURED RAW KEYS and the DECLARED SET, not a tool name.
+// Resolving either inside made this untestable: a unit test can only pass an
+// unregistered name, so the lookup returned null, no block was ever computed,
+// and the "never overwrite the handler's own block" guard was never exercised —
+// deleting that guard passed clean (mutation-tested 2026-08-25).
+export function _stampRequestInterpretation(result, rawKeys, declared) {
   try {
     if (!result || typeof result !== 'object') return result;
     const sc = result.structuredContent;
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
     if (sc.request_interpretation !== undefined) return result;  // handler said it better
-    const ri = _requestInterpretation(args, declared);
+    const ri = _requestInterpretation(rawKeys, declared);
     if (!ri) return result;
     return { ...result, structuredContent: { ...sc, request_interpretation: ri } };
   } catch {
@@ -15688,7 +15730,9 @@ app.post('/mcp', async (req, res) => {
       // item-3: stamp the live request's caller IP onto the reused ctx (the
       // stored meta carries the init-time IP; a returning request may come
       // from a different hop, so prefer the current one when present).
-      return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment }, async () => {
+      return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment,
+        // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
+        raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     }
@@ -15835,6 +15879,7 @@ app.post('/mcp', async (req, res) => {
         api_key: apiKey, platform, tier: 'free', session_id: null,
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+        raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
       }, async () => {
         await ephTransport.handleRequest(req, res, body);
       });
@@ -15890,6 +15935,7 @@ app.post('/mcp', async (req, res) => {
         client_name_raw: _recallClientName(sessionId),
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+        raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
       }, async () => {
         await ephTransport.handleRequest(req, res, body);
       });
@@ -16095,3 +16141,11 @@ export { _collapseEnvelope };
 // are not unit-testable in isolation; _goUrl is the pure part.
 export { _goUrl };
 
+// r70 follow-up (2026-08-25): the Express app is exported so a guard can bind an
+// EPHEMERAL port under vitest, where the block above deliberately does not
+// listen. Stage 0a shipped dead because every one of its 17 guards called the
+// exported functions directly — a level at which the SDK has not yet stripped
+// the undeclared arguments the feature exists to name. Driving a real
+// tools/call over HTTP is the only level that can catch that, and it needs the
+// app. Exporting an existing object changes no runtime behavior.
+export { app };
