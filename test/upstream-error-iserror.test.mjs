@@ -126,8 +126,13 @@ describe('★ it is actually WIRED into dispatch', () => {
   // behavioural test above green. A pure unit test proves the function is
   // correct and says NOTHING about whether anything calls it.
   it('wraps the tool-dispatch return chain', () => {
+    // ★ Pins that it is called from the dispatch arrow, NOT the literal
+    // composition beneath it. The first version matched
+    // `_flagUpstreamError(_stampAttribution(` and broke the moment Stage 0a
+    // nested _stampRequestInterpretation between them — a correct change. A
+    // guard should fail on lost behaviour, not on a new sibling wrapper.
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    const call = src.match(/_flagUpstreamError\(_stampAttribution\(/g) || [];
+    const call = src.match(/=> _flagUpstreamError\(/g) || [];
     expect(call.length).toBe(1);
   });
 
