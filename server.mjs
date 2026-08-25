@@ -2383,7 +2383,18 @@ export function _upstreamError(status, text) {
         status === 404
           ? 'That identifier did not resolve. Re-discover it with this entity\'s search tool (search_facilities for a facility slug, rank_markets for a market slug) instead of retrying the same value.'
           : (status === 400 || status === 422)
-            ? 'A parameter was rejected. Re-read this tool\'s inputSchema in tools/list and re-send with the declared types — do not retry the same arguments.'
+            // ★★★2026-08-25: this used to say ONLY "re-read this tool's
+            // inputSchema". Measured: 75 of 82 tools declare NO `required`
+            // array, so for almost every tool the schema cannot say which
+            // argument was missing — and conditional requirements are not
+            // expressible there at all. rank_sites is the worked example: its
+            // handler answers "objectives required: {field: weight}", while
+            // `objectives` is deliberately .optional() because it IS optional
+            // in shortlist_name mode (making it required caused a -32602 that
+            // rejected the documented re-rank path, 2026-07-16). An agent sent
+            // to `required` learns nothing and retries wrong. The answer lives
+            // in `detail` and in the tool DESCRIPTION, so point there first.
+            ? 'A parameter was rejected. Read the `detail` field above first — it names the offending argument. Most tools here declare no `required` array and some arguments are conditionally required (needed only alongside another), which a JSON Schema cannot express, so check this tool\'s DESCRIPTION in tools/list as well as its inputSchema. Do not retry the same arguments.'
             : 'The upstream data service is unavailable for this query. Retry after a short backoff; if it persists, report the data as temporarily inaccessible rather than substituting an estimate.'),
     };
   }
