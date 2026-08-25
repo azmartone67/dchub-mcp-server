@@ -10764,11 +10764,78 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   top-level citation and no provenance at all (verified live 2026-08-12).
   //   The caller's tier is passed so `completeness` can only read
   //   'unrestricted' when the tier genuinely removes the gates.
-  }, async (args, extra) => _flagUpstreamError(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), name));
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), args, _toolParamKeys(name)), name));
+}
+
+// ★★★ STAGE 0a — request_interpretation (2026-08-25).
+//
+// THE PROBLEM. An argument this server does not declare is dropped in silence.
+// Measured live 2026-08-25, both real:
+//
+//   get_power_availability_timeline{latitude,longitude} -> API 400. That tool
+//     declares {mw, state, years} and NO coordinates at all. The 400 says a
+//     parameter was rejected; it never says WHICH.
+//   /api/v1/facilities?search=… -> the ENTIRE 17,170-row fleet, because
+//     `search` was not an accepted alias. No error at all (dchub-backend#3160).
+//
+// A dropped argument that errors is visible. One that is ignored is not, and
+// the caller reads the answer as responsive to a constraint that never applied.
+//
+// WHAT THIS CAN SAY TRUTHFULLY. `unsupported_arguments` = sent MINUS declared,
+// computed against _TOOL_PARAM_KEYS — the SAME registered ZodRawShape the tool
+// advertises in tools/list. An undeclared argument definitively never reached
+// the handler. This is true BY CONSTRUCTION, not an inference.
+//
+// ★★★ WHAT THIS DELIBERATELY REFUSES TO SAY. There is no
+// `recognized_arguments` here, and there must not be. `capacity_mw` and `state`
+// are BOTH declared on analyze_site and look identical at dispatch — yet
+// measured 2026-08-25, `state` changes the composite score (AZ 83.6 vs TX 71)
+// and `capacity_mw` does not move it at all (79 at 1 MW, 5000 MW and absent).
+// A wrapper that reported both as "recognized" would report a silently-dropped
+// constraint as understood. That is a FALSE REASSURANCE and strictly worse than
+// today's silence — the only honest place to say an argument was APPLIED is the
+// handler, and where a handler does say it, it publishes constraint_coverage
+// with shape `argument_disposition` (site_selection_canvas's capacity_mw comes
+// back applied:false with a reason and an instead).
+//
+// ★ Silent when there is nothing to report. This tail is already enormous and a
+// payload-diet change shipped the same month; a block on every clean call would
+// be pure cost. It appears only when an argument was actually dropped.
+export function _requestInterpretation(args, declared) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  if (!declared || typeof declared.has !== 'function') return null;  // unknown tool: say nothing
+  const unsupported = Object.keys(args).filter((k) => !declared.has(k));
+  if (!unsupported.length) return null;
+  return {
+    unsupported_arguments: unsupported.sort(),
+    basis: 'sent MINUS this tool\'s declared inputSchema properties. An undeclared argument never reached the handler — true by construction, not inferred.',
+    what_to_do: 'Re-read this tool\'s inputSchema in tools/list and re-send. The rest of your call still ran; the result below is the answer WITHOUT the argument(s) named here.',
+    caveat: 'This block cannot tell you that a DECLARED argument was APPLIED. Only the handler knows that, and where it publishes one, `constraint_coverage` with shape `argument_disposition` reports it per argument (applied/reason/instead).',
+  };
+}
+
+// ★ Takes the DECLARED SET, not a tool name. Resolving _toolParamKeys() inside
+// made this untestable: a unit test can only pass an unregistered name, so
+// _toolParamKeys returned null, no block was ever computed, and the
+// "never overwrite the handler's own block" guard was never exercised —
+// deleting that guard passed clean (mutation-tested 2026-08-25). A function
+// that reaches into a module registry cannot be tested at its own boundary.
+export function _stampRequestInterpretation(result, args, declared) {
+  try {
+    if (!result || typeof result !== 'object') return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    if (sc.request_interpretation !== undefined) return result;  // handler said it better
+    const ri = _requestInterpretation(args, declared);
+    if (!ri) return result;
+    return { ...result, structuredContent: { ...sc, request_interpretation: ri } };
+  } catch {
+    return result;  // fail-soft: an advisory block is never worth failing a response over
+  }
 }
 
 // ★★★ r-upstream-iserror (2026-08-25): LOCAL argument validation has always
