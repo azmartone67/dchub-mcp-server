@@ -10764,11 +10764,54 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   top-level citation and no provenance at all (verified live 2026-08-12).
   //   The caller's tier is passed so `completeness` can only read
   //   'unrestricted' when the tier genuinely removes the gates.
-  }, async (args, extra) => _stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }));
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), name));
+}
+
+// ★★★ r-upstream-iserror (2026-08-25): LOCAL argument validation has always
+// stamped isError:true — _isoError and _coordsError both do, literally. An
+// UPSTREAM rejection of the same argument did not. Measured live 2026-08-25:
+//
+//   rank_sites {candidates:[…]}  -> structuredContent.error "API 400",
+//                                   _error_mitigation present, NO isError key
+//
+// Same failure class (invalid parameter), two different transport signals. An
+// MCP client that branches on result.isError — which is what the protocol says
+// it is for — cannot see the upstream one and reads a 400 as a successful
+// result. callAPI RETURNS its error as data rather than throwing, which is why
+// nothing downstream ever flagged it.
+//
+// ★ SCOPE, deliberately narrow. This does NOT touch the preview/wall transport
+// debate at server.mjs:518-545, and it CANNOT: it acts only when `isError` is
+// UNDEFINED. Previews set it explicitly from DCHUB_PREVIEW_ISERROR (true OR
+// false — both are !== undefined), the two paywall walls set it via
+// _wallIsError(), and local validation sets it literally. Every one of those
+// decisions is measured and survives untouched. The only responses this
+// reaches are genuine upstream failures that carried no signal at all.
+//
+// ★ A served preview is NOT an error and must never come through here — that
+// is the r51/Grok distinction, and the isError !== undefined guard is what
+// enforces it structurally rather than by convention.
+export function _flagUpstreamError(result, toolName) {
+  try {
+    // Never override an explicit decision — see SCOPE above.
+    if (!result || result.isError !== undefined) return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    // Two markers, both written by _upstreamError(): the mitigation block, or
+    // the literal "API <status>" string. Matching a bare truthy `error` would
+    // be too loose — a successful payload may carry a nested error field.
+    const upstream = !!sc._error_mitigation
+      || (typeof sc.error === 'string' && /^API \d{3}$/.test(sc.error));
+    if (!upstream) return result;
+    return { ...result, isError: true };
+  } catch {
+    // Fail-soft: a flag is never worth failing a response over.
+    return result;
+  }
 }
 
 // r-chatgpt-commerce-scrub (2026-07-19): OpenAI's App Directory supports
