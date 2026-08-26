@@ -72,6 +72,32 @@ describe('_claimVia — never mints an attribution tag from an absence', () => {
     expect(SRC).toContain("p.includes('dchub')");
   });
 
+  // ★★★ r-gateway-identity (2026-08-26): the class this set exists for was
+  // missing the platform that IS the traffic. Measured that day:
+  // distinct_platforms = 1 and it is Smithery; Smithery is 50% of paywall hits
+  // (348/7d, largest external segment) at 0% conversion; its listing is an
+  // `external_shttp` proxy whose live page payload carries `configSchema: {}`,
+  // so no user can supply a key at install and every install is anonymous by
+  // construction. That is the re-mint loop (~22 re-mints/agent, 36% of keys
+  // never call) this whole branch exists to break — and it never fired for them.
+  it('every hosted-gateway / URL-box platform is in the BYO class', () => {
+    for (const p of ['smithery', 'chatgpt', 'grok', 'perplexity', 'connectors-manager']) {
+      expect(_BYO_MCP_PLATFORMS.has(p), `${p} must get the connector-URL lead`).toBe(true);
+    }
+  });
+
+  it('the agent-facing copy names the gateway class it now covers', () => {
+    // A platform in the set but absent from the prose gets the branch and no
+    // instruction — the copy and the set have to move together.
+    // BOTH copy sites, counted — the phrase appears in the claim response's
+    // save-line AND in the tool description an agent reads before calling.
+    // Asserting mere presence let a mutation strip one of the two and still
+    // pass (caught by mutation, 2026-08-26).
+    const sites = SRC.split('Perplexity, Smithery — a URL box, no header field').length - 1;
+    expect(sites, 'both the save-line and the tool description must name it').toBe(2);
+    expect(SRC).toMatch(/Smithery[^.]*runs behind their proxy/);
+  });
+
   // r-via-transport (2026-08-19): observed live — a curl probe minted via=curl.
   it('a bare HTTP client name is a TRANSPORT, not an install channel', () => {
     // "which install channel sent this agent" must never answer "curl".
