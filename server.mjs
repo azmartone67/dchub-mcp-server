@@ -709,6 +709,43 @@ function _stripeWithKey(url, apiKey) {
 // loosening anything.
 //
 // Kill switch: DCHUB_ANON_ATTRIB=0 → no ref, i.e. exactly today's behaviour.
+// ★★★ r-bind-honesty (2026-08-26): ONE source of truth for the same-session
+// unlock promise, because it was being re-typed at every surface and was wrong
+// at three of them.
+//
+// The promise is real for two identity classes and impossible for the third:
+//   durable key  -> grant_credit_pack credits the key HASH; get_credit_balance
+//                   matches it -> the next call IS full.
+//   session id   -> the webhook writes mcp_session_upgrades keyed by the sid
+//                   -> the next call IS full.
+//   NEITHER      -> nothing to bind to. The pack still mints and EMAILS a
+//                   dch_live_ key, so the buyer gets what they paid for, but
+//                   the agent's next call is NOT served full.
+//
+// That third class is the entire Smithery / listed-connector cohort. Verified
+// live 2026-08-26 AFTER the first fix shipped: the daily-cap wall was still
+// telling an anonymous caller "the moment they pay, your next call returns the
+// full result" on the very same response whose trialHeader had just been
+// corrected. Re-typed copy is how a fixed invariant comes back.
+function _checkoutBinds(sessionId) {
+  try {
+    if (sessionId && sessionId !== 'no-session') return true;
+    const c = getCtx();
+    if (c && c.session_id && c.session_id !== 'no-session') return true;
+    return !!(c && c.api_key);
+  } catch (_) { return false; }
+}
+// The clause to append after a checkout link. Never promises a same-session
+// unlock to a caller that cannot receive one.
+function _afterPayClause(sessionId, toolName) {
+  const t = toolName ? '`' + toolName + '`' : 'the tool';
+  return _checkoutBinds(sessionId)
+    ? 'the moment they pay, THIS session unlocks — just call ' + t + ' again'
+    : 'no key or session on this call, so the checkout cannot bind to it — DC Hub '
+      + 'emails the key to the payer; send it as `X-API-Key`. Calling `claim_free_key` '
+      + 'FIRST gives this session an identity the checkout can bind to';
+}
+
 const ANON_REF_PREFIX = 'a-';
 function _anonAttribRef() {
   try {
@@ -4036,7 +4073,7 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // fields stay in structuredContent for machine consumers.
   const leadExhausted =
     '🔒 **Today’s free full `' + name + '` answers are used up.**\n' +
-    '\n\u{1F464} **Tell your human:** unlock the complete `' + name + '` now — one click, **\u{1F4B3} $10 one-time = 1,000 calls**, no subscription, no email needed → ' + _meteredUrl + ' (the moment they pay, your next call returns the full result).\n' +
+    '\n\u{1F464} **Tell your human:** unlock the complete `' + name + '` now — one click, **\u{1F4B3} $10 one-time = 1,000 calls**, no subscription, no email needed → ' + _meteredUrl + ' (' + _afterPayClause('', name) + ').\n' +
     '\nFree: `bind_email` (your human’s email, no card) lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.\n';
   // r-handoff (2026-06-28): ONE free taste + ONE human CTA. The prior block
   // stacked ~8 CTAs and led with the free key, so agents self-served and never
@@ -4626,14 +4663,7 @@ function trialHeader(toolName, sessionId, refUrlDeveloper, gapClause) {
   // as the literal 'no-session' on the stateless path — which is the entire
   // Smithery cohort. Same defect class as the hardcoded
   // next_call_full_after_checkout in unlock_more_data, on the same day.
-  let _hasKey = '';
-  try { _hasKey = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
-  const _bindable = !!(sessionId && sessionId !== 'no-session') || !!_hasKey;
-  const _unlockClause = _bindable
-    ? ' (the moment they pay, THIS session unlocks — just call `' + toolName + '` again)'
-    : ' (no key or session on this call, so the checkout cannot bind to it — DC Hub emails the'
-      + ' key to the payer; send it as `X-API-Key`. Calling `claim_free_key` FIRST gives this'
-      + ' session an identity the checkout can bind to)';
+  const _unlockClause = ' (' + _afterPayClause(sessionId, toolName) + ')';
   // ONE line. The count and the "this is a preview" framing were two adjacent
   // lines saying the same thing (📦 "3 of 5 results shown" then 🔒 "free-tier
   // preview of rank_markets") — ~200 characters of pure duplication ahead of
@@ -10657,7 +10687,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // and NO bind_email (binding cannot lift the paid cap).
                 message: _paidTaste
                   ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro ($299/mo) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — the moment your human pays, your next call returns full data (no reconnect). Call \`unlock_more_data\` for one-click links (also ⚡ $9/mo Starter = 200 calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ $9/mo Starter = 200 calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
@@ -16410,7 +16440,7 @@ export { _stripeWithAnon, _anonAttribRef, _packCheckoutUrl, _subCheckoutUrl, ANO
 // trialHeader: exported so the same-session-unlock promise can be pinned per
 // identity class. It was asserted unconditionally and was false for the entire
 // anonymous cohort (found by driving a real tools/call, 2026-08-26).
-export { trialHeader, _trialGapClause };
+export { trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause };
 
 // r70 follow-up (2026-08-25): the Express app is exported so a guard can bind an
 // EPHEMERAL port under vitest, where the block above deliberately does not

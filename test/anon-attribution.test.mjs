@@ -20,7 +20,7 @@ import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   _goUrl, _stripeWithAnon, _anonAttribRef, _packCheckoutUrl, _subCheckoutUrl,
-  ANON_REF_PREFIX, _ctxALS, trialHeader, _trialGapClause,
+  ANON_REF_PREFIX, _ctxALS, trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause,
 } from '../server.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
@@ -239,5 +239,39 @@ describe('the same-session-unlock promise is made ONLY where it is true', () => 
                                             _trialGapClause({ results: [1, 2, 3, 4, 5] })));
     expect(t).toContain('3 of 5 results shown');
     expect(t.trimEnd().split('\n')).toHaveLength(1);
+  });
+});
+
+describe('the bind promise has ONE source of truth', () => {
+  // WHY THIS EXISTS: the first fix corrected trialHeader and unlock_more_data,
+  // and verifying the deploy from the outside showed the DAILY-CAP WALL still
+  // telling the same anonymous caller "the moment they pay, your next call
+  // returns the full result" — in the same response. Re-typed copy is how a
+  // fixed invariant comes back, so all surfaces now call one helper.
+  it('binds for a session, for a key, and for neither', () => {
+    expect(withCtx({}, () => _checkoutBinds('e6f1c0de-1234-4aaa-9999-abc'))).toBe(true);
+    expect(withCtx({ session_id: 'e6f1c0de-1234-4aaa-9999-abc' }, () => _checkoutBinds(''))).toBe(true);
+    expect(withCtx({ api_key: 'dch_live_abc' }, () => _checkoutBinds(''))).toBe(true);
+    expect(withCtx({}, () => _checkoutBinds(''))).toBe(false);
+    expect(withCtx({}, () => _checkoutBinds('no-session'))).toBe(false);
+    expect(withCtx({ session_id: 'no-session' }, () => _checkoutBinds(''))).toBe(false);
+  });
+
+  it('the clause promises a same-session unlock only when it binds', () => {
+    expect(withCtx({ session_id: 'e6f1c0de-1' }, () => _afterPayClause('', 'rank_markets')))
+      .toMatch(/THIS session unlocks/);
+    const anon = withCtx({}, () => _afterPayClause('no-session', 'rank_markets'));
+    expect(anon).not.toMatch(/THIS session unlocks/);
+    expect(anon).toMatch(/cannot bind/);
+    expect(anon).toMatch(/emails the key/);
+  });
+
+  it('NO surface re-types the promise as a literal', () => {
+    // Source pin: every occurrence must route through _afterPayClause. A new
+    // hand-written "your next call returns full data" is the regression.
+    expect(SRC).not.toContain('your next call returns the full result');
+    expect(SRC).not.toContain('your next call returns full data (no reconnect)');
+    // ...and the helper is actually used at more than one site.
+    expect((SRC.match(/_afterPayClause\(/g) || []).length).toBeGreaterThanOrEqual(4);
   });
 });
