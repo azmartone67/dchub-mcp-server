@@ -17,7 +17,7 @@
     "type": "function",
     "function": {
       "name": "dchub_search_facilities",
-      "description": "Search 18,800+ data-center facilities by name, operator, or location. Returns name, operator, city/state, slug. Execute by GET https://dchub.cloud/api/v1/facilities?q={q}",
+      "description": "Search 18,900+ data-center facilities by name, operator, or location. Returns name, operator, city/state, slug. Execute by GET https://dchub.cloud/api/v1/facilities?q={q}",
       "parameters": {
         "type": "object",
         "properties": {

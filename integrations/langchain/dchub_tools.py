@@ -62,7 +62,7 @@ class FacilitySearchArgs(BaseModel):
 
 def dchub_search_facilities(country: str = "US", state: str | None = None,
                             q: str | None = None, limit: int = 5) -> dict:
-    """Search the 18,800+ data-center facility universe. Returns rows with
+    """Search the 18,900+ data-center facility universe. Returns rows with
     canonical slug, name, provider, and location, plus a citation URL."""
     params = {"country": country, "limit": limit}
     if state:

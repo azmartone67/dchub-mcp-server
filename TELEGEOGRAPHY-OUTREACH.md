@@ -37,7 +37,7 @@ Hi [name] — I run DC Hub (dchub.cloud) and I'm in DC-land at CBRE too. Your Da
 ---
 
 ## TALKING POINTS (for the call, if it happens)
-- **Proof we're real/live:** dchub.cloud/mcp (82-tool MCP server, cited by ChatGPT/Claude/Gemini/Perplexity); 18,800+ facilities; DCPI 300+ markets; per-state gas pipeline/operator presence (the DCGI score was withdrawn 2026-08-08 rather than published wrong); 10 ISOs.
+- **Proof we're real/live:** dchub.cloud/mcp (82-tool MCP server, cited by ChatGPT/Claude/Gemini/Perplexity); 18,900+ facilities; DCPI 300+ markets; per-state gas pipeline/operator presence (the DCGI score was withdrawn 2026-08-08 rather than published wrong); 10 ISOs.
 - **Why now:** AI load makes *power* the binding constraint on siting — their network-first customers increasingly need a power answer they don't have.
 - **What we'd want from them:** their geocoded IX/network/cloud-onramp layer (they already sell it as a GeoJSON→S3 feed) to overlay on the land+power map.
 - **What we'd give:** live DCPI + grid/queue feed; attribution; co-marketing.
