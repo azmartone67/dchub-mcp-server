@@ -36,11 +36,13 @@ describe('human relay artifact threading', () => {
   });
 
   // r-human-first (2026-08-15, conversion item 1): DELIBERATE pin change. The
-  // old contract — a TRAILING humanLine appended by this builder — is retired:
-  // trailing lines are what agents summarize away (131 relays minted → 0 humans
-  // acted). The human link's ONE prose carrier is now the human-FIRST line the
-  // response sites compose via composeHumanFirst (pinned in
-  // human-line-first.test.mjs). This builder must NOT emit its own copy, or a
+  // old contract — a TRAILING humanLine appended by this builder — was retired
+  // on the theory that trailing lines are what agents summarize away (131 relays
+  // minted → 0 humans acted). r-data-first (2026-08-26) put the line back at the
+  // end after that theory failed its own test in production (5,704 paywall
+  // signals → 1 real handoff open in 14d), but the SINGLE-CARRIER rule below is
+  // untouched and is the part that matters here: whichever end it rides, exactly
+  // one component emits it. This builder must NOT emit its own copy, or a
   // response would stack two human-link lines.
   it('the builder no longer appends its own trailing human line '
      + '(single-carrier rule; the link leads the response instead)', async () => {
@@ -50,12 +52,14 @@ describe('human relay artifact threading', () => {
     expect(sc.high_intent_human_url).toBe('https://dchub.cloud/relay/tok-human');
   });
 
-  it('every gated response site hoists claim.human_url to the FIRST line', () => {
+  it('every gated response site routes claim.human_url through the ONE composer', () => {
     // Source pin: the three anon-cascade/hard-block sites compose their prose
-    // through composeHumanFirst with the high-intent human link as the
-    // preferred URL. If a site drops the composer, the link goes back to
-    // dying inside the agent context.
-    const sites = SRC.match(/composeHumanFirst\(/g) || [];
+    // through composeHumanCta with the high-intent human link as the preferred
+    // URL. If a site drops the composer, that response carries no human link at
+    // all — which is the failure this pin exists to catch. (The composer's
+    // PLACEMENT is pinned in human-line-first.test.mjs; this pin is about
+    // reaching the composer, not about which end it emits to.)
+    const sites = SRC.match(/composeHumanCta\(/g) || [];
     expect(sites.length).toBeGreaterThanOrEqual(4); // 3 cascade sites + metered wall (+1 def)
     expect(SRC).toContain('_hiClaim && _hiClaim.human_url');
     expect(SRC).toContain('_hiClaim2 && _hiClaim2.human_url');

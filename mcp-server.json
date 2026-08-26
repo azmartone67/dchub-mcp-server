@@ -337,7 +337,7 @@
     },
     {
       "name": "unlock_more_data",
-      "description": "Unlock DC Hub's full depth. Call this when a result came back as a 1-of-N preview, a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click — after which your very next call returns full data (no reconnect; the checkout binds to this session). Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · $49/mo Developer · $299/mo Pro. Want the FREE tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}."
+      "description": "Unlock DC Hub's full depth. Call this when a result came back as a partial preview (e.g. \"3 of 12 results shown\"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · $49/mo Developer · $299/mo Pro. Want the FREE tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}."
     }
   ],
   "example_queries": [

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   trimForTrial, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey,
+  TRIAL_PREVIEW_ROWS,
   shapeGridIntelligence, _anonInlineFullEnabled,
 } from '../server.mjs';
 
@@ -31,12 +32,47 @@ describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)
   // De-spam (Devin QA): gating must NOT pollute the data with promo strings —
   // arrays trim to the first row only (+ an honest side count), gated metrics
   // become null. The upgrade CTA lives once in the nudge header, not in the data.
-  it('truncates arrays >1 to ONLY the first item + an honest side count (no inline promo)', () => {
-    const out = trimForTrial({ grids: [{ iso: 'PJM' }, { iso: 'ERCOT' }, { iso: 'CAISO' }] });
+  // r-preview-rows (2026-08-26): the preview was ONE row; it is now
+  // TRIAL_PREVIEW_ROWS (default 3). "1 of 5" reads to an agent as a broken tool,
+  // which costs the second impression the upsell needs. What must NOT change is
+  // the honesty contract: _<key>_total_in_pro is the FULL length, never the
+  // shown length, so an agent can always compute what it is missing.
+  it('truncates over-long arrays to TRIAL_PREVIEW_ROWS + an honest side count (no inline promo)', () => {
+    const many = Array.from({ length: 9 }, (_, i) => ({ iso: 'ISO' + i }));
+    const out = trimForTrial({ grids: many });
     expect(Array.isArray(out.grids)).toBe(true);
-    expect(out.grids).toHaveLength(1);
-    expect(out.grids[0]).toEqual({ iso: 'PJM' });
-    expect(out._grids_total_in_pro).toBe(3);
+    expect(out.grids).toHaveLength(TRIAL_PREVIEW_ROWS);
+    expect(out.grids[0]).toEqual({ iso: 'ISO0' });
+    // the side count is the FULL length, not the shown length — the whole point
+    expect(out._grids_total_in_pro).toBe(9);
+    // no inline {_gated:…} promo object smuggled into the array
+    for (const row of out.grids) expect(Object.keys(row)).toEqual(['iso']);
+  });
+
+  it('leaves an array at or under the preview size intact and stamps NO side count', () => {
+    const exact = Array.from({ length: TRIAL_PREVIEW_ROWS }, (_, i) => ({ iso: 'ISO' + i }));
+    const out = trimForTrial({ grids: exact });
+    expect(out.grids).toHaveLength(TRIAL_PREVIEW_ROWS);
+    expect(out._grids_total_in_pro).toBeUndefined();  // nothing was withheld
+  });
+
+  it('the preview size is a real dial, and it is clamped so it cannot un-gate the tier', () => {
+    expect(TRIAL_PREVIEW_ROWS).toBeGreaterThanOrEqual(1);
+    expect(TRIAL_PREVIEW_ROWS).toBeLessThanOrEqual(25);
+  });
+
+  // ★ LITERALS, NOT THE CONSTANT. Every assertion above reads the shown length
+  // back out of TRIAL_PREVIEW_ROWS, so both sides move together and reverting
+  // the default to 1 passes them all — verified by mutation, 2026-08-26. The
+  // product decision ("an anonymous agent sees more than one row, so the result
+  // reads as a useful tool rather than a broken one") only exists if something
+  // pins the number itself.
+  it('the DEFAULT preview is 3 rows — more than one, and deliberately so', () => {
+    expect(TRIAL_PREVIEW_ROWS).toBe(3);
+    const out = trimForTrial({ markets: [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }] });
+    expect(out.markets).toHaveLength(3);
+    expect(out.markets.map((r) => r.n)).toEqual([1, 2, 3]);
+    expect(out._markets_total_in_pro).toBe(5);
   });
 
   it('leaves a single-element array intact but NULLS metric scalars inside (no promo string)', () => {
@@ -83,7 +119,7 @@ describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)
       total_matching: 41,
       note: 'Free tier: showing 5 of 41 matching facilities with basic fields. Upgrade for full data including capacity, coordinates, and detailed specs.',
     });
-    expect(out.data).toHaveLength(1);          // trimmed to a single teaser row
+    expect(out.data).toHaveLength(TRIAL_PREVIEW_ROWS);  // trimmed to the preview size
     expect(out._data_total_in_pro).toBe(5);    // honest side field still stamped
     expect(out.count).toBe(null);              // count nulled by the metric mask
     expect(out.note).not.toMatch(/showing\s+5\s+of\s+41/i);  // the stale claim is gone
@@ -96,6 +132,7 @@ describe('trimForTrial — anonymous redaction (clean-data contract, 2026-06-07)
       note: 'Free tier: showing 1 of 1 matching facilities.',
     });
     expect(out.note).toMatch(/showing 1 of 1/);  // no array trimmed → note is honest as-is
+    expect(out._data_total_in_pro).toBeUndefined();
   });
 });
 
