@@ -33,7 +33,12 @@ function descAfter(startMarker, endMarker) {
 
 const claim = descAfter('★ BEFORE YOU MINT', 'Returns {api_key');
 const bind  = descAfter('★ WHAT THIS DOES AND DOES NOT DO', 'Returns the unlocked benefits');
-const instr = descAfter('GOLDEN PATH for your first session', 'If a result comes back as a 1-of-N preview');
+// r-preview-rows (2026-08-26): the end-anchor tracks the copy. The preview is
+// no longer 1-of-N (it is TRIAL_PREVIEW_ROWS, default 3), so the sentence it
+// anchors on was reworded. The anchor is a slicing boundary, not the thing under
+// test — it is kept to the stable prefix so a future count change cannot break
+// this suite's collection again.
+const instr = descAfter('GOLDEN PATH for your first session', 'If a result comes back as a partial preview');
 
 describe('claim_free_key leads with the identity that retains', () => {
   it('names the durable OAuth path', () => {
