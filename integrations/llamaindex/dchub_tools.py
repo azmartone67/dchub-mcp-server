@@ -49,7 +49,7 @@ def dchub_market_intel(slug: str) -> dict:
 
 def dchub_search_facilities(country: str = "US", state: str = "",
                             q: str = "", limit: int = 5) -> dict:
-    """Search the 19,100+ data-center facility universe by country (ISO code),
+    """Search the 19,300+ data-center facility universe by country (ISO code),
     state/region code, and/or free-text query. Returns rows with canonical slug,
     name, provider, location, and a citation URL."""
     params = {"country": country, "limit": limit}
