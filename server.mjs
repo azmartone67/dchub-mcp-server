@@ -1224,6 +1224,41 @@ const _SOURCE_PLATFORM = (() => {
 })();
 
 
+// ── r-analyst-path (2026-08-28): OUR OWN analyst is not external demand ──
+// The DC Hub siting analyst (a Managed Agents app) reaches THIS server through
+// Anthropic's MCP connector. Every self-traffic channel we already have misses
+// it, and it lands in the most credible bucket we publish:
+//   · agent_id = md5(first XFF token) → an ANTHROPIC egress IP, byte-identical
+//     in shape to a real Claude.ai user's. No IP rule can separate them.
+//   · the UA is Anthropic's, so PLATFORM_CASE classifies the rows 'claude' —
+//     the single strongest "an external agent uses us" signal on the funnel.
+//   · clientInfo AND the X-MCP-Platform header are set by the CONNECTOR, not by
+//     our code, so the r-ci-selftag channel below is unreachable for it.
+// Measured 2026-08-28 before this shipped: real_calls_7d was 227 over 23 agents
+// (/api/v1/reach), with the claude-family buckets already 74 of those calls — a
+// denominator small enough that ONE analyst conversation moves the headline.
+//
+// The one channel we own end-to-end is the URL we configure the agent with: the
+// connector POSTs to exactly the URL we declared, so a distinct PATH rides EVERY
+// request the way the CI header does, and no replica routing or session eviction
+// can lose it. The path resolves through _INTERNAL_SELF_TAG (the SAME vocabulary
+// as clientInfo and the header — never a second copy), so it can only ever
+// return 'dchub-internal', which every backend read predicate already excludes
+// via %dchub%.
+// ★ SAFETY, unchanged from the header channel: this can only route traffic INTO
+// the excluded bucket. It never returns a brand, so a third party who discovers
+// the path can at worst exclude ITSELF from counts we publish — the conservative
+// direction for a number we stand behind.
+const MCP_SELF_PATHS = new Map([['/mcp/analyst', 'dchub-analyst']]);
+// Every path this server answers MCP on. '/mcp' stays the canonical, published
+// one; the rest are our own first-party surfaces, tagged above.
+export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys()];
+
+export function _pathSelfTag(req) {
+  const path = (req?.path || '').replace(/\/+$/, '') || '/mcp';
+  return MCP_SELF_PATHS.get(path) || '';
+}
+
 function detectPlatformFromInit(body, ua = '', explicitHint = '') {
   // A deployment-source tag (operator env) names the CHANNEL the traffic came
   // through and WINS: on a hosted single-tenant deployment every session IS that
@@ -15779,7 +15814,7 @@ app.get('/internal/sessions', (req, res) => {
   res.json({ count: out.length, sessions: out });
 });
 
-app.post('/mcp', async (req, res) => {
+app.post(MCP_PATHS, async (req, res) => {
   try {
     // r-apps-sdk-csp (2026-07-19): the ChatGPT App Directory (Apps SDK)
     // review checks for a Content-Security-Policy on the MCP endpoint.
@@ -15793,7 +15828,11 @@ app.post('/mcp', async (req, res) => {
     // (Gemini enterprise). Only a KNOWN-platform value is honored (see
     // detectPlatformFromInit); an unknown value is ignored, so it can't mint a
     // platform or brand-attribute crawl. The CF worker forwards custom X- headers.
-    const platformHeader = (req.headers['x-mcp-platform'] || req.headers['x-client-source']
+    // r-analyst-path (2026-08-28): a first-party PATH is an explicit self-tag and
+    // outranks the caller-supplied headers below — the path is ours, the headers
+    // are theirs, and the tag can only ever resolve to 'dchub-internal'.
+    const platformHeader = (_pathSelfTag(req)
+      || req.headers['x-mcp-platform'] || req.headers['x-client-source']
       // r-gemini-ident (2026-08-01): Gemini committed to shipping X-Client-Info
       // ('Gemini-Agent/2.5') ahead of the 08-04 per-platform gate — honor it as a
       // third alias of the same explicit-attribution channel. Same rules apply:
@@ -16449,7 +16488,7 @@ app.post('/mcp', async (req, res) => {
   }
 });
 
-app.get('/mcp', async (req, res) => {
+app.get(MCP_PATHS, async (req, res) => {
   const sid = req.headers['mcp-session-id'];
   if (sid && sessions.has(sid)) {
     touchSession(sid);  // r41
@@ -16465,7 +16504,7 @@ app.get('/mcp', async (req, res) => {
   res.status(400).json({ error: 'No session. POST /mcp with initialize.' });
 });
 
-app.delete('/mcp', async (req, res) => {
+app.delete(MCP_PATHS, async (req, res) => {
   const sid = req.headers['mcp-session-id'];
   if (sid && sessions.has(sid)) {
     await sessions.get(sid).close();
