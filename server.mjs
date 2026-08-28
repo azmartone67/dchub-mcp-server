@@ -3546,8 +3546,14 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
 // replaying 350k hostile bumps (attacker-chosen kinds/methods, __proto__,
 // throwing toString) through _chBump: the Map held 5 and Object.prototype stayed
 // clean. Flat backend work under any input is the whole outage argument.
+// ★The "2 kinds x 3 methods = 6" arithmetic above is the ORIGINAL bound and has
+// been stale since chatgpt_connector_seen landed. The invariant that matters is
+// not the number, it is that BOTH axes are closed sets checked HERE — the bound
+// is |_CH_KINDS| x (|_CH_METHODS| + 1), today 4 x 3 = 12 keys, and it moves only
+// when this line does. Nothing client-supplied has ever entered a Map key.
 // Kill switch: DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 -> fully INERT.
-const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen']);
+const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen',
+                             'claude_connector_seen']);
 const _CH_METHODS = new Set(['initialize', 'tools/call']);
 const _CH_BEAT_MS = 60 * 60 * 1000;          // idle heartbeat: 1 POST/hour/replica
 const _chCounts = new Map();                 // `${kind}:${method}` -> n  (<=6 keys, ever)
@@ -15913,6 +15919,43 @@ app.post('/mcp', async (req, res) => {
     // OR its remembered clientInfo.name is on DCHUB_CHALLENGE_CLIENTS.
     const _chClientName = _recallClientName(sessionId) || _ciName || '';
     const _chAllowed = _isClaudeConnectorNow || _challengeClientAllowed(_chClientName);
+    // ── r-claude-arrivals (2026-08-28): PASSIVE arrival counter ─────────────
+    // The passive twin of chatgpt_connector_seen above, and the instrument this
+    // family was missing. Everything else here counts challenges we ISSUED —
+    // _chBump sits inside the 401 branch below — so `claude_connector` measures
+    // OUR behaviour, not the caller's. When r-challenge-after-value moved the
+    // challenge off `initialize`, that count fell ~99% and read as "Claude
+    // traffic stopped"; it was us asking less. And it gets WORSE as the policy
+    // gets better: every caller served instead of 401'd is a caller the
+    // challenge counter no longer sees, so a working fix and a vanishing cohort
+    // are indistinguishable. Nor can the call-grain tables cover it — a
+    // challenged connector dies at the handshake and never writes a row to
+    // mcp_calls_identity. Arrivals were simply never recorded anywhere.
+    //
+    // Issues NO 401 and changes NO behavior: a Map bump and nothing else.
+    //
+    // ★NOT gated on _workosEnabled() or _challengeDisabled, deliberately. An
+    // arrival counter that switches off with the challenge cannot answer "what
+    // happened when we changed the challenge" — the only question it exists
+    // for. Its one kill switch is the counter's own
+    // DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE, enforced inside _chBump.
+    //
+    // ★★NO hasSession BAIL — and this is where a copy-paste of the ChatGPT
+    // block above would ship DEAD. That one ends in
+    // `!(sessionId && sessions.has(sessionId))`, which is correct for ChatGPT
+    // but fatal here: the Claude connector initializes, gets a session, and
+    // carries it on every later tools/call, so a sessionless test would count
+    // handshakes and NEVER a tool call. That is the identical mistake
+    // r-challenge-identity caught in the challenge itself (see
+    // _claudeChallengeEligible: "hasSession CANNOT be an exemption here"), and
+    // it would have produced a confident, permanent zero on the exact series
+    // this exists to populate. The credential checks are what scope this to the
+    // anonymous cohort — the same three the challenge uses.
+    if (_challengeMethod && _chAllowed
+        && !req.headers['x-api-key'] && !_workosAuthed
+        && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))) {
+      _chBump('claude_connector_seen', req.body?.method);
+    }
     // r-challenge-bound: keyed on the CALLER, not the session — the bound must
     // survive the one-call-per-session pattern it exists to protect, and a
     // coarse key here fails OPEN (serves more). Same expression as `clientIp`
