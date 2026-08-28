@@ -3541,13 +3541,19 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
 // inherited from the upstream gates. Both challenge branches are
 // unauthenticated and fully client-controlled (`Authorization: Bearer x` + any
 // body, no key, no rate limit), so nothing attacker-supplied may ever enter
-// this Map key — notably NOT clientInfo.name. Max size: 2 kinds x 3 methods
-// (initialize | tools/call | the 'other' escape) = 6 keys, FOREVER — verified by
+// this Map key — notably NOT clientInfo.name. Max size: 4 kinds x 3 methods
+// (initialize | tools/call | the 'other' escape) = 12 keys, FOREVER. ★The bound
+// below was measured when there were 2 kinds and the comment still said 6 after a
+// 3rd was added in July; the ARITHMETIC is updated here, the hostile replay itself
+// was NOT re-run — its conclusion (closed whitelists keep the Map bounded and
+// Object.prototype clean) is structural and does not depend on the kind count.
+// Originally verified by
 // replaying 350k hostile bumps (attacker-chosen kinds/methods, __proto__,
 // throwing toString) through _chBump: the Map held 5 and Object.prototype stayed
 // clean. Flat backend work under any input is the whole outage argument.
 // Kill switch: DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 -> fully INERT.
-const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen']);
+const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen',
+                             'claude_connector_seen']);
 const _CH_METHODS = new Set(['initialize', 'tools/call']);
 const _CH_BEAT_MS = 60 * 60 * 1000;          // idle heartbeat: 1 POST/hour/replica
 const _chCounts = new Map();                 // `${kind}:${method}` -> n  (<=6 keys, ever)
@@ -15886,6 +15892,25 @@ app.post('/mcp', async (req, res) => {
         && !req.headers['x-api-key'] && !_workosAuthed
         && !(sessionId && sessions.has(sessionId))) {
       _chBump('chatgpt_connector_seen', req.body?.method);
+    }
+    // r-claude-passive-arrivals (2026-08-28) — the SYMMETRIC half of the instrument
+    // above, and the answer to a question that was UNMEASURED rather than answered "no".
+    // ★`claude_connector` below counts 401s WE ISSUE: its single call site is INSIDE the
+    // branch that sets WWW-Authenticate and returns 401. So when r-challenge-after-value
+    // narrowed the trigger on 2026-08-15, that series fell ~159/day -> ~0 the next day BY
+    // DESIGN — and three separate passes read our own restraint as the Claude cohort
+    // dying. It had not: platform-attribution shows claude-family calls continuing.
+    // This bump fires on THEIR arrival instead of our action, so it keeps reading the same
+    // population no matter how the challenge trigger is tuned later.
+    // PASSIVE, exactly like the ChatGPT probe: issues NO 401, changes NO behavior, and is
+    // placed OUTSIDE the challenge branch on purpose — a counter inside that branch is
+    // what created the misread. Same denominator (_challengeMethod) and same anonymity
+    // gates as the ChatGPT block, so the two series are directly comparable.
+    // Kill: the same DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 that gates _chBump.
+    if (detectPlatformFromInit(req.body, userAgent, platformHeader) === 'claude' && _challengeMethod
+        && !req.headers['x-api-key'] && !_workosAuthed
+        && !(sessionId && sessions.has(sessionId))) {
+      _chBump('claude_connector_seen', req.body?.method);
     }
     // r-api-connector-bearer (2026-07-19): Anthropic's MESSAGES-API MCP
     // connector ships the same `User-Agent: Claude-User` as the claude.ai web
