@@ -15898,25 +15898,22 @@ app.post('/mcp', async (req, res) => {
         && !(sessionId && sessions.has(sessionId))) {
       _chBump('chatgpt_connector_seen', req.body?.method);
     }
-    // r-claude-passive-arrivals (2026-08-28) — the SYMMETRIC half of the instrument
-    // above, and the answer to a question that was UNMEASURED rather than answered "no".
-    // ★`claude_connector` below counts 401s WE ISSUE: its single call site is INSIDE the
-    // branch that sets WWW-Authenticate and returns 401. So when r-challenge-after-value
-    // narrowed the trigger on 2026-08-15, that series fell ~159/day -> ~0 the next day BY
-    // DESIGN — and three separate passes read our own restraint as the Claude cohort
-    // dying. It had not: platform-attribution shows claude-family calls continuing.
-    // This bump fires on THEIR arrival instead of our action, so it keeps reading the same
-    // population no matter how the challenge trigger is tuned later.
-    // PASSIVE, exactly like the ChatGPT probe: issues NO 401, changes NO behavior, and is
-    // placed OUTSIDE the challenge branch on purpose — a counter inside that branch is
-    // what created the misread. Same denominator (_challengeMethod) and same anonymity
-    // gates as the ChatGPT block, so the two series are directly comparable.
-    // Kill: the same DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 that gates _chBump.
-    if (detectPlatformFromInit(req.body, userAgent, platformHeader) === 'claude' && _challengeMethod
-        && !req.headers['x-api-key'] && !_workosAuthed
-        && !(sessionId && sessions.has(sessionId))) {
-      _chBump('claude_connector_seen', req.body?.method);
-    }
+    // r-claude-arrivals-dedup (2026-08-28): the FIRST attempt at this counter
+    // stood here (r-claude-passive-arrivals, 9a34f1a) — the ChatGPT block above
+    // with 'claude' substituted, trailing `!(sessionId && sessions.has(sessionId))`
+    // and all. #239 rewrote it ~60 lines below WITHOUT that bail and explained at
+    // length why the bail is fatal for Claude... but landed as an ADDITION rather
+    // than a replacement, so both bumped the same `claude_connector_seen` key.
+    // Two consequences, one loud and one quiet:
+    //   • LOUD: claude-arrival-counter.test.mjs anchors on the sole call site and
+    //     errored out on `found 2` — main's smoke gate went red on the merge.
+    //   • QUIET: an anonymous sessionless connect satisfied BOTH conditions and
+    //     bumped TWICE, while later in-session tools/calls bumped once (this block
+    //     bailed on the session, the surviving one does not). So the series was
+    //     inflated by a factor that MOVES with the handshake-to-call ratio — not a
+    //     constant you can divide out afterwards.
+    // The surviving counter is the one #239's own comment describes. See the
+    // as_of basis note on the series for the affected window (08-27 -> 08-28).
     // r-api-connector-bearer (2026-07-19): Anthropic's MESSAGES-API MCP
     // connector ships the same `User-Agent: Claude-User` as the claude.ai web
     // connector but can only authenticate via `authorization_token` → a Bearer

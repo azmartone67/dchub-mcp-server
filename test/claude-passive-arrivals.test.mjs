@@ -55,14 +55,56 @@ describe('claude_connector_seen — counts THEIR arrivals, not OUR challenges', 
     expect(around).toContain('status(401)');
   });
 
-  it('shares the ChatGPT probe gates, so the two series stay comparable', () => {
+  // ── r-claude-arrivals-dedup (2026-08-28) ──────────────────────────────────
+  // ★THIS ASSERTION USED TO REQUIRE THE OPPOSITE OF WHAT THE SIBLING GUARD
+  // REQUIRES, and both were in the suite at once. As written on 08-27 it demanded
+  // `=== 'claude'` and `sessions.has(sessionId)` — full symmetry with the ChatGPT
+  // probe. #239 then rewrote the counter WITHOUT the session bail, and
+  // claude-arrival-counter.test.mjs asserts `.not.toMatch(/sessions\.has\(/)` on
+  // the same condition. No implementation can satisfy both; the suite was pinning
+  // a contradiction, and it stayed hidden only because the duplicate call site
+  // made both files error on their anchors before either assertion ran.
+  //
+  // #239 wins on the merits, and its reasoning is worth keeping here rather than
+  // only at the call site: the Claude connector initializes, gets a session, and
+  // carries it on EVERY later tools/call. A sessionless gate would count
+  // handshakes and never a tool call — a confident, permanent zero on the exact
+  // series this exists to fill. ChatGPT does not behave that way, so the two
+  // probes are deliberately NOT gate-identical any more.
+  //
+  // What survives of the original intent: both probes must stay scoped to the
+  // same ANONYMOUS cohort, because that is what makes the two series readable
+  // side by side. That is what this now asserts.
+  it('stays scoped to the anonymous cohort, like the ChatGPT probe', () => {
     const idx = SRC.indexOf("_chBump('claude_connector_seen'");
     const block = SRC.slice(Math.max(0, idx - 900), idx);
     const cond = block.slice(block.lastIndexOf('\n    if ('));
-    expect(cond).toContain("=== 'claude'");
-    expect(cond).toContain('_challengeMethod');
+    expect(cond, 'anchor drifted — this is not the arrival condition')
+      .toContain('_challengeMethod');
     expect(cond).toContain("!req.headers['x-api-key']");
     expect(cond).toContain('!_workosAuthed');
-    expect(cond).toContain('sessions.has(sessionId)');
+
+    // The Claude-side identity gate is _chAllowed (resolved from clientInfo
+    // remembered at initialize), NOT a per-request detectPlatformFromInit call —
+    // there is no clientInfo on a tools/call, so the platform check is inert there.
+    expect(cond, 'the arrival counter lost its Claude-identity gate — it would '
+      + 'now count every anonymous caller as a Claude arrival').toContain('_chAllowed');
+
+    // ★The session bail is FORBIDDEN, not required. Kept as an explicit negative
+    // so this file can never drift back into contradicting its sibling.
+    expect(cond, 'the session bail is back: this counts handshakes and never a '
+      + 'tool call — see claude-arrival-counter.test.mjs, which forbids it too')
+      .not.toContain('sessions.has(sessionId)');
+  });
+
+  it('the ChatGPT probe still keeps ITS session bail — the asymmetry is deliberate', () => {
+    const idx = SRC.indexOf("_chBump('chatgpt_connector_seen'");
+    expect(idx, 'chatgpt probe missing').toBeGreaterThan(-1);
+    const block = SRC.slice(Math.max(0, idx - 900), idx);
+    const cond = block.slice(block.lastIndexOf('\n    if ('));
+    expect(cond).toContain("=== 'chatgpt'");
+    expect(cond, 'the ChatGPT bail was removed too — if that was intended, the '
+      + 'comparability note above needs rewriting, not this assertion')
+      .toContain('sessions.has(sessionId)');
   });
 });
