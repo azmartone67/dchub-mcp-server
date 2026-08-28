@@ -284,6 +284,59 @@ describe('gated / preview responses declare their own partiality', () => {
     expect(detectGating({ _entity: 'x', preview_is_partial: false })).toBeNull();
   });
 
+  // ── r-cta-is-not-withholding (2026-08-28) ────────────────────────────────
+  // Found by the same live comparison that surfaced the invalid-key bypass:
+  // a 25-row search_facilities response with NOTHING trimmed came back carrying
+  // `preview_warning: "PARTIAL RESPONSE — data was withheld by tier gating"` and
+  // `withheld_fields: []`. The only markers present were an upgrade CTA and a
+  // free-tier note — neither of which evidences an absence. Crying partial over a
+  // complete answer teaches an agent to ignore the honesty block, which is the
+  // same damage as staying silent over a trimmed one.
+  it('a CTA alone does NOT manufacture a withholding claim', () => {
+    const ctaOnly = { _entity: 'x', data: [{ a: 1 }, { b: 2 }],
+                      _upgrade: { url: 'https://dchub.cloud/pricing' },
+                      note: 'Free tier preview — call claim_free_key for the free tier.' };
+    const g = detectGating(ctaOnly);
+    expect(g).not.toBeNull();                 // still DETECTED — reasons are honest
+    expect(g.withheld_fields).toEqual([]);    // …and they name no withheld field
+    expect(g.withholding_proven).toBe(false);
+
+    const p = buildProvenance(ctaOnly, { tier: 'free' });
+    expect(p.preview_warning,
+      'asserted data was withheld over an envelope whose withheld_fields is []')
+      .toBeUndefined();
+    expect(p.completeness).toBe('unknown');
+    expect(p.completeness_basis).toMatch(/NO evidence of withholding/i);
+    expect(p.preview).toBeTruthy();           // the block still ships
+  });
+
+  it('a CTA alone on an ungated tier reads unrestricted, not partial', () => {
+    const ctaOnly = { _entity: 'x', rows: [{ a: 1 }],
+                      _upgrade: { url: 'https://dchub.cloud/pricing' } };
+    expect(buildProvenance(ctaOnly, { tier: 'enterprise' }).completeness).toBe('unrestricted');
+  });
+
+  it('★ PROVEN withholding still warns — every evidence class', () => {
+    // The fix must not soften the real case. Each of these names an absence.
+    const proven = [
+      { _entity: 'x', data: [{ a: 1 }], _data_total_in_pro: 5 },   // shown-of-total gap
+      { _entity: 'x', power_mw: null, _power_mw_in_pro: true },     // nulled scalar
+      { _entity: 'x', locked: ['grid'] },                           // named lock
+      { _entity: 'x', preview_is_partial: true },                   // structural flag
+      { _entity: 'x', trial_preview: true },
+      { _entity: 'x', steps: [{ truncated: true }] },
+      { _entity: 'x', steps: [{ status: 'gated_preview' }] },
+    ];
+    for (const one of proven) {
+      const g = detectGating(one);
+      expect(g, JSON.stringify(one)).not.toBeNull();
+      expect(g.withholding_proven, JSON.stringify(one)).toBe(true);
+      const p = buildProvenance(one, { tier: 'free' });
+      expect(p.completeness, JSON.stringify(one)).toBe('partial_preview');
+      expect(p.preview_warning, JSON.stringify(one)).toMatch(/withheld by tier gating/i);
+    }
+  });
+
   it('completeness is three-valued and never claims more than it knows', () => {
     // ungated payload + free tier → we do NOT know the backend served it whole
     const clean = { _entity: 'response', rows: [{ a: 1 }] };

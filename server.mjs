@@ -1832,7 +1832,11 @@ const keyCache = new Map(); // api_key → { valid, tier, exp }
 // and the NEVER-cache-a-downgrade rule below are unchanged.
 const _keyValidateInflight = new Map();      // api_key → Promise<validation>
 async function validateKey(api_key) {
-  if (!api_key) return { valid: false, tier: 'free' };
+  // key_rejected = the BACKEND authoritatively said this credential is not a
+  // key. It is deliberately NOT the same as `!valid`: `valid:false` is also
+  // what a backend timeout/5xx returns, and those two must not be treated
+  // alike (see _effectiveCallerKey). No credential at all rejects nothing.
+  if (!api_key) return { valid: false, tier: 'free', key_rejected: false };
   const hit = keyCache.get(api_key);
   if (hit && hit.exp > Date.now()) return hit;
   const inflight = _keyValidateInflight.get(api_key);
@@ -1862,11 +1866,18 @@ async function _validateKeyUncached(api_key) {
       // (The catch{} path below already avoids caching for the same reason.)
       console.error('[validateKey] backend validate not ok:', resp.status,
                     '— returning free for this call but NOT caching the downgrade');
-      return { valid: false, tier: 'free' };
+      // INDETERMINATE, not rejected. Same reasoning as the no-cache rule above:
+      // a blip must not be read as "this key is fake" either, or _effectiveCallerKey
+      // would strip a PAYING caller's identity for the duration of the outage.
+      return { valid: false, tier: 'free', key_rejected: false, indeterminate: true };
     }
     const data = await resp.json();
     return cacheKey(api_key, {
       valid: !!data.valid,
+      // The backend answered 200 and said no. THIS is the authoritative
+      // rejection — the only condition under which a presented credential is
+      // dropped and the caller falls back to anonymous free-tier gating.
+      key_rejected: data.valid !== true,
       tier: data.tier || 'free',
       developer_id: data.developer_id || null,
       email: data.email || null,
@@ -1890,8 +1901,58 @@ async function _validateKeyUncached(api_key) {
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
-    return { valid: false, tier: 'free' };
+    // Timeout / DNS / socket error → INDETERMINATE (see A2 above).
+    return { valid: false, tier: 'free', key_rejected: false, indeterminate: true };
   }
+}
+
+// ── r-invalid-key-anon (2026-08-28): an UNRESOLVABLE credential must not buy
+// authenticated depth ───────────────────────────────────────────────────────
+// ★THE DEFECT THIS CLOSES. Every gating decision in this file asks `!!c.api_key`
+// — "did this caller present a key?" — and NOT "is that key real?". The tier was
+// resolved correctly (validateKey → 'free'), but the RAW, unvalidated string was
+// written into ctx anyway, so `hasApiKey` came back true and applyTierGate took
+// the keyed-free branches (trial_taste / KEYED_FREE_BONUS / KEYED_FACILITY_MASK)
+// while ANON_PREVIEW_ONLY's trim was skipped. Net: any non-empty junk string
+// unlocked full depth.
+//
+// Measured live against production 2026-08-28, search_facilities
+// {query:"Ashburn", limit:25}, junk key "totally_made_up":
+//     no credential      →  3 rows,  4,459 chars, withheld_fields=['data']
+//     ?apiKey=<junk>     → 25 rows, 12,302 chars, withheld_fields=[]
+//     ?api_key=<junk>    → 25 rows   (identical)
+//     ?key=<junk>        → 25 rows   (identical)
+//     X-API-Key: <junk>  → 25 rows   (identical)   ← NOT query-string-specific
+//     inline arg api_key → 25 rows   (identical)
+//     ?apiKey=           →  3 rows   (empty string is falsy → never reached here)
+// At limit=100 the same junk key returned 100 rows / 41,958 chars against the
+// anonymous 3. Only the Bearer channel was safe, and only because
+// r-invalid-bearer-401 validates it separately and 401s.
+//
+// ★FIXED AT THE ctx BOUNDARY, NOT AT THE READ SITES. There are ~9 `!!c.api_key`
+// predicates spread across gating, scraper-detection, quota, credit identity and
+// CTA copy. Adding a `key_valid` flag would mean finding and correcting all of
+// them, and missing ONE leaves the hole open. Refusing to put an unresolvable
+// key into ctx at all makes every one of those sites correct by construction,
+// including any added later.
+//
+// ★FAIL-SOFT ON INDETERMINATE. Only `key_rejected` (backend answered 200 and
+// said no) drops the key. A backend timeout or 5xx also yields valid:false, and
+// stripping identity there would knock PAYING customers down to fully anonymous
+// during an outage — the exact regression the 2026-06-07 "never cache a
+// downgrade" hardening exists to prevent. Indeterminate keeps today's behavior.
+//
+// Kill switch: DCHUB_INVALID_KEY_ANON_DISABLE=1 restores the pre-fix behavior.
+export function _effectiveCallerKey(apiKey, validation, opts = {}) {
+  if (!apiKey) return null;
+  if (opts.disabled === true) return apiKey;          // kill switch
+  if (validation && validation.valid === true) return apiKey;
+  if (validation && validation.key_rejected === true) return null;   // → anonymous
+  return apiKey;                                       // indeterminate → fail-soft
+}
+
+function _invalidKeyAnonDisabled() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INVALID_KEY_ANON_DISABLE || ''));
 }
 
 // ── Monthly quota: the GATEWAY CONSUMER of /api/v1/mcp/monthly-usage ──────
@@ -2223,7 +2284,15 @@ function _lateKeyResolve(meta, apiKey, validation) {
       },
     };
   }
+  // r-invalid-key-anon (2026-08-28): this branch let a header key that the
+  // backend had just REJECTED ride onto an anonymous session as `api_key` for
+  // the duration of the call — the same "presented ⇒ authenticated" confusion
+  // _effectiveCallerKey closes at the init/stateless boundaries. A rejected key
+  // is no identity at all, so leave the session anonymous. An INDETERMINATE
+  // result (backend down; key_rejected false) still adopts, unchanged.
   if (!meta.api_key) {
+    if (validation && validation.key_rejected === true
+        && !_invalidKeyAnonDisabled()) return null;
     return { persist: false, meta: { ...meta, api_key: apiKey, tier: 'free' } };
   }
   return null;
@@ -16126,6 +16195,10 @@ app.post('/mcp', async (req, res) => {
       const platform   = detectPlatformFromInit(body, userAgent, platformHeader);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
+      // r-invalid-key-anon: drop a credential the backend authoritatively
+      // rejected BEFORE it reaches sessionMeta/ctx, so every downstream
+      // `!!c.api_key` gate sees an anonymous caller. See _effectiveCallerKey.
+      apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
 
       // (r-workos-consolidate 2026-06-21) Removed the duplicate 401 challenge that
       // lived here. It was unreachable in practice — the single challenge block
@@ -16257,6 +16330,14 @@ app.post('/mcp', async (req, res) => {
       // No onclose handler: this is a one-shot stateless request. The SDK closes
       // the SSE stream after the response and both objects become GC-eligible;
       // there is no session in the Map to clean up (sessionIdGenerator: undefined).
+      // r-invalid-key-anon (2026-08-28): this branch DELIBERATELY does not run
+      // the _effectiveCallerKey drop the initialize / stateless-call branches do.
+      // It is the hot discovery path and deliberately pays NO validateKey hop
+      // (see r-stateless-list above — Smithery's tools/list P95 is the thing this
+      // branch exists to protect), and it gates nothing: the catalog is
+      // caller-independent. Verified 2026-08-28 against production — tools/list
+      // with and without a junk key returned byte-identical 388,199-char bodies.
+      // If anything here ever becomes key-dependent, this exemption must go.
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null,
         referer: req.headers.referer || req.headers.referrer || null,
@@ -16296,6 +16377,10 @@ app.post('/mcp', async (req, res) => {
       const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
+      // r-invalid-key-anon: same drop as the initialize branch. This path is the
+      // one the Smithery gateway takes (stale session id → stateless serve), so
+      // it carried the bypass just as fully. See _effectiveCallerKey.
+      apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
