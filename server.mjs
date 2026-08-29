@@ -5611,6 +5611,31 @@ function withFreshness(result, toolName) {
 //   gi    = /api/v1/grid/intelligence/<iso>   (demand + generation_mix)
 //   cmp   = /api/v1/dcpi/iso-comparison       ({isos:[{iso, avg_constraint, …}]})
 //   qsnap = /api/v1/interconnection-queue/snapshot ({by_iso:[{iso, queued_load_*}]})
+// r-unknownregion (2026-08-29): did ANY feed recognise the region?
+//
+// `ISO` reaching shapeGridIntelligence is only the caller's string uppercased
+// with non-alphanumerics stripped — it is never validated, and out.iso is set
+// from it verbatim. So an unrecognised region produced a well-formed record
+// carrying a FABRICATED code ("Karaburun Peninsula, Izmir Province, Turkey" ->
+// iso:"KARABURUNPENINSULAIZMIRPROVINCETURKEY") with every other field null and
+// no error — indistinguishable from a covered region during a feed outage.
+//
+// Deliberately discriminated on the DATA rather than on a region allowlist:
+// the 40+ EIA balancing authorities are covered but carry no DCPI row and no
+// interconnection-queue row, so any test stricter than "nothing at all
+// resolved" would reject live regions. Measured live 2026-08-29:
+//   AZPS  -> demand_mw 8005, 10 fuel keys, iso_name null, constraint null, queue null  → RESOLVED
+//   SOCO  -> demand_mw 31539, 12 fuel keys, iso_name "Southern Company", constraint 54.8 → RESOLVED
+//   TUR   -> all five absent                                                            → UNRESOLVED
+export function _gridRegionUnresolved(out) {
+  if (!out || typeof out !== 'object') return true;
+  return out.iso_name == null
+    && out.demand_mw == null
+    && out.constraint_score == null
+    && out.queue_depth_gw == null
+    && Object.keys(out.generation_mix_mw || {}).length === 0;
+}
+
 function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); // "ISO-NE" -> "ISONE"
   const _n = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
@@ -14256,6 +14281,39 @@ function createServer(descOverrides) {
         callAPI(`/api/v1/grid/extended/${ISO}`, {}, { internal: true }),
       ]);
       const out = shapeGridIntelligence(ISO, gi, cmp, qsnap);
+      // r-unknownregion (2026-08-29): an UNRECOGNISED region_id used to be
+      // indistinguishable from a covered one with a quiet hour. `ISO` is just
+      // the caller's string uppercased with non-alphanumerics stripped, and
+      // shapeGridIntelligence copies it to out.iso verbatim — so
+      // region_id="Karaburun Peninsula, Izmir Province, Turkey" came back as
+      // iso:"KARABURUNPENINSULAIZMIRPROVINCETURKEY" with every other field null,
+      // no error and no coverage note. A caller cannot tell a fabricated code
+      // from a real outage, and the observed behaviour is that they retry: one
+      // live user issued that exact call 5x in 3h, then abandoned the whole
+      // toolset for that geography. The empty-input branch above already
+      // answers honestly; this is the same answer for a value we cannot resolve.
+      //
+      // Discriminated on DATA, not on a hardcoded region list, so that the 40+
+      // EIA balancing authorities keep working: a valid BA resolves telemetry
+      // even when it has no DCPI row and no queue row (AZPS -> demand_mw 8005,
+      // 10 fuel keys, iso_name null, constraint_score null, queue_depth_gw
+      // null). Only a region where ALL FIVE signals are absent is unresolvable.
+      if (_gridRegionUnresolved(out)) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'region not covered',
+          detail: `"${raw}" did not resolve to a grid region DC Hub covers. Live grid telemetry is US-only (7 ISOs + EIA balancing authorities); it is not available for non-US geographies.`,
+          requested: raw,
+          hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs, or a US EIA balancing-authority code.',
+          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'PJM-DOM'],
+          example: 'get_grid_intelligence region_id="PJM"',
+          instead: 'For non-US power infrastructure use get_global_power (plant/unit inventory, 170+ countries). There is no live grid telemetry outside the US.',
+          _error_mitigation: {
+            error_code: 'region_not_covered',
+            severity: 'parameter_adjustment',
+            deterministic_hint: 'Retrying the same region_id will not help — this is a coverage boundary, not a transient failure. Use get_global_power for non-US geographies.',
+          },
+        }) }] };
+      }
       // r-extended (2026-07-03): merge the forward/supply signals the grid-data
       // master shell absorbs from gridstatus (forward load, committed capacity,
       // operating reserve/margin, grid carbon intensity, zone LMP) — data we were
