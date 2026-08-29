@@ -7147,6 +7147,13 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     ok: _oBool('true when the intent was routed'),
     intent: _oStr('The natural-language intent that was routed (echoed back)'),
     intent_class: _oStr('The matched intent class (market_ranking | capacity_search | market_comparison | grid_headroom | interconnection_queue | hosting_capacity | water_climate | site_analysis | deals_ma | fiber_power_pairing | fiber | price | incentives_tax | power_timeline | changes_delta | facility_search | unknown)'),
+    routing_hint: _oObj({
+      problem: _oStr('The matched intent class — the SAME closed enum as intent_class, so it is branchable, not free text'),
+      best_path: _oStr('Where to start: `execute_plan` for a multi-capability question, or the one tool name for a single-capability lookup'),
+      why: _oStr('Short deterministic rationale for that entry point'),
+      expected_outputs: _oArr(_oStr('An output CLASS to expect — not a tool name'), 'Bounded list of what the recommended path returns'),
+      advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
+    }, 'ADVISORY four-field router: collapses 82 tools to one starting point. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Specified by ChatGPT in the 2026-08-29 partner round.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -9344,6 +9351,7 @@ export function _planQuery(intent, context) {
     const fbWaves = _planWaves(fbSeq);
     const sc = {
       _entity: 'query_plan', ok: true, intent: text, intent_class: 'unknown',
+      routing_hint: _routingHint('unknown', 'discover_tools'),
       best_tool: 'discover_tools',
       confidence: 0.2,
       intent_confidence: 0.2,
@@ -9441,6 +9449,7 @@ export function _planQuery(intent, context) {
   const sc = {
     _entity: 'query_plan', ok: true, intent: text,
     intent_class: top.cls.id,
+    routing_hint: _routingHint(top.cls.id, seq[0].tool),
     recipe: top.cls.recipe,
     best_tool: seq[0].tool,
     confidence: intentConfidence,
@@ -11335,6 +11344,83 @@ export function _applyProjection(payload, keep) {
     out[k] = Array.isArray(v) ? v.map(projectRow) : v;
   }
   return out;
+}
+
+// ★★★ r-routing-hint (2026-08-29) — collapse 82 tools to ONE starting point.
+//
+// SPECIFIED BY ChatGPT, verbatim, in the partner round. Its exact words on the
+// shape and on what to leave OUT, both of which this follows:
+//
+//   "problem should use your canonical problem taxonomy, not free text. That
+//    gives downstream agents a stable enum they can branch on."
+//   "The routing hint should be ADVISORY, not executable authority. best_path
+//    recommends the entry point; it does not assert that the path will succeed."
+//   "I would not put tool lists, latency promises, confidence scores, detailed
+//    execution graphs, planner versions in the routing hint. Those belong in the
+//    response/replay AFTER routing."
+//   On `not_for`: "Only add that when you have a concrete routing failure that
+//    cannot be prevented by the four fields above."
+//
+// So: four fields, no fifth. `problem` is the planner's intent_class, which is
+// already a closed enum (see the plan_query outputSchema) — not a new vocabulary.
+// Everything a caller might want beyond this already rides `replay`.
+//
+// ★ Why this is not just `best_tool` renamed. `best_tool` names the first tool of
+// a sequence; a caller cannot tell from it whether to call that tool or to call
+// execute_plan and let the sequence run. best_path answers THAT question, and it
+// is the only question a router has to answer.
+const _ROUTING_OUTPUTS = {
+  market_ranking:       ['ranked markets with DCPI verdicts', 'applied and unsupported filters', 'rejected alternatives with reasons'],
+  market_comparison:    ['a like-for-like scorecard per market', 'the limiting factor on each side', 'rejected alternatives with reasons'],
+  capacity_search:      ['matching facilities or sites', 'power and grid context for the hits', 'coverage limits'],
+  site_analysis:        ['a composite site score and verdict', 'the top limiting factor', 'per-argument constraint coverage'],
+  grid_headroom:        ['headroom and telemetry for the ISO', 'published limits on what headroom does not promise'],
+  interconnection_queue:['queue position and wait signals', 'published limits on queue-derived timing'],
+  hosting_capacity:     ['feeder-grain hosting capacity', 'coverage limits'],
+  water_climate:        ['water stress and climate risk for the point', 'coverage limits'],
+  deals_ma:             ['tracked transactions with market verdicts', 'coverage limits'],
+  fiber_power_pairing:  ['where fiber depth and grid headroom overlap', 'coverage limits'],
+  fiber:                ['routes and carrier counts for the market', 'coverage limits'],
+  price:                ['power price for the geography', 'published limits on price as a siting signal'],
+  incentives_tax:       ['statutory programs for the jurisdiction', 'published limits on eligibility'],
+  power_timeline:       ['time-to-power signals for the state', 'semantic constraint coverage'],
+  changes_delta:        ['only what moved since your timestamp'],
+  facility_search:      ['matching facilities', 'coverage limits'],
+  unknown:              ['the tool families that could answer this', 'a suggested entry call'],
+};
+const _ROUTING_WHY = {
+  market_ranking:       'The question ranks geographies, which spans market scores and grid reality.',
+  market_comparison:    'A head-to-head needs the same scorecard pulled for each side.',
+  capacity_search:      'Finding capacity spans facility inventory and the power context around it.',
+  site_analysis:        'A point-in-space question spans grid, fiber, water and risk.',
+  grid_headroom:        'Headroom is one capability; the queue behind it is another.',
+  interconnection_queue:'Queue position is a single-capability lookup.',
+  hosting_capacity:     'Feeder-grain capacity is a single-capability lookup.',
+  water_climate:        'Point risk is a single-capability lookup.',
+  deals_ma:             'Transaction flow is a single-capability lookup.',
+  fiber_power_pairing:  'Pairing fiber against power is two capabilities by definition.',
+  fiber:                'Fiber depth for one market is a single-capability lookup.',
+  price:                'Price alone mis-answers siting; the cheapest ISO is often the one with no headroom.',
+  incentives_tax:       'Statutory programs are a single-capability lookup.',
+  power_timeline:       'Time-to-power for one state is a single-capability lookup.',
+  changes_delta:        'A delta is one incremental call, never a re-run.',
+  facility_search:      'An inventory lookup is one round trip.',
+  unknown:              'The intent did not match a known class, so start by narrowing the catalog.',
+};
+
+// ADVISORY. Names where to start; asserts nothing about whether it will succeed.
+export function _routingHint(intentClass, bestTool) {
+  const cls = _ROUTING_OUTPUTS[intentClass] ? intentClass : 'unknown';
+  // Multi-capability classes route to the planner; single-capability ones do not.
+  const MULTI = new Set(['market_ranking', 'market_comparison', 'capacity_search',
+                         'site_analysis', 'grid_headroom', 'fiber_power_pairing']);
+  return {
+    problem: intentClass || 'unknown',
+    best_path: MULTI.has(cls) ? 'execute_plan' : (bestTool || 'discover_tools'),
+    why: _ROUTING_WHY[cls],
+    expected_outputs: _ROUTING_OUTPUTS[cls],
+    advisory: 'Recommends an entry point. It does not assert the path will succeed — read the result, not this block.',
+  };
 }
 
 // ★★★ STAGE 0a — request_interpretation (2026-08-25).
