@@ -20,7 +20,7 @@
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
       "toolCount": 82,
-      "license": "CC-BY-4.0",
+      "license": "CC-BY-4.0 for DCPI scores + methodology and DC Hub's own grid analysis; other layers per https://dchub.cloud/data-sources",
       "freeTier": true
     }
   }
