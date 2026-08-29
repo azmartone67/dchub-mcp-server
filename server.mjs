@@ -4409,6 +4409,16 @@ const _PROTECTED_KEYS = new Set([
   'tier_required', 'tier_current', 'platform', 'last_updated',
   'data_source', 'as_of', 'published_at', 'title', 'summary', 'provider',
   'location_display', 'country_name', 'state_name', 'company', 'project',
+  // r-excluded-total (2026-08-29): a COVERAGE count, not a paywalled metric.
+  // backend #3327 returns `excluded_total` — how many markets exist in a
+  // geography when none met the verdict filter — precisely so the honest count
+  // survives whatever later trims the row array. It matched `_total$` here and
+  // came back NULL on the free tier, which is the one reading it must never
+  // have: `null` says "unknown", the truth is "nine, and here are three of
+  // them". Verified live 2026-08-29 before this fix: region=OH returned
+  // markets_in_region 9 (unmasked, same number) beside excluded_total null.
+  // Masking one and not the other was incoherent as well as wrong.
+  'excluded_total', 'markets_in_region',
 ]);
 function _isMetricKey(k) {
   if (_PROTECTED_KEYS.has(k)) return false;
