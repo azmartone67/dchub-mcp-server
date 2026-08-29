@@ -11257,6 +11257,86 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name));
 }
 
+// ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
+//
+// ASKED FOR BY THREE AGENTS in the partner round, for the same reason:
+//   Gemini  "Every token you send consumes the user's context window and slows
+//            time-to-first-token" — and then supplied the exact 17-field siting
+//            set it wanted, plus: "Exposing a preset string alias like
+//            projection='siting_summary' alongside explicit field arrays saves
+//            input prompt tokens on tool invocation."
+//   Copilot "Support a `fields` query param so Copilot can request only the
+//            minimal fields it needs."
+//   Mistral asked for the same thing under caching.
+//
+// ★★★ THE RULE THAT MAKES THIS SAFE: A PROJECTION NARROWS ROWS, NEVER THE
+// ENVELOPE. Everything DC Hub says about the honesty of an answer — its
+// citation, its provenance and as_of, what it could not cover, which arguments
+// it ignored, which credential it used, and the verbatim human line the relay
+// doctrine depends on — is NOT data the caller may opt out of. A caller that
+// could project away `constraint_coverage` would get a cheaper answer that is
+// also a less honest one, and would not know it had made that trade.
+//
+// This is not hypothetical caution: `for_your_human` is the only link a human
+// can act on, and `citation` is what makes a figure quotable. Dropping either to
+// save tokens would break a doctrine to save bytes. So the keep-list is
+// enforced, not advisory, and a test asserts every member of it survives.
+//
+// Gemini's own example payload keeps request_interpretation, as_of, completeness
+// and cite_as while projecting `results` — so this rule is its rule, made
+// mechanical.
+const _PROJECTION_ENVELOPE_KEEP = new Set([
+  'citation', 'provenance', 'as_of', 'quota', 'ok', 'success', 'error',
+  'constraint_coverage', 'constraint_coverage_shape', 'request_interpretation',
+  'identity', 'empty_result', 'applied_filters', 'inputs', 'routing_hint',
+  'for_your_human', 'upgrade', '_upgrade', 'tier', 'completeness',
+  '_entity', 'matched', 'universe', 'total', 'count', 'note', 'sources',
+]);
+
+// Gemini's 17-field siting set, verbatim from its reply.
+const _PROJECTION_PRESETS = {
+  siting_summary: ['site_id', 'name', 'latitude', 'longitude', 'market_slug', 'verdict',
+    'verdict_reasons', 'composite_score', 'power_capacity_mw', 'grid_headroom_mw',
+    'substation_distance_km', 'queue_depth_mw', 'water_stress_index', 'seismic_risk_score',
+    'power_cost_cents_kwh', 'fiber_provider_count', 'as_of'],
+  // The canvas/rank row shape, for the ranking tools.
+  market_summary: ['market', 'slug', 'state', 'iso', 'verdict', 'composite_score',
+    'excess_power_score', 'constraint_score', 'time_to_power_months', 'dcpi_url'],
+  identity_only: ['id', 'site_id', 'slug', 'market_slug', 'name', 'market'],
+};
+
+// Resolve `fields` (array or comma string) + `projection` (preset name) into a
+// keep-set, or null when the caller asked for nothing.
+export function _resolveProjection(fields, projection) {
+  const out = [];
+  if (projection && _PROJECTION_PRESETS[projection]) out.push(..._PROJECTION_PRESETS[projection]);
+  if (Array.isArray(fields)) out.push(...fields.filter((f) => typeof f === 'string'));
+  else if (typeof fields === 'string' && fields.trim()) out.push(...fields.split(',').map((f) => f.trim()));
+  const keep = out.filter(Boolean);
+  return keep.length ? new Set(keep) : null;
+}
+
+// Project ROWS only. Envelope keys pass through untouched, always.
+export function _applyProjection(payload, keep) {
+  if (!keep || payload === null || typeof payload !== 'object') return payload;
+  const projectRow = (row) => {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) return row;
+    const r = {};
+    for (const k of Object.keys(row)) if (keep.has(k)) r[k] = row[k];
+    // A row that shares NO field with the projection is returned whole rather
+    // than as {} — an empty object reads as "this record is empty", which is a
+    // different and false claim. Under-projecting is recoverable; lying is not.
+    return Object.keys(r).length ? r : row;
+  };
+  if (Array.isArray(payload)) return payload.map(projectRow);
+  const out = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (_PROJECTION_ENVELOPE_KEEP.has(k) || k.startsWith('_')) { out[k] = v; continue; }
+    out[k] = Array.isArray(v) ? v.map(projectRow) : v;
+  }
+  return out;
+}
+
 // ★★★ STAGE 0a — request_interpretation (2026-08-25).
 //
 // THE PROBLEM. An argument this server does not declare is dropped in silence.
@@ -14510,15 +14590,18 @@ function createServer(descOverrides) {
     { criteria: S.describe('Ranking criterion: "cheapest_power", "most_capacity", "most_operators", "fastest_growing", "best_overall" (default), or "ai_ready" (DCPI buildability — where new AI load can land, for AI-campus siting; region us/global)'),
       region: S.describe('Region scope: "global", "us" (default), "canada", "eu", "apac", or "americas"'),
       limit: LIMIT.describe('Number of markets to return, 1-50 (default 10)'),
-      min_capacity_mw: N.describe('Minimum existing capacity filter in megawatts (MW), e.g. 100') },
+      min_capacity_mw: N.describe('Minimum existing capacity filter in megawatts (MW), e.g. 100'),
+      fields: z.union([z.array(z.string()), z.string()]).optional().describe('Return ONLY these row fields (array or comma string) — a token diet. The response envelope (citation, provenance, as_of, coverage, request_interpretation, the human relay line) is NEVER projected away; a projection narrows ROWS only.'),
+      projection: z.enum(['siting_summary', 'market_summary', 'identity_only']).optional().describe('Named field preset, cheaper to send than a field list: market_summary (ranking rows), siting_summary (site/point rows), identity_only (ids + names).'),
+    },
     async (a) => ({
       content: [{ type: 'text',
-        text: JSON.stringify(await callAPI('/api/v1/mcp/tools/rank_markets', {
+        text: JSON.stringify(_applyProjection(await callAPI('/api/v1/mcp/tools/rank_markets', {
           criteria:        a.criteria        || 'best_overall',
           region:          a.region          || 'us',
           limit:           a.limit           || 10,
           min_capacity_mw: a.min_capacity_mw || 0,
-        }))
+        }), _resolveProjection(a.fields, a.projection)))
       }]
     }));
 
