@@ -112,6 +112,54 @@ const TOOL_ALIASES = {
 };
 
 
+// r-argalias (2026-08-29): THE SAME FAILURE AS TOOL_ALIASES, ONE LEVEL DOWN.
+// TOOL_ALIASES exists because agents guess tool NAMES; nothing ever routed a
+// guessed ARGUMENT name, and Zod STRIPS undeclared arguments before the handler
+// — so a guess did not fail loudly, it returned a confident WRONG answer.
+//
+// Measured live 2026-08-29 against production, calling the top paid-demand
+// tools the way an agent naturally would:
+//   get_dchub_recommendation {intent:"..."}  -> `intent` stripped, generic blurb
+//   get_fiber_intel          {location:"Dallas"} -> `location` stripped, 200 OK,
+//                                                   data NOT about Dallas
+// 58 of 82 tools declare no `required`, so an agent cannot learn the right name
+// from tools/list either. ★A silently-wrong answer is worse than an error: the
+// error would have been retried.
+//
+// Same contract as TOOL_ALIASES: call-time ONLY, never surfaced in tools/list,
+// every hit logged so the map grows from what agents actually type.
+//
+// ★VALIDATION LIMIT, STATED PLAINLY. Values must be REAL declared properties of
+// that tool, but this repo CANNOT assert that: the authoritative 82-tool
+// manifest with real schemas lives in dchub-backend/worker.js, and this repo's
+// toolspec.json is stale — 79 tools, and `properties` is EMPTY for every one of
+// them, so validating against it would pass vacuously. test/arg-aliases.test.mjs
+// therefore guards the STRUCTURE (no guess shadows a real target, no two guesses
+// collide, no self-mapping) and pins the target names as a reviewed list. A
+// property RENAMED in worker.js would leave a silent no-op alias here and no
+// test in this repo would catch it. ★Re-check targets against worker.js when
+// editing this map.
+//
+// ★ONLY pure RENAMES belong here. An alias whose VALUE needs translating is a
+// different problem and must NOT be faked with a rename: get_grid_intelligence
+// takes an ISO (PJM/ERCOT/CAISO), so {market:"Ashburn"} is NOT `region` and is
+// deliberately absent — it needs market->ISO resolution against
+// util/iso_taxonomy, backend-side. analyze_site {location:"Ashburn, VA"} is
+// likewise absent: it needs geocoding to lat/lon, and its existing error
+// already names exactly what to send.
+const ARG_ALIASES = {
+  get_dchub_recommendation: { intent: 'context', query: 'context',
+                              question: 'context', use_case: 'context',
+                              request: 'context' },
+  get_fiber_intel:          { location: 'market', city: 'market',
+                              metro: 'market' },
+  get_metro_fiber:          { location: 'market', city: 'market' },
+  get_market_intel:         { location: 'market', city: 'market' },
+  get_energy_prices:        { location: 'state', region: 'state' },
+  list_transactions:        { limit_results: 'limit' },
+};
+
+
 // phase39_human_message — paywall response enrichment for higher conversion
 // Adds a literal markdown string that AI clients (Claude/Cursor/Cline)
 // render verbatim instead of summarizing away. Plus attribution query
@@ -15953,6 +16001,25 @@ app.post(MCP_PATHS, async (req, res) => {
           req.body.params.name = _canon;
         }
       }
+      // r-argalias: normalize GUESSED argument names on the same mutation of
+      // req.body, for the same reason and on every tools/call path. Runs AFTER
+      // the tool-name alias so a guessed name + guessed arg both land.
+      const _am = req.body && req.body.params
+        && Object.prototype.hasOwnProperty.call(ARG_ALIASES, req.body.params.name)
+        ? ARG_ALIASES[req.body.params.name] : null;
+      const _args = req.body && req.body.params && req.body.params.arguments;
+      if (_am && _args && typeof _args === 'object' && !Array.isArray(_args)) {
+        for (const [guess, real] of Object.entries(_am)) {
+          // NEVER clobber: an explicitly-sent real argument always wins, so an
+          // agent that got it right cannot be overwritten by one that guessed.
+          if (Object.prototype.hasOwnProperty.call(_args, guess)
+              && !Object.prototype.hasOwnProperty.call(_args, real)) {
+            _args[real] = _args[guess];
+            delete _args[guess];
+            console.log(`[argalias] ${req.body.params.name}.${guess} \u2192 ${real} sid=${(sessionId || '').slice(0, 8)}`);
+          }
+        }
+      }
     } catch (_) {}
     // r-smithery-config (2026-07-16): Smithery's remote-server gateway forwards
     // a user's configSchema value (the optional apiKey) as a QUERY PARAM on the
@@ -16760,4 +16827,8 @@ export { trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause };
 // the undeclared arguments the feature exists to name. Driving a real
 // tools/call over HTTP is the only level that can catch that, and it needs the
 // app. Exporting an existing object changes no runtime behavior.
+// r-argalias (2026-08-29): exported for test only — the alias map's structural
+// invariants are guarded in test/arg-aliases.test.mjs.
+export { ARG_ALIASES, TOOL_ALIASES };
+
 export { app };
