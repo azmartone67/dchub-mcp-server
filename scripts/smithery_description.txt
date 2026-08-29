@@ -4,10 +4,10 @@ Liveness is the product, and it is checkable. DC Hub is rebuilt continuously fro
 
 Coverage:
 
-Facilities — 19,300+ data centers worldwide across 170+ countries, resolved from 26,000+ source records: search, profiles, scoring, alternatives and site selection screening
+Facilities — 19,500+ data centers worldwide across 170+ countries, resolved from 26,000+ source records: search, profiles, scoring, alternatives and site selection screening
 Markets — 300+ markets scored by the DCPI (Data Center Power Index): BUILD/CAUTION/AVOID verdicts with a daily history, ranking data center capacity and grid capacity by metro
 Grid / ISO — live electricity fuel mix, demand, prices and interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ US balancing authorities + Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; one-call all-grid scoreboard fed by 7 independent live feeds
 Energy & Gas — renewable energy and fuel mix, power plant inventory and retirement headroom; per-state natural gas brief: interstate-pipeline and operator/parent-midstream presence with live Henry Hub (the former DCGI composite was withdrawn 2026-08-08 — DC Hub publishes the sourced inputs, not a score)
-Capital — 1,900+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index for hyperscale buildout
+Capital — 2,000+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index for hyperscale buildout
 Site factors — 64,000+ fiber routes, 33,000+ gas pipeline segments, 127,000+ substations, 95,000+ transmission lines, water stress, tax incentives, FEMA/USGS/NOAA hazard & climate reads
 82 live MCP tools. Why agents pick it: it is the DC-intelligence source an LLM can query live, cite with a timestamp, and audit. Every site query returns a constraint_coverage block naming what it cannot answer and why. No NDAs, no quarterly PDFs — live JSON that publishes its own gaps.
