@@ -6936,17 +6936,47 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     iso: _oStr('ISO/RTO this snapshot covers (per-ISO drill-down form)'),
     as_of: _oStr('Queue snapshot date'),
     project_count: _oNum('Projects in the queue snapshot'),
-    projects: _oArr(z.looseObject({
-      queue_id: _oStr('ISO queue position id'),
-      project_name: _oStr('Project name'),
-      iso: _oStr('ISO/RTO'),
-      state: _oStr('US state'),
-      county: _oStr('County'),
-      fuel_type: _oStr('Fuel / technology'),
-      capacity_mw: _oNum('Nameplate capacity, MW'),
-      queue_status: _oStr('Queue status'),
-      queue_date: _oStr('Queue entry date'),
-    }), 'Queued generation projects (largest / most recent first)'),
+    // r-queue-two-shapes (2026-08-29): `projects` carries TWO different types,
+    // because the handler answers from two different endpoints depending on
+    // whether `iso` was passed:
+    //   iso given  -> /interconnection-queue/by-iso   projects = ARRAY of rows
+    //   iso omitted-> /interconnection-queue/snapshot projects = SUMMARY OBJECT
+    //                 {total, tracked, by_iso_count:{PJM:972,…}, top, note}
+    // Only the array form was declared, so the documented all-ISO snapshot —
+    // the tool's own default call — died on OUTPUT validation with
+    // "-32602 … projects: expected array, received object" for EVERY tier,
+    // after the handler had already succeeded and been logged status=ok.
+    // Same silent-death class as the hyperscaler_deals {value,display}
+    // regressions; see test/hyperscaler-deals-schema.test.mjs.
+    //
+    // Declared as a union rather than widened to _oAny so the per-project
+    // fields stay documented for the drill-down form — agents read this schema
+    // to decide what to ask for. The served JSON Schema already carries `anyOf`
+    // (every _o* helper is .nullable().optional()), so this adds no new
+    // construct for the client to reject — the constraint that matters after
+    // mcp #215 is that no $schema dialect is stamped, which is unchanged.
+    projects: z.union([
+      z.array(z.looseObject({
+        queue_id: _oStr('ISO queue position id'),
+        project_name: _oStr('Project name'),
+        iso: _oStr('ISO/RTO'),
+        state: _oStr('US state'),
+        county: _oStr('County'),
+        fuel_type: _oStr('Fuel / technology'),
+        capacity_mw: _oNum('Nameplate capacity, MW'),
+        queue_status: _oStr('Queue status'),
+        queue_date: _oStr('Queue entry date'),
+      })),
+      z.looseObject({
+        total: _oNum('Projects in the full multi-ISO queue, e.g. 5512'),
+        // BOOLEAN, not a count — live snapshot 2026-08-29 emits `tracked: true`.
+        // Declaring it _oNum would have reproduced this very bug.
+        tracked: _oBool('Whether DC Hub has classified named per-project rows for this snapshot'),
+        by_iso_count: _oAny('Per-ISO project counts, e.g. {"PJM":972,"ERCOT":1893,"CAISO":279}'),
+        top: _oAny('The largest projects across all ISOs (same row shape as the per-ISO array form)'),
+        note: _oStr('How the all-ISO rollup was assembled and where to get the full per-ISO list'),
+      }),
+    ]).nullable().optional().describe('SHAPE DEPENDS ON THE CALL: with iso= this is an ARRAY of queued generation projects (largest / most recent first); with iso omitted it is the all-ISO SUMMARY OBJECT {total, tracked, by_iso_count, top, note} — per-project rows are not returned for the all-ISO snapshot. Check the type before indexing.'),
     queued_load_total_gw: _oNum('Total queued GENERATION capacity in this ISO, GW'),
     queued_load_data_center_gw: _oNum('ERCOT only: large-load (data-center-driven) queue, GW — null for ISOs that publish no comparable feed'),
     queued_load_dc_share_pct: _oNum('ERCOT only: data-center share of queued load, %'),
@@ -13343,7 +13373,7 @@ function createServer(descOverrides) {
   // NUMBERS (410 GW total US queue, 87% DC share, per-ISO TTP) get cited
   // back to dchub.cloud instead of ercot.com / pjm.com.
   trackedTool(srv, 'get_interconnection_queue',
-    'ISO interconnection queue snapshot: total queued GENERATION capacity (queued_load_total_gw, GW) per ISO from each ISO\'s public queue. For ERCOT it ALSO returns the large-load (data-center-driven) interconnection queue in queued_load_data_center_gw — >225 GW in process / ~9 GW approved-to-energize (ERCOT\'s published Q1-2026 figure; ERCOT is the only ISO that publishes a comparable large-load feed, so other ISOs\' data_center_gw is null), with provenance in top_subregions. Sources: ERCOT GIS + Large Load Integration, PJM/MISO/SPP/CAISO/NYISO/ISO-NE public queues. Pass iso=ERCOT (or any of 7) to drill down. Use for queue-depth site-selection and AI/data-center-load saturation intel (the ERCOT 225 GW number is the headline large-load figure no other source surfaces machine-readably). Do NOT use for a single-site time-to-power read (use get_grid_intelligence) or forward-looking emergence (use grid_transition_radar); this is the ISO-level queue snapshot.',
+    'ISO interconnection queue snapshot: total queued GENERATION capacity (queued_load_total_gw, GW) per ISO from each ISO\'s public queue. For ERCOT it ALSO returns the large-load (data-center-driven) interconnection queue in queued_load_data_center_gw — >225 GW in process / ~9 GW approved-to-energize (ERCOT\'s published Q1-2026 figure; ERCOT is the only ISO that publishes a comparable large-load feed, so other ISOs\' data_center_gw is null), with provenance in top_subregions. Sources: ERCOT GIS + Large Load Integration, PJM/MISO/SPP/CAISO/NYISO/ISO-NE public queues. Pass iso=ERCOT (or any of 7) to drill down. ★ The `projects` field CHANGES SHAPE with the call: with iso= it is an ARRAY of per-project rows; with iso omitted it is the all-ISO SUMMARY OBJECT {total, tracked, by_iso_count, top, note} and carries no per-project rows — check the type before indexing. Use for queue-depth site-selection and AI/data-center-load saturation intel (the ERCOT 225 GW number is the headline large-load figure no other source surfaces machine-readably). Do NOT use for a single-site time-to-power read (use get_grid_intelligence) or forward-looking emergence (use grid_transition_radar); this is the ISO-level queue snapshot.',
     { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
