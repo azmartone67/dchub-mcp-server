@@ -11250,11 +11250,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   top-level citation and no provenance at all (verified live 2026-08-12).
   //   The caller's tier is passed so `completeness` can only read
   //   'unrestricted' when the tier genuinely removes the gates.
-  }, async (args, extra) => _flagUpstreamError(_stampRequestInterpretation(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name));
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -11443,6 +11443,64 @@ export function _stampRequestInterpretation(result, rawKeys, declared) {
     return { ...result, structuredContent: { ...sc, request_interpretation: ri } };
   } catch {
     return result;  // fail-soft: an advisory block is never worth failing a response over
+  }
+}
+
+// ★★★ r-auth-source (2026-08-29) — name the credential channel, per response.
+//
+// THE PROBLEM. An agent cannot tell which credential DC Hub used for its call,
+// or whether one arrived at all. Three partners hit the same wall independently
+// in one week:
+//
+//   ChatGPT  saw `401 reauthentication required` on get_agent_registry and
+//            correctly declined to say whether that was its connector or our
+//            server. (It was its connector — that tool answers keyless: probed
+//            anonymously 2026-08-29 -> 200, free tier, 3 of 11 platforms.)
+//   Grok     asked for "a URL-box identity that survives reconnects", not
+//            knowing `connect_url` (?apiKey=) already ships exactly that.
+//   Copilot  asked whether a direct bind is possible for it at all.
+//
+// One missing fact answers all three. And it could NOT be established from
+// outside: probing with a real key in the URL, a junk key in the URL, and no key
+// produced identical responses, because identity falls back to a caller
+// fingerprint that masks the difference. The fallback is correct and the junk key
+// IS rejected — but the query channel is unverifiable by the agents told to use
+// it, which is why `connect_url` could not honestly be recommended.
+//
+// ★ THIS GRANTS NOTHING. It reports the channel already resolved upstream. It
+// does not change precedence (header > bearer > query > inline_argument), does
+// not widen access, and never echoes the credential itself — only its channel.
+//
+// ★ FAIL-SOFT AND SILENT. No ctx (stdio transport, off-request) => no block. An
+// advisory field is never worth failing a response over.
+export function _identitySource(ctxLike) {
+  const c = ctxLike || {};
+  const src = c.auth_source;
+  if (!src) return null;                        // not a /mcp request path
+  const out = { credential_source: src, tier: c.tier || 'free' };
+  if (src === 'none') {
+    // The only actionable case, so the only one that pays for prose.
+    out.means = 'This call was served ANONYMOUSLY — no credential reached DC Hub. '
+      + 'If you believed you were authenticated, the credential did not arrive: a '
+      + 'header your host strips, a key held in chat that your client cannot resend, '
+      + 'or a connector configured without one. Precedence is header > bearer > '
+      + 'query > inline_argument; `claim_free_key` returns a `connect_url` that '
+      + 'carries the key in the URL for hosts that have a URL box and no header field.';
+  }
+  return out;
+}
+
+export function _stampIdentitySource(result) {
+  try {
+    if (!result || typeof result !== 'object') return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    if (sc.identity !== undefined) return result;      // handler said it better
+    const id = _identitySource(getCtx());
+    if (!id) return result;
+    return { ...result, structuredContent: { ...sc, identity: id } };
+  } catch {
+    return result;
   }
 }
 
@@ -16167,6 +16225,29 @@ app.post(MCP_PATHS, async (req, res) => {
                    || _qKey
                    || _inlineKey
                    || null;
+    // r-auth-source (2026-08-29): name the channel the credential arrived on.
+    //
+    // WHY. Three partner agents independently reported an identity question this
+    // server could not answer from the outside. ChatGPT saw `401 reauthentication
+    // required` and correctly refused to say whether that was its connector or our
+    // server (it was its connector — get_agent_registry answers keyless). Grok asked
+    // for "a URL-box identity that survives reconnects" without knowing `connect_url`
+    // already ships one. Copilot asked whether a direct bind is even possible for it.
+    //
+    // All three are the same missing fact: WHICH credential did this call actually
+    // use? Probing from outside could not establish it — a real key in the URL, a
+    // junk key in the URL and no key at all all resolved identically, because
+    // identity falls back to a caller fingerprint further down and masks the answer.
+    // That is not a bug (the junk key is rejected and the fallback is correct), but
+    // it makes the query-param channel unverifiable by the agents relying on it.
+    //
+    // This records the channel ONLY. It changes no precedence and grants no access:
+    // `apiKey` above is already resolved by the time we read it.
+    const _authSource = req.headers['x-api-key'] ? 'header'
+                      : (req.headers['authorization'] ? 'bearer'
+                      : (_qKey ? 'query'
+                      : (_inlineKey ? 'inline_argument' : 'none')));
+    let _authSourceRestored = false;   // set by the session-restore branch below
     // OAuth (Phase 1, DORMANT unless DCHUB_OAUTH_ENABLED): if the Bearer is an
     // issued OAuth access token, resolve it to its bound dev key. Flag off / not
     // an OAuth token → null → apiKey unchanged (Bearer still treated as an
@@ -16196,8 +16277,11 @@ app.post(MCP_PATHS, async (req, res) => {
     if (!apiKey && sessionId
         && process.env.DCHUB_SESSION_KEY_RESTORE !== '0') {
       const _restored = await restoreSessionKey(sessionId);
-      if (_restored) apiKey = _restored;
+      if (_restored) { apiKey = _restored; _authSourceRestored = true; }
     }
+    // Final channel, after every fallback has had its turn. Rides ctx so the
+    // envelope stamper can report it without re-deriving auth.
+    const _authChannel = _authSourceRestored ? 'session_restore' : _authSource;
     // ── Phase B+ (r-workos-challenge): trigger the OAuth handshake ──────────
     // Per the MCP auth spec (2025-06-18) + Claude's connector docs, a client
     // only STARTS OAuth when the server answers an unauthenticated request with
@@ -16493,6 +16577,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // stored meta carries the init-time IP; a returning request may come
       // from a different hop, so prefer the current one when present).
       return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment,
+        auth_source: _authChannel,
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
         await transport.handleRequest(req, res, req.body);
@@ -16582,6 +16667,7 @@ app.post(MCP_PATHS, async (req, res) => {
 
       return ctx.run({
         api_key: apiKey, platform, tier, session_id: null,
+        auth_source: _authChannel,
         // r46: see sessionMeta.set above for rationale
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent,
@@ -16651,6 +16737,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // If anything here ever becomes key-dependent, this exemption must go.
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null,
+        auth_source: _authChannel,
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
@@ -16702,6 +16789,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
         api_key: apiKey, platform, tier,
+        auth_source: _authChannel,
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
         developer_id: validation.developer_id || null,
