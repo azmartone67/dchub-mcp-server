@@ -11433,6 +11433,68 @@ export function _routingHint(intentClass, bestTool) {
   };
 }
 
+// ★★★ r-step-slim (2026-08-29) — truncating a step must not truncate its HONESTY.
+//
+// execute_plan slims any step result over 6KB so one fat step cannot crowd the
+// envelope. It did that by replacing the whole object with a 1,200-character
+// PREFIX OF ITS JSON — and JSON key order decides what survives a prefix.
+//
+// FOUND LIVE, minutes after backend #3327 deployed and caused it. #3327 added
+// `excluded_top` (the AVOID rows) to the canvas, which pushed the Ohio response
+// past 6KB for the first time. Measured on the live deploy:
+//
+//   execute_plan "rank Ohio markets for a 100 MW AI build"
+//     step1 site_selection_canvas -> {truncated, preview, note}
+//     preview cut off inside `constraint_coverage`; `empty_result` sorts after
+//     it and was GONE.
+//
+// So the front door lost the block that explains WHY the shortlist is empty —
+// the exact thing three agents asked for — as a side effect of adding data. The
+// direct tool call was unaffected; only the planner path regressed, and only
+// because the payload grew.
+//
+// ★ THE RULE, same one the fields projection follows: what DC Hub says about the
+// honesty of an answer is not the part you drop to save room. Keep those keys
+// STRUCTURED, and spend the character budget on a preview of the rest.
+//
+// ★ Bounded: if the kept block is itself large, `excluded_top` is trimmed to
+// three rows before anything else, because rows are the recoverable part — a
+// caller can re-call the tool for rows, but a missing `empty_result` reads as
+// "the tool returned nothing", which is a different and false claim.
+const _STEP_SLIM_KEEP = ['ok', 'error', 'empty_result', 'applied_filters',
+  'constraint_coverage', 'constraint_coverage_shape', 'request_interpretation',
+  'identity', 'citation', 'provenance', 'as_of', 'matched', 'universe', 'quota'];
+
+export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
+  try {
+    if (!out || typeof out !== 'object' || Array.isArray(out)) return out;
+    if (JSON.stringify(out).length <= limit) return out;
+
+    const kept = {};
+    for (const k of _STEP_SLIM_KEEP) if (out[k] !== undefined) kept[k] = out[k];
+
+    // Bound the kept block before it can defeat the point of slimming.
+    if (JSON.stringify(kept).length > limit * 0.75
+        && kept.empty_result && Array.isArray(kept.empty_result.excluded_top)) {
+      kept.empty_result = { ...kept.empty_result,
+        excluded_top: kept.empty_result.excluded_top.slice(0, 3) };
+    }
+
+    // Preview the REST — the keys already kept would waste the budget.
+    const rest = {};
+    for (const k of Object.keys(out)) if (!(k in kept)) rest[k] = out[k];
+    const preview = JSON.stringify(rest).slice(0, previewChars);
+
+    return { ...kept, truncated: true, preview,
+      note: 'step result truncated to ' + Math.round(previewChars / 100) / 10
+        + 'KB — call ' + name + ' directly for the full payload. The blocks that '
+        + 'state what this answer does and does not cover are kept in full above, '
+        + 'never in the preview.' };
+  } catch (_e) {
+    return out;
+  }
+}
+
 // ★★★ STAGE 0a — request_interpretation (2026-08-25).
 //
 // THE PROBLEM. An argument this server does not declare is dropped in silence.
@@ -14138,13 +14200,7 @@ function createServer(descOverrides) {
         if (txt) { try { out = JSON.parse(txt); } catch (_e) { out = { text: String(txt).slice(0, 1200) }; } }
       }
       if (!out) out = { error: 'no_result', http_status: r.status };
-      let slim = out;
-      try {
-        if (JSON.stringify(out).length > 6000) {
-          const txt = JSON.stringify(out).slice(0, 1200);
-          slim = { truncated: true, preview: txt, note: 'step result truncated to 1.2KB — call ' + name + ' directly for the full payload' };
-        }
-      } catch (_e) {}
+      let slim = _slimStepResult(out, name);
       // r-execute-plan v2.7.1: the paywall serves previews through the MCP
       // ERROR channel for some gated tools — an isError body carrying
       // preview/upgrade markers is a WORKING tease, not a failure. Label it
