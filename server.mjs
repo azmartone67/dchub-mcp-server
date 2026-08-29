@@ -11780,6 +11780,18 @@ function createServer(descOverrides) {
   const I = z.number().int().optional();
   const B = z.boolean().optional();
   const ID = z.union([z.string(), z.number()]).transform(v => String(v)).optional();  // accepts numeric or string ids; coerces to string for the API path
+  // r-required (2026-08-29): REQUIRED counterparts of S and ID. Every alias above
+  // is `.optional()`, so before this 75 of 82 tools served an EMPTY `required[]`
+  // — a model could legitimately omit an argument the description called
+  // mandatory, and the tool answered with a 404 or an in-band error instead.
+  // Use these ONLY where the argument is unconditionally mandatory: a param that
+  // has an alias (region_id/iso/region), an either-or partner (candidates vs
+  // shortlist_name) or a second mode (research_task's task_id poll) must stay
+  // optional — JSON Schema `required` cannot express "one of these", and marking
+  // one arm of a pair breaks the other. That regression already happened once:
+  // see the r-shortlist-rerank note on rank_sites.objectives.
+  const Sreq  = z.string();
+  const IDreq = z.union([z.string(), z.number()]).transform(v => String(v));  // same coercion as ID, without .optional()
   // r-legibility (2026-07-02): bounded int aliases so /mcp tools/list shows real
   // bounds ("1-500") instead of the JS Number.MAX_SAFE_INTEGER garbage bounds that
   // bare z.number().int() serializes. Prefer these (or an inline .describe()) over
@@ -12286,7 +12298,7 @@ function createServer(descOverrides) {
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
     'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 300+ scored markets in 10 ISOs. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth.',
-    { market_slug: S.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
+    { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
       // r42i: surface the narrative up-top so agents see prose first,
@@ -12307,7 +12319,7 @@ function createServer(descOverrides) {
   // description says so, so agents cite it as a trend read, never a guarantee.
   trackedTool(srv, 'predict_market_trajectory',
     'Forecast a DCPI market\'s near-term trajectory (next 1-8 quarters). Projects excess_power_score and constraint_score forward with confidence bands that WIDEN with horizon, from DC Hub\'s daily DCPI snapshot history — the only source that can, because it owns the time-series. Use to answer "is this market trending toward BUILD or AVOID?" or "will Dallas power stay tight over the next 6 months?". Params: market_slug (required, metro slug e.g. dallas, phoenix, northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank); horizon_quarters (optional 1-8, default 4; 2 = ~6 months out). Returns {market_slug, method, basis{history_points, history_span_days, slope_per_day, trend}, horizon_quarters, projection[{quarter_out, excess_power_score, excess_power_band, constraint_score, constraint_band}], caveat, snapshot_record}. HONEST: linear trend extrapolation, NOT a guarantee — bands widen with horizon and short history; needs >=3 daily snapshots or it declines. Do NOT use for a single point-in-time verdict (use get_market_dcpi_rank) or to rank many markets (use rank_markets).',
-    { market_slug: S.describe('Market slug (metro), e.g. dallas, phoenix, northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
+    { market_slug: Sreq.describe('Market slug (metro), e.g. dallas, phoenix, northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
       horizon_quarters: z.number().int().min(1).max(8).optional().describe('Forecast horizon in quarters (1-8, default 4); 2 = ~6 months ahead') },
     async (a) => {
       const slug = slugify(a.market_slug) || '';
@@ -12346,7 +12358,7 @@ function createServer(descOverrides) {
   // (synthetic_seed until the eia_gas_prices loader lands → then real delivered).
   trackedTool(srv, 'get_gas_economics',
     'Behind-the-meter / gas-fired power inputs for a US data-center market: Henry Hub spot, regional basis differential, and the delivered industrial + electric gas tariff ($/MMBtu), each with its own source label. Pass market=<slug> (e.g. "northern-virginia", "dallas", "phoenix"). ★ WITHDRAWN 2026-08-08: the gas-to-grid levelized cost ($/MWh across CCGT/peaker heat-rate scenarios) is NO LONGER RETURNED. Five surfaces published a $/MWh for the same market on the same day up to 5.5x apart because each chose the burner-tip price by a different rule, with no sanity gate — this endpoint served a physically impossible $6.73/MWh for Phoenix stamped data_basis: "live". The heat-rate arithmetic was correct; the input price selection was not. The $/MMBtu layers are sourced and still returned; `gas_to_grid_status` carries the reason. DO NOT quote a cached $/MWh figure, and do not derive one yourself from the $/MMBtu without saying that you did. Do NOT use for the electricity grid fuel mix (use get_grid_data).',
-    { market: S.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
+    { market: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
       heat_rate_btu_per_kwh: N.describe('Optional custom generator heat rate in Btu/kWh for the gas-to-grid $/MWh scenario, e.g. 6800 (avg CCGT)') },
     async (a) => {
       const slug = String(a.market || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -12984,7 +12996,7 @@ function createServer(descOverrides) {
   // they are modeled baselines (not live) and error on /grid/intelligence.
   trackedTool(srv, 'compare_isos',
     'Use when a user wants a side-by-side of 2-4 ISO grids — fuel mix, demand, renewable/gas share, interconnection-queue depth, time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: "Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now." — compare_isos isos="PJM,ERCOT,CAISO". Params: isos is a comma-separated list (2-4 max) drawn from the 7 live US ISOs: "PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE". Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, avg_queue_wait_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. ★avg_time_to_power_months (DCPI per-market estimate, ISO-averaged) and avg_queue_wait_months (proxy from live queue DEPTH) are DIFFERENT measurements — quote whichever you mean by name. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence).',
-    { isos: S.describe('Comma-separated list of 2-4 US ISO/RTO grid regions to compare, e.g. "PJM,ERCOT,CAISO" (valid: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE)') },
+    { isos: Sreq.describe('Comma-separated list of 2-4 US ISO/RTO grid regions to compare, e.g. "PJM,ERCOT,CAISO" (valid: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE)') },
     async (a) => {
       const SUPPORTED = ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'];
       const _norm = (s) => {
@@ -13128,7 +13140,7 @@ function createServer(descOverrides) {
   // Developer+/pack credits get the full budget. Backend: routes/context_packs.py.
   trackedTool(srv, 'get_market_context',
     'Use when an agent needs a WHOLE-market briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a data-center market: DCPI verdict, power & grid facts, the Claude-written 12-month outlook, M&A deals, construction pipeline, operator footprint, transaction comps, risk factors, and top news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: "Brief me on the Columbus data-center market" — get_market_context market=columbus max_tokens=4000. Params: market (required, market slug e.g. northern-virginia — valid slugs come from rank_markets); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for a single metric (use get_market_dcpi_rank), the raw structured metric set (use get_market_intel), or cross-market ranking (use rank_markets); this is the narrative briefing pack. Cite "DC Hub (dchub.cloud)".',
-    { market: S.describe('Market slug (required), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
+    { market: Sreq.describe('Market slug (required), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
       max_tokens: N.describe('Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent') },
     async (a) => {
       const slug = String((a && (a.market || a.slug)) || '').trim().toLowerCase().replace(/\s+/g, '-');
@@ -13147,7 +13159,7 @@ function createServer(descOverrides) {
   // CREDIT_HEAVY + _free_preview tease). Backend: /api/v1/context/iso/<iso>.
   trackedTool(srv, 'get_iso_context',
     'Use when an agent needs a WHOLE-grid briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a US ISO/RTO: live grid snapshot (demand, fuel-mix shares), DCPI verdict mix & grid economics across the ISO\'s tracked markets (queue wait, power cost, reserve margin), interconnection-queue depth with the largest projects, real-time benchmark LMP, the tracked DCPI market list, deep-dive narrative excerpts, and recent news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: "Brief me on ERCOT for data-center siting" — get_iso_context iso=ERCOT max_tokens=4000. Params: iso (required: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for raw single-ISO telemetry (use get_grid_data), the per-ISO decision brief with headroom/TTP (use get_grid_intelligence), multi-ISO scalar comparison (use compare_isos), or non-US grids (use get_grid_scoreboard); this is the narrative briefing pack. Cite "DC Hub (dchub.cloud)".',
-    { iso: S.describe('ISO/RTO grid region (required): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
+    { iso: Sreq.describe('ISO/RTO grid region (required): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE'),
       max_tokens: N.describe('Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent') },
     async (a) => {
       const rawIso = String((a && a.iso) || '').trim();
@@ -13277,7 +13289,7 @@ function createServer(descOverrides) {
   // the same commit (register ≠ routable — three prior occurrences).
   trackedTool(srv, 'get_power_availability_timeline',
     'Power-availability TIMING for one US state — when power gets EASIER, year by year. Composes: new generation coming online from EIA-860M monthly, split by confidence class (under-construction vs planned vs testing — never blended); scheduled retirements as dated subtractions; LBNL interconnection-queue depth as congestion context (NO delivery dates — the feed has none and most queued MW never completes). The one derived number, cumulative_firm_signal_mw, counts ONLY under-construction+testing minus retirements — speculative permitting-stage MW is shown but never folded in. Answers "when is new capacity landing in Ohio", "what comes online in Georgia by 2027" with dated, sourced, per-lane-vintaged numbers. HONESTY LINE: supply-side signals, not a load-interconnection promise — generation ≠ deliverable load, and utility study timelines / large-load tariff processes / substation-grain delivery are declared out of coverage in constraint_coverage rather than estimated. Try: get_power_availability_timeline state=OH. Do NOT use for the raw project list (get_power_pipeline), live headroom today (get_grid_intelligence), queue survivors (get_refined_queue), or where-to-build ranking (rank_markets / ai_capacity_index) — this answers WHEN, for one state.',
-    { state: S.describe('2-letter US state code (required), e.g. OH, GA, TX — the timeline grain; a state can span ISOs and the response reports ISO membership as context'),
+    { state: Sreq.describe('2-letter US state code (required), e.g. OH, GA, TX — the timeline grain; a state can span ISOs and the response reports ISO membership as context'),
       years: N.describe('Window in years from now, 1-6 (default 5)'),
       mw: N.describe('Optional target MW for CONTEXT ONLY — echoed back with an explicit note; never converted into an energize-by date, which this data cannot honestly state') },
     async (a) => {
@@ -13889,7 +13901,7 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'get_shortlist',
     'Retrieve a saved shortlist (Phase 5). With refresh=true (default) each site is RE-SCORED against the current national percentile baseline and returns saved_score, current_score, and score_delta_since_saved — so you see whether a site slipped because IT changed or the POPULATION did. The reliable way to maintain a siting campaign across days/weeks. Scoped to your API key.',
-    { name: S.describe('The shortlist name to fetch'),
+    { name: Sreq.describe('The shortlist name to fetch'),
       refresh: B.describe('true (default) = re-score every site against the CURRENT baseline + return drift deltas; false = return the saved snapshots only') },
     async (a) => {
       const data = await callAPI('/api/v1/shortlist/get', { name: a.name, refresh: a.refresh });
@@ -13913,7 +13925,7 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'suggest_reallocation',
     'When a saved site DRIFTS (its national standing dropped — surfaced by get_shortlist refresh or a set_shortlist_alert firing), get replacement candidates from the rest of that shortlist so the alert becomes an action, not just a warning (Phase 5). Returns TWO tiers — tier_1_same_region (a near-in tactical swap) and tier_2_cross_region (a different-region arbitrage) — each re-scored against the DRIFTED slot\'s own objectives, PLUS drift_is_systemic: if the rest of your shortlist also slipped, the drop is region/baseline-wide and a same-region swap will inherit it (prefer cross_region); if peers held, it\'s idiosyncratic (tactical_ok). DC Hub does the reduction; the final weighted pick is yours. Candidates come from THIS shortlist only (save more via save_to_shortlist to widen the pool). Scoped to your API key.',
-    { shortlist_name: S.describe('The shortlist to re-allocate within (created via save_to_shortlist)'),
+    { shortlist_name: Sreq.describe('The shortlist to re-allocate within (created via save_to_shortlist)'),
       drifted_site_ref: S.describe('Optional site_ref of the drifted slot to replace; if omitted, the current lowest-scoring site is treated as the drifted one') },
     async (a) => {
       const data = await callAPI('/api/v1/shortlist/reallocate', {}, { method: 'POST', body: { shortlist_name: a.shortlist_name, drifted_site_ref: a.drifted_site_ref } });
@@ -13987,8 +13999,8 @@ function createServer(descOverrides) {
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', { since: a.since })) }] }));
 
   trackedTool(srv, 'set_market_alert', 'Subscribe to movement alerts for a DCPI market (FREE with a key) — get notified when its Excess-Power / Constraint score moves. On the free tier, email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel="email". Webhook delivery (channel="webhook" + destination=<https URL>) is Pro. Lets an agent MONITOR markets, not just query them. Answers "tell me when this market moves", "ping me if Northern Virginia\u2019s power score changes". Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
-    { market: S.describe('Market slug (metro) to watch, e.g. northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
-      channel: S.describe('Delivery channel: "email" (free, sent to your bound email) or "webhook" (Pro)'),
+    { market: Sreq.describe('Market slug (metro) to watch, e.g. northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
+      channel: Sreq.describe('Delivery channel: "email" (free, sent to your bound email) or "webhook" (Pro)'),
       destination: S.describe('For channel="webhook", the https URL to POST alerts to (Pro); ignored for email (forced to bound address)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
 
@@ -13998,7 +14010,7 @@ function createServer(descOverrides) {
   // consent-safe double-opt-in endpoint: it emails a tokenized CONFIRM link and
   // sets NOTHING; marketing_opt_in flips only on the human's confirm click.
   trackedTool(srv, 'subscribe_digest', 'Subscribe your human to DC Hub\'s FREE weekly "what changed in the markets/sites you queried" digest (DCPI movers, new facilities, new deals & news) — ONE call, the nudge that pulls your agent back when the data moves. DOUBLE opt-in + consent-safe: we email a one-click CONFIRM link, the human only gets the digest after confirming, and every email has one-click unsubscribe — this call alone sets no marketing flag. Only call once your human shares their email and wants a weekly email. Params: email (required), source (optional tag). Returns {ok, sent, message}. Prefer this over hand-building POST /api/v1/opt-in/request.',
-    { email: S.describe("Your human's email address (required) — a one-click confirm link is sent; use only an address they explicitly gave"),
+    { email: Sreq.describe("Your human's email address (required) — a one-click confirm link is sent; use only an address they explicitly gave"),
       source: S.describe('Optional attribution tag for where the subscription came from, e.g. mcp_digest') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/opt-in/request', { email: a.email, source: (a.source || 'mcp_digest') })) }] }));
 
@@ -14012,10 +14024,10 @@ function createServer(descOverrides) {
   // it turns save_site from a write-only shoebox into an inbox-delivered reason
   // to come back — delivery the human receives, not a reminder the agent ignores.
   trackedTool(srv, 'set_site_alert', 'Arm an email watch on a site you already saved (FREE with a key) — DC Hub emails you when that site’s DCPI score, grid capacity, or nearby facilities move, so you don’t have to keep re-checking. On the free tier the alert is delivered to your human’s bound email (call bind_email first; notify_email is forced to that address). Pro can send to any address. The "monitor my shortlist for me" loop: call save_site first (it returns a saved_site_id), then set_site_alert on that id. Params: saved_site_id (required integer, from save_site or list_saved_sites), trigger_type ("dcpi_change" | "capacity_change" | "new_facility_nearby", default "dcpi_change"), threshold (number — the points/MW move that fires it, default 5), notify_email (required — the address the alert is sent to). Answers "let me know if anything changes at the site I saved". Try: set_site_alert saved_site_id=12 trigger_type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, message}. Do NOT use to watch a whole MARKET (use set_market_alert) or to save a new site (use save_site); this arms a monitor on ONE already-saved site.',
-    { saved_site_id: ID.describe('The saved_site_id returned by save_site or list_saved_sites (required)'),
+    { saved_site_id: IDreq.describe('The saved_site_id returned by save_site or list_saved_sites (required)'),
       trigger_type: S.describe('What movement fires the alert: "dcpi_change" (default), "capacity_change", or "new_facility_nearby"'),
       threshold: N.describe('The points/MW move that fires the alert (default 5)'),
-      notify_email: S.describe("Email address the alert is sent to (required); on free tier forced to your human's bound email") },
+      notify_email: Sreq.describe("Email address the alert is sent to (required); on free tier forced to your human's bound email") },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/lp/alerts', {
       saved_site_id: a.saved_site_id,
       trigger_type:  a.trigger_type || 'dcpi_change',
@@ -14434,7 +14446,7 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'find_alternatives',
     'Use when a user likes ONE specific facility and wants similar nearby options to consider instead ("what else looks like this?"). Example: "Find alternatives to the Ashburn QTS campus for about 50MW." — find_alternatives facility_id=<id>. Params: facility_id or name (the target, required); optional capacity_mw, radius_km, limit. Returns: ranked alternatives, each with similarity_score, match_reasons, and key_differences versus the target. Do NOT use to score one site (use score_facility or analyze_site) or to compare a known short-list head-to-head (use compare_sites); this DISCOVERS candidates from a single seed facility.',
-    { facility_id: S.describe('The seed facility id/slug (or use name) to find alternatives to, from a prior search result'),
+    { facility_id: Sreq.describe('The seed facility id/slug (required) to find alternatives to, from a prior search result — there is no `name` param; an undeclared key is silently stripped'),
       radius_km: N.describe('Search radius in km for candidate alternatives around the seed facility'),
       match_on: S.describe('Optional similarity dimension to weight, e.g. capacity, operator, fiber, market'),
       exclude_operator: B.describe('If true, exclude facilities from the same operator as the seed'),
@@ -14458,7 +14470,7 @@ function createServer(descOverrides) {
 
   trackedTool(srv, 'score_facility',
     'Use when a user wants an independent 0-100 grade for ONE existing facility across 7 dimensions — power, fiber, water, climate_risk, tax_environment, talent_pool, expansion. Example: "How does the CoreWeave Las Vegas site score, power-weighted?" — score_facility facility_id=<id> weighting=power_priority. Params: facility_id or name (required); weighting one of "balanced" (default) | "power_priority" | "risk_priority" | "expansion_priority". Returns: composite 0-100, tier_classification, peer comparison, and per-dimension detail. Do NOT use for a raw lat/lon parcel (use analyze_site), to compare 2 or more sites (use compare_sites), or to find similar sites (use find_alternatives).',
-    { facility_id: S.describe('The facility id/slug to score (required), from a prior search_facilities result'),
+    { facility_id: Sreq.describe('The facility id/slug to score (required), from a prior search_facilities result'),
       weighting: S.describe('Scoring profile: "balanced" (default), "power_priority", "risk_priority", or "expansion_priority"') },
     async (a) => {
       if (!a.facility_id) {
@@ -14640,8 +14652,8 @@ function createServer(descOverrides) {
   // Anon callers get trimForTrial'd to a 1-route teaser; keyed callers get all N.
   trackedTool(srv, 'plan_fiber_leadin',
     'Plan N diverse, road-following fibre lead-in routes from a candidate data-center site to a carrier hotel / POP, with indicative build cost and a route-diversity read. Answers "can I get N diverse fibre routes into this site, how far, how much, and where do they share a corridor?". Example: plan_fiber_leadin from="250 Paringa Road, Murarrie QLD" to="20 Wharf Street, Brisbane City QLD" n=4. Params: from (lat,lng OR street address), to (lat,lng OR address — e.g. a NextDC/Equinix POP), n (1-6 routes, default 4), fibre ("720F"|"1440F"), bore_m (river/rail bore length in metres, optional). Returns per-route length_km + GeoJSON geometry, total_route_km, diversity {min_separation_m_midhaul, shared_street_km}, and indicative cost {capex_usd, opex_usd_yr}. INDICATIVE auto-routed road corridors — NOT engineered alignments; subject to survey, DBYD and carrier confirmation. Do NOT use for a single site-suitability score (use analyze_site) or fibre-provider footprints (use get_fiber_intel).',
-    { from: S.describe('Origin site as "lat,lng" OR a street address, e.g. "250 Paringa Road, Murarrie QLD"'),
-      to: S.describe('Destination carrier hotel/POP as "lat,lng" OR an address, e.g. "20 Wharf Street, Brisbane City QLD"'),
+    { from: Sreq.describe('Origin site as "lat,lng" OR a street address, e.g. "250 Paringa Road, Murarrie QLD"'),
+      to: Sreq.describe('Destination carrier hotel/POP as "lat,lng" OR an address, e.g. "20 Wharf Street, Brisbane City QLD"'),
       n: z.number().int().min(1).max(6).optional().describe('Number of diverse routes to plan, 1-6 (default 4)'),
       fibre: S.describe('Fibre count spec for cost estimate: "720F" or "1440F"'),
       bore_m: z.number().int().min(0).max(100000).optional().describe('River/rail bore length in metres to add to the route, 0-100000 (optional)') },
@@ -15063,7 +15075,7 @@ function createServer(descOverrides) {
   trackedTool(srv, 'bind_email',
     '★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). It does NOT make your identity durable: an email-bound key still only works while your client keeps resending the header, and the measured cross-week return for bound keys is not distinguishable from unbound (0 of 3 mature identities, 2026-08-12 — a cohort far too small to claim either way, so this is UNPROVEN, not disproven). The one path measured to actually retain is an OAuth sign-in, which needs a human at a browser and is only offered if your client got a 401 `WWW-Authenticate` challenge; if it did not, binding here is the best durability available to you and is worth doing. ' +
     'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets 10 free calls total, then results drop to previews until it\'s bound; binding restores the FREE tier at 50 calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
-    { email: S.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
+    { email: Sreq.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
     async (a) => {
@@ -15146,7 +15158,7 @@ function createServer(descOverrides) {
   // exists). trackedTool so the call is logged for the kill-criterion ratio.
   trackedTool(srv, 'recover_my_key',
     'Recover a LOST DC Hub key. Pass your human\'s email and DC Hub re-sends any key tied to that address to that inbox. It NEVER returns the key over the wire (it emails the bound address), and the confirmation is the same whether or not a key exists (enumeration-safe), so no key is leaked to a caller. Use this when your human had a key, lost it, and knows the email they bound it to. Param: email (required). Returns DC Hub\'s neutral confirmation.',
-    { email: S.describe("Your human's email address that a lost key was bound to (required) — the key is re-sent to that inbox, never returned over the wire") },
+    { email: Sreq.describe("Your human's email address that a lost key was bound to (required) — the key is re-sent to that inbox, never returned over the wire") },
     async (a) => {
       const email = (a.email || '').toString().trim().slice(0, 200);
       if (!email) {
