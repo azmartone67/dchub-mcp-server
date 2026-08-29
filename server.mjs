@@ -14684,15 +14684,40 @@ function createServer(descOverrides) {
   // get the verdict/thesis/autopsy read. No extra MCP-side gating needed.
   trackedTool(srv, 'site_selection_canvas',
     'Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the DC Hub Power Index. Answers "where should I build 100 MW in Texas by 2028". Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow.',
+    // r-canvas-state (2026-08-29): `state` and `iso` were UNDECLARED here while
+    // the backend has always accepted them — routes/site_selection_canvas.py
+    // resolves `region = _arg("region") or _arg("state") or _arg("iso")`. Because
+    // the SDK's Zod validation STRIPS undeclared arguments before the handler
+    // runs, an agent sending the natural name for a US state got its geography
+    // silently deleted and a NATIONWIDE shortlist back.
+    //
+    // Measured live 2026-08-29, free tier:
+    //   {state:"OH", capacity_mw:100} -> matched 104, shortlist TX MI ND KS WY
+    //     MO AZ AZ AZ AZ QC AZ, and the synthesis names Midland-Odessa by name.
+    //   {region:"OH", capacity_mw:100} -> matched 0 + the correct `empty_result`
+    //     ("9 tracked markets, all AVOID").
+    // Same question, opposite failure, decided purely by which argument name the
+    // caller guessed. `request_interpretation` did name `state` as unsupported,
+    // which is why this was findable at all — but a wrong-geography answer ships
+    // ALONGSIDE that block, and an agent composing prose from the result
+    // publishes it.
+    //
+    // The sibling tools disagree on the same concept, which is why the guess is
+    // reasonable: get_power_availability_timeline REQUIRES `state`, and
+    // get_composite_site_score declares `state`. Declaring it here makes the MCP
+    // surface match the backend contract that already exists; no backend change.
     { capacity_mw: z.number().int().min(1).max(5000).optional().describe('Target power load for the build in megawatts (MW), 1-5000, e.g. 100'),
-      region: S.describe('Geography scope, e.g. a US state code like TX or a region like us/apac'),
+      region: S.describe('Geography scope: a US state code like TX, an ISO like ERCOT, or a region like us/apac. `state` and `iso` are accepted as aliases for this same filter.'),
+      state: S.describe('US state code, e.g. OH — alias for `region`. Use either; `region` wins if both are sent.'),
+      iso: S.describe('ISO/RTO code, e.g. ERCOT or PJM — alias for `region`. Use either; `region` wins if both are sent.'),
       max_months: z.number().int().min(1).max(120).optional().describe('Maximum acceptable time-to-power in months, 1-120, e.g. 24'),
-      verdict: S.describe('Optional DCPI verdict filter: BUILD, CAUTION, or AVOID'),
+      verdict: S.describe('Optional DCPI verdict filter: BUILD, CAUTION, or AVOID — or ALL to see every scored market in the geography. Defaults to BUILD,CAUTION, so a geography whose markets are all AVOID returns matched:0 plus an `empty_result` block explaining that; re-run with verdict=ALL to see those rows.'),
       limit: LIMIT.describe('Number of shortlist markets to return') },
     async (a) => ({
       content: [{ type: 'text',
         text: JSON.stringify(await callAPI('/api/v1/site-selection/canvas', {
-          capacity_mw: a.capacity_mw, region: a.region, max_months: a.max_months,
+          capacity_mw: a.capacity_mw, region: a.region, state: a.state, iso: a.iso,
+          max_months: a.max_months,
           verdict: a.verdict, limit: a.limit || 12,
         }))
       }]
