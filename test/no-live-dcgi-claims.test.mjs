@@ -41,9 +41,42 @@ describe('no current-claim copy names the DCGI without saying it was withdrawn',
       expect(bad, `${f}: DCGI named without "withdrawn" on the same line:\n${bad.join('\n')}`).toEqual([]);
     });
   }
-  it('why_dchub no longer lists "DCPI + DCGI indices" as a differentiator', () => {
-    expect(read('server.mjs').includes('DCPI + DCGI indices')).toBe(false);
-  });
+  // ★★2026-08-30 — THIS ASSERTION WAS VACUOUS AND HID THE DEFECT IT NAMED.
+  //
+  // It read:
+  //     expect(read('server.mjs').includes('DCPI + DCGI indices')).toBe(false);
+  //
+  // Three independent reasons it could only ever pass:
+  //   1. WRONG STRING. The shipped label is "Proprietary live indices
+  //      (DCPI + DCGI)". The literal 'DCPI + DCGI indices' has never existed
+  //      in any file, in any repo.
+  //   2. WRONG FILE. why_dchub's sales copy is not in server.mjs; this repo
+  //      registers the tool name and proxies the call.
+  //   3. WRONG REPO. That copy is built in
+  //      dchub-backend/routes/competitive_intel.py, which this test cannot see.
+  //
+  // So the header above ("the one sales string that did not was why_dchub")
+  // diagnosed it correctly and then guarded nothing. The live server kept
+  // serving "Two proprietary indices recomputed daily … the DC Hub Gas Index
+  // (DCGI) scores gas access and cost by state" — with a proof URL and a
+  // citation line — until 2026-08-30, when an outside AI auditing DC Hub
+  // reported it from the public side. Eight days green over a live false claim.
+  //
+  // Real coverage now lives where the string does:
+  // dchub-backend/tests/test_why_dchub_no_stale_capability.py, which asserts
+  // over the EDGES objects rather than a source literal, so a reworded claim
+  // cannot slip past it the way this one did.
+  //
+  // No replacement assertion is added here, deliberately. The line rule the
+  // FILES loop above applies works on PROSE, where every line is a claim.
+  // server.mjs is code: `get_gas_index: "Gas Index (DCGI)"` is a display name,
+  // `_R('methodology', …, 'DCPI / DCGI methodology')` is a resource title whose
+  // body states the withdrawal, and several hits are ordinary code comments.
+  // Applying the line rule here flags all of them — a fence that cannot be made
+  // green without mangling identifiers, which is how fences get deleted rather
+  // than fixed. server.mjs's one substantive claim is already covered by the
+  // methodology assertion directly below, and the sales copy that was actually
+  // wrong is covered in the repo that generates it.
   it('the methodology resource says the Gas Index was withdrawn', () => {
     const src = read('server.mjs');
     const i = src.indexOf("_R('methodology'");
