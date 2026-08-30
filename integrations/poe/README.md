@@ -14,4 +14,4 @@ A **Poe server bot** puts DC Hub in front of every Poe user — they just chat w
 Done — Poe users can now chat with DC Hub. Try: *"What's the data-center capacity in Northern Virginia?"* → live numbers + `Source: dchub.cloud`.
 
 ## Make it smarter (optional)
-The starter bot does keyword market-matching + facility search against the free REST API. To give it the full 82 tools, have it call `https://dchub.cloud/mcp` (MCP) or the `dchub` Python SDK (`pip install dchub`), and route a Poe model (e.g. GPT-4o via `server_bot_dependencies`) to reason over the results.
+The starter bot does keyword market-matching + facility search against the free REST API. To give it the full 83 tools, have it call `https://dchub.cloud/mcp` (MCP) or the `dchub` Python SDK (`pip install dchub`), and route a Poe model (e.g. GPT-4o via `server_bot_dependencies`) to reason over the results.

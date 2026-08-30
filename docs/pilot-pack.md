@@ -5,7 +5,7 @@ run the 10 scenarios, check them against the acceptance criteria. Every tool nam
 is real (verify with `tools/list`).
 
 ## Connect (zero-install)
-- **Server:** `https://dchub.cloud/mcp` (remote streamable-HTTP, 82 tools)
+- **Server:** `https://dchub.cloud/mcp` (remote streamable-HTTP, 83 tools)
 - **Auth:** none for the free tier; `X-API-Key: <dch_live_…>` for a paid tier
 - **Manifest:** `https://dchub.cloud/.well-known/mcp.json` · **OpenAPI:** `/openapi.json`
 - **SDKs:** `sdk/python` + `sdk/node` (zero-dependency). **Prompts:** `docs/canonical-workflows.md`
@@ -26,7 +26,7 @@ is real (verify with `tools/list`).
 | 10 | Provenance check | any of the above | Response carries `citation` (`source`, `retrieved_at`) |
 
 ## Acceptance criteria (pass/fail)
-- **Discovery:** `tools/list` returns 82 tools in < 5 s.
+- **Discovery:** `tools/list` returns 83 tools in < 5 s.
 - **Latency:** each scenario returns in < 10 s (cold grid/composite calls may take longer).
 - **Provenance:** every response is traceable to an authoritative source (FEMA / USGS / NOAA / WRI / EIA / ENTSO-E …); `retrieved_at` present on keyed responses.
 - **Honest unknowns:** wherever data isn't sourced, the tool returns `coverage: unavailable` (or `null`) — **never a fabricated number**. Verify scenario 7 out-of-US and scenario 8 wet-bulb.

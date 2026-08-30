@@ -35,4 +35,4 @@ for tc in (msg.get("tool_calls") or []):
     print(tc["function"]["name"], "→", json.dumps(result)[:200])
 ```
 
-Add `X-API-Key` to the DC Hub requests for paid tools. For the full 82 tools (not just these three), point an MCP-capable client at `https://dchub.cloud/mcp` instead — see [`../mcp-clients/`](../mcp-clients/).
+Add `X-API-Key` to the DC Hub requests for paid tools. For the full 83 tools (not just these three), point an MCP-capable client at `https://dchub.cloud/mcp` instead — see [`../mcp-clients/`](../mcp-clients/).
