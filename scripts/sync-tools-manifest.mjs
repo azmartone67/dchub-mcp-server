@@ -529,6 +529,49 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`server.mjs SERVER_VERSION ${svm[2]} != ${VERSION}`);
     if (FIX) pend('server.mjs', sm.replace(SVRX, `$1${VERSION}$3`));
   }
+
+  // ★2026-08-30 — integrations/copilot/dchub-mcp.yaml, the paste-ready Copilot
+  // descriptor. Same class as the server.mjs gap above, found the same day, but
+  // with a sharper edge: this file was ALREADY covered by this script. It sits in
+  // the COVERAGE list below AND in daily-manifest-sync.yml's $OWNED, so its
+  // facility/market/deal/country counts self-healed every single day — while
+  // nothing owned its `version:` key, which rotted to 2.1.13 against a canonical
+  // 2.12.1. Eleven minor versions stale, under a daily job reporting success.
+  // A PARTIALLY healed surface reads MORE current than an untouched one, because
+  // every number beside the stale version is right.
+  //
+  // It belongs in this loop, not merely in COVERAGE, because it is a server
+  // DESCRIPTOR in the same family as smithery.yaml — name / display_name /
+  // description / version / server.transport / base_url -> https://dchub.cloud/mcp —
+  // and integrations/copilot/README.md instructs a human to "Paste the YAML
+  // manifest from dchub-mcp.yaml". That is exactly the paste-ready manual-repair
+  // path the 2026-07-28 note below widened REGISTRY-LISTINGS.md to cover: a human
+  // correcting a listing by hand propagates whatever version is sitting here.
+  //
+  // ★ ANCHORED at column 0 on the top-level `version:` key — never a bare
+  // /^version:/m with \s*, which spans newlines. The tools[] entries below are
+  // indented key/value blocks; no future nested `version` may capture this heal.
+  // The value is compared EXACTLY, NOT via .includes() as smithery.yaml is above:
+  // a descriptor that merely mentions the canonical version somewhere in its
+  // prose is not a descriptor that DECLARES it.
+  // A missing anchor is a hard PROBLEM, not a silent no-op — the server.mjs rule:
+  // a regex heal that quietly matches nothing is the silent-green shape this
+  // script exists to kill, and it would leave the hand-repair path free to drift
+  // again under a green check.
+  const CPY = 'integrations/copilot/dchub-mcp.yaml';
+  const cp = readCur(CPY);
+  const CPRX = /^(version:[ \t]*")([^"\n]*)("[ \t]*)$/m;
+  const cpm = CPRX.exec(cp);
+  if (!cpm) {
+    problems.push(`${CPY}: top-level \`version: "x.y.z"\` key NOT FOUND — this heal `
+      + 'anchors on a column-0, double-quoted `version:` line. If that key moved, lost '
+      + 'its quotes or changed shape, re-anchor it here. Do not leave the version heal '
+      + 'matching nothing: this file is the paste-ready copy a human uses to correct the '
+      + 'Copilot listing by hand.');
+  } else if (cpm[2] !== VERSION) {
+    problems.push(`${CPY} version ${cpm[2]} != ${VERSION}`);
+    if (FIX) pend(CPY, cp.replace(CPRX, `$1${VERSION}$3`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
