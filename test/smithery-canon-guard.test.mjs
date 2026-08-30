@@ -742,6 +742,187 @@ describe('server.mjs publish-version guard', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// integrations/copilot/dchub-mcp.yaml publish-version guard  (★2026-08-30)
+//
+// THE DEFECT, measured on origin/main at 8c38fe8:
+//
+//   server.json 2.12.1 (canon) · integrations/copilot/dchub-mcp.yaml 2.1.13
+//
+// Eleven minor versions stale — and, unlike the server.mjs gap #268 closed, this
+// file was NEVER outside the script's reach. It is in sync-tools-manifest.mjs's
+// COVERAGE list AND in daily-manifest-sync.yml's $OWNED, so the daily job healed
+// its facility / market / deal / country phrases every single day and pushed the
+// result. COVERAGE heals phrase QUANTITIES only. Nothing owned `version:`.
+//
+// That is the shape worth a control: a PARTIALLY healed surface reads MORE
+// current than an untouched one. Every number beside the version was correct and
+// freshly written, which is precisely why eleven versions of rot drew no
+// attention. "This file is covered" was true and still insufficient.
+//
+// It is a server DESCRIPTOR in the smithery.yaml family (name / display_name /
+// description / version / server.transport / base_url -> https://dchub.cloud/mcp),
+// and integrations/copilot/README.md tells a human to "Paste the YAML manifest
+// from dchub-mcp.yaml" — the paste-ready manual-repair path this script's own
+// 2026-07-28 note widened REGISTRY-LISTINGS.md to cover.
+//
+// Extended here rather than in a new file for the reason test.yml states in its
+// own comment block: it names test files EXPLICITLY, `npm test` is invoked by no
+// workflow, and a new file no line names is dead on arrival, silently green.
+// ─────────────────────────────────────────────────────────────────────────────
+const COPILOT = path.join(ROOT, 'integrations', 'copilot', 'dchub-mcp.yaml');
+
+// The same anchor the heal uses: column-0, double-quoted, top-level `version:`.
+const COPILOT_VERSION_RX = /^version:[ \t]*"([^"\n]*)"[ \t]*$/m;
+
+/** Temporarily replace the Copilot descriptor, run fn, always restore. */
+function withCopilotMutation(mutate, fn) {
+  const original = fs.readFileSync(COPILOT, 'utf8');
+  try {
+    const next = mutate(original);
+    expect(next, 'copilot yaml mutation was a no-op — control proves nothing').not.toBe(original);
+    sandboxWrite(COPILOT, next);
+    return fn();
+  } finally {
+    sandboxWrite(COPILOT, original);
+  }
+}
+
+describe('copilot descriptor publish-version guard', () => {
+  it('the committed tree agrees: the Copilot descriptor declares the canonical version', () => {
+    const m = COPILOT_VERSION_RX.exec(fs.readFileSync(COPILOT, 'utf8'));
+    expect(m, 'top-level `version: "x.y.z"` not found in integrations/copilot/dchub-mcp.yaml').toBeTruthy();
+    expect(m[1], 'the Copilot descriptor version drifted from server.json').toBe(CANON_VERSION);
+  });
+
+  // ── the must-fail control ──
+  // Reintroduce the EXACT value found on main: 2.1.13 against a canon of 2.12.1.
+  // Note the shape — 2.1.13 is not merely old, it sorts as a DIFFERENT minor
+  // line entirely, which is how it survived eyeballing next to 2.12.1.
+  it('FAILS when the Copilot descriptor version drifts from canon', () => {
+    withCopilotMutation((orig) => {
+      const from = `version: "${CANON_VERSION}"`;
+      expect(orig.split(from).length - 1, `fixture anchor must appear exactly once: "${from}"`).toBe(1);
+      return orig.replace(from, 'version: "2.1.13"');
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a stale Copilot descriptor version did NOT fail the guard').toBe(false);
+      expect(out).toMatch(new RegExp(
+        `integrations/copilot/dchub-mcp\\.yaml version 2\\.1\\.13 != ${CANON_VERSION.replace(/\./g, '\\.')}`));
+    });
+  });
+
+  // ── the vacuity control: unknown-as-SUCCESS, the dangerous direction ──
+  // The heal is a regex over YAML source. An anchor that has moved matches
+  // nothing, heals nothing, and the naive spelling reports that as a clean tree.
+  // This file is the copy a human PASTES into the listing, so a silent no-op
+  // here republishes whatever rot is already there.
+  it('FAILS when the version anchor is gone (matching nothing is not a pass)', () => {
+    withCopilotMutation((orig) => {
+      const from = `version: "${CANON_VERSION}"`;
+      expect(orig.includes(from), `fixture anchor "${from}" not found`).toBe(true);
+      // A plausible YAML edit, not vandalism: same key, same value, no quotes.
+      return orig.replace(from, `version: ${CANON_VERSION}`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the version heal matched nothing and reported the tree CLEAN').toBe(false);
+      expect(out).toMatch(/dchub-mcp\.yaml: top-level `version: "x\.y\.z"` key NOT FOUND/);
+    });
+  });
+
+  // ── the precision control ──
+  // The heal must anchor at COLUMN 0. tools[] below is a list of indented
+  // key/value blocks; if a future entry gains a `version:` field, a bare
+  // /^version:/m-with-\s* heal could rewrite IT and leave the real one stale —
+  // silently, since the descriptor would still "contain" the canonical version.
+  // Drift the top-level version SO A HEAL ACTUALLY FIRES, then confirm the write
+  // lands on the column-0 key and nowhere else. Asserting "the nested key
+  // survived" on a tree where no heal runs proves nothing — the earlier spelling
+  // of this control passed with the heal block deleted entirely.
+  it('heals only the top-level version:, never an indented one under tools[]', () => {
+    withCopilotMutation(
+      (orig) => orig
+        .replace('  - name: search_facilities',
+          '  - name: search_facilities\n    version: "0.0.1"')
+        .replace(`version: "${CANON_VERSION}"`, 'version: "2.1.13"'),
+      () => {
+        const before = fs.readFileSync(COPILOT, 'utf8');
+        expect(before, 'nested-key fixture did not land').toContain('    version: "0.0.1"');
+        expect(COPILOT_VERSION_RX.exec(before)[1], 'drift fixture did not land').toBe('2.1.13');
+        const { ok } = check();
+        expect(ok, 'the drifted top-level version was not caught').toBe(false);
+        const { ok: fixOk } = fix();
+        expect(fixOk, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+        const after = fs.readFileSync(COPILOT, 'utf8');
+        expect(COPILOT_VERSION_RX.exec(after)[1], 'the top-level version was not healed').toBe(CANON_VERSION);
+        expect(after, 'the heal ALSO rewrote a nested version: key — the anchor is not column-0')
+          .toContain('    version: "0.0.1"');
+      });
+  });
+
+  it('tracks server.json rather than any version frozen in the script', () => {
+    withServerJsonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.version = '9.87.65';
+      return JSON.stringify(j, null, 2) + '\n';
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the descriptor did not drift against a moved canonical version').toBe(false);
+      expect(out).toMatch(/integrations\/copilot\/dchub-mcp\.yaml version \d+\.\d+\.\d+ != 9\.87\.65/);
+      // The pre-existing four must still be named — this extends the loop, it
+      // does not replace it.
+      expect(out).toMatch(/package\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
+      expect(out).toMatch(/mcp-server\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
+      expect(out).toMatch(/smithery\.yaml does not contain canonical version 9\.87\.65/);
+      expect(out).toMatch(/server\.mjs SERVER_VERSION \d+\.\d+\.\d+ != 9\.87\.65/);
+    });
+  });
+
+  // Behavioural, not just declarative: --fix must actually WRITE the healed
+  // version. daily-manifest-sync.yml already stages this path in $OWNED, so a
+  // heal that computes but never writes would be discarded with a green log.
+  it('--fix heals the descriptor version back to canon (and touches nothing else)', () => {
+    withCopilotMutation(
+      (orig) => orig.replace(`version: "${CANON_VERSION}"`, 'version: "2.1.13"'),
+      () => {
+        const before = fs.readFileSync(COPILOT, 'utf8');
+        expect(COPILOT_VERSION_RX.exec(before)[1], 'mutation did not land').toBe('2.1.13');
+        const { ok } = fix();
+        expect(ok, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+        const after = fs.readFileSync(COPILOT, 'utf8');
+        expect(COPILOT_VERSION_RX.exec(after)[1], '--fix did not write the healed version').toBe(CANON_VERSION);
+        // Surgical: restoring the one value makes the file byte-identical.
+        expect(after.replace(`version: "${CANON_VERSION}"`, 'version: "2.1.13"')).toBe(before);
+      });
+  });
+
+  // ── the chain control, specific to this file ──
+  // This is the ONLY surface in the version loop that is ALSO in COVERAGE, so it
+  // is the only one where two heals write the same file in one run. They must
+  // CHAIN through pend()/readCur(), not clobber: the version block runs first and
+  // pends, then COVERAGE reads the PENDING content. If either dropped the
+  // other's write, the daily job would ship a file healed on one axis and
+  // reverted on the other — and converge only one run later, if at all.
+  it('heals version AND phrase quantities in the SAME --fix run (the two heals chain)', () => {
+    expect(FACILITIES, 'canon facilities phrase unresolved — this control would be vacuous').toBeTruthy();
+    withCopilotMutation((orig) => {
+      const staleQty = orig.replace(`${FACILITIES} facilities`, '12,650+ facilities');
+      expect(staleQty, 'quantity mutation did not land — canon phrase not present as written')
+        .not.toBe(orig);
+      return staleQty.replace(`version: "${CANON_VERSION}"`, 'version: "2.1.13"');
+    }, () => {
+      const { ok } = fix();
+      expect(ok, '--fix exited non-zero').toBe(true);
+      const after = fs.readFileSync(COPILOT, 'utf8');
+      expect(COPILOT_VERSION_RX.exec(after)[1], 'the COVERAGE heal clobbered the version heal')
+        .toBe(CANON_VERSION);
+      expect(after, 'the version heal clobbered the COVERAGE quantity heal')
+        .toContain(`${FACILITIES} facilities`);
+      expect(after, 'the stale quantity survived').not.toContain('12,650+ facilities');
+    });
+  });
+});
+
 // Order-proof backstop for the isolation control above.
 afterAll(() => {
   const changed = fingerprintDiff(TREE_BEFORE, fingerprintTree(REAL_ROOT));
