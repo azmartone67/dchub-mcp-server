@@ -107,3 +107,87 @@ describe('_identitySource — fail-soft contract', () => {
     expect(q.means).toBeUndefined();
   });
 });
+
+// ── identity.connection — present only when a gateway is in the path ────────
+//
+// Copilot named our worst measurement problem more precisely than our own
+// dashboards do (2026-08-30): "Smithery fronting aggregates caller identity;
+// popularity metrics are gateway volume, not distinct agent adoption."
+// ~97% of the 7-day panel is one gateway, and that fact lived only in our IP
+// logs — invisible to the agent making the call, and so unactionable by it.
+//
+// ★★★ THE TEST THAT MATTERS IS THE ONE ASSERTING WE NEVER CLAIM 'direct'.
+// A gateway forwarding a generic clientInfo is indistinguishable from a direct
+// caller by construction, so the field can only ever say 'gateway' or be
+// ABSENT. Every other assertion here would still pass if that rule broke.
+import { _connectionShape, _KNOWN_GATEWAYS, _identitySource } from '../server.mjs';
+import { readFileSync } from 'node:fs';
+
+describe('identity.connection', () => {
+  it('names a known gateway, and says what its volume does and does not mean', () => {
+    for (const g of _KNOWN_GATEWAYS) {
+      const c = _connectionShape(g);
+      expect(c.via, g).toBe('gateway');
+      expect(c.gateway, g).toBe(g);
+      expect(c.basis, g).toContain(g);
+      expect(c.means.toLowerCase(), g).toContain('not distinct-agent');
+      expect(c.means, g).toContain('https://dchub.cloud/mcp');
+    }
+    expect(_KNOWN_GATEWAYS.has('smithery'), 'the gateway that IS the panel').toBe(true);
+  });
+
+  it('IS ABSENT for everything else — it never claims direct, and never guesses', () => {
+    for (const p of [undefined, null, '', '  ', 'claude', 'chatgpt', 'node', 'mcp',
+                     'some-future-client', 'SMITHERY-LOOKALIKE']) {
+      expect(_connectionShape(p), JSON.stringify(p)).toBeNull();
+    }
+    // and no value of `via` other than 'gateway' is reachable at all
+    const vias = new Set([..._KNOWN_GATEWAYS].map((g) => _connectionShape(g).via));
+    expect([...vias]).toEqual(['gateway']);
+  });
+
+  it('normalises case and whitespace before matching a gateway', () => {
+    expect(_connectionShape('  Smithery ').via).toBe('gateway');
+    expect(_connectionShape('SMITHERY').gateway).toBe('smithery');
+  });
+
+  it('rides on the identity block WITHOUT colliding with the anonymous prose', () => {
+    // `means` already exists on this block for the anonymous case. A flat
+    // second `means` would have been silently overwritten by it — two meanings
+    // on one key. Nesting is why both survive.
+    const anon = _identitySource({ auth_source: 'none', tier: 'free', platform: 'smithery' });
+    expect(anon.means, 'the anonymous prose').toMatch(/served ANONYMOUSLY/);
+    expect(anon.connection.means, 'the gateway prose').toMatch(/GATEWAY VOLUME/);
+    expect(anon.connection.gateway).toBe('smithery');
+
+    const keyed = _identitySource({ auth_source: 'header', tier: 'free', platform: 'smithery' });
+    expect(keyed.credential_source).toBe('header');
+    expect(keyed.connection.via).toBe('gateway');
+  });
+
+  it('stays terse off the gateway path — the block\'s existing contract', () => {
+    // Unchanged from before this field existed. A caller with nothing to do
+    // differently gets no extra bytes on every single response.
+    expect(_identitySource({ auth_source: 'query', tier: 'free', platform: 'claude' }))
+      .toEqual({ credential_source: 'query', tier: 'free' });
+  });
+});
+
+describe('the registry entry declares itself the origin', () => {
+  const M = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'))
+    ._meta['io.modelcontextprotocol.registry/publisher-provided'];
+
+  it('says which kind of endpoint this listing is', () => {
+    // Published in the publisher-provided namespace, which exists for exactly
+    // this. Deliberately NOT added to smithery.yaml: an unrecognised top-level
+    // key in a third-party manifest risks a listing that currently ranks first
+    // for twelve of thirteen terms, and the runtime block above already answers
+    // the question for any caller that asks.
+    expect(M.deploymentType).toBe('origin');
+  });
+
+  it('points at OUR host, so the direct-bind advice cannot be redirected', () => {
+    expect(new URL(M.canonicalRemote).hostname).toBe('dchub.cloud');
+    expect(M.gatewayNote).toMatch(/identity\.connection/);
+  });
+});
