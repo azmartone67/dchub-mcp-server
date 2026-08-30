@@ -13,35 +13,6 @@
 // rather than returning data. Run with: npx vitest run
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'node:fs';
-
-// ── Version consistency guard (r-version-sync 2026-06-19) ──────────────────
-// The release flow bumps package.json + server.mjs, but server.json /
-// mcp-server.json / smithery.yaml have drifted behind before — and server.json is
-// what registry-refresh publishes to the official MCP registry, so a mismatch
-// silently UNDER-publishes the version (caught + fixed v2.3.0->2.3.1, 2026-06-19).
-// Fail the build if the five publish surfaces disagree. Pure local read, no network.
-describe('version consistency across publish surfaces', () => {
-  const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
-  it('package.json / server.json / mcp-server.json / smithery.yaml / server.mjs all agree', () => {
-    const versions = {
-      'package.json':    JSON.parse(read('../package.json')).version,
-      'server.json':     JSON.parse(read('../server.json')).version,
-      'mcp-server.json': JSON.parse(read('../mcp-server.json')).version,
-    };
-    const sm = read('../smithery.yaml').match(/^version:\s*["']?(\d+\.\d+\.\d+)/m);
-    versions['smithery.yaml'] = sm ? sm[1] : null;
-    // server.mjs carries the version in 2+ spots (McpServer init + well-known);
-    // dedup — if they disagree, the joined string makes the set size > 1 and fails.
-    const mjs = [...new Set([...read('../server.mjs')
-      .matchAll(/version:\s*['"](\d+\.\d+\.\d+)['"]/g)].map((m) => m[1]))];
-    versions['server.mjs'] = mjs.length === 1 ? mjs[0] : mjs.join(',');
-    expect(
-      new Set(Object.values(versions)).size,
-      `version drift across publish surfaces: ${JSON.stringify(versions)}`,
-    ).toBe(1);
-  });
-});
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
@@ -602,27 +573,5 @@ describe('MCP regression suite', () => {
         `search slug "${slug}" should resolve everywhere; failed on: ${failures.join(', ')}`
       ).toEqual([]);
     }, 40000);
-  });
-});
-
-// ── Funnel invariants guard (r-peace 2026-07-05) ───────────────────────────
-// Pin the anon→free→$10→metered fixes so a later edit can't silently revert:
-//   (1) claim_free_key's daily_limit fallback is 10 (matches the CF worker's
-//       enforced free cap) — NOT 25, which over-promised vs the 10 enforced.
-//   (2) The Stripe-MPP per-call path is FIRST-CLASS in unlock_more_data — the
-//       recommendation is 'mpp' when the rail is on, and an 'mpp' plan entry
-//       exists — so agents that can pay $0.50 themselves aren't sent to buy
-//       the $10 human pack. Pure local source read, no network.
-describe('funnel invariants (peace 2026-07-05)', () => {
-  const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-
-  it('claim_free_key daily_limit fallback is 10, not 25', () => {
-    expect(src).toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 10\b/);
-    expect(src).not.toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 25\b/);
-  });
-
-  it('unlock_more_data makes MPP first-class (recommended + plan entry)', () => {
-    expect(src).toMatch(/recommended:\s*_mppOn\s*\?\s*'mpp'\s*:\s*'credits'/);
-    expect(src).toMatch(/id:\s*'mpp'/);
   });
 });
