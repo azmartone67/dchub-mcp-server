@@ -692,7 +692,7 @@ describe('server.mjs publish-version guard', () => {
       // loop, it does not replace it.
       expect(out).toMatch(/package\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
       expect(out).toMatch(/mcp-server\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
-      expect(out).toMatch(/smithery\.yaml does not contain canonical version 9\.87\.65/);
+      expect(out).toMatch(/smithery\.yaml version \d+\.\d+\.\d+ != 9\.87\.65/);
     });
   });
 
@@ -873,7 +873,7 @@ describe('copilot descriptor publish-version guard', () => {
       // does not replace it.
       expect(out).toMatch(/package\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
       expect(out).toMatch(/mcp-server\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
-      expect(out).toMatch(/smithery\.yaml does not contain canonical version 9\.87\.65/);
+      expect(out).toMatch(/smithery\.yaml version \d+\.\d+\.\d+ != 9\.87\.65/);
       expect(out).toMatch(/server\.mjs SERVER_VERSION \d+\.\d+\.\d+ != 9\.87\.65/);
     });
   });
@@ -920,6 +920,97 @@ describe('copilot descriptor publish-version guard', () => {
         .toContain(`${FACILITIES} facilities`);
       expect(after, 'the stale quantity survived').not.toContain('12,650+ facilities');
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// smithery.yaml publish-version guard  (★2026-08-30)
+//
+// THE DEFECT. #268 (server.mjs) and #269 (the Copilot descriptor) each added a
+// surface to the version loop. This one was ALREADY in the loop and still could
+// not catch the drift, because the check asked the wrong question:
+//
+//   if (!sy.includes(VERSION))   // "does 2.12.1 appear ANYWHERE in the file?"
+//
+// which is not "does this descriptor DECLARE 2.12.1". Measured on 676255f:
+//
+//   line 5   # Last refreshed 2026-07-10 (83-tool / v2.12.1 canonical sync)…
+//   line 16  version: "9.9.9"
+//   $ node scripts/sync-tools-manifest.mjs   -> exit 0
+//   ✓ all manifest + facts surfaces consistent
+//
+// The trigger is HOUSEKEEPING, not vandalism. Line 5 of the committed file reads
+// "(71-tool / v2.4.4 canonical sync)" — refreshing that comment to the current
+// version is a normal, well-intentioned edit, and it silently disarms the guard
+// on the key one line below. This is the listing the file is named for.
+//
+// The controls below are the regression test for that exact shape: the canonical
+// string PRESENT in the file, the declared version WRONG.
+// ─────────────────────────────────────────────────────────────────────────────
+const SMITHERY_VERSION_RX = /^version:[ \t]*"([^"\n]*)"[ \t]*$/m;
+
+describe('smithery.yaml publish-version guard', () => {
+  it('the committed tree agrees: smithery.yaml declares the canonical version', () => {
+    const m = SMITHERY_VERSION_RX.exec(fs.readFileSync(YAML, 'utf8'));
+    expect(m, 'top-level `version: "x.y.z"` not found in smithery.yaml').toBeTruthy();
+    expect(m[1], 'the Smithery descriptor version drifted from server.json').toBe(CANON_VERSION);
+  });
+
+  // ── the must-fail control: the .includes() hole itself ──
+  // Drift the DECLARED version while leaving the canonical string in the file,
+  // in the file's own comment format. `includes()` reported this tree clean.
+  it('FAILS when the declared version drifts but a comment still carries canon', () => {
+    withMutation((orig) => {
+      const decl = `version: "${CANON_VERSION}"`;
+      expect(orig.split(decl).length - 1, `fixture anchor must appear exactly once: "${decl}"`).toBe(1);
+      const next = orig
+        .replace(decl, 'version: "9.9.9"')
+        .replace('# Last refreshed', `# Last refreshed — canonical sync v${CANON_VERSION} —`);
+      // The whole point: canon is STILL present in the file, just not declared.
+      expect(next.includes(CANON_VERSION),
+        'fixture must leave the canonical string in the file — otherwise it does not '
+        + 'reproduce the includes() hole').toBe(true);
+      expect(SMITHERY_VERSION_RX.exec(next)[1], 'drift fixture did not land').toBe('9.9.9');
+      return next;
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a drifted smithery.yaml version passed because canon appeared elsewhere in the file')
+        .toBe(false);
+      expect(out).toMatch(new RegExp(
+        `smithery\\.yaml version 9\\.9\\.9 != ${CANON_VERSION.replace(/\./g, '\\.')}`));
+    });
+  });
+
+  // ── the vacuity control: unknown-as-SUCCESS ──
+  it('FAILS when the version anchor is gone (matching nothing is not a pass)', () => {
+    withMutation((orig) => {
+      const decl = `version: "${CANON_VERSION}"`;
+      expect(orig.includes(decl), `fixture anchor "${decl}" not found`).toBe(true);
+      // A plausible YAML edit, not vandalism: same key, same value, no quotes.
+      return orig.replace(decl, `version: ${CANON_VERSION}`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the version heal matched nothing and reported the tree CLEAN').toBe(false);
+      expect(out).toMatch(/smithery\.yaml: top-level `version: "x\.y\.z"` key NOT FOUND/);
+    });
+  });
+
+  it('--fix heals the declared version back to canon (and touches nothing else)', () => {
+    withMutation(
+      (orig) => orig.replace(`version: "${CANON_VERSION}"`, 'version: "9.9.9"'),
+      () => {
+        const before = fs.readFileSync(YAML, 'utf8');
+        expect(SMITHERY_VERSION_RX.exec(before)[1], 'mutation did not land').toBe('9.9.9');
+        const { ok } = fix();
+        expect(ok, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+        const after = fs.readFileSync(YAML, 'utf8');
+        expect(SMITHERY_VERSION_RX.exec(after)[1], '--fix did not write the healed version')
+          .toBe(CANON_VERSION);
+        // Surgical: restoring the one value makes the file byte-identical. This also
+        // pins the dropped `\s*` — a rewrite that ran past the end of the version
+        // line would change bytes the heal has no business touching.
+        expect(after.replace(`version: "${CANON_VERSION}"`, 'version: "9.9.9"')).toBe(before);
+      });
   });
 });
 

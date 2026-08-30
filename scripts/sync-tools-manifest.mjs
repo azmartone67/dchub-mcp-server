@@ -483,10 +483,35 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`package.json version ${pj.version} != ${VERSION}`);
     if (FIX) { pj.version = VERSION; pend('package.json', JSON.stringify(pj, null, 2) + '\n'); }
   }
+  // ★2026-08-30 — this check used to be `!sy.includes(VERSION)`: does the canonical
+  // version appear ANYWHERE in the file. That is not the same question as "does
+  // this descriptor DECLARE the canonical version", and the gap is reachable.
+  // Measured on 676255f, with the file's own established comment format:
+  //
+  //   line 5   # Last refreshed 2026-07-10 (83-tool / v2.12.1 canonical sync)…
+  //   line 16  version: "9.9.9"
+  //   $ node scripts/sync-tools-manifest.mjs -> exit 0
+  //   ✓ all manifest + facts surfaces consistent
+  //
+  // The trigger is not hypothetical vandalism, it is HOUSEKEEPING: line 5 already
+  // reads "(71-tool / v2.4.4 canonical sync)", so the routine act of refreshing
+  // that comment to the current version blinds the guard on the key beside it.
+  // Smithery is the listing this whole file is named for. Same rule as the
+  // copilot descriptor below and server.mjs above: anchor at COLUMN 0 on the
+  // declaration, compare the VALUE exactly, and make a missing anchor a hard
+  // problem rather than a silent no-op. Also drops the old `\s*`, which spans
+  // newlines and could carry the rewrite onto the following line.
   const sy = readCur('smithery.yaml');
-  if (!sy.includes(VERSION)) {
-    problems.push(`smithery.yaml does not contain canonical version ${VERSION}`);
-    if (FIX) pend('smithery.yaml', sy.replace(/^version:\s*.*$/m, `version: "${VERSION}"`));
+  const SYRX = /^(version:[ \t]*")([^"\n]*)("[ \t]*)$/m;
+  const sym = SYRX.exec(sy);
+  if (!sym) {
+    problems.push('smithery.yaml: top-level `version: "x.y.z"` key NOT FOUND — this heal '
+      + 'anchors on a column-0, double-quoted `version:` line. If that key moved, lost its '
+      + 'quotes or changed shape, re-anchor it here. Do not leave the version heal matching '
+      + 'nothing: this is the descriptor Smithery crawls.');
+  } else if (sym[2] !== VERSION) {
+    problems.push(`smithery.yaml version ${sym[2]} != ${VERSION}`);
+    if (FIX) pend('smithery.yaml', sy.replace(SYRX, `$1${VERSION}$3`));
   }
   // ★2026-08-30 — server.mjs, the publish surface this loop could not see.
   // The three surfaces above follow server.json. server.mjs did not, and on
