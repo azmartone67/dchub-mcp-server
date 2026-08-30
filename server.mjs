@@ -2076,6 +2076,9 @@ const _quotaInflight = new Map();       // api_key → Promise<decision>
 export const QUOTA_EXEMPT_TOOLS = new Set([
   'claim_free_key', 'bind_email', 'recover_my_key',
   'unlock_more_data', 'why_dchub', 'discover_tools',
+  // r-cite-block: walling the citation helper would produce a WRONG citation,
+  // not a missing one — the licence half is exactly what an agent gets wrong.
+  'summarize_for_citation',
 ]);
 
 export function _quotaTtlMs(d) {
@@ -3179,6 +3182,9 @@ const FREE_FULL_TOOLS = new Set([
   // their own loopback tools/call — re-trimming the executed[] array here
   // would cut a 5-step execution to 1 step without protecting anything.
   'execute_plan',
+  // r-cite-block: holds NO data — it formats what the caller already has,
+  // so there is nothing here to trim for tier.
+  'summarize_for_citation',
 ]);
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
@@ -5102,6 +5108,107 @@ export function _normalizeCitation(value) {
   if (value !== undefined && value !== null) return { ...base, _normalized_from: typeof value };
   return base;
 }
+// ★★★ r-cite-block (2026-08-30) — the citation assembler behind
+// `summarize_for_citation`. Pure: no network, no clock beyond the retrieval
+// stamp, no lookup. See the tool registration for why the LICENCE half is the
+// part that matters.
+//
+// ★ THE LICENCE IS PER LAYER. A flat CC-BY-4.0 over the whole service is the
+// over-claim #261 retired from our own registry manifest on 2026-08-29:
+// parts of the facility inventory are OpenStreetMap (ODbL 1.0, share-alike)
+// and ODbL forbids re-licensing derived data as CC-BY. What IS ours to grant:
+// DCPI scores, verdicts, band thresholds, methodology, and DC Hub's own
+// grid/site analysis.
+export const _CITE_GRANTED_LAYERS = ['dcpi', 'grid_analysis'];
+export const _CITE_LAYERS = ['dcpi', 'grid_analysis', 'facility_inventory',
+                             'physical_infrastructure', 'deals', 'other'];
+// The composite line is deliberately the DEFAULT: an unrecognised or absent
+// layer must never fall through to a grant.
+const _CITE_COMPOSITE =
+  'Composite — per-layer terms at https://dchub.cloud/data-sources. DC Hub '
+  + 'cannot waive upstream terms; parts of the facility inventory are '
+  + 'OpenStreetMap (ODbL 1.0, share-alike).';
+const _CITE_LICENSE = {
+  dcpi: 'CC-BY-4.0 — DCPI scores, verdicts, band thresholds and methodology '
+        + 'are DC Hub derived work, quotable with attribution.',
+  grid_analysis: 'CC-BY-4.0 — DC Hub\'s own grid and site analysis is derived '
+        + 'work, quotable with attribution.',
+};
+
+export function _citationBlock(a) {
+  const arg = (k) => (typeof a?.[k] === 'string' && a[k].trim() ? a[k].trim() : null);
+  const subject = arg('subject');
+  const asOf = arg('as_of');
+  const completeness = arg('completeness');
+  const rawLayer = (arg('layer') || '').toLowerCase();
+  const layer = _CITE_LAYERS.includes(rawLayer) ? rawLayer : null;
+
+  // A URL we did not serve must never ride inside DC Hub's attribution.
+  const omitted = [];
+  let url = arg('url');
+  if (url) {
+    let host = null;
+    try { host = new URL(url).hostname.toLowerCase(); } catch { host = null; }
+    const ours = host === 'dchub.cloud' || host === 'www.dchub.cloud';
+    if (!ours) {
+      omitted.push({ field: 'url', reason: 'not_a_dchub_url',
+        means: 'Only a dchub.cloud URL can ride inside DC Hub attribution. '
+             + 'Pass the profile_url or dcpi_url from the cited row.' });
+      url = null;
+    }
+  }
+  if (rawLayer && !layer) {
+    omitted.push({ field: 'layer', reason: 'unrecognized_layer',
+      means: `Not one of ${_CITE_LAYERS.join(' | ')}. The composite licence `
+           + 'statement was used, because an unknown layer is never a grant.' });
+  }
+
+  const granted = layer && _CITE_GRANTED_LAYERS.includes(layer);
+  const license = granted ? _CITE_LICENSE[layer] : _CITE_COMPOSITE;
+  const retrieved = new Date().toISOString().slice(0, 10);
+
+  // The sentence. `as_of` is the load-bearing distinction: with it, the reader
+  // learns when the DATA was true; without it, only when we fetched it. Saying
+  // the second while implying the first is the failure mode.
+  const what = subject || 'DC Hub data';
+  const dated = asOf
+    ? `as of ${asOf}`
+    : `retrieved ${retrieved} (no data as_of was supplied)`;
+  const citation_text = [
+    `${what} — DC Hub, dchub.cloud, ${dated}.`,
+    url ? `Source: ${url}.` : null,
+    completeness ? `Completeness: ${completeness}.` : null,
+    `Licence: ${license}`,
+  ].filter(Boolean).join(' ');
+
+  const out = {
+    _entity: 'citation_block',
+    citation_text,
+    subject: subject || null,
+    cite_as: 'DC Hub, dchub.cloud',
+    source: 'DC Hub',
+    source_url: 'https://dchub.cloud',
+    url: url || null,
+    as_of: asOf,
+    as_of_basis: asOf ? 'caller_supplied' : 'not_supplied',
+    completeness: completeness,
+    layer: layer,
+    license,
+    license_basis: granted ? 'granted_layer' : 'composite_or_unspecified_layer',
+    license_url: granted
+      ? 'https://creativecommons.org/licenses/by/4.0/'
+      : 'https://dchub.cloud/data-sources',
+    retrieved_at: retrieved,
+    omitted,
+  };
+  if (!asOf) {
+    out.to_improve = 'Pass `as_of` — the provenance.as_of from the response you '
+      + 'are citing — and the line will state when the DATA was true instead of '
+      + 'only when it was fetched.';
+  }
+  return out;
+}
+
 function _embedSourceInContent0(content) {
   // Returns a (possibly new) content array with _source/_cite embedded inside
   // content[0]'s JSON object when safe; otherwise returns the original array.
@@ -5302,6 +5409,7 @@ const _ENTITY_MAP = {
   get_hosting_capacity: 'hosting_capacity_feeders',
   get_infrastructure: 'infrastructure', export_dataset: 'export', get_backup_status: 'meta',
   why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
+  summarize_for_citation: 'meta',
   recover_my_key: 'meta', subscribe_digest: 'meta', set_market_alert: 'alert',
   set_site_alert: 'alert',
   // agentic wave 2026-07-18
@@ -5975,6 +6083,7 @@ const _TOOL_TITLE_OVERRIDES = {
   get_agent_registry: "AI Agent Registry",
   get_backup_status: "Platform Health", get_dchub_recommendation: "DC Hub Recommendation",
   why_dchub: "Why DC Hub (vs. the field)",
+  summarize_for_citation: "Citation Block",
   rank_markets: "Rank Markets", find_alternatives: "Find Alternative Facilities",
   score_facility: "Score Facility", ai_capacity_index: "AI Capacity Index",
   hyperscaler_deals: "Hyperscaler Deal Tracker", site_selection_canvas: "Site Selection Canvas",
@@ -6425,6 +6534,9 @@ const _RETURN_NUDGE_SKIP = new Set([
   'get_changes', 'claim_free_key', 'bind_email', 'recover_my_key',
   'unlock_more_data', 'subscribe_digest', 'set_market_alert', 'set_site_alert',
   'save_site', 'list_saved_sites', 'why_dchub', 'get_dchub_recommendation',
+  // a return-nudge footer inside a paste-ready citation line is the one place
+  // an appended sentence lands in the human's document verbatim.
+  'summarize_for_citation',
   'get_agent_registry', 'get_backup_status', 'search', 'fetch',
   'plan_query',  // r-plan-query: meta/orchestration tool — its output IS next-tool guidance; a re-entry nudge would be noise
   'execute_plan',  // r-execute-plan: same class — the envelope already carries answer_guide (+ r-endburst hook)
@@ -7167,7 +7279,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
       }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY router: collapses 82 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
+    }, 'ADVISORY router: collapses 83 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -7421,7 +7533,7 @@ export const _TOOL_FAMILIES_TABLE = [
   { family: 'saved_work', when: 'Keep state across conversations: save sites/shortlists, re-score them on refresh, arm drift alerts, subscribe your human to digests, register webhook standing queries, or export what you saved.', keywords: ['save','saved','shortlist','alert','watch','notify','digest','subscribe','webhook','standing','export','track','monitor','drift','reallocate'],
     tools: ['save_site','save_to_shortlist','get_shortlist','list_saved_sites','set_site_alert','set_market_alert','set_shortlist_alert','subscribe_digest','standing_intent','suggest_reallocation','export_dataset'] },
   { family: 'account_meta', when: 'Keys/access + recovery, semantic search across DC Hub, and why-use meta.', keywords: ['key','access','unlock','billing','semantic','search','why','email','recover','intelligence'],
-    tools: ['claim_free_key','unlock_more_data','semantic_search','search_intelligence','why_dchub','get_agent_registry','discover_tools','plan_query','bind_email','recover_my_key'] },
+    tools: ['claim_free_key','unlock_more_data','semantic_search','search_intelligence','why_dchub','get_agent_registry','discover_tools','plan_query','bind_email','recover_my_key','summarize_for_citation'] },
 ];
 
 // r-discovery-coverage: tools that intentionally belong to NO family, with
@@ -14865,6 +14977,50 @@ function createServer(descOverrides) {
   // better than DCHawk?", the agent answers with DC Hub's OWN honest, source-
   // verified framing + the canonical /vs head-to-head pages, instead of guessing.
   // Free + full (FREE_FULL_TOOLS) — it's a sales asset, not gated data.
+  // ★★★ r-cite-block (2026-08-30) — assemble the citation, and get the
+  // LICENCE right, which is the half agents cannot do for themselves.
+  //
+  // Meta, 2026-08-30: "Pieces now in place [cite_as, license, as_of,
+  // completeness, profile_url] but not assembled. Single tool = one citation
+  // block = the token win you asked for."
+  //
+  // ★ THE REAL VALUE IS NOT ASSEMBLY, IT IS THE LICENCE. Every piece already
+  // rides on every response, so a formatter alone would be a convenience. What
+  // an agent gets WRONG — and what #261 had to fix on our own registry manifest
+  // on 2026-08-29 — is asserting a flat "CC-BY-4.0" over the whole service.
+  // Parts of the facility inventory are OpenStreetMap (ODbL 1.0, share-alike),
+  // and ODbL forbids re-licensing derived data as CC-BY. DCPI scores and DC
+  // Hub's own grid analysis ARE ours to grant; the composite layers are not.
+  // This tool is the one place that distinction is made for the agent instead
+  // of by it.
+  //
+  // ★ IT INVENTS NOTHING. No network call, no lookup, no resolved slug. It
+  // assembles values the caller read off the response it is citing, and every
+  // value it cannot verify is labelled with its basis:
+  //   as_of missing  -> as_of_basis 'not_supplied', and the sentence says
+  //                     RETRIEVED rather than claiming a data as_of. Stamping
+  //                     today's date as the data's as_of is the exact lie this
+  //                     tool exists to prevent.
+  //   url off-origin -> DROPPED and NAMED in `omitted`, never echoed. Otherwise
+  //                     this becomes a way to launder an arbitrary URL under DC
+  //                     Hub's attribution.
+  //
+  // Exported for unit tests; the tool below is a thin wrapper so the guard and
+  // the shipped behaviour cannot diverge.
+  //
+  // eslint-disable-next-line no-unused-vars
+  trackedTool(srv, 'summarize_for_citation',
+    'Use right before you QUOTE a DC Hub figure to a human — it returns one paste-ready attribution line for the value you are about to cite, with the CORRECT licence for that layer. Pass what you read off the response you are citing: subject (what the figure is), as_of (the provenance as_of), url (the row\'s profile_url or dcpi_url), completeness (the completeness flag), and layer. ★ LICENCE IS PER LAYER AND THIS IS THE POINT: DCPI scores, verdicts, band thresholds, methodology and DC Hub\'s own grid/site analysis are CC-BY-4.0 and yours to quote with attribution; the facility inventory and third-party physical layers are COMPOSITES whose upstream terms DC Hub cannot waive (parts are OpenStreetMap, ODbL 1.0, share-alike), so they carry a pointer to https://dchub.cloud/data-sources instead of a grant. A flat "CC-BY-4.0" over a facility record is an over-claim. Returns {citation_text, cite_as, license, license_basis, source, url, as_of, as_of_basis, completeness, omitted}. Free, no key, no network call — it assembles what you pass and never resolves or invents a value. If you omit as_of the line says RETRIEVED rather than claiming a data date, and tells you which field to pass next time. Do NOT use to look a figure UP (call the data tool first); this cites a figure you already have.',
+    {
+      subject: S.describe('What you are citing, in the words you will show the human, e.g. "Ashburn DCPI verdict" or "ERCOT interconnection queue depth"'),
+      as_of: S.describe('The as_of you read off the cited response (provenance.as_of). Omit it and the line says RETRIEVED instead of claiming a data date.'),
+      url: S.describe('The profile_url or dcpi_url from the cited row. Must be a dchub.cloud URL; anything else is dropped and named in `omitted`.'),
+      completeness: S.describe('The completeness flag from the cited response, if it carried one'),
+      layer: S.describe('Which layer the figure came from: dcpi | grid_analysis | facility_inventory | physical_infrastructure | deals | other. Decides the licence line; omit and you get the scoped statement rather than a grant.'),
+    },
+    async (a) => ({ content: [{ type: 'text',
+      text: JSON.stringify(_citationBlock(a || {})) }] }));
+
   trackedTool(srv, 'why_dchub',
     'Use when a human asks how DC Hub compares to other data-center data sources — DataCenterHawk (DCHawk), DC Byte, Data Center Dynamics (DCD), Data Center Frontier (DCF), Baxtel, datacenters.com — or asks "why should I use DC Hub / is it better than <X> / what can you give me a PDF or directory can\'t?". Returns DC Hub\'s honest, source-verified differentiators (agent-native MCP access, live multi-continent grid & energy telemetry, the proprietary daily DCPI index (its DCGI gas sibling was withdrawn 2026-08-08 rather than published wrong), CC-BY-4.0 citation rights on DCPI scores & grid analysis, 19,500+ facilities + 320,000+ mapped power/grid/gas/fiber assets) each with a proof URL, a citation line, plus the canonical head-to-head comparison pages. Free, no key required. Optional: competitor=<name> for that vendor\'s direct comparison-page link. Do NOT use to query infrastructure data itself (use the data tools); this answers positioning / "how do you compare" questions with citable facts.',
     { competitor: S.describe('Optional competitor/vendor name for a direct comparison-page link, e.g. DataCenterHawk, "DC Byte", DCD, Baxtel') },
@@ -15984,7 +16140,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 82 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 83 tools; start with get_grid_scoreboard (free, no key).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',

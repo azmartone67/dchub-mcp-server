@@ -30,6 +30,12 @@
 // handler ever ran. This test pins both directions so it cannot happen twice.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+// server.json is what the registry publishes and what sync-tools-manifest
+// heals every surface to — so it is the count this suite must agree with.
+const TOOL_COUNT_OWNER = JSON.parse(readFileSync(
+  new URL('../server.json', import.meta.url), 'utf8'),
+)._meta['io.modelcontextprotocol.registry/publisher-provided'].toolCount;
 let S, PORT, httpServer, TOOLS;
 
 beforeAll(async () => {
@@ -123,7 +129,11 @@ const MUST_NOT_REQUIRE = {
 
 describe('tools/list serves a usable schema', () => {
   it('every tool is present and carries an inputSchema', () => {
-    expect(TOOLS.length).toBe(82);
+    // The tool count's documented owner is server.json / server.mjs via
+    // scripts/sync-tools-manifest.mjs (see canonical/mcp_facts.json's warning),
+    // NOT a literal here. A hardcoded number turns every tool addition into a
+    // test edit and teaches the next person that the number is negotiable.
+    expect(TOOLS.length).toBe(TOOL_COUNT_OWNER);
     for (const t of TOOLS) expect(t.inputSchema, `${t.name} has no inputSchema`).toBeTruthy();
   });
 

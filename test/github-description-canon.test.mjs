@@ -25,6 +25,8 @@ const DESC = read('canonical/github_description.txt');
 const SYNC = read('scripts/sync-tools-manifest.mjs');
 const WF   = read('.github/workflows/daily-manifest-sync.yml');
 const CANON = JSON.parse(read('canonical/canon_phrases.json'));
+const TOOL_COUNT_OWNER = JSON.parse(read('server.json'))
+  ._meta['io.modelcontextprotocol.registry/publisher-provided'].toolCount;
 
 describe('the description file is pushable verbatim', () => {
   it('carries NO header or comment — its bytes become the metadata', () => {
@@ -74,10 +76,26 @@ describe('the healed content matches canon', () => {
     expect(DESC).not.toMatch(/16,9\d\d\+/);   // the exact figure that drifted
   });
 
-  it('carries the canonical tool, market and deal counts', () => {
-    expect(DESC).toContain(String(CANON.tools));
+  it('carries the canonical market and deal counts', () => {
+    // The GOVERNANCE quantities — facilities, countries, markets, deals — are
+    // owned by the backend's canon and mirrored into canon_phrases.json.
     expect(DESC).toContain(CANON.markets);
     expect(DESC).toContain(CANON.deals);
+  });
+
+  it('carries the tool count from the owner that actually owns it', () => {
+    // ★ NOT CANON.tools. canonical/mcp_facts.json states the split in writing:
+    // "version + tool_count are owned by sync-tools-manifest.mjs (server.json /
+    // server.mjs)"; canon_phrases mirrors the BACKEND's live canon, which
+    // resolves the tool count from the DEPLOYED server.
+    //
+    // Those two disagree for exactly as long as a merged tool addition takes to
+    // deploy — the repo registers the new tool immediately, the live canon
+    // learns it later, and the daily canon job reconciles the snapshot. Pinning
+    // this assertion to canon_phrases made every tool-adding PR red for a
+    // reason that was never about the description being stale. Found by the PR
+    // that added the 83rd tool.
+    expect(DESC).toContain(String(TOOL_COUNT_OWNER));
   });
 });
 

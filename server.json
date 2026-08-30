@@ -19,7 +19,7 @@
     "io.modelcontextprotocol.registry/publisher-provided": {
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
-      "toolCount": 82,
+      "toolCount": 83,
       "license": "CC-BY-4.0 for DCPI scores + methodology and DC Hub's own grid analysis; other layers per https://dchub.cloud/data-sources",
       "freeTier": true,
       "deploymentType": "origin",
