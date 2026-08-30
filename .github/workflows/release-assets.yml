@@ -1,0 +1,66 @@
+# Attach dchub.dxt — the Claude Desktop extension bundle — to every published release.
+#
+# ★2026-08-30. Before this, NO release carried any asset, and the bundle's only
+# fetch path was raw.githubusercontent.com off the default branch — a URL that
+# always serves whatever main happens to hold, with no way to install the build
+# that matched a given version. #270 made the committed bundle self-healing; this
+# makes it PUBLISHED, and publishes it under a tag it actually agrees with.
+#
+# A one-off manual upload would have rotted exactly the way the bundle itself did:
+# correct on the day, forgotten on the next release. Nothing owning it is how a
+# hand-zipped binary sat eleven versions stale in the open for a month.
+#
+# ★ The tag reaches the shell through env:, never by ${{ }} interpolation inside
+# `run:`. GitHub substitutes ${{ }} as raw TEXT before bash parses the line, so a
+# crafted ref would be executed rather than compared. Quoting "$TAG" from env is
+# the form that cannot.
+name: release assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write          # required to upload an asset onto the release
+
+jobs:
+  attach-dxt:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the code the release was cut FROM, not main. A release published
+      # from an older tag must attach that tag's bundle; checking out main would
+      # attach whatever is current and quietly mislabel it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Refuses to publish a bundle that is stale against source OR that declares a
+      # version different from the tag. Runs BEFORE the upload: a mismatched asset
+      # is never published, rather than published and corrected afterwards.
+      - name: Verify the bundle is honest about this tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: node scripts/verify-release-bundle.mjs "$TAG"
+
+      - name: Attach dchub.dxt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dchub.dxt --clobber
+
+      - name: Summary
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          {
+            echo "### dchub.dxt attached to $TAG"
+            echo
+            echo "Install path for Claude Desktop:"
+            echo '```'
+            echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/dchub.dxt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
