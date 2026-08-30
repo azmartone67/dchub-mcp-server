@@ -7162,8 +7162,12 @@ export const _TOOL_OUTPUT_SCHEMAS = {
       best_path: _oStr('Where to start: `execute_plan` for a multi-capability question, or the one tool name for a single-capability lookup'),
       why: _oStr('Short deterministic rationale for that entry point'),
       expected_outputs: _oArr(_oStr('An output CLASS to expect — not a tool name'), 'Bounded list of what the recommended path returns'),
+      external_sources_recommended: _oArr(_oObj({
+        source_class: _oStr('Closed enum: brokerage_research | market_analytics | financial_context | utility_or_iso_filing | operator_disclosure'),
+        why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
+      }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY four-field router: collapses 82 tools to one starting point. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Specified by ChatGPT in the 2026-08-29 partner round.'),
+    }, 'ADVISORY router: collapses 82 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -11418,6 +11422,74 @@ const _ROUTING_WHY = {
   unknown:              'The intent did not match a known class, so start by narrowing the catalog.',
 };
 
+// ★★★ r-research-stack (2026-08-30) — the fifth field, and why it is not a
+// re-opening of the four-field decision.
+//
+// ChatGPT specified the four-field router in the 2026-08-29 round, and asked
+// for this field by name in its 2026-08-30 briefing:
+//
+//   "That gives an agent a complete research plan without pretending DC Hub
+//    has every source."
+//
+// The omissions it asked for are all OUR OWN execution metadata — tool lists,
+// latency promises, confidence scores, execution graphs, planner versions —
+// which belong in `replay`, AFTER routing. This field is the opposite: it names
+// what lies OUTSIDE DC Hub's data entirely. `replay` is the wrong home for it
+// (it describes a plan we executed) and so is `coverage_notes` (which is about
+// tier depth, not about a different owner). So the ceremony the four-field test
+// demands is paid here rather than skipped: the count moves to six, deliberately.
+//
+// ★ SOURCE CLASSES, NEVER VENDOR NAMES. The same wording rule the problem
+// taxonomy lives under — name the CLASS, never a company that gets acquired,
+// renamed or repriced out from under the string. A test asserts no vendor name
+// appears, because the first helpful edit here will be to add one.
+//
+// ★ ONLY WHERE WE HAVE ALREADY PUBLISHED A LIMIT. Sending an agent elsewhere
+// for something we DO cover teaches it to leave for no reason, which is a worse
+// outcome than saying nothing. Every mapping below points at a gap one of our
+// own published `limits` already declares, and several classes recommend
+// NOTHING on purpose.
+const _EXTERNAL_SOURCE_CLASSES = {
+  brokerage_research:
+    'Executed lease terms, asking rates and vacancy. DC Hub scores markets and '
+    + 'sites; it does not hold transacted lease comps.',
+  market_analytics:
+    'Multi-year absorption and supply history. DC Hub rescores daily and serves '
+    + 'the present day; it does not serve a historical series.',
+  financial_context:
+    'Capital-markets and valuation context around an owner, sponsor or deal, '
+    + 'beyond the tracked transaction record itself.',
+  utility_or_iso_filing:
+    'The utility study, large-load tariff or docket that governs DELIVERABLE '
+    + 'load at a named site. DC Hub publishes supply-side signals, and a '
+    + 'supply-side signal is not a load-interconnection promise.',
+  operator_disclosure:
+    'Per-rack power density, cooling design and PUE at a named facility. No '
+    + 'public source publishes them, so DC Hub ingests none.',
+};
+
+// intent class -> the external classes that class genuinely needs. An empty
+// array is a real answer: it says DC Hub covers this question end to end.
+const _ROUTING_EXTERNAL = {
+  market_ranking:       ['market_analytics', 'brokerage_research'],
+  market_comparison:    ['market_analytics', 'brokerage_research'],
+  capacity_search:      ['operator_disclosure'],
+  site_analysis:        ['utility_or_iso_filing', 'operator_disclosure'],
+  grid_headroom:        ['utility_or_iso_filing'],
+  interconnection_queue:['utility_or_iso_filing'],
+  hosting_capacity:     ['utility_or_iso_filing'],
+  water_climate:        [],
+  deals_ma:             ['financial_context'],
+  fiber_power_pairing:  [],
+  fiber:                [],
+  price:                ['utility_or_iso_filing'],
+  incentives_tax:       [],
+  power_timeline:       ['utility_or_iso_filing'],
+  changes_delta:        [],
+  facility_search:      ['operator_disclosure'],
+  unknown:              [],
+};
+
 // ADVISORY. Names where to start; asserts nothing about whether it will succeed.
 export function _routingHint(intentClass, bestTool) {
   const cls = _ROUTING_OUTPUTS[intentClass] ? intentClass : 'unknown';
@@ -11429,6 +11501,12 @@ export function _routingHint(intentClass, bestTool) {
     best_path: MULTI.has(cls) ? 'execute_plan' : (bestTool || 'discover_tools'),
     why: _ROUTING_WHY[cls],
     expected_outputs: _ROUTING_OUTPUTS[cls],
+    // r-research-stack: what DC Hub cannot answer for this class, and the KIND
+    // of source that can. Empty means we cover it end to end — which is a
+    // statement, not a gap in the block.
+    external_sources_recommended: (_ROUTING_EXTERNAL[cls] || []).map((k) => ({
+      source_class: k, why: _EXTERNAL_SOURCE_CLASSES[k],
+    })),
     advisory: 'Recommends an entry point. It does not assert the path will succeed — read the result, not this block.',
   };
 }
