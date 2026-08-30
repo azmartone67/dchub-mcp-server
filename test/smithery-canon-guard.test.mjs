@@ -35,7 +35,7 @@
 // writer that REFUSES any path outside it. The refusal is the guarantee; the
 // tree fingerprint at the bottom of this file is only a backstop, and a weak
 // one (see the note on the isolation controls).
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1317,6 +1317,112 @@ describe('dchub.dxt shipped-bundle guard', () => {
     const owned = new Set(m[1].split(/\s+/).filter((x) => x && x !== '\\'));
     expect(owned.has('dchub.dxt'),
       'dchub.dxt is repacked by --fix but not staged — the daily job would discard it').toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// release asset guard — scripts/verify-release-bundle.mjs  (★2026-08-30)
+//
+// #270 made the committed bundle self-healing against CANON. That says nothing
+// about the TAG it gets published under, and a release asset is the one place the
+// two can disagree silently: a v2.12.0 release carrying a 2.12.1 bundle downloads
+// fine, installs fine, and misreports itself for as long as anyone fetches it.
+//
+// This was a live fork, not a hypothesis. When the guard was written the latest
+// release was v2.12.0 while canon and the bundle were both 2.12.1, and no release
+// carried any asset at all — so "just attach it to the existing release" was the
+// fast option, and it would have shipped exactly that lie.
+// ─────────────────────────────────────────────────────────────────────────────
+const RELEASE_GUARD = path.join(ROOT, 'scripts', 'verify-release-bundle.mjs');
+
+// Synchronous handle on the sandbox's bundle module, so the controls below can
+// build fixtures without every one of them being async.
+let _bundleMod = null;
+function bundleModSync() {
+  if (!_bundleMod) throw new Error('bundle module not loaded — see the beforeAll below');
+  return _bundleMod;
+}
+beforeAll(async () => { _bundleMod = await import(path.join(ROOT, 'scripts', 'dxt-bundle.mjs')); });
+
+/** Run the release guard for a tag. Returns {code, out}. */
+function verifyRelease(tag) {
+  try {
+    const out = execFileSync('node', [RELEASE_GUARD, tag], { cwd: ROOT, encoding: 'utf8' });
+    return { code: 0, out };
+  } catch (e) {
+    return { code: e.status, out: `${e.stdout || ''}${e.stderr || ''}` };
+  }
+}
+
+describe('release asset guard', () => {
+  it('accepts the committed bundle under the tag it actually declares', () => {
+    const { code, out } = verifyRelease(`v${CANON_VERSION}`);
+    expect(code, `the guard refused an honest pairing: ${out}`).toBe(0);
+    expect(out).toMatch(/safe to publish/);
+  });
+
+  // ── the must-fail control ──
+  // The exact pairing that was available and declined.
+  it('REFUSES a tag that disagrees with the bundle version', () => {
+    const [maj, min, pat] = CANON_VERSION.split('.').map(Number);
+    const other = `v${maj}.${min}.${pat === 0 ? 1 : pat - 1}`;
+    expect(other).not.toBe(`v${CANON_VERSION}`);
+    const { code, out } = verifyRelease(other);
+    expect(code, 'a version-mismatched asset would have been published').toBe(1);
+    expect(out).toMatch(/declares version .* but would be published under tag/);
+  });
+
+  // A tag that MATCHES a stale bundle is the subtler miss: the pairing is
+  // self-consistent and still ships a binary that is not the source.
+  it('REFUSES a stale bundle even when the tag matches what it declares', () => {
+    withBundleMutation((orig) => {
+      const { readZipEntries, buildZip } = bundleModSync();
+      const e = readZipEntries(orig);
+      const m = JSON.parse(e.get('manifest.json'));
+      m.version = '1.0.0';
+      return buildZip([
+        { name: 'manifest.json', data: Buffer.from(JSON.stringify(m, null, 2) + '\n', 'utf8') },
+        { name: 'server/' },
+        { name: 'server/index.js', data: e.get('server/index.js') },
+      ]);
+    }, () => {
+      const { code, out } = verifyRelease('v1.0.0');
+      expect(code, 'a self-consistent but STALE bundle would have been published').toBe(1);
+      expect(out).toMatch(/does not match dxt\/manifest\.json/);
+    });
+  });
+
+  it('REFUSES an unreadable bundle rather than publishing it unverified', () => {
+    withBundleMutation(() => Buffer.from('not a zip at all', 'utf8'), () => {
+      const { code, out } = verifyRelease(`v${CANON_VERSION}`);
+      expect(code, 'an unreadable bundle would have been published').toBe(1);
+      expect(out).toMatch(/unreadable as a zip/);
+    });
+  });
+
+  // A tag the guard cannot parse must be a hard stop, not a skipped comparison —
+  // the unknown-as-SUCCESS direction, applied to the release path.
+  it('REFUSES a non-semver tag instead of silently skipping the comparison', () => {
+    const { code, out } = verifyRelease('v1.0.0; rm -rf /');
+    expect(code, 'an unparseable tag was treated as verifiable').toBe(2);
+    expect(out).toMatch(/refusing to verify against a non-semver tag/);
+  });
+
+  // ── the injection control ──
+  // GitHub substitutes ${{ }} as raw TEXT before bash parses the line, so a ref
+  // interpolated straight into `run:` is executed rather than compared. Every
+  // value this workflow puts on a command line must arrive through env:.
+  it('the workflow passes the tag through env, never ${{ }} inside run:', () => {
+    const wf = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release-assets.yml'), 'utf8');
+    expect(wf, 'workflow does not trigger on a published release').toMatch(/release:\s*\n\s*types:\s*\[published\]/);
+    const runs = [...wf.matchAll(/^\s*run:\s*(\|?)([\s\S]*?)(?=\n\s{6}[-\w]|\n\S|$)/gm)];
+    expect(runs.length, 'no run: blocks found — this control is vacuous').toBeGreaterThan(0);
+    for (const r of runs) {
+      expect(r[2].includes('${{'),
+        `a run: block interpolates \${{ }} directly — GitHub substitutes it as TEXT before bash `
+        + `parses, so a crafted ref would execute: ${r[2].trim().slice(0, 60)}`).toBe(false);
+    }
   });
 });
 

@@ -94,7 +94,13 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         // of on the drift it was written to catch.
                         'scripts/dxt-bundle.mjs',
                         // The shipped bundle the dchub.dxt guard compares against.
-                        'dchub.dxt']) {
+                        'dchub.dxt',
+                        // ★2026-08-30: the release-asset guard and the workflow it runs
+                        // from. Both are asserted by controls that shell out INTO the
+                        // sandbox, so a missing copy makes them fail on ENOENT rather
+                        // than on the mismatch they exist to catch.
+                        'scripts/verify-release-bundle.mjs',
+                        '.github/workflows/release-assets.yml']) {
       if (!fs.existsSync(path.join(root, need))) {
         throw new Error(`repo sandbox is missing ${need} — the copy did not take, ` +
                         `so anything checked against it would be vacuous`);
