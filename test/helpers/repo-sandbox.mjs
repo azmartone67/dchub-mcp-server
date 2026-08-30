@@ -87,7 +87,14 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
     // for a clean tree. Assert the surfaces the canon guard depends on.
     for (const need of ['server.mjs', 'server.json', 'smithery.yaml',
                         'canonical/canon_phrases.json', 'REGISTRY-LISTINGS.md',
-                        'scripts/sync-tools-manifest.mjs']) {
+                        'scripts/sync-tools-manifest.mjs',
+                        // ★2026-08-30: sync-tools-manifest.mjs IMPORTS this. A sandbox
+                        // missing it makes the script die with ERR_MODULE_NOT_FOUND, and
+                        // every must-fail control then 'passes' on a stack trace instead
+                        // of on the drift it was written to catch.
+                        'scripts/dxt-bundle.mjs',
+                        // The shipped bundle the dchub.dxt guard compares against.
+                        'dchub.dxt']) {
       if (!fs.existsSync(path.join(root, need))) {
         throw new Error(`repo sandbox is missing ${need} — the copy did not take, ` +
                         `so anything checked against it would be vacuous`);

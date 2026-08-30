@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = process.argv.includes('--fix');
@@ -597,6 +598,48 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`${CPY} version ${cpm[2]} != ${VERSION}`);
     if (FIX) pend(CPY, cp.replace(CPRX, `$1${VERSION}$3`));
   }
+
+  // ★2026-08-30 — dxt/manifest.json, the Claude Desktop extension manifest.
+  // OPERATOR-DIRECTED. This one is a judgment call rather than a found defect, and
+  // it was made deliberately: the extension version was "1.0.0", set at creation
+  // (a88e500) and never bumped, while the extension it packages tracked the server
+  // through 12 minor releases. Claude Desktop shows this number to the user and
+  // uses it to decide whether an installed extension is out of date, so a frozen
+  // 1.0.0 means a user who installed on day one is never told anything changed.
+  // The operator's call is that it follows server.json like every other DERIVED
+  // surface here. (Contrast integrations/chatgpt/openapi.json, deliberately NOT in
+  // this loop: c3da5da moved its info.version onto its own recipe-aligned line,
+  // "promote recipe-aligned v1.2.3 spec". That is an ownership decision already
+  // made, and this script must not undo it.)
+  //
+  // ★ TEXT-anchored, NOT JSON.parse/stringify like package.json and
+  // mcp-server.json above. A round-trip through JSON is NOT byte-identical here:
+  // the file stores "DC Hub — Data Center Intelligence" and stringify emits a
+  // literal em-dash, a 19-byte reformat of lines this heal has no business
+  // touching. It would also fight the COVERAGE loop below, which heals this same
+  // file as raw TEXT — two writers, two formats, one file.
+  //
+  // ★ Anchored at 2-space indent on the top-level "version" key, and NOT on a bare
+  // /"version":/ — line 2 is "dxt_version": "0.1", the DXT SPEC version, which is
+  // not ours to move and must survive every heal. The optional trailing comma is
+  // captured and replayed so the key can sit anywhere in the object. A missing
+  // anchor is a hard PROBLEM, not a silent no-op — same rule as the three surfaces
+  // above.
+  const DXT = 'dxt/manifest.json';
+  const dx = readCur(DXT);
+  const DXRX = /^(  "version": ")([^"\n]*)("(?:,)?)$/m;
+  const dxm = DXRX.exec(dx);
+  if (!dxm) {
+    problems.push(`${DXT}: top-level \`"version": "x.y.z"\` key NOT FOUND — this heal `
+      + 'anchors on a 2-space-indented, double-quoted "version" line, deliberately NOT on a '
+      + 'bare /"version":/ (line 2 is "dxt_version", the DXT spec version, which is not ours '
+      + 'to move). If the key moved, was reindented or changed shape, re-anchor it here. Do '
+      + 'not leave the version heal matching nothing: Claude Desktop reads this to decide '
+      + 'whether an installed extension is stale.');
+  } else if (dxm[2] !== VERSION) {
+    problems.push(`${DXT} version ${dxm[2]} != ${VERSION}`);
+    if (FIX) pend(DXT, dx.replace(DXRX, `$1${VERSION}$3`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
@@ -744,6 +787,43 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // which is also the block that writes the file — one pend, one write, no
   // second scan reporting the same sentence twice (a doubled problem line
   // reads as two stale surfaces and inflates every drift report).
+}
+
+// ---- dchub.dxt — the SHIPPED Claude Desktop bundle -------------------------
+// ★2026-08-30. Everything above heals SOURCE. dchub.dxt is a committed BINARY at
+// the repo root containing a COPY of dxt/manifest.json, and nothing built it: it
+// was hand-zipped in a88e500, last repacked by hand on 2026-07-30 (#107), and then
+// went a month without one. Measured on 887c250 the shipped manifest read
+// "version 1.0.0 · 81 tools · 15,300+ facilities" against a canon of 2.12.1 / 83 /
+// 19,500+ — so the daily job healed dxt/manifest.json every day while the file a
+// user actually installs kept the old numbers. Neither this script nor $OWNED had
+// ever heard of dchub.dxt (`grep -c` returned 0 in both), which is exactly why it
+// could rot in the open: no guard was wrong, none existed.
+//
+// ★ Placed AFTER the COVERAGE loop, deliberately. The bundle must carry the FINAL
+// manifest, and dxt/manifest.json is written by two heals — the version block far
+// above and COVERAGE just above. readCur() returns this run's pending content, so
+// packing here bundles the healed file rather than the one still on disk. Packing
+// earlier would ship a one-run-stale bundle and converge only tomorrow.
+//
+// ★ Compares CONTENTS, never bytes — see scripts/dxt-bundle.mjs. Two zlib builds
+// can deflate identically-valid streams to different bytes; a byte guard would go
+// red for a reason unrelated to drift.
+{
+  const BUNDLE = 'dchub.dxt';
+  const srcBytes = (f) => Buffer.from(readCur(f), 'utf8');
+  let cur = null;
+  try { cur = fs.readFileSync(path.join(ROOT, BUNDLE)); }
+  catch { problems.push(`${BUNDLE}: MISSING — the shipped Claude Desktop bundle is not in the tree`); }
+  if (cur) {
+    const drift = bundleDrift(cur, srcBytes);
+    if (drift.length) {
+      problems.push(`${BUNDLE} ${drift.join('; ')} — repack with --fix`);
+      if (FIX) pend(BUNDLE, packBundle(srcBytes));
+    }
+  } else if (FIX) {
+    pend(BUNDLE, packBundle(srcBytes));
+  }
 }
 
 // ---- canonical FACTS drift-guard (pricing / coverage) ----------------------
