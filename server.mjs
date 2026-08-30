@@ -129,16 +129,20 @@ const TOOL_ALIASES = {
 // Same contract as TOOL_ALIASES: call-time ONLY, never surfaced in tools/list,
 // every hit logged so the map grows from what agents actually type.
 //
-// ★VALIDATION LIMIT, STATED PLAINLY. Values must be REAL declared properties of
-// that tool, but this repo CANNOT assert that: the authoritative 82-tool
-// manifest with real schemas lives in dchub-backend/worker.js, and this repo's
-// toolspec.json is stale — 79 tools, and `properties` is EMPTY for every one of
-// them, so validating against it would pass vacuously. test/arg-aliases.test.mjs
-// therefore guards the STRUCTURE (no guess shadows a real target, no two guesses
-// collide, no self-mapping) and pins the target names as a reviewed list. A
-// property RENAMED in worker.js would leave a silent no-op alias here and no
-// test in this repo would catch it. ★Re-check targets against worker.js when
-// editing this map.
+// ★VALIDATION, AND WHAT IT COVERS. Values must be REAL declared properties of
+// that tool. This repo used to be unable to assert that — toolspec.json held 79
+// tools with `properties` EMPTY for every one, so validating against it passed
+// vacuously, and a property renamed upstream left a silent no-op alias nothing
+// here would catch (Zod strips undeclared args, so the caller gets a confident
+// WRONG answer, not an error).
+// ★2026-08-30: closed. scripts/refresh-toolspec.mjs regenerates toolspec.json
+// from the live tools/list (83 tools, 340 declared properties) and
+// test/toolspec-is-real.test.mjs now resolves EVERY target in this map against
+// the tool's real schema, on the hard gate. It also pins toolspec.json's name
+// set to the trackedTool() registrations below, so a stale snapshot reds CI
+// instead of silently weakening the check. test/arg-aliases.test.mjs continues
+// to guard the STRUCTURE (no guess shadows a real target, no two guesses
+// collide, no self-mapping) and pins the targets as a reviewed list.
 //
 // ★ONLY pure RENAMES belong here. An alias whose VALUE needs translating is a
 // different problem and must NOT be faked with a rename: get_grid_intelligence

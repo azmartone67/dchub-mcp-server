@@ -137,6 +137,16 @@ jobs:
         # than half-writing one, because a bad snapshot would move every
         # published claim at once. test/free-tier-claims.test.mjs gates on it.
         run: node scripts/refresh-tier-limits.mjs
+      - name: Regenerate toolspec.json from the live tools/list
+        # toolspec.json is in the COVERAGE list below, so this job healed the
+        # phrase QUANTITIES inside it every day while the tool list itself sat
+        # at 79 tools with zero declared properties — a partially healed surface
+        # reading more current than an untouched one (#269's shape). This step
+        # owns the tools; sync-tools-manifest owns the numbers. Fails CLOSED:
+        # any transport error, or a result as vacuous as what it replaces,
+        # leaves the file untouched and exits 0.
+        run: node scripts/refresh-toolspec.mjs
+
       - name: Sync tool count + version + canon quantities into every owned surface
         run: node scripts/sync-tools-manifest.mjs --fix
       - name: Commit + push only if a surface drifted
