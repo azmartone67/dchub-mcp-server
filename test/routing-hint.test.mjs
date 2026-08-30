@@ -78,9 +78,85 @@ describe('routing_hint — what it must NOT carry', () => {
       for (const b of BANNED) expect(keys, `${c} leaked ${b}`).not.toContain(b);
     }
   });
-  it('stays exactly five keys — four fields plus the advisory disclaimer', () => {
+  // ★ THE COUNT MOVED FROM FIVE TO SIX, ON PURPOSE, ONCE.
+  // The five-key assertion existed so a helpful future PR adding `confidence`
+  // would have to delete a test that says the omission was deliberate. That
+  // ceremony is being paid, not skipped: ChatGPT — the author of the original
+  // four-field spec AND of its omissions — asked for
+  // `external_sources_recommended` by name in its 2026-08-30 briefing. Its
+  // exclusions were all OUR OWN execution metadata, which belongs in `replay`;
+  // a source we do not own is not that. Every banned field above stays banned.
+  it('stays exactly six keys — five fields plus the advisory disclaimer', () => {
     expect(Object.keys(_routingHint('market_ranking', 'x')).sort())
-      .toEqual(['advisory', 'best_path', 'expected_outputs', 'problem', 'why']);
+      .toEqual(['advisory', 'best_path', 'expected_outputs',
+                'external_sources_recommended', 'problem', 'why']);
+  });
+});
+
+// ── external_sources_recommended — the Research Stack field ──────────────────
+// ChatGPT, 2026-08-30: "That gives an agent a complete research plan without
+// pretending DC Hub has every source."
+describe('routing_hint — external_sources_recommended', () => {
+  const ALLOWED = ['brokerage_research', 'market_analytics', 'financial_context',
+                   'utility_or_iso_filing', 'operator_disclosure'];
+
+  it('every intent class resolves the field, and only to the closed enum', () => {
+    for (const c of CLASSES) {
+      const ext = _routingHint(c, 'rank_markets').external_sources_recommended;
+      expect(Array.isArray(ext), c).toBe(true);
+      for (const e of ext) {
+        expect(ALLOWED, `${c}: unknown source_class ${e.source_class}`).toContain(e.source_class);
+        expect(typeof e.why, c).toBe('string');
+        expect(e.why.length, `${c}/${e.source_class}: why is too thin to act on`)
+          .toBeGreaterThan(60);
+      }
+      // No class may recommend the same source twice.
+      const names = ext.map((e) => e.source_class);
+      expect(new Set(names).size, `${c}: duplicate source_class`).toBe(names.length);
+    }
+  });
+
+  it('NAMES CLASSES, NEVER VENDORS — the first helpful edit here will add one', () => {
+    // A company gets acquired, renamed or repriced and the string rots in every
+    // agent that cached it. Same wording rule the problem taxonomy lives under.
+    const VENDORS = new RegExp('\\b(' + [
+      'CBRE', 'JLL', 'Cushman', 'Colliers', 'Newmark', 'DC ?Byte', 'DataCenterHawk',
+      'dchawk', 'Baxtel', 'DCD', 'Data ?Center ?Frontier', 'S&P', 'Moody', 'Gartner',
+      'Synergy', 'Omdia', 'Structure ?Research', '451',
+    ].join('|') + ')\\b', 'i');
+    for (const c of CLASSES) {
+      for (const e of _routingHint(c, 'x').external_sources_recommended) {
+        const blob = `${e.source_class} ${e.why}`;
+        expect(blob, `${c}: vendor name in the contract`).not.toMatch(VENDORS);
+      }
+    }
+  });
+
+  it('an empty list is a real answer, and some classes give one', () => {
+    // Recommending an outside source for something we DO cover teaches an agent
+    // to leave for no reason — worse than saying nothing. So "we cover this end
+    // to end" has to be expressible, and has to actually occur.
+    const empties = CLASSES.filter(
+      (c) => _routingHint(c, 'x').external_sources_recommended.length === 0);
+    expect(empties.length, 'every class recommends leaving — that is not a contract, it is a shrug')
+      .toBeGreaterThan(2);
+    expect(empties, 'fiber coverage is not an admitted gap').toContain('fiber');
+    expect(empties, 'unknown cannot recommend a source for a question it did not read')
+      .toContain('unknown');
+  });
+
+  it('the classes that DO recommend are the ones with a published limit behind them', () => {
+    // grid_headroom publishes "supply-side signals, not a load-interconnection
+    // promise"; interconnection_queue publishes "no delivery dates". Both point
+    // at the same owner: the utility or ISO filing.
+    const of = (c) => _routingHint(c, 'x').external_sources_recommended.map((e) => e.source_class);
+    expect(of('grid_headroom')).toContain('utility_or_iso_filing');
+    expect(of('interconnection_queue')).toContain('utility_or_iso_filing');
+    // "no per-rack power density is ingested; there is no public source"
+    expect(of('capacity_search')).toContain('operator_disclosure');
+    // "DC Hub rescores daily and serves the present day" — the historical
+    // series is the real DC Byte / DC Hawk gap and we should say so.
+    expect(of('market_ranking')).toContain('market_analytics');
   });
 });
 
@@ -131,6 +207,17 @@ describe('routing_hint reaches a real plan_query response', () => {
     expect(sc.routing_hint.problem).toBe(sc.intent_class);
   }, 30000);
 
+  it('external_sources_recommended reaches a real response, not just the helper', async () => {
+    // Stage 0a shipped INERT for eight days because its guards called the helper
+    // directly. Drive the field over HTTP or it is not shipped.
+    const sc = await plan('rank markets for a 200 MW AI campus');
+    const ext = sc?.routing_hint?.external_sources_recommended;
+    expect(Array.isArray(ext)).toBe(true);
+    expect(ext.length).toBeGreaterThan(0);
+    expect(ext[0].source_class).toBeTruthy();
+    expect(ext[0].why.length).toBeGreaterThan(60);
+  }, 30000);
+
   it('the hint is declared in the tool schema, so an agent can find it', async () => {
     const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
@@ -140,5 +227,12 @@ describe('routing_hint reaches a real plan_query response', () => {
       ? raw.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('') : raw;
     const t = JSON.parse(j).result.tools.find((x) => x.name === 'plan_query');
     expect(Object.keys(t.outputSchema.properties)).toContain('routing_hint');
+    // and the new field is declared INSIDE it — an undeclared field is one an
+    // agent can only find by accident. Optional fields render as
+    // anyOf:[{object}, {null}], so unwrap rather than assuming the shape.
+    const node = t.outputSchema.properties.routing_hint;
+    const obj = node.properties ? node : (node.anyOf || []).find((b) => b.properties);
+    expect(obj, 'routing_hint has no object branch to declare fields in').toBeTruthy();
+    expect(Object.keys(obj.properties)).toContain('external_sources_recommended');
   }, 30000);
 });
