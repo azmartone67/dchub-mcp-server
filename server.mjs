@@ -11631,11 +11631,57 @@ export function _stampRequestInterpretation(result, rawKeys, declared) {
 //
 // ★ FAIL-SOFT AND SILENT. No ctx (stdio transport, off-request) => no block. An
 // advisory field is never worth failing a response over.
+// ★★★ r-gateway-visible (2026-08-30) — say, per response, when a call came
+// through a gateway rather than to the origin.
+//
+// THE PROBLEM Copilot named better than our own dashboards do (2026-08-30):
+// "Smithery fronting aggregates caller identity; popularity metrics are gateway
+// volume, not distinct agent adoption." It is our worst measurement problem —
+// ~97% of the 7-day panel is one gateway — and it lived only in our IP logs,
+// where the agent making the call could neither see it nor act on it.
+//
+// ★★★ IT CAN ONLY EVER SAY 'gateway', OR NOTHING. There is deliberately no
+// 'direct' and no 'unknown'. A gateway forwarding a generic clientInfo is
+// indistinguishable from a direct caller by construction (see
+// _GENERIC_CLIENT_NAMES and the mcpmarket case in r-source-tag), so a 'direct'
+// verdict would be manufactured confidence — the exact thing this block exists
+// to remove. Silence is the honest form of "we cannot tell", and it is also the
+// terse one, which is why the field is ABSENT rather than 'unknown'.
+//
+// ★ NESTED UNDER ONE KEY, on purpose. `means` already exists on the identity
+// block for the anonymous case; a second flat `means` would have collided and
+// the anonymous prose would have silently overwritten this one — two meanings
+// on one key, which is the bug this codebase keeps finding in other people's
+// payloads.
+//
+// ★ PROSE ONLY WHERE IT IS ACTIONABLE, per the block's existing contract: a
+// caller that is NOT behind a known gateway has nothing to do differently, so
+// it gets no field at all.
+export const _KNOWN_GATEWAYS = new Set(['smithery', 'glama', 'openrouter', 'poe']);
+
+export function _connectionShape(platform) {
+  const p = String(platform || '').trim().toLowerCase();
+  if (!_KNOWN_GATEWAYS.has(p)) return null;     // silence, never a 'direct' claim
+  return {
+    via: 'gateway',
+    gateway: p,
+    basis: `The connecting client self-identified as '${p}', a hosted gateway that `
+      + 'fronts many end users. Calls arriving this way share one upstream identity, '
+      + 'so DC Hub cannot tell them apart and neither can you.',
+    means: 'Usage counted through this path is GATEWAY VOLUME, not distinct-agent '
+      + 'adoption. To be counted as yourself — and to carry your own key and '
+      + 'clientInfo unaltered — connect directly to https://dchub.cloud/mcp.',
+  };
+}
+
 export function _identitySource(ctxLike) {
   const c = ctxLike || {};
   const src = c.auth_source;
   if (!src) return null;                        // not a /mcp request path
   const out = { credential_source: src, tier: c.tier || 'free' };
+  // Absent unless a known gateway self-identified — see _connectionShape.
+  const conn = _connectionShape(c.platform);
+  if (conn) out.connection = conn;
   if (src === 'none') {
     // The only actionable case, so the only one that pays for prose.
     out.means = 'This call was served ANONYMOUSLY — no credential reached DC Hub. '
