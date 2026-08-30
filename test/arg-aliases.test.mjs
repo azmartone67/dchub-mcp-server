@@ -13,12 +13,15 @@ import { ARG_ALIASES, TOOL_ALIASES } from '../server.mjs';
 // 58 of 82 tools declare no `required`, so tools/list could not teach the right
 // name either.
 //
-// ★VALIDATION LIMIT, STATED PLAINLY: this repo cannot check targets against the
-// real schemas. The authoritative 82-tool manifest lives in
-// dchub-backend/worker.js; this repo's toolspec.json is stale (79 tools, and
-// `properties` is EMPTY for every one), so asserting against it would pass
-// VACUOUSLY — the failure mode this whole file exists to prevent. What IS
-// guarded here is structure. Cross-repo target validation is a known gap.
+// ★THAT GAP IS NOW CLOSED (2026-08-30). This file used to say the repo could
+// not check targets against real schemas, because toolspec.json was 79 tools
+// with `properties` EMPTY for every one — asserting against it would have
+// passed VACUOUSLY, the failure mode this whole file exists to prevent.
+// scripts/refresh-toolspec.mjs now regenerates it from the live tools/list, and
+// test/toolspec-is-real.test.mjs resolves every target below against the tool's
+// real declared properties. THIS file still guards STRUCTURE; that one guards
+// EXISTENCE. Keep both — structure is what stops a bad edit, existence is what
+// catches an upstream rename.
 
 // The reviewed target list. Kept explicit so a change to the map is a change to
 // this file too — the only signal available in-repo.
