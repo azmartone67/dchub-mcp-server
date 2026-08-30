@@ -5,9 +5,9 @@
     "coverage": "https://dchub.cloud/api/v1/canon/coverage",
     "capture_evidence": "https://dchub.cloud/api/v1/reports/canonical-benchmarks"
   },
-  "retrieved_at": "2026-08-24T13:58:14.033Z",
-  "contract_hash": "d41282bd57a97364",
-  "version": 3,
+  "retrieved_at": "2026-08-30T13:42:51.323Z",
+  "contract_hash": "10a70f5544b5a4d3",
+  "version": 5,
   "source": "dchub-backend routes/problem_taxonomy.py",
   "statuses": {
     "expanding": "answerable, but a named input is still a proxy or estimate",
@@ -19,6 +19,32 @@
     {
       "entry_tool": "execute_plan",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "the user's question, passed through unchanged"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "hard_error",
+          "example": "how much power headroom is there in ERCOT",
+          "name": "intent",
+          "on": "execute_plan",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "ISO or RTO identifier"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "ERCOT",
+          "name": "iso",
+          "on": "execute_plan",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "supply-side signals, not a load-interconnection promise — generation is not deliverable load",
         "utility study timelines, large-load tariff processes and substation-grain delivery are declared out of coverage rather than estimated"
@@ -35,6 +61,59 @@
     {
       "entry_tool": "execute_plan",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "the user's question, passed through unchanged"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "hard_error",
+          "example": "rank Ohio markets for an AI build",
+          "name": "intent",
+          "on": "execute_plan",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "US state code"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "OH",
+          "name": "state",
+          "on": "execute_plan",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "megawatts"
+          ],
+          "applied": "accepted_not_applied",
+          "behavior": "echoed and disclosed via constraint_coverage.capacity_mw.applied = false; it does not size or filter the shortlist. Market rows carry excess_power_score, an index, so there is no megawatt quantity to filter against",
+          "example": "100",
+          "name": "capacity_mw",
+          "on": "site_selection_canvas",
+          "required": false,
+          "type": "number"
+        },
+        {
+          "accepted_forms": [
+            "BUILD",
+            "CAUTION",
+            "AVOID",
+            "ALL"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "default_applied_and_disclosed",
+          "example": "ALL",
+          "name": "verdict",
+          "on": "site_selection_canvas",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "a state-scoped ranking needs a state the planner can resolve; an unresolved geography answers nationally and says so"
       ],
@@ -50,6 +129,33 @@
     {
       "entry_tool": "rank_markets",
       "has_published_limits": false,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "US state code",
+            "region slug"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "TX",
+          "name": "region",
+          "on": "rank_markets",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "megawatts"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "50",
+          "name": "min_capacity_mw",
+          "on": "rank_markets",
+          "required": false,
+          "type": "number"
+        }
+      ],
       "limits": [],
       "problem": "colocation and wholesale data-center markets",
       "status": "mature",
@@ -63,6 +169,20 @@
     {
       "entry_tool": "ai_capacity_index",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "a lookback window the tool names in its response"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "default_applied_and_disclosed",
+          "example": "90d",
+          "name": "horizon",
+          "on": "ai_capacity_index",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "ai_ready_mw is a market-level PROXY from disclosed installed capacity — no per-rack power density or cooling type is ingested, because no public source publishes it. Directional, not a spec claim",
         "deployable_mw is an estimate from market depth, not a measured interconnect result"
@@ -78,6 +198,34 @@
     {
       "entry_tool": "get_composite_site_score",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "decimal degrees",
+            "alias: latitude"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "hard_error",
+          "example": "39.04",
+          "name": "lat",
+          "on": "get_composite_site_score",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "accepted_forms": [
+            "decimal degrees",
+            "aliases: lng, longitude"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "hard_error",
+          "example": "-77.48",
+          "name": "lon",
+          "on": "get_composite_site_score",
+          "required": true,
+          "type": "number"
+        }
+      ],
       "limits": [
         "water is declared unavailable outside WRI Aqueduct basin coverage rather than imputed"
       ],
@@ -94,6 +242,20 @@
     {
       "entry_tool": "get_fiber_intel",
       "has_published_limits": false,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "metro or market name"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "Dallas",
+          "name": "market",
+          "on": "get_fiber_intel",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [],
       "problem": "fiber routes, diversity and latency",
       "status": "mature",
@@ -108,6 +270,20 @@
     {
       "entry_tool": "get_interconnection_queue",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "ISO or RTO identifier"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "ERCOT",
+          "name": "iso",
+          "on": "get_interconnection_queue",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "the queue feed carries no delivery dates, and most queued MW never completes — queue depth is congestion context, not a timeline"
       ],
@@ -122,6 +298,20 @@
     {
       "entry_tool": "get_tax_incentives",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "US state code"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "OH",
+          "name": "state",
+          "on": "get_tax_incentives",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "permitting records are human-curated and stage-tagged (enacted / proposed / speculative) — read the stage before treating a record as in force"
       ],
@@ -136,6 +326,33 @@
     {
       "entry_tool": "list_transactions",
       "has_published_limits": false,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "US state code",
+            "region slug"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "TX",
+          "name": "region",
+          "on": "list_transactions",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "ISO date"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "2026-01-01",
+          "name": "date_from",
+          "on": "list_transactions",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [],
       "problem": "data-center M&A and deals",
       "status": "mature",
@@ -149,6 +366,32 @@
     {
       "entry_tool": "get_energy_prices",
       "has_published_limits": false,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "US state code"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "TX",
+          "name": "state",
+          "on": "get_energy_prices",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "ISO or RTO identifier"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "ERCOT",
+          "name": "iso",
+          "on": "get_energy_prices",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [],
       "problem": "PPAs and energy pricing",
       "status": "mature",
@@ -161,6 +404,46 @@
     {
       "entry_tool": "get_infrastructure",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "decimal degrees",
+            "alias: latitude"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "hard_error",
+          "example": "39.04",
+          "name": "lat",
+          "on": "get_infrastructure",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "accepted_forms": [
+            "decimal degrees",
+            "aliases: lng, longitude"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "hard_error",
+          "example": "-77.48",
+          "name": "lon",
+          "on": "get_infrastructure",
+          "required": true,
+          "type": "number"
+        },
+        {
+          "accepted_forms": [
+            "kilometres"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "default_applied_and_disclosed",
+          "example": "25",
+          "name": "radius_km",
+          "on": "get_infrastructure",
+          "required": false,
+          "type": "number"
+        }
+      ],
       "limits": [
         "utility-published feeder hosting capacity covers a named subset of utilities in the Northeast, Mid-Atlantic and Midwest — not nationwide, and absence of a feeder is not absence of capacity",
         "published feeder capacities are single-digit to low-tens of MW and the rows are GIS vertices — read distinct_feeders, never the row count"
@@ -176,6 +459,21 @@
     {
       "entry_tool": "get_facility",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "facility slug",
+            "aliases: facility_id, id"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "equinix-dc1",
+          "name": "slug",
+          "on": "get_facility",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "disclosed MW is populated on a minority of facility rows, so a facility count is a PRESENCE signal and not a capacity one — metered_facility_count reports the share that carries MW",
         "no per-rack power density is ingested; there is no public source"
@@ -192,6 +490,32 @@
     {
       "entry_tool": "get_power_pipeline",
       "has_published_limits": true,
+      "inputs": [
+        {
+          "accepted_forms": [
+            "US state code"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "TX",
+          "name": "state",
+          "on": "get_power_pipeline",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "accepted_forms": [
+            "a status the response enumerates"
+          ],
+          "applied": "applied",
+          "behavior_if_missing": "answers_broadly_and_discloses",
+          "example": "planned",
+          "name": "status",
+          "on": "get_power_pipeline",
+          "required": false,
+          "type": "string"
+        }
+      ],
       "limits": [
         "the generating-unit inventory counts UNITS across all statuses (operating, planned, cancelled, shelved, retired) — it is not a plant count and not an operating fleet"
       ],
