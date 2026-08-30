@@ -15,7 +15,10 @@ name: registry PR auto-submit
 
 on:
   schedule:
-    - cron: '30 7 * * 1'    # weekly, Monday 07:30 UTC
+    # ★2026-08-30: moved 07:30 -> 07:40 so registry-discover (now 07:30)
+    # runs FIRST. Ordering is asserted by test/registry-cron-order.test.mjs;
+    # if you move either time, move it there too rather than deleting it.
+    - cron: '40 7 * * 1'    # weekly, Monday 07:40 UTC — AFTER registry-discover
   workflow_dispatch:
     inputs:
       dry_run:

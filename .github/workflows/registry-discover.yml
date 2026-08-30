@@ -12,7 +12,18 @@ name: registry discovery crawl
 
 on:
   schedule:
-    - cron: '40 7 * * 1'    # weekly, Monday 07:40 UTC (right after pr-submit)
+    # ★2026-08-30: was 07:40 — TEN MINUTES AFTER registry-pr-submit, which
+    # meant discovery could not reach the submit run it fed, by construction:
+    # every candidate found here had already missed that Monday's window and
+    # waited a full week for the next one. Discovery now LEADS submission.
+    #
+    # ★ The gap is not the binding constraint and this change does not
+    # pretend otherwise: a candidate still has to clear a HUMAN vet — the
+    # stub PR this files must be merged into pr-submit's TARGETS before that
+    # workflow will act on it. Measured 2026-08-29, the submission queue had
+    # held one item for 32 days, which is that review step, not this cron.
+    # What the swap removes is the structural guarantee of missing.
+    - cron: '30 7 * * 1'    # weekly, Monday 07:30 UTC — BEFORE pr-submit (07:40)
   workflow_dispatch:
     inputs:
       report_only:
