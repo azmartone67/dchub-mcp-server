@@ -20,6 +20,114 @@ SMITHERY_SLUG = "azmartone67/dchub"
 REPO_SLUG = "azmartone67/dchub-mcp-server"
 LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
 
+# ── CONNECTOR listings ────────────────────────────────────────────────────────
+#
+# ★2026-08-30. This module's header says Glama drift "is reported but NOT alerted
+# (they re-crawl on their own cadence)". That is TRUE of the SERVER listing, which
+# re-crawls the README — glama_page_tool_count() above depends on exactly that.
+#
+# It is FALSE of a CONNECTOR listing, and the difference cost us 22 days.
+#
+# A connector description is typed once into Glama's own database and is never
+# re-read from this repo. Measured 2026-08-30, the live connector blurb still
+# advertised "the DCGI Data Center Gas Index (per-state natural-gas suitability
+# for siting)" as a CURRENT capability — a score withdrawn 2026-08-08 — alongside
+# a facility count and a market count retired long before that.
+#
+# test/no-live-dcgi-claims.test.mjs exists to stop precisely that claim. It passes
+# 12/12. It scans this REPOSITORY, and the claim does not live here, so no edit to
+# it could ever have caught this. registry_stale_guard.py has the same blind spot
+# and states the reason in its own docstring: "The public registries pull from the
+# SOURCE files in this repo" — which the connector listings simply do not do.
+#
+# So: the one Glama surface that can never self-correct was the one surface not
+# watched, under a policy written for the surface that does self-correct.
+#
+# SLUGS ARE NOT DISCOVERABLE. There is no connector-enumeration endpoint we know
+# of, so each listing must be named here. An empty list is a hard failure rather
+# than a quiet pass, and a slug that stops resolving is reported — a fence that
+# cannot reach its subject must not look like a clean scan.
+CONNECTOR_SLUGS = [
+    "cloud.dchub/dc-hub-data-center-intelligence-mcp-server",
+]
+
+# Capabilities we have RETIRED. The rule matches test/no-live-dcgi-claims.test.mjs
+# exactly — the word may appear, but never without "withdrawn" — so the same rule
+# now covers the surface that test structurally cannot see.
+WITHDRAWN_CAPABILITIES = [
+    ("DCGI", re.compile(r"\bDCGI\b|(?:Data[- ]Center |DC Hub )?Gas Index", re.I), "2026-08-08"),
+]
+
+
+def scan_withdrawn(text):
+    """Names of withdrawn capabilities advertised WITHOUT the withdrawal. Pure."""
+    out = []
+    for name, pat, date in WITHDRAWN_CAPABILITIES:
+        for line in re.split(r"[\r\n]|(?<=[.;])\s+", text):
+            if pat.search(line) and not re.search(r"withdraw", line, re.I):
+                out.append((name, date, line.strip()[:120]))
+                break
+    return out
+
+
+def connector_listing_text(slug):
+    """The DESCRIPTION region of a connector page. (text, None) or (None, reason).
+
+    The page, not an API path: /api/mcp/v1/servers/<slug> is documented and proven
+    above, but no connector equivalent is, and a guard pointed at a guessed URL
+    404s forever while reporting nothing. This URL is the one a human opens.
+
+    ★SCOPED, and the first draft of this was not — which would have made it
+    useless. The connector page renders the full tool catalog, and one of the
+    tools is `get_gas_index`, whose DISPLAY NAME is literally "Gas Index (DCGI)".
+    A whole-page scan therefore flags a withdrawn-capability claim on every run,
+    forever, against a tool that legitimately still exists and returns the
+    withdrawal when called. A fence that cries wolf every run is a fence someone
+    switches off, which is how the other four in this codebase died.
+
+    So the scan is bounded to the prose between "Server Details" and the tool
+    catalogue. That is a textual assumption about someone else's page, and it can
+    break — which is why a missing marker returns a REASON rather than empty
+    text. Unknown must not look like clean; that distinction is the whole point
+    of this module's no-hardcoded-fallback rule."""
+    url = f"https://glama.ai/mcp/connectors/{slug}"
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            html = r.read().decode("utf-8", "ignore")
+    except Exception as e:
+        return None, f"unreachable ({type(e).__name__})"
+    start = html.find("Server Details")
+    if start < 0:
+        return None, "no 'Server Details' marker — page moved, renamed or redesigned"
+    end = -1
+    for marker in ("Available Tools", "Tool Definition Quality", "Glama MCP Gateway"):
+        i = html.find(marker, start)
+        if i > 0:
+            end = i if end < 0 else min(end, i)
+    if end < 0:
+        return None, "no tool-catalogue marker — cannot bound the description region"
+    return html[start:end], None
+
+
+def connector_regressions():
+    """Alertable findings across the connector listings. Fails closed."""
+    out = []
+    if not CONNECTOR_SLUGS:
+        return ["CONNECTOR_SLUGS is empty — the connector fence is scanning nothing"]
+    for slug in CONNECTOR_SLUGS:
+        html, err = connector_listing_text(slug)
+        if err:
+            out.append(f"connector `{slug}` could not be scanned: {err} "
+                       f"— treat as UNKNOWN, not clean")
+            continue
+        for name, date, line in scan_withdrawn(html):
+            out.append(f"🚨 connector `{slug}` advertises {name} as a live capability "
+                       f"(withdrawn {date}) — a stored blurb never re-crawls, so this "
+                       f"does not self-heal: {line!r}")
+    return out
+
+
 # ── Term tiers (recalibrated 2026-07-12 from a Spearman teardown of registry.smithery.ai
 #    ordering: score[text-relevance]≈0.61-0.88 and verified≈0.80-0.88 DRIVE rank; useCount
 #    ≈0.53-0.66; createdAt[recency]≈0.00 == UNUSED. So a slip is a RELEVANCE loss to fix
@@ -379,6 +487,7 @@ def main(probe=False):
     off_ver, off_tools = official_registry()
     smi_name, smi_tools = smithery_record()
     gla_tools, gla_desc = glama_record()
+    reasons.extend(connector_regressions())
     readme_tools = readme_tool_count()
     lobe_status, lobe_tools = lobehub_presence()
 
@@ -536,6 +645,36 @@ def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated, 
     return bool(reasons)
 
 
+def _self_test():
+    """Offline must-fail controls for the pure half. The network half reuses the
+    page-fetch pattern already proven by glama_page_tool_count()."""
+    cases = [
+        ("the DCGI Data Center Gas Index (per-state natural-gas suitability)", True,
+         "the exact live blurb this fence was written for"),
+        ("the DC Hub Gas Index (DCGI) was WITHDRAWN 2026-08-08", False,
+         "honest mention — allowed, an agent asking deserves the answer"),
+        ("DCPI market verdicts and live grid telemetry", False, "DCPI is not DCGI"),
+        ("Gas Index scores gas access by state", True, "aliased name, no withdrawal"),
+        ("live gas data via get_gas_intelligence", False, "gas data is live; no index claim"),
+        ("get_gas_index Gas Index (DCGI) Read-only Idempotent", True,
+         "tool display name — flags in isolation, which is WHY the scan is scoped "
+         "to the description region and never the tool catalogue"),
+    ]
+    bad = 0
+    for text, should_flag, why in cases:
+        got = bool(scan_withdrawn(text))
+        ok = got == should_flag
+        bad += not ok
+        print(f"  {'ok  ' if ok else 'FAIL'}  {'flag' if should_flag else 'pass'}  {why}")
+    if bad:
+        print(f"\n\u2717 self-test: {bad} case(s) wrong")
+        return 1
+    print("\n\u2713 self-test: all cases correct")
+    return 0
+
+
 if __name__ == "__main__":
     import sys
+    if "--self-test" in sys.argv:
+        sys.exit(_self_test())
     main(probe="--probe" in sys.argv)
