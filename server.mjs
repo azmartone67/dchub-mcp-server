@@ -13783,7 +13783,15 @@ function createServer(descOverrides) {
     { market: Sreq.describe('Market slug (required), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank'),
       max_tokens: N.describe('Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent') },
     async (a) => {
-      const slug = String((a && (a.market || a.slug)) || '').trim().toLowerCase().replace(/\s+/g, '-');
+      // r-marketresolve (2026-08-30): `|| a.slug` removed. `market` is Sreq
+      // (required), so Zod rejects any call that omits it BEFORE this handler
+      // runs — a caller sending {slug:"dallas"} gets -32602 naming `market` and
+      // never reaches this line. The fallback could therefore only ever fire
+      // when `market` was ALSO present, in which case `market` wins. It read as
+      // an alias and was one only in appearance. Making it real would mean
+      // un-requiring `market`, which is a downgrade of the requiredness added in
+      // #249; the loud -32602 is the better answer.
+      const slug = String((a && a.market) || '').trim().toLowerCase().replace(/\s+/g, '-');
       if (!slug) return { content: [{ type: 'text', text: JSON.stringify({ error: 'market required', example: 'get_market_context market=northern-virginia' }) }] };
       const q = { format: 'json' };
       const mt = Number(a && a.max_tokens);
@@ -14883,10 +14891,11 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', q)) }] };
     });
 
-  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, avg_queue_wait_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. ★avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements and are not interchangeable: time-to-power is the DCPI per-market estimate averaged over the ISO, while queue-wait is a proxy derived from live interconnection-queue DEPTH (12 + 0.6 months per GW, clipped 12-66) and is the one that saturates on the deepest queues. Quote whichever you mean by name. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
+  trackedTool(srv, 'get_grid_intelligence', 'Use when a user asks "can I get N MW of power in <ISO> and how long will it take?" — the flagship grid-headroom + interconnection-queue brief for one ISO. Example: "How much excess power does PJM have right now and what is the time-to-power for a 200MW load?" — get_grid_intelligence region_id="PJM". Params: region_id (aliases iso/region accepted) — one of the 7 US ISOs ("PJM" | "ERCOT" | "CAISO" | "MISO" | "SPP" | "NYISO" | "ISO-NE") OR a US EIA balancing authority (40+ now live, e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE, Seattle/SCL, LA/LDWP, Quincy/GCPD, Denver/PSCO, Tennessee/TVA — note: balancing authorities return live generation mix; demand, headroom, interconnection-queue and DCPI scores remain ISO-level for the 7 ISOs). You may instead pass market="Ashburn" (or a metro slug like "northern-virginia") to name a MARKET rather than a grid code: it is resolved to the ISO for that market through the published DCPI market row, and the reply carries a resolved_from block naming what it resolved to — the figures then describe the ISO, which is larger than the market you named. Returns: {iso, iso_name, demand_mw, generation_mix_pct{NG,COL,NUC,WND,SUN,WAT,…}, renewable_share_pct, gas_share_pct, constraint_score (0-100 DCPI), excess_power_score (0-100 DCPI), avg_time_to_power_months, avg_queue_wait_months, curtailment_pct, reserve_margin_pct, retail_price_cents_kwh, queue_depth_gw, data_center_share_pct, stranded_capacity_mw, grid_emergencies_30d, build_rate_pct, last_updated}. ★avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements and are not interchangeable: time-to-power is the DCPI per-market estimate averaged over the ISO, while queue-wait is a proxy derived from live interconnection-queue DEPTH (12 + 0.6 months per GW, clipped 12-66) and is the one that saturates on the deepest queues. Quote whichever you mean by name. Do NOT use to compare 2+ ISOs side-by-side (use compare_isos) or for the global greenest-first ranking (use get_grid_scoreboard).',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for live Ashburn / Northern Virginia zone load + real-time LMP (the world\'s #1 DC market, invisible in EIA)'),
       iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
-      region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code') },
+      region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
+      market: S.describe('Market NAME or metro slug instead of a grid code, e.g. "Ashburn", "northern-virginia", "dallas". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — "Ashburn" is not a grid code.') },
     async (a) => {
       // r78-gridfix (2026-06-12): the prior handler hit /api/v1/grid-headroom/${region},
       // a lat/lon SUBSTATION analyzer that does NOT understand ISO names — it
@@ -14900,14 +14909,80 @@ function createServer(descOverrides) {
       //   (3) /interconnection-queue/snapshot live queue depth + DC share
       // The substation-level available-MW headroom block stays Pro-gated server-side
       // (use get_grid_data / analyze_site for a site-specific available-MW estimate).
-      const raw = (a.region_id || a.iso || a.region || a.market || '').toString().trim();
-      if (!raw) {
+      // r-marketresolve (2026-08-30): `a.market` was READ on this line since the
+      // handler was written, but `market` was never a DECLARED property — and Zod
+      // strips undeclared arguments before the handler runs. So `|| a.market ||`
+      // could never be non-empty. Measured live against production that day:
+      //   {market:"PJM"}       -> "region required"   (NOT the PJM brief)
+      //   {market:"Karaburun"} -> "region required"   (NOT "region not covered")
+      //   {}                   -> "region required"   (byte-identical)
+      // A read that can never see a value reads as coverage and provides none —
+      // anyone auditing this line would have concluded market was handled.
+      //
+      // `market` is now declared AND resolved by VALUE. It is deliberately NOT an
+      // entry in ARG_ALIASES: test/arg-aliases.test.mjs forbids that, and is right
+      // to — "Ashburn" is not a grid code, so a rename would turn a loud correct
+      // error into a silently wrong answer. Resolving the value against a real
+      // source, and SAYING SO in the payload, is the honest version of the same fix.
+      const rawRegion = (a.region_id || a.iso || a.region || '').toString().trim();
+      const rawMarket = (a.market || '').toString().trim();
+      if (!rawRegion && !rawMarket) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'region required',
-          hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs.',
-          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'PJM-DOM'],
+          // The "region not covered" branch below was taught about EIA balancing
+          // authorities by #248; THIS branch was left behind, so the caller who
+          // supplied nothing got a NARROWER recovery list than the one who
+          // supplied something wrong. 40+ BAs resolve here (AZPS -> live Phoenix
+          // fuel mix, SOCO -> constraint 54.8) and none are in the 7-ISO list.
+          hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs, or a US EIA balancing-authority code (40+ live, e.g. SOCO, AZPS, DUK, TVA). To ask by market name instead, pass market="Ashburn".',
+          // PJM-DOM removed: it is a PJM SUB-ZONE, not one of the 7 ISOs, so
+          // listing it made this array length 8 under a hint that says 7 — a
+          // contradiction inside one object. It is also currently
+          // source_unavailable (needs GRIDSTATUS_API_KEY), so recommending it
+          // sent callers to an empty payload. The handler still accepts it.
+          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'],
           example: 'get_grid_intelligence region_id="PJM"',
+          example_by_market: 'get_grid_intelligence market="Ashburn"',
         }) }] };
+      }
+      let resolved_from = null;
+      let raw = rawRegion;
+      if (!raw) {
+        // A real lookup against the published DCPI market row, never a guess.
+        // PJM-DOM is deliberately not a resolution target even for Ashburn: it is
+        // source_unavailable today, so resolving the world's #1 DC market to the
+        // DOM sub-zone would hand back an empty payload where PJM returns a real
+        // brief. callAPI does NOT throw on 404 — it returns {error:'API 404'} —
+        // so this is checked by shape, not by try/catch.
+        const slug = slugify(rawMarket);
+        const row = slug
+          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
+          : null;
+        const iso = (row && !row.error && typeof row.iso === 'string') ? row.iso.trim() : '';
+        if (!iso) {
+          return { content: [{ type: 'text', text: JSON.stringify({
+            error: 'market not resolved',
+            detail: `"${rawMarket}" did not resolve to a DC Hub market, so no grid region could be derived. The call was refused rather than answered for a region we did not identify.`,
+            requested_market: rawMarket,
+            tried_market_slug: slug,
+            hint: 'Pass the metro slug as it appears in rank_markets / get_market_dcpi_rank (e.g. market="ashburn", "northern-virginia", "dallas"), or skip the lookup and pass region_id="PJM" directly. A trailing state is NOT stripped — "Ashburn, VA" will not resolve, because guessing which token is the state risks answering for the wrong market.',
+            example: 'get_grid_intelligence market="ashburn"',
+            _error_mitigation: {
+              error_code: 'market_not_resolved',
+              severity: 'parameter_adjustment',
+              deterministic_hint: 'Retrying the same market string will not help. Look the slug up with rank_markets, or pass region_id directly.',
+            },
+          }) }] };
+        }
+        raw = iso;
+        resolved_from = {
+          market: rawMarket,
+          market_slug: slug,
+          resolved_region_id: iso,
+          iso_type: row.iso_type == null ? null : row.iso_type,
+          via: '/api/v1/dcpi/scores — published DCPI market row',
+          note: `market="${rawMarket}" is not a grid code; it was resolved to region_id="${iso}" before this brief was assembled. The figures below describe ${iso}, which is larger than the market you named.`,
+        };
       }
       const ISO = raw.toUpperCase().replace(/[^A-Z0-9-]/g, '');
       // PJM Dominion (DOM) sub-zone — Ashburn / Northern Virginia (world's #1 DC
@@ -14950,7 +15025,7 @@ function createServer(descOverrides) {
           detail: `"${raw}" did not resolve to a grid region DC Hub covers. Live grid telemetry is US-only (7 ISOs + EIA balancing authorities); it is not available for non-US geographies.`,
           requested: raw,
           hint: 'Pass region_id (aliases iso/region accepted) = one of the 7 live US ISOs, or a US EIA balancing-authority code.',
-          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE', 'PJM-DOM'],
+          valid_regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'],
           example: 'get_grid_intelligence region_id="PJM"',
           instead: 'For non-US power infrastructure use get_global_power (plant/unit inventory, 170+ countries). There is no live grid telemetry outside the US.',
           _error_mitigation: {
@@ -14972,6 +15047,9 @@ function createServer(descOverrides) {
           if (ext[k] != null) out[k] = ext[k];
         }
       }
+      // Never answer a resolved market silently: the caller asked about a market
+      // and is being handed ISO-level figures, which is a different question.
+      if (resolved_from) out.resolved_from = resolved_from;
       return withFreshness({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out }, 'get_grid_intelligence');
     });
 
