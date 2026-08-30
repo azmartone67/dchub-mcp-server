@@ -178,7 +178,7 @@ jobs:
                  integrations/README.md integrations/chatgpt/README.md \
                  integrations/chatgpt/openapi.json integrations/chatgpt/instructions.txt \
                  integrations/cohere/README.md integrations/copilot/dchub-mcp.yaml \
-                 integrations/openrouter/tools.json dxt/manifest.json \
+                 integrations/openrouter/tools.json dxt/manifest.json dchub.dxt \
                  docs/canonical-workflows.md docs/distribution-targets.md \
                  toolspec.json dchub_mcp_server.py TELEGEOGRAPHY-OUTREACH.md \
                  integrations/gemini/README.md integrations/openrouter/README.md \

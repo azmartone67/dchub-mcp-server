@@ -692,7 +692,7 @@ describe('server.mjs publish-version guard', () => {
       // loop, it does not replace it.
       expect(out).toMatch(/package\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
       expect(out).toMatch(/mcp-server\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
-      expect(out).toMatch(/smithery\.yaml does not contain canonical version 9\.87\.65/);
+      expect(out).toMatch(/smithery\.yaml version \d+\.\d+\.\d+ != 9\.87\.65/);
     });
   });
 
@@ -873,7 +873,7 @@ describe('copilot descriptor publish-version guard', () => {
       // does not replace it.
       expect(out).toMatch(/package\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
       expect(out).toMatch(/mcp-server\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
-      expect(out).toMatch(/smithery\.yaml does not contain canonical version 9\.87\.65/);
+      expect(out).toMatch(/smithery\.yaml version \d+\.\d+\.\d+ != 9\.87\.65/);
       expect(out).toMatch(/server\.mjs SERVER_VERSION \d+\.\d+\.\d+ != 9\.87\.65/);
     });
   });
@@ -920,6 +920,403 @@ describe('copilot descriptor publish-version guard', () => {
         .toContain(`${FACILITIES} facilities`);
       expect(after, 'the stale quantity survived').not.toContain('12,650+ facilities');
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// smithery.yaml publish-version guard  (★2026-08-30)
+//
+// THE DEFECT. #268 (server.mjs) and #269 (the Copilot descriptor) each added a
+// surface to the version loop. This one was ALREADY in the loop and still could
+// not catch the drift, because the check asked the wrong question:
+//
+//   if (!sy.includes(VERSION))   // "does 2.12.1 appear ANYWHERE in the file?"
+//
+// which is not "does this descriptor DECLARE 2.12.1". Measured on 676255f:
+//
+//   line 5   # Last refreshed 2026-07-10 (83-tool / v2.12.1 canonical sync)…
+//   line 16  version: "9.9.9"
+//   $ node scripts/sync-tools-manifest.mjs   -> exit 0
+//   ✓ all manifest + facts surfaces consistent
+//
+// The trigger is HOUSEKEEPING, not vandalism. Line 5 of the committed file reads
+// "(71-tool / v2.4.4 canonical sync)" — refreshing that comment to the current
+// version is a normal, well-intentioned edit, and it silently disarms the guard
+// on the key one line below. This is the listing the file is named for.
+//
+// The controls below are the regression test for that exact shape: the canonical
+// string PRESENT in the file, the declared version WRONG.
+// ─────────────────────────────────────────────────────────────────────────────
+const SMITHERY_VERSION_RX = /^version:[ \t]*"([^"\n]*)"[ \t]*$/m;
+
+describe('smithery.yaml publish-version guard', () => {
+  it('the committed tree agrees: smithery.yaml declares the canonical version', () => {
+    const m = SMITHERY_VERSION_RX.exec(fs.readFileSync(YAML, 'utf8'));
+    expect(m, 'top-level `version: "x.y.z"` not found in smithery.yaml').toBeTruthy();
+    expect(m[1], 'the Smithery descriptor version drifted from server.json').toBe(CANON_VERSION);
+  });
+
+  // ── the must-fail control: the .includes() hole itself ──
+  // Drift the DECLARED version while leaving the canonical string in the file,
+  // in the file's own comment format. `includes()` reported this tree clean.
+  it('FAILS when the declared version drifts but a comment still carries canon', () => {
+    withMutation((orig) => {
+      const decl = `version: "${CANON_VERSION}"`;
+      expect(orig.split(decl).length - 1, `fixture anchor must appear exactly once: "${decl}"`).toBe(1);
+      const next = orig
+        .replace(decl, 'version: "9.9.9"')
+        .replace('# Last refreshed', `# Last refreshed — canonical sync v${CANON_VERSION} —`);
+      // The whole point: canon is STILL present in the file, just not declared.
+      expect(next.includes(CANON_VERSION),
+        'fixture must leave the canonical string in the file — otherwise it does not '
+        + 'reproduce the includes() hole').toBe(true);
+      expect(SMITHERY_VERSION_RX.exec(next)[1], 'drift fixture did not land').toBe('9.9.9');
+      return next;
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a drifted smithery.yaml version passed because canon appeared elsewhere in the file')
+        .toBe(false);
+      expect(out).toMatch(new RegExp(
+        `smithery\\.yaml version 9\\.9\\.9 != ${CANON_VERSION.replace(/\./g, '\\.')}`));
+    });
+  });
+
+  // ── the vacuity control: unknown-as-SUCCESS ──
+  it('FAILS when the version anchor is gone (matching nothing is not a pass)', () => {
+    withMutation((orig) => {
+      const decl = `version: "${CANON_VERSION}"`;
+      expect(orig.includes(decl), `fixture anchor "${decl}" not found`).toBe(true);
+      // A plausible YAML edit, not vandalism: same key, same value, no quotes.
+      return orig.replace(decl, `version: ${CANON_VERSION}`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the version heal matched nothing and reported the tree CLEAN').toBe(false);
+      expect(out).toMatch(/smithery\.yaml: top-level `version: "x\.y\.z"` key NOT FOUND/);
+    });
+  });
+
+  it('--fix heals the declared version back to canon (and touches nothing else)', () => {
+    withMutation(
+      (orig) => orig.replace(`version: "${CANON_VERSION}"`, 'version: "9.9.9"'),
+      () => {
+        const before = fs.readFileSync(YAML, 'utf8');
+        expect(SMITHERY_VERSION_RX.exec(before)[1], 'mutation did not land').toBe('9.9.9');
+        const { ok } = fix();
+        expect(ok, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+        const after = fs.readFileSync(YAML, 'utf8');
+        expect(SMITHERY_VERSION_RX.exec(after)[1], '--fix did not write the healed version')
+          .toBe(CANON_VERSION);
+        // Surgical: restoring the one value makes the file byte-identical. This also
+        // pins the dropped `\s*` — a rewrite that ran past the end of the version
+        // line would change bytes the heal has no business touching.
+        expect(after.replace(`version: "${CANON_VERSION}"`, 'version: "9.9.9"')).toBe(before);
+      });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// dxt/manifest.json publish-version guard  (★2026-08-30, operator-directed)
+//
+// Not a found defect — a decision. The Claude Desktop extension manifest carried
+// "version": "1.0.0", set at creation (a88e500) and never bumped, while the
+// extension it packages followed the server through 12 minor releases. Claude
+// Desktop shows that number and uses it to decide whether an installed extension
+// is stale, so a frozen 1.0.0 means a day-one installer is never told anything
+// changed. The operator's call is that it joins the DERIVED set.
+//
+// TWO THINGS THIS FILE MUST NOT LOSE, and both have a control below:
+//
+//   1. "dxt_version": "0.1" on line 2 — the DXT SPEC version. Not ours to move.
+//      A bare /"version":/ heal is one careless character away from it.
+//   2. The — escapes. This heal is TEXT-anchored precisely because
+//      JSON.parse -> JSON.stringify is not byte-identical here: it emits a literal
+//      em-dash and reformats 19 bytes of lines the heal has no business touching,
+//      while the COVERAGE loop heals this same file as raw text. Two writers, two
+//      formats, one file.
+// ─────────────────────────────────────────────────────────────────────────────
+const DXT = path.join(ROOT, 'dxt', 'manifest.json');
+const DXT_VERSION_RX = /^  "version": "([^"\n]*)"(?:,)?$/m;
+
+/** Temporarily replace the DXT manifest, run fn, always restore. */
+function withDxtMutation(mutate, fn) {
+  const original = fs.readFileSync(DXT, 'utf8');
+  try {
+    const next = mutate(original);
+    expect(next, 'dxt manifest mutation was a no-op — control proves nothing').not.toBe(original);
+    sandboxWrite(DXT, next);
+    return fn();
+  } finally {
+    sandboxWrite(DXT, original);
+  }
+}
+
+describe('dxt/manifest.json publish-version guard', () => {
+  it('the committed tree agrees: the extension declares the canonical version', () => {
+    const m = DXT_VERSION_RX.exec(fs.readFileSync(DXT, 'utf8'));
+    expect(m, 'top-level `"version": "x.y.z"` not found in dxt/manifest.json').toBeTruthy();
+    expect(m[1], 'the extension version drifted from server.json').toBe(CANON_VERSION);
+  });
+
+  // ── the must-fail control ── reintroduce the frozen-at-creation value.
+  it('FAILS when the extension version drifts from canon', () => {
+    withDxtMutation((orig) => {
+      const from = `  "version": "${CANON_VERSION}",`;
+      expect(orig.split(from).length - 1, `fixture anchor must appear exactly once: "${from}"`).toBe(1);
+      return orig.replace(from, '  "version": "1.0.0",');
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a stale extension version did NOT fail the guard').toBe(false);
+      expect(out).toMatch(new RegExp(
+        `dxt/manifest\\.json version 1\\.0\\.0 != ${CANON_VERSION.replace(/\./g, '\\.')}`));
+    });
+  });
+
+  // ── the vacuity control: unknown-as-SUCCESS ──
+  it('FAILS when the version anchor is gone (matching nothing is not a pass)', () => {
+    withDxtMutation((orig) => {
+      const from = `  "version": "${CANON_VERSION}",`;
+      expect(orig.includes(from), `fixture anchor "${from}" not found`).toBe(true);
+      // A plausible reformat, not vandalism: same key, same value, 4-space indent.
+      return orig.replace(from, `    "version": "${CANON_VERSION}",`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the version heal matched nothing and reported the tree CLEAN').toBe(false);
+      expect(out).toMatch(/dxt\/manifest\.json: top-level `"version": "x\.y\.z"` key NOT FOUND/);
+    });
+  });
+
+  // ── the precision control: dxt_version is NOT ours ──
+  // Drift the top-level version SO A HEAL ACTUALLY FIRES, then prove the write
+  // landed on our key and left the DXT spec version alone. "dxt_version" contains
+  // the substring `version"`, so this is one careless anchor away from breaking
+  // every install by claiming DXT spec 2.12.1.
+  it('never rewrites "dxt_version" — the DXT spec version is not ours to move', () => {
+    withDxtMutation(
+      (orig) => orig.replace(`  "version": "${CANON_VERSION}",`, '  "version": "1.0.0",'),
+      () => {
+        const before = fs.readFileSync(DXT, 'utf8');
+        expect(DXT_VERSION_RX.exec(before)[1], 'drift fixture did not land').toBe('1.0.0');
+        const spec = /"dxt_version": "([^"]*)"/.exec(before)[1];
+        const { ok } = fix();
+        expect(ok, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+        const after = fs.readFileSync(DXT, 'utf8');
+        expect(DXT_VERSION_RX.exec(after)[1], 'the extension version was not healed').toBe(CANON_VERSION);
+        expect(/"dxt_version": "([^"]*)"/.exec(after)[1],
+          'the heal rewrote "dxt_version" — the anchor is matching the DXT SPEC version')
+          .toBe(spec);
+      });
+  });
+
+  // ── the format control ──
+  // The reason this heal is text-anchored rather than a JSON round-trip. If someone
+  // "simplifies" it to JSON.parse/stringify, the — escapes become literal
+  // em-dashes and the file reformats around a one-value change.
+  it('--fix heals surgically, preserving \\u2014 escapes and every other byte', () => {
+    withDxtMutation(
+      (orig) => orig.replace(`  "version": "${CANON_VERSION}",`, '  "version": "1.0.0",'),
+      () => {
+        const before = fs.readFileSync(DXT, 'utf8');
+        const escapesBefore = (before.match(/\\u2014/g) || []).length;
+        expect(escapesBefore, 'fixture should carry \\u2014 escapes — otherwise this control is vacuous')
+          .toBeGreaterThan(0);
+        const { ok } = fix();
+        expect(ok, '--fix exited non-zero').toBe(true);
+        const after = fs.readFileSync(DXT, 'utf8');
+        expect((after.match(/\\u2014/g) || []).length,
+          'the heal unescaped \\u2014 — this is the JSON round-trip reformat the text anchor avoids')
+          .toBe(escapesBefore);
+        // Restoring the one value makes the file byte-identical.
+        expect(after.replace(`  "version": "${CANON_VERSION}",`, '  "version": "1.0.0",')).toBe(before);
+      });
+  });
+
+  it('tracks server.json rather than any version frozen in the script', () => {
+    withServerJsonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.version = '9.87.65';
+      return JSON.stringify(j, null, 2) + '\n';
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the extension did not drift against a moved canonical version').toBe(false);
+      expect(out).toMatch(/dxt\/manifest\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// dchub.dxt — the SHIPPED bundle  (★2026-08-30)
+//
+// Every guard above holds a SOURCE file to canon. dchub.dxt is a committed BINARY
+// at the repo root carrying a COPY of dxt/manifest.json, and nothing built it — it
+// was hand-zipped in a88e500 and last repacked by hand on 2026-07-30 (#107).
+// Measured on 887c250, the shipped manifest read
+//
+//   version 1.0.0 · 81 tools · 15,300+ facilities
+//
+// against a canon of 2.12.1 / 83 / 19,500+, while the daily job healed
+// dxt/manifest.json beside it every single day. `grep -c dchub.dxt` was 0 in both
+// sync-tools-manifest.mjs and daily-manifest-sync.yml's $OWNED: no guard was
+// wrong, none existed, and the artifact a user installs was the stale one.
+//
+// The bridge CODE inside was current — server/index.js was byte-identical to
+// source. Only the metadata rotted, which is what made it invisible: the thing
+// worked, it just lied about what it was.
+// ─────────────────────────────────────────────────────────────────────────────
+const BUNDLE = path.join(ROOT, 'dchub.dxt');
+const DXT_SRC = path.join(ROOT, 'dxt', 'manifest.json');
+
+/** Temporarily replace the committed bundle, run fn, always restore. */
+function withBundleMutation(mutate, fn) {
+  const original = fs.readFileSync(BUNDLE);
+  try {
+    const next = mutate(original);
+    expect(next.equals(original), 'bundle mutation was a no-op — control proves nothing').toBe(false);
+    sandboxWrite(BUNDLE, next);
+    return fn();
+  } finally {
+    sandboxWrite(BUNDLE, original);
+  }
+}
+
+describe('dchub.dxt shipped-bundle guard', () => {
+  it('the committed bundle is a readable zip with the expected layout', async () => {
+    const { readZipEntries } = await import(path.join(ROOT, 'scripts', 'dxt-bundle.mjs'));
+    const e = readZipEntries(fs.readFileSync(BUNDLE));
+    expect([...e.keys()].sort()).toEqual(['manifest.json', 'server/', 'server/index.js']);
+  });
+
+  it('the committed bundle carries the CURRENT source, not a stale copy', () => {
+    const { ok, out } = check();
+    expect(ok, `the shipped bundle drifted from source: ${out}`).toBe(true);
+  });
+
+  // ── the must-fail control ──
+  // Reintroduce the exact defect: a bundle whose embedded manifest is stale while
+  // the source beside it is correct. This is the shape that sat in the repo for a
+  // month, and the shape no guard could see.
+  it('FAILS when the bundle embeds a manifest that disagrees with dxt/manifest.json', async () => {
+    const { readZipEntries, buildZip } = await import(path.join(ROOT, 'scripts', 'dxt-bundle.mjs'));
+    await withBundleMutation((orig) => {
+      const e = readZipEntries(orig);
+      const m = JSON.parse(e.get('manifest.json'));
+      m.version = '1.0.0';                       // the frozen-at-creation value
+      m.description = (m.description || '').replace(/\d+ tools/, '81 tools');
+      return buildZip([
+        { name: 'manifest.json', data: Buffer.from(JSON.stringify(m, null, 2) + '\n', 'utf8') },
+        { name: 'server/' },
+        { name: 'server/index.js', data: e.get('server/index.js') },
+      ]);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a stale shipped bundle did NOT fail the guard').toBe(false);
+      expect(out).toMatch(/dchub\.dxt entry "manifest\.json" does not match dxt\/manifest\.json/);
+    });
+  });
+
+  // ── the code-drift control ──
+  // The metadata is what rotted last time, but the bridge is the part that RUNS.
+  // A bundle shipping stale server/index.js is the worse failure and must also fail.
+  it('FAILS when the bundle ships a stale server/index.js', async () => {
+    const { readZipEntries, buildZip } = await import(path.join(ROOT, 'scripts', 'dxt-bundle.mjs'));
+    await withBundleMutation((orig) => {
+      const e = readZipEntries(orig);
+      return buildZip([
+        { name: 'manifest.json', data: e.get('manifest.json') },
+        { name: 'server/' },
+        { name: 'server/index.js',
+          data: Buffer.concat([e.get('server/index.js'), Buffer.from('\n// stale\n', 'utf8')]) },
+      ]);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a bundle with stale bridge code did NOT fail the guard').toBe(false);
+      expect(out).toMatch(/dchub\.dxt entry "server\/index\.js" does not match dxt\/server\/index\.js/);
+    });
+  });
+
+  // ── the vacuity control: unknown-as-SUCCESS ──
+  // A corrupt or non-zip bundle must be a HARD failure. The tempting spelling —
+  // try/catch and carry on — reports "nothing to compare" as agreement, which is
+  // the silent-green shape this whole file exists to kill.
+  it('FAILS when the bundle is not a readable zip (unreadable is not agreement)', () => {
+    withBundleMutation(() => Buffer.from('not a zip at all', 'utf8'), () => {
+      const { ok, out } = check();
+      expect(ok, 'an unreadable bundle reported the tree CLEAN').toBe(false);
+      expect(out).toMatch(/dchub\.dxt unreadable as a zip/);
+    });
+  });
+
+  // ── the behavioural control ──
+  // --fix must REPACK. daily-manifest-sync.yml stages dchub.dxt in $OWNED, so a
+  // repack that computes but never writes would be discarded with a green log.
+  it('--fix repacks the bundle so it carries source again', async () => {
+    const { readZipEntries, buildZip } = await import(path.join(ROOT, 'scripts', 'dxt-bundle.mjs'));
+    await withBundleMutation((orig) => {
+      const e = readZipEntries(orig);
+      const m = JSON.parse(e.get('manifest.json'));
+      m.version = '1.0.0';
+      return buildZip([
+        { name: 'manifest.json', data: Buffer.from(JSON.stringify(m, null, 2) + '\n', 'utf8') },
+        { name: 'server/' },
+        { name: 'server/index.js', data: e.get('server/index.js') },
+      ]);
+    }, () => {
+      expect(JSON.parse(readZipEntries(fs.readFileSync(BUNDLE)).get('manifest.json')).version,
+        'mutation did not land').toBe('1.0.0');
+      const { ok } = fix();
+      expect(ok, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+      const after = readZipEntries(fs.readFileSync(BUNDLE));
+      expect(after.get('manifest.json').equals(fs.readFileSync(DXT_SRC)),
+        '--fix did not repack the bundle from source').toBe(true);
+      expect(after.get('server/index.js')
+        .equals(fs.readFileSync(path.join(ROOT, 'dxt', 'server', 'index.js'))),
+        '--fix repacked stale bridge code').toBe(true);
+    });
+  });
+
+  // ── the no-churn control ──
+  // A zip embeds a per-entry mtime. If the packer stamped wall-clock time or the
+  // source files' mtimes, the daily job would commit a fresh binary every run
+  // forever — drift noise indistinguishable from a real repack.
+  //
+  // Byte-equality ALONE is too weak to state that: two packs inside one process
+  // share whatever the packer read once, so an mtime-stamping packer passes it.
+  // So pin the property directly — every entry must carry the ZIP epoch
+  // (1980-01-01 00:00), which no clock and no file can produce by accident.
+  it('stamps every entry with the ZIP epoch, so an unchanged tree never churns', async () => {
+    const { packBundle } = await import(path.join(ROOT, 'scripts', 'dxt-bundle.mjs'));
+    const rs = (f) => fs.readFileSync(path.join(ROOT, f));
+    const buf = packBundle(rs);
+
+    // DOS date 1980-01-01 = (0 << 9) | (1 << 5) | 1 = 0x0021; time 00:00:00 = 0.
+    const stamps = [];
+    for (let i = 0; i + 4 <= buf.length; i++) {
+      if (buf.readUInt32LE(i) === 0x04034b50) {
+        stamps.push({ time: buf.readUInt16LE(i + 10), date: buf.readUInt16LE(i + 12) });
+      }
+    }
+    expect(stamps.length, 'no local file headers found — this control is vacuous').toBe(3);
+    for (const s of stamps) {
+      expect(s.date, 'an entry is stamped with a real date — the packer read a clock or an mtime, '
+        + 'so the daily job would commit a new binary every run').toBe(0x0021);
+      expect(s.time, 'an entry carries a non-zero time stamp').toBe(0);
+    }
+
+    // And, given epoch stamping, identical inputs must give identical bytes.
+    expect(packBundle(rs).equals(buf), 'two packs of the same tree differ').toBe(true);
+  });
+
+  // ── the staging control ──
+  // A heal the workflow does not stage is discarded with a green log. That failure
+  // mode is why daily-manifest-sync.yml grew its UNOWNED-HEAL GATE; this asserts
+  // the new binary is actually covered rather than trusting the gate to catch it.
+  it('daily-manifest-sync.yml stages dchub.dxt in $OWNED', () => {
+    const wf = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'daily-manifest-sync.yml'), 'utf8');
+    const m = wf.match(/OWNED="([\s\S]*?)"/);
+    expect(m, '$OWNED assignment not found in daily-manifest-sync.yml').toBeTruthy();
+    const owned = new Set(m[1].split(/\s+/).filter((x) => x && x !== '\\'));
+    expect(owned.has('dchub.dxt'),
+      'dchub.dxt is repacked by --fix but not staged — the daily job would discard it').toBe(true);
   });
 });
 
