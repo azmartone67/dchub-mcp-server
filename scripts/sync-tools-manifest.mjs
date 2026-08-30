@@ -119,6 +119,87 @@ for (const key of ['deals', 'facilities', 'markets', 'countries']) {
   P[key] = SNAP[key];
 }
 
+// ---- canonical ASSET-CLASS quantities --------------------------------------
+// ★2026-08-30. The four phrase quantities above heal from canon_phrases.json.
+// The ASSET-CLASS figures did not: server.mjs:12048 recorded them as "not yet
+// in the phrases feed and remain hand-bound", and hand-bound is exactly how
+// they rotted. Measured that morning against the LIVE gate — one session, one
+// server, two answers:
+//
+//   initialize.instructions    330,000+ assets · 127k substations · 64k fiber
+//   dchub://coverage resource  320,000+ assets · 126k substations · 55k fiber
+//
+// The coverage resource carried the CORRECT 19,500+ facilities and 300+ markets
+// in the SAME paragraph — because those two heal and the asset figures did not.
+// Fiber read 15% under live (55k vs 64,836 measured). And nothing could go red:
+// instructions-compose.test.mjs asserts only that the KEY EXISTS in the facts
+// object, and end-of-burst-hook.test.mjs asserts against its own hardcoded
+// '320,000+' fixture, so both stayed green while the published copy drifted.
+//
+// The instructions blob already composes these live from canonical/mcp_facts.json
+// (_composeInstructions, behind a freshness gate). This block puts every OTHER
+// surface on that same file, so the two halves of one server cannot answer
+// differently again.
+//
+// ★ Source is mcp_facts.json, NOT canon_phrases.json: the asset layers come from
+//   /api/v1/infrastructure/stats and have no /api/v1/canon/phrases home. Same
+//   floors-round-DOWN semantic, same refusal to invent a fallback.
+const FACTS_FILE = 'canonical/mcp_facts.json';
+const isAssetVal = (s) => typeof s === 'string' && /^\d{1,3}(?:,\d{3})*k?\+?$/.test(s);
+const factsFatal = (msg) => {
+  console.error(`FATAL (facts): ${msg}\n` +
+    `${FACTS_FILE} is the ONLY source of asset-class quantities — there is\n` +
+    `deliberately no hardcoded fallback, for the same reason canon_phrases.json\n` +
+    `has none: a frozen number republishes stale canon under a green check.\n` +
+    `Regenerate it in dchub-backend:  python3 mcp_facts_export.py`);
+  process.exit(2);
+};
+let FACTS = null;
+try { FACTS = readJSON(FACTS_FILE); }
+catch (e) { factsFatal(`cannot read the facts snapshot — ${e.message}`); }
+
+// Freshness: borrow server.mjs's OWN gate instead of keeping a second copy of
+// 45. Past that age _composeInstructions stops publishing figures at all, so
+// healing PERMANENT literals from a file that stale would bake in exactly the
+// numbers the live blob has already decided it will not serve. Parsed out of
+// the source text — never imported, because importing server.mjs boots a server.
+{
+  const mAge = /_FACTS_MAX_AGE_DAYS\s*=\s*(\d+)/.exec(read('server.mjs'));
+  if (!mAge) factsFatal('server.mjs no longer exports _FACTS_MAX_AGE_DAYS — the '
+    + 'freshness gate this heal borrows has moved; re-point it before healing.');
+  const gen = Date.parse(FACTS.generated_at);
+  if (!Number.isFinite(gen)) factsFatal(`generated_at is ${JSON.stringify(FACTS.generated_at)}, unparseable`);
+  const ageDays = (Date.now() - gen) / 86400e3;
+  if (ageDays > Number(mAge[1])) factsFatal(
+    `the facts snapshot is ${ageDays.toFixed(0)}d old (gate ${mAge[1]}d). `
+    + `_composeInstructions has already stopped publishing figures at this age; `
+    + `healing literals from it would republish what the live blob refuses.`);
+}
+
+// noun → the exact phrase shapes these figures are published in. Deliberately
+// narrow: "assets" alone is ordinary English, so the mapped-asset rule requires
+// the word "mapped"; and "US power plants" must stay distinct from the GEM
+// "global power generating units" sitting in the same sentence beside it.
+const ASSET_QUANTITIES = [
+  { key: 'infrastructure_assets_total', label: 'mapped-asset total',
+    noun: String.raw`mapped\s+(?:[A-Za-z&/-]+\s+){0,2}assets\b` },
+  { key: 'substations',        label: 'substation count',        noun: String.raw`substations\b` },
+  { key: 'transmission_lines', label: 'transmission-line count', noun: String.raw`transmission\s+lines\b` },
+  { key: 'fiber_routes',       label: 'fiber-route count',       noun: String.raw`fiber\s+routes\b` },
+  { key: 'gas_pipelines',      label: 'gas-pipeline count',      noun: String.raw`gas\s+pipeline\s+segments\b` },
+  { key: 'power_plants_us',    label: 'US power-plant count',    noun: String.raw`US\s+power\s+plants\b` },
+  { key: 'submarine_cables',   label: 'subsea-cable count',      noun: String.raw`subsea\s+cables\b` },
+  { key: 'cable_landings',     label: 'cable-landing count',     noun: String.raw`cable\s+landings\b` },
+  { key: 'generating_units_global', label: 'generating-unit count',
+    noun: String.raw`global\s+power\s+generating\s+units\b` },
+].map(({ key, label, noun }) => {
+  const v = FACTS.numbers?.[key];
+  if (!isAssetVal(v)) factsFatal(
+    `numbers.${key} is ${JSON.stringify(v)}, not a floor phrase like "330,000+" or "127k". `
+    + `Refusing to heal published surfaces from a malformed snapshot.`);
+  return { noun, label, canon: () => v };
+});
+
 // --print-count: emit the live tool count (from server.mjs) and exit. Lets the
 // daily-manifest-sync workflow feed the SAME source-of-truth number into the
 // GitHub About field, which aggregators (Glama) mirror but no manifest file owns.
@@ -298,6 +379,12 @@ const applyQuantities = (file, txt, rules, commentAware) => {
   let txt = readCur(f);
   const before = txt;
   txt = applyQuantities(f, txt, QUANTITIES.filter((q) => q.label !== 'country count'), true);
+  // ★2026-08-30 asset-class figures — same matcher, same reporting, same
+  // comment-aware exclusion. That last part matters here more than anywhere
+  // else: the dated rebind history in this file's header quotes the OLD
+  // literals ("320,000+/126k/94k/55k/30k/…") and must stay true, so those
+  // //-comment lines are never scanned and never healed.
+  txt = applyQuantities(f, txt, ASSET_QUANTITIES, true);
   // number-AFTER-noun shapes in the reference resources
   const AFTER_NOUN = [
     { rx: /(\*\*Facilities:\*\*\s+)(\d[\d,]*\+)/g, canon: () => P.facilities, label: 'facility count' },

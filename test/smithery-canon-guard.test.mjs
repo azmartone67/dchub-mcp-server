@@ -423,6 +423,145 @@ describe('smithery.yaml canonical-quantity guard', () => {
   });
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// ASSET-CLASS quantities (★2026-08-30)
+//
+// WHY THIS EXISTS: the four phrase quantities above healed from
+// canon_phrases.json. The asset-class figures did not — server.mjs recorded
+// them as "not yet in the phrases feed and remain hand-bound" — so they
+// rotted for a month while every check stayed green. Measured against the
+// LIVE gate on 2026-08-30, one session, one server, two answers:
+//
+//   initialize.instructions    330,000+ assets · 127k substations · 64k fiber
+//   dchub://coverage resource  320,000+ assets · 126k substations · 55k fiber
+//
+// The coverage resource carried the CORRECT facilities and markets figures in
+// the SAME paragraph, because those two heal and the asset ones did not.
+// Fiber published 15% under the measured 64,836.
+//
+// Nothing could go red. instructions-compose.test.mjs asserts only that the
+// KEY EXISTS in the facts object; end-of-burst-hook.test.mjs asserts against
+// its own hardcoded '320,000+' fixture. Both are still green and both always
+// would have been. So, as above, the MUST-FAIL controls are the point of this
+// block — not the happy path.
+//
+// Canon is read from canonical/mcp_facts.json and never transcribed here, for
+// the same reason the block above reads canon_phrases.json: a number frozen in
+// a test can only ever certify a stale number in the source.
+const FACTS_PATH = path.join(ROOT, 'canonical', 'mcp_facts.json');
+const SERVER = path.join(ROOT, 'server.mjs');
+const FACTS = (() => {
+  try { return JSON.parse(fs.readFileSync(FACTS_PATH, 'utf8')); }
+  catch { return null; }
+})();
+const isAssetPhrase = (v) => typeof v === 'string' && /^\d{1,3}(?:,\d{3})*k?\+?$/.test(v);
+const FIBER = (FACTS && isAssetPhrase(FACTS.numbers?.fiber_routes)) ? FACTS.numbers.fiber_routes : null;
+const ASSETS_TOTAL = (FACTS && isAssetPhrase(FACTS.numbers?.infrastructure_assets_total))
+  ? FACTS.numbers.infrastructure_assets_total : null;
+
+/** Temporarily replace canonical/mcp_facts.json, run fn, always restore. */
+function withFactsMutation(mutate, fn) {
+  const original = fs.readFileSync(FACTS_PATH, 'utf8');
+  try {
+    sandboxWrite(FACTS_PATH, mutate(original));
+    return fn();
+  } finally {
+    sandboxWrite(FACTS_PATH, original);
+  }
+}
+
+/** Temporarily replace server.mjs, run fn, always restore. */
+function withServerMutation(mutate, fn) {
+  const original = fs.readFileSync(SERVER, 'utf8');
+  try {
+    sandboxWrite(SERVER, mutate(original));
+    return fn();
+  } finally {
+    sandboxWrite(SERVER, original);
+  }
+}
+
+describe('server.mjs asset-class quantity guard', () => {
+  it('resolves the asset floors from the facts snapshot (not from this test)', () => {
+    expect(FIBER, `numbers.fiber_routes missing/malformed in ${FACTS_PATH} — this guard is blind`)
+      .toBeTruthy();
+    expect(ASSETS_TOTAL, `numbers.infrastructure_assets_total missing/malformed — this guard is blind`)
+      .toBeTruthy();
+  });
+
+  // ── the must-fail control ──
+  // Reintroduce the EXACT defect measured on 2026-08-30: the coverage resource
+  // republishing a fiber figure the instructions blob had already moved past.
+  it('FAILS when a published asset literal drifts from the facts snapshot', () => {
+    const stale = FIBER === '55k' ? '51k' : '55k';   // never collide with canon
+    withServerMutation((orig) => {
+      const from = `${FIBER} fiber routes`;
+      expect(orig.includes(from), `fixture anchor "${from}" not found in server.mjs`).toBe(true);
+      return orig.replace(from, `${stale} fiber routes`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a stale published fiber-route count did NOT fail the guard').toBe(false);
+      expect(out).toMatch(/stale fiber-route count/);
+    });
+  });
+
+  // ── the fail-closed controls ──
+  // Same contract the canon snapshot has: an unusable source is a hard stop,
+  // never a silent skip. The pre-existing facts check read this same file as
+  // `try { … } catch { /* not generated yet */ }` — fail-OPEN — so a missing
+  // file disabled it silently. These prove the asset heal does not inherit that.
+  it('REFUSES to run when the facts snapshot is unreadable (no frozen fallback)', () => {
+    withFactsMutation(() => '{ not json', () => {
+      const { ok, out } = check();
+      expect(ok, 'guard ran anyway — it must not heal from a hardcoded fallback').toBe(false);
+      expect(out).toMatch(/FATAL \(facts\)/);
+    });
+  });
+
+  it('REFUSES to run when an asset quantity is not a floor phrase', () => {
+    withFactsMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.numbers.fiber_routes = null;   // the unknown-as-success direction
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'guard accepted a malformed asset quantity').toBe(false);
+      expect(out).toMatch(/not a floor phrase/);
+    });
+  });
+
+  // The dangerous direction, and the one the compose path already refuses:
+  // past _FACTS_MAX_AGE_DAYS, _composeInstructions stops publishing figures
+  // entirely. Healing PERMANENT literals from a snapshot that stale would bake
+  // in exactly the numbers the live blob has decided it will not serve.
+  it('REFUSES to heal from a snapshot older than the compose freshness gate', () => {
+    withFactsMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.generated_at = new Date(Date.now() - 365 * 86400e3).toISOString();
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'guard healed published copy from a year-old snapshot').toBe(false);
+      expect(out).toMatch(/facts snapshot is \d+d old/);
+    });
+  });
+
+  it('tracks the snapshot rather than any number frozen in the script', () => {
+    // Move the asset total to a value that appears nowhere in the repo. The
+    // COMMITTED surfaces must now read as drifted against it — proving the
+    // figure enforced comes from the snapshot, not from source.
+    withFactsMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.numbers.infrastructure_assets_total = '911,000+';
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the committed surfaces did not drift against a moved canon').toBe(false);
+      expect(out).toMatch(/stale mapped-asset total \(canonical 911,000\+\)/);
+    });
+  });
+});
+
 // Order-proof backstop for the isolation control above.
 afterAll(() => {
   const changed = fingerprintDiff(TREE_BEFORE, fingerprintTree(REAL_ROOT));
