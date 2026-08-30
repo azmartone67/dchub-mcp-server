@@ -585,11 +585,26 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   };
 }
 // ── Config ──────────────────────────────────────────────────────────────────
+// ★2026-08-30 — SUPERSEDES the "single source of truth" line below on ONE
+// point: this literal is DERIVED. scripts/sync-tools-manifest.mjs heals it
+// from server.json (the operator-owned canonical version), exactly as it heals
+// package.json / smithery.yaml / mcp-server.json. Until then it was the one
+// publish surface that loop did not cover, and #262's bump to 2.12.1 moved all
+// four manifest surfaces while the gateway went on answering 2.12.0 for four
+// days — under a green `node scripts/sync-tools-manifest.mjs`, which had no
+// reason to look here. #267 healed that instance and made the guard blocking;
+// the heal is what stops the next operator bump needing a hand-edit at all.
+// The heal anchors on the LITERAL only, never the changelog beside it: that
+// history is dated and must stay true, so a bump moves the version without
+// touching the entries. Add the entry yourself when the bump means something.
+//
 // Single source of truth for the server version — used by the McpServer init,
 // the /health endpoint, and the startup banner (the banner sat at a stale
 // hardcoded 'v2.1.10' for months). Written as a `version: 'x.y.z'` literal so
-// regression.test.mjs's publish-surface version grep (/version:\s*['"].../)
+// test/version-consistency.test.mjs's publish-surface grep (/version:\s*['"].../)
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
+// (That guard lived in regression.test.mjs until #267 moved it onto the hard
+// gate — it had been running in a continue-on-error step and could not fail.)
 const SERVER_VERSION = { version: '2.12.1' }.version;  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
