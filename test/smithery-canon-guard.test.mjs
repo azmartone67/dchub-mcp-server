@@ -562,6 +562,186 @@ describe('server.mjs asset-class quantity guard', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// server.mjs publish-version guard  (★2026-08-30)
+//
+// THE DEFECT, measured on origin/main:
+//
+//   package.json 2.12.1 · server.json 2.12.1 · mcp-server.json 2.12.1 ·
+//   smithery.yaml 2.12.1 · server.mjs 2.12.0
+//
+// #262 bumped the canonical version to trigger a registry republish. The three
+// DERIVED manifest surfaces followed; server.mjs did not, so the live gateway
+// kept introducing itself as 2.12.0 for four days — the one surface of the five
+// a connecting agent actually reads.
+//
+// #267 fixed the half that let it MERGE: the guard that caught this lived in
+// regression.test.mjs, named in test.yml's continue-on-error step, so it went
+// red while `smoke` reported SUCCESS. It now lives in
+// test/version-consistency.test.mjs on the hard gate, and that file is where
+// the five-surface agreement rule belongs.
+//
+// These controls guard the other half, which #267 left open: nothing HEALS
+// server.mjs. `node scripts/sync-tools-manifest.mjs` printed "✓ all manifest +
+// facts surfaces consistent" on the drifted tree, because the version loop
+// carried package.json / smithery.yaml / mcp-server.json and stopped there.
+// Detection alone leaves every future operator bump a hand-edit that fails the
+// build until someone notices; the heal makes `--fix` (and the daily job that
+// runs it) carry the gateway like every other derived surface.
+//
+// Extended here rather than in a new file for the reason test.yml states in its
+// own comment block: it names test files EXPLICITLY, `npm test` is invoked by no
+// workflow, and a new file no line names is dead on arrival, silently green.
+// ─────────────────────────────────────────────────────────────────────────────
+const SERVER_JSON = path.join(ROOT, 'server.json');
+
+// Canon read FROM server.json — the operator-owned canonical version — never
+// transcribed into this file. A version literal frozen in a test certifies the
+// test, not the repo.
+const CANON_VERSION = (() => {
+  try {
+    const v = JSON.parse(fs.readFileSync(SERVER_JSON, 'utf8')).version;
+    return /^\d+\.\d+\.\d+$/.test(v) ? v : null;
+  } catch { return null; }
+})();
+
+/** Temporarily replace server.json, run fn, always restore. */
+function withServerJsonMutation(mutate, fn) {
+  const original = fs.readFileSync(SERVER_JSON, 'utf8');
+  try {
+    sandboxWrite(SERVER_JSON, mutate(original));
+    return fn();
+  } finally {
+    sandboxWrite(SERVER_JSON, original);
+  }
+}
+
+/** Run the sync script in --fix mode. Returns {ok, out}. */
+function fix() {
+  try {
+    return { ok: true, out: execFileSync('node', [SCRIPT, '--fix'], { cwd: ROOT, encoding: 'utf8' }) };
+  } catch (e) {
+    return { ok: false, out: `${e.stdout || ''}${e.stderr || ''}` };
+  }
+}
+
+const SERVER_VERSION_RX = /const SERVER_VERSION = \{ version: '(\d+\.\d+\.\d+)' \}\.version/;
+
+describe('server.mjs publish-version guard', () => {
+  it('resolves the canonical version from server.json (not from this test)', () => {
+    expect(CANON_VERSION, `server.json .version missing/malformed in ${SERVER_JSON} — this guard is blind`)
+      .toBeTruthy();
+  });
+
+  it('the committed tree agrees: the gateway reports the canonical version', () => {
+    const m = SERVER_VERSION_RX.exec(fs.readFileSync(SERVER, 'utf8'));
+    expect(m, 'SERVER_VERSION declaration not found in server.mjs').toBeTruthy();
+    expect(m[1], 'the live gateway version drifted from server.json').toBe(CANON_VERSION);
+  });
+
+  // ── the must-fail control ──
+  // Reintroduce the EXACT defect: the gateway republishing a version the
+  // manifest surfaces have already moved past.
+  it('FAILS when the gateway version drifts from the canonical version', () => {
+    const [maj, min, pat] = CANON_VERSION.split('.').map(Number);
+    const stale = `${maj}.${min}.${pat === 0 ? 1 : pat - 1}`;   // never collide with canon
+    expect(stale).not.toBe(CANON_VERSION);
+    withServerMutation((orig) => {
+      const from = `const SERVER_VERSION = { version: '${CANON_VERSION}' }.version`;
+      expect(orig.split(from).length - 1, `fixture anchor must appear exactly once: "${from}"`).toBe(1);
+      return orig.replace(from, `const SERVER_VERSION = { version: '${stale}' }.version`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a stale gateway version did NOT fail the guard').toBe(false);
+      expect(out).toMatch(new RegExp(`server\\.mjs SERVER_VERSION ${stale.replace(/\./g, '\\.')} != ${CANON_VERSION.replace(/\./g, '\\.')}`));
+    });
+  });
+
+  // ── the vacuity control: unknown-as-SUCCESS, the dangerous direction ──
+  // The heal is a regex over source. A regex whose anchor has moved matches
+  // nothing and heals nothing, and the naive spelling of this check reports
+  // that as a clean tree — the same silent-green shape the whole script exists
+  // to kill, applied to the one surface agents actually read. Removing the
+  // anchor must be a HARD failure, never an unobserved pass.
+  it('FAILS when the SERVER_VERSION anchor is gone (matching nothing is not a pass)', () => {
+    withServerMutation((orig) => {
+      const from = `const SERVER_VERSION = { version: '${CANON_VERSION}' }.version`;
+      expect(orig.includes(from), `fixture anchor "${from}" not found in server.mjs`).toBe(true);
+      // A plausible refactor, not vandalism: same value, shape the anchor misses.
+      return orig.replace(from, `const SERVER_VERSION = String('${CANON_VERSION}')`);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the version heal matched nothing and reported the tree CLEAN').toBe(false);
+      expect(out).toMatch(/SERVER_VERSION literal NOT FOUND/);
+    });
+  });
+
+  it('tracks server.json rather than any version frozen in the script', () => {
+    // Move the canonical version to a value that appears nowhere in the repo.
+    // Every DERIVED surface must now read as drifted against it — server.mjs
+    // among them, which is the whole point of this block.
+    withServerJsonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.version = '9.87.65';
+      return JSON.stringify(j, null, 2) + '\n';
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'the committed surfaces did not drift against a moved canonical version').toBe(false);
+      expect(out).toMatch(/server\.mjs SERVER_VERSION \d+\.\d+\.\d+ != 9\.87\.65/);
+      // The pre-existing three must still be named too — this block extends the
+      // loop, it does not replace it.
+      expect(out).toMatch(/package\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
+      expect(out).toMatch(/mcp-server\.json version \d+\.\d+\.\d+ != 9\.87\.65/);
+      expect(out).toMatch(/smithery\.yaml does not contain canonical version 9\.87\.65/);
+    });
+  });
+
+  // Behavioural, not just declarative: --fix must actually WRITE the healed
+  // literal. daily-manifest-sync.yml already stages server.mjs in $OWNED (the
+  // prose-quantity heal writes it), so a heal that computes but never writes
+  // would be discarded with a green log — the failure mode that workflow's own
+  // UNOWNED-HEAL GATE was added to stop.
+  it('--fix heals the gateway version back to canon (and touches nothing else)', () => {
+    const [maj, min, pat] = CANON_VERSION.split('.').map(Number);
+    const stale = `${maj}.${min}.${pat === 0 ? 1 : pat - 1}`;
+    withServerMutation((orig) => orig.replace(
+      `const SERVER_VERSION = { version: '${CANON_VERSION}' }.version`,
+      `const SERVER_VERSION = { version: '${stale}' }.version`,
+    ), () => {
+      const before = fs.readFileSync(SERVER, 'utf8');
+      expect(SERVER_VERSION_RX.exec(before)[1], 'mutation did not land').toBe(stale);
+      const { ok } = fix();
+      expect(ok, '--fix exited non-zero on a drift it is supposed to heal').toBe(true);
+      const after = fs.readFileSync(SERVER, 'utf8');
+      expect(SERVER_VERSION_RX.exec(after)[1], '--fix did not write the healed version').toBe(CANON_VERSION);
+      // The heal is surgical: restoring the one literal makes the file byte-identical.
+      expect(after.replace(SERVER_VERSION_RX, `const SERVER_VERSION = { version: '${stale}' }.version`))
+        .toBe(before);
+    });
+  });
+
+  // The heal is anchored on SERVER_VERSION alone — deliberately, so it can never
+  // rewrite the dated changelog beside it. That leaves one gap the anchored heal
+  // cannot see, and it is covered elsewhere rather than here: a SECOND semver
+  // literal in server.mjs disagreeing with the first. Measured 2026-08-30 —
+  // injecting `{ version: '1.0.0' }` leaves this check at exit 0 while
+  // test/version-consistency.test.mjs reports "2.12.1,1.0.0". That file is on
+  // the hard gate since #267, so the broader rule blocks; duplicating it here
+  // would be a second copy to rot. Stated so the boundary is deliberate, not
+  // assumed.
+
+  // The dated changelog shares the SERVER_VERSION line. It is history, and a
+  // heal that rewrote it would make this file's own record of what shipped
+  // false — the same rule the asset-class heal honours for //-comment lines.
+  it('leaves the dated changelog on that line untouched', () => {
+    const line = fs.readFileSync(SERVER, 'utf8')
+      .split('\n').find((l) => SERVER_VERSION_RX.test(l));
+    expect(line, 'SERVER_VERSION line not found').toBeTruthy();
+    const history = line.slice(line.indexOf('//'));
+    expect(history, 'the trailing changelog lost its dated entries').toMatch(/\/\/ \d+\.\d+\.\d+ \(\d{4}-\d{2}-\d{2}\):/);
+  });
+});
+
 // Order-proof backstop for the isolation control above.
 afterAll(() => {
   const changed = fingerprintDiff(TREE_BEFORE, fingerprintTree(REAL_ROOT));

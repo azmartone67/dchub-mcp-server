@@ -488,6 +488,47 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`smithery.yaml does not contain canonical version ${VERSION}`);
     if (FIX) pend('smithery.yaml', sy.replace(/^version:\s*.*$/m, `version: "${VERSION}"`));
   }
+  // ★2026-08-30 — server.mjs, the publish surface this loop could not see.
+  // The three surfaces above follow server.json. server.mjs did not, and on
+  // 2026-08-29 the gap shipped: #262 bumped the canonical version to 2.12.1 to
+  // trigger a registry republish, every manifest surface followed, and the LIVE
+  // GATEWAY went on introducing itself as 2.12.0 — the version an agent
+  // actually reads at McpServer init, at /health, and in the startup banner.
+  // This script ran on that tree and printed "✓ all manifest + facts surfaces
+  // consistent", because the one surface that had drifted was not in the loop.
+  //
+  // The drift WAS caught — by regression.test.mjs's publish-surface grep. But
+  // that file sits in test.yml's `continue-on-error: true` live step, so it
+  // could only ever report the drift, never block it, and main stayed red for a
+  // day. This block is the blocking half: manifest-consistency.yml runs check
+  // mode on every push and PR with no continue-on-error.
+  //
+  // OWNERSHIP IS UNCHANGED. server.json.version stays operator-owned and is
+  // still never written here (see the server.json block above). server.mjs
+  // simply joins package.json / smithery.yaml / mcp-server.json as a DERIVED
+  // surface that follows it. No workflow edit is needed either: server.mjs is
+  // already in daily-manifest-sync.yml's $OWNED list — the prose-quantity heal
+  // writes it — so --fix is staged, committed and pushed by the same daily job.
+  //
+  // ★ Anchored on the SERVER_VERSION declaration, never a bare /version:/. The
+  // trailing changelog on that same line is dated history ("2.12.0
+  // (2026-08-12): …") and, like every comment this script touches, must stay
+  // true. A missing anchor is a hard PROBLEM rather than a silent no-op: a
+  // regex heal that quietly matches nothing is the precise silent-green shape
+  // this script exists to kill, and it would leave the gateway free to drift
+  // again under a green check.
+  const sm = readCur('server.mjs');
+  const SVRX = /(const SERVER_VERSION = \{ version: ')(\d+\.\d+\.\d+)('\s*\}\.version)/;
+  const svm = SVRX.exec(sm);
+  if (!svm) {
+    problems.push('server.mjs: SERVER_VERSION literal NOT FOUND — this heal anchors on '
+      + "`const SERVER_VERSION = { version: 'x.y.z' }.version`. If that declaration moved "
+      + 'or changed shape, re-anchor it here. Do not leave the version heal matching '
+      + 'nothing: server.mjs is the version the live gateway reports.');
+  } else if (svm[2] !== VERSION) {
+    problems.push(`server.mjs SERVER_VERSION ${svm[2]} != ${VERSION}`);
+    if (FIX) pend('server.mjs', sm.replace(SVRX, `$1${VERSION}$3`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
