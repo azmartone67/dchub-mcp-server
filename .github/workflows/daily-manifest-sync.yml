@@ -295,21 +295,36 @@ jobs:
           fi
           N=$(node scripts/sync-tools-manifest.mjs --print-count)
           D=$(node scripts/sync-tools-manifest.mjs --print-deals)
+          F=$(node scripts/sync-tools-manifest.mjs --print-facilities)
           CUR=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .description)
-          # Heal BOTH the tool count AND the deal count. The deal count drifted
-          # 2,000+ -> 4,000+ unwatched (a ~2.9x over-claim from AUTO-<date> re-ingest
-          # dupes) while only the tool count was auto-healed — that blind spot is
-          # closed here. Replace only the NUMBER before "deals"; preserve the phrasing.
+          # Heal the tool count, the deal count AND the facility count. The deal
+          # count drifted 2,000+ -> 4,000+ unwatched (a ~2.9x over-claim from
+          # AUTO-<date> re-ingest dupes) while only the tool count was auto-healed
+          # — that blind spot was closed here.
+          #
+          # ★2026-08-31: and the SAME note then described a blind spot it was
+          # itself leaving open. Two rules were added, facilities was not, so the
+          # About field sat at "19,700+ facilities" against a canon of 19,900+ —
+          # on the one surface no manifest file owns and Glama mirrors verbatim.
+          # Two of three claims healed, the third unwatched, reported green.
+          # Replace only the NUMBER before each noun; preserve the phrasing.
+          #
+          # Each rule is anchored on its OWN noun, so it cannot reach a
+          # neighbouring population: the facilities rule must never touch
+          # "300+ markets". Verified against the live About string before
+          # shipping — facilities healed, markets and deals byte-identical,
+          # and a second pass is a no-op.
           NEW=$(printf '%s' "$CUR" \
             | N="$N" perl -pe 's/\b\d+(?: MCP)? tools\b/$ENV{N}." tools"/e' \
-            | D="$D" perl -pe 's/\b[\d,]+\+(\s+(?:tracked\s+)?(?:M&A\s+)?deals)\b/$ENV{D}.$1/e')
+            | D="$D" perl -pe 's/\b[\d,]+\+(\s+(?:tracked\s+)?(?:M&A\s+)?deals)\b/$ENV{D}.$1/e' \
+            | F="$F" perl -pe 's/\b[\d,]+\+(\s+facilities)\b/$ENV{F}.$1/e')
           if [ "$CUR" = "$NEW" ]; then
-            echo "✓ GitHub About already states ${N} tools / ${D} deals — no drift"
+            echo "✓ GitHub About already states ${N} tools / ${D} deals / ${F} facilities — no drift"
             exit 0
           fi
           echo "About drifted — healing:"; echo "  was: $CUR"; echo "  now: $NEW"
           if gh repo edit "${GITHUB_REPOSITORY}" --description "$NEW"; then
-            echo "::notice::✅ GitHub About synced to ${N} tools / ${D} deals — Glama & other About-mirroring listings will re-scan on their own cadence."
+            echo "::notice::✅ GitHub About synced to ${N} tools / ${D} deals / ${F} facilities — Glama & other About-mirroring listings will re-scan on their own cadence."
           else
             echo "::warning::About edit failed — the PAT likely lacks repo 'Administration: write' / classic 'repo' scope. Grant it or add REPO_METADATA_TOKEN."
           fi

@@ -209,6 +209,13 @@ if (process.argv.includes('--print-count')) { console.log(COUNT); process.exit(0
 // workflow heals the GitHub About deal count the same way it heals the tool count,
 // so the 2,000+ -> 4,000+ drift (that no auto-heal watched) cannot recur.
 if (process.argv.includes('--print-deals')) { console.log(P.deals); process.exit(0); }
+// --print-facilities: ★2026-08-31, and it closes the SAME blind spot the note
+// above describes closing for deals. The About heal covered tools and deals and
+// silently left the facilities figure alone, so "19,700+ facilities" sat in the
+// GitHub About field against a canon of 19,900+ — on the one surface no manifest
+// file owns and Glama mirrors verbatim. Two of three claims healed, the third
+// unwatched, reported green: the shape this repo keeps finding.
+if (process.argv.includes('--print-facilities')) { console.log(P.facilities); process.exit(0); }
 
 // ---- quantity guard (derived, not denylisted) ------------------------------
 // ★2026-07-28 (deals/facilities), ★2026-07-30 (markets/countries): the old
