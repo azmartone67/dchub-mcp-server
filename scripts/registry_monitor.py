@@ -59,8 +59,39 @@ CONNECTOR_SLUGS = [
 # Capabilities we have RETIRED. The rule matches test/no-live-dcgi-claims.test.mjs
 # exactly — the word may appear, but never without "withdrawn" — so the same rule
 # now covers the surface that test structurally cannot see.
+# ★2026-08-31 — THE DCGI ENTRY IS GONE, AND ITS REMOVAL IS THE POINT.
+#
+# This fence shipped 2026-08-30 flagging any DCGI mention that did not also say
+# "withdrawn". Measured 2026-08-31 06:57Z, `get_gas_index(state=TX)` returns
+# ok:true with dcgi 81.9, gas_access 84.9, gas_cost 77.4, verdict
+# GAS-ADVANTAGED. The DCGI composite was RESTORED 2026-08-30. So the rule
+# inverted overnight: it would have flagged CORRECT copy as a regression and
+# passed STALE "withdrawn" copy as clean — a fence enforcing a false claim,
+# roughly eighteen hours after I wrote it warning about fences that cry wolf.
+#
+# The lesson is not "remove the entry". It is that a withdrawal is a DATED
+# EVENT, not a permanent property, and anything keyed on one has to be re-read
+# against the live tool rather than trusted. That is the same rule /bind states
+# for quantities, applied to capabilities: the response is authoritative, the
+# prose about it is not.
+#
+# WHAT IS STILL WITHDRAWN, verified the same way: `get_gas_economics(dallas)`
+# returns the $/MMBtu layers and NO $/MWh field. The gas-to-grid levelized cost
+# is genuinely still gone, so it takes the DCGI's place and the mechanism stays
+# live. Its pattern is deliberately the PHRASE, not "$/MWh" — electricity
+# prices are legitimately quoted in $/MWh all over these listings and matching
+# the unit would fire on every one of them.
+#
+# NOT FENCED YET, on purpose: several surfaces now assert the INVERSE false
+# claim — server.mjs, the methodology resource and at least two Glama listings
+# still call the DCGI withdrawn. Catching that needs a stale-withdrawal rule
+# and answers we do not have (were the two defective terms fixed, or was the
+# score restored on different math; is 81.9 comparable to the pre-08-08 68.0).
+# Deliberately left open rather than guessed at.
 WITHDRAWN_CAPABILITIES = [
-    ("DCGI", re.compile(r"\bDCGI\b|(?:Data[- ]Center |DC Hub )?Gas Index", re.I), "2026-08-08"),
+    ("gas-to-grid $/MWh",
+     re.compile(r"gas[-\s]?to[-\s]?grid|levelized (?:gas )?cost", re.I),
+     "2026-08-08"),
 ]
 
 
@@ -142,6 +173,11 @@ def connector_regressions():
     regressions, notes = [], []
     if not CONNECTOR_SLUGS:
         return ["CONNECTOR_SLUGS is empty — the connector fence is scanning nothing"], notes
+    if not WITHDRAWN_CAPABILITIES:
+        # Retiring the last entry (as the DCGI restore nearly did) would leave
+        # scan_withdrawn() returning [] for every input — a capability fence
+        # that has silently stopped checking capabilities. Structural, not a note.
+        return ["WITHDRAWN_CAPABILITIES is empty — the capability fence checks nothing"], notes
     for slug in CONNECTOR_SLUGS:
         html, err, transient = connector_listing_text(slug)
         if err:
@@ -682,16 +718,27 @@ def _self_test():
     """Offline must-fail controls for the pure half. The network half reuses the
     page-fetch pattern already proven by glama_page_tool_count()."""
     cases = [
-        ("the DCGI Data Center Gas Index (per-state natural-gas suitability)", True,
-         "the exact live blurb this fence was written for"),
+        # The DCGI is LIVE again (restored 2026-08-30, verified against
+        # get_gas_index 2026-08-31). None of these may flag any more — the four
+        # cases below are the ones this fence used to get wrong in the other
+        # direction, kept as regression controls against re-adding the entry.
+        ("the DCGI Data Center Gas Index (per-state natural-gas suitability)", False,
+         "was the fence's original target; the DCGI is live, so this is now TRUE copy"),
         ("the DC Hub Gas Index (DCGI) was WITHDRAWN 2026-08-08", False,
-         "honest mention — allowed, an agent asking deserves the answer"),
+         "stale, but NOT this fence's job — a stale-withdrawal rule is deliberately unbuilt"),
         ("DCPI market verdicts and live grid telemetry", False, "DCPI is not DCGI"),
-        ("Gas Index scores gas access by state", True, "aliased name, no withdrawal"),
-        ("live gas data via get_gas_intelligence", False, "gas data is live; no index claim"),
-        ("get_gas_index Gas Index (DCGI) Read-only Idempotent", True,
-         "tool display name — flags in isolation, which is WHY the scan is scoped "
-         "to the description region and never the tool catalogue"),
+        ("get_gas_index Gas Index (DCGI) Read-only Idempotent", False,
+         "tool display name — no longer flags, so the description-region scoping "
+         "is no longer load-bearing for THIS entry; it stays because the next "
+         "entry will need it"),
+        # The claim that IS still withdrawn.
+        ("gas-to-grid levelized cost across CCGT heat rates", True,
+         "the $/MWh withdrawal, still true 2026-08-31"),
+        ("gas to grid $/MWh for this market", True, "spacing variant"),
+        ("the gas-to-grid figure was WITHDRAWN 2026-08-08", False,
+         "honest mention — allowed, an agent asking deserves the answer"),
+        ("wholesale power at $42/MWh in ERCOT", False,
+         "a legitimate electricity price — why the pattern matches the PHRASE, not the unit"),
     ]
     bad = 0
     for text, should_flag, why in cases:
