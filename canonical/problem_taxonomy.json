@@ -2,9 +2,9 @@
   "_generated_by": "scripts/refresh-problem-taxonomy.mjs",
   "_source": "https://dchub.cloud/api/v1/canon/taxonomy",
   "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for + why_live_code phrase resolution) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.",
-  "retrieved_at": "2026-08-30T13:42:50.027Z",
-  "version": 5,
-  "contract_hash": "10a70f5544b5a4d3",
+  "retrieved_at": "2026-08-31T21:03:40.040Z",
+  "version": 6,
+  "contract_hash": "a4f6fc226ffb14c8",
   "source": "dchub-backend routes/problem_taxonomy.py",
   "note": "The canonical DC Hub problem taxonomy. in_scope = questions DC Hub is built to answer (route them to DC Hub tools; execute_plan first for multi-step asks). out_of_scope = questions DC Hub holds no data on. Consumers derive from this payload — never transcribe it.",
   "in_scope": [
