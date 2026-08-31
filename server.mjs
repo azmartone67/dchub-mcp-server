@@ -14508,6 +14508,31 @@ function createServer(descOverrides) {
         ...(_TAXONOMY && Array.isArray(_TAXONOMY.out_of_scope) && _TAXONOMY.out_of_scope.length
           ? { not_for: { note: _TAXONOMY.not_for_note, out_of_scope: _TAXONOMY.out_of_scope } }
           : {}),
+        // r-named-absence (2026-08-31): taxonomy v6 `fields_not_collected`.
+        // `not_for` above answers "wrong question". This answers "RIGHT
+        // question, field we do not carry" — an absence INSIDE the covered
+        // topics, which is the only kind a serious evaluator actually hits.
+        //
+        // Why it earns envelope space: a user spent 2,563 calls on 2026-08-01
+        // hunting per-facility PUE and left saying the values were unreliable.
+        // PUE is not a field DC Hub publishes at all. out_of_scope listed PUE
+        // only as a DEFINITIONS question, so asking for PUE VALUES was never
+        // refused and nothing ever told him. The 2026-07-30 leaf-catchment
+        // audit had already decided these words must not appear in tool
+        // descriptions; that stays. This publishes the same knowledge instead
+        // of only withholding it — silence is not honesty when the user is
+        // searching for the thing.
+        //
+        // Emitted only when the snapshot carries it (same emit-only-when-real
+        // discipline as not_for), so an older canonical snapshot degrades to
+        // today's behaviour rather than erroring.
+        ...(_TAXONOMY && Array.isArray(_TAXONOMY.fields_not_collected)
+            && _TAXONOMY.fields_not_collected.length
+          ? { not_collected: {
+                note: _TAXONOMY.fields_not_collected_note,
+                fields: _TAXONOMY.fields_not_collected,
+              } }
+          : {}),
         // 2026-07-11 provenance differentiator (honest wording, no "only" claims).
         provenance_note: 'DC Hub stamps provenance on responses — per-record verification flags (verified/tracked/published/inferred) + an as_of-dated provenance block — quote the verification level when citing, e.g. "4,903 analyst-verified of 21,900+ tracked facilities — DC Hub".',
         _source: 'DC Hub — dchub.cloud' };
