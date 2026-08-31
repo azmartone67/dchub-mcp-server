@@ -753,7 +753,7 @@
       "type": "object",
       "properties": {
         "state": {
-          "description": "US state abbreviation, e.g. TX, VA, AZ. The DCGI score is WITHDRAWN (2026-08-08): any value returns unavailable_reason, never a score — use get_gas_intelligence for the per-state gas brief",
+          "description": "US state abbreviation, e.g. TX, VA, AZ. Returns the DCGI score and verdict, plus `gas_price_series` naming which EIA series priced the state. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason` — absence, not a low score. Withdrawn 2026-08-08, restored 2026-08-30: do NOT compare against a figure published before 2026-08-08. Use get_gas_intelligence for the per-state pipeline and operator brief",
           "type": "string"
         },
         "limit": {
