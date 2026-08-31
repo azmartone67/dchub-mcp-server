@@ -48,6 +48,11 @@ LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
 # than a quiet pass, and a slug that stops resolving is reported — a fence that
 # cannot reach its subject must not look like a clean scan.
 CONNECTOR_SLUGS = [
+    # Confirmed 2026-08-31 from the address bar of each live listing. BOTH point
+    # at the same server and the same 83 tools; only the stored blurb differs,
+    # which is why both must be watched and why the difference is measurable:
+    # the quantity-free one scores Server Coherence A, the quantity-dense one C.
+    "cloud.dchub/mcp-server",                              # blurb corrected 2026-08-30
     "cloud.dchub/dc-hub-data-center-intelligence-mcp-server",
 ]
 
