@@ -77,11 +77,26 @@ describe('no current-claim copy names the DCGI without saying it was withdrawn',
   // than fixed. server.mjs's one substantive claim is already covered by the
   // methodology assertion directly below, and the sales copy that was actually
   // wrong is covered in the repo that generates it.
-  it('the methodology resource says the Gas Index was withdrawn', () => {
+  // ★ 2026-08-30 — INVERTED, not deleted. This asserted that the methodology
+  //   resource names the DCGI as WITHDRAWN. The index was restored once all
+  //   three defective terms were repaired, so that assertion now demands a
+  //   falsehood. It is NOT dropped: the live danger moved from "sells a
+  //   withdrawn score" to "serves a restored score as if nothing happened",
+  //   and a reader holding a pre-2026-08-08 figure has to be told the two are
+  //   different indices. The fence now requires the CORRECTION, both dates.
+  it('the methodology resource states the withdrawal AND the restoration', () => {
     const src = read('server.mjs');
     const i = src.indexOf("_R('methodology'");
     expect(i).toBeGreaterThan(0);
-    expect(src.slice(i, i + 3000)).toMatch(/DCGI[^]{0,60}WITHDRAWN 2026-08-08/);
+    const block = src.slice(i, i + 3000);
+    expect(block).toMatch(/DCGI/);
+    expect(block, 'the withdrawal date must survive the restoration')
+      .toMatch(/2026-08-08/);
+    expect(block, 'a restored index must say so, and when')
+      .toMatch(/restored\s+2026-08-30/i);
+    expect(block, 'a reader holding a pre-withdrawal figure must be told the '
+                + 'two are not comparable')
+      .toMatch(/not comparable|corrections/i);
   });
 });
 
