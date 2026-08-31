@@ -128,8 +128,18 @@ describe('persist_config carries a canonical VS Code snippet', () => {
       .toBeGreaterThan(1000);
 
     const clients = Object.keys((await claim()).persist_config.clients);
+    // ★ This map must cover EVERY key in persist_config.clients. It is not a
+    // convenience — a client added without a LABEL entry makes LABEL[c]
+    // undefined and this guard silently asserts includes('undefined'), which
+    // is how a new client would sail past the very check that exists to catch
+    // it. gemini_cli/antigravity added 2026-08-31 with their snippets.
     const LABEL = { claude_desktop: 'Claude Desktop', claude_code: 'Claude Code',
-                    cursor: 'Cursor', vscode: 'VS Code', cline: 'Cline', windsurf: 'Windsurf' };
+                    cursor: 'Cursor', vscode: 'VS Code', cline: 'Cline', windsurf: 'Windsurf',
+                    gemini_cli: 'Gemini CLI', antigravity: 'Antigravity' };
+    for (const c of clients) {
+      expect(LABEL[c], `client '${c}' has no LABEL entry — this guard would assert includes('undefined')`)
+        .toBeTruthy();
+    }
     for (const c of clients) {
       expect(instructions.includes(LABEL[c]),
         `client '${c}' has a persist_config snippet but is not named in the server instructions`)
