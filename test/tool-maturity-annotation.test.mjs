@@ -140,7 +140,9 @@ describe('property 2 — derived from canon, not written down', () => {
     for (const t of listed.tools) {
       const exp = expectedFor(t.name, SNAP);
       const w = _withdrawnFromDescription(t.description);
-      if (w) {
+      // 'restored' is a THIRD state and carries neither the flag nor the cap —
+      // this mirrors _maturityAnnotation, which is the point of the property.
+      if (w && w !== 'restored') {
         exp.withdrawn = w;
         if (exp.maturity in RANK && RANK[exp.maturity] > RANK.partial) exp.maturity = 'partial';
       }
@@ -224,17 +226,33 @@ describe('property 3 — it cannot pass when the canonical source is empty', () 
 });
 
 describe('withdrawn capabilities say so at selection time', () => {
-  it('the gas capabilities withdrawn 2026-08-08 are flagged', () => {
+  it('the STILL-withdrawn gas capabilities are flagged, and the restored one is not', () => {
+    // ★ 2026-08-30: this used to assert all three, with get_gas_index fully
+    //   'withdrawn'. The DCGI was restored once all three of its defective
+    //   terms were repaired, and the gas-fired $/MWh was NOT — so the three
+    //   tools no longer share one state. Asserting them together is what let
+    //   a restored capability keep a 'withdrawn' annotation: an agent reading
+    //   selection-time metadata would skip a live, corrected index.
     const marked = listed.tools.filter((t) => t.annotations.withdrawn);
     expect(marked.map((t) => t.name).sort())
-      .toEqual(['get_gas_economics', 'get_gas_index', 'get_gas_intelligence']);
+      .toEqual(['get_gas_economics', 'get_gas_intelligence']);
     const byName = Object.fromEntries(marked.map((t) => [t.name, t.annotations]));
-    // The whole tool is gone vs. named fields retracted — different advice.
-    expect(byName.get_gas_index.withdrawn).toBe('withdrawn');
+    // Named fields retracted ($/MWh), the tools still answer.
     expect(byName.get_gas_economics.withdrawn).toBe('partially_withdrawn');
     expect(byName.get_gas_intelligence.withdrawn).toBe('partially_withdrawn');
     // A withdrawn capability can never read as mature.
     for (const t of marked) expect(t.annotations.maturity).not.toBe('mature');
+
+    // The restored one carries NEITHER the flag NOR the partial cap.
+    const gi = listed.tools.find((t) => t.name === 'get_gas_index');
+    expect(gi, 'get_gas_index missing from tools/list').toBeTruthy();
+    expect(gi.annotations.withdrawn).toBeUndefined();
+    // …and it still tells the agent the two dates, so a pre-withdrawal figure
+    // is never compared with a post-repair one.
+    expect(gi.description).toMatch(/RESTORED\s+2026-08-30/i);
+    expect(gi.description).toMatch(/DO NOT COMPARE/i);
+    // …and it still names what did NOT come back with it.
+    expect(gi.description).toMatch(/STILL WITHDRAWN/i);
   });
 
   it('the verdict is read from the tool description, not a list', () => {
@@ -242,6 +260,14 @@ describe('withdrawn capabilities say so at selection time', () => {
       .toBe('withdrawn');
     expect(_withdrawnFromDescription('★ WITHDRAWN 2026-08-08: the $/MWh is NO LONGER RETURNED.'))
       .toBe('partially_withdrawn');
+    // ★ A capability that came BACK is a third state, not a shade of gone.
+    expect(_withdrawnFromDescription('★ WITHDRAWN 2026-08-08, RESTORED 2026-08-30 after the terms were repaired.'))
+      .toBe('restored');
+    // The restoration must sit in the clause AFTER the marker to count — a
+    // later unrelated sentence may not resurrect a withdrawn capability.
+    expect(_withdrawnFromDescription(
+      '★ WITHDRAWN 2026-08-08: this tool no longer returns a score.' + ' filler'.repeat(80)
+      + ' Some other index was RESTORED 2026-08-30.')).toBe('withdrawn');
     expect(_withdrawnFromDescription('a perfectly ordinary description')).toBe(null);
   });
 });
