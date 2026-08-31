@@ -79,7 +79,7 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
   { "mcpServers": { "dchub": { "url": "https://dchub.cloud/mcp" } } }
   ```
 
-### Generic config snippet (for any client/registry)
+### Config snippet — DEFAULT SHAPE, and the five clients that reject it
 ```json
 {
   "mcpServers": {
@@ -89,6 +89,26 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
   }
 }
 ```
+Correct as-is for Cursor, Continue and most registry forms. Claude Desktop wants
+`"transport": "http"` alongside `url`, and Claude Code is a CLI one-liner
+(`claude mcp add dchub --transport http <url>`), not this shape at all.
+
+★ It is NOT universal, and every exception fails SILENTLY — the block stays
+valid JSON and simply registers nothing, so a directory that pastes this into
+the wrong client shows DC Hub as installed and broken. Hand these clients their
+own shape instead:
+
+| Client | Field / root | The wrong one does |
+|---|---|---|
+| **Gemini CLI** | `httpUrl` | `url` is the SSE form — wrong transport, never connects |
+| **Antigravity** | `serverUrl` | `url` and `httpUrl` both rejected |
+| **Windsurf** | `serverUrl` | same as Antigravity |
+| **VS Code** (Copilot agent) | root key `servers`, `"type": "http"` | `mcpServers` parses and registers nothing |
+| **Cline** | `"type": "streamableHttp"` | without it, treated as stdio |
+
+These are the same shapes the server hands agents in `persist_config.clients`
+(see `_persistConfig` in server.mjs) — that is the canonical source, so copy
+from it rather than from memory when a new client is added here.
 With a key:
 ```json
 {
@@ -106,7 +126,10 @@ Some clients and scan-based directories want a stdio *command*, not a remote URL
 ```bash
 npx mcp-remote https://dchub.cloud/mcp
 ```
-As an `mcpServers` entry (Cursor / Cline / Windsurf / Claude Desktop):
+As an `mcpServers` entry (Cursor / Cline / Windsurf / Claude Desktop / Gemini CLI):
+> Only for clients or scanners that need a runnable process. **Gemini CLI and
+> Antigravity both speak remote Streamable HTTP natively** — give them the
+> `httpUrl` / `serverUrl` shapes above instead; the shim is a downgrade for them.
 ```json
 {
   "mcpServers": {
