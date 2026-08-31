@@ -107,7 +107,20 @@ jobs:
     # and the GitHub MCP Registry on their own cadence, so a single bump refreshes them
     # all. An UNCHANGED version is a graceful no-op (the registry rejects duplicate
     # versions). So: bump server.json's version when you modify things → everything refreshes.
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # ★2026-08-31 — REF-GATED. This condition accepted a push to ANY ref, so a
+    # feature branch could publish to the PRODUCTION registry before review.
+    # It did: 2.12.2 went out from the draft branch of #282, minutes after that
+    # branch was pushed and well before it merged. That one landed well — it was
+    # the fix for a real staleness — but the mechanism is wrong in a way that
+    # does not undo. A published version CANNOT be withdrawn, so an abandoned or
+    # rejected PR burns a version number the default branch never carries, and
+    # the registry ends up advertising a release that exists on no branch.
+    # `schedule` always runs on the default branch, so this only narrows `push`
+    # and `workflow_dispatch` — both of which should be main for a publish.
+    # Pinned by test/registry-publish-ref-gated.test.mjs.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     env:
       MCP_REGISTRY_DNS_KEY: ${{ secrets.MCP_REGISTRY_DNS_KEY }}
     steps:
