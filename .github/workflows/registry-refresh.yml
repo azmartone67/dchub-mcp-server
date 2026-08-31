@@ -23,6 +23,7 @@ on:
       # otherwise a figure that just became canonical stays judged by the old one.
       - 'canonical/canon_phrases.json'
       - 'scripts/registry_stale_guard.py'
+      - 'scripts/registry_version_bump_guard.py'
   # 2026-08-13: external refresh hook. Every listing target that is not a
   # PR-submit has to be poked from OUTSIDE the repo — a registry UI, a cron
   # elsewhere, or a human with a curl. There was no such entry point: both sync
@@ -46,7 +47,15 @@ jobs:
     name: honest-numbers drift guard
     runs-on: ubuntu-latest
     steps:
+      # ★ fetch-depth: 0 is load-bearing for the version-bump guard below — it
+      # walks server.json's history back to the commit that set the current
+      # version. On the default depth-1 checkout it can see no history, fails
+      # open by design, and reports "did not run". A guard that silently does
+      # not run is the exact failure mode this whole job exists to end, so pay
+      # the full clone here rather than let it go quiet.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       # ★2026-08-05: the guard body moved to scripts/registry_stale_guard.py and
       # now READS canon from canonical/canon_phrases.json. It used to carry the
       # canonical figures twice inline — in a comment and in its own ::error::
@@ -58,6 +67,24 @@ jobs:
       # TRUE count. See the script's docstring for the full rationale.
       - name: Guard registry sources against retired/stale numbers
         run: python3 scripts/registry_stale_guard.py
+
+      # ★2026-08-31: the publish step treats the registry's duplicate-version
+      # rejection as a graceful no-op — correct when nothing changed, a silent
+      # staleness bug when server.json's CONTENT moved and the version did not.
+      # Measured that day: version 2.12.1 was set in 941b8d5, then two commits
+      # changed the manifest without bumping (toolCount 82 -> 83, plus the new
+      # deploymentType / canonicalRemote / gatewayNote fields). Every push since
+      # re-attempted the publish, took the 400, and reported success, while the
+      # official registry — the cascade source for PulseMCP / mcp.so / Glama /
+      # ToolPlex — kept serving the old manifest. The workflow already stated
+      # the rule ("bump server.json's version when you modify things"); nothing
+      # enforced it. This does. It fails OPEN on insufficient history, so it can
+      # never red the repo on a verdict it could not actually reach.
+      - name: Guard against an unbumped server.json (silent publish no-op)
+        run: python3 scripts/registry_version_bump_guard.py
+
+      - name: 'Guard — version-bump fence self-test (must-fail controls)'
+        run: python3 scripts/registry_version_bump_guard.py --self-test
       - name: Validate JSON well-formedness
         run: |
           python3 -c "import json,glob,sys
