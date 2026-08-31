@@ -4974,6 +4974,20 @@ function buildSiteHeadlineTease(parsed) {
     // caveat about what the answer does not cover, and paywalling caveats
     // leaves the free tier over-claiming more than the paid one.
     ...(parsed.capacity_context ? { capacity_context: parsed.capacity_context } : {}),
+    // ★2026-08-31 — SAME RULE AS capacity_context, AND FOUND THE HARD WAY.
+    // `resolved_from` says the caller passed location="ashburn" and the score
+    // describes that market's PUBLISHED CENTROID, not the parcel they named.
+    // This function rebuilds the payload from an allowlist, so a field absent
+    // here is DROPPED — and shipping #280 without this line meant a free-tier
+    // caller got `composite_score: 83.7` for "ashburn" with nothing saying the
+    // point was resolved. Verified live against production before this fix.
+    // That is the exact over-claim the capacity_context note above warns about
+    // ("paywalling caveats leaves the free tier over-claiming more than the
+    // paid one") and the doctrine test/fields-projection.test.mjs pins: a
+    // projection narrows ROWS, never the ENVELOPE — and what the answer does
+    // NOT cover is envelope. Conditional, so its ABSENCE still means "no
+    // resolution happened", exactly like capacity_context.
+    ...(parsed.resolved_from ? { resolved_from: parsed.resolved_from } : {}),
     composite_score: score,        // canonical name (matches the tool description)
     overall_score:   score,        // parity with the full payload's field name
     score_basis: '0–100 DC Hub composite site-suitability index across power, gas, fiber, market & risk',
@@ -17713,5 +17727,9 @@ export { trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause };
 // r-argalias (2026-08-29): exported for test only — the alias map's structural
 // invariants are guarded in test/arg-aliases.test.mjs.
 export { ARG_ALIASES, TOOL_ALIASES };
+// Exported for test/site-headline-envelope.test.mjs — the tier projection
+// is a pure function of the parsed payload, so the honesty fields it must
+// carry can be pinned directly instead of only through the network.
+export { buildSiteHeadlineTease };
 
 export { app };
