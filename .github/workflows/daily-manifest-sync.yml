@@ -78,39 +78,98 @@ jobs:
         # error, or an over-long description logs the exact manual command and
         # exits 0. A metadata blip must never fail the daily heal.
         env:
-          # REPO_ADMIN_TOKEN is a PAT with `repo` scope. GITHUB_TOKEN CANNOT do
-          # this: repo metadata is not covered by any Actions permission, which
-          # is the whole reason the first attempt at this step was invalid. Read
-          # falls back to GITHUB_TOKEN so the DRIFT CHECK still runs, and still
-          # reports, when no PAT is configured — a visible unfixed drift beats a
-          # silent one, and that is the failure this file exists to prevent.
-          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN || secrets.GITHUB_TOKEN }}
-          HAVE_PAT: ${{ secrets.REPO_ADMIN_TOKEN != '' }}
+          # ★2026-08-31 — WHY THIS IS THREE VARIABLES AND NOT ONE `||` CHAIN.
+          #
+          # This was `GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN || secrets.GITHUB_TOKEN }}`
+          # doing BOTH the read and the write. The 2026-08-31 run log:
+          #
+          #     HAVE_PAT: true
+          #     HTTP 401: Bad credentials (https://api.github.com/graphql)
+          #     [gh-desc] DRIFT: the published description does not match canon.
+          #     [gh-desc]   live:
+          #     [gh-desc] PUSH FAILED despite a PAT
+          #
+          # REPO_ADMIN_TOKEN is CONFIGURED but DEAD. Three defects fell out of
+          # that one line, and the step exited 0 through every one of them, so
+          # the job stayed green and nobody saw it. Meanwhile the About field —
+          # the surface this step exists to keep honest — sat at "19,700+
+          # facilities" against a canon of 19,900+ and was healed by the OTHER
+          # step at the bottom of this file, which regex-heals three named
+          # numbers rather than pushing the whole canonical string.
+          #
+          #  1. `||` picks the first NON-EMPTY secret, never the first WORKING
+          #     one. A dead PAT wins the expression and takes the step with it,
+          #     so adding a healthy fallback secret would NOT have helped. The
+          #     write token is now chosen at RUNTIME, by authenticating.
+          #  2. The dead PAT was also doing the READ, so `gh repo view` 401'd,
+          #     `|| echo ''` swallowed it, LIVE became "" — and "" never equals
+          #     canon, so the step reported DRIFT unconditionally, with a blank
+          #     `live:` line, every day, whatever the field actually said. A
+          #     check that cannot see its subject must report UNKNOWN, not a
+          #     verdict. Reading is `metadata: read`, which GITHUB_TOKEN always
+          #     has, so the drift REPORT no longer depends on a PAT at all.
+          #  3. It called a 401 a scope problem — sending a reader to audit a
+          #     token that is not under-scoped but expired. 401 (dead) and 403
+          #     (under-scoped) are now named separately, because they have
+          #     different fixes.
+          #
+          # GITHUB_TOKEN CANNOT do the write: repo metadata is outside every
+          # Actions permission, which is why the first attempt at this step
+          # (`administration: write`) was not merely wrong but UNPARSEABLE.
+          READ_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRIMARY_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.REPO_METADATA_TOKEN || secrets.REGISTRY_PR_PAT }}
         run: |
           DESC="$(cat canonical/github_description.txt)"
-          LIVE="$(gh repo view "$GITHUB_REPOSITORY" --json description --jq .description || echo '')"
+
+          # READ with GITHUB_TOKEN, and keep a failed read DISTINCT from a
+          # drift verdict — conflating them is what produced a year of blank
+          # `live:` lines that looked like findings.
+          if ! LIVE="$(GH_TOKEN="$READ_TOKEN" gh api "repos/$GITHUB_REPOSITORY" \
+                         --jq '.description // ""' 2>/tmp/gh-desc-read.err)"; then
+            echo "::warning::[gh-desc] UNKNOWN — cannot READ the published description, so drift is undetermined. This is NOT 'in sync' and NOT 'drifted':"
+            sed 's/^/[gh-desc]   /' /tmp/gh-desc-read.err || true
+            exit 0
+          fi
+
           if [ "$DESC" = "$LIVE" ]; then
             echo "[gh-desc] in sync — no push needed"
             exit 0
           fi
           if [ "${#DESC}" -gt 350 ]; then
-            echo "[gh-desc] REFUSING: ${#DESC} chars exceeds GitHub's limit — shorten the file"
+            echo "::warning::[gh-desc] REFUSING: ${#DESC} chars exceeds GitHub's limit — shorten the file"
             exit 0
           fi
           echo "[gh-desc] DRIFT: the published description does not match canon."
           echo "[gh-desc]   live: $LIVE"
           echo "[gh-desc]   want: $DESC"
-          if [ "$HAVE_PAT" != "true" ]; then
-            echo "[gh-desc] no REPO_ADMIN_TOKEN configured — cannot push (GITHUB_TOKEN has no metadata scope)."
+
+          # WRITE — try each configured PAT and keep the first that
+          # AUTHENTICATES, which is the decision `||` could not make.
+          PUSHED=no
+          for VAR in PRIMARY_TOKEN FALLBACK_TOKEN; do
+            TOK="${!VAR}"
+            [ -n "$TOK" ] || continue
+            if ERR="$(GH_TOKEN="$TOK" gh api -X PATCH "repos/$GITHUB_REPOSITORY" \
+                        -f description="$DESC" 2>&1 >/dev/null)"; then
+              echo "::notice::[gh-desc] pushed via $VAR — About now matches canon; Glama and other About-mirroring listings re-scan on their own cadence."
+              PUSHED=yes
+              break
+            fi
+            case "$ERR" in
+              *401*|*"Bad credentials"*)
+                echo "::warning::[gh-desc] $VAR is INVALID or EXPIRED (401). Reissue the PAT — auditing its scopes will find nothing wrong." ;;
+              *403*|*404*)
+                echo "::warning::[gh-desc] $VAR authenticated but was REFUSED (403/404) — it lacks repo 'Administration: write' (fine-grained) or classic 'repo' scope." ;;
+              *)
+                echo "::warning::[gh-desc] $VAR failed: $ERR" ;;
+            esac
+          done
+
+          if [ "$PUSHED" != yes ]; then
+            echo "::warning::[gh-desc] PUSH FAILED with every configured token — the About field stays stale and every listing that mirrors it inherits the stale figure."
             echo "[gh-desc] Fix now:  gh api -X PATCH repos/$GITHUB_REPOSITORY -f description=\"\$(cat canonical/github_description.txt)\""
-            echo "[gh-desc] Automate: add a PAT with 'repo' scope as secret REPO_ADMIN_TOKEN"
-            exit 0
-          fi
-          if gh api -X PATCH "repos/$GITHUB_REPOSITORY" -f description="$DESC" >/dev/null; then
-            echo "[gh-desc] pushed"
-          else
-            echo "[gh-desc] PUSH FAILED despite a PAT — check its scopes. Run manually:"
-            echo "  gh api -X PATCH repos/$GITHUB_REPOSITORY -f description=\"\$(cat canonical/github_description.txt)\""
+            echo "[gh-desc] Automate: set REPO_ADMIN_TOKEN to a LIVE PAT with repo 'Administration: write'"
           fi
       - name: Refresh the canonical problem taxonomy from the owner endpoint
         # ★2026-07-31: pulls /api/v1/canon/taxonomy (owner: dchub-backend
