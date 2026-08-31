@@ -76,7 +76,11 @@ def scan_withdrawn(text):
 
 
 def connector_listing_text(slug):
-    """The DESCRIPTION region of a connector page. (text, None) or (None, reason).
+    """The DESCRIPTION region of a connector page.
+
+    Returns (text, None, False) on success, or (None, reason, transient) where
+    `transient` separates THEIR outage from OUR blind spot — see
+    connector_regressions() for why that distinction is load-bearing.
 
     The page, not an API path: /api/mcp/v1/servers/<slug> is documented and proven
     above, but no connector equivalent is, and a guard pointed at a guessed URL
@@ -101,36 +105,57 @@ def connector_listing_text(slug):
         with urllib.request.urlopen(req, timeout=25) as r:
             html = r.read().decode("utf-8", "ignore")
     except Exception as e:
-        return None, f"unreachable ({type(e).__name__})"
+        return None, f"unreachable ({type(e).__name__})", True
     start = html.find("Server Details")
     if start < 0:
-        return None, "no 'Server Details' marker — page moved, renamed or redesigned"
+        return None, "no 'Server Details' marker — page moved, renamed or redesigned", False
     end = -1
     for marker in ("Available Tools", "Tool Definition Quality", "Glama MCP Gateway"):
         i = html.find(marker, start)
         if i > 0:
             end = i if end < 0 else min(end, i)
     if end < 0:
-        return None, "no tool-catalogue marker — cannot bound the description region"
-    return html[start:end], None
+        return None, "no tool-catalogue marker — cannot bound the description region", False
+    return html[start:end], None, False
 
 
 def connector_regressions():
-    """Alertable findings across the connector listings. Fails closed."""
-    out = []
+    """(regressions, notes) across the connector listings.
+
+    ★TWO FAILURE CLASSES, and collapsing them is a mistake this org has already
+    paid for once. dchub-backend#3410 — "unit tests were asking glama.ai what it
+    was serving, and main went red when the answer changed" — is the same shape:
+    a check that treats a third party's availability as our defect.
+
+      TRANSIENT (timeout, connection reset, 5xx): Glama is down or throttling.
+        A NOTE, never a regression. Alerting on it trains everyone to ignore
+        this fence, and an ignored fence is how the other four here died.
+
+      STRUCTURAL (page reachable, expected markers absent): the page was
+        redesigned and the scan is now blind. That IS ours, it does not
+        self-heal, and it must alert — otherwise the fence silently degrades to
+        a green check over an unread page, which is the exact defect it exists
+        to catch.
+
+    Empty slug list is structural too: a fence scanning nothing must never look
+    like a fence finding nothing."""
+    regressions, notes = [], []
     if not CONNECTOR_SLUGS:
-        return ["CONNECTOR_SLUGS is empty — the connector fence is scanning nothing"]
+        return ["CONNECTOR_SLUGS is empty — the connector fence is scanning nothing"], notes
     for slug in CONNECTOR_SLUGS:
-        html, err = connector_listing_text(slug)
+        html, err, transient = connector_listing_text(slug)
         if err:
-            out.append(f"connector `{slug}` could not be scanned: {err} "
-                       f"— treat as UNKNOWN, not clean")
+            msg = f"connector `{slug}` not scanned: {err}"
+            (notes if transient else regressions).append(
+                msg + ("  — Glama-side, retried next run" if transient
+                       else "  — the fence is BLIND until this is fixed"))
             continue
         for name, date, line in scan_withdrawn(html):
-            out.append(f"🚨 connector `{slug}` advertises {name} as a live capability "
-                       f"(withdrawn {date}) — a stored blurb never re-crawls, so this "
-                       f"does not self-heal: {line!r}")
-    return out
+            regressions.append(
+                f"🚨 connector `{slug}` advertises {name} as a live capability "
+                f"(withdrawn {date}) — a stored blurb never re-crawls, so this "
+                f"does not self-heal: {line!r}")
+    return regressions, notes
 
 
 # ── Term tiers (recalibrated 2026-07-12 from a Spearman teardown of registry.smithery.ai
@@ -492,7 +517,10 @@ def main(probe=False):
     off_ver, off_tools = official_registry()
     smi_name, smi_tools = smithery_record()
     gla_tools, gla_desc = glama_record()
-    reasons.extend(connector_regressions())
+    _conn_reg, _conn_notes = connector_regressions()
+    reasons.extend(_conn_reg)
+    for _n in _conn_notes:
+        print(f"note: {_n}")
     readme_tools = readme_tool_count()
     lobe_status, lobe_tools = lobehub_presence()
 
