@@ -361,10 +361,18 @@ describe('MCP regression suite', () => {
     }, 20000);
 
     it('get_gas_index returns a DCGI score, or an honest reason it does not', async () => {
-      // ★2026-08-08: the DCGI composite is WITHDRAWN. This assertion used to
-      // demand a score, which would now fail for the RIGHT reason and read as
+      // ★2026-08-08: the DCGI composite was WITHDRAWN. This assertion used to
+      // demand a score, which would then fail for the RIGHT reason and read as
       // a regression. Inverted deliberately: the contract is no longer "a
       // number comes back", it is "a number OR a stated reason comes back".
+      // ★2026-08-31: the DCGI was RESTORED 2026-08-30 (measured:
+      // get_gas_index(TX) -> dcgi 81.9, GAS-ADVANTAGED). The assertion is
+      // deliberately NOT reverted to demanding a score: a state that cannot be
+      // priced legitimately returns verdict UNSCORED with dcgi null and an
+      // `unscored_reason`, so "a number OR a stated reason" is the contract
+      // that survives BOTH the withdrawal and the restoration. Re-tightening
+      // it to "a number" would go red on an honest UNSCORED state, which is
+      // how an assertion gets weakened again next time.
       // A bare empty/200 with neither still fails, which is the case that
       // matters — silently returning nothing is the failure mode a withdrawal
       // is most likely to introduce.

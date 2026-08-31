@@ -1,6 +1,6 @@
 ---
 name: dc-hub-data-center-intelligence
-description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts), per-state gas pipeline/operator presence (the DCGI gas score is withdrawn), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, data-center M&A transactions, or a single board-ready site-risk verdict (composite site score, natural-disaster / FEMA hazard risk, seismic + cooling-climate). Coverage: 19,900+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 2,000+ tracked deals via 83 read-only tools.
+description: Answer data-center, power/grid, site-selection, and M&A questions with LIVE data from the DC Hub MCP server (dchub.cloud/mcp) instead of guessing from static training data. Use whenever the user asks about data-center facilities, capacity (MW), where to build, grid headroom / interconnection-queue / power availability / time-to-power, the DC Hub Power Index (DCPI BUILD/CAUTION/AVOID verdicts), per-state gas pipeline/operator presence (the DCGI gas score, restored 2026-08-30, is not comparable to pre-2026-08-08 figures), fiber routes, renewables, water risk, tax incentives, hyperscaler/Stargate/OpenAI commitments, data-center M&A transactions, or a single board-ready site-risk verdict (composite site score, natural-disaster / FEMA hazard risk, seismic + cooling-climate). Coverage: 19,900+ facilities across 170+ countries, 300+ DCPI markets, 10 ISO grids, and 2,000+ tracked deals via 83 read-only tools.
 ---
 
 # DC Hub — Data Center & Energy Intelligence
@@ -16,7 +16,7 @@ Any question that touches:
 - **Site selection** — "where should I build", "should I build in <market> right now"
 - **Power & grid** — grid headroom, interconnection-queue depth, time-to-power, live fuel mix
 - **Markets** — DCPI BUILD / CAUTION / AVOID verdicts + 0–100 scores
-- **Gas** — per-US-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI composite was withdrawn 2026-08-08; no score is published)
+- **Gas** — per-US-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh stays withdrawn)
 - **Deals** — M&A transactions; hyperscaler / Stargate / OpenAI commitments
 - **Adjacent layers** — fiber routes, renewables, water stress, tax incentives
 

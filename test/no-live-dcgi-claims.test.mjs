@@ -1,4 +1,24 @@
-// Current-claim copy must not sell the withdrawn DCGI as a live score.
+// Current-claim copy must match the CURRENT state of each withdrawn capability.
+//
+// ★★2026-08-31 — THIS FENCE INVERTED, and it took the prose down with it.
+//
+// The rule below used to be "the DCGI may be named, but never on a line that
+// does not also say 'withdrawn'". Correct on 2026-08-22. The DCGI was restored
+// 2026-08-30, and from that morning the fence was REQUIRING A FALSE CLAIM on
+// eight files — it went green precisely because they were wrong, and it would
+// have failed anyone who fixed them. A stale-withdrawal claim is not a smaller
+// error than a stale-live one: it tells an agent reading tools/list not to call
+// a tool that works, so the restored index is invisible to exactly the careful
+// clients we built it for.
+//
+// THE LESSON, and why the shape below changed: A WITHDRAWAL IS A DATED EVENT,
+// NOT A PERMANENT PROPERTY. The old rule hardcoded one event's verdict into a
+// regex, so the next event could only be absorbed by rewriting the fence. The
+// state now lives in CAPABILITY_STATE, one entry per claim, and the rules are
+// derived from it — restoring or re-withdrawing something is a one-line edit
+// with a date and a measurement, not a rewrite. Both directions are fenced:
+// nothing may call a RESTORED capability withdrawn, and nothing may sell a
+// STILL-WITHDRAWN one as available.
 //
 // WHY (2026-08-22): the DCGI composite was withdrawn 2026-08-08 and every tool
 // description says so — but the copy registries and humans actually read did
@@ -34,13 +54,88 @@ const FILES = [
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const liveLines = (txt) => txt.split('\n').filter((l) => !/canon:frozen/.test(l));
 
-describe('no current-claim copy names the DCGI without saying it was withdrawn', () => {
-  for (const f of FILES) {
-    it(f, () => {
-      const bad = liveLines(read(f)).filter((l) => /\bDCGI\b/.test(l) && !/withdrawn/i.test(l));
-      expect(bad, `${f}: DCGI named without "withdrawn" on the same line:\n${bad.join('\n')}`).toEqual([]);
-    });
+/**
+ * THE STATE OF EVERY CAPABILITY THIS AUDIT WITHDREW. One entry per claim; the
+ * rules below are derived from it, so a restore or a re-withdrawal is an edit
+ * HERE and nowhere else.
+ *
+ * `restored_on: null` means still withdrawn. `verified` is how the current
+ * state was MEASURED, not who asserted it — the previous version of this fence
+ * rotted because nobody re-checked the premise, so an entry without a
+ * measurement is an entry nobody has confirmed.
+ */
+const CAPABILITY_STATE = {
+  'DCGI score': {
+    names: /\bDCGI\b/,
+    withdrawn_on: '2026-08-08',
+    restored_on: '2026-08-30',
+    verified: 'get_gas_index(state=TX) -> ok:true, dcgi 81.9, GAS-ADVANTAGED (2026-08-31T09:09Z)',
+  },
+  'gas-fired $/MWh': {
+    names: /\$\/MWh|per[-\s]MWh|gas[-\s]to[-\s]grid/i,
+    withdrawn_on: '2026-08-08',
+    restored_on: null,
+    verified: 'get_gas_economics(market=dallas) -> $/MMBtu layers only, no $/MWh field '
+            + '(2026-08-31T09:10Z); get_gas_intelligence(TX).gas_to_grid_status.available === false',
+  },
+};
+
+// "This thing is gone" — the vocabulary a stale withdrawal actually uses.
+const CALLS_IT_GONE = /withdrawn|retired|no longer returns|not published|unavailable|pulled|suspended/i;
+
+describe('prose copy matches the CURRENT state of each withdrawn capability', () => {
+  // ── RESTORED capabilities: nothing may still call them gone.
+  for (const [cap, st] of Object.entries(CAPABILITY_STATE)) {
+    if (!st.restored_on) continue;
+    for (const f of FILES) {
+      it(`${f} does not still call the ${cap} withdrawn`, () => {
+        const bad = liveLines(read(f)).filter(
+          (l) => st.names.test(l) && CALLS_IT_GONE.test(l) && !/restored/i.test(l));
+        expect(bad, `${f}: the ${cap} was restored ${st.restored_on} (${st.verified}), but this `
+          + `line still calls it gone and never says it came back:\n${bad.join('\n')}`).toEqual([]);
+      });
+    }
   }
+
+  // ── STILL-WITHDRAWN capabilities: the original rule, unchanged, for the half
+  //    of the audit that is genuinely unfixed. Restoring one claim must not
+  //    quietly un-withdraw its neighbour.
+  for (const [cap, st] of Object.entries(CAPABILITY_STATE)) {
+    if (st.restored_on) continue;
+    for (const f of FILES) {
+      it(`${f} does not sell the ${cap} as available`, () => {
+        const bad = liveLines(read(f)).filter(
+          (l) => st.names.test(l) && !CALLS_IT_GONE.test(l));
+        expect(bad, `${f}: the ${cap} is still withdrawn (${st.withdrawn_on}; ${st.verified}) — `
+          + `naming it without saying so sells a product we do not serve:\n${bad.join('\n')}`).toEqual([]);
+      });
+    }
+  }
+
+  // ★ THE RESTORE MUST NOT ERASE THE RECORD. A reader holding a pre-2026-08-08
+  //   DCGI figure is holding a number from a different index; if every mention
+  //   of the withdrawal is scrubbed on restore, nothing tells them that. At
+  //   least one paste-ready listing has to carry both dates.
+  it('the correction survives the restoration — both dates are on record', () => {
+    const carriers = FILES.filter((f) => {
+      const t = read(f);
+      return /2026-08-08/.test(t) && /2026-08-30/.test(t);
+    });
+    expect(carriers.length,
+      'no listing file carries BOTH the withdrawal and restoration dates. A restored index '
+      + 'whose correction is scrubbed leaves every cached pre-08-08 figure looking current.'
+    ).toBeGreaterThan(0);
+  });
+
+  // ★ SELF-CHECK: a state table nobody re-measures is how this fence rotted the
+  //   first time. Every entry must carry evidence of when it was last checked.
+  it('every capability records how its state was measured', () => {
+    for (const [cap, st] of Object.entries(CAPABILITY_STATE)) {
+      expect(st.verified, `${cap}: no measurement recorded — this fence enforces a claim `
+        + 'nobody has confirmed, which is exactly how it inverted in August').toBeTruthy();
+      expect(st.verified, `${cap}: the measurement names no date`).toMatch(/20\d\d-\d\d-\d\d/);
+    }
+  });
   // ★★2026-08-30 — THIS ASSERTION WAS VACUOUS AND HID THE DEFECT IT NAMED.
   //
   // It read:

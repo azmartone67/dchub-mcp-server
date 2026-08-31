@@ -141,22 +141,49 @@ describe('smithery.yaml canonical-quantity guard', () => {
     });
   });
 
+  // ★★2026-08-31 — THE SENTINEL COLLIDED WITH REALITY AND THE TEST BLAMED THE
+  // GUARD. This mutated canon to the hardcoded literal '19,900+', under the
+  // comment "a value that appears nowhere in the repo". True the day it was
+  // written. On 2026-08-31 the daily canon sync moved facilities to 19,900+ FOR
+  // REAL and committed it [skip ci], so nothing ran this until the next PR:
+  // the mutation became a no-op (smithery.yaml already carried 19,900+), the
+  // guard correctly reported NO drift, and the test failed — asserting the
+  // guard was broken at the exact moment it was working.
+  //
+  // A sentinel that is merely UNUSED TODAY is a time bomb on a value that
+  // climbs past it. So it is now (a) an impossible magnitude rather than a
+  // plausible next value, and (b) asserted absent before use, so a future
+  // collision is a loud refusal naming the cause instead of a confusing red
+  // against innocent code.
+  const IMPOSSIBLE = '99,999,999+';
+
+  it('the drift sentinel has not itself become a real canon value', () => {
+    // The guard reads smithery.yaml and the snapshot; if the sentinel ever
+    // appears in either, the mutation below is a no-op and every assertion
+    // that follows is vacuous.
+    for (const [label, file] of [['smithery.yaml', YAML], ['canon snapshot', CANON_PATH]]) {
+      expect(fs.readFileSync(file, 'utf8'), `${label} already contains the drift sentinel `
+        + `${IMPOSSIBLE} — pick a new one; the mutation test below cannot prove anything `
+        + 'while the "wrong" value is also the right one').not.toContain(IMPOSSIBLE);
+    }
+  });
+
   it('tracks the snapshot rather than any number frozen in the script', () => {
-    // Move canon to a value that appears nowhere in the repo. The guard must
+    // Move canon to a value the surfaces cannot already carry. The guard must
     // now report the COMMITTED surfaces as drifted against it — proving the
     // quantities it enforces come from the snapshot, not from source.
     withCanonMutation((orig) => {
       const j = JSON.parse(orig);
-      j.facilities = '19,900+';
+      j.facilities = IMPOSSIBLE;
       return JSON.stringify(j, null, 2);
     }, () => {
       const { ok, out } = check();
       expect(ok, 'guard ignored a moved canon — it is not snapshot-driven').toBe(false);
-      expect(out).toMatch(/19,900\+/);
+      expect(out).toContain(IMPOSSIBLE);
     });
     // And no source file was left carrying the throwaway value.
     const script = fs.readFileSync(SCRIPT, 'utf8');
-    expect(script).not.toMatch(/19,900\+/);
+    expect(script).not.toContain(IMPOSSIBLE);
   });
 
   it('reports the committed tree as clean', () => {
