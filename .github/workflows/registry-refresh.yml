@@ -24,6 +24,14 @@ on:
       - 'canonical/canon_phrases.json'
       - 'scripts/registry_stale_guard.py'
       - 'scripts/registry_version_bump_guard.py'
+      # ★2026-08-31: THE WORKFLOW ITSELF. It was absent from its own paths, so
+      # editing this file — including the publish job's trigger condition, the
+      # thing that decides whether anything is published at all — did not re-run
+      # it, and the change shipped unexercised. Found while adding the ref gate
+      # below: the PR that introduced it produced no run of this workflow.
+      # Fenced but not triggered is the same trap the guard-script entries above
+      # exist to avoid; the file that steers the fence belongs in the fence.
+      - '.github/workflows/registry-refresh.yml'
   # 2026-08-13: external refresh hook. Every listing target that is not a
   # PR-submit has to be poked from OUTSIDE the repo — a registry UI, a cron
   # elsewhere, or a human with a curl. There was no such entry point: both sync
