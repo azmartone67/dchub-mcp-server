@@ -6493,12 +6493,12 @@ const COORD_REQUIRED_TOOLS = new Set([
   'get_fiber_readiness',
 ]);
 const _COORD_ALT_HINT = {
-  analyze_site:   ' — or pass candidate_id from get_refined_queue instead',
+  analyze_site:   ' — or pass candidate_id from get_refined_queue, or location="ashburn" (a DC Hub market slug, resolved to that market\'s published centroid — NOT your parcel)',
   analyze_parcel: ' — or pass a GeoJSON Polygon/MultiPolygon as geometry instead',
 };
 export function _coordsRequired(name, args) {
   if (COORD_REQUIRED_TOOLS.has(name)) return true;
-  if (name === 'analyze_site') return !(args && args.candidate_id);
+  if (name === 'analyze_site') return !(args && (args.candidate_id || args.location));
   if (name === 'analyze_parcel') return !(args && args.geometry);
   return false;
 }
@@ -6524,6 +6524,71 @@ const _coordsError = (missing, toolName) => {
            content: [{ type: 'text', text: JSON.stringify(enriched) }],
            structuredContent: enriched };
 };
+
+// ── analyze_site location -> point (r-locationresolve 2026-08-31) ───────────
+// A place name is NOT a coordinate. `location` is deliberately NOT an entry in
+// ARG_ALIASES — test/arg-aliases.test.mjs names this exact case and forbids the
+// rename, because renaming it to `lat` would hand back a confident wrong point.
+// Resolving the VALUE against the published DCPI market row and SAYING what it
+// resolved to is the honest version, and it is the same shape
+// get_grid_intelligence already uses for market -> ISO.
+//
+// ★ PURE ON PURPOSE. The fetch stays in the handler so this predicate — the
+// part that decides whether a point was really identified — is testable against
+// live captures rather than only through the network.
+//
+// ★ callAPI does NOT throw on 404; it returns {error:'API 404'}. Checked by
+// SHAPE, never by try/catch.
+// ★ Number(null) === 0, and 0 is FINITE. A market row that exists but carries
+// no coordinates would coerce straight to (0, 0) — open ocean — and be scored
+// and returned as the answer. Reject by TYPE first, then by range; never by a
+// bare Number.isFinite() on a coerced value.
+function _coord(v, limit) {
+  let n = NaN;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && v.trim() !== '') n = Number(v);
+  return (Number.isFinite(n) && Math.abs(n) <= limit) ? n : NaN;
+}
+
+export function _locationPoint(rawLocation, slug, row) {
+  const ok = row && typeof row === 'object' && !row.error;
+  const lat = ok ? _coord(row.latitude, 90) : NaN;
+  const lon = ok ? _coord(row.longitude, 180) : NaN;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return { ok: false, error: {
+      error: 'location not resolved',
+      detail: `"${rawLocation}" did not resolve to a DC Hub market, so no coordinates could be derived. `
+            + 'The call was refused rather than analyzed at a point we did not identify.',
+      requested_location: rawLocation,
+      tried_market_slug: slug,
+      hint: 'Pass the metro slug as it appears in rank_markets / get_market_dcpi_rank '
+          + '(e.g. location="ashburn", "northern-virginia", "dallas"), or pass lat and lon directly '
+          + 'for a specific parcel. A trailing state is NOT stripped — "Ashburn, VA" will not resolve, '
+          + 'because guessing which token is the state risks answering for the wrong market.',
+      example: 'analyze_site lat=39.04 lon=-77.48',
+      _error_mitigation: {
+        error_code: 'location_not_resolved',
+        severity: 'parameter_adjustment',
+        deterministic_hint: 'Retrying the same location string will not help. Look the slug up with '
+          + 'rank_markets, or pass lat/lon directly.',
+      },
+    } };
+  }
+  return { ok: true, lat, lon,
+    state: typeof row.state === 'string' ? row.state : '',
+    resolved_from: {
+      location: rawLocation,
+      market_slug: slug,
+      market_name: row.market_name == null ? null : row.market_name,
+      resolved_lat: lat,
+      resolved_lon: lon,
+      via: '/api/v1/dcpi/scores — published DCPI market row',
+      note: `location="${rawLocation}" is not a coordinate; it was resolved to the PUBLISHED CENTROID `
+          + `of the "${slug}" market (${lat}, ${lon}) before this site was scored. This is a `
+          + 'MARKET-level read, not the parcel you named — pass lat/lon for a specific site.',
+    } };
+}
+
 export function _validateToolArgs(name, args) {
   // Returns an MCP error-content object if the args are invalid, else null.
   if (STRICT_ISO_TOOLS.has(name) && args && args.iso != null
@@ -14692,17 +14757,54 @@ function createServer(descOverrides) {
     { format: S.describe('Output file format: "csv" (default) or "geojson" (for GIS tools like QGIS)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI(a.format === 'geojson' ? '/api/v1/lp/export.geojson' : '/api/v1/lp/export.csv', {})) }] }));
 
-  trackedTool(srv, 'analyze_site', 'Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call. Example: "Score this Phoenix parcel for a 100MW build — power, gas, fiber, market & risk." — analyze_site lat=33.45 lon=-112.07 capacity_mw=100 state=AZ. Params: lat (-90 to 90, required unless candidate_id), lon (-180 to 180, required unless candidate_id), candidate_id (a cand_… from get_refined_queue — resolves coordinates from the frozen mint and ignores lat/lon), capacity_mw (target load in MW, e.g. 50-500 — returns a `capacity_context` block sizing that load against nearby installed generation; it deliberately does NOT move overall_score, and the block names where the load IS applied), state (2-letter US, optional — improves the tax-incentive/context lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns (full, paid): {overall_score (aka composite_score, 0-100 composite — for the integrity-first version that never imputes a missing factor, use get_composite_site_score), interpretation (verdict string, e.g. "Excellent site"), scores{power_infrastructure, gas_pipeline_access, fiber_connectivity, market_conditions, risk_resilience — each 0-100}, nearby{substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw}, power_cost{industrial_cents_kwh, commercial_cents_kwh, period, basis}, fiber{connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk}, location, citation}. FREE tier returns a REAL, citable HEADLINE — composite_score + verdict + the single top limiting factor (the lowest sub-score) + citation; the full per-factor breakdown, nearby infrastructure, power cost, fiber carriers, and the branded Site Analysis PDF (generate_site_analysis) are Pro. For dedicated water / disaster / climate / tax reads use get_water_risk / get_disaster_risk / get_climate_intel / get_tax_incentives. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).',
+  trackedTool(srv, 'analyze_site', 'Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call. Example: "Score this Phoenix parcel for a 100MW build — power, gas, fiber, market & risk." — analyze_site lat=33.45 lon=-112.07 capacity_mw=100 state=AZ. Params: lat (-90 to 90, required unless candidate_id or location), lon (-180 to 180, required unless candidate_id or location), location (a market NAME or metro slug instead of coordinates, e.g. location="ashburn" — resolved to that market\'s PUBLISHED CENTROID through the DCPI market row, with a resolved_from block naming what it resolved to; a MARKET-level read, NOT the parcel you named, and a trailing state is not stripped so "Ashburn, VA" will not resolve), candidate_id (a cand_… from get_refined_queue — resolves coordinates from the frozen mint and ignores lat/lon), capacity_mw (target load in MW, e.g. 50-500 — returns a `capacity_context` block sizing that load against nearby installed generation; it deliberately does NOT move overall_score, and the block names where the load IS applied), state (2-letter US, optional — improves the tax-incentive/context lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns (full, paid): {overall_score (aka composite_score, 0-100 composite — for the integrity-first version that never imputes a missing factor, use get_composite_site_score), interpretation (verdict string, e.g. "Excellent site"), scores{power_infrastructure, gas_pipeline_access, fiber_connectivity, market_conditions, risk_resilience — each 0-100}, nearby{substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw}, power_cost{industrial_cents_kwh, commercial_cents_kwh, period, basis}, fiber{connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk}, location, citation}. FREE tier returns a REAL, citable HEADLINE — composite_score + verdict + the single top limiting factor (the lowest sub-score) + citation; the full per-factor breakdown, nearby infrastructure, power cost, fiber carriers, and the branded Site Analysis PDF (generate_site_analysis) are Pro. For dedicated water / disaster / climate / tax reads use get_water_risk / get_disaster_risk / get_climate_intel / get_tax_incentives. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).',
     { candidate_id: S.describe('PREFERRED for queue survivors: a cand_… id from get_refined_queue — coordinates come from the FROZEN mint (lat/lon args are ignored; zero transcription drift; expired ids fail closed with candidate_expired). See dchub.cloud/docs/candidate-lifecycle'),
-      lat: N.describe('Site latitude in decimal degrees (-90 to 90; required unless candidate_id given), e.g. 33.45'),
-      lon: N.describe('Site longitude in decimal degrees (-180 to 180; required unless candidate_id given), e.g. -112.07'),
+      lat: N.describe('Site latitude in decimal degrees (-90 to 90; required unless candidate_id or location given), e.g. 33.45'),
+      lon: N.describe('Site longitude in decimal degrees (-180 to 180; required unless candidate_id or location given), e.g. -112.07'),
+      location: S.describe('Market NAME or metro slug instead of coordinates, e.g. "ashburn", "northern-virginia", "dallas". Resolved to that market\'s PUBLISHED CENTROID through the DCPI market row, and the answer carries a resolved_from block saying so. This is a MARKET-level read, not the parcel you named — pass lat/lon for a specific site. Not an alias for lat/lon: a place name is not a coordinate.'),
       ...COORD_ALIASES,
       state: S.describe('US state abbreviation (optional) — improves the tax-incentive lookup, e.g. AZ'),
       capacity_mw: N.describe('Target power load for the build in megawatts (MW), e.g. 100 (typical 50-500)'),
       include_grid: B.describe('Include grid-headroom / substation analysis (default true)'),
       include_risk: B.describe('Include water/drought/climate risk analysis (default true)'),
       include_fiber: B.describe('Include fiber-connectivity analysis (default true)') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/site-score', _foldCoordArgs(a))) }] }));
+    async (a) => {
+      // r-locationresolve (2026-08-31): a place name is NOT a coordinate, so
+      // `location` is deliberately NOT an entry in ARG_ALIASES —
+      // test/arg-aliases.test.mjs names this exact case ("analyze_site
+      // {location:\"Ashburn, VA\"} likewise needs geocoding to lat/lon") and
+      // forbids the rename, which would hand back a confident wrong point.
+      // Resolving the VALUE against the published DCPI market row, and SAYING
+      // what it resolved to, is the honest version — the same shape
+      // get_grid_intelligence uses for market -> ISO.
+      const args = _foldCoordArgs(a);
+      const rawLocation = (a.location || '').toString().trim();
+      delete args.location;
+      let resolved_from = null;
+      const haveCoords = Number.isFinite(Number(args.lat)) && Number.isFinite(Number(args.lon));
+      if (rawLocation && !a.candidate_id && !haveCoords) {
+        const slug = slugify(rawLocation);
+        // callAPI does NOT throw on 404 — it returns {error:'API 404'} — so this
+        // is checked by SHAPE, not by try/catch.
+        const row = slug
+          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
+          : null;
+        const res = _locationPoint(rawLocation, slug, row);
+        if (!res.ok) {
+          return { isError: true,
+                   content: [{ type: 'text', text: JSON.stringify(res.error) }],
+                   structuredContent: res.error };
+        }
+        args.lat = res.lat;
+        args.lon = res.lon;
+        if (!args.state && res.state) args.state = res.state;
+        resolved_from = res.resolved_from;
+      }
+      const out = await callAPI('/api/site-score', args);
+      const payload = (resolved_from && out && typeof out === 'object' && !Array.isArray(out))
+        ? { ...out, resolved_from } : out;
+      return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
+    });
 
   // 2026-07-08: the HONEST composite. Unlike analyze_site (full raw data + a
   // composite that silently includes placeholder factors), this scores ONLY over
