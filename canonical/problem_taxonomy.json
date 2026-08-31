@@ -1,8 +1,8 @@
 {
   "_generated_by": "scripts/refresh-problem-taxonomy.mjs",
   "_source": "https://dchub.cloud/api/v1/canon/taxonomy",
-  "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for + why_live_code phrase resolution) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.",
-  "retrieved_at": "2026-08-31T21:03:40.040Z",
+  "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by server.mjs at startup (initialize instructions scope section + discover_tools not_for/not_collected + why_live_code phrase resolution) and by the taxonomy guard test. The owner is dchub-backend routes/problem_taxonomy.py.",
+  "retrieved_at": "2026-08-31T22:07:03.772Z",
   "version": 6,
   "contract_hash": "a4f6fc226ffb14c8",
   "source": "dchub-backend routes/problem_taxonomy.py",
@@ -41,5 +41,54 @@
     "requires_live_change_ledger": "requires the live change and deal ledger",
     "requires_live_grid_telemetry": "requires real-time grid telemetry and current headroom reads",
     "requires_live_queue_data": "requires live interconnection-queue and buildout-timing data"
-  }
+  },
+  "fields_not_collected": [
+    {
+      "aliases": [
+        "pue",
+        "power usage effectiveness",
+        "dcie",
+        "efficiency ratio",
+        "energy efficiency ratio"
+      ],
+      "field": "PUE / Power Usage Effectiveness",
+      "instead": "get_facility returns cooling_type where the source carries it; ai_capacity_index reports rack power density and cooling type",
+      "why": "operator-self-reported, rarely published per facility, and not independently verifiable — DC Hub neither collects nor models it, and will not infer one"
+    },
+    {
+      "aliases": [
+        "smr",
+        "small modular reactor",
+        "microreactor"
+      ],
+      "field": "SMR / small-modular-reactor classification",
+      "instead": "get_power_pipeline returns technology labels including the literal 'nuclear'",
+      "why": "the generation data labels technology as 'nuclear' with no SMR sub-classification"
+    },
+    {
+      "aliases": [
+        "carbon",
+        "co2",
+        "emissions",
+        "carbon intensity",
+        "scope 2",
+        "gco2"
+      ],
+      "field": "per-facility carbon intensity or emissions",
+      "instead": "get_renewable_energy returns a by_fuel generation mix for the region",
+      "why": "no carbon field exists in the facility or grid layers; grid-carbon is a different product category"
+    },
+    {
+      "aliases": [
+        "liquid cooling",
+        "immersion",
+        "direct-to-chip",
+        "rear-door heat exchanger"
+      ],
+      "field": "liquid / immersion cooling designation",
+      "instead": "get_facility returns cooling_type verbatim from the source",
+      "why": "the field is a cooling TYPE as carried by the source, with no liquid variant observed in the data"
+    }
+  ],
+  "fields_not_collected_note": "These are fields DC Hub does NOT carry, inside topics it DOES cover. Asking for them is a reasonable question with no answer here — do not keep probing endpoints for them, and do not treat a nearby field as a substitute. `instead` names a different real field, not a stand-in."
 }
