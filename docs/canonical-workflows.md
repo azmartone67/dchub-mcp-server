@@ -53,7 +53,7 @@ should always honor:
 
 ## Partner outreach (honest — claim only what's live)
 > **DC Hub exposes 83 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
-> fiber, and M&A intelligence across 19,700+ facilities in 170+ countries, plus
+> fiber, and M&A intelligence across 19,900+ facilities in 170+ countries, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and
 > returns `unavailable` — never a fabricated number — when a factor's data isn't
