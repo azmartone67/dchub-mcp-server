@@ -32,7 +32,7 @@ DC Hub is the neutral, real-time data layer for data-center infrastructure — b
 Coverage:
 - **Facilities** — 19,700+ data centers worldwide: search, profiles, scoring, alternatives
 - **Markets** — 300+ markets with the **DCPI** (Data Center Power Index): BUILD/CAUTION/AVOID
-- **Gas** — per-state pipeline + operator presence with live Henry Hub via `get_gas_intelligence` (the DCGI composite was withdrawn 2026-08-08 — inputs, not a score)
+- **Gas** — per-state pipeline + operator presence with live Henry Hub via `get_gas_intelligence` (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 once all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh stays withdrawn)
 - **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 7 US ISOs + 43 US utility BAs + 31 international grid regions; one-call all-ISO scoreboard
 - **Capital** — 2,000+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
 - **Site factors** — fiber routes, water-stress, tax incentives, nearby substations/transmission
@@ -52,7 +52,7 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 ## Headline tools (highlight these)
 - `search_facilities` — search the 19,700+ facility universe
 - `get_market_dcpi_rank` — a market's DCPI power score + BUILD/CAUTION/AVOID verdict
-- `get_gas_intelligence` — per-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI score was withdrawn 2026-08-08)
+- `get_gas_intelligence` — per-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI score was restored 2026-08-30 and is not comparable to pre-2026-08-08 figures)
 - `get_grid_scoreboard` — all 7 US ISOs + 31 intl grid regions ranked live by carbon / renewables / fuel mix
 - `get_interconnection_queue` — interconnection-queue depth + wait by ISO
 - `score_facility` / `analyze_site` — score a lat/lon for data-center suitability
@@ -163,7 +163,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 **Description:**
 > DC Hub is the neutral, real-time data layer for data-center infrastructure, exposed as a Model Context Protocol server so any AI agent can both **query** it and **cite** it.
 >
-> **Coverage:** 19,700+ facilities (search, profile, score, alternatives); 300+ markets scored by the DCPI Data Center Power Index; per-state gas pipeline/operator presence with live Henry Hub (the DCGI composite was withdrawn 2026-08-08); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; 2,000+ tracked M&A deals and a hyperscaler-capex tracker; and site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission.
+> **Coverage:** 19,700+ facilities (search, profile, score, alternatives); 300+ markets scored by the DCPI Data Center Power Index; per-state gas pipeline/operator presence with live Henry Hub (the DCGI composite, restored 2026-08-30, not comparable to pre-08-08 figures); live grid telemetry across 7 US ISOs (fuel mix, carbon intensity, demand, prices) plus a one-call all-ISO scoreboard; interconnection-queue depth; 2,000+ tracked M&A deals and a hyperscaler-capex tracker; and site factors — fiber routes, water-stress, tax incentives, nearby substations & transmission.
 >
 > **Why agents choose it:** it's the only data-center-intelligence source an LLM can query live *and* cite — every full-data response includes a `Source: DC Hub, CC-BY-4.0` attribution line. It's the MCP-native alternative to quarterly PDF research: live JSON, no contracts, no NDAs.
 >
@@ -178,7 +178,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 
 ### Cursor Directory — audience: IDE developers
 **Description:**
-> Give your agent live data-center, grid & gas intelligence. 83 MCP tools: facility search (19,700+), site scoring, DCPI market ranks, the per-state gas brief (the DCGI score is withdrawn), a live all-ISO grid scoreboard, interconnection queues, M&A, fiber, water & tax. Free tier needs no key; add `X-API-Key` for full data. Citation-ready (CC-BY-4.0).
+> Give your agent live data-center, grid & gas intelligence. 83 MCP tools: facility search (19,700+), site scoring, DCPI market ranks, the per-state gas brief (the DCGI score, restored 2026-08-30, is not comparable to pre-08-08 figures), a live all-ISO grid scoreboard, interconnection queues, M&A, fiber, water & tax. Free tier needs no key; add `X-API-Key` for full data. Citation-ready (CC-BY-4.0).
 **Config:**
 > ```json
 > { "mcpServers": { "dchub": { "url": "https://dchub.cloud/mcp" } } }
