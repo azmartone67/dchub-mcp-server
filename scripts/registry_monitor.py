@@ -235,6 +235,12 @@ WATCH = ["grid", "infrastructure", "hyperscaler", "renewable energy", "transmiss
 # Per-CORE-term relevance remedy surfaced on a slip. The ONLY Smithery lever that moves the
 # top-level `score` is the UI-authored description (no CLI/registry write path reaches it —
 # confirmed 2026-07-12), so every remedy leads with that owner action.
+# Smithery's SEARCH api truncates `description` to exactly this many chars —
+# measured 2026-09-01 across 50 servers off registry.smithery.ai: max length
+# 1000, none over, five sitting exactly at it. The DETAIL endpoint returns the
+# full text. Only what survives this cut can rank.
+SMITHERY_SEARCH_CHARS = 1000
+
 STATE_FILE = "state/rank_streak.json"
 
 
@@ -960,6 +966,86 @@ def _reflex_kick():
         return f"kick failed ({e})"
 
 
+def _live_search_blurb():
+    """The description Smithery's SEARCH index actually holds — already truncated
+    by them, so no slicing here. Returns None if unreadable (never "")."""
+    try:
+        d = _get("https://registry.smithery.ai/servers?" + urllib.parse.urlencode(
+            {"q": "data center", "pageSize": "50"}))
+    except Exception:
+        return None
+    for s in (d.get("servers") or []):
+        if "dchub" in (s.get("qualifiedName") or "").lower():
+            return s.get("description") or ""
+    return None
+
+
+def smithery_visible_terms(core_ranks):
+    """A ranked term the copy PAYS FOR but Smithery never indexes.
+
+    ★This does NOT compare the two TEXTS, deliberately. They have never matched
+    (2026-09-01: live 2,212 chars vs repo 2,383, measured BEFORE any paste), and
+    repo-ahead-of-live is the NORMAL state between a merge and the owner's paste
+    — the blurb is owner-authored in the UI and no repo path writes it. A
+    text-equality fence would be red by design, and a fence that is red by
+    design gets deleted rather than fixed. This compares TERM VISIBILITY, which
+    is the property that decides rank.
+
+    Severity follows the HARM, not the drift:
+      slipped (rank > 1) AND absent from the live window -> REGRESSION. That is
+        the 2026-09-01 fiber case exactly: rank #3 for 313 consecutive cycles
+        (~20 days) while the word sat at char 1,932 of a file whose first 1,000
+        are all the search API ever reads.
+      absent but still #1 -> note. `datacenter`, `power grid`,
+        `grid interconnection` and `renewables` are absent from the copy
+        entirely and hold #1 off displayName, smithery.yaml keywords and tool
+        names. Alerting on those would encode a requirement the evidence
+        contradicts — the same scope line test/smithery-reclaim-terms.test.mjs
+        draws.
+    """
+    regressions, notes = [], []
+    blurb = _live_search_blurb()
+    if blurb is None:
+        notes.append("Smithery blurb UNREADABLE from here — term visibility was not "
+                     "checked. This is an unknown, not a clean result.")
+        return regressions, notes
+    if len(blurb) > SMITHERY_SEARCH_CHARS:
+        notes.append(f"Smithery now serves {len(blurb)} description chars, past the "
+                     f"{SMITHERY_SEARCH_CHARS} this check assumes — the truncation moved; "
+                     f"re-measure before trusting the visibility verdict below.")
+    low = blurb.lower()
+    try:
+        repo = open("scripts/smithery_description.txt", encoding="utf-8").read().lower()
+    except Exception:
+        repo = ""
+
+    slipped, holding = [], []
+    for t in CORE:
+        if t.lower() in low:
+            continue
+        pos = (core_ranks.get(t) or (None, None, None))[0]
+        (slipped if (pos and pos > 1) else holding).append(
+            f"{t} (#{pos})" if pos and pos > 1 else t)
+    pending = [t for t in CORE + RECLAIM
+               if t.lower() in repo and t.lower() not in low]
+
+    if slipped:
+        regressions.append(
+            f"Smithery indexes a blurb that never says {', '.join(slipped)} — SLIPPED and "
+            f"absent from the {SMITHERY_SEARCH_CHARS}-char window the search API reads. "
+            f"Owner: smithery.ai/servers/{SMITHERY_SLUG} -> Edit, paste "
+            f"scripts/smithery_description.txt (terms front-loaded), Save.")
+    if pending:
+        shown = ", ".join(pending[:6]) + ("..." if len(pending) > 6 else "")
+        notes.append(f"repo->live paste PENDING: scripts/smithery_description.txt carries "
+                     f"{len(pending)} monitored term(s) the live window does not ({shown}). "
+                     f"The blurb is owner-pasted in the UI; no repo path writes it.")
+    if holding:
+        notes.append(f"absent from the live window but holding #1 — winning off displayName, "
+                     f"keywords and tool names rather than the blurb: {', '.join(holding)}")
+    return regressions, notes
+
+
 def main(probe=False):
     core = {t: smithery_rank(t) for t in CORE}
     # --- CORE regression + streak + reflex (both modes) ---
@@ -1013,6 +1099,10 @@ def main(probe=False):
     # long comment on glama_build_provenance() says why the exception is correct.
     _prov_reg, _prov_notes = glama_build_provenance(live_list)
     reasons.extend(_prov_reg)
+    # TERM VISIBILITY on the surface that actually ranks. Alerts only where a
+    # term is BOTH slipped and unindexed; see smithery_visible_terms().
+    _vis_reg, _vis_notes = smithery_visible_terms(core)
+    reasons.extend(_vis_reg)
     readme_tools = readme_tool_count()
     lobe_status, lobe_tools = lobehub_presence()
 
@@ -1057,7 +1147,7 @@ def main(probe=False):
     regression = bool(reasons)
 
     # Non-paging notes: owner-gated or environmental items we report but don't alert on.
-    notes = list(_prov_notes)
+    notes = list(_prov_notes) + list(_vis_notes)
     if lobe_status == "present" and lobe_tools and live_tools and lobe_tools != live_tools:
         notes.append(f"LobeHub shows **{lobe_tools} tools** vs live **{live_tools}** — owner: open the "
                      f"listing and click **Refresh Metadata** (re-crawls the README) once README is current.")
