@@ -4142,12 +4142,42 @@ const ANON_DAILY_CAP = Math.max(0, parseInt(process.env.DCHUB_ANON_DAILY_CAP || 
 
 // 60s-per-IP in-process cache of today's anon call count. Bounded like
 // _trialDayCounts (clear at 50000) so it can't grow unbounded across distinct IPs.
-const _anonUsageCounts = new Map();  // ip -> { at: epochMs, count: number }
-async function _anonOverCap(ip) {
-  // INERT-when-off — the critical guard: cap disabled OR no usable IP => no fetch
-  // at all, no latency, returns false (never throttle). This is what makes the
-  // default (DCHUB_ANON_DAILY_CAP=0) a true no-op on the hot path.
-  if (ANON_DAILY_CAP <= 0 || !ip) return false;
+export const _anonUsageCounts = new Map();  // ip -> { at: epochMs, count: number }
+
+// ── Hard wall multiple (DCHUB_ANON_HARD_WALL_MULT) ───────────────────────────
+// (owner-approved 2026-09-01, at 10x.) The soft cap above is a CARROT and stays
+// one: between the cap and this multiple the caller keeps getting a trimmed
+// preview plus the claim_free_key / unlock_more_data escalation, exactly as
+// before. This adds ONE thing on top — a caller that has taken MULT x cap
+// over-cap nudges in a single day, from one IP, holding no key, is not a
+// prospect being nurtured; it is a loop that cannot read an envelope.
+//
+// Measured cause (2026-09-01): `chain-hire` (UA `chain-hire/1.0 (MCP client;
+// doubao 2026)`) made 1,345 anonymous calls in ONE day against a cap of 30 --
+// 45x -- to a single tool, at a flat 100-132 calls/hour for 14 hours. 1,410 of
+// its 1,473 calls were logged status='anon_daily_cap' and served anyway. It was
+// 69.6% of the rolling-7d headline. Across 30d, anon_daily_cap fired 7,073
+// times over 3,517 sessions, so this tail is not one caller.
+//
+// REACHABILITY IS DELIBERATELY UNTOUCHED: at the production cap of 30 the wall
+// lands at 300 calls/IP/day. Real agents do not reach it -- the funnel's own
+// arithmetic is ~0.5 payable calls per caller per day and 89.4% of callers are
+// one-and-gone -- so this narrows the free class for harvesters only. Set
+// DCHUB_ANON_HARD_WALL_MULT=0 to disable the wall and keep the soft cap.
+//
+// Inherits BOTH invariants of the soft cap and is tested for both: INERT when
+// DCHUB_ANON_DAILY_CAP<=0 (no fetch, no wall) and FAIL-OPEN on any unreadable
+// count (a backend hiccup must never wall the funnel).
+const ANON_HARD_WALL_MULT = Math.max(0, parseInt(process.env.DCHUB_ANON_HARD_WALL_MULT || '10', 10));
+const ANON_HARD_WALL_AT = (ANON_DAILY_CAP > 0 && ANON_HARD_WALL_MULT > 0)
+  ? ANON_DAILY_CAP * ANON_HARD_WALL_MULT
+  : 0;   // 0 => hard wall disabled; the soft cap is unaffected either way
+
+// Today's anon call count for an IP, or 0 when inert/unreadable. Single source
+// for both thresholds so they can never disagree, and so the hard-wall check
+// costs no extra fetch (the 60s per-IP cache is shared).
+export async function _anonUsageCount(ip) {
+  if (ANON_DAILY_CAP <= 0 || !ip) return 0;
   try {
     const now = Date.now();
     const hit = _anonUsageCounts.get(ip);
@@ -4174,10 +4204,26 @@ async function _anonOverCap(ip) {
       if (_anonUsageCounts.size > 50000) _anonUsageCounts.clear();  // unbounded-growth guard
       _anonUsageCounts.set(ip, { at: now, count });
     }
-    return count >= ANON_DAILY_CAP;
+    return count;
   } catch (_) {
-    return false;  // FAIL-OPEN on any unexpected error → treat as count 0
+    return 0;  // FAIL-OPEN on any unexpected error → treat as count 0
   }
+}
+
+export async function _anonOverCap(ip) {
+  // INERT-when-off — the critical guard: cap disabled OR no usable IP => no fetch
+  // at all, no latency, returns false (never throttle). This is what makes the
+  // default (DCHUB_ANON_DAILY_CAP=0) a true no-op on the hot path.
+  if (ANON_DAILY_CAP <= 0 || !ip) return false;
+  return (await _anonUsageCount(ip)) >= ANON_DAILY_CAP;
+}
+
+// TRUE only for an anonymous caller that has blown past MULT x the daily cap.
+// Guarded by ANON_HARD_WALL_AT so that a disabled cap OR a zero multiple keeps
+// this permanently false without a fetch.
+export async function _anonHardWalled(ip) {
+  if (ANON_HARD_WALL_AT <= 0 || !ip) return false;
+  return (await _anonUsageCount(ip)) >= ANON_HARD_WALL_AT;
 }
 
 // 2026-06-15 A/B TOGGLE: DCHUB_ANON_INLINE_FULL (default 'on' = current behavior).
@@ -11060,6 +11106,49 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     ..._pwx2,        /* phase39_human_message — hoisted above (r-human-first) */
     ..._autoMintSC2, /* r61-conv: present only when mint succeeded */
     ..._hiSC2,       /* 2026-06-07: present only when count>=3 high-intent */
+          })),
+        };
+      }
+      // ── Anonymous per-IP HARD wall (DCHUB_ANON_HARD_WALL_MULT x the cap) ────
+      // Deliberately ABOVE the handler, unlike the soft cap below it. The soft
+      // cap runs the full query and then trims the result, so an over-cap caller
+      // costs exactly as much to serve as a paying one -- measured 2026-09-01:
+      // capped calls averaged 1,003ms against 1,187ms uncapped, ~23 minutes of
+      // continuous query time spent on 1,410 answers we had already decided to
+      // trim. Past the hard wall there is nothing left to trim a preview FROM,
+      // so the query is skipped outright and that cost goes to zero.
+      //
+      // Same !c.api_key guard as the soft cap: keyed/trial/paid callers never
+      // reach this line, so claiming a key remains the escape hatch and the
+      // wall is escapable in one step by anyone able to read the message.
+      if (!c.api_key && await _anonHardWalled(c.client_ip)) {
+        status = 'anon_hard_wall';
+        const _sidw = c.session_id || 'no-session';
+        const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
+          + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
+          + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
+          + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
+          + "identified callers are not subject to this wall. For full depth now, call `unlock_more_data` "
+          + "($10 one-time = 1,000 API calls, no subscription).";
+        return {
+          content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
+          isError: _wallIsError(),
+          structuredContent: _collapseEnvelope(_dedupeAliasKeys({
+            error: 'anon_hard_wall',
+            tool: name,
+            current_tier: tier || 'free',
+            // Named so a caller can tell WHICH limit stopped it: this is the
+            // IP-wide anonymous counter, not any per-tool budget. Same
+            // r-quota-truth reasoning as the soft cap's remaining_today_basis.
+            binding_limit: 'anon_ip_daily_hard',
+            limit: ANON_HARD_WALL_AT,
+            soft_cap: ANON_DAILY_CAP,
+            retry_after: 'UTC midnight',
+            next_tool: 'claim_free_key',
+            unlock_tool: 'unlock_more_data',
+            credits_url: _packCheckoutUrl(_sidw),
+            signup_url: SIGNUP_URL,
+            upgrade_url: UPGRADE_URL,
           })),
         };
       }
