@@ -219,8 +219,15 @@ def connector_regressions():
 CORE = ["data center", "data centers", "datacenter", "power grid", "fiber", "capacity",
         "grid interconnection", "interconnection", "interconnection queue",
         "renewables", "power"]
+#   utility added to RECLAIM 2026-09-01 — it was rank #1 on 2026-08-26 (measured, past
+#     agent-utils at 10,009 uses) and is now >20 of 162. Cause is presence, not popularity:
+#     the term had been dropped from scripts/smithery_description.txt entirely. It was in
+#     NO list — not CORE, not RECLAIM, not WATCH — so the fall from #1 to off-page was
+#     invisible to this monitor. RECLAIM (not CORE) because CORE means "we verifiably hold
+#     #1 and a slip PAGES"; a term currently off-page would fire a permanent false page,
+#     which this file's own energy CORE->RECLAIM note warns against.
 RECLAIM = ["energy", "natural gas", "hyperscale", "PJM", "ERCOT", "CAISO", "MISO",
-           "electricity", "site selection"]
+           "electricity", "site selection", "utility"]
 WATCH = ["grid", "infrastructure", "hyperscaler", "renewable energy", "transmission",
          "data center capacity", "grid capacity", "electricity grid",
          "ai infrastructure", "compute capacity", "power plant", "substation", "DCPI"]
