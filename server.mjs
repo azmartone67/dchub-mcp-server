@@ -7846,9 +7846,26 @@ export const _PLAN_CLASSES = [
       { step: 2, tool: 'get_market_dcpi_rank', depends_on: [], estimated_calls: 1,
         why: 'Same DCPI scorecard for the SECOND market — side B. Independent of step 1, run in parallel.',
         args_hint: { market_slug: (d.comparePair && d.comparePair.b) || '<second market, e.g. columbus>' } },
-      { step: 3, tool: 'get_market_intel', depends_on: [], estimated_calls: 2,
-        why: 'Optional depth on both markets (vacancy, pricing, pipeline) once the DCPI verdicts flag which factors to dig into — one call per market, parallel.',
-        args_hint: { market: (d.comparePair && d.comparePair.a) || '<either market>' } },
+      // ★2026-08-31 SYMMETRY. This was ONE step carrying estimated_calls: 2 and a
+      // rationale promising "one call per market, parallel" — but a step is executed
+      // once, with one args object, and that object named market A only. Measured on
+      // "compare Dallas vs Phoenix": executed[] held get_market_dcpi_rank x2 and
+      // get_market_intel(dallas). Phoenix never got a brief, while the replay an
+      // agent composes from asserted both markets were covered. An agent doing the
+      // right thing — reading the replay and trusting it — produced a lopsided
+      // comparison and had no way to notice.
+      //
+      // estimated_calls is a COST HINT, not an instruction to the executor; nothing
+      // reads it and fans out. Sides A and B are symmetric here for the same reason
+      // steps 1 and 2 are: because they are two steps. Fixed structurally rather
+      // than by teaching the executor to expand a step, so the plan says exactly
+      // what it will do.
+      { step: 3, tool: 'get_market_intel', depends_on: [], estimated_calls: 1,
+        why: 'Optional depth on the FIRST market (vacancy, pricing, pipeline) — side A of the like-for-like brief. Independent of steps 1-2, same parallel wave.',
+        args_hint: { market: (d.comparePair && d.comparePair.a) || '<first market, e.g. phoenix>' } },
+      { step: 4, tool: 'get_market_intel', depends_on: [], estimated_calls: 1,
+        why: 'Same depth for the SECOND market — side B. A head-to-head that briefs only one side is not a comparison.',
+        args_hint: { market: (d.comparePair && d.comparePair.b) || '<second market, e.g. columbus>' } },
     ],
     alternatives: [
       { tool: 'compare_isos', when: 'You are comparing GRIDS (ISOs) head-to-head, not markets.',
