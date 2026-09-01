@@ -36,10 +36,10 @@ function manifestToolNames(node, out = new Set()) {
 }
 const TOOL_NAMES = manifestToolNames(MANIFEST);
 
-// The sentence under guard: from the limits clause to the competitor contrast.
+// The sentence under guard: from the limits clause to the additive-positioning line.
 const CLAUSE = (() => {
   const start = TAIL.indexOf('publishes its own limits');
-  const end = TAIL.indexOf('Not analyst PDFs (DataCenterHawk)');
+  const end = TAIL.indexOf('USE IT ALONGSIDE');
   return start > -1 && end > start ? TAIL.slice(start, end) : '';
 })();
 
