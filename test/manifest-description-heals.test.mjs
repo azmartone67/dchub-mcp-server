@@ -62,3 +62,66 @@ describe('mcp-server.json top-level description', () => {
     expect(SRC.slice(i, i + 200)).toContain('QUANTITIES');
   });
 });
+
+// ★2026-09-01 — THE ADJECTIVE SLOT. Two tool counts rotted in plain sight because
+// a single word sat between the digits and "tools":
+//
+//   scripts/smithery_description.txt   "82 live MCP tools"   canon 83
+//   docs/contextual-triggers.md        "70 live tools"       canon 83, stale since 2026-07-08
+//
+// Both the detector and the healer keyed on `(?: MCP| read-only)?` — ONE optional
+// adjective — so "live MCP" matched neither. `node scripts/sync-tools-manifest.mjs`
+// exited 0 and reported nothing, which is indistinguishable from clean. The second
+// file compounded it by being in no scan list at all.
+//
+// These run the ACTUAL patterns out of the script rather than grepping for text,
+// so narrowing one fails here. The adjective set stays CLOSED on purpose — an
+// open `\w*` would let the healer rewrite numbers inside unrelated prose.
+function rxAfter(anchor) {
+  const i = SRC.indexOf(anchor);
+  if (i < 0) throw new Error(`anchor not found, test is vacuous: ${anchor}`);
+  const m = SRC.slice(i).match(/\/((?:[^/\\\n]|\\.)+)\/([gimsuy]*)/);
+  if (!m) throw new Error(`no regex after anchor: ${anchor}`);
+  return new RegExp(m[1], m[2].replace('g', ''));
+}
+
+describe('tool-count patterns cover the adjective slot', () => {
+  const PATTERNS = [
+    ['per-file heal',   'txt = applyRx(txt, /\\b(\\d+)'],
+    ['coverage detect', 'live.matchAll(/(\\d+)'],
+    ['coverage heal',   ".replace(/\\b(\\d+)((?: live"],
+  ];
+  const MUST_MATCH = ['83 tools', '83 MCP tools', '83 live MCP tools',
+                      '70 live tools', '83 read-only tools'];
+
+  for (const [label, anchor] of PATTERNS) {
+    it(`${label}: matches every adjective phrasing we ship`, () => {
+      const rx = rxAfter(anchor);
+      for (const s of MUST_MATCH) {
+        expect(rx.test(s), `"${s}" is invisible to the ${label} pattern`).toBe(true);
+      }
+    });
+
+    it(`${label}: the adjective set stays closed`, () => {
+      // Over-widening (e.g. \w*) would let the healer rewrite counts inside
+      // unrelated prose. An unknown adjective must NOT be absorbed.
+      const rx = rxAfter(anchor);
+      expect(rx.test('83 amazing tools'),
+        `${label} absorbs an arbitrary word — the set is no longer closed`).toBe(false);
+    });
+  }
+
+  it('both files that carried the rot are in the sweep that actually heals', () => {
+    // MEASURED, because "in a scan list" is not the same as "scanned": dropping
+    // docs/contextual-triggers.md from COVERAGE alone still detects the stale
+    // count, but dropping it from the per-file sweep makes the detector go
+    // silent. Only this list is load-bearing, so this is the one to pin — a
+    // looser `SRC.includes(name)` passes while the file is effectively unscanned.
+    const at = SRC.indexOf("for (const f of ['smithery.yaml'");
+    expect(at, 'per-file sweep not found — this test would be vacuous').toBeGreaterThan(-1);
+    const sweep = SRC.slice(at, SRC.indexOf('])', at));
+    for (const f of ['scripts/smithery_description.txt', 'docs/contextual-triggers.md']) {
+      expect(sweep.includes(`'${f}'`), `${f} is absent from the sweep that heals tool counts`).toBe(true);
+    }
+  });
+});
