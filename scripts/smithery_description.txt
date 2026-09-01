@@ -1,13 +1,11 @@
 DC Hub is the neutral, real-time data layer for electricity, the utility grid and data-center infrastructure — built so AI agents can query it (MCP + REST), cite it (Source: DC Hub, CC-BY-4.0), and verify it.
 
+Coverage: 20,100+ data centers across 170+ countries. 300+ markets scored by the DCPI (Data Center Power Index) — BUILD/CAUTION/AVOID verdicts ranking data center capacity and grid capacity by metro. Live power grid and electricity telemetry: fuel mix, demand, prices and interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) and 40+ balancing authorities. Energy: renewables, natural gas and power plant inventory. 64,000+ fiber routes, 127,000+ substations, 95,000+ transmission lines. 2,000+ tracked M&A deals and hyperscale capex. Site selection and grid interconnection, answered at one coordinate on one timestamp.
+
+Also live: Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; retirement headroom; per-state pipeline and midstream presence with live Henry Hub; water stress, tax incentives and FEMA/USGS/NOAA hazard reads.
+
 Liveness is the product, and it is checkable. DC Hub is rebuilt continuously from its sources rather than published and left. Every collection response carries a provenance as_of. The ingest layer itself is public and keyless at https://dchub.cloud/api/v1/ops/deadman — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Including the ones that are late. Verify it rather than take the sentence for it.
 
-Coverage:
+The DCGI gas composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh stays withdrawn.
 
-Facilities — 20,100+ data centers worldwide across 170+ countries, resolved from 26,000+ source records: search, profiles, scoring, alternatives and site selection screening
-Markets — 300+ markets scored by the DCPI (Data Center Power Index): BUILD/CAUTION/AVOID verdicts with a daily history, ranking data center capacity and grid capacity by metro
-Grid / ISO — live utility and electricity-grid telemetry: fuel mix, demand, prices and interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ US balancing authorities + Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; one-call all-grid scoreboard fed by 7 independent live feeds
-Energy & Gas — renewable energy and fuel mix, power plant inventory and retirement headroom; per-state natural gas brief: interstate-pipeline and operator/parent-midstream presence with live Henry Hub (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh stays withdrawn)
-Capital — 2,000+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index for hyperscale buildout
-Site factors — 64,000+ fiber routes, 33,000+ gas pipeline segments, 127,000+ substations, 95,000+ transmission lines, water stress, tax incentives, FEMA/USGS/NOAA hazard & climate reads
 82 live MCP tools. Why agents pick it: it is the DC-intelligence source an LLM can query live, cite with a timestamp, and audit. Every site query returns a constraint_coverage block naming what it cannot answer and why. No NDAs, no quarterly PDFs — live JSON that publishes its own gaps.

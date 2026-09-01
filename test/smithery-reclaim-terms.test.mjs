@@ -68,3 +68,64 @@ describe('smithery canonical description keeps the terms we reclaim with it', ()
     expect(tracked).toContain('utility');
   });
 });
+
+// ★ 2026-09-01 — THE SECOND HALF OF THE SAME MECHANISM.
+//
+// The fence above pins `electricity` and `utility` to the visible window because
+// those two were the ones caught by hand. Measured the same day against the live
+// search API, 13 of the 21 monitored terms sat PAST that window — among them
+// `fiber` (character 1,932) and `interconnection queue` (1,104), which are
+// exactly the two CORE terms registry_monitor.py had escalated. `fiber` held
+// rank #3 for 313 consecutive 90-minute cycles — about twenty days — while the
+// word sat in this file the entire time, 900+ characters past anything Smithery
+// reads. #252 has the same shape: it added ERCOT/PJM to "name the ISOs we rank
+// >50 for" at characters 1,154-1,161, and none of it was ever indexed.
+//
+// THE RULE IS NOT "every monitored term must appear". The scope note above
+// explains why that would encode a requirement the evidence contradicts, and
+// that reasoning still stands — `datacenter` is absent here and still ranks #1.
+//
+// The rule is: a term this copy ALREADY SPENDS WORDS ON must sit where those
+// words are read. Invisible presence is the defect; it costs the writer's
+// attention and the file's length and buys nothing. Absence is a deliberate
+// choice, presence past the cut is an accident every time.
+//
+// WHAT IS DELIBERATELY *NOT* ASSERTED: file length. The detail endpoint returns
+// the full text, so a long file is correct, and the honesty content below the
+// fold (the deadman URL, the DCGI withdrawal/restoration record) belongs there.
+// A cap on the FILE would delete that. Only the POSITION of ranking terms is
+// fenced.
+describe('a monitored term this description already carries sits inside the visible window', () => {
+  const MONITORED = [...pyList('CORE'), ...pyList('RECLAIM')];
+  const MARGIN = 100;
+
+  it('parses a real term list and a real cut (otherwise everything below is vacuous)', () => {
+    expect(SEARCH_TRUNCATION).toBe(1000);
+    expect(MONITORED.length).toBeGreaterThan(15);
+  });
+
+  it('no monitored term is present in the file but past the truncation', () => {
+    const low = DESC.toLowerCase();
+    const invisible = MONITORED
+      .map(t => [t, low.indexOf(t.toLowerCase())])
+      .filter(([, at]) => at >= SEARCH_TRUNCATION)
+      .map(([t, at]) => `${t} @${at}`);
+    expect(invisible, 'present in scripts/smithery_description.txt but past the '
+      + `${SEARCH_TRUNCATION}-char search truncation, so Smithery never indexes `
+      + 'them — move them earlier or cut them').toEqual([]);
+  });
+
+  it('leaves headroom, because the canon healer rewrites quantities in place', () => {
+    // daily-manifest-sync.yml rewrites 20,100+ / 2,000+ / 300+ / 170+ inside THIS
+    // file. A term sitting at 998 is one quantity-growth away from falling off the
+    // cut with no human edit at all. Fail while there is still room to fix it.
+    const low = DESC.toLowerCase();
+    const visible = MONITORED
+      .map(t => low.indexOf(t.toLowerCase()))
+      .filter(at => at >= 0 && at < SEARCH_TRUNCATION);
+    const last = Math.max(...visible);
+    expect(last, `the last visible monitored term sits at ${last}; keep it below `
+      + `${SEARCH_TRUNCATION - MARGIN} so a canon quantity rewrite cannot push it `
+      + 'past the cut').toBeLessThan(SEARCH_TRUNCATION - MARGIN);
+  });
+});
