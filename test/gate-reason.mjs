@@ -76,3 +76,57 @@ export function gateReason(r) {
 
   return null;
 }
+
+// =============================================================================
+// hasPayload() — does a response actually carry data?
+// -----------------------------------------------------------------------------
+// regression.test.mjs defined this inline as:
+//
+//     const hasData = r && !r.__structured && !r.__raw?.includes('sign up to unlock');
+//
+// which reads "has data" as "did NOT arrive as structuredContent". That is
+// backwards: structuredContent is how a well-formed MCP response arrives, so the
+// better a tool behaved, the more certainly it failed the check.
+//
+// Measured 2026-09-01 on the authenticated smoke run (tier: paid), the four
+// tools failing that assertion returned:
+//
+//   get_grid_intelligence  __structured:true  iso, iso_name, demand_mw,
+//                          generation_mix_pct, constraint_score,
+//                          excess_power_score, retail_price_cents_kwh, …
+//   get_dchub_recommendation __structured:true  recommendation,
+//                          recommendation_live, related_intel, success, …
+//   get_fiber_intel        __structured:true  features, total, type,
+//                          freshness, provenance   (a GeoJSON FeatureCollection)
+//   compare_sites          __structured:true  error  — and nothing else
+//
+// Three of the four were serving exactly what they document. Only the fourth is
+// a real problem, and the old check could not tell them apart because it never
+// looked at the payload — it looked at the transport.
+//
+// So look at the payload. A response has data when it carries at least one key
+// that is not envelope furniture, and does not carry a top-level `error`.
+//
+// ★ ENVELOPE_KEYS is a DENYLIST, and that direction is deliberate: an allowlist
+//   of expected data keys would have to be updated for every tool and would fail
+//   closed on any new field — the same brittleness as asserting a fixed response
+//   shape, which is what left two tests red for months. Adding a key here makes
+//   the check STRICTER, so the risk of forgetting one is a false pass on a
+//   response that is all envelope; test/edge-gate-recognition.test.mjs pins the
+//   four real key sets above against that.
+const ENVELOPE_KEYS = new Set([
+  '_entity', 'quota', '_source', '_cite', 'citation', 'next_session', 'resume',
+  '_return_loop', 'provenance', 'identity', '__structured', '__raw', 'tool',
+  'starter_pack', 'first_call_nudge', 'platform', 'next_tools_hint',
+]);
+
+/**
+ * True when a response carries payload rather than only envelope or an error.
+ * @param {any} r a response as returned by a suite's callTool()
+ */
+export function hasPayload(r) {
+  if (!r || typeof r !== 'object') return false;
+  if (r.error !== undefined) return false;
+  if (typeof r.__raw === 'string') return !/sign up to unlock/i.test(r.__raw);
+  return Object.keys(r).some((k) => !ENVELOPE_KEYS.has(k));
+}

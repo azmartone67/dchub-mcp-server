@@ -36,7 +36,7 @@
 //   saying why it existed.
 // =============================================================================
 import { describe, it, expect } from 'vitest';
-import { gateReason } from './gate-reason.mjs';
+import { gateReason, hasPayload } from './gate-reason.mjs';
 
 // callTool()'s parsing, verbatim from test/regression.test.mjs — what a suite
 // actually holds by the time it calls gateReason().
@@ -160,5 +160,69 @@ describe('edge gate recognition', () => {
     // that here would silently change one of them, so gateReason stays out of it.
     expect(gateReason(undefined)).toBeNull();
     expect(gateReason(null)).toBeNull();
+  });
+});
+
+// =============================================================================
+// hasPayload, against the key sets four tools ACTUALLY returned
+// -----------------------------------------------------------------------------
+// Captured verbatim from the authenticated smoke run on 1dac2bc (tier: paid),
+// via the diagnostic added to regression.test.mjs:479. These are not invented
+// fixtures — they are what production served, which is the only reason the old
+// `!__structured` check could be shown to be wrong rather than merely suspected.
+// Three of the four are full documented payloads; the fourth is an error.
+// =============================================================================
+const keysOnly = (keys) => Object.fromEntries(keys.map((k) => [k, 1]));
+
+describe('hasPayload — measured 2026-09-01, paid tier', () => {
+  it('counts a full grid brief as data even though it is structuredContent', () => {
+    const r = { ...keysOnly(['quota', 'iso', 'iso_name', 'demand_mw', 'demand_period',
+      'generation_mix_period', 'generation_mix_mw', 'generation_mix_pct', 'renewable_share_pct',
+      'gas_share_pct', 'constraint_score', 'excess_power_score', 'avg_time_to_power_months',
+      'avg_queue_wait_months', 'curtailment_pct', 'reserve_margin_pct', 'retail_price_cents_kwh',
+      'queue_depth_gw', 'data_center_share_pct', 'stranded_capacity_mw', 'grid_emergencies_30d',
+      'market_count', 'build_count', 'build_rate_pct', 'as_of']), __structured: true };
+    expect(gateReason(r)).toBeNull();
+    expect(hasPayload(r), 'the old check failed this BECAUSE it was well-formed').toBe(true);
+  });
+
+  it('counts a GeoJSON FeatureCollection as data', () => {
+    const r = { ...keysOnly(['quota', 'features', 'provenance', 'total', 'type', '_source',
+      '_cite', 'citation', '_entity', 'freshness', 'next_session', '_return_loop', 'identity']),
+      __structured: true };
+    expect(hasPayload(r)).toBe(true);
+  });
+
+  it('counts a recommendation payload as data', () => {
+    const r = { ...keysOnly(['_entity', 'quota', 'answer_note', 'available_categories',
+      'connect_url', 'context', 'context_understood', 'is_generic_answer', 'matched_category',
+      'next_tools', 'recommendation', 'recommendation_live', 'related_intel', 'success',
+      'top_pocket', '_source', '_cite', 'citation', 'next_session', 'provenance', 'identity']),
+      __structured: true };
+    expect(hasPayload(r)).toBe(true);
+  });
+
+  it('does NOT count an error-only response as data', () => {
+    // compare_sites, same run, same tier: envelope furniture plus `error`, and
+    // no payload at all. This one SHOULD fail its assertion — it is the single
+    // real signal the other three were burying.
+    const r = { ...keysOnly(['_entity', 'quota', '_source', '_cite', 'citation',
+      'next_session', '_return_loop', 'provenance', 'identity']),
+      error: 'some upstream failure', __structured: true };
+    expect(gateReason(r)).toBeNull();
+    expect(hasPayload(r), 'an error is not data, however well enveloped').toBe(false);
+  });
+
+  it('does NOT count an all-envelope response as data', () => {
+    // The failure mode a forgotten ENVELOPE_KEYS entry would cause, pinned so
+    // the denylist direction stays safe.
+    const r = { ...keysOnly(['_entity', 'quota', '_source', '_cite', 'citation',
+      'next_session', 'resume', '_return_loop', 'provenance', 'identity', 'tool']),
+      __structured: true };
+    expect(hasPayload(r)).toBe(false);
+  });
+
+  it('still rejects a masked free-tier body', () => {
+    expect(hasPayload({ __raw: 'vacancy: [7.2 — sign up to unlock]' })).toBe(false);
   });
 });

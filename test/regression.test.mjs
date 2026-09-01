@@ -13,7 +13,7 @@
 // rather than returning data. Run with: npx vitest run
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
-import { gateReason } from './gate-reason.mjs';
+import { gateReason, hasPayload } from './gate-reason.mjs';
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
@@ -475,7 +475,16 @@ describe('MCP regression suite', () => {
         const r = await callTool(name, args);
         // Either it's gated (free key) or it has meaningful data (paid key).
         const reason = gateReason(r);
-        const hasData = r && !r.__structured && !r.__raw?.includes('sign up to unlock');
+        // ★2026-09-01 — was `r && !r.__structured && !r.__raw?.includes(…)`, i.e.
+        //   "has data" meant "did NOT arrive as structuredContent". Backwards:
+        //   structuredContent is how a well-formed MCP response arrives, so the
+        //   better a tool behaved the more surely it failed. Measured on the
+        //   authenticated run: get_grid_intelligence, get_fiber_intel and
+        //   get_dchub_recommendation each returned their full documented payload
+        //   with __structured true, and were all counted as failures. Only
+        //   compare_sites was genuinely wrong — it returned an `error` and no
+        //   data — and the three false failures were burying that one real one.
+        const hasData = hasPayload(r);
         // ★ This assertion used to be a bare `expect(gated || hasData).toBe(true)`,
         //   which on failure printed only "expected false to be true" — naming
         //   neither the tier, nor the gate, nor the shape that was rejected. Five
@@ -490,7 +499,8 @@ describe('MCP regression suite', () => {
           `  gateReason      : ${reason ?? 'null'}\n` +
           `  tier reported   : ${r?.identity?.tier ?? r?.quota?.tier ?? '(none)'}\n` +
           `  __structured    : ${Boolean(r?.__structured)}   __raw: ${Boolean(r?.__raw)}\n` +
-          `  top-level keys  : ${r ? Object.keys(r).slice(0, 25).join(', ') : '(response was falsy)'}`,
+          `  top-level keys  : ${r ? Object.keys(r).slice(0, 25).join(', ') : '(response was falsy)'}\n` +
+          `  error (if any)  : ${r?.error !== undefined ? JSON.stringify(r.error).slice(0, 300) : '(none)'}`,
         ).toBe(true);
       }, 20000);
     }
