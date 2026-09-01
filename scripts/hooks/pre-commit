@@ -1,0 +1,31 @@
+#!/bin/sh
+# ============================================================================
+# Author-time manifest-drift guard.
+#
+# Blocks a commit whenever the MCP tool manifest surfaces (server.json,
+# mcp-server.json, README.md, smithery.yaml) have drifted from server.mjs —
+# the single source of truth. This is the failure that kept recurring
+# (48-vs-49, 46-vs-42, 57-vs-56): a tool is added to server.mjs but the
+# surfaces registries scrape are never re-synced, and it's only caught later
+# by CI (red PR) or the daily job. This moves the catch to the moment you
+# commit the tool.
+#
+# Only runs when the commit actually touches server.mjs or a manifest surface,
+# so unrelated commits pay zero cost. Bypass (rarely needed) with:
+#   git commit --no-verify
+#
+# Installed by scripts/install-hooks.mjs (npm "prepare"). Offline; no network.
+# ============================================================================
+changed=$(git diff --cached --name-only)
+case "$changed" in
+  *server.mjs*|*mcp-server.json*|*server.json*|*README.md*|*smithery.yaml*) ;;
+  *) exit 0 ;;
+esac
+
+if ! node scripts/sync-tools-manifest.mjs; then
+  echo ""
+  echo "✗ MCP manifest drift — the surfaces registries scrape are out of sync with server.mjs."
+  echo "  Fix:  npm run sync:fix   (rewrites the counts), then re-stage & commit."
+  echo "  Skip: git commit --no-verify   (not recommended — CI will still block the PR)."
+  exit 1
+fi
