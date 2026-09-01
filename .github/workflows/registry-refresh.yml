@@ -14,6 +14,15 @@ on:
   schedule:
     - cron: '30 6 * * 1'      # weekly, Monday 06:30 UTC
   push:
+    # ★2026-08-31: `branches` was absent, so a push to ANY feature branch that
+    # touched server.json ran the publish job with the DNS key and pushed that
+    # branch's manifest to registry.modelcontextprotocol.io — the cascade source
+    # for PulseMCP / mcp.so / Glama / ToolPlex. An unreviewed branch could
+    # therefore change what every aggregator serves, and the version-bump guard
+    # made it worse: bumping (which it requires) is exactly what makes the early
+    # publish succeed instead of no-op. Publish only from main.
+    branches:
+      - main
     paths:
       - 'mcp-server.json'
       - 'integrations/**'
