@@ -11770,6 +11770,28 @@ const _STEP_SLIM_KEEP = ['ok', 'error', 'empty_result', 'applied_filters',
   'constraint_coverage', 'constraint_coverage_shape', 'request_interpretation',
   'identity', 'citation', 'provenance', 'as_of', 'matched', 'universe', 'quota'];
 
+// ★2026-09-01 — THE ANSWER, not only the caveats.
+//
+// The list above is every block saying what an answer does NOT cover. It kept a
+// slimmed step honest and citable — provenance, as_of, applied_filters — and
+// then dropped the VERDICT, because a verdict is not a caveat and nothing named
+// it. Same key-order lottery as the empty_result regression this file's test was
+// written for, one layer over.
+//
+// Measured on live execute_plan("compare Dallas vs Phoenix"): the DCPI step
+// slimmed, and `composite_score: 43.6` survived ONLY because JSON.stringify
+// emits insertion/alphabetical order and "composite_score" lands in the first
+// 1,200 characters. `verdict` starts with v. It was gone. So the envelope handed
+// an agent a dated, sourced, caveated step with no answer in it — and the agent
+// cannot tell that from a step whose subject genuinely has no verdict.
+//
+// Bounded, because a headline must be a VERDICT and not a dataset: a value over
+// _HEADLINE_MAX stays in the preview rather than defeating the slimming this
+// function exists to do. `score` is the object form (get_gas_index returns
+// {dcgi, verdict, gas_access_score, ...}, ~300 b) and is kept whole when it fits.
+const _STEP_SLIM_HEADLINE = ['verdict', 'composite_score', 'dcgi', 'score', 'headline'];
+const _HEADLINE_MAX = 600;
+
 export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
   try {
     if (!out || typeof out !== 'object' || Array.isArray(out)) return out;
@@ -11777,6 +11799,13 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
 
     const kept = {};
     for (const k of _STEP_SLIM_KEEP) if (out[k] !== undefined) kept[k] = out[k];
+    // The answer itself, size-bounded — see _STEP_SLIM_HEADLINE.
+    for (const k of _STEP_SLIM_HEADLINE) {
+      if (out[k] === undefined) continue;
+      try {
+        if (JSON.stringify(out[k]).length <= _HEADLINE_MAX) kept[k] = out[k];
+      } catch (_e) { /* unserialisable: leave it to the preview */ }
+    }
 
     // Bound the kept block before it can defeat the point of slimming.
     if (JSON.stringify(kept).length > limit * 0.75
