@@ -13,7 +13,7 @@ Glama index lag is reported but NOT alerted (they re-crawl on their own cadence)
 Read-only. No secrets. Smithery's API 403s the default urllib UA, so a browser
 UA is set on every request.
 """
-import json, os, re, urllib.request, urllib.parse, urllib.error
+import datetime, json, os, re, urllib.request, urllib.parse, urllib.error
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 SMITHERY_SLUG = "azmartone67/dchub"
@@ -313,12 +313,8 @@ def glama_page_tool_count():
     for weeks. Agents discover DC Hub via the rendered page + live badge, not the
     blurb — so the page is the count that matters. FAIL-SAFE: any error → None so we
     fall back to the API blurb rather than false-alerting."""
-    url = f"https://glama.ai/mcp/servers/{REPO_SLUG}"
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            html = r.read().decode("utf-8", "ignore")
-    except Exception:
+    html, _err = _glama_server_html()   # one 2 MB fetch shared with the provenance check
+    if html is None:
         return None
     m = re.search(r"(\d+)\s*MCP\s*tools", html, re.I)
     return int(m.group(1)) if m else None
@@ -342,6 +338,440 @@ def glama_record():
             note += f" (API blurb lags: {blurb})"
         return page, note
     return blurb, (desc[:60] or "unreachable")
+
+
+# ── BUILD PROVENANCE: the listing must be BUILT FROM THE CURRENT TIP OF MAIN ───
+#
+# ★2026-09-01. Measured, and still true as this shipped: the Glama SERVER listing
+# renders `get_gas_index` as "★ WITHDRAWN 2026-08-08: this tool no longer returns
+# a score" — a capability RESTORED on main 2026-08-30 and returning ok:true live.
+# Seven tool descriptions were serving text main no longer declares.
+#
+# WHY EVERY EXISTING FENCE MISSED IT. This is NOT stale prose and NOT a stale
+# cache. The text was genuine MCP introspection output — perfectly correct for
+# the commit that was built. CONNECTOR_SLUGS above watches connector blurbs for
+# stale PROSE, so no prose rule could fire on copy that was true when written.
+# test/no-live-dcgi-claims.test.mjs and registry_stale_guard.py scan THIS
+# REPOSITORY, and the defect was never in it. The unowned invariant was the one
+# nothing asserted: THE PUBLISHED LISTING MUST BE BUILT FROM THE CURRENT TIP OF
+# MAIN.
+#
+# THE MECHANISM IS FRESHNESS, NOT A VENDOR DEFECT. Glama's mirror syncs fine —
+# measured 2026-09-01 it was AT origin/main while the listing was still stale.
+#
+# THERE ARE THREE CLOCKS, NOT TWO, and two drafts of this comment got the count
+# wrong before the third stage was found by hand:
+#
+#     repo SYNC  →  container BUILD  →  RELEASE  →  published schema page
+#
+# Each is a separate trigger, and NONE of them fires the next one on its own.
+#     2026-08-31 16:53Z  BUILD  ran `git checkout 2462f5de` (pre-fix)
+#     2026-08-31 16:54Z  RELEASE cut from that build → this is what is published
+#     2026-08-31 17:29Z  SYNC   advanced the mirror to 0792adc (post-fix)
+#   ⇒ the build was run 36 minutes before the sync that carried the fix.
+#     2026-09-01 14:42Z  BUILD  re-run, success, 22.2s, `git checkout e67cddd`
+#                        (== origin/main), container tools/list introspects the
+#                        RESTORED text correctly … and the listing did NOT change.
+#                        That build page carries NO "Release Created" block.
+#
+# So a green build proves nothing TWICE OVER: it may re-run a frozen checkout
+# (the 08-31 case), and even a build at the correct commit publishes nothing
+# until a RELEASE is cut from it (the 09-01 case, which is the live state as
+# this shipped). The failure this fence detects is therefore best described as
+# A STALE PUBLISHED RELEASE, not "a stale build".
+#
+# The invariant this checks is the OUTPUT one, which is stage-agnostic on
+# purpose — it stays true no matter which of the three clocks is behind:
+#   what the listing SERVES == what origin/main DECLARES.
+# The mirror-commit comparison is the one stage we can also read directly, so it
+# is used to NARROW the remedy: mirror behind ⇒ sync; mirror current ⇒ the
+# problem is downstream of the sync and the report must name BOTH remaining
+# stages, because a rebuild is a no-op when the build is already current.
+#
+# ★WHY THIS ALERTS, against this module's own stated policy. The header says
+# Glama drift "is reported but NOT alerted (they re-crawl on their own cadence)".
+# That remains TRUE of the README re-crawl — glama_page_tool_count() depends on
+# exactly that, and the mirror sync above is the same kind of self-correcting
+# thing. It is FALSE of the BUILD. Nothing re-triggers a build when the mirror
+# advances, so a build left behind main stays behind indefinitely: this one had
+# already been stale for two days when it was found by hand. A condition that
+# does not self-correct must page, or it is discovered the way this one was.
+#
+# ★"pinnedCommit": null DOES NOT MEAN "TRACK LATEST". Glama's saved Build Spec
+# read `"pinnedCommit": null` while the generated Dockerfile still contained a
+# literal `git checkout 2462f5de…`. Empty means "use whatever the mirror
+# resolved at build time", not "follow the branch". And glama.json cannot express
+# a ref pin either — its schema is `maintainers` only, required. So there is no
+# in-repo lever for this: a green rebuild re-runs the frozen checkout and proves
+# nothing about freshness. Only the OUTPUT can be trusted, which is what the
+# behavioural proxy below reads.
+#
+# ★HEAD COMES FROM origin/main OVER THE NETWORK, NEVER A LOCAL CHECKOUT. A local
+# tree is routinely dozens of commits behind — this exact mistake was made on
+# 2026-08-31 from a tree 36 commits stale, which is how a fresh mirror first got
+# misread as a frozen one.
+GITHUB_API = "https://api.github.com/repos/" + REPO_SLUG
+# Mirror sync lag we tolerate before calling it a stall. Measured 2026-09-01: the
+# mirror sat 10 commits behind main after ~1 day, against a repo doing 35-80
+# commits/week — so ~1 day of normal lag is ~7-11 commits and 40 is ~4 days. The
+# mirror DOES self-correct, so this is deliberately generous: it exists to catch a
+# mirror that has stopped, not one that is merely behind.
+MIRROR_LAG_TOLERANCE = 40
+# The tool whose repair is the worked example above. The check sweeps EVERY tool;
+# this one is named only so the historical case stays legible in the report.
+PROVENANCE_SENTINEL = "get_gas_index"
+# ★PUBLISH LAG. The RELEASE stage is ASYNCHRONOUS AND AUTOMATIC — measured
+# 2026-09-01, a release fired on its own and the schema page followed, tens of
+# minutes after the 21:43Z build, with no human cutting anything. An earlier
+# draft of this file said a release had to be cut by hand; that was wrong, and
+# the remedy text below no longer says it. Inside that lag a correct, freshly
+# deployed server is INDISTINGUISHABLE from a stale one: mirror at HEAD, served
+# text still the previous release. Flagging it would page on every good deploy.
+#
+# ★WHAT THIS IS ANCHORED TO, AND WHY IT IS NEITHER THE BUILD TIME NOR HEAD. The
+# natural anchor is the last build's timestamp, and it is NOT obtainable: the
+# build page is admin-only and the JSON API is 401. Anchoring to our own
+# first-observation would need state that survives runs, and state/ is gitignored
+# with no cache step in registry-rank-monitor.yml — so a state-anchored window
+# would reset every CI run and NEVER expire, silently disabling this fence.
+#
+# The first draft anchored to origin/main HEAD's commit date, and MEASUREMENT
+# killed it. Over the last 30 days of origin/main: 198 commits, MEDIAN GAP 75
+# MINUTES — below this window — and 103 of 197 gaps under 90 minutes. Commits
+# arrive in bursts separated by long quiet stretches (longest 38.1h), so the
+# reassuring 25% of-wall-clock figure is an average that hides the shape: DURING
+# A BURST each push re-arms the window before the previous one expires, so it is
+# effectively always open. Deploys happen during bursts. HEAD-anchoring was
+# therefore open precisely when the defect is most likely to be introduced, and
+# it got QUIETER THE MORE YOU PUSH.
+#
+# So the anchor is the MIRROR commit's date. The mirror advancing is the actual
+# precondition for a rebuild — a push that has not synced cannot have been built,
+# so it must not re-arm the window — and the mirror advances far less often than
+# main does (measured: 10 commits / ~20h behind at one point on 2026-09-01).
+#
+# ★THE GUARANTEE IS ONE-SIDED, on purpose. A commit's date is a LOWER BOUND on
+# when the mirror synced to it (sync >= commit), so age-since-commit >=
+# age-since-sync. Therefore: age < grace PROVES we are still inside the publish
+# window, and grace is sound. age >= grace does NOT prove we are outside it — the
+# mirror may have just caught up to an older commit — so we may occasionally page
+# during a legitimate publish. That asymmetry is deliberate: this fence exists
+# because a stale listing went unnoticed for two days, so it fails toward paging
+# and never toward silence. Start at 90 and tune; one clean measurement of the
+# real build->release lag bounds it only loosely.
+PUBLISH_GRACE_MINUTES = 90
+
+_PAGE_CACHE = {}
+
+
+def _glama_server_html():
+    """The public server page (~2 MB), fetched at most once per run.
+
+    Returns (html, err). Shared by glama_page_tool_count() and the provenance
+    check so one fetch serves both."""
+    if "html" not in _PAGE_CACHE:
+        url = f"https://glama.ai/mcp/servers/{REPO_SLUG}"
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                _PAGE_CACHE["html"], _PAGE_CACHE["err"] = r.read().decode("utf-8", "ignore"), None
+        except Exception as e:
+            _PAGE_CACHE["html"], _PAGE_CACHE["err"] = None, f"unreachable ({type(e).__name__})"
+    return _PAGE_CACHE["html"], _PAGE_CACHE["err"]
+
+
+def _mirror_commit(html):
+    """The commit Glama's repository mirror last resolved, or None.
+
+    The page browses the mirrored tree at
+    /mcp/servers/<slug>/tree/<40-hex-commit>/<path>, so the SHA is readable
+    without an API key — which matters, because the JSON API at
+    /api/mcp/v1/servers/<slug> now answers 401 and its data licence demands
+    visible attribution. Pure: takes HTML, returns a SHA."""
+    shas = set(re.findall(r"/mcp/servers/[^\"']*?/tree/([0-9a-f]{40})/", html or ""))
+    return shas.pop() if len(shas) == 1 else None
+
+
+def _rendered_descriptions(html):
+    """{tool_name: description} as the LISTING renders them — i.e. the output of
+    the last BUILD's MCP introspection. Pure.
+
+    Bounded per tool the same way connector_listing_text() bounds its region, and
+    for the same reason: a marker that moves must yield nothing rather than
+    something wrong.
+
+    ★READ THE TOOL REGIONS, NEVER THE PAGE'S OWN PROSE. The overview page mixes
+    two feeds with different clocks: the surrounding prose and the "N MCP tools"
+    badge are README-fed and go fresh at the repo SYNC (glama_page_tool_count()
+    depends on that and is right to), while these per-tool blocks come from the
+    published RELEASE and lag it. Measured 2026-09-01 on the same fetch: the
+    prose already carried the current 20,100+ facility count while every tool
+    block still served August's text. A check reading the prose would have gone
+    green one full stage early — blind to exactly this failure.
+
+    The tool blocks here are byte-identical to the ones on /schema (verified
+    2026-09-01 on get_gas_index), and the overview page additionally carries the
+    /tree/<sha>/ mirror links that /schema does not — which is why both signals
+    are taken from this one page rather than splitting across two fetches."""
+    out = {}
+    for name in set(re.findall(r"tool=([a-z_][a-z0-9_]*)\"", html or "")):
+        i = (html or "").find(f'tool={name}"')
+        seg = html[i:i + 9000]
+        j = seg.find('<div class="prose">')
+        if j < 0:
+            continue
+        m = re.search(r"<p>([\s\S]*?)</p>", seg[j:])
+        if m:
+            out[name] = _norm_rendered(m.group(1))
+    return out
+
+
+def _norm_rendered(t):
+    """Rendered HTML → comparable text. Tags out FIRST, then entities: the
+    descriptions contain literal angle-bracket placeholders (`<ISO>`, `<slug>`,
+    `<the user's question>`) which Glama's markdown renderer emits inconsistently
+    — some survive as escaped text, some are eaten as bogus tags. Unescaping
+    first would resurrect them into tags the stripper then removes, which is a
+    difference in OUR normaliser masquerading as a difference in THEIR build.
+
+    Markdown punctuation is deliberately NOT stripped here — _words() handles it
+    for BOTH sides at once. Doing it on this side only is what an earlier draft
+    did, and it silently merged `analyze_site` into `analyzesite` on the served
+    side while the declared side kept the underscore: 80 of 83 tools "stale",
+    every one of them a defect in the normaliser."""
+    # Imported HERE and aliased on purpose: three functions in this module bind
+    # `html` as a LOCAL (connector_listing_text, glama_page_tool_count,
+    # _glama_server_html's caller), so a top-level `import html` is one careless
+    # edit away from a local shadowing the module.
+    import html as _html
+    return re.sub(r"\s+", " ", _html.unescape(re.sub(r"<[^>]+>", "", t or ""))).strip()
+
+
+def _words(t):
+    """Comparable word set. Markdown punctuation (`` ` ``, *, _) becomes a
+    SEPARATOR rather than being deleted, so `analyze_site` yields the same two
+    words whether or not the renderer kept the underscore. Applied to BOTH sides
+    by _undeclared_words(), which is the only thing that makes the comparison
+    symmetric."""
+    return set(re.findall(r"[a-z0-9]{3,}", re.sub(r"[`*_]", " ", (t or "").lower())))
+
+
+def _undeclared_words(rendered, declared):
+    """Words the LISTING serves that the SERVER does not declare. Pure.
+
+    ★THE ASYMMETRY IS THE WHOLE DESIGN, and a symmetric diff does not work here.
+    Measured across all 83 tools: rendering only ever REMOVES words (placeholders
+    eaten as tags, markdown stripped), so a two-way diff false-positives on 6 of
+    10 tools with nothing wrong. But rendering cannot INVENT a word — text the
+    listing serves that the live server does not declare can only have come from
+    a different, older commit. Comparing added-words-only takes the false
+    positives to ZERO while leaving the real signal loud: 76/83 clean, and the 7
+    flagged were exactly the 7 that go clean when compared against the commit the
+    build actually used (2462f5de). That is not a tuned threshold — it is the one
+    direction rendering cannot fake.
+
+    Deliberately word-set, not string equality: the listing legitimately
+    truncates and re-renders, and a fence that fires on formatting is a fence
+    someone switches off."""
+    return _words(rendered) - _words(declared)
+
+
+def _gh_json(url):
+    """Keyless GitHub API read → (data, reason, transient).
+
+    No token, matching this module's no-secrets rule; that caps us at 60 req/h
+    per IP, so a 403/429 is THEIR throttle and must be a note, never a
+    regression — the same TRANSIENT/STRUCTURAL split connector_regressions()
+    documents. A 404 is structural on either caller (see below) and alerts."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA,
+                                               "Accept": "application/vnd.github+json"})
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return json.load(r), None, False
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 429):
+            return None, f"GitHub API throttled ({e.code}) — keyless limit is 60/h per IP", True
+        if e.code == 404:
+            # Structural on either caller: for commits/main the repo moved or was
+            # renamed; for compare/… the mirror is on a commit GitHub cannot
+            # resolve (force-push, GC'd, or a fork). Both are real and neither
+            # self-heals, so this alerts rather than becoming a note.
+            return None, f"GitHub API 404 for {url} — unknown repo or commit", False
+        return None, f"GitHub API HTTP {e.code}", True
+    except Exception as e:
+        return None, f"GitHub API unreachable ({type(e).__name__})", True
+
+
+def origin_main_head():
+    """(sha, committed_iso, reason, transient) for origin/main's tip — read over
+    the NETWORK.
+
+    Never `git rev-parse`: see the ★HEAD note above. The whole check is a
+    comparison against this value, so a local answer would silently compare the
+    listing against whatever happened to be checked out.
+
+    The commit DATE comes back too because it is the only publish-pipeline clock
+    readable without an API key — see PUBLISH_GRACE_MINUTES."""
+    d, err, transient = _gh_json(f"{GITHUB_API}/commits/main")
+    if err:
+        return None, None, err, transient
+    sha = (d or {}).get("sha")
+    when = (((d or {}).get("commit") or {}).get("committer") or {}).get("date")
+    return (sha, when, None, False) if sha else (
+        None, None, "no sha in GitHub commits/main response", False)
+
+
+def _age_minutes(iso, now=None):
+    """Minutes since an ISO-8601 instant, or None if unparseable. Pure.
+
+    None (not 0) on bad input, and the caller must treat None as NO GRACE: an
+    unreadable clock has to fail toward alerting, never toward silence."""
+    if not iso:
+        return None
+    try:
+        t = datetime.datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    # Clock skew can put a commit slightly in the future; clamp rather than
+    # returning a negative age that would read as "very old".
+    return max(0.0, (now - t).total_seconds() / 60.0)
+
+
+def glama_build_provenance(live_tools):
+    """(regressions, notes) — is the published listing built from current main?
+
+    `live_tools` is the live tools/list array (see _live_tools()); passing it in
+    keeps this to one MCP handshake per run.
+
+    ★THE REFERENCE IS THE LIVE SERVER'S OWN tools/list, not a parse of
+    server.mjs, and that choice is load-bearing. This module already states the
+    principle — "the response is authoritative, the prose about it is not" — and
+    the measurement backed it: statically reading the declarations out of
+    server.mjs needs a JS-literal reader that handles concatenation chains, and
+    the version that did not silently truncated `claim_free_key` at 371 of 4389
+    chars and reported 119 phantom stale words. tools/list returns the resolved
+    string as JSON with nothing to parse. The commit comparison below is the
+    independent guard against the live server ITSELF being behind, so the two
+    signals do not share a failure mode."""
+    regressions, notes = [], []
+
+    html, page_err = _glama_server_html()
+    if page_err:
+        # Glama down/throttled: theirs, retried next run. Never a regression —
+        # dchub-backend#3410 is what treating their availability as our defect costs.
+        return regressions, [f"Glama build-provenance not checked: {page_err} — Glama-side, retried next run"]
+
+    head, head_when, head_err, head_transient = origin_main_head()
+    if head_err:
+        (notes if head_transient else regressions).append(
+            f"build provenance not checked: {head_err}"
+            + ("" if head_transient else "  — the fence is BLIND until this is fixed"))
+        head = None
+
+    # ── half 1: the mirror's synced commit vs origin/main HEAD ────────────────
+    # mirror_fresh: True = the mirror carries current main, so anything stale in
+    # the SERVED text can only have come from an older BUILD. None = unknown.
+    mirror_fresh = None
+    mirror = _mirror_commit(html)
+    if not mirror:
+        regressions.append("Glama page exposes no /tree/<sha>/ mirror commit — page redesigned; "
+                           "the build-provenance fence is BLIND until this is fixed")
+    elif head:
+        if mirror == head:
+            mirror_fresh = True
+            notes.append(f"Glama mirror is AT origin/main ({head[:7]}).")
+        else:
+            cmp_, cmp_err, cmp_transient = _gh_json(f"{GITHUB_API}/compare/{mirror}...{head}")
+            if cmp_err:
+                (notes if cmp_transient else regressions).append(
+                    f"mirror-vs-HEAD distance not measured: {cmp_err}")
+            else:
+                status, ahead = cmp_.get("status"), cmp_.get("ahead_by")
+                mirror_fresh = False
+                if status != "ahead":
+                    # diverged/behind: the mirror is on a commit main cannot reach
+                    # (force-push, rewritten history). It will not converge on its own.
+                    regressions.append(
+                        f"🚨 Glama mirror commit `{mirror[:7]}` is NOT an ancestor of origin/main "
+                        f"`{head[:7]}` (compare status: {status}) — the listing is built from "
+                        f"history main no longer contains")
+                elif ahead is not None and ahead > MIRROR_LAG_TOLERANCE:
+                    regressions.append(
+                        f"🚨 Glama mirror commit `{mirror[:7]}` is {ahead} commits behind origin/main "
+                        f"`{head[:7]}` (tolerance {MIRROR_LAG_TOLERANCE}) — the mirror has stopped syncing")
+                else:
+                    mirror_fresh = True
+                    notes.append(f"Glama mirror at `{mirror[:7]}`, {ahead} commits behind origin/main "
+                                 f"`{head[:7]}` — within normal crawl lag, self-corrects.")
+
+    # ── half 2: behavioural proxy — what the listing SERVES vs what main DECLARES ──
+    if not isinstance(live_tools, list) or not live_tools:
+        notes.append("build provenance: live tools/list unavailable, so the served-vs-declared "
+                     "comparison was skipped — the mirror-commit half above still applied.")
+        return regressions, notes
+    declared = {t.get("name"): t.get("description") or "" for t in live_tools if t.get("name")}
+    served = _rendered_descriptions(html)
+    if not served:
+        regressions.append("Glama page rendered no tool descriptions — page redesigned; the "
+                           "served-vs-declared half of the fence is BLIND until this is fixed")
+        return regressions, notes
+    stale = {}
+    for name, text in served.items():
+        if name not in declared:
+            continue
+        extra = _undeclared_words(text, declared[name])
+        if extra:
+            stale[name] = sorted(extra)
+    if stale:
+        worst = sorted(stale.items(), key=lambda kv: -len(kv[1]))
+        head_line = (f"🚨 Glama listing serves {len(stale)} of {len(served)} tool descriptions that "
+                     f"origin/main does NOT declare — the PUBLISHED RELEASE was built from an older "
+                     f"commit. Nothing downstream re-runs itself, so this does NOT self-correct; see "
+                     f"the staged remedy below (owner: glama.ai/mcp/servers/{REPO_SLUG}). Worst: "
+                     + "; ".join(f"`{n}` (+{len(w)}: {', '.join(w[:5])})" for n, w in worst[:3]))
+        found = [head_line]
+        if PROVENANCE_SENTINEL in stale:
+            found.append(
+                f"🚨 including the sentinel `{PROVENANCE_SENTINEL}` — the listing advertises it with "
+                f"wording main has replaced ({', '.join(stale[PROVENANCE_SENTINEL][:6])}). This is the "
+                f"worked example in the comment above: a repaired capability still shown as broken.")
+        if mirror_fresh:
+            # Only meaningful when the mirror is CURRENT — if the mirror itself
+            # were stalled, the staleness would be explained by the sync stage.
+            found.append(
+                "↳ the mirror is AT origin/main, so the SYNC stage is not the problem. Two stages remain "
+                "and this check cannot see which one is behind: (A) the BUILD is older than the mirror "
+                "→ Sync Server, then Deploy; or (B) the build is already at HEAD and its RELEASE has not "
+                "landed yet. The release stage is AUTOMATIC and asynchronous — it fires on its own tens "
+                "of minutes after a build — so (B) needs no human action and only becomes actionable "
+                f"once it has been stale well past PUBLISH_GRACE_MINUTES ({PUBLISH_GRACE_MINUTES}m), at "
+                "which point check the newest build for its 'Release Created' block. DO NOT simply "
+                "rebuild: when the build is already current a rebuild is a NO-OP, and 'green build → "
+                "nothing changed → the vendor must be broken' is the exact loop that cost two days here. "
+                "Neither stage is fixable from this repo (glama.json has no ref-pin field, and "
+                "`pinnedCommit: null` does not mean 'track latest').")
+        # GRACE: inside the publish window this is what a good deploy looks like.
+        # Anchored to the MIRROR commit (see PUBLISH_GRACE_MINUTES): when the
+        # mirror is already AT head we reuse head's date rather than spending a
+        # second API call on the same commit. An unreadable sha or date grants NO
+        # grace — unknown must not buy silence.
+        anchor = head_when if (mirror and head and mirror == head) else None
+        if mirror and anchor is None:
+            _d, _e, _t = _gh_json(f"{GITHUB_API}/commits/{mirror}")
+            anchor = (((_d or {}).get("commit") or {}).get("committer") or {}).get("date")
+        age = _age_minutes(anchor) if mirror else None
+        if age is not None and age < PUBLISH_GRACE_MINUTES:
+            notes.append(f"Glama publish in progress — the mirror commit `{mirror[:7]}` is {int(age)}m "
+                         f"old (grace {PUBLISH_GRACE_MINUTES}m) and build→release trails a sync, so this "
+                         f"is reported but NOT alerted; it pages once the window passes. "
+                         + " ".join(found))
+        else:
+            regressions.extend(found)
+    else:
+        notes.append(f"Glama build provenance: all {len(served)} rendered tool descriptions match "
+                     f"what the live server declares.")
+    return regressions, notes
 
 
 def readme_tool_count():
@@ -386,12 +816,24 @@ def lobehub_presence(slug=LOBEHUB_SLUG):
     return "present", (int(m.group(1)) if m else None)
 
 
+def _live_tools():
+    """Initialize + tools/list against the LIVE MCP server → the tools ARRAY, or
+    None on any error. Split out of live_tool_count() so the build-provenance
+    check can read tool DESCRIPTIONS from the same single handshake."""
+    return _live_tools_impl()
+
+
 def live_tool_count():
     """Initialize + tools/list against the LIVE MCP server → the SOURCE OF TRUTH
     tool count. Returns None on any error (then we don't alert on it). This is the
     check that catches "the publish source (server.json) is behind reality" — the
     failure mode where server.json AND the official registry agree at a stale count
     so the parity check above sees them in sync and confirms stale-as-healthy."""
+    t = _live_tools()
+    return len(t) if isinstance(t, list) else None
+
+
+def _live_tools_impl():
     base = "https://dchub.cloud/mcp"
     hdr = {"User-Agent": UA, "Content-Type": "application/json",
            "Accept": "application/json, text/event-stream"}
@@ -419,7 +861,7 @@ def live_tool_count():
                     d = json.loads(line)
                     tools = (d.get("result") or {}).get("tools")
                     if isinstance(tools, list):
-                        return len(tools)
+                        return tools
                 except Exception:
                     pass
         return None
@@ -556,7 +998,10 @@ def main(probe=False):
         return _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated, sig)
 
     can_ver, can_tools = canonical()
-    live_tools = live_tool_count()
+    # ONE live handshake serves both the count gate and the build-provenance
+    # comparison — _live_tools() returns the array, the count is derived from it.
+    live_list = _live_tools()
+    live_tools = len(live_list) if isinstance(live_list, list) else None
     off_ver, off_tools = official_registry()
     smi_name, smi_tools = smithery_record()
     gla_tools, gla_desc = glama_record()
@@ -564,6 +1009,10 @@ def main(probe=False):
     reasons.extend(_conn_reg)
     for _n in _conn_notes:
         print(f"note: {_n}")
+    # BUILD PROVENANCE — alerts, unlike the rest of the Glama drift above; the
+    # long comment on glama_build_provenance() says why the exception is correct.
+    _prov_reg, _prov_notes = glama_build_provenance(live_list)
+    reasons.extend(_prov_reg)
     readme_tools = readme_tool_count()
     lobe_status, lobe_tools = lobehub_presence()
 
@@ -608,7 +1057,7 @@ def main(probe=False):
     regression = bool(reasons)
 
     # Non-paging notes: owner-gated or environmental items we report but don't alert on.
-    notes = []
+    notes = list(_prov_notes)
     if lobe_status == "present" and lobe_tools and live_tools and lobe_tools != live_tools:
         notes.append(f"LobeHub shows **{lobe_tools} tools** vs live **{live_tools}** — owner: open the "
                      f"listing and click **Refresh Metadata** (re-crawls the README) once README is current.")
@@ -753,6 +1202,80 @@ def _self_test():
         ok = got == should_flag
         bad += not ok
         print(f"  {'ok  ' if ok else 'FAIL'}  {'flag' if should_flag else 'pass'}  {why}")
+    # ── BUILD-PROVENANCE controls ─────────────────────────────────────────────
+    # The asymmetry in _undeclared_words() is the load-bearing claim, so the
+    # first four cases are the rendering artifacts that a symmetric diff gets
+    # WRONG: each one is a real transformation measured on the live Glama page
+    # (6 of 10 tools tripped a two-way diff with nothing actually stale).
+    print("\n  — build provenance —")
+    words = [
+        ("Prices in <ISO> right now? — live energy PRICING for the 7 US ISOs",
+         "Prices in right now? — live energy PRICING for the 7 US ISOs", False,
+         "renderer ATE the <ISO> placeholder as a bogus tag — removal only, must not flag"),
+        ("Per-feed freshness for the ingest layer, one row per feed",
+         "Per-feed freshness for the ingest", False,
+         "listing TRUNCATED the description — removal only, must not flag"),
+        ("set the `X-API-Key` header", "set the X-API-Key header", False,
+         "markdown code ticks stripped by the renderer — must not flag"),
+        ("identical text both sides", "identical text both sides", False, "exact match"),
+        # The signal: text the listing serves that the server does not declare.
+        ("DCGI — the per-state score. WITHDRAWN 2026-08-08, RESTORED 2026-08-30",
+         "DCGI — the per-state score. WITHDRAWN 2026-08-08: this tool no longer "
+         "returns a score, the backend names the defects", True,
+         "the observed defect — a repaired capability still served as broken"),
+        ("700+ subsea cables", "1,900+ subsea cables", True,
+         "a single drifted quantity is still text main does not declare"),
+    ]
+    for declared_txt, served, should_flag, why in words:
+        got = bool(_undeclared_words(served, declared_txt))
+        ok = got == should_flag
+        bad += not ok
+        print(f"  {'ok  ' if ok else 'FAIL'}  {'flag' if should_flag else 'pass'}  {why}")
+
+    # A fence that cannot reach its subject must return None (→ reported BLIND),
+    # never a guess and never something that reads as clean.
+    tree = '<a href="/mcp/servers/x/y/tree/' + "a" * 40 + '/docs">docs</a>'
+    shas = [
+        (tree, "a" * 40, "well-formed mirror tree link"),
+        ('<a href="/mcp/servers/x/y">no tree links</a>', None,
+         "page redesigned — must be None so the caller reports BLIND, not clean"),
+        (tree + '<a href="/mcp/servers/x/y/tree/' + "b" * 40 + '/src">src</a>', None,
+         "two different shas — ambiguous, so None rather than an arbitrary pick"),
+    ]
+    for html_in, want, why in shas:
+        got = _mirror_commit(html_in)
+        ok = got == want
+        bad += not ok
+        print(f"  {'ok  ' if ok else 'FAIL'}  sha   {why}")
+
+    # The grace clock. An unreadable date must yield None so the caller grants NO
+    # grace — a clock we cannot read must never buy silence.
+    _T0 = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)
+    for iso, want, why in [
+        ("2026-09-01T11:00:00Z", 60.0, "a plain past instant, in minutes"),
+        ("2026-09-01T11:00:00+00:00", 60.0, "offset form parses the same as Z"),
+        (None, None, "no date → None → NO grace (unknown must not buy silence)"),
+        ("not-a-date", None, "unparseable → None → NO grace, not 0"),
+        ("2026-09-01T12:30:00Z", 0.0, "clock skew clamps to 0, never negative"),
+    ]:
+        got = _age_minutes(iso, now=_T0)
+        ok = got == want
+        bad += not ok
+        print(f"  {'ok  ' if ok else 'FAIL'}  age   {why}")
+
+    page = ('<a href="?tab=tools&amp;tool=get_gas_index">Inspect</a>'
+            '<div class="prose"><p>Gas Index &amp; <code>dcgi</code> score</p></div>'
+            '<a href="?tab=tools&amp;tool=orphan_tool">Inspect</a><div>no prose here</div>')
+    got = _rendered_descriptions(page)
+    for want_ok, why in [
+        (got.get("get_gas_index") == "Gas Index & dcgi score",
+         "entities decoded and <code> stripped after tags, not before"),
+        ("orphan_tool" not in got,
+         "a tool with no prose region is ABSENT, not empty-string (empty reads as clean)"),
+    ]:
+        bad += not want_ok
+        print(f"  {'ok  ' if want_ok else 'FAIL'}  desc  {why}")
+
     if bad:
         print(f"\n\u2717 self-test: {bad} case(s) wrong")
         return 1
