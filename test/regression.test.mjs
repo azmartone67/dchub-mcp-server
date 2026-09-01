@@ -464,7 +464,15 @@ describe('MCP regression suite', () => {
   describe('PAID_ONLY gating (free key → gate, enterprise key → data)', () => {
     const paidToolCalls = [
       { name: 'analyze_site', args: { lat: 33.45, lon: -112.07 } },
-      { name: 'compare_sites', args: { locations: '[{"lat":33.45,"lon":-112.07},{"lat":39.04,"lon":-77.48}]' } },
+      // ★2026-09-01: was '[{"lat":33.45,"lon":-112.07},{"lat":39.04,"lon":-77.48}]' —
+      //   a JSON array, when `locations` is documented as 'Semicolon-separated
+      //   list of 2-4 "lat,lon" pairs'. The tool rejected it correctly, with a
+      //   message naming the right format; the suite reported that refusal as a
+      //   PAID_ONLY failure. Same coordinates, in the shape the schema declares.
+      //   This was invisible until hasData stopped counting structuredContent as
+      //   "no data" — three well-behaved tools were failing beside it and the one
+      //   real signal read as more of the same noise.
+      { name: 'compare_sites', args: { locations: '33.45,-112.07;39.04,-77.48' } },
       { name: 'get_grid_intelligence', args: { region_id: 'PJM' } },
       { name: 'get_fiber_intel', args: { carrier: 'Lumen' } },
       { name: 'get_dchub_recommendation', args: { context: '100MW AI campus in Texas' } },
