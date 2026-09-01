@@ -22,7 +22,7 @@ physical infrastructure behind AI — instead of guessing from stale training da
 (It's currently the #1 data-center MCP on Smithery across data center, power grid,
 fiber, capacity, and interconnection.)
 
-It exposes 83 tools + 6 guided prompts over: 19,900+ data-center facilities
+It exposes 83 tools + 6 guided prompts over: 20,100+ data-center facilities
 (170+ countries), 300+ power markets scored by a Data Center Power Index (DCPI),
 real-time grid telemetry for 10 ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
 time-to-power), interconnection queues, fiber routes, gas pipelines, and 2,000+
@@ -50,7 +50,7 @@ Body:
 Sharing an MCP server I maintain. DC Hub is the live data layer for data-center
 infrastructure — agents can query it and cite it (CC-BY-4.0).
 
-- 19,900+ facilities, 300+ DCPI-scored markets, 10 live ISO grids
+- 20,100+ facilities, 300+ DCPI-scored markets, 10 live ISO grids
 - 83 tools + 6 guided prompts (/dchub:analyze-site, /dchub:power-availability, …)
 - 4 citable resources (methodology, data sources, coverage)
 - Remote streamable-HTTP → Claude Desktop / Cursor / VS Code / Cline, no install
@@ -71,7 +71,7 @@ AI agents keep getting asked data-center questions they can only answer from
 stale training data. So we built DC Hub — an MCP server that gives any AI
 assistant LIVE, citable ground truth on the infrastructure behind AI:
 
-→ 19,900+ data-center facilities across 170+ countries
+→ 20,100+ data-center facilities across 170+ countries
 → 300+ markets scored by our Data Center Power Index (BUILD / CAUTION / AVOID)
 → Real-time grid telemetry for 10 ISOs — headroom, fuel mix, time-to-power
 → Fiber routes, gas pipelines, interconnection queues, 2,000+ M&A deals

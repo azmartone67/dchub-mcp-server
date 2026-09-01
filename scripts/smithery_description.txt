@@ -4,7 +4,7 @@ Liveness is the product, and it is checkable. DC Hub is rebuilt continuously fro
 
 Coverage:
 
-Facilities — 19,900+ data centers worldwide across 170+ countries, resolved from 26,000+ source records: search, profiles, scoring, alternatives and site selection screening
+Facilities — 20,100+ data centers worldwide across 170+ countries, resolved from 26,000+ source records: search, profiles, scoring, alternatives and site selection screening
 Markets — 300+ markets scored by the DCPI (Data Center Power Index): BUILD/CAUTION/AVOID verdicts with a daily history, ranking data center capacity and grid capacity by metro
 Grid / ISO — live electricity fuel mix, demand, prices and interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ US balancing authorities + Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; one-call all-grid scoreboard fed by 7 independent live feeds
 Energy & Gas — renewable energy and fuel mix, power plant inventory and retirement headroom; per-state natural gas brief: interstate-pipeline and operator/parent-midstream presence with live Henry Hub (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh stays withdrawn)
