@@ -13,6 +13,7 @@
 // rather than returning data. Run with: npx vitest run
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
+import { gateReason, hasPayload } from './gate-reason.mjs';
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
@@ -146,18 +147,17 @@ async function callTool(name, args = {}) {
 }
 
 /** Returns true if the response looks like a gated/paywall/trial preview */
+// Gate recognition lives in ./gate-reason.mjs — ONE copy, shared with mcp.test.mjs.
+// This local copy had drifted from that one and did NOT recognise the edge's
+// `plan_required` rejection (dchub-frontend/_worker.js). Since a parsed
+// plan_required object also satisfies `hasData` below, the PAID_ONLY assertion
+// PASSED on a payload whose whole content is a refusal to serve — a broken tool
+// behind that gate would have read as healthy. See test/edge-gate-recognition.test.mjs.
+//
+// A falsy response is NOT a gate here (mcp.test.mjs deliberately decides the
+// opposite); gateReason leaves that call to each suite.
 function isGated(r) {
-  if (!r) return false;
-  if (r.__structured && (r.error === 'paid_only' || r.trial_preview || r.error === 'scraper_pattern_blocked')) return true;
-  if (r.__raw && /sign up to unlock|upgrade|trial/i.test(r.__raw)) return true;
-  // Check for masked metric values: "[number — sign up to unlock]"
-  const str = JSON.stringify(r);
-  if (/sign up to unlock/i.test(str)) return true;
-  if (r._upgrade || r.upgrade_url) return true;
-  // Transient live-API unavailability (rate limit / upstream error): can't
-  // assert on data content, so treat like a gate and skip the data checks.
-  if (/\bAPI 429\b|\bAPI 5\d\d\b|rate.?limit|too many requests/i.test(str)) return true;
-  return false;
+  return gateReason(r) !== null;
 }
 
 /** Deep-compare two results — returns true if they are meaningfully different */
@@ -464,7 +464,15 @@ describe('MCP regression suite', () => {
   describe('PAID_ONLY gating (free key → gate, enterprise key → data)', () => {
     const paidToolCalls = [
       { name: 'analyze_site', args: { lat: 33.45, lon: -112.07 } },
-      { name: 'compare_sites', args: { locations: '[{"lat":33.45,"lon":-112.07},{"lat":39.04,"lon":-77.48}]' } },
+      // ★2026-09-01: was '[{"lat":33.45,"lon":-112.07},{"lat":39.04,"lon":-77.48}]' —
+      //   a JSON array, when `locations` is documented as 'Semicolon-separated
+      //   list of 2-4 "lat,lon" pairs'. The tool rejected it correctly, with a
+      //   message naming the right format; the suite reported that refusal as a
+      //   PAID_ONLY failure. Same coordinates, in the shape the schema declares.
+      //   This was invisible until hasData stopped counting structuredContent as
+      //   "no data" — three well-behaved tools were failing beside it and the one
+      //   real signal read as more of the same noise.
+      { name: 'compare_sites', args: { locations: '33.45,-112.07;39.04,-77.48' } },
       { name: 'get_grid_intelligence', args: { region_id: 'PJM' } },
       { name: 'get_fiber_intel', args: { carrier: 'Lumen' } },
       { name: 'get_dchub_recommendation', args: { context: '100MW AI campus in Texas' } },
@@ -473,10 +481,35 @@ describe('MCP regression suite', () => {
     for (const { name, args } of paidToolCalls) {
       it(`${name} returns gated response OR real data (tier-dependent)`, async () => {
         const r = await callTool(name, args);
-        // Either it's gated (free key) or it has meaningful data (enterprise key)
-        const gated = isGated(r);
-        const hasData = r && !r.__structured && !r.__raw?.includes('sign up to unlock');
-        expect(gated || hasData).toBe(true);
+        // Either it's gated (free key) or it has meaningful data (paid key).
+        const reason = gateReason(r);
+        // ★2026-09-01 — was `r && !r.__structured && !r.__raw?.includes(…)`, i.e.
+        //   "has data" meant "did NOT arrive as structuredContent". Backwards:
+        //   structuredContent is how a well-formed MCP response arrives, so the
+        //   better a tool behaved the more surely it failed. Measured on the
+        //   authenticated run: get_grid_intelligence, get_fiber_intel and
+        //   get_dchub_recommendation each returned their full documented payload
+        //   with __structured true, and were all counted as failures. Only
+        //   compare_sites was genuinely wrong — it returned an `error` and no
+        //   data — and the three false failures were burying that one real one.
+        const hasData = hasPayload(r);
+        // ★ This assertion used to be a bare `expect(gated || hasData).toBe(true)`,
+        //   which on failure printed only "expected false to be true" — naming
+        //   neither the tier, nor the gate, nor the shape that was rejected. Five
+        //   of these went red the moment CI started authenticating (2026-09-01)
+        //   and the output could not distinguish a product defect from a suite
+        //   that cannot classify a paid-tier payload. A verdict you cannot trace
+        //   to an observation is the defect this repo keeps paying for, so the
+        //   failure now carries the evidence: gate name, tier, and top-level keys.
+        expect(
+          Boolean(reason) || Boolean(hasData),
+          `${name}: not recognised as a gate and not counted as data.\n` +
+          `  gateReason      : ${reason ?? 'null'}\n` +
+          `  tier reported   : ${r?.identity?.tier ?? r?.quota?.tier ?? '(none)'}\n` +
+          `  __structured    : ${Boolean(r?.__structured)}   __raw: ${Boolean(r?.__raw)}\n` +
+          `  top-level keys  : ${r ? Object.keys(r).slice(0, 25).join(', ') : '(response was falsy)'}\n` +
+          `  error (if any)  : ${r?.error !== undefined ? JSON.stringify(r.error).slice(0, 300) : '(none)'}`,
+        ).toBe(true);
       }, 20000);
     }
   });

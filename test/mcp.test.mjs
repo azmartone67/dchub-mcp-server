@@ -8,6 +8,7 @@
 // MCP_URL env var overrides the target if you want to test a staging deploy.
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
+import { gateReason } from './gate-reason.mjs';
 
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
@@ -108,15 +109,17 @@ async function callTool(name, args = {}) {
 // on any tier. Mirrors the gate-or-data pattern in regression.test.mjs.
 function unwrap(r) { return Array.isArray(r) ? r[0] : r; }
 
+// Gate recognition lives in ./gate-reason.mjs — ONE copy, shared with
+// regression.test.mjs. The two used to be separate and had drifted: this copy
+// caught the edge's `plan_required` rejection only because its regex happened to
+// include buy\.stripe\.com and the rejection carries a checkout link; the other
+// copy missed it entirely. See test/edge-gate-recognition.test.mjs.
+//
+// A falsy response IS gated here (skip the data checks) — the opposite of
+// regression.test.mjs, on purpose. gateReason leaves that call to each suite.
 function isGated(r) {
   if (!r) return true;
-  const o = unwrap(r);
-  if (o?.__structured && (o.error === 'paid_only' || o.trial_preview ||
-                          o.error === 'scraper_pattern_blocked')) return true;
-  if (o?.raw && /upgrade|trial|preview|sign up|stripe/i.test(o.raw)) return true;
-  const str = JSON.stringify(r);
-  if (/sign up to unlock|trial_preview|dch_trial_|upgrade\?key=|pick a plan|buy\.stripe\.com|scraper_pattern_blocked|rate.?limit|too many requests/i.test(str)) return true;
-  return false;
+  return gateReason(unwrap(r)) !== null || gateReason(r) !== null;
 }
 
 describe('dchub MCP smoke tests', () => {
@@ -164,12 +167,22 @@ describe('dchub MCP smoke tests', () => {
     expect(ok).toBeTruthy();
   }, 15000);
 
-  it('get_grid_data returns headroom/substation', async () => {
+  // ★ 2026-09-01: this test asserted `grid_headroom || nearest_substation` — the
+  //   shape of /api/v1/grid/status, which get_grid_data STOPPED calling on
+  //   2026-06-07 (Devin QA: that route had no iso-aware handler and returned the
+  //   same default for every iso). The handler is a bare passthrough of
+  //   /api/v1/grid/intelligence/<iso>, and the tool's own description promises
+  //   "fuel mix, demand, 24h demand curve" and explicitly redirects headroom
+  //   questions to get_grid_intelligence. So the test demanded the one thing the
+  //   tool says it does not do, and had been red ever since the repoint.
+  //   Asserted against the description's contract now, not the retired route's.
+  it('get_grid_data returns the ISO fuel-mix / demand payload', async () => {
     const r = await callTool('get_grid_data', { iso: 'PJM' });
     if (isGated(r)) return;
     const o = unwrap(r);
-    const ok = o?.success === true || o?.grid_headroom != null || o?.nearest_substation;
-    expect(ok).toBeTruthy();
+    const ok = o?.generation_mix_pct || o?.fuel_mix || o?.demand_mw != null ||
+               o?.demand_curve || o?.iso || o?.success === true;
+    expect(ok, `get_grid_data keys: ${o ? Object.keys(o).slice(0, 25).join(', ') : '(none)'}`).toBeTruthy();
   }, 15000);
 
   it('get_water_risk returns drought data for TX', async () => {
@@ -199,11 +212,22 @@ describe('dchub MCP smoke tests', () => {
     expect(ppas.length || inst.length || total > 0 || o?.success === true).toBeTruthy();
   }, 15000);
 
-  it('get_grid_intelligence is paywalled or returns corridors', async () => {
+  // ★ 2026-09-01: this asserted `r.region && (r.corridors || r.energy_rates_cents_kwh)`.
+  //   The tool's documented return shape names none of those three: it is keyed
+  //   `iso` (not `region`), and carries `retail_price_cents_kwh` (not
+  //   `energy_rates_cents_kwh`); `corridors` belongs to the retired
+  //   /api/v1/grid/intelligence?region= shape. The handler now reads
+  //   /api/v1/grid/intelligence/<ISO>. Also widened the gate check from an inline
+  //   two-field paywall test to the shared gateReason, so a plan_required or
+  //   daily-wall response is recognised here too.
+  it('get_grid_intelligence is gated or returns the ISO grid brief', async () => {
     const r = await callTool('get_grid_intelligence', { region_id: 'PJM' });
-    const paywall = r?.__structured && (r?.error === 'paid_only' || r?.trial_preview);
-    const realData = r?.region && (r?.corridors || r?.energy_rates_cents_kwh);
-    expect(paywall || realData).toBeTruthy();
+    if (isGated(r)) return;
+    const o = unwrap(r);
+    const realData = (o?.iso || o?.region) &&
+      (o?.demand_mw != null || o?.generation_mix_pct || o?.excess_power_score != null ||
+       o?.avg_time_to_power_months != null || o?.retail_price_cents_kwh != null);
+    expect(realData, `get_grid_intelligence keys: ${o ? Object.keys(o).slice(0, 25).join(', ') : '(none)'}`).toBeTruthy();
   }, 15000);
 
   it('get_fiber_intel returns GeoJSON or paywall', async () => {

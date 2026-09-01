@@ -5,7 +5,15 @@
  * the McpServer init, /health, and the startup banner)
  * ────────────────────────────────────────────────────────────────────────────
  * Patches v2.1.0:
- *   - Path corrections to match production Flask routes:
+ *   - Path corrections to match production Flask routes.
+ *
+ *     ★★ THIS IS A v2.1.0 CHANGELOG ENTRY, NOT A CURRENT ROUTE TABLE. ★★
+ *     Five of the eleven right-hand routes below have MOVED since, and reading
+ *     this list as "where these tools point today" has now misled twice: #297
+ *     cited it as the root cause for its three description fixes, and a
+ *     2026-09-01 audit repeated the error from the same lines. Routes below are
+ *     where v2.1.0 put them. The authority is the callAPI(...) in the handler.
+ *
  *       get_market_intel:        /api/v1/markets        → /api/v1/markets/${slug}
  *       get_news:                /api/news/latest       → /api/news
  *       get_grid_data:           /api/v1/grid           → /api/v1/grid/fuel-mix-live
@@ -17,6 +25,42 @@
  *       get_backup_status:       /api/v1/stats          → /api/health/data-freshness
  *       get_dchub_recommendation:/api/agents/recommendation → /api/agents/recommend
  *       compare_sites:           /api/site-score/compare → /api/site-score
+ *
+ *     Where those eleven ACTUALLY point, read off each handler's callAPI on
+ *     2026-09-01. Five differ from the v2.1.0 line above (marked ✗):
+ *
+ *       get_market_intel          /api/v1/markets/${slug}
+ *       get_news                  /api/news
+ *     ✗ get_grid_data             /api/v1/grid/intelligence/${iso}
+ *                                 (repointed 2026-06-07, Devin QA: /api/v1/grid/status
+ *                                  had no iso-aware handler and served the same
+ *                                  default for every iso. Never went to fuel-mix-live.)
+ *     ✗ get_energy_prices         /api/v1/energy/summary
+ *     ✗ get_renewable_energy      /api/v1/energy/renewable
+ *                                 (note these two read as SWAPPED against the
+ *                                  v2.1.0 lines — check the handler, not the list)
+ *     ✗ get_water_risk            /api/v1/water/drought
+ *                                 (the backend reads lat/lng, not lat/lon — see
+ *                                  the handler comment; the documented point read
+ *                                  400'd until 2026-07-16)
+ *     ✗ get_grid_intelligence     /api/v1/grid/intelligence/${ISO} — plus
+ *                                 /api/v1/dcpi/scores/${slug} to resolve market=,
+ *                                 /api/v1/interconnection-queue/snapshot, and
+ *                                 /api/v1/grid/extended/${ISO}
+ *       get_agent_registry        /api/v1/ai-platforms/status
+ *       get_backup_status         /api/health/data-freshness
+ *       get_dchub_recommendation  /api/agents/recommend
+ *       compare_sites             /api/site-score
+ *
+ *     Descriptions were checked against these routes in the same pass. The two
+ *     that were wrong are fixed in test/mcp.test.mjs, where the TESTS — not the
+ *     prose — still asserted the pre-move shapes: get_grid_data was asserted to
+ *     return grid_headroom/nearest_substation (the retired /api/v1/grid/status
+ *     shape, and the very thing its description tells you to call
+ *     get_grid_intelligence for), and get_grid_intelligence was asserted to
+ *     return {region, corridors} when it documents {iso, …, retail_price_cents_kwh}.
+ *     Both had been red since their repoints. #297 fixed stale PROSE against live
+ *     behaviour; this is the mirror image — stale TESTS against fixed behaviour.
  *
  * v2.1.0 features (preserved):
  *   1. Per-tool-call telemetry (POST /api/v1/mcp/track)
@@ -13260,11 +13304,48 @@ function createServer(descOverrides) {
       // declare that we do not KNOW why rather than inventing a reason. UNMEASURED
       // is the honest verdict for an unexplained absence; a fabricated withdrawal
       // notice would be the same class of error as a drift report from a failed read.
+      //
+      // ★2026-09-01 — the above shipped in #297 and read the WRONG KEY, so it
+      // declared UNMEASURED while holding a full, dated explanation.
+      //
+      // The status is published in TWO shapes by two different endpoints:
+      //   routes/gas_intelligence.py   nests it:  {gas_to_grid_status: {...}}
+      //   routes/powered_land_gas.py   is FLAT:   {ok:false, available:false,
+      //                                            status:'disabled',
+      //                                            unavailable_reason:'…',
+      //                                            withdrawn_on:'2026-08-08', …}
+      // This tool calls /api/v1/markets/<slug>/gas-to-grid — the FLAT one. #297
+      // only knew the nested shape, so `g2g.gas_to_grid_status` was always
+      // undefined here, `scenarios_usd_per_mwh` was absent (it IS withdrawn),
+      // and the fallback fired on every call. Measured live 2026-09-01:
+      // get_gas_economics(dallas) returned "the absence is not explained here"
+      // while the upstream body carried withdrawn_on, an audit_ref, and the
+      // five-surfaces reason in full.
+      //
+      // Reading a stated withdrawal as an unexplained one is the SAME conflation
+      // #297 existed to remove, just pointed the other way: there, silence was
+      // presented as a decision; here, a decision was presented as silence.
+      //
+      // Both shapes are accepted now, forwarded verbatim, and UNMEASURED is kept
+      // for the case it was written for — no status in either shape, and no $/MWh.
+      const _g2gFlatWithdrawal =
+        (g2g && g2g.available === false && (g2g.unavailable_reason || g2g.withdrawn_on))
+          ? { available: false,
+              reason: g2g.unavailable_reason,
+              withdrawn_on: g2g.withdrawn_on,
+              status: g2g.status,
+              audit_ref: g2g.audit_ref,
+              what_is_still_published: g2g.what_is_still_published,
+              reenable: g2g.reenable,
+              surface: g2g.surface }
+          : undefined;
+
       const g2gStatus =
         (g2g && g2g.gas_to_grid_status !== undefined) ? g2g.gas_to_grid_status
+        : _g2gFlatWithdrawal !== undefined ? _g2gFlatWithdrawal
         : (g2g && g2g.scenarios_usd_per_mwh !== undefined) ? undefined
         : { available: false,
-            reason: 'UNMEASURED — the gas-to-grid endpoint returned neither a $/MWh scenario set nor a gas_to_grid_status. The absence is not explained here; do NOT read it as a stated withdrawal.' };
+            reason: 'UNMEASURED — the gas-to-grid endpoint returned neither a $/MWh scenario set nor any withdrawal status, in either the nested (gas_to_grid_status) or flat (available/unavailable_reason) shape. The absence is not explained here; do NOT read it as a stated withdrawal.' };
 
       const out = {
         market_slug: slug,
