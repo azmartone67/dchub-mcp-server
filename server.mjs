@@ -13247,6 +13247,25 @@ function createServer(descOverrides) {
         callAPI(`/api/v1/markets/${slug}/gas-pricing`, {}).catch(e => ({ error: String(e).slice(0, 200) })),
         callAPI(`/api/v1/markets/${slug}/gas-to-grid`, g2g_q).catch(e => ({ error: String(e).slice(0, 200) })),
       ]);
+      // ★2026-09-01: gas_to_grid_status is promised by this tool's own description
+      // ("gas_to_grid_status carries the reason") and was never copied out of
+      // g2g — the allowlist below simply forgot it. So the withdrawn $/MWh
+      // arrived as SILENT absence: four $/MMBtu layers, no $/MWh, and nothing
+      // saying why. A withdrawal announced in the description and quiet in the
+      // payload is the defect #289 fixed on the About-field step: the reader
+      // cannot tell "withdrawn on purpose" from "this endpoint broke today".
+      //
+      // Forwarded VERBATIM — no shape is assumed here, because the shape is the backend's to define, not
+      // ours to guess. When the backend supplies no status AND no $/MWh, we
+      // declare that we do not KNOW why rather than inventing a reason. UNMEASURED
+      // is the honest verdict for an unexplained absence; a fabricated withdrawal
+      // notice would be the same class of error as a drift report from a failed read.
+      const g2gStatus =
+        (g2g && g2g.gas_to_grid_status !== undefined) ? g2g.gas_to_grid_status
+        : (g2g && g2g.scenarios_usd_per_mwh !== undefined) ? undefined
+        : { available: false,
+            reason: 'UNMEASURED — the gas-to-grid endpoint returned neither a $/MWh scenario set nor a gas_to_grid_status. The absence is not explained here; do NOT read it as a stated withdrawal.' };
+
       const out = {
         market_slug: slug,
         market_name: (pricing && pricing.market_name) || (g2g && g2g.market_name) || slug,
@@ -13263,6 +13282,7 @@ function createServer(descOverrides) {
         as_of:                          (pricing && pricing.fetched_at) || (g2g && g2g.fetched_at),
         pricing_error:                  pricing && pricing.error,
         gas_to_grid_error:              g2g && g2g.error,
+        gas_to_grid_status:             g2gStatus,
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
@@ -15366,10 +15386,23 @@ function createServer(descOverrides) {
       return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
     });
 
-  trackedTool(srv, 'get_agent_registry', 'Curated roster of the AI platforms + agent frameworks in the DC Hub agent ecosystem — each with its recommended DC Hub tools and authentication tier. Recognized MCP clients include Claude and Cursor, with Cline, Continue and other agents surfaced as they are integrated. Use it to see which platforms DC Hub supports and how to connect them. Answers "which AI platforms can connect to DC Hub", "which tools should my framework start with". Try: get_agent_registry. NOTE: this is a curated ecosystem/capability index, NOT live per-caller call/citation telemetry. Do NOT use for platform uptime / backup health (use get_backup_status).', {},
+  trackedTool(srv, 'get_agent_registry', 'Curated roster of the AI platforms and agent frameworks in the DC Hub agent ecosystem — each with its recommended DC Hub tools and authentication tier. The roster is BACKEND-OWNED and changes: read the platforms[] array the response returns, and the status on each row (mcp_active / mcp_ready), rather than any list named in this sentence — an enumeration here goes stale the moment the backend adds or drops a platform, which is exactly how a client named here stopped appearing in the roster. ★ These statuses are CURATED EDITORIAL claims, not measurements: the response carries as_of null, so do NOT relay "MCP Active" as though it were a live connection count. Answers "which AI platforms can connect to DC Hub". Try: get_agent_registry. NOTE: this is a curated ecosystem/capability index, NOT live per-caller call/citation telemetry. Do NOT use for platform uptime or feed health (use get_backup_status).', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/ai-platforms/status')) }] }));
 
-  trackedTool(srv, 'get_backup_status', 'DC Hub platform health: database backup status (last successful, age, integrity check), data freshness across 49 sources (green/yellow/red), agentic heartbeat score (0-100), MCP call volume (last hour), and DCPI recompute cadence. Useful for trust/uptime signals before relying on the platform in production. Answers "is DC Hub current enough to trust today", "are any of your sources stale right now". Try: get_backup_status. Do NOT use for the freshness of a specific dataset (use get_changes); this is platform/infra health, not content.', {},
+  // ★2026-09-01: this description used to promise database backup state, an
+  // agentic heartbeat score, MCP call volume and the DCPI recompute cadence,
+  // across '49 sources'. The handler is a bare passthrough to
+  // /api/health/data-freshness and serves NONE of them — it returns ingest-feed
+  // freshness and a summary rollup. The route was corrected off /api/v1/stats
+  // in v2.1.0 (see the migration block at the top of this file) and the prose
+  // stayed behind, so the tool an agent calls to decide 'is DC Hub current
+  // enough to trust today' was itself making four claims it could not back.
+  //
+  // The absent fields are NOT enumerated in the description on purpose: naming
+  // them is only meaningful to someone who read the old text, and test/
+  // tool-description-honesty.test.mjs forbids the phrases outright so a future
+  // edit cannot quietly reinstate them. This comment is where the history goes.
+  trackedTool(srv, 'get_backup_status', 'Per-feed freshness for the DC Hub ingest layer: one row per feed (deals, facilities, news, substations, fiber_routes, transactions, construction_permits, pipeline, markets) carrying health (healthy/stale/error/unknown), record_count, refresh_interval and scheduler, plus a summary rollup {healthy, stale, error, unknown, total_feeds, overall_health}. Read the health of each row before trusting a figure drawn from it — a feed reporting "unknown" has NOT been measured, which is not the same as healthy. Answers "are any of your sources stale right now". Try: get_backup_status. Scope is exactly what /api/health/data-freshness serves: ingest-feed freshness, nothing wider. Do NOT use for the freshness of one dataset (use get_changes); this is ingest health, not content.', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/health/data-freshness')) }] }));
 
   // r-why-dchub (2026-06-21 growth audit): the competitive moat IS agent-native
