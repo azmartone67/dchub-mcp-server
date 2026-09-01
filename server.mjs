@@ -3657,7 +3657,7 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
 // fully free (the proven citation "wow"). In-memory soft counter (resets on
 // restart, per-replica) — fine for a nudge, not a hard limit.
 // env unset/0 => the helper is never called (short-circuit) => zero change.
-const _trialDayCounts = new Map();
+export const _trialDayCounts = new Map();
 
 // ── r-durable-cap (2026-07-01): backend-backed durable daily counter ────────
 // _trialDayCounts is in-memory, so EVERY deploy/restart/replica reset the cap
@@ -3676,17 +3676,57 @@ const _trialDayCounts = new Map();
 // by ip exactly as before. ACCEPTED RACE: the very first call after a fresh
 // deploy may serve one extra full answer before the hydration peek lands —
 // strictly better than today, where the ENTIRE day's count reset to zero.
-const _fullCapHydrated = new Set();   // `${identity}:${tool}:${day}` — peek fired (day in key = self-resets on rollover)
+// ★ r-cap-enforce (2026-08-31): was a Set of "peek fired" markers. Now a Map of
+// the peek PROMISE, so concurrent first-calls on a replica await the SAME peek
+// instead of racing past it. Key `${identity}:${tool}:${day}` (day in key =
+// self-resets on rollover).
+export const _fullCapHydrated = new Map();
+// How long the gate will WAIT for the durable count before falling back to the
+// local (replica-local) count. Bounds the added latency to the first call per
+// (identity, tool, day) per replica. 0 disables waiting = pre-fix behaviour.
+export const FULL_CAP_PEEK_MS = Math.max(0, parseInt(process.env.DCHUB_FULL_CAP_PEEK_MS || '800', 10));
+
+// ── r-caller-cap (2026-08-31): the budget is PER CALLER, not per tool ───────
+// The per-(identity,tool,day) counter resets for every distinct tool, so a
+// caller who rotates tools never spends a budget at all. Measured 30d to
+// 2026-08-31: callers touch 1.99 distinct capped tools per day on average
+// (max 6), so a per-tool cap of 2 is really ~4 full answers/day for a typical
+// caller and up to 12 for the widest.
+//
+// A SECOND bucket now tracks the caller across ALL capped tools and the gate
+// refuses when EITHER is spent. That is strictly tighter than per-tool alone:
+// the single-tool case still binds at the per-tool cap, and only the
+// tool-rotating case changes.
+//
+// The caller cap is a MULTIPLE of whatever per-tool cap the call site passes,
+// so it scales with tier for free: trial 2 -> 4, bound-email 10 -> 20, paid
+// N -> 2N. Default 2 is the measured average tools/day, i.e. it preserves what
+// the typical caller already gets and closes only the tail.
+//   DCHUB_TRIAL_CALLER_CAP_MULT=0  disables the per-caller cap entirely.
+export const CALLER_CAP_MULT = Math.max(0, parseInt(process.env.DCHUB_TRIAL_CALLER_CAP_MULT || '2', 10));
+// Sentinel bucket name for the all-tools counter. The durable table is keyed
+// (identity, tool, day) and the endpoint accepts any non-empty string <=200
+// chars, so the caller bucket rides the SAME rail with no migration. '*' can
+// never collide with a real tool name.
+export const CALLER_CAP_TOOL = '*';
+const _callerCapFor = (perToolCap) =>
+  (CALLER_CAP_MULT > 0 && perToolCap > 0) ? perToolCap * CALLER_CAP_MULT : 0;
 function _fullCapHydrate(localKey, identity, tool, cap) {
   try {
+    // ★ Returns the promise so the gate can AWAIT it. It still never rejects —
+    // every failure path resolves, so awaiting can only ever cost time, never
+    // throw. Fail-open is preserved exactly.
     const u = new URL('/api/v1/mcp/full-cap/peek', API_BASE);
     u.searchParams.set('identity', identity);
     u.searchParams.set('tool', tool);
     u.searchParams.set('cap', String(cap));
-    fetch(u.toString(), {
+    return fetch(u.toString(), {
       method: 'GET',
       headers: { 'X-Internal-Key': INTERNAL_KEY },
-      signal: AbortSignal.timeout(5000),
+      // Bounded: this is now on the request path for the first call per
+      // (identity, tool, day) per replica. A slow backend must degrade to the
+      // old local-count behaviour, not stall the answer.
+      signal: AbortSignal.timeout(FULL_CAP_PEEK_MS || 5000),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -3696,8 +3736,9 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
         const local = _trialDayCounts.get(localKey) || 0;
         if (remote > local) _trialDayCounts.set(localKey, remote);
       })
-      .catch(() => {});  // never throw, never block — the counter is a nudge, not a wall
-  } catch (_) { /* fire-and-forget */ }
+      .catch(() => {});  // never throw — a failed peek leaves the local count alone
+  } catch (_) { /* fall through */ }
+  return Promise.resolve();
 }
 // ── r-oauth-funnel (2026-07-16): count 401 OAuth challenges ISSUED ──────────
 // WHY: the oauth_durable cohort returns 40% vs 5.2% key_only (Fisher p=0.027),
@@ -3807,20 +3848,41 @@ function _fullCapConsume(identity, tool, cap) {
   } catch (_) { /* fire-and-forget */ }
 }
 
-function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
+export async function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
   try {
     const day = new Date().toISOString().slice(0, 10);
     const key = `${ipKey || 'anon'}:${tool}:${day}`;
-    // r-durable-cap: hydrate from the backend once per (identity, tool, day)
-    // per process — fired async BEFORE the increment, never awaited (the gate
-    // stays sync). Day is part of the guard key, so rollover re-hydrates.
+    // ★ r-cap-enforce (2026-08-31) — THE PEEK IS NOW AWAITED.
+    //
+    // It used to be fired and abandoned on the line before the local count was
+    // read, so a fresh replica always decided from a count of 0 no matter what
+    // the durable counter said. The peek landed after the answer had shipped,
+    // and `_fullCapHydrated` was marked before it resolved, so it happened once
+    // per process and never affected the call that triggered it.
+    //
+    // Effective cap was therefore (replicas x cap), not cap. Measured over 30d
+    // on 2026-08-31: cap was 2, yet 847 of 1,859 (identity, tool, day) buckets
+    // sat ABOVE it, the worst at n=21, and 3,712 full answers were served past
+    // the declared limit. The gated share of payable calls was 1.4%.
+    //
+    // A durable counter whose value arrives after the decision is not a
+    // counter, it is a log. Awaiting it is the whole point.
     const id = durableId || ipKey || 'anon';
-    const hydrateKey = `${id}:${tool}:${day}`;
-    if (!_fullCapHydrated.has(hydrateKey)) {
-      if (_fullCapHydrated.size > 50000) _fullCapHydrated.clear();  // unbounded-growth guard
-      _fullCapHydrated.add(hydrateKey);
-      _fullCapHydrate(key, id, tool, cap);
-    }
+    // r-caller-cap: the caller bucket is keyed on the DURABLE identity for both
+    // the local Map and the backend, because it is the caller that owns the
+    // budget — not the NAT the caller shares.
+    const callerCap = _callerCapFor(cap);
+    const callerKey = `${id}:${CALLER_CAP_TOOL}:${day}`;
+    // Both peeks fire together and are awaited together, so adding the caller
+    // bucket costs no extra wall-clock over the per-tool one.
+    const hydrating = Promise.all([
+      _hydrateOnce(`${id}:${tool}:${day}`, key, id, tool, cap),
+      callerCap > 0
+        ? _hydrateOnce(`${id}:${CALLER_CAP_TOOL}:${day}`, callerKey, id, CALLER_CAP_TOOL, callerCap)
+        : Promise.resolve(),
+    ]);
+    // FULL_CAP_PEEK_MS=0 restores the pre-fix fire-and-forget behaviour.
+    if (FULL_CAP_PEEK_MS > 0) await hydrating;
     const n = (_trialDayCounts.get(key) || 0) + 1;
     _trialDayCounts.set(key, n);
     if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
@@ -3829,18 +3891,49 @@ function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
     // otherwise add one outbound HTTP call per hit and grow the backend
     // counter without bound (past cap, only "over" matters, not the count).
     if (n <= cap + 3) _fullCapConsume(id, tool, cap);
-    return n > cap;
+    let callerOver = false;
+    if (callerCap > 0) {
+      const cn = (_trialDayCounts.get(callerKey) || 0) + 1;
+      _trialDayCounts.set(callerKey, cn);
+      if (cn <= callerCap + 3) _fullCapConsume(id, CALLER_CAP_TOOL, callerCap);
+      callerOver = cn > callerCap;
+    }
+    // EITHER budget being spent gates the call.
+    return n > cap || callerOver;
   } catch (_) { return false; }
+}
+
+// Shared by both buckets: fire the peek at most once per (identity, bucket, day)
+// per replica and hand every concurrent first-caller the SAME promise.
+function _hydrateOnce(guardKey, localKey, identity, bucket, cap) {
+  let p = _fullCapHydrated.get(guardKey);
+  if (!p) {
+    if (_fullCapHydrated.size > 50000) _fullCapHydrated.clear();  // unbounded-growth guard
+    p = _fullCapHydrate(localKey, identity, bucket, cap);
+    // Stored BEFORE any await so concurrent first-calls on this replica await
+    // the SAME peek rather than each firing one and racing past it.
+    _fullCapHydrated.set(guardKey, p);
+  }
+  return p;
 }
 // r-honest-cap (2026-07-01): PURE PEEK — how many full answers this (ip,tool)
 // has LEFT today under `cap`. Never increments (unlike _trialFullCallsExceeded,
 // which counts the in-flight call on every check), so CTAs can state a truthful
 // "you have N more full answers today" without burning one.
-function _trialFullRemaining(ipKey, tool, cap) {
+export function _trialFullRemaining(ipKey, tool, cap, durableId) {
   try {
     const day = new Date().toISOString().slice(0, 10);
     const n = _trialDayCounts.get(`${ipKey || 'anon'}:${tool}:${day}`) || 0;
-    return Math.max(0, cap - n);
+    const perTool = Math.max(0, cap - n);
+    // r-caller-cap: the honest number is the SMALLER of the two budgets. A CTA
+    // that promises 2 more answers on this tool while the caller's all-tools
+    // budget has 0 left is the same dishonest copy the per-tool count already
+    // was — it just moved buckets.
+    const callerCap = _callerCapFor(cap);
+    if (callerCap <= 0) return perTool;
+    const id = durableId || ipKey || 'anon';
+    const cn = _trialDayCounts.get(`${id}:${CALLER_CAP_TOOL}:${day}`) || 0;
+    return Math.min(perTool, Math.max(0, callerCap - cn));
   } catch (_) { return 0; }
 }
 
@@ -4799,7 +4892,8 @@ const TRIAL_HEADER_OVERRIDES = {
     try {
       const _c = getCtx();
       if (_c && _c.client_ip && TRIAL_DAILY_FULL_CAP > 0) {
-        _remaining = _trialFullRemaining(_c.client_ip, 'get_grid_intelligence', TRIAL_DAILY_FULL_CAP);
+        _remaining = _trialFullRemaining(_c.client_ip, 'get_grid_intelligence', TRIAL_DAILY_FULL_CAP,
+                                         _c.api_key || _c.client_ip);
       }
     } catch (_) {}
     return '🔒 **`get_grid_intelligence` returned a preview** — full per-ISO depth (all 7 US ISOs + queue + time-to-power) is one click: 💳 **$10 one-time = 1,000 calls** → ' + _pack +
@@ -5503,7 +5597,7 @@ function _buildQuotaHint(toolName) {
       // it has headroom forever, so it never claims a key and never converts.
       if (_durable) {
         q.full_answers_cap_today = ANON_FULL_CAP;
-        q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP);
+        q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP, (c && (c.api_key || c.client_ip)));
       } else {
         q.full_answers_cap_today = null;
         q.full_answers_remaining_today = null;
@@ -10529,12 +10623,15 @@ function trackedTool(srv, name, description, schema, handler) {
             // buildAutoMintBlock keeps the uncapped copy.
             const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name);
             const _overCap = _capApplies && ANON_FULL_CAP > 0
-              && _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP,
-                                         c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
+              // ★ AWAIT: the call is async now. Without it this is a Promise,
+              // which is truthy, and EVERY call would gate. See the source
+              // guard in test/full-cap-enforce.test.mjs.
+              && await _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP,
+                                               c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
             // Only claim a remaining-count for tools the cap actually governs —
             // a non-taste tool must not advertise "N more full answers today".
             const _remainingFull = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
-              ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP)
+              ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip)
               : null;
             const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name, _mintBound, _remainingFull);
             // 2026-06-07 HIGH-INTENT CLAIM: bump per-(session,tool) counter +
@@ -10869,7 +10966,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // r-honest-cap (2026-07-01): pure PEEK here — this hard-wall response
         // consumes no full answer, so no increment; the count is already honest.
         const _remainingFull2 = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
-          ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP)
+          ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip)
           : null;
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name, _mint2Bound, _remainingFull2);
         // MCP-C (2026-06-06): write tool_requested-tagged signal here too.
@@ -11102,8 +11199,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         const _cap = _paidTaste ? PAID_DAILY_FULL_CAP
                    : _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
         const _tasteExceeded = _cap > 0
-          && _trialFullCallsExceeded(_capId, name, _cap,
-                                     c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
+          && await _trialFullCallsExceeded(_capId, name, _cap,
+                                           c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
         if (_cap > 0 && !_tasteExceeded) {
           // r-metered-visible (2026-07-27 digest wave, "metered trial"): the
           // taste was SILENT — an agent got N full answers with no warning,
@@ -11116,7 +11213,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try {
             const _mtParsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (_mtParsed && typeof _mtParsed === 'object' && !Array.isArray(_mtParsed)) {
-              const _mtRemaining = _trialFullRemaining(_capId, name, _cap);
+              const _mtRemaining = _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip);
               const _mtCall = Math.min(_cap, Math.max(1, _cap - _mtRemaining));
               _mtParsed._metered_trial = {
                 call: _mtCall,
@@ -11241,7 +11338,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // key is built from the FIRST arg (client_ip); the durable id is only
             // used for hydration, so read with the same client_ip or you read a
             // different bucket and always see a full allowance.
-            const _rem = _trialFullRemaining(c.client_ip, name, _cap);
+            const _rem = _trialFullRemaining(c.client_ip, name, _cap, c.api_key || c.client_ip);
             const _pre = await mppPrewallOffer(name, _rem);
             if (_pre) {
               const _p = JSON.parse(result.content?.[0]?.text || '{}');
