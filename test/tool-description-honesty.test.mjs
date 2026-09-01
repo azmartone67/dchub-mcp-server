@@ -141,6 +141,58 @@ describe('get_gas_economics forwards gas_to_grid_status', () => {
     expect(out.gas_to_grid_status).toBeUndefined();
   });
 
+  // ★2026-09-01 — the shape this guard did not know, and #297 therefore missed.
+  //
+  // The status ships in TWO shapes. routes/gas_intelligence.py NESTS it under
+  // gas_to_grid_status (the shape every test above uses). But this tool calls
+  // /api/v1/markets/<slug>/gas-to-grid, served by routes/powered_land_gas.py,
+  // whose gas_to_grid_unavailable() body is FLAT: {ok, available, status,
+  // unavailable_reason, withdrawn_on, audit_ref, …}. #297 handled only the
+  // nested shape, so the flat one fell through to UNMEASURED on EVERY live call
+  // — the tool reported an unexplained absence while holding a dated, sourced
+  // withdrawal. Measured against production 2026-09-01 before this fix.
+  //
+  // The guard above could not catch it because every fixture it feeds is already
+  // in the nested shape: it proved the forwarding worked for the shape it knew,
+  // which is exactly how a real endpoint's shape goes unrepresented.
+  it('forwards the FLAT withdrawal body powered_land_gas.py actually serves', async () => {
+    pricingPayload = { delivered_electric_usd_mmbtu: 1.967 };
+    g2gPayload = {
+      ok: false,
+      available: false,
+      status: 'disabled',
+      unavailable_reason: 'Gas-to-grid $/MWh is withdrawn pending correction. Five surfaces published a gas-fired $/MWh for the same market on the same day, up to 5.5x apart…',
+      withdrawn_on: '2026-08-08',
+      audit_ref: 'gas-audit-2026-08-08',
+      what_is_still_published: ['/api/v1/markets/<slug>/gas-pricing — Henry Hub spot and the delivered EIA tariff in $/MMBtu'],
+      reenable: 'set DCHUB_GAS_TO_GRID_ENABLED=1 once price selection is deterministic and sanity-gated',
+      surface: 'powered-land-gas-to-grid',
+    };
+    const out = await callTool('get_gas_economics', { market: 'dallas' });
+    const st = out.gas_to_grid_status;
+    expect(st, 'a stated withdrawal must not vanish').toBeTruthy();
+    expect(st.available).toBe(false);
+    // The decisive assertion: a STATED withdrawal must never be reported as an
+    // unexplained absence. This is the whole bug.
+    expect(st.reason, 'the served reason must be forwarded, not replaced').toMatch(/withdrawn pending correction/i);
+    expect(JSON.stringify(st)).not.toMatch(/UNMEASURED/);
+    // And the provenance that makes it citable must survive the hop.
+    expect(st.withdrawn_on).toBe('2026-08-08');
+    expect(st.audit_ref).toBe('gas-audit-2026-08-08');
+  });
+
+  it('still says UNMEASURED when NEITHER shape carries a status', async () => {
+    // The fallback keeps the job it was written for. Widening recognition must
+    // not turn "we do not know why" into a fabricated withdrawal — the failure
+    // #297 was built to prevent, and the one this fix must not reintroduce.
+    pricingPayload = { delivered_electric_usd_mmbtu: 1.9 };
+    g2gPayload = { ok: true, market_slug: 'dallas' };   // no status, no $/MWh, no flat markers
+    const out = await callTool('get_gas_economics', { market: 'dallas' });
+    expect(out.gas_to_grid_status.available).toBe(false);
+    expect(out.gas_to_grid_status.reason).toMatch(/UNMEASURED/);
+    expect(out.gas_to_grid_status.reason).not.toMatch(/2026-08-08|withdrawn pending/i);
+  });
+
   it('declares even when the gas-to-grid read itself failed', async () => {
     pricingPayload = { delivered_electric_usd_mmbtu: 1.9 };
     g2gPayload = { error: 'upstream 502' };

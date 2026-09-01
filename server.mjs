@@ -13304,11 +13304,48 @@ function createServer(descOverrides) {
       // declare that we do not KNOW why rather than inventing a reason. UNMEASURED
       // is the honest verdict for an unexplained absence; a fabricated withdrawal
       // notice would be the same class of error as a drift report from a failed read.
+      //
+      // ★2026-09-01 — the above shipped in #297 and read the WRONG KEY, so it
+      // declared UNMEASURED while holding a full, dated explanation.
+      //
+      // The status is published in TWO shapes by two different endpoints:
+      //   routes/gas_intelligence.py   nests it:  {gas_to_grid_status: {...}}
+      //   routes/powered_land_gas.py   is FLAT:   {ok:false, available:false,
+      //                                            status:'disabled',
+      //                                            unavailable_reason:'…',
+      //                                            withdrawn_on:'2026-08-08', …}
+      // This tool calls /api/v1/markets/<slug>/gas-to-grid — the FLAT one. #297
+      // only knew the nested shape, so `g2g.gas_to_grid_status` was always
+      // undefined here, `scenarios_usd_per_mwh` was absent (it IS withdrawn),
+      // and the fallback fired on every call. Measured live 2026-09-01:
+      // get_gas_economics(dallas) returned "the absence is not explained here"
+      // while the upstream body carried withdrawn_on, an audit_ref, and the
+      // five-surfaces reason in full.
+      //
+      // Reading a stated withdrawal as an unexplained one is the SAME conflation
+      // #297 existed to remove, just pointed the other way: there, silence was
+      // presented as a decision; here, a decision was presented as silence.
+      //
+      // Both shapes are accepted now, forwarded verbatim, and UNMEASURED is kept
+      // for the case it was written for — no status in either shape, and no $/MWh.
+      const _g2gFlatWithdrawal =
+        (g2g && g2g.available === false && (g2g.unavailable_reason || g2g.withdrawn_on))
+          ? { available: false,
+              reason: g2g.unavailable_reason,
+              withdrawn_on: g2g.withdrawn_on,
+              status: g2g.status,
+              audit_ref: g2g.audit_ref,
+              what_is_still_published: g2g.what_is_still_published,
+              reenable: g2g.reenable,
+              surface: g2g.surface }
+          : undefined;
+
       const g2gStatus =
         (g2g && g2g.gas_to_grid_status !== undefined) ? g2g.gas_to_grid_status
+        : _g2gFlatWithdrawal !== undefined ? _g2gFlatWithdrawal
         : (g2g && g2g.scenarios_usd_per_mwh !== undefined) ? undefined
         : { available: false,
-            reason: 'UNMEASURED — the gas-to-grid endpoint returned neither a $/MWh scenario set nor a gas_to_grid_status. The absence is not explained here; do NOT read it as a stated withdrawal.' };
+            reason: 'UNMEASURED — the gas-to-grid endpoint returned neither a $/MWh scenario set nor any withdrawal status, in either the nested (gas_to_grid_status) or flat (available/unavailable_reason) shape. The absence is not explained here; do NOT read it as a stated withdrawal.' };
 
       const out = {
         market_slug: slug,
