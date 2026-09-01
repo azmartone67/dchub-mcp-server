@@ -9,6 +9,14 @@
 // Fail-SAFE by design: if there is no .git dir (tarball install, CI checkout
 // with hooks disabled, npm-in-node_modules), it no-ops with exit 0 — never
 // block an install because hooks couldn't be wired.
+//
+// The "prepare" script that calls this is suffixed `2>/dev/null || exit 0` for
+// the same reason, and that suffix is load-bearing: the Dockerfile runs
+// `npm ci` after copying ONLY package.json + package-lock.json, so this file
+// does not exist yet at that layer and node exits MODULE_NOT_FOUND before any
+// guard below can run. Without `|| exit 0` the image build fails; without the
+// redirect it still dumps a stack trace that reads like a failure. (.git is
+// dockerignored, so there is nothing to install in a container anyway.)
 // ============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
