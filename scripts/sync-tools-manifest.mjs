@@ -417,7 +417,13 @@ const applyQuantities = (file, txt, rules, commentAware) => {
       return m[1] + P.countries + m[3];
     }, true);
   }
-  txt = applyRx(txt, /\b(\d+)((?: MCP)? tools)\b/g, (m) => {
+  // ★2026-09-01: the adjective slot is why two counts rotted unseen. "82 live
+  // MCP tools" (this file's own Smithery copy) and "70 live tools" in
+  // docs/contextual-triggers.md — stale since 2026-07-08 against a canon of 83 —
+  // matched NEITHER the detector nor the healer, because a word between the digits
+  // and "tools" broke `(?: MCP)?`. Repeat the group so any run of known adjectives
+  // is absorbed and preserved; the set stays closed so this cannot swallow prose.
+  txt = applyRx(txt, /\b(\d+)((?: live| MCP| read-only)* tools)\b/g, (m) => {
     if (Number(m[1]) <= 20 || Number(m[1]) === COUNT) return null;
     problems.push(`${f}: "${m[0].trim()}" — stale tool count (live ${COUNT})`);
     return `${COUNT}${m[2]}`;
@@ -666,6 +672,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'integrations/openrouter/README.md', 'integrations/poe/README.md',
                  'integrations/gemini/README.md', 'integrations/youcom/README.md',
                  'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
+                 'docs/contextual-triggers.md',   // ★2026-09-01: was in NO list; "70 live tools" since 07-08
                  'docs/distribution-targets.md', 'docs/canonical-workflows.md',
                  'scripts/smithery_description.txt', 'dxt/manifest.json',
                  // ★2026-08-11 — the GitHub repo DESCRIPTION. It is METADATA, not
@@ -684,14 +691,14 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // separately the Tools badge said tools-48 while the body said 49 (2026-06-26).
   const live = liveLines(txt);   // historical (canon:frozen) lines are not claims about now
   const counts = [
-    ...[...live.matchAll(/(\d+)(?: MCP| read-only)? tools/g)].map((x) => Number(x[1])),
+    ...[...live.matchAll(/(\d+)(?: live| MCP| read-only)* tools/g)].map((x) => Number(x[1])),
     ...[...live.matchAll(/badge\/tools-(\d+)/g)].map((x) => Number(x[1])),
   ];
   const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
   if (wrong.length) {
     problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
     if (FIX) pend(f, healLines(txt, (ln) => ln
-      .replace(/\b(\d+)( MCP| read-only)? tools\b/g, (s, n, mcp) => (Number(n) > 20 ? `${COUNT}${mcp || ''} tools` : s))
+      .replace(/\b(\d+)((?: live| MCP| read-only)*) tools\b/g, (s, n, adj) => (Number(n) > 20 ? `${COUNT}${adj || ''} tools` : s))
       .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))));
   }
 }
@@ -772,6 +779,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     'integrations/cohere/README.md', 'integrations/copilot/dchub-mcp.yaml',
     'integrations/openrouter/tools.json', 'dxt/manifest.json',
     'docs/canonical-workflows.md', 'docs/distribution-targets.md',
+    'docs/contextual-triggers.md',
     'scripts/smithery_description.txt',
     // ★2026-07-30 (PR #107) additions — current-claim copy the 07-30 sweep
     // found stale (21k+/12,650+/58 tools era): per-platform integration
