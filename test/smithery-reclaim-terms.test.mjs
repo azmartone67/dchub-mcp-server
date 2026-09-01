@@ -129,3 +129,50 @@ describe('a monitored term this description already carries sits inside the visi
       + 'past the cut').toBeLessThan(SEARCH_TRUNCATION - MARGIN);
   });
 });
+
+// ★ 2026-09-01 — the LIVE half. Everything above fences this repo against
+// itself; nothing fenced it against what Smithery actually SERVES, and those
+// have never matched (measured that day, BEFORE any paste: live detail endpoint
+// 2,212 chars vs this file's 2,383). The blurb is owner-authored in the UI and
+// no repo path writes it, which is why 20 days of `fiber` at #3 went unexplained.
+//
+// smithery_visible_terms() in registry_monitor.py closes it. These assertions
+// pin the two decisions that make it worth having, because both are one token
+// away from being silently inverted.
+describe('the live term-visibility check keeps its severities straight', () => {
+  const FN = MONITOR.slice(MONITOR.indexOf('def smithery_visible_terms('));
+
+  it('exists and is wired into main()', () => {
+    expect(MONITOR).toMatch(/def smithery_visible_terms\(/);
+    // wiring, not just definition — a helper nothing calls is not a fence.
+    expect(MONITOR).toMatch(/_vis_reg,\s*_vis_notes\s*=\s*smithery_visible_terms\(core\)/);
+    expect(MONITOR).toMatch(/reasons\.extend\(_vis_reg\)/);
+    expect(MONITOR).toMatch(/notes\s*=\s*list\(_prov_notes\)\s*\+\s*list\(_vis_notes\)/);
+  });
+
+  // ROUTING, not text. Flipping either append target leaves every string in
+  // place and every behavioural check green while destroying the meaning:
+  // a slipped-and-unindexed term would stop paging, or a merely-pending paste
+  // would start. Assert the SINK.
+  //
+  // ⚠️ If this is ever refactored to build the message into a variable first
+  // (`msg = "…"; regressions.append(msg)`), these regexes FAIL — the safe
+  // direction. The correct repair is to keep asserting the SINK (parse the call
+  // and check the append target), NEVER to relax back to matching message text.
+  it('a slipped AND unindexed term PAGES; a merely-pending paste does not', () => {
+    expect(FN).toMatch(/regressions\.append\(\s*\n?\s*f?"Smithery indexes a blurb that never says/);
+    expect(FN).toMatch(/notes\.append\(f?"repo->live paste PENDING/);
+    expect(FN).toMatch(/notes\.append\(f?"absent from the live window but holding #1/);
+  });
+
+  it('an unreadable blurb is an UNKNOWN, never a clean pass', () => {
+    // The failure this whole module exists to prevent, one level up: if the
+    // live read fails and we return no finding, the surface reads healthy.
+    expect(FN).toMatch(/notes\.append\(\s*"Smithery blurb UNREADABLE/);
+    expect(FN).toMatch(/blurb is None/);
+  });
+
+  it('pins the truncation it reasons about', () => {
+    expect(MONITOR).toMatch(/^SMITHERY_SEARCH_CHARS = 1000$/m);
+  });
+});
