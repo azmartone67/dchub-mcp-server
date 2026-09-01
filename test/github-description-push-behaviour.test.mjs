@@ -107,11 +107,35 @@ function run(script, env = {}) {
   return out;
 }
 
-const STALE = CANON.replace('19,900+', '19,700+');
+// ★ 2026-09-01: this was `CANON.replace('19,900+', '19,700+')` — substituting a
+//   LITERAL that the daily canon-sync bot rotates. The bot moved canon to
+//   "20,100+" in d412e4b, the replace then matched nothing, and STALE came out
+//   byte-identical to CANON. Every test below that asserts "drift IS detected"
+//   was handed a fixture with no drift in it: the shipped script correctly
+//   reported "in sync — no push needed", and nine tests went red blaming the
+//   script. The script was right and the FIXTURE was broken.
+//
+//   That commit carried [skip ci], so no run ever saw it — this file is on the
+//   HARD gate, and main was still red the next day.
+//
+//   Derive the stale value from whatever figure canon currently carries, and
+//   assert below that the substitution actually bit. A fixture that can silently
+//   become a no-op is a test that can silently stop testing.
+const FACILITIES_RE = /[\d,]+\+ facilities/;
+const STALE = CANON.replace(FACILITIES_RE, '19,700+ facilities');
 
 describe('the extraction is pointed at the real step', () => {
   it('found a script, not an empty string', () => {
     expect(SHIPPED.length).toBeGreaterThan(400);
+  });
+
+  it('the STALE fixture actually differs from canon', () => {
+    // Without this, a fixture that stops substituting turns every drift test
+    // below into a test of the no-drift path — which is how nine of them came
+    // to fail at once with no indication that the fixture was the cause.
+    expect(CANON).toMatch(FACILITIES_RE);
+    expect(STALE).not.toBe(CANON);
+    expect(STALE).toContain('19,700+ facilities');
   });
   it('is the description step and not a neighbouring one', () => {
     expect(SHIPPED).toContain('canonical/github_description.txt');
@@ -160,7 +184,12 @@ describe('the read no longer depends on a PAT being alive', () => {
     const out = run(SHIPPED, { STUB_LIVE: STALE });
     expect(out).toContain('DRIFT');
     expect(out).toContain('19,700+');          // a real live value, not ''
-    expect(out).toContain('19,900+');
+    // ★ 2026-09-01: this asserted the literal '19,900+' — canon's value on the
+    //   day it was written. The daily canon-sync bot moved canon to 20,100+ and
+    //   this went red while the script was behaving correctly. Assert against
+    //   canon's CURRENT figure, so the test tracks the thing it is about (the
+    //   run prints what it WANTS) instead of a number that expires.
+    expect(out).toContain(CANON.match(FACILITIES_RE)[0]);
   });
 
   it('detects drift even when every PAT is dead', () => {

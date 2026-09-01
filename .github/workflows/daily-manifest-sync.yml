@@ -54,6 +54,19 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
+          cache: "npm"
+      # ★2026-09-01 — this job pushes with [skip ci], so NOTHING ever tested what
+      # it shipped. On 2026-09-01 it healed canon 19,900+ -> 20,100+ and left main
+      # RED on the hard gate for a day: test/github-description-push-behaviour.test.mjs
+      # derived its "stale" fixture by substituting the literal '19,900+', which
+      # after the heal matched nothing, so the fixture became identical to canon and
+      # nine drift tests were handed a no-drift input. Nobody saw it, because
+      # [skip ci] is exactly the instruction not to look.
+      #
+      # The fixtures are fixed, but a bot that ships unverified will find the next
+      # one. So it installs deps and runs the same HARD gate before pushing.
+      - name: Install deps (so the heal can be verified before it ships)
+        run: npm ci --no-audit --no-fund
       - name: Refresh canonical phrase quantities from the owner endpoint
         # ★2026-07-30: pulls /api/v1/canon/phrases (the SAME owner the
         # dchub-frontend heal reads) into canonical/canon_phrases.json.
@@ -273,6 +286,34 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # stage ONLY the files this job owns (never -A)
           git add $OWNED
+          # ★ Verify the HEALED tree before it ships. [skip ci] means no workflow
+          #   will run on the resulting commit, so this is the only opportunity —
+          #   after this push, a break is live and silent until a human trips on it.
+          #   Fail CLOSED: leave the drift unhealed and say so, rather than push a
+          #   tree that does not pass. An unhealed surface is visible and
+          #   recoverable; a red main nobody is told about is neither.
+          # The gate's file list is DERIVED from test.yml, never copied: a second
+          # copy is a second thing to forget, and this job exists because a canon
+          # value lived in two places. If the extraction comes back empty, fail —
+          # `vitest run` with no files would sweep everything and could pass
+          # vacuously, which is the silent-green this repo keeps re-learning.
+          HARD_GATE=$(grep -oE 'npx vitest run test/[^"]*' .github/workflows/test.yml | head -1 | sed 's|^npx vitest run ||')
+          if [ -z "$HARD_GATE" ]; then
+            echo "::error::[verify] could not extract the hard-gate file list from test.yml."
+            echo "::error::Refusing to push an unverified heal. Check that test.yml still has a"
+            echo "::error::'npx vitest run test/…' line, and fix this extraction if it moved."
+            exit 1
+          fi
+          echo "[verify] running the hard gate against the healed tree…"
+          if ! npx vitest run $HARD_GATE > /tmp/heal-gate.log 2>&1; then
+            echo "::error::[verify] the healed canon FAILS the hard gate — NOT pushing."
+            echo "::error::The heal itself may be correct and a test may be pinned to the"
+            echo "::error::previous canon value (that is what happened on 2026-09-01)."
+            echo "::error::Fix the test or the heal, then re-run. Drift stays unhealed until then."
+            tail -60 /tmp/heal-gate.log
+            exit 1
+          fi
+          echo "[verify] hard gate green on the healed tree — pushing"
           git commit -m "chore(canon): daily tool-count/version/quantity sync from server.mjs + canon snapshot [skip ci]"
           git push
           echo "✓ healed registry surfaces — Glama/PulseMCP/GitHub will re-scan the updated source"
