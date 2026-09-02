@@ -92,7 +92,7 @@ import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
 import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppCallDigest, mppWantsChallenge, mppTakeArgSignal, mppArgShape, mppOffer, mppPrewallOffer, mppUndercapOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_ARG_PAY, MPP_ARG_CRED, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
 import express from 'express';
-import { randomUUID, createHash, createHmac } from 'crypto';
+import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
@@ -17444,6 +17444,114 @@ app.get('/internal/sessions', (req, res) => {
     out.push({ sid, ...meta, api_key: meta.api_key ? `${meta.api_key.slice(0,6)}…` : null });
   }
   res.json({ count: out.length, sessions: out });
+});
+
+// ── r-origin-edge-key (2026-09-02): only the edge may speak to this origin ───
+//
+// MEASURED, not theorised. On 2026-09-02, from an ordinary laptop:
+//     curl -X POST https://dchub-mcp-server-production-4d2e.up.railway.app/mcp \
+//       -H 'Content-Type: application/json' \
+//       -H 'Accept: application/json, text/event-stream' \
+//       -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+//   → 200, the full tools/list, no credential of any kind. The sibling host
+//   dchub-mcp-server-production.up.railway.app answered the same way, and that
+//   hostname was PUBLISHED keyless in the /mcp-selftest payload.
+//
+// ★ WHY THIS IS WORSE THAN ORDINARY ORIGIN EXPOSURE. Our demand telemetry
+//   defines agent_id = md5(first public X-Forwarded-For token), and
+//   mcp_calls_deloop.py's is_real_external treats Cloudflare POP ranges as
+//   non-agents. Both assume arrival THROUGH Cloudflare: the zone worker
+//   overwrites X-Forwarded-For with cf-connecting-ip, so through the edge the
+//   token is ours to trust. A caller at the origin supplies its own XFF and the
+//   overwrite never happens — it can mint arbitrary agent_ids, or dodge counting
+//   entirely. Every number we publish about external demand rests on the edge
+//   being the only door. Also bypassed: CF rate limiting, the WAF, ROUTE_TIMEOUTS,
+//   cache rules, and the practical enforcement of the anonymous hard wall.
+//
+// ★★ WHY THIS SHIPS IN OBSERVE MODE BY DEFAULT. dchub.cloud/mcp is proxied by
+//   the CF ZONE worker (dchubapiproxy, x-dc-worker-version 4.9.x), which lives in
+//   NO repository — it is edited by hand in the dashboard. A hard gate that
+//   deploys before that worker forwards the header takes the entire public MCP
+//   endpoint down, and nothing in this repo's CI can prove it forwards. So:
+//
+//     DCHUB_EDGE_KEY unset               → the gate is completely inert (today).
+//     DCHUB_EDGE_KEY set, ENFORCE unset  → OBSERVE: every request is served as
+//                                          before, stamped x-dc-edge-key:
+//                                          ok|missing|bad and counted at
+//                                          /internal/edge-key.
+//     DCHUB_EDGE_KEY set, ENFORCE=1      → a request without the exact key is
+//                                          refused 403.
+//
+//   The flip to enforcement is therefore a DECISION ON EVIDENCE — flip only once
+//   /internal/edge-key shows `missing` at zero for a full traffic day — not a
+//   deploy-and-hope. Both MCP services (resourceful-essence and zonal-liberation)
+//   need the same variable before either flip.
+//
+// ★★★ 403, DELIBERATELY, NOT 401. In MCP a 401 + WWW-Authenticate is the signal
+//   that STARTS the OAuth flow (see the r-workos-challenge block above). Answering
+//   an unkeyed origin request with 401 would push compliant clients into a sign-in
+//   dance instead of telling them plainly that this door is not for them.
+const EDGE_KEY_HEADER = 'x-dc-edge-key';
+
+// Observe-mode evidence. Deliberately a plain counter, not a sample: the flip
+// decision needs "how many requests would this have broken", and one is enough
+// to hold it.
+const _edgeKeyStats = { ok: 0, missing: 0, bad: 0, since: new Date().toISOString(), last_missing_ua: null };
+
+// Read LAZILY, never captured at module load: a Railway variable change plus a
+// restart is the intended operating procedure, and a lazy read also lets the
+// test set the variable around a live request instead of re-importing a 18k-line
+// module per case.
+const _edgeKeySecret   = () => String(process.env.DCHUB_EDGE_KEY || '').trim();
+const _edgeKeyEnforced = () => /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_EDGE_KEY_ENFORCE || '').trim());
+
+// 'off' | 'ok' | 'missing' | 'bad'. Constant-time on the equal-length path;
+// length itself is not a secret (it is our own configured key).
+export function _edgeKeyVerdict(presented, secret) {
+  if (!secret) return 'off';
+  if (!presented) return 'missing';
+  const a = Buffer.from(String(presented), 'utf8');
+  const b = Buffer.from(String(secret), 'utf8');
+  if (a.length !== b.length) return 'bad';
+  return timingSafeEqual(a, b) ? 'ok' : 'bad';
+}
+
+// Mounted on MCP_PATHS only. /health, /server.json and the .well-known docs stay open
+// on purpose — registries and uptime monitors read them, they carry no data, and
+// closing them would trade a real exposure for a self-inflicted health flag.
+app.use(MCP_PATHS, (req, res, next) => {
+  const verdict = _edgeKeyVerdict(req.headers[EDGE_KEY_HEADER], _edgeKeySecret());
+  if (verdict === 'off') return next();
+
+  _edgeKeyStats[verdict] += 1;
+  res.set('x-dc-edge-key', verdict);
+  if (verdict === 'ok') return next();
+
+  if (!_edgeKeyEnforced()) {
+    // OBSERVE. Serve it, but leave a trail that names what would have been
+    // refused — a bare count cannot tell a forgotten first-party prober from an
+    // outsider, and that distinction is the whole flip decision.
+    _edgeKeyStats.last_missing_ua = String(req.headers['user-agent'] || '').slice(0, 200) || null;
+    console.warn(`[edge-key] ${verdict} on ${req.method} ${req.originalUrl} ua=${_edgeKeyStats.last_missing_ua} (observe mode; would 403 under DCHUB_EDGE_KEY_ENFORCE=1)`);
+    return next();
+  }
+
+  return res.status(403).json({
+    error: 'edge_key_required',
+    message: 'This origin answers only requests proxied by the DC Hub edge. Use https://dchub.cloud/mcp.',
+    endpoint: 'https://dchub.cloud/mcp',
+  });
+});
+
+// Evidence for the enforcement flip, behind the SAME internal key the rest of
+// the other /internal routes use. `missing` must be 0 for a full traffic day first.
+app.get('/internal/edge-key', (req, res) => {
+  if (req.headers['x-internal-key'] !== INTERNAL_KEY) return res.sendStatus(403);
+  res.json({
+    configured: Boolean(_edgeKeySecret()),
+    enforcing:  _edgeKeyEnforced(),
+    ..._edgeKeyStats,
+  });
 });
 
 app.post(MCP_PATHS, async (req, res) => {
