@@ -119,6 +119,14 @@ import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
 
+// ★★★ r-tier-canon (2026-09-02, QA sweep D8 + pricing #3): every allowance and
+// price this server states is READ from lib/tier-canon.mjs (canonical/
+// tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
+// measurements, and the fail-soft contract live at the top of that file.
+// Re-exported so tests and the manifest sync see one object.
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL } from './lib/tier-canon.mjs';
+export { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL };
+
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
 // tool surface and invent plausible-but-wrong names. A live cross-platform test
 // showed Copilot inventing `create_alert` / `get_market_universe` /
@@ -511,10 +519,10 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
     // meant to prevent). Those tools fall through to the $10-pack relay lead instead.
     !PRO_ONLY_TOOLS.has(toolName);
   const human_message = _isTrial
-    ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (50 calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
+    ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
       ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
-      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (10 calls/day) \u2014 full depth still needs the $10 above.*';
+      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + FREE_TIER.free_calls_per_day + ' calls/day) \u2014 full depth still needs the $10 above.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
   // agents, custom MCP scripts, aggregator pipelines). Those callers
@@ -552,7 +560,7 @@ function buildPaywallExtras(toolName, currentTier, sessionId) {
   // Everyone else keeps the deliberate $10-first relay lead.
   const relayLead = _isTrial
     ? ('**Tell the user:** ' + (toolName || 'this tool') + ' returned a preview because this ' +
-       'DC Hub key used its free unbound calls. It keeps working FREE (50 calls/day) once it’s ' +
+       'DC Hub key used its free unbound calls. It keeps working FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) once it’s ' +
        'bound to an email. PAUSE and ask your human, in these words: “DC Hub needs an email to ' +
        'keep our free data access — which address should I use?” — then call **`bind_email`** ' +
        'with their answer (never invent one). Want full/unlimited depth instead? **$10 one-time = ' +
@@ -926,6 +934,13 @@ const _GO_PLAN_BY_LINK = {
   '7sY5kE8F4fs13ml0PEaZi0c': 'developer',  // $49/mo
   '7sY7sM9J8enX7CB69YaZi0l': 'pro',        // $299/mo
 };
+// r-price-canon (2026-09-02): the founding licence rides the SAME measured rail.
+// Its link comes from the canonical ladder snapshot (never a literal here);
+// absent rung → no entry → a founding link would pass through _goUrl direct.
+{
+  const m = FOUNDING_URL && /buy\.stripe\.com\/([A-Za-z0-9]+)$/.exec(FOUNDING_URL);
+  if (m && !_GO_PLAN_BY_LINK[m[1]]) _GO_PLAN_BY_LINK[m[1]] = 'founding';
+}
 function _goUrl(url) {
   try {
     if (!url) return url;
@@ -981,6 +996,43 @@ function _subCheckoutUrl(url, sessionId) {
   } catch (_) {
     return _goUrl(_stripeWithAnon(_stripeWithSession(url, sessionId)));
   }
+}
+
+// ★★★ r-go-everywhere (2026-09-02, QA sweep pricing #7). Three places still
+// handed a human `https://dchub.cloud/upgrade?key=<k>&tier=…` / `&tool=…` /
+// `&pack=5`. MEASURED 2026-09-02 00:32Z: that route (routes/pair_code.py:836)
+// answers 302 → /pricing?utm_source=mcp_upgrade&utm_medium=paywall_nointent —
+// the pricing WALL, not a checkout; only /go/c/<token> (verified 3/3 → Stripe)
+// and api.dchub.cloud/pricing/upgrade reach a card form. So every link a human
+// could act on from those three sites was one more click from paying, and the
+// click was unmeasured. These build the KEY-BOUND /go/c link for an EXPLICIT
+// key (a just-minted or just-redeemed one that is not in ctx yet): k-<sha256>
+// for a subscription (the backend's k- branch stamps the tier from the Stripe
+// line item onto THAT key), pk-<sha256> for the pack. Same refs the webhook
+// already honours; _goUrl fails open to the direct Stripe link, never to a wall.
+export function _keyBoundSubUrl(url, apiKey) {
+  try {
+    if (!url || !apiKey) return url;
+    if (/[?&]client_reference_id=/.test(url)) return _goUrl(url);   // idempotent
+    const h = createHash('sha256').update(String(apiKey)).digest('hex');
+    const sep = url.includes('?') ? '&' : '?';
+    return _goUrl(url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h));
+  } catch (_) { return url; }
+}
+export function _keyBoundPackUrl(apiKey) { return _goUrl(_stripeWithKey(CREDITS_URL, apiKey)); }
+// The ONE "upgrade this key" link: founding while the programme is open (the
+// only subscription SKU with sales — 10 of 14 active external subs), else
+// Developer. Pro access either way for founding (backend rule: founding == pro).
+export function _keyBoundUpgradeUrl(apiKey) {
+  return _keyBoundSubUrl(FOUNDING_URL || (DEVELOPER_URL + promoParam()), apiKey);
+}
+export function _keyBoundTiers(apiKey) {
+  return {
+    starter:   _keyBoundSubUrl(STARTER_URL, apiKey),
+    ...(FOUNDING_URL ? { founding: _keyBoundSubUrl(FOUNDING_URL, apiKey) } : {}),
+    developer: _keyBoundSubUrl(DEVELOPER_URL + promoParam(), apiKey),
+    pro:       _keyBoundSubUrl(PRO_URL, apiKey),
+  };
 }
 
 // ── Per-request context (api_key, platform, tier, session_id) ───────────────
@@ -1751,7 +1803,7 @@ function _hiClaimLine(name, claim, from, devUrl) {
   return '\n\u{1F4A1} **`' + name + '` ×' + claim.count + from + ' — this is a live siting workflow, ' +
     'the kind DC Hub Developer/Enterprise is built for.** Ask your human for their email + an OK to ' +
     'follow up, then call `bind_email` (marketing_opt_in=true): a DC Hub analyst sends the full `' + name +
-    '` workup + a Developer trial (500 calls/day). Self-serve upgrade ($49/mo): ' + devUrl + '\n';
+    '` workup + a Developer trial (' + _callsPerDay('developer') + ' calls/day). Self-serve upgrade (' + _priceLabel('developer') + '): ' + devUrl + '\n';
 }
 const VARIANT_COPY = {
   // 2026-07-11 (claim-variant audit): Claude.ai/desktop are HEADER-LESS hosts —
@@ -1763,7 +1815,7 @@ const VARIANT_COPY = {
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so SHOW YOUR HUMAN THIS LINK VERBATIM and ask them ' +
     'to open it — one click, email only, free 7-day/50-call trial key: ' + claim.claim_url +
-    ' — Self-serve upgrade ($49/mo): ' + devUrl + '\n',
+    ' — Self-serve upgrade (' + _priceLabel('developer') + '): ' + devUrl + '\n',
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
   chatgpt: (name, claim, devUrl) => _hiClaimLine(name, claim, ' from ChatGPT', devUrl),
@@ -1902,8 +1954,9 @@ async function buildHighIntentClaimBlock(claim, name) {
   // flips THAT agent's own key in place (DCM- pair-code webhook) — the structural fix
   // for claim_to_paid=0. The old block handed a generic $49/mo link with NO key binding,
   // so payments never attached to a key and conversions were un-attributable.
+  // r-go-everywhere (2026-09-02): was /upgrade?key=…&tool=… — the /pricing wall.
   const hiUpgradeUrl = redeemed && redeemed.api_key
-    ? ('https://dchub.cloud/upgrade?key=' + encodeURIComponent(redeemed.api_key) + (name ? '&tool=' + encodeURIComponent(name) : ''))
+    ? _keyBoundUpgradeUrl(redeemed.api_key)
     : devUrl;
   // Shell #44 r-two-artifacts (2026-07-30): ONE line pointing at the durable
   // HUMAN link — for machine-redeem variants the single-use claim burns in
@@ -1948,8 +2001,8 @@ async function buildHighIntentClaimBlock(claim, name) {
       'This session shows a live siting workflow (' + name + ' ×' + claim.count +
       '). Highest-value next step: ask your human for their email AND explicit OK to be '
       + 'contacted, then call bind_email {email, marketing_opt_in:true} — DC Hub follows up '
-      + 'with the full ' + name + ' workup + a Developer trial (500 calls/day). Self-serve: '
-      + 'high_intent_developer_url ($49/mo) or high_intent_enterprise_url ($25k+/yr data '
+      + 'with the full ' + name + ' workup + a Developer trial (' + _callsPerDay('developer') + ' calls/day). Self-serve: '
+      + 'high_intent_developer_url (' + _priceLabel('developer') + ') or high_intent_enterprise_url ($25k+/yr data '
       + 'licensing). Only bind an email your human explicitly provided — never invent one.',
   };
   return { text, sc };
@@ -2274,6 +2327,76 @@ async function mintAutoTrial(tool_name) {
     console.error('[auto_mint] failed:', err && err.message);
     return null;
   }
+}
+
+// ★★★ r-held-key (2026-09-02, QA sweep F2 — the binding constraint).
+// MEASURED 2026-09-02 00:23Z (/api/v1/mcp/retention + /ops/activation):
+//   free_key_durable.pct_used_again_any_time 49.2  — agents DO come back within
+//   free_key_durable.pct_returned              2.0  — a session, and vanish across weeks
+//   remint_ratio 19.1 redemptions per distinct agent, WORSENING (prior 17.7)
+// i.e. claim_free_key minted a NEW key every session. The backend dedupes on
+// (client_name, ip) for 30d, but client_name is whatever the agent typed this
+// time ("Claude Desktop", "acme-bot", the default) so the dedupe rarely hits,
+// and the r-claim-idempotent branch above it only recognises a key the caller
+// PRESENTED — the one thing a header-less host cannot do.
+//
+// This remembers, per DURABLE CALLER FINGERPRINT (sha256 of the real client
+// IP + the UA/client family this server already resolves as `platform`), the
+// free dch_live_ key it minted, so the next session from the same caller gets
+// THAT key back — `already_held:true` — instead of a sibling. Two consumers:
+//   (1) claim_free_key: returns the held key (after a validateKey confirms it
+//       is not revoked) and auto-binds it to the session like a fresh mint;
+//   (2) initialize: a keyless session whose fingerprint holds a key gets the
+//       key IN-BAND in the per-session instructions (see _INSTR_TAIL_HELD),
+//       the only channel a header-less host can read.
+// SCOPE, deliberately narrow: durable FREE keys only. Trial keys (dch_trial_)
+// and any paid tier are never remembered — a NAT-shared fingerprint (the same
+// collapse the backend's (client_name, ip) dedupe already accepts) must never
+// hand one caller another caller's paid access. Bounded (5,000 entries, FIFO
+// evict) and TTL'd (30d, the backend's own dedupe horizon). Per replica and
+// not persisted — a restart forgets, which degrades to today's behaviour.
+export const _HELD_KEY_TTL_MS = 30 * 86400e3;
+export const _HELD_KEY_MAX = 5000;
+export const _heldKeys = new Map();   // fingerprint -> { key, tier, at }
+export function _callerFingerprint(c) {
+  try {
+    const ip = c && c.client_ip;
+    if (!ip) return null;                                   // no durable signal → no fingerprint
+    const fam = String((c && c.platform) || 'unknown').toLowerCase().slice(0, 40);
+    return createHash('sha256').update(String(ip) + '|' + fam).digest('hex').slice(0, 32);
+  } catch (_) { return null; }
+}
+export function _rememberHeldKey(fp, key, tier) {
+  try {
+    if (!fp || !key) return false;
+    if (!/^dch_live_/.test(String(key))) return false;     // durable free keys only
+    if (tier && tier !== 'free') return false;              // never a paid identity
+    if (_heldKeys.size >= _HELD_KEY_MAX && !_heldKeys.has(fp)) {
+      _heldKeys.delete(_heldKeys.keys().next().value);      // FIFO evict
+    }
+    _heldKeys.set(fp, { key: String(key), tier: 'free', at: Date.now() });
+    return true;
+  } catch (_) { return false; }
+}
+export function _heldKeyFor(fp, now = Date.now()) {
+  const e = fp ? _heldKeys.get(fp) : null;
+  if (!e) return null;
+  if (now - e.at > _HELD_KEY_TTL_MS) { _heldKeys.delete(fp); return null; }
+  return e;
+}
+export function _forgetHeldKey(fp) { if (fp) _heldKeys.delete(fp); }
+// The in-band channel for a header-less host: appended to THIS session's
+// initialize `instructions` (module-scope _INSTRUCTIONS + this tail) when the
+// caller sent no credential but its fingerprint holds a key. Names the key,
+// says it is the SAME key claim_free_key would return, and tells the agent
+// not to mint — the sentence the 2.0% cross-week return was missing.
+export function _INSTR_TAIL_HELD(key) {
+  const k = String(key || '');
+  if (!k) return '';
+  return ' ★ YOU ALREADY HOLD A DC HUB KEY — a previous session from this same caller minted `' + k + '`. ' +
+    'Do NOT mint another: send it as `X-API-Key` (header-capable clients), or simply call `claim_free_key` — ' +
+    'it returns this SAME key with `already_held:true` and applies it to this session with no reconnect. ' +
+    'Re-minting orphans the usage history behind this key and restarts its daily allowance from zero.';
 }
 
 // r-paid-durable (2026-06-28, redesign #4): an agent that JUST PAID autonomously is
@@ -3021,6 +3144,11 @@ async function resolveWorkosBearer(token) {
     return null;  // transient: do not negative-cache; next request retries
   }
   const out = { api_key: idn.api_key, tier: idn.tier || 'free', exp: Date.now() + _WORKOS_CACHE_TTL };
+  // r-oauth-funnel-stages: stage 3 — only when the backend SAYS the row is new.
+  // (Today /api/v1/oauth/identity does not report it; the built-in AS path in
+  // oauth.mjs does. A first-seen-in-this-process heuristic would double count
+  // across replicas and restarts, so it is deliberately not used.)
+  if (idn.created === true) _chStage('identity_created');
   _workosTokenCache.set(token, out);
   console.log(`[oauth] workos bearer → durable key ${idn.api_key.slice(0, 12)}… tier=${out.tier}`);
   return out;
@@ -3495,7 +3623,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
   teased._upgrade = {
     tier:    _isKeyed ? (tier || 'free') : 'anonymous',
     locked:  'full_depth',
-    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock ${fullLine}: 💳 $10 one-time = 1,000 API calls (no subscription) — call \`unlock_more_data\` for the one-click link; or Developer $49/mo. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
+    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock ${fullLine}: 💳 $10 one-time = 1,000 API calls (no subscription) — call \`unlock_more_data\` for the one-click link; or Developer ${_priceLabel('developer')}. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
     credits_url:   _pack,
     credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to full depth.',
     developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
@@ -3515,31 +3643,34 @@ export async function buildDepthTease(name, result, ctx, tier) {
   // credits/developer/metered URLs above stay session-bound; this is the durable
   // key-bound option. Smallest move-#3 increment: gateway-only, reuse, no backend change.
   if (_isKeyed && ctx.api_key) {
-    const _k = encodeURIComponent(ctx.api_key);
-    const _starterKeyUrl = 'https://dchub.cloud/upgrade?key=' + _k + '&tier=starter';
-    teased._upgrade.upgrade_this_key_url   = _starterKeyUrl;
+    // r-go-everywhere (2026-09-02): every link here was /upgrade?key=… (the
+    // /pricing wall). Now key-bound /go/c links (k-<sha256> ref) — the same
+    // webhook branch, one click shorter, and the click is measured.
+    const _tiers = _keyBoundTiers(ctx.api_key);
+    const _starterKeyUrl = _tiers.starter;
+    teased._upgrade.upgrade_this_key_url   = _tiers.founding || _starterKeyUrl;
     teased._upgrade.upgrade_this_key_pitch =
-      'Upgrade THIS key in place — Starter $9/mo (200 calls/day), no key swap: the instant your '
+      (_tiers.founding
+        ? 'Upgrade THIS key in place — Founding ' + _priceLabel('founding') + ' (Pro access while seats last), or Starter '
+          + _priceLabel('starter') + ' (' + _callsPerDay('starter') + ' calls/day), no key swap: the instant your '
+        : 'Upgrade THIS key in place — Starter ' + _priceLabel('starter') + ' (' + _callsPerDay('starter') + ' calls/day), no key swap: the instant your ')
       + 'human pays, this same key unlocks and you just call `' + name + '` again (no reconnect, no re-config).';
-    teased._upgrade.upgrade_this_key_tiers = {
-      starter:   _starterKeyUrl,
-      developer: 'https://dchub.cloud/upgrade?key=' + _k + '&tier=developer',
-      pro:       'https://dchub.cloud/upgrade?key=' + _k + '&tier=pro',
-    };
+    teased._upgrade.upgrade_this_key_tiers = _tiers;
     // Key-bound PACK (move #3 step 2): 1,000 API calls bound to THIS key-hash via
     // /upgrade?key=…&pack=5 → pk-<hash> ref → webhook grants credits to the KEY (not
     // the ephemeral session the plain credits_url above would credit). Cheapest
     // durable unlock — lead with it, offer Starter as the permanent option.
     // NOTE: the &pack=5 query param is the backend /upgrade route's pack id, NOT a
     // price — it provisions the single $10/1,000-call pack. Leave the param as-is.
-    const _packKeyUrl = 'https://dchub.cloud/upgrade?key=' + _k + '&pack=5';
+    const _packKeyUrl = _keyBoundPackUrl(ctx.api_key);
     teased._upgrade.upgrade_this_key_pack_url   = _packKeyUrl;
     teased._upgrade.upgrade_this_key_pack_pitch =
       '$10 one-time = 1,000 API calls bound to THIS key (no subscription) — '
       + 'pay once and this same key keeps returning full data; the cheapest durable unlock.';
     teased._upgrade.message += ' — Or bind a paid upgrade to THIS key (no swap, no reconnect): '
       + '💳 $10 one-time = 1,000 API calls → ' + _packKeyUrl
-      + '  ·  or Starter $9/mo → ' + _starterKeyUrl
+      + (_tiers.founding ? '  ·  or Founding ' + _priceLabel('founding') + ' (Pro access) → ' + _tiers.founding : '')
+      + '  ·  or Starter ' + _priceLabel('starter') + ' → ' + _starterKeyUrl
       + ' (the moment your human pays, this same key unlocks).';
   }
   // 2026-06-29 web/direct experiment: every depth-teased preview also offers a
@@ -3553,7 +3684,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
     const _devUrl = _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid);
     teased._upgrade.map_cta = `📍 This \`${name}\` data is live + visual on DC Hub's Land & Power map — every substation, transmission line, gas pipeline, fiber route, power-headroom + air-permitting score for any parcel, on one screen.`;
     teased._upgrade.map_url = mapHref(name);
-    teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Unlock the full map + uncapped \`${name}\` with Developer ($49/mo) → ${_devUrl} (the full Land & Power map is Pro).`;
+    teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Unlock the full map + uncapped \`${name}\` with Developer (${_priceLabel('developer')}) → ${_devUrl} (the full Land & Power map is Pro).`;
   }
   // x402 (2026-06-20): on the flagship tools, ADDITIVELY advertise the
   // agent-autonomous pay-per-call rail — a wallet-funded agent pays USDC for
@@ -3819,16 +3950,33 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
 // is |_CH_KINDS| x (|_CH_METHODS| + 1), today 4 x 3 = 12 keys, and it moves only
 // when this line does. Nothing client-supplied has ever entered a Map key.
 // Kill switch: DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 -> fully INERT.
+// r-oauth-funnel-stages (2026-09-02, QA sweep F2): three STAGE counters so the
+// retention read can say WHERE the 1,111-challenges-per-identity loss happens
+// (measured 2026-09-02 00:23Z: oauth_connector_challenges_per_new_identity_30d
+// 1,111; oauth_new_identities_30d 2). Until now the series had only the two
+// ends — challenges we issued, identities that eventually resolved.
+//   challenge_issued        — the 401 we are about to send (method = MCP method)
+//   oauth_authorize_started — the consent page rendered by OUR AS (oauth.mjs)
+//   identity_created        — a durable key minted for a NEW OAuth identity
+// Same closed-set, same flusher, same sink (POST /api/v1/mcp/oauth-challenge/emit)
+// as the four kinds above; the backend ledger skips a kind it does not know,
+// so widening here is safe before the backend learns the names.
+// ★HONEST GAP: the LIVE authorization server is WorkOS AuthKit (the PRM doc's
+// authorization_servers), and a consent page rendered there is invisible to
+// this process — oauth_authorize_started counts the built-in AS only, and
+// identity_created on the WorkOS path fires only when /api/v1/oauth/identity
+// reports `created:true` (a backend follow-up; today it reports neither).
 const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen',
-                             'claude_connector_seen']);
+                             'claude_connector_seen',
+                             'challenge_issued', 'oauth_authorize_started', 'identity_created']);
 const _CH_METHODS = new Set(['initialize', 'tools/call']);
 const _CH_BEAT_MS = 60 * 60 * 1000;          // idle heartbeat: 1 POST/hour/replica
-const _chCounts = new Map();                 // `${kind}:${method}` -> n  (<=6 keys, ever)
+export const _chCounts = new Map();          // `${kind}:${method}` -> n  (|kinds| x 3 keys, ever)
 let _chFlushStarted = false, _chFailStreak = 0, _chNextAt = 0, _chLastPostAt = 0;
 const _chDisabled = () =>
   /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE || ''));
 
-function _chBump(kind, method) {
+export function _chBump(kind, method) {
   try {
     if (_chDisabled()) return;                 // INERT-when-off: no map write at all
     if (!_CH_KINDS.has(kind)) return;          // closed set — never trust the call site
@@ -3877,6 +4025,10 @@ function _chFlush() {
       .catch(() => { _chFailStreak += 1; _chArm(); });     // write-behind: never throws
   } catch (_) { /* fire-and-forget */ }
 }
+// Stage events that carry no MCP method (they happen on the OAuth routes, not
+// on POST /mcp) land on the 'other' method axis. This is the hook oauth.mjs
+// receives as `onEvent` — a Map bump and nothing else, same contract as _chBump.
+export const _chStage = (kind) => _chBump(kind, 'other');
 function _chArm() {   // 3 consecutive failures -> back off 10 min; self-heals on any ok
   _chNextAt = _chFailStreak >= 3 ? Date.now() + 10 * 60 * 1000 : 0;
 }
@@ -4422,7 +4574,9 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // to the calling key.
   // r-attrib (2026-07-01): omit &tool= entirely when there is no tool name —
   // an empty tool= param polluted conversion attribution downstream.
-  const upgradeUrl = 'https://dchub.cloud/upgrade?key=' + encodeURIComponent(mint.api_key) + (name ? '&tool=' + encodeURIComponent(name) : '');
+  // r-go-everywhere (2026-09-02): was /upgrade?key=…&tool=… (the /pricing wall).
+  // Key-bound /go/c: the webhook's k- branch flips THIS mint.api_key in place.
+  const upgradeUrl = _keyBoundUpgradeUrl(mint.api_key);
   // Fix E (2026-06-06): bind METERED_URL to the current MCP session_id so a
   // direct usage-based checkout (skipping the pair-code path) also closes the
   // conversion loop via the webhook's client_reference_id binding.
@@ -4543,9 +4697,13 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     identify_hint:             ('Attach the owner email to RAISE this key’s daily cap ' + calls + ' → ' + boundCalls + ' calls/day (plus key recovery + upgrade receipts). Ask your human for their email and POST identify_payload to identify_endpoint. Idempotent; invalid emails are rejected softly and the key keeps working.'),
     daily_calls_when_email_bound: boundCalls,
     upgrade_url:               upgradeUrl,
-    upgrade_model:             'pair_code_key_bound',
-    upgrade_instructions:      'Have the human open upgrade_url and complete checkout (Developer $49/mo or Pro $299/mo). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
-    pricing:                   { developer_usd_month: 49, pro_usd_month: 299, metered_url: METERED_URL },
+    upgrade_model:             'go_c_key_bound',
+    upgrade_instructions:      'Have the human open upgrade_url and complete checkout (' + _paidPlansLine() + '). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
+    // r-price-canon: every number here is read from canonical/tier_limits.json.
+    // founding leads while the rung exists (MEASURED: it is the plan that sells).
+    pricing:                   { ...(Number.isFinite(PLAN_PRICE.founding) ? { founding_usd_month: PLAN_PRICE.founding } : {}),
+                                 developer_usd_month: _rungNumPrice('developer'), pro_usd_month: _rungNumPrice('pro'),
+                                 metered_url: METERED_URL },
   };
   return { text, sc };
 }
@@ -4848,7 +5006,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
                 // (this nudge is the generic free-tool surface at the call site ~L1931; trialHeader only
                 // fires in the mint/upgrade branch). One in-protocol call an agent can actually follow.
                 'Call `claim_free_key` (no email) for the full free tier — it returns an `api_key`; send it as `X-API-Key` and **save it to your MCP config so future sessions reuse it**. ' +
-                '[Paid plans — Developer $49/mo · Pro $299/mo](https://dchub.cloud/pricing' + ref + ')\n' +
+                '[Paid plans — ' + _paidPlansLine() + '](https://dchub.cloud/pricing' + ref + ')\n' +
                 _trialGapLine(parsed);
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return body.replace(/\s*$/, '') + '\n\n---\n' + nudge;
@@ -8371,7 +8529,7 @@ export const _PLAN_CLASSES = [
       { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel is depth-teased below Developer tier (free tier ~10 calls/day). cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel is depth-teased below Developer tier (free tier ~' + FREE_TIER.free_calls_per_day + ' calls/day). cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -10851,7 +11009,7 @@ function trackedTool(srv, name, description, schema, handler) {
                         ? { next_session: _NEXT_SESSION } : {}),
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
                     tool: name,
-                    ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer ($49/mo).` } : {}),
+                    ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer (${_priceLabel('developer')}).` } : {}),
                     ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
                     ..._hiSC,
                   })),
@@ -11023,12 +11181,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 
 \u{1F464} **Tell your human:** unlock \`${name}\` — **$10 one-time = 1,000 API calls**, no subscription, no email, works in any browser → ${_packUrl}. Click, pay, refresh this chat — \`${name}\` unlocks.
 
-*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for the free tier (10 calls/day) — full depth still needs the $10 above.*`
+*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for the free tier (${FREE_TIER.free_calls_per_day} calls/day) — full depth still needs the $10 above.*`
           : `## \u{1F512} \`${name}\` is a paid feature
 
 \u{1F464} **Tell your human:** unlock \`${name}\` — **$10 one-time = 1,000 API calls**, no subscription → ${_packUrl}. The moment they pay, this session unlocks.
 
-*Hold your own key? Call the \`claim_free_key\` tool (no email) for the free tier (10 calls/day) — full depth still needs the $10 above.*`;
+*Hold your own key? Call the \`claim_free_key\` tool (no email) for the free tier (${FREE_TIER.free_calls_per_day} calls/day) — full depth still needs the $10 above.*`;
 
         // r50 (2026-05-26): mark paywall response as isError=true so
         // MCP clients (Claude Desktop/Cursor/Cline/ChatGPT-MCP) surface
@@ -11187,7 +11345,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // front-door ladder instead of the bare "or upgrade".
             trimmed._upgrade = {
               tier: 'anon_daily_cap',
-              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (10 calls/day) and SAVE the key to your MCP config. Want full depth now? 💳 $10 one-time = 1,000 API calls (no subscription) → call `unlock_more_data` for the one-click link. The moment your human pays, your next call returns full data — no reconnect.",
+              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + FREE_TIER.free_calls_per_day + " calls/day) and SAVE the key to your MCP config. Want full depth now? 💳 $10 one-time = 1,000 API calls (no subscription) → call `unlock_more_data` for the one-click link. The moment your human pays, your next call returns full data — no reconnect.",
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
@@ -11280,6 +11438,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API calls (no subscription) — the cheapest unlock.',
               starter_url: _stripeWithAnon(_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid)),
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
+              ...(FOUNDING_URL ? { founding_url: _subCheckoutUrl(FOUNDING_URL, _sid),
+                                   founding_hint: 'Founding member ' + _priceLabel('founding') + ' — Pro access while seats last (the plan most humans choose).' } : {}),
               ...promoSC(),
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
@@ -11407,14 +11567,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // works per-call (credit cascade serves PRO_ONLY full for pack holders),
                 // and NO bind_email (binding cannot lift the paid cap).
                 message: _paidTaste
-                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro ($299/mo) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ $9/mo Starter = 200 calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ ${_priceLabel('starter')} Starter = ${_callsPerDay('starter')} calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
                 upgrade_url: UPGRADE_URL,
                 starter_url: _stripeWithAnon(_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid)),
                 developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
+                ...(FOUNDING_URL ? { founding_url: _subCheckoutUrl(FOUNDING_URL, _sid),
+                                     founding_hint: 'Founding member ' + _priceLabel('founding') + ' — Pro access while seats last (the plan most humans choose).' } : {}),
                 ...promoSC(),
               };
               // r-fresh-zero (2026-07-01): this response hands out a checkout link —
@@ -11433,7 +11595,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // follow-up for unbound callers.
                 { type: 'text', text: _paidTaste
                   ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
-                    '⚡ **Unlimited full `' + name + '` depth is Pro ($299/mo):** ' + UPGRADE_URL +
+                    '⚡ **Unlimited full `' + name + '` depth is Pro (' + _priceLabel('pro') + '):** ' + UPGRADE_URL +
                     ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
                     _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
                   : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
@@ -11547,7 +11709,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               _bteased._upgrade = {
                 tier: _btPaid ? String(_gateTier) : 'trial',
                 message: _btPaid
-                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro ($299/mo) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro (${_priceLabel('pro')}) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
                   : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock the complete dataset: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
@@ -12773,13 +12935,15 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
-function createServer(descOverrides) {
+function createServer(descOverrides, instructionsTail) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
     // `instructions` is composed at module scope from canonical/mcp_facts.json
     // behind a freshness gate — see _composeInstructions above for the contract
-    // and this string's full provenance history.
-    instructions: _INSTRUCTIONS,
+    // and this string's full provenance history. r-held-key (2026-09-02): a
+    // PER-SESSION tail may follow it — today only _INSTR_TAIL_HELD, the in-band
+    // held-key notice for a keyless session whose caller already minted one.
+    instructions: _INSTRUCTIONS + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -16105,7 +16269,7 @@ function createServer(descOverrides) {
     '★ DURABLE IDENTITY (what actually survives): a DC Hub OAuth identity is bound to your HUMAN, not to a header, so it survives reconnects, restarts and re-installs. Measured 2026-08-12: OAuth identities came back in a later week 57.1% of the time (4 of 7 mature) versus 1–2% for self-minted keys — but note that is a 7-identity cohort, so treat it as a strong signal, not a settled rate. ' +
     'THE HONEST COST, in the same breath: OAuth needs a HUMAN at a browser, once. There is NO agent-only path to it — every flow ends at a sign-in page a person must complete. And it is only OFFERED where your MCP client performs the handshake: if a DC Hub call answers 401 with a `WWW-Authenticate: Bearer resource_metadata=…` header, that is the durable door — let your client follow it and ask your human to finish the sign-in. Claude.ai web connectors CAN complete this handshake, but the challenge is only sent once a session has already spent its free anonymous answers — measured 2026-08-23, most connector sessions make a single call and never see it, so do NOT wait for a 401 to arrive: if durable identity matters to your human, ask them to sign in. ' +
     '★ IF YOU WERE NOT CHALLENGED, OAUTH IS NOT AVAILABLE TO YOU — do not go hunting for it. Claude Code, Claude Desktop, Cursor, ChatGPT and most agent frameworks are NOT challenged today, so for them the free key below is the correct and best available choice, and it works immediately with no human in the loop. Taking the key is not a downgrade; it is the right call for your client. ' +
-    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a partial preview (a result that says e.g. "3 of 12 results shown"): it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (10 calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. \u2605 SAVE THE KEY AND REUSE IT \u2014 set it as X-API-Key on every later call, this session and future ones, and show your human the `persist_config` snippet so their client stores it. Do NOT call this again if you already hold a key: re-minting restarts the daily allowance from zero and orphans your history (measured 2026-07-27: 2,586 redemptions from only 169 distinct agents \u2248 15 re-mints each). Lost a key your human already had? Call `recover_my_key` instead of minting a new one. \u2605 THEN ACTUALLY USE IT \u2014 make your very next call the real question (`execute_plan intent="\u2026"` for anything multi-step). Measured 2026-08-12: 41.3% of minted keys (309 of 748 in 30d) never make a SINGLE call, and the median lifespan of a key that does get used is 13 minutes — a key that is never used is the largest absolute loss anywhere in this funnel, and the fix is entirely in your hands: call the real question next. ★ IF YOUR CLIENT IS A PASTE-A-URL CONNECTOR OR A HOSTED GATEWAY (Claude.ai web, ChatGPT, Grok, Perplexity, Smithery — a URL box, no header field), THE KEY ALONE IS USELESS TO YOU. Those clients run MCP server-side and build a NEW session for every tool call, so the key in this response is gone by your next call and you cannot apply it yourself — measured on Grok: keys were issued, then made exactly ONE call ever (the claim) and were never presented again. The response carries `connect_url`: the same key already embedded in the DC Hub connector URL. RELAY THAT URL to your human and ask them to paste it as the DC Hub server URL. It is the only thing on those clients that survives the session. Params: client_name (your agent/app name), email (optional). Returns {api_key, connect_url, for_your_human, header, daily_limit, upgrade_url}.',
+    'Mint a FREE DC Hub dev key instantly — no email, no browser, ONE call. Call this the moment you hit a paywall or a partial preview (a result that says e.g. "3 of 12 results shown"): it returns an `api_key` you set as the `X-API-Key` header for the FREE tier (' + FREE_TIER.free_calls_per_day + ' calls/day, all 300+ markets + grid/fiber/DCPI at free depth — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews; COMPLETE depth is the $10 pack = 1,000 calls — call `unlock_more_data` for the one-click link). Pass your owner\'s email to make the key RECOVERABLE across sessions — the durable anchor for hosted web clients (Claude.ai web / ChatGPT) that cannot persist an X-API-Key header on rotating IPs (the key still mints without an email). This is the fastest path from anonymous to identified. \u2605 SAVE THE KEY AND REUSE IT \u2014 set it as X-API-Key on every later call, this session and future ones, and show your human the `persist_config` snippet so their client stores it. Do NOT call this again if you already hold a key: re-minting restarts the daily allowance from zero and orphans your history (measured 2026-07-27: 2,586 redemptions from only 169 distinct agents \u2248 15 re-mints each). Lost a key your human already had? Call `recover_my_key` instead of minting a new one. \u2605 THEN ACTUALLY USE IT \u2014 make your very next call the real question (`execute_plan intent="\u2026"` for anything multi-step). Measured 2026-08-12: 41.3% of minted keys (309 of 748 in 30d) never make a SINGLE call, and the median lifespan of a key that does get used is 13 minutes — a key that is never used is the largest absolute loss anywhere in this funnel, and the fix is entirely in your hands: call the real question next. ★ IF YOUR CLIENT IS A PASTE-A-URL CONNECTOR OR A HOSTED GATEWAY (Claude.ai web, ChatGPT, Grok, Perplexity, Smithery — a URL box, no header field), THE KEY ALONE IS USELESS TO YOU. Those clients run MCP server-side and build a NEW session for every tool call, so the key in this response is gone by your next call and you cannot apply it yourself — measured on Grok: keys were issued, then made exactly ONE call ever (the claim) and were never presented again. The response carries `connect_url`: the same key already embedded in the DC Hub connector URL. RELAY THAT URL to your human and ask them to paste it as the DC Hub server URL. It is the only thing on those clients that survives the session. Params: client_name (your agent/app name), email (optional). Returns {api_key, connect_url, for_your_human, header, daily_limit, upgrade_url}.',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave") },
     async (a) => {
@@ -16161,11 +16325,83 @@ function createServer(descOverrides) {
           };
         }
       } catch (_) { /* fall through to the normal mint */ }
+      // r-held-key (2026-09-02): the caller presented NO key, but this same
+      // fingerprint (client IP + client family) minted one in an earlier
+      // session — hand THAT back, confirmed live, instead of the 19.1x
+      // sibling. Rationale + scope at _rememberHeldKey.
+      let _fp = null;
+      try {
+        _fp = _callerFingerprint(getCtx());
+        const _e = _heldKeyFor(_fp);
+        if (_e) {
+          let _v = null;
+          try { _v = await validateKey(_e.key); } catch (_) { _v = null; }
+          // The backend authoritatively rejected it (revoked/expired) → forget
+          // it and mint afresh. Anything else — confirmed, or INDETERMINATE
+          // (backend blip) — returns the held key rather than a sibling: a
+          // blip must not re-mint a real holder's identity (same rule as the
+          // presented-key branch above). Only a CONFIRMED key gets the
+          // session auto-bind and the install artifact (r-validate-artifact).
+          if (_v && _v.key_rejected) {
+            _forgetHeldKey(_fp);
+          } else {
+            const _ok = !!(_v && _v.valid);
+            let _bound = false;
+            if (_ok) {
+              try {                                             // auto-bind, exactly like a fresh mint
+                const _c1 = getCtx();
+                const _sid1 = _c1 && _c1.session_id;
+                if (_sid1 && sessionMeta.has(_sid1)) {
+                  const _m1 = sessionMeta.get(_sid1);
+                  if (!_m1.api_key) {
+                    _m1.api_key = _e.key; _m1.tier = _v.tier || 'free'; _m1.auto_bound = true;
+                    sessionMeta.set(_sid1, _m1);
+                    recordSessionUpgrade(_m1.platform, _m1.tier);
+                    _bound = true;
+                  }
+                }
+              } catch (_) { /* non-fatal */ }
+            }
+            return {
+              content: [{ type: 'text', text:
+                '🔑 **This caller already holds a DC Hub key — returning THAT key, not a new one.** ' +
+                'A previous session from the same client minted it; re-minting would orphan its usage history ' +
+                'and restart the daily allowance from zero.\n\n' +
+                '**Your key:** `' + _e.key + '`' + (_bound ? ' *(applied to this session — no reconnect)*' : '') + '\n\n' +
+                _heldKeyUrlLine(_ok, _connectUrl(_e.key, _via)) +
+                'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' }],
+              structuredContent: {
+                api_key:                 _e.key,
+                tier:                    (_v && _v.tier) || 'free',
+                header:                  'X-API-Key',
+                reused:                  true,
+                already_held:            true,
+                key_confirmed:           _ok,
+                held_by:                 'caller_fingerprint',
+                auto_applied_to_session: _bound,
+                // The install artifact is emitted ONLY for a confirmed key.
+                ...(_ok ? {
+                  connect_url:    _connectUrl(_e.key, _via),
+                  for_your_human: _connectRelay(_e.key, _via),
+                  persist_config: _persistConfig(_e.key, _via),
+                } : {
+                  connect_url_withheld: _CONNECT_URL_WITHHELD,
+                }),
+                recover_tool:            'recover_my_key',
+                next_tool:               'bind_email',
+                note: 'claim_free_key is idempotent per caller: the key this client minted earlier is returned (already_held). Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth.',
+              },
+            };
+          }
+        }
+      } catch (_) { /* fall through to the normal mint */ }
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
       const body = { client_name: cn };
       if (a.email) body.email = String(a.email).trim().slice(0, 200);
       const r = await callAPIWrite('/api/v1/keys/claim', body);
       const key = r && (r.api_key || r.key);
+      // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
+      if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
       if (!key) {
         return { isError: true, content: [{ type: 'text',
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
@@ -16200,14 +16436,14 @@ function createServer(descOverrides) {
       // Don't celebrate a "fresh mint" that isn't one: lead with the bind ask,
       // scripted the same way as the bind-first paywall (e918eaa).
       if (r && (r.bind_required === true || r.gate === 'bind_email_required')) {
-        const _gateN = (typeof r.free_calls_unbound === 'number') ? r.free_calls_unbound : 10;
+        const _gateN = (typeof r.free_calls_unbound === 'number') ? r.free_calls_unbound : _rungNum('free');
         return {
           content: [{ type: 'text', text:
             '🔒 **This identity already used its ' + _gateN + ' free unbound calls — ' +
             (r.reused ? 're-claiming returned the SAME key, not a fresh allowance.' :
                         'the counter carried onto this key; re-minting does not reset it.') + '**\n\n' +
             '**Your key:** `' + key + '`' + (_autoBound ? ' *(applied to this session)*' : '') + '\n\n' +
-            'It keeps working FREE (50 calls/day) the moment it’s bound to an email — binding is free, no card. ' +
+            'It keeps working FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) the moment it’s bound to an email — binding is free, no card. ' +
             'PAUSE and ask your human, in these words: “DC Hub needs an email to keep our free data access — ' +
             'which address should I use?” — then call **`bind_email`** with their answer (never invent one).\n\n' +
             'Want full/unlimited depth instead? Call `unlock_more_data` ($10 one-time = 1,000 API calls).' }],
@@ -16221,7 +16457,7 @@ function createServer(descOverrides) {
             free_calls_unbound:      _gateN,
             reused:                  !!r.reused,
             next_tool:               'bind_email',
-            next_tool_hint:          'Ask your human for their email, then call bind_email {email} — restores the free tier (50 calls/day) on THIS key and makes it recoverable. Re-calling claim_free_key returns the same gated key.',
+            next_tool_hint:          'Ask your human for their email, then call bind_email {email} — restores the free tier (' + FREE_TIER.identified_calls_per_day + ' calls/day) on THIS key and makes it recoverable. Re-calling claim_free_key returns the same gated key.',
             // r-persist: the gated key is still the durable identity — saving it
             // in the client config is what makes the bind stick next session.
             persist_config:          _persistConfig(key, _via),
@@ -16276,7 +16512,7 @@ function createServer(descOverrides) {
         : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '`, or — if their client only offers a URL box — paste `' + _cUrl + '` as the DC Hub server URL. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`. Ready-to-paste snippets for Claude Desktop / Cursor / VS Code / Cline / Windsurf are in `persist_config`.\n\n';
       const _tierLine = CLAIM_CAROT_COPY
         ? 'Full free toolset — no card, no browser.\n\n'
-        : 'Free tier = 10 calls/day, full toolset.\n\n';
+        : 'Free tier = ' + FREE_TIER.free_calls_per_day + ' calls/day, full toolset.\n\n';
       // r-bind-default (2026-07-21): make email-bind the DEFAULT persist step at
       // claim success, not only at exhaustion. Only 55/346 keys are email-bound
       // because the ask fired solely on the paywall/exhaustion branch — so
@@ -16290,7 +16526,7 @@ function createServer(descOverrides) {
       const _bindDefaultOn  = process.env.CLAIM_BIND_DEFAULT !== '0';
       const _bindDefault    = _bindDefaultOn && !a.email && !_isByo;
       const _bindDefaultLine = _bindDefault
-        ? '🔗 **One free step so this key is still yours tomorrow:** ask your human for their email and call `bind_email {email}` — it lifts this key to 50 calls/day and makes it recoverable next session (no card, works on any client). Binding is what turns a one-session key into a durable identity.\n\n'
+        ? '🔗 **One free step so this key is still yours tomorrow:** ask your human for their email and call `bind_email {email}` — it lifts this key to ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes it recoverable next session (no card, works on any client). Binding is what turns a one-session key into a durable identity.\n\n'
         : '';
       const text =
         '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
@@ -16330,7 +16566,7 @@ function createServer(descOverrides) {
           // description — NOT 25, which over-promised vs the 10 the worker
           // actually enforces (promise 25 → capped at 10 = broken promise).
           daily_limit:             (r && typeof r.daily_calls === 'number') ? r.daily_calls
-                                     : (r && typeof r.daily_limit === 'number') ? r.daily_limit : 10,
+                                     : (r && typeof r.daily_limit === 'number') ? r.daily_limit : _rungNum('free'),
           key_is_durable:          true,
           // r-persist (2026-07-11): copy-paste-ready client-config snippets with
           // the REAL key inlined — the agent shows its human the right one so
@@ -16365,7 +16601,7 @@ function createServer(descOverrides) {
           // email-bound ratio is the real cross-week retention lever.
           ...(_bindDefault ? {
             next_tool:      'bind_email',
-            next_tool_hint: 'Ask your human for their email, then call bind_email {email}. This key already works — binding lifts it to 50 calls/day AND makes it recoverable next session (the durable-identity default; a header-less web session otherwise starts over anonymous).',
+            next_tool_hint: 'Ask your human for their email, then call bind_email {email}. This key already works — binding lifts it to ' + FREE_TIER.identified_calls_per_day + ' calls/day AND makes it recoverable next session (the durable-identity default; a header-less web session otherwise starts over anonymous).',
           } : {}),
           retention_tools:         ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
           upgrade_url:             'https://dchub.cloud/pricing/upgrade',
@@ -16390,7 +16626,7 @@ function createServer(descOverrides) {
   // marketing without explicit opt-in (default OFF).
   trackedTool(srv, 'bind_email',
     '★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). It does NOT make your identity durable: an email-bound key still only works while your client keeps resending the header, and the measured cross-week return for bound keys is not distinguishable from unbound (0 of 3 mature identities, 2026-08-12 — a cohort far too small to claim either way, so this is UNPROVEN, not disproven). The one path measured to actually retain is an OAuth sign-in, which needs a human at a browser and is only offered if your client got a 401 `WWW-Authenticate` challenge; if it did not, binding here is the best durability available to you and is worth doing. ' +
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets 10 free calls total, then results drop to previews until it\'s bound; binding restores the FREE tier at 50 calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets ' + FREE_TIER.unbound_calls_total + ' free calls total, then results drop to previews until it\'s bound; binding restores the FREE tier at ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
     { email: Sreq.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
@@ -16511,7 +16747,7 @@ function createServer(descOverrides) {
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · $49/mo Developer · $299/mo Pro. Want the FREE tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also ' + _priceLabel('starter') + ' Starter · ' + _paidPlansLine() + '. Want the FREE tier instead (no payment, ' + FREE_TIER.free_calls_per_day + ' calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => {
       const _ctx = getCtx();
@@ -16520,6 +16756,9 @@ function createServer(descOverrides) {
       const starter   = _subCheckoutUrl(STARTER_URL,   _sid);
       const developer = _subCheckoutUrl(DEVELOPER_URL, _sid);
       const pro       = _subCheckoutUrl(PRO_URL,       _sid);
+      // r-price-canon (2026-09-02): the founding $99 licence — the SKU that
+      // sells — was absent from this ladder (live 00:33Z: $10/$9/$49/$299).
+      const founding  = FOUNDING_URL ? _subCheckoutUrl(FOUNDING_URL, _sid) : null;
       const reason = (a.reason || '').toString().trim().slice(0, 240);
       const _why = reason
         ? '\nYou asked me for: *' + reason + '* — that needs DC Hub’s full depth.\n'
@@ -16549,8 +16788,13 @@ function createServer(descOverrides) {
       const human_message =
         '🔓 **I can unlock full DC Hub data for you.** I can’t enter a card myself, but here’s a one-click link — ' + _afterPay + ':' + _why + '\n' +
         '**💳 $10 one-time = 1,000 API calls** (no subscription — less than two coffees, and DataCenterHawk is an annual contract) → ' + credits + '\n\n' +
-        '*Other options:* $9/mo Starter → ' + starter + ' · $49/mo Developer → ' + developer + ' · $299/mo Pro → ' + pro + '\n\n' +
-        '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, 10 calls/day.*';
+        '*Other options:* ' + [
+          founding && (_priceLabel('founding') + ' Founding (Pro access, while seats last) → ' + founding),
+          _priceLabel('starter') + ' Starter → ' + starter,
+          _priceLabel('developer') + ' Developer → ' + developer,
+          _priceLabel('pro') + ' Pro → ' + pro,
+        ].filter(Boolean).join(' · ') + '\n\n' +
+        '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + FREE_TIER.free_calls_per_day + ' calls/day.*';
       // r-agent-pay-first (2026-06-28): if the live Stripe-MPP rail is on, lead the
       // agent-facing text with the AUTONOMOUS path (the agent pays the original call
       // itself, no human) and keep human-relay as the fallback — the human-relay path
@@ -16592,11 +16836,12 @@ function createServer(descOverrides) {
                             best_for: 'autonomous agents (no card-holder in the loop)',
                             how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
             { id: 'credits',   label: '$10 one-time — 1,000 API calls', best_for: 'cheapest human start, no subscription', checkout_url: credits },
-            { id: 'starter',   label: '$9/mo',   calls_per_day: 200, checkout_url: starter },
-            { id: 'developer', label: '$49/mo',  note: 'full depth at scale', checkout_url: developer },
-            { id: 'pro',       label: '$299/mo', note: 'everything', checkout_url: pro },
+            ...(founding ? [{ id: 'founding', label: _priceLabel('founding'), note: 'Founding member — Pro access (everything) at the founding price while seats last', checkout_url: founding }] : []),
+            { id: 'starter',   label: _priceLabel('starter'),   calls_per_day: _rungNum('starter'), checkout_url: starter },
+            { id: 'developer', label: _priceLabel('developer'), note: 'full depth at scale', checkout_url: developer },
+            { id: 'pro',       label: _priceLabel('pro'),       note: 'everything', checkout_url: pro },
           ],
-          free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, 10 calls/day, all tools' },
+          free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + FREE_TIER.free_calls_per_day + ' calls/day, all tools' },
           what_unlocks: 'Full grid intelligence (all ISOs/grids, not 1), full fiber depth, every premium tool, complete result sets (not partial previews), and higher rate limits.',
           binds_to_session: !!_sid,
           // r-anon-attrib (2026-08-26): was hardcoded `true` while binds_to_session
@@ -17089,6 +17334,7 @@ const _oauthStore = {
 registerOAuthRoutes(app, {
   issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
   store: _oauthStore,
+  onEvent: _chStage,   // r-oauth-funnel-stages: oauth_authorize_started / identity_created
   mintIdentity: async (clientId) => {
     try {
       // PER-CONNECTION client_name (review HIGH fix): a distinct client_name per
@@ -17544,6 +17790,7 @@ app.post(MCP_PATHS, async (req, res) => {
         'Bearer resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource", '
         + 'scope="openid profile email offline_access"');
       _chBump('claude_connector', req.body?.method);   // r-oauth-funnel: Map bump only
+      _chBump('challenge_issued', req.body?.method);   // r-oauth-funnel-stages: stage 1 of 3
       // ★ Count the challenge we are about to ISSUE. Without this the bound can
       // never be reached and the 401 repeats forever — the lockout this whole
       // block exists to prevent. Bumped BEFORE the return, like _chBump.
@@ -17734,7 +17981,18 @@ app.post(MCP_PATHS, async (req, res) => {
       _ensureDescRefresher();
       let _descOverrides = null;
       try { _descOverrides = _platformOverrides(platform); } catch (_) {}
-      const mcpServer = createServer(_descOverrides);
+      // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
+      // say so IN-BAND in this session's instructions. Map read only — no
+      // backend call in the init hot path (r-tuner-warmcache rule); the key is
+      // confirmed live when claim_free_key returns it. Never for a keyed session.
+      let _instrTail = '';
+      try {
+        if (!apiKey) {
+          const _held = _heldKeyFor(_callerFingerprint({ client_ip: clientIp, platform }));
+          if (_held) _instrTail = _INSTR_TAIL_HELD(_held.key);
+        }
+      } catch (_) { _instrTail = ''; }
+      const mcpServer = createServer(_descOverrides, _instrTail);
       await mcpServer.connect(transport);
 
       return ctx.run({

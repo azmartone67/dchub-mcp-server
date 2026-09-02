@@ -166,11 +166,13 @@ describe('claim_free_key wiring — every keyed branch ships the artifact', () =
     expect(SRC).toContain('_CONNECT_URL_NOTES');
   });
 
-  it('the two key-issuing branches emit for_your_human with the connect URL', () => {
+  it('the three key-issuing branches emit for_your_human with the connect URL', () => {
     // The bind-gate branch deliberately does NOT (its human ask is an email,
     // and a second human CTA is the r-cta-collapse failure mode) — so exactly
-    // two, and the gate branch must still carry connect_url machine-readably.
-    expect((SRC.match(/for_your_human:\s+_connectRelay\(/g) || []).length).toBe(2);
+    // three (presented key, held-by-fingerprint key — r-held-key 2026-09-02 —
+    // and fresh mint), and the gate branch must still carry connect_url
+    // machine-readably.
+    expect((SRC.match(/for_your_human:\s+_connectRelay\(/g) || []).length).toBe(3);
     expect(SRC).toContain('connect_url:             _connectUrl(key, _via)');
   });
 
