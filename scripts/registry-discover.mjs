@@ -15,9 +15,17 @@
 //      repo so a human can add the good ones to TARGETS. Never PRs a stranger's
 //      repo automatically; discovery proposes, pr-submit (curated) disposes.
 //
-// SAFETY: read-only against third parties (plain fetches). The only write is an
-// issue on OUR repo, gated on GITHUB_TOKEN + DISCOVER_LIVE=1. Default = report.
+// SAFETY: read-only against third parties (plain fetches). The only writes are
+// an issue + a scaffold branch/PR on OUR repo, gated on GITHUB_TOKEN +
+// DISCOVER_LIVE=1. Default = report.
+//
+// ★ 2026-09-02: the scaffold-PR half is FAIL-LOUD. A GitHub write that fails
+// (branch, contents PUT, PR create) throws and the job goes red. It used to log
+// "— skip" and exit 0, which is how it sat wedged on a 409 for three Mondays
+// running with a green check (see openScaffoldPR).
 // ============================================================================
+
+import { pathToFileURL } from 'node:url';
 
 const TOKEN = process.env.GITHUB_TOKEN || process.env.REGISTRY_PR_PAT || '';
 const LIVE = TOKEN && ['1', 'true', 'yes'].includes(String(process.env.DISCOVER_LIVE || '').toLowerCase());
@@ -100,7 +108,7 @@ const NICHE_RE = new RegExp([
 
 // Verdict for one candidate. Returns {keep, why} — `why` is printed and shown
 // in the tracking issue so a rejection is auditable, never silent.
-function relevance(nameAndDesc, readmeBody) {
+export function relevance(nameAndDesc, readmeBody) {
   if (DOMAIN_RE.test(nameAndDesc)) return { keep: true, why: 'domain match (name/desc)' };
   const niche = NICHE_RE.exec(nameAndDesc);
   if (niche) return { keep: false, why: `scoped to "${niche[0]}" — excludes a data-center server` };
@@ -240,7 +248,7 @@ async function readme(full, branch) {
 // Build a DISABLED TARGETS stub for a candidate. section/entry are placeholders
 // a human completes — auto-guessing a list's category is exactly what we must
 // NOT do (registry-pr-submit refuses to blind-append), so it ships enabled:false.
-function buildStub(c) {
+export function buildStub(c) {
   const key = c.full.split('/').pop().replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
   const text = [
     `  // ── AUTO-DISCOVERED ${c.full} (★${c.stars}) — VET BEFORE ENABLING ──`,
@@ -262,7 +270,7 @@ function buildStub(c) {
 
 // Insert the stub just before the TARGETS array's closing `];` (never touches
 // REFRESH_TARGETS, which closes later). Returns null if the array isn't found.
-function insertStub(src, stubText) {
+export function insertStub(src, stubText) {
   const start = src.indexOf('const TARGETS = [');
   if (start < 0) return null;
   const close = src.indexOf('\n];', start);
@@ -270,52 +278,108 @@ function insertStub(src, stubText) {
   return src.slice(0, close) + '\n' + stubText + src.slice(close);
 }
 
-// Open ONE same-repo PR appending a disabled stub for the top not-yet-scaffolded
-// candidate. Idempotent (skips a candidate already referenced in the file, and a
-// branch/PR that already exists). Fail-soft: logs + returns on any hiccup.
-async function openScaffoldPR(candidates) {
+// Open ONE same-repo PR appending a disabled stub for the FIRST candidate that
+// is not yet scaffolded and has no open PR. Idempotent. Injectable `gh`/`log`
+// so the whole state machine is unit-tested without a network
+// (test/registry-discover-scaffold.test.mjs).
+//
+// ★ 2026-09-02 — this used to be fail-SOFT, and it wedged for three weeks with
+// a green check. Measured on run 33369412410 (2026-08-31 07:40Z): five NEW
+// candidates, tracking issue #73 refreshed, then
+//     ▶ scaffold onboarding PR: ! contents PUT failed 409 — skip
+// and job = success. Root cause, step by step:
+//   · discover/add-target-awesome-mcp-gateways already existed from the
+//     2026-08-10 run (its PR was closed; the branch was never deleted) —
+//     three such branches sat on the repo with ZERO open PRs;
+//   · the "PR already open?" check therefore passed;
+//   · POST /git/refs returned 422 (branch exists) and was treated as fine;
+//   · the contents PUT sent MAIN's file sha against a branch whose copy of
+//     the file had already diverged → 409, every Monday, forever;
+//   · `pick` was always the same top candidate, so #2..#5 were never tried;
+//   · and the step logged "skip" and exited 0.
+// Discovery had been "wired" to onboarding for six weeks and onboarded nothing.
+//
+// Now: a stale branch with no open PR is RESET to the base head (force-update
+// the ref) so the PR diff is exactly our stub against current main; the file
+// sha is read FROM THE BRANCH immediately before the PUT, never assumed from
+// main; a candidate that already has an open PR is stepped over rather than
+// ending the run; and every failed GitHub write THROWS — the workflow goes red
+// instead of printing "skip" under a green check.
+export async function openScaffoldPR(candidates, deps = {}) {
+  const api = deps.gh || gh;
+  const log = deps.log || console.log;
   const owner = SELF.split('/')[0];
-  const cur = await gh(`/repos/${SELF}/contents/${SUBMIT_PATH}`);
-  if (!cur.ok || !cur.json.content) { console.log(`  ! can't read ${SUBMIT_PATH} (${cur.status}) — skip scaffold PR`); return; }
+  const cur = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}`);
+  if (!cur.ok || !cur.json?.content) throw new Error(`can't read ${SUBMIT_PATH} on ${DEFAULT_BRANCH} (HTTP ${cur.status})`);
   const src = Buffer.from(cur.json.content, 'base64').toString('utf8');
-  const pick = candidates.find((c) => !src.includes(c.full));
-  if (!pick) { console.log('  ✓ all candidates already scaffolded in registry-pr-submit.mjs — no PR'); return; }
-  const { key, text } = buildStub(pick);
-  const branch = `discover/add-target-${key}`;
-  const open = await gh(`/repos/${SELF}/pulls?head=${owner}:${branch}&state=open`);
-  if (open.ok && Array.isArray(open.json) && open.json.length) { console.log(`  ↳ scaffold PR already open: ${open.json[0].html_url}`); return; }
-  const updated = insertStub(src, text);
-  if (!updated) { console.log('  ! TARGETS array not found — skip scaffold PR'); return; }
-  const ref = await gh(`/repos/${SELF}/git/ref/heads/${DEFAULT_BRANCH}`);
+  const ref = await api(`/repos/${SELF}/git/ref/heads/${DEFAULT_BRANCH}`);
   const baseSha = ref.json?.object?.sha;
-  if (!baseSha) { console.log(`  ! can't resolve ${DEFAULT_BRANCH} head — skip scaffold PR`); return; }
-  const mk = await gh(`/repos/${SELF}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }) });
-  if (!mk.ok && mk.status !== 422) { console.log(`  ! branch create failed ${mk.status} — skip`); return; }
-  const put = await gh(`/repos/${SELF}/contents/${SUBMIT_PATH}`, { method: 'PUT', body: JSON.stringify({
-    message: `chore(registry): scaffold onboarding target ${pick.full} (auto-discovery, disabled)`,
-    content: Buffer.from(updated, 'utf8').toString('base64'), branch, sha: cur.json.sha,
-  }) });
-  if (!put.ok) { console.log(`  ! contents PUT failed ${put.status} — skip`); return; }
-  const prBody = [
-    `Auto-discovered curated MCP list ${pick.full} (★${pick.stars}) that accepts PRs and does not yet list DC Hub.`,
-    '',
-    'Appends a DISABLED TARGETS stub to scripts/registry-pr-submit.mjs so onboarding is propose-only-automated.',
-    'Before merging: confirm the README path, set the exact section header, and flip enabled:true.',
-    'Left enabled:false so the submit loop skips it until vetted.',
-    '',
-    `List: ${pick.url}`,
-    '',
-    'Opened by registry-discover.mjs. Safe to close if the list is not a fit.',
-  ].join('\n');
-  const pr = await gh(`/repos/${SELF}/pulls`, { method: 'POST', body: JSON.stringify({
-    title: `Scaffold onboarding target: ${pick.full} (disabled — vet + enable)`,
-    head: branch, base: DEFAULT_BRANCH, body: prBody,
-  }) });
-  if (pr.ok) console.log(`  🆕 scaffold PR opened: ${pr.json.html_url}`);
-  else console.log(`  ! scaffold PR create failed ${pr.status}: ${JSON.stringify(pr.json).slice(0, 120)}`);
+  if (!baseSha) throw new Error(`can't resolve ${DEFAULT_BRANCH} head (HTTP ${ref.status})`);
+  const skipped = [];
+  for (const c of candidates || []) {
+    if (src.includes(c.full)) { skipped.push(`${c.full}: already scaffolded`); continue; }
+    const { key, text } = buildStub(c);
+    const branch = `discover/add-target-${key}`;
+    const open = await api(`/repos/${SELF}/pulls?head=${owner}:${branch}&state=open`);
+    if (open.ok && Array.isArray(open.json) && open.json.length) {
+      log(`  ↳ ${c.full}: scaffold PR already open: ${open.json[0].html_url} — trying the next candidate`);
+      skipped.push(`${c.full}: PR already open`);
+      continue;
+    }
+    const updated = insertStub(src, text);
+    if (!updated) throw new Error(`TARGETS array not found in ${SUBMIT_PATH} — cannot scaffold`);
+    // Branch: create it, or RESET a stale one (exists, no open PR) to the base head.
+    const existing = await api(`/repos/${SELF}/git/ref/heads/${branch}`);
+    if (existing.ok && existing.json?.object?.sha) {
+      log(`  ↻ ${branch} already exists with no open PR (stale from a prior run) — resetting to ${DEFAULT_BRANCH}@${baseSha.slice(0, 7)}`);
+      const upd = await api(`/repos/${SELF}/git/refs/heads/${branch}`, {
+        method: 'PATCH', body: JSON.stringify({ sha: baseSha, force: true }),
+      });
+      if (!upd.ok) throw new Error(`branch reset failed HTTP ${upd.status} on ${branch}: ${JSON.stringify(upd.json).slice(0, 120)}`);
+    } else {
+      const mk = await api(`/repos/${SELF}/git/refs`, {
+        method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+      });
+      if (!mk.ok) throw new Error(`branch create failed HTTP ${mk.status} on ${branch}: ${JSON.stringify(mk.json).slice(0, 120)}`);
+    }
+    // ★ The blob sha MUST be the one on the branch we are writing to. Sending
+    // main's sha against a diverged branch is the 409 that wedged this for weeks.
+    const onBranch = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}?ref=${branch}`);
+    const sha = onBranch.ok ? onBranch.json?.sha : null;
+    if (!sha) throw new Error(`can't read ${SUBMIT_PATH} on ${branch} (HTTP ${onBranch.status})`);
+    const put = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}`, { method: 'PUT', body: JSON.stringify({
+      message: `chore(registry): scaffold onboarding target ${c.full} (auto-discovery, disabled)`,
+      content: Buffer.from(updated, 'utf8').toString('base64'), branch, sha,
+    }) });
+    if (!put.ok) throw new Error(`contents PUT failed HTTP ${put.status} on ${branch}: ${JSON.stringify(put.json).slice(0, 120)}`);
+    const prBody = [
+      `Auto-discovered curated MCP list ${c.full} (★${c.stars}) that accepts PRs and does not yet list DC Hub.`,
+      '',
+      'Appends a DISABLED TARGETS stub to scripts/registry-pr-submit.mjs so onboarding is propose-only-automated.',
+      'Before merging: confirm the README path, set the exact section header, and flip enabled:true.',
+      'Left enabled:false so the submit loop skips it until vetted.',
+      '',
+      `List: ${c.url}`,
+      '',
+      'Opened by registry-discover.mjs. Safe to close if the list is not a fit.',
+    ].join('\n');
+    const pr = await api(`/repos/${SELF}/pulls`, { method: 'POST', body: JSON.stringify({
+      title: `Scaffold onboarding target: ${c.full} (disabled — vet + enable)`,
+      head: branch, base: DEFAULT_BRANCH, body: prBody,
+    }) });
+    if (!pr.ok) throw new Error(`scaffold PR create failed HTTP ${pr.status} for ${branch}: ${JSON.stringify(pr.json).slice(0, 120)}`);
+    log(`  🆕 scaffold PR opened: ${pr.json.html_url}`);
+    return { opened: pr.json.html_url, candidate: c.full, branch, skipped };
+  }
+  log(`  ✓ nothing to scaffold — ${skipped.length ? skipped.join('; ') : 'no candidates'}`);
+  return { opened: null, candidate: null, branch: null, skipped };
 }
 
-(async () => {
+// ★ ENTRYPOINT GUARD: the crawl only runs when this file is executed directly,
+// so the test can import openScaffoldPR without triggering a GitHub search.
+const _IS_MAIN = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (_IS_MAIN) (async () => {
   console.log(`▶ registry-discover — mode=${LIVE ? 'LIVE (will file/refresh issue)' : 'REPORT-ONLY'} · min ★${MIN_STARS}\n`);
   if (!TOKEN) console.log('  (no token — GitHub search is unauthenticated; results may be rate-limited)\n');
 
@@ -469,6 +533,9 @@ async function openScaffoldPR(candidates) {
   // the "discover -> onboard" close: discovery no longer stops at a tracking
   // issue a human must hand-translate into code.
   if (PR_ENABLED && candidates.length) {
+    // A throw here reaches the .catch below and exits 1 — on purpose. The
+    // scaffold is the ONLY bridge from discovery to onboarding; a silent skip
+    // is a green run that onboarded nothing.
     console.log('\n▶ scaffold onboarding PR:');
     await openScaffoldPR(candidates);
   } else if (PR_ENABLED) {

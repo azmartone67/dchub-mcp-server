@@ -87,6 +87,38 @@ describe("published calls/day claims", () => {
   });
 });
 
+// ★2026-09-02: the ladder-membership check above could not see this one.
+// smithery.yaml's pricing block said `free: "… 50 calls/day"` for a month —
+// 50 IS a rung (identified), so membership passed — while the same file's
+// configSchema said a FREE key is 10/day and canon says free=10 /
+// identified=50. A pricing block is the one place a claim carries its tier
+// LABEL, so it is checked label-by-label against canon, not by membership.
+describe("smithery.yaml pricing block matches the ladder label-by-label", () => {
+  const yaml = read("smithery.yaml");
+  const at = yaml.indexOf("\npricing:");
+  const tail = yaml.slice(at + 1);
+  const end = tail.search(/\n[A-Za-z]/); // next top-level key, or EOF
+  const block = end === -1 ? tail : tail.slice(0, end);
+  const rows = [...block.matchAll(/^  (\w+):\s*"([^"]*)"/gm)].map((m) => ({ tier: m[1], text: m[2] }));
+
+  it("finds the pricing rows (not a vacuous pass)", () => {
+    expect(at).toBeGreaterThan(-1);
+    expect(rows.map((r) => r.tier)).toEqual(
+      expect.arrayContaining(["anonymous", "free", "starter", "developer", "pro", "enterprise"]),
+    );
+  });
+
+  for (const r of rows) {
+    it(`${r.tier}: the calls/day figure is canon's ${r.tier} rung`, () => {
+      expect(CANON[r.tier], `no canonical rung is labelled "${r.tier}"`).toBeDefined();
+      const m = r.text.match(/([\d,]+)\+?\s*calls?\/day/i);
+      expect(m, `${r.tier} row states no calls/day figure: ${r.text}`).toBeTruthy();
+      expect(num(m[1]), `smithery.yaml pricing.${r.tier} says ${m[1]} calls/day; canon says ${CANON[r.tier]}`)
+        .toBe(CANON[r.tier]);
+    });
+  }
+});
+
 // ★2026-09-02 (D8): the served surface too. Measured 00:29Z: the free tier was
 // described FOUR ways across the manifest family ("10 calls/day", "10 free
 // calls total", "50 calls/day when bound", "5 dossiers/day") because every
