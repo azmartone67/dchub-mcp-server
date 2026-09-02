@@ -68,8 +68,7 @@ describe('smithery-freshness.yml — the key-scope failure is named and reported
     expect(beat.body).toMatch(/STATUS=success/);
     expect(beat.body).toMatch(/failure\|cancelled\)/);
     expect(beat.body).toMatch(/status:\$s/); // the status variable reaches the JSON body
-    expect(beat.body).toContain('"feed":"smithery-freshness"'.replace(/"/g, '')); // feed name intact
-    expect(beat.body).toContain('smithery-freshness');
+    expect(beat.body).toMatch(/feed:"smithery-freshness"/); // feed name intact in the jq body
   });
 
   it('the beat note carries the scope marker so the dead-man board names the owner action', () => {
