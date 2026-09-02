@@ -46,6 +46,7 @@ jobs:
           node-version: '22'
 
       - name: Re-publish to Smithery (freshness heartbeat)
+        id: publish
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
         run: |
@@ -66,6 +67,7 @@ jobs:
       # our live server serves. Convergence was ~60s when measured; the budget is
       # 10 minutes.
       - name: Verify the listing actually converged
+        id: converge
         run: |
           python3 - <<'PY'
           import json, sys, time, urllib.request
@@ -152,41 +154,6 @@ jobs:
           sys.exit(1)
           PY
 
-      # ★ BEAT THE DEAD-MAN LEDGER — but ONLY ON SUCCESS.
-      #
-      # This lane is the only DAILY-updating registry channel there is, and on
-      # 2026-08-03 and 08-04 it failed on `stale_desc=['search_facilities']`
-      # (Smithery's cached description for one tool would not refresh; retried
-      # 20x, gave up). It failed correctly and LOUDLY — into a log nobody reads.
-      # Two days passed before anyone noticed.
-      #
-      # ★★ NO `if: always()` HERE, and that is the whole point. The ledger's own
-      # contract says it "records its last SUCCESSFUL run"; beating on failure
-      # would keep the feed looking alive while it was broken — a dead-man switch
-      # that reports health when the operator has stopped breathing. Only a real
-      # success beats, so a failed day leaves the feed to go OVERDUE on
-      # /api/v1/ops/deadman, which is exactly the signal that was missing.
-      #
-      # Fail-soft on the beat itself (`|| true`): a ledger outage must never turn
-      # a healthy publish into a red run — the beat reports the work, it is not
-      # the work.
-      - name: Beat the dead-man ledger (success only)
-        if: success()
-        env:
-          DCHUB_ADMIN_KEY: ${{ secrets.DCHUB_ADMIN_KEY }}
-        run: |
-          if [ -z "$DCHUB_ADMIN_KEY" ]; then
-            echo "::warning::no DCHUB_ADMIN_KEY — cannot beat; this lane stays invisible on the dead-man board"
-            exit 0
-          fi
-          curl -fsS -X POST "https://dchub.cloud/api/v1/admin/ingest-runs/beat" \
-            -H "Content-Type: application/json" \
-            -H "X-Admin-Key: $DCHUB_ADMIN_KEY" \
-            -H "User-Agent: dchub-smithery-freshness/1.0" \
-            -d '{"feed":"smithery-freshness","status":"success","cadence_hours":24,
-                 "note":"daily Smithery re-publish + listing convergence verified"}' \
-            && echo "  ✓ beat recorded" || echo "::warning::beat failed (publish still succeeded)"
-
       # ★ 2026-08-22 — the listing COPY is owner-pasted and nothing compared it.
       # `smithery mcp publish` refreshes tools/verification; the `description`
       # Smithery serves is whatever was last pasted into the owner UI. On
@@ -215,6 +182,7 @@ jobs:
       # is never trusted alone (the fake-push landmine). Idempotent. No key ⇒
       # warn+skip. Kill: repo/org var WHITE_GLOVE_SMITHERY_AUTOWRITE=0.
       - name: White-glove — auto-write the Smithery description (api.smithery.ai PATCH)
+        id: whiteglove
         if: always()
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
@@ -253,7 +221,28 @@ jobs:
           try:
               resp = json.load(urllib.request.urlopen(req, timeout=30))
           except urllib.error.HTTPError as e:
-              print(f"::error::Smithery PATCH failed HTTP {e.code}: {e.read().decode('utf-8','replace')[:200]} — check SMITHERY_API_KEY write scope"); sys.exit(1)
+              body = e.read().decode('utf-8', 'replace')[:200]
+              if e.code == 403:
+                  # ★ 2026-09-02: measured on 08-29, 08-31 and 09-01 (run 33519871704):
+                  #   HTTP 403: Missing required permission: servers:write
+                  # The key has NEVER carried write scope — the 08-30 "pass" was the
+                  # early-exit above (live copy already == txt). This is an OWNER
+                  # action (regenerate the key with that scope; update the secret),
+                  # so it gets its own titled annotation and is handed to the ledger
+                  # beat below, which reports it on the dead-man board instead of
+                  # letting the lane age out silently.
+                  m = re.search(r"Missing required permission:\s*([\w:.-]+)", body)
+                  scope = m.group(1) if m else "servers:write"
+                  print(f"::error title=SMITHERY_KEY_SCOPE::Smithery PATCH 403 — SMITHERY_API_KEY lacks the `{scope}` permission. "
+                        f"OWNER ACTION: at smithery.ai -> Settings -> API keys, generate a key WITH `{scope}` and update the "
+                        f"SMITHERY_API_KEY repo secret. Until then the listing copy only moves by owner-paste "
+                        f"(https://smithery.ai/servers/azmartone67/dchub -> Edit). Response: {body}")
+                  out = os.environ.get("GITHUB_OUTPUT")
+                  if out:
+                      with open(out, "a", encoding="utf-8") as fh:
+                          fh.write(f"key_scope_missing={scope}\n")
+                  sys.exit(1)
+              print(f"::error::Smithery PATCH failed HTTP {e.code}: {body} — check SMITHERY_API_KEY write scope"); sys.exit(1)
           if not resp.get("success"):
               print(f"::error::Smithery PATCH did not report success: {resp}"); sys.exit(1)
           # AUTHORITATIVE verify on api.smithery.ai (consistent; never trust success:true)
@@ -273,6 +262,7 @@ jobs:
           PY_WG
 
       - name: Listing copy equals scripts/smithery_description.txt (owner-pasted)
+        id: copycheck
         if: always()
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
@@ -307,3 +297,63 @@ jobs:
                   "owner-paste at https://smithery.ai/servers/azmartone67/dchub -> Edit is the fallback.")
           sys.exit(1)
           PY
+
+      # ★ BEAT THE DEAD-MAN LEDGER — LAST, ALWAYS, WITH THE LANE'S REAL STATUS.
+      #
+      # This beat used to run `if: success()` and sit BEFORE the white-glove
+      # write, so that a failed day left the feed to go OVERDUE on
+      # /api/v1/ops/deadman — the intended signal. Two things broke that:
+      #   · the white-glove PATCH ran AFTER the beat, so its failure was beaten
+      #     over: on 2026-08-29, 08-31 and 09-01 (run 33519871704) the PATCH
+      #     died with `HTTP 403: Missing required permission: servers:write`
+      #     minutes after the ledger had recorded a clean success;
+      #   · "overdue" only appears after cadence_hours and is indistinguishable
+      #     from "the cron never fired". A lane that RAN and FAILED should say
+      #     so the minute it fails, and name the remedy.
+      # So: `if: always()`, last in the job, status derived from every step's
+      # outcome. `status: error` is the non-OK path in dchub-backend
+      # routes/ingest_runs.py (`_OK_STATUS`) — it renders as a failed beat on
+      # the board rather than a stale success — and the note names the failed
+      # step and, for the key-scope case, the exact permission the owner must
+      # add. The ledger contract ("records its last SUCCESSFUL run") is kept:
+      # only a real success carries the success status. Fail-soft on the beat
+      # itself (`|| true` shape): a ledger outage must never redden a healthy
+      # publish — the beat reports the work, it is not the work.
+      - name: Beat the dead-man ledger (status reflects the whole lane)
+        id: beat
+        if: always()
+        env:
+          DCHUB_ADMIN_KEY: ${{ secrets.DCHUB_ADMIN_KEY }}
+          OUTCOME_PUBLISH: ${{ steps.publish.outcome }}
+          OUTCOME_CONVERGE: ${{ steps.converge.outcome }}
+          OUTCOME_WHITEGLOVE: ${{ steps.whiteglove.outcome }}
+          OUTCOME_COPYCHECK: ${{ steps.copycheck.outcome }}
+          KEY_SCOPE_MISSING: ${{ steps.whiteglove.outputs.key_scope_missing }}
+        run: |
+          if [ -z "$DCHUB_ADMIN_KEY" ]; then
+            echo "::warning::no DCHUB_ADMIN_KEY — cannot beat; this lane stays invisible on the dead-man board"
+            exit 0
+          fi
+          STATUS=success
+          NOTE="daily Smithery re-publish + listing convergence verified + description in sync"
+          FAILED=""
+          for pair in "publish:$OUTCOME_PUBLISH" "converge:$OUTCOME_CONVERGE" "whiteglove:$OUTCOME_WHITEGLOVE" "copycheck:$OUTCOME_COPYCHECK"; do
+            case "${pair#*:}" in
+              failure|cancelled) FAILED="$FAILED ${pair%%:*}" ;;
+            esac
+          done
+          if [ -n "$FAILED" ]; then
+            STATUS=error
+            NOTE="lane FAILED at:${FAILED}"
+            if [ -n "$KEY_SCOPE_MISSING" ]; then
+              NOTE="$NOTE — SMITHERY_KEY_SCOPE: SMITHERY_API_KEY lacks ${KEY_SCOPE_MISSING}; owner: regenerate the key with that permission at smithery.ai and update the repo secret"
+            fi
+          fi
+          BODY=$(jq -cn --arg s "$STATUS" --arg n "$NOTE" '{feed:"smithery-freshness",status:$s,cadence_hours:24,note:$n}')
+          echo "beat: $BODY"
+          curl -fsS -X POST "https://dchub.cloud/api/v1/admin/ingest-runs/beat" \
+            -H "Content-Type: application/json" \
+            -H "X-Admin-Key: $DCHUB_ADMIN_KEY" \
+            -H "User-Agent: dchub-smithery-freshness/1.0" \
+            -d "$BODY" \
+            && echo "  ✓ beat recorded (status=$STATUS)" || echo "::warning::beat failed (the lane's own result above stands)"

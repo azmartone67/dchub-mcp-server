@@ -36,7 +36,10 @@ describe('instructions compose gate', () => {
     }
     expect(out).toContain('generating UNITS across all statuses');
     // retired over-claims can never re-enter through this path
-    expect(out).not.toMatch(/12,650|311 markets|1,400\+|1,500\+|500,000\+|headroom/);
+    // ★2026-09-02: the retired pipeline figure too. test/retired-claims bans
+    // it from every committed FILE; this is the one fence on the composed
+    // runtime string, which no file scan can see.
+    expect(out).not.toMatch(/12,650|311 markets|1,400\+|1,500\+|500,000\+|headroom|369\s*GW|540\+\s*projects/);
   });
 
   // ── must-fail controls ──
