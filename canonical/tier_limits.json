@@ -9,5 +9,20 @@
     "developer": 500,
     "pro": 2000,
     "enterprise": 100000
+  },
+  "price_usd_month": {
+    "starter": 9,
+    "founding": 99,
+    "developer": 49,
+    "pro": 299,
+    "team": 699,
+    "enterprise": null
+  },
+  "stripe_link": {
+    "starter": "https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g",
+    "founding": "https://buy.stripe.com/14A9AUcVk4Nn1edcymaZi0o",
+    "developer": "https://buy.stripe.com/7sY5kE8F4fs13ml0PEaZi0c",
+    "pro": "https://buy.stripe.com/7sY7sM9J8enX7CB69YaZi0l",
+    "team": "https://buy.stripe.com/14AbJ2bRga7H0a98i6aZi0m"
   }
 }
