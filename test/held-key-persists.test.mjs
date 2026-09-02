@@ -103,12 +103,23 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     const mint = sole(TOOL, "callAPIWrite('/api/v1/keys/claim', body)", 'mint');
     expect(lookup).toBeLessThan(mint);
   });
-  it('returns the held key only after a LIVE validity check, flagged already_held', () => {
-    const guard = sole(TOOL, 'if (_v && _v.valid) {', 'validity guard');
+  it('returns the held key flagged already_held; a REJECTED key is forgotten and re-minted', () => {
+    const rejected = sole(TOOL, 'if (_v && _v.key_rejected) {', 'rejection guard');
+    const forget = sole(TOOL, '_forgetHeldKey(_fp);', 'forget');
     const flag = sole(TOOL, 'already_held:            true', 'already_held flag');
-    expect(guard).toBeLessThan(flag);
-    // and a backend-rejected (revoked) key is dropped, not handed back
-    expect(TOOL).toContain('if (_v && _v.key_rejected) _forgetHeldKey(_fp);');
+    expect(rejected).toBeLessThan(forget);
+    expect(forget).toBeLessThan(flag);
+  });
+  it('the install artifact and the session auto-bind ride ONLY on a confirmed key', () => {
+    const ok = sole(TOOL, 'const _ok = !!(_v && _v.valid);', 'confirmed flag');
+    const bind = sole(TOOL, '_m1.api_key = _e.key;', 'auto-bind');
+    const artifact = sole(TOOL, 'for_your_human: _connectRelay(_e.key, _via)', 'artifact');
+    expect(ok).toBeLessThan(bind);
+    expect(TOOL.slice(ok, bind)).toContain('if (_ok) {');
+    const gate = TOOL.lastIndexOf('...(_ok ? {', artifact);
+    expect(gate).toBeGreaterThan(ok);
+    expect(TOOL.slice(gate, artifact)).not.toContain('}');       // inside the _ok spread
+    expect(TOOL).toContain('key_confirmed:           _ok,');
   });
   it('remembers every fresh mint for the fingerprint', () => {
     const mint = sole(TOOL, "callAPIWrite('/api/v1/keys/claim', body)", 'mint');
