@@ -84,7 +84,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 // to what the SDK would serve. No network, pure public SDK API.
 import { Client as McpProbeClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 // MPP per-call rail (DARK unless MPP_ENABLED=1 + MPP_SIDECAR_URL). Pure hook (no
 // mppx in the gateway) — calls the isolated sidecar over HTTP. NOTE: the MCP SDK
 // reserves -32042 (UrlElicitationRequired) and swallows other custom JSON-RPC
@@ -1420,6 +1420,63 @@ export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys()];
 export function _pathSelfTag(req) {
   const path = (req?.path || '').replace(/\/+$/, '') || '/mcp';
   return MCP_SELF_PATHS.get(path) || '';
+}
+
+// ── r-init-precise-error (2026-09-02): say WHICH field is missing ────────────
+//
+// THE DEFECT (live-verified 2026-09-02 on https://dchub.cloud/mcp AND on the
+// Railway origin — identical, so application logic, not the edge). An
+// `initialize` whose params.clientInfo omits the spec-required `version` was
+// answered with:
+//     {"code":-32000,"message":"Bad Request: Server not initialized","id":null}
+// which blames SERVER STATE for a MALFORMED CLIENT PAYLOAD. It cost one
+// debugging session ~15 minutes down a false "production outage" path, and any
+// integrator who forgets `version` reads it as "DC Hub is down".
+//
+// WHY IT SAID THAT. The SDK's transport decides "is this an initialize?" by
+// zod-parsing the whole message with InitializeRequestSchema (types.js:473,
+// `isInitializeRequest`). ImplementationSchema requires `version: z.string()`,
+// so a clientInfo without it makes that parse FAIL — the message is no longer
+// recognized as an initialize at all, falls through to validateSession(), and
+// that reports the only thing it knows: `_initialized` is false. The message is
+// accurate about the transport's internal state and useless to the caller.
+//
+// ★ THE REJECTION SET IS UNCHANGED, ON PURPOSE. The field IS required by the
+// MCP spec, so we keep rejecting. This runs the SDK's OWN InitializeRequestSchema
+// — the exact predicate `isInitializeRequest` uses — so every payload this
+// function rejects is one the transport already rejected a moment later, and
+// every payload it accepts still reaches the transport untouched. Nothing is
+// loosened, nothing is tightened, and the check cannot drift from the SDK on an
+// upgrade because it IS the SDK's schema. Only the WORDING changes: -32602
+// invalid params, naming the offending path, and echoing the caller's id
+// instead of the SDK's `id: null`.
+//
+// Fail-soft: any throw returns null and the request proceeds down the exact
+// pre-fix path. Kill switch: DCHUB_INIT_PRECISE_ERROR_DISABLE=1.
+export function _initRequestError(body) {
+  try {
+    if (/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INIT_PRECISE_ERROR_DISABLE || ''))) return null;
+    if (!body || body.method !== 'initialize') return null;
+    const parsed = InitializeRequestSchema.safeParse(body);
+    if (parsed.success) return null;                       // the SDK accepts it → so do we
+    const issues = parsed.error?.issues || [];
+    // Prefer a clientInfo issue when present: it is the one that actually bites
+    // integrators, and the deepest path is the most specific thing we can name.
+    const pick = issues.find((i) => (i.path || [])[1] === 'clientInfo') || issues[0];
+    if (!pick) return null;
+    const path = ['params', ...(pick.path || []).slice(1)].join('.');
+    const expected = pick.expected || 'value';
+    const missing = pick.code === 'invalid_type' && /received undefined/.test(String(pick.message || ''));
+    return {
+      code: -32602,
+      message: `Invalid params: initialize requires ${path} (${expected})`
+             + (missing ? ' — it is absent from this request.' : '.')
+             + ' The MCP spec requires it; this is a malformed request, NOT a server outage.',
+      data: { field: path, expected, reason: missing ? 'missing' : 'invalid_type', issues },
+    };
+  } catch (_) {
+    return null;   // never turn a working initialize into a 500
+  }
 }
 
 function detectPlatformFromInit(body, ua = '', explicitHint = '') {
@@ -6678,6 +6735,15 @@ function _writeRpcResult(req, res, id, result) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(msg);
   }
+}
+
+// Error twin of _writeRpcResult. Always application/json at the given HTTP
+// status, matching the SDK's createJsonErrorResponse (webStandardStreamableHttp.js:86)
+// so a client that already parses the SDK's 400s parses this identically — the
+// only differences are a real JSON-RPC code and the caller's own id.
+function _writeRpcError(res, id, error, status = 400) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ jsonrpc: '2.0', error, id: id === undefined ? null : id }));
 }
 
 // State-mutating MCP tools — these create/update server-side state or trigger a
@@ -18013,6 +18079,16 @@ app.post(MCP_PATHS, async (req, res) => {
 
     const body = req.body;
     if (body?.method === 'initialize') {
+      // r-init-precise-error: reject a malformed initialize HERE, naming the
+      // field, instead of letting it fall through to the transport's
+      // "Server not initialized". Placed BEFORE detectPlatformFromInit /
+      // validateKey / createServer so a malformed handshake also stops paying
+      // for a backend key hop and a full tool re-registration it will not use.
+      const _initErr = _initRequestError(body);
+      if (_initErr) {
+        console.log(`[MCP] init REJECTED field=${_initErr.data?.field} reason=${_initErr.data?.reason} client=${(body?.params?.clientInfo?.name || '?').toString().slice(0, 60)} ua=${userAgent.slice(0, 60)}`);
+        return _writeRpcError(res, body.id, { code: _initErr.code, message: _initErr.message, data: _initErr.data });
+      }
       // r47.30 (2026-05-26): use clientInfo.name as the canonical source
       // (UA is a noisy fallback — most MCP clients ship "node" as UA).
       const platform   = detectPlatformFromInit(body, userAgent, platformHeader);
