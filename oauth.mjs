@@ -211,6 +211,14 @@ ${hidden('client_id', p.client_id)}${hidden('redirect_uri', p.redirect_uri)}${hi
 //                  a durable dev key (server.mjs wires this to the backend claim).
 //   store        : optional {put,get,consume} durable adapter (default: in-memory).
 export function registerOAuthRoutes(app, opts = {}) {
+  // r-oauth-funnel-stages (2026-09-02): stage hook. The gateway passes its
+  // challenge-counter bump (server.mjs _chStage) so the consent page render and
+  // the first mint for a client land in the SAME sink as the 401 challenges —
+  // three counters, one series, so the retention read can place the loss.
+  // A Map bump and nothing else; never allowed to affect a response.
+  const onEvent = (typeof opts.onEvent === 'function')
+    ? (kind) => { try { opts.onEvent(kind); } catch { /* never affect the flow */ } }
+    : () => {};
   const issuer = (opts.issuer || 'https://dchub.cloud').replace(/\/$/, '');
   const mintIdentity = opts.mintIdentity || (async (_clientId) => ({ api_key: null, tier: 'free' }));
   const store = opts.store || _memStore();
@@ -306,6 +314,7 @@ export function registerOAuthRoutes(app, opts = {}) {
     if (challenge.length < 43 || challenge.length > 128) return fail('invalid_request', 'code_challenge required (S256)');
     // P3: render a click-through consent page (no silent auto-approve). The
     // code is issued only after the human clicks Authorize (POST /decision).
+    onEvent('oauth_authorize_started');   // stage 2: a human is now at the consent page
     res.set('Content-Type', 'text/html; charset=utf-8');
     return res.send(_consentPage({
       issuer, client_id: String(q.client_id), redirect_uri,
@@ -389,6 +398,7 @@ export function registerOAuthRoutes(app, opts = {}) {
       }
       boundKey = identity.api_key;
       tier = identity.tier || 'free';
+      onEvent('identity_created');          // stage 3: a NEW durable identity exists
       try {  // best-effort persist the bound key on the client record (reuse next time)
         await store.put('client', rec.client_id, {
           ...(clientRec || {}),

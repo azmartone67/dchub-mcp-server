@@ -2336,6 +2336,76 @@ async function mintAutoTrial(tool_name) {
   }
 }
 
+// ★★★ r-held-key (2026-09-02, QA sweep F2 — the binding constraint).
+// MEASURED 2026-09-02 00:23Z (/api/v1/mcp/retention + /ops/activation):
+//   free_key_durable.pct_used_again_any_time 49.2  — agents DO come back within
+//   free_key_durable.pct_returned              2.0  — a session, and vanish across weeks
+//   remint_ratio 19.1 redemptions per distinct agent, WORSENING (prior 17.7)
+// i.e. claim_free_key minted a NEW key every session. The backend dedupes on
+// (client_name, ip) for 30d, but client_name is whatever the agent typed this
+// time ("Claude Desktop", "acme-bot", the default) so the dedupe rarely hits,
+// and the r-claim-idempotent branch above it only recognises a key the caller
+// PRESENTED — the one thing a header-less host cannot do.
+//
+// This remembers, per DURABLE CALLER FINGERPRINT (sha256 of the real client
+// IP + the UA/client family this server already resolves as `platform`), the
+// free dch_live_ key it minted, so the next session from the same caller gets
+// THAT key back — `already_held:true` — instead of a sibling. Two consumers:
+//   (1) claim_free_key: returns the held key (after a validateKey confirms it
+//       is not revoked) and auto-binds it to the session like a fresh mint;
+//   (2) initialize: a keyless session whose fingerprint holds a key gets the
+//       key IN-BAND in the per-session instructions (see _INSTR_TAIL_HELD),
+//       the only channel a header-less host can read.
+// SCOPE, deliberately narrow: durable FREE keys only. Trial keys (dch_trial_)
+// and any paid tier are never remembered — a NAT-shared fingerprint (the same
+// collapse the backend's (client_name, ip) dedupe already accepts) must never
+// hand one caller another caller's paid access. Bounded (5,000 entries, FIFO
+// evict) and TTL'd (30d, the backend's own dedupe horizon). Per replica and
+// not persisted — a restart forgets, which degrades to today's behaviour.
+export const _HELD_KEY_TTL_MS = 30 * 86400e3;
+export const _HELD_KEY_MAX = 5000;
+export const _heldKeys = new Map();   // fingerprint -> { key, tier, at }
+export function _callerFingerprint(c) {
+  try {
+    const ip = c && c.client_ip;
+    if (!ip) return null;                                   // no durable signal → no fingerprint
+    const fam = String((c && c.platform) || 'unknown').toLowerCase().slice(0, 40);
+    return createHash('sha256').update(String(ip) + '|' + fam).digest('hex').slice(0, 32);
+  } catch (_) { return null; }
+}
+export function _rememberHeldKey(fp, key, tier) {
+  try {
+    if (!fp || !key) return false;
+    if (!/^dch_live_/.test(String(key))) return false;     // durable free keys only
+    if (tier && tier !== 'free') return false;              // never a paid identity
+    if (_heldKeys.size >= _HELD_KEY_MAX && !_heldKeys.has(fp)) {
+      _heldKeys.delete(_heldKeys.keys().next().value);      // FIFO evict
+    }
+    _heldKeys.set(fp, { key: String(key), tier: 'free', at: Date.now() });
+    return true;
+  } catch (_) { return false; }
+}
+export function _heldKeyFor(fp, now = Date.now()) {
+  const e = fp ? _heldKeys.get(fp) : null;
+  if (!e) return null;
+  if (now - e.at > _HELD_KEY_TTL_MS) { _heldKeys.delete(fp); return null; }
+  return e;
+}
+export function _forgetHeldKey(fp) { if (fp) _heldKeys.delete(fp); }
+// The in-band channel for a header-less host: appended to THIS session's
+// initialize `instructions` (module-scope _INSTRUCTIONS + this tail) when the
+// caller sent no credential but its fingerprint holds a key. Names the key,
+// says it is the SAME key claim_free_key would return, and tells the agent
+// not to mint — the sentence the 2.0% cross-week return was missing.
+export function _INSTR_TAIL_HELD(key) {
+  const k = String(key || '');
+  if (!k) return '';
+  return ' ★ YOU ALREADY HOLD A DC HUB KEY — a previous session from this same caller minted `' + k + '`. ' +
+    'Do NOT mint another: send it as `X-API-Key` (header-capable clients), or simply call `claim_free_key` — ' +
+    'it returns this SAME key with `already_held:true` and applies it to this session with no reconnect. ' +
+    'Re-minting orphans the usage history behind this key and restarts its daily allowance from zero.';
+}
+
 // r-paid-durable (2026-06-28, redesign #4): an agent that JUST PAID autonomously is
 // the highest-intent moment to hand it a DURABLE identity so it returns paid on day 2
 // — the binding retention constraint (mature multi-day return ~0.8%). Mint the SAME
@@ -3081,6 +3151,11 @@ async function resolveWorkosBearer(token) {
     return null;  // transient: do not negative-cache; next request retries
   }
   const out = { api_key: idn.api_key, tier: idn.tier || 'free', exp: Date.now() + _WORKOS_CACHE_TTL };
+  // r-oauth-funnel-stages: stage 3 — only when the backend SAYS the row is new.
+  // (Today /api/v1/oauth/identity does not report it; the built-in AS path in
+  // oauth.mjs does. A first-seen-in-this-process heuristic would double count
+  // across replicas and restarts, so it is deliberately not used.)
+  if (idn.created === true) _chStage('identity_created');
   _workosTokenCache.set(token, out);
   console.log(`[oauth] workos bearer → durable key ${idn.api_key.slice(0, 12)}… tier=${out.tier}`);
   return out;
@@ -3879,16 +3954,33 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
 // is |_CH_KINDS| x (|_CH_METHODS| + 1), today 4 x 3 = 12 keys, and it moves only
 // when this line does. Nothing client-supplied has ever entered a Map key.
 // Kill switch: DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 -> fully INERT.
+// r-oauth-funnel-stages (2026-09-02, QA sweep F2): three STAGE counters so the
+// retention read can say WHERE the 1,111-challenges-per-identity loss happens
+// (measured 2026-09-02 00:23Z: oauth_connector_challenges_per_new_identity_30d
+// 1,111; oauth_new_identities_30d 2). Until now the series had only the two
+// ends — challenges we issued, identities that eventually resolved.
+//   challenge_issued        — the 401 we are about to send (method = MCP method)
+//   oauth_authorize_started — the consent page rendered by OUR AS (oauth.mjs)
+//   identity_created        — a durable key minted for a NEW OAuth identity
+// Same closed-set, same flusher, same sink (POST /api/v1/mcp/oauth-challenge/emit)
+// as the four kinds above; the backend ledger skips a kind it does not know,
+// so widening here is safe before the backend learns the names.
+// ★HONEST GAP: the LIVE authorization server is WorkOS AuthKit (the PRM doc's
+// authorization_servers), and a consent page rendered there is invisible to
+// this process — oauth_authorize_started counts the built-in AS only, and
+// identity_created on the WorkOS path fires only when /api/v1/oauth/identity
+// reports `created:true` (a backend follow-up; today it reports neither).
 const _CH_KINDS   = new Set(['claude_connector', 'invalid_bearer', 'chatgpt_connector_seen',
-                             'claude_connector_seen']);
+                             'claude_connector_seen',
+                             'challenge_issued', 'oauth_authorize_started', 'identity_created']);
 const _CH_METHODS = new Set(['initialize', 'tools/call']);
 const _CH_BEAT_MS = 60 * 60 * 1000;          // idle heartbeat: 1 POST/hour/replica
-const _chCounts = new Map();                 // `${kind}:${method}` -> n  (<=6 keys, ever)
+export const _chCounts = new Map();          // `${kind}:${method}` -> n  (|kinds| x 3 keys, ever)
 let _chFlushStarted = false, _chFailStreak = 0, _chNextAt = 0, _chLastPostAt = 0;
 const _chDisabled = () =>
   /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE || ''));
 
-function _chBump(kind, method) {
+export function _chBump(kind, method) {
   try {
     if (_chDisabled()) return;                 // INERT-when-off: no map write at all
     if (!_CH_KINDS.has(kind)) return;          // closed set — never trust the call site
@@ -3937,6 +4029,10 @@ function _chFlush() {
       .catch(() => { _chFailStreak += 1; _chArm(); });     // write-behind: never throws
   } catch (_) { /* fire-and-forget */ }
 }
+// Stage events that carry no MCP method (they happen on the OAuth routes, not
+// on POST /mcp) land on the 'other' method axis. This is the hook oauth.mjs
+// receives as `onEvent` — a Map bump and nothing else, same contract as _chBump.
+export const _chStage = (kind) => _chBump(kind, 'other');
 function _chArm() {   // 3 consecutive failures -> back off 10 min; self-heals on any ok
   _chNextAt = _chFailStreak >= 3 ? Date.now() + 10 * 60 * 1000 : 0;
 }
@@ -12833,13 +12929,15 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
-function createServer(descOverrides) {
+function createServer(descOverrides, instructionsTail) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
     // `instructions` is composed at module scope from canonical/mcp_facts.json
     // behind a freshness gate — see _composeInstructions above for the contract
-    // and this string's full provenance history.
-    instructions: _INSTRUCTIONS,
+    // and this string's full provenance history. r-held-key (2026-09-02): a
+    // PER-SESSION tail may follow it — today only _INSTR_TAIL_HELD, the in-band
+    // held-key notice for a keyless session whose caller already minted one.
+    instructions: _INSTRUCTIONS + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -16221,11 +16319,72 @@ function createServer(descOverrides) {
           };
         }
       } catch (_) { /* fall through to the normal mint */ }
+      // r-held-key (2026-09-02): the caller presented NO key, but this same
+      // fingerprint (client IP + client family) minted one in an earlier
+      // session — hand THAT back, confirmed live, instead of the 19.1x
+      // sibling. Rationale + scope at _rememberHeldKey.
+      let _fp = null;
+      try {
+        _fp = _callerFingerprint(getCtx());
+        const _e = _heldKeyFor(_fp);
+        if (_e) {
+          let _v = null;
+          try { _v = await validateKey(_e.key); } catch (_) { _v = null; }
+          if (_v && _v.valid) {
+            let _bound = false;
+            try {                                             // auto-bind, exactly like a fresh mint
+              const _c1 = getCtx();
+              const _sid1 = _c1 && _c1.session_id;
+              if (_sid1 && sessionMeta.has(_sid1)) {
+                const _m1 = sessionMeta.get(_sid1);
+                if (!_m1.api_key) {
+                  _m1.api_key = _e.key; _m1.tier = _v.tier || 'free'; _m1.auto_bound = true;
+                  sessionMeta.set(_sid1, _m1);
+                  recordSessionUpgrade(_m1.platform, _m1.tier);
+                  _bound = true;
+                }
+              }
+            } catch (_) { /* non-fatal */ }
+            return {
+              content: [{ type: 'text', text:
+                '🔑 **This caller already holds a DC Hub key — returning THAT key, not a new one.** ' +
+                'A previous session from the same client minted it; re-minting would orphan its usage history ' +
+                'and restart the daily allowance from zero.\n\n' +
+                '**Your key:** `' + _e.key + '`' + (_bound ? ' *(applied to this session — no reconnect)*' : '') + '\n\n' +
+                _heldKeyUrlLine(true, _connectUrl(_e.key, _via)) +
+                'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' }],
+              structuredContent: {
+                api_key:                 _e.key,
+                tier:                    _v.tier || 'free',
+                header:                  'X-API-Key',
+                reused:                  true,
+                already_held:            true,
+                key_confirmed:           true,
+                held_by:                 'caller_fingerprint',
+                auto_applied_to_session: _bound,
+                connect_url:             _connectUrl(_e.key, _via),
+                for_your_human:          _connectRelay(_e.key, _via),
+                persist_config:          _persistConfig(_e.key, _via),
+                recover_tool:            'recover_my_key',
+                next_tool:               'bind_email',
+                note: 'claim_free_key is idempotent per caller: the key this client minted earlier is returned (already_held). Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth.',
+              },
+            };
+          }
+          // The backend authoritatively rejected it (revoked/expired) → forget
+          // and mint afresh. An INDETERMINATE answer (backend blip) falls
+          // through to the normal mint, whose own dedupe still returns the
+          // same key when it can — never a lock-out on a timeout.
+          if (_v && _v.key_rejected) _forgetHeldKey(_fp);
+        }
+      } catch (_) { /* fall through to the normal mint */ }
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
       const body = { client_name: cn };
       if (a.email) body.email = String(a.email).trim().slice(0, 200);
       const r = await callAPIWrite('/api/v1/keys/claim', body);
       const key = r && (r.api_key || r.key);
+      // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
+      if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
       if (!key) {
         return { isError: true, content: [{ type: 'text',
           text: '⚠️ Could not mint a key right now: ' + JSON.stringify(r || {}).slice(0, 300) +
@@ -17149,6 +17308,7 @@ const _oauthStore = {
 registerOAuthRoutes(app, {
   issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
   store: _oauthStore,
+  onEvent: _chStage,   // r-oauth-funnel-stages: oauth_authorize_started / identity_created
   mintIdentity: async (clientId) => {
     try {
       // PER-CONNECTION client_name (review HIGH fix): a distinct client_name per
@@ -17604,6 +17764,7 @@ app.post(MCP_PATHS, async (req, res) => {
         'Bearer resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource", '
         + 'scope="openid profile email offline_access"');
       _chBump('claude_connector', req.body?.method);   // r-oauth-funnel: Map bump only
+      _chBump('challenge_issued', req.body?.method);   // r-oauth-funnel-stages: stage 1 of 3
       // ★ Count the challenge we are about to ISSUE. Without this the bound can
       // never be reached and the 401 repeats forever — the lockout this whole
       // block exists to prevent. Bumped BEFORE the return, like _chBump.
@@ -17794,7 +17955,18 @@ app.post(MCP_PATHS, async (req, res) => {
       _ensureDescRefresher();
       let _descOverrides = null;
       try { _descOverrides = _platformOverrides(platform); } catch (_) {}
-      const mcpServer = createServer(_descOverrides);
+      // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
+      // say so IN-BAND in this session's instructions. Map read only — no
+      // backend call in the init hot path (r-tuner-warmcache rule); the key is
+      // confirmed live when claim_free_key returns it. Never for a keyed session.
+      let _instrTail = '';
+      try {
+        if (!apiKey) {
+          const _held = _heldKeyFor(_callerFingerprint({ client_ip: clientIp, platform }));
+          if (_held) _instrTail = _INSTR_TAIL_HELD(_held.key);
+        }
+      } catch (_) { _instrTail = ''; }
+      const mcpServer = createServer(_descOverrides, _instrTail);
       await mcpServer.connect(transport);
 
       return ctx.run({
