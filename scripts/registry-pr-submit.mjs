@@ -10,8 +10,11 @@
 // SAFETY RAILS:
 //   - DRY_RUN default: prints the exact PR it WOULD open, opens nothing.
 //     Goes live only when REGISTRY_PR_PAT is set AND REGISTRY_PR_LIVE=1.
-//   - Idempotent: skips a target if we're already listed OR an open PR from
-//     our head branch already exists.
+//   - Idempotent: skips a target if we're already listed OR ANY open PR of
+//     ours exists on the upstream (★2026-09-02: was head-branch-only, which
+//     let a second refresh PR open beside a hand-opened one — see prGate).
+//   - Bounded: a REFRESH target stops after REFRESH_MAX_DECLINED of our PRs
+//     were closed unmerged — a maintainer who declines is not re-asked weekly.
 //   - Rate-limited: at most MAX_PR_PER_RUN new PRs per run (default 1) so we
 //     never spam maintainers.
 //   - Curated entries: each target has a hand-written, on-convention entry —
@@ -230,6 +233,57 @@ async function openPR(t, newContent, opts = {}) {
   return { blocked: `${pr.status} ${JSON.stringify(pr.json).slice(0, 90)}`, compare };
 }
 
+// ★ 2026-09-02 — ONE open PR per upstream, and STOP refreshing a list whose
+// maintainer keeps declining. Measured on punkpeye/awesome-mcp-servers at
+// 2026-09-02T00:55Z: 19 PRs by us — 1 merged (#7462, 2026-06-11), 16 closed
+// UNMERGED, and TWO open at once: #12454 (2026-08-19, a hand-opened fix on a
+// different head) and #13272 (2026-08-31, opened by this file's refresh pass
+// WHILE #12454 was still open). The idempotency check in openPR() only looks
+// for OUR HEAD BRANCH (`refresh-dchub-punkpeye`), so a PR from any other head
+// was invisible to it, and nothing anywhere counted the sixteen declines —
+// a refresh PR went out to a maintainer who had closed every previous one.
+//
+// The gate reads the SAME author search registry-verify-listed.mjs reads
+// (search by author, never /pulls?per_page=N — ours sit far outside a busy
+// repo's recent window):
+//   · ANY open PR of ours on the upstream → skip (add AND refresh paths);
+//   · refresh path only: ≥ REFRESH_MAX_DECLINED closed-unmerged PRs of ours
+//     → STOP and say so in the step summary. The count lives on GitHub,
+//     which is the durable tracking state; a ledger file here would drift
+//     from it (verify-listed already renders the same count as DECLINED);
+//   · unreadable search → skip. Opening blind is the duplicate this exists to
+//     prevent: a skip costs one week, a duplicate costs the maintainer.
+export const REFRESH_MAX_DECLINED = Number(process.env.REGISTRY_REFRESH_MAX_DECLINED || 3);
+
+export async function prGate(t, me, opts = {}) {
+  const api = opts.gh || gh;
+  const kind = opts.kind || 'add';
+  const maxDeclined = Number.isFinite(opts.maxDeclined) ? opts.maxDeclined : REFRESH_MAX_DECLINED;
+  const q = encodeURIComponent(`repo:${t.upstream} author:${me} type:pr`);
+  const r = await api('GET', `/search/issues?q=${q}&per_page=100`);
+  const items = r.ok && Array.isArray(r.json?.items) ? r.json.items : null;
+  if (!items) {
+    return { skipped: `cannot read our PR history on ${t.upstream} (HTTP ${r.status}) — not opening a PR blind`, open: null, declined: null };
+  }
+  const open = items.filter((p) => p.state === 'open');
+  const declined = items.filter((p) => p.state === 'closed' && !p.pull_request?.merged_at);
+  if (open.length) {
+    return {
+      skipped: `an open PR of ours already exists on ${t.upstream} (${open.map((p) => `#${p.number}`).join(' ')}) — one at a time`,
+      open: open.length, declined: declined.length,
+    };
+  }
+  if (kind === 'refresh' && declined.length >= maxDeclined) {
+    return {
+      skipped: `STOPPED — ${declined.length} of our PRs to ${t.upstream} were closed unmerged (cap ${maxDeclined}); `
+        + 'the maintainer is declining edits. Owner action: ask on the last closed PR, or accept the entry as frozen. '
+        + 'REGISTRY_REFRESH_MAX_DECLINED raises the cap.',
+      stopped: true, open: 0, declined: declined.length,
+    };
+  }
+  return { skipped: null, open: 0, declined: declined.length };
+}
+
 // ★ ENTRYPOINT GUARD (2026-08-05). TARGETS/REFRESH_TARGETS are now exported so
 // the listing VERIFIER can read the same table the submitter writes from — two
 // copies of that table would drift, and a verifier checking a stale target list
@@ -243,6 +297,14 @@ if (_IS_MAIN) (async () => {
   console.log(`▶ registry-pr-submit — mode=${DRY ? 'DRY-RUN' : 'LIVE'} (PAT=${PAT ? 'set' : 'absent'}, LIVE=${LIVE}), max ${MAX_PR_PER_RUN}/run\n`);
   let opened = 0;
   const readyLinks = [];   // blocked-but-ready: {key, compare} for the run summary
+  const gated = [];        // gate verdicts (open PR exists / refresh stopped) for the summary
+  let _me = null;
+  const whoAmI = async () => {
+    if (_me) return _me;
+    _me = (await gh('GET', '/user')).json?.login;
+    if (!_me) throw new Error('PAT /user failed');
+    return _me;
+  };
   for (const t of TARGETS) {
     // Auto-discovered stubs land here with enabled:false (registry-discover.mjs
     // opens the PR; a human vets the section + flips this). Skip until vetted so
@@ -260,6 +322,8 @@ if (_IS_MAIN) (async () => {
     if (DRY) continue;
     if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
     try {
+      const gate = await prGate(t, await whoAmI(), { kind: 'add' });
+      if (gate.skipped) { console.log(`      ⏸ ${gate.skipped}`); gated.push({ key: t.key, why: gate.skipped }); continue; }
       const r = await openPR(t, updated);
       if (r.skipped) console.log(`      skip: ${r.skipped}`);
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked})`); console.log(`      → branch is READY — open the PR in 1 click:\n        ${r.compare}`); readyLinks.push({ key: t.key, compare: r.compare }); }
@@ -277,6 +341,8 @@ if (_IS_MAIN) (async () => {
     if (DRY) continue;
     if (opened >= MAX_PR_PER_RUN) { console.log(`      (rate-limit ${MAX_PR_PER_RUN}/run reached — next run)`); continue; }
     try {
+      const gate = await prGate(t, await whoAmI(), { kind: 'refresh' });
+      if (gate.skipped) { console.log(`      ⏸ ${gate.skipped}`); gated.push({ key: `${t.key}-refresh`, why: gate.skipped }); continue; }
       const r = await openPR(t, refreshed, {
         branch: `refresh-dchub-${t.key}`,
         title: `Refresh DC Hub MCP entry (${N_TOOLS} tools, ${MARKETS} markets, ${DEALS} deals)`,
@@ -297,6 +363,12 @@ if (_IS_MAIN) (async () => {
     const md = ['## 🔗 Registry PRs ready to open (1 click each)\n',
       'Auto-PR is blocked by a GitHub account-level restriction; each branch is prepared with a clean +1 diff — click to open:\n',
       ...readyLinks.map((l) => `- **${l.key}** → [open PR](${l.compare})`), ''].join('\n');
+    try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, md); } catch (_) {}
+  }
+  if (gated.length && process.env.GITHUB_STEP_SUMMARY) {
+    const md = ['## ⏸ Not opened — gated\n',
+      'One open PR per upstream; a refresh stops after REFRESH_MAX_DECLINED closed-unmerged PRs (the count is read from GitHub, the durable state):\n',
+      ...gated.map((g) => `- **${g.key}** — ${g.why}`), ''].join('\n');
     try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, md); } catch (_) {}
   }
 })().catch((e) => { console.error('fatal:', e.message); process.exit(1); });

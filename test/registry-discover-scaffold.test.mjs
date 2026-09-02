@@ -1,0 +1,177 @@
+// =============================================================================
+// Discovery → onboarding: the scaffold PR must ACTUALLY open.
+// -----------------------------------------------------------------------------
+// registry-discover.mjs crawls for new curated MCP lists and, when LIVE, opens
+// ONE same-repo PR appending a disabled TARGETS stub to registry-pr-submit.mjs.
+// That PR is the only bridge from discovery to onboarding.
+//
+// Measured on run 33369412410 (2026-08-31 07:40Z): five NEW candidates,
+// tracking issue #73 refreshed, then
+//     ▶ scaffold onboarding PR: ! contents PUT failed 409 — skip
+// and job = success. discover/add-target-awesome-mcp-gateways had existed
+// since the 2026-08-10 run (its PR closed, the branch never deleted; two more
+// like it — awesome-mcp-servers, awesome-mcp-zh — sat beside it with ZERO
+// open PRs). The "PR already open?" check passed, POST /git/refs 422'd and
+// was treated as fine, and the contents PUT sent MAIN's blob sha
+// (f35c410…) against a branch whose file was already 913dbe7… → 409, every
+// Monday, forever. `pick` was always the same top candidate, so candidates
+// #2..#5 were never tried. Discovery had been "wired" to onboarding for six
+// weeks and onboarded nothing, under a green check.
+//
+// These tests drive openScaffoldPR against an in-memory GitHub that enforces
+// the one rule that mattered — a contents PUT whose sha is not the blob on
+// THAT branch is a 409 — and assert the four behaviours that fix it:
+//   1. the sha is read from the branch immediately before the PUT;
+//   2. a stale branch with no open PR is RESET to the base head, then written;
+//   3. a candidate whose PR is already open is stepped over, not the end;
+//   4. a failed write REJECTS — the job goes red, not "skip".
+// =============================================================================
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { openScaffoldPR, buildStub } from '../scripts/registry-discover.mjs';
+
+const SELF = 'azmartone67/dchub-mcp-server';
+const PATH = 'scripts/registry-pr-submit.mjs';
+const MAIN_SRC = readFileSync(new URL(`../${PATH}`, import.meta.url), 'utf8');
+const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
+const quiet = () => {};
+
+// the top two candidates from issue #73 on 2026-08-31
+const CANDS = [
+  { full: 'e2b-dev/awesome-mcp-gateways', stars: 168, url: 'https://github.com/e2b-dev/awesome-mcp-gateways', base: 'main', desc: 'A list of MCP gateways' },
+  { full: 'AlexMili/Awesome-MCP', stars: 145, url: 'https://github.com/AlexMili/Awesome-MCP', base: 'main', desc: 'Awesome ModelContextProtocol resources' },
+];
+const branchOf = (c) => `discover/add-target-${buildStub(c).key}`;
+
+/**
+ * In-memory GitHub REST. `branches` = {name: {sha, fileSha}}, `openPRs` = Set of
+ * head branch names. The PUT rule is GitHub's: the sha must be the blob currently
+ * on the branch named in the body, else 409.
+ */
+function fakeGitHub({ branches = {}, openPRs = [], mainFileSha = 'main-file-sha', mainSha = 'main-head-sha' } = {}) {
+  const st = { branches: { ...branches }, openPRs: new Set(openPRs), calls: [], prs: [] };
+  const res = (status, json = {}) => ({ ok: status >= 200 && status < 300, status, json });
+  const gh = async (path, opts = {}) => {
+    const method = opts.method || 'GET';
+    const body = opts.body ? JSON.parse(opts.body) : null;
+    st.calls.push({ method, path, body });
+    const [route, qs = ''] = path.split('?');
+    const q = Object.fromEntries(new URLSearchParams(qs));
+    if (method === 'GET' && route === `/repos/${SELF}/contents/${PATH}`) {
+      if (!q.ref) return res(200, { sha: mainFileSha, content: b64(MAIN_SRC) });
+      const br = st.branches[q.ref];
+      return br ? res(200, { sha: br.fileSha, content: b64(MAIN_SRC) }) : res(404, { message: 'Not Found' });
+    }
+    const refGet = route.match(new RegExp(`^/repos/${SELF}/git/ref/heads/(.+)$`));
+    if (method === 'GET' && refGet) {
+      if (refGet[1] === 'main') return res(200, { object: { sha: mainSha } });
+      const br = st.branches[refGet[1]];
+      return br ? res(200, { ref: `refs/heads/${refGet[1]}`, object: { sha: br.sha } }) : res(404, { message: 'Not Found' });
+    }
+    if (method === 'GET' && route === `/repos/${SELF}/pulls`) {
+      const head = (q.head || '').split(':')[1];
+      return res(200, st.openPRs.has(head) ? [{ html_url: `https://github.com/${SELF}/pull/1`, head: { ref: head } }] : []);
+    }
+    if (method === 'POST' && route === `/repos/${SELF}/git/refs`) {
+      const name = body.ref.replace('refs/heads/', '');
+      if (st.branches[name]) return res(422, { message: 'Reference already exists' });
+      st.branches[name] = { sha: body.sha, fileSha: mainFileSha };
+      return res(201, { ref: body.ref, object: { sha: body.sha } });
+    }
+    const refPatch = route.match(new RegExp(`^/repos/${SELF}/git/refs/heads/(.+)$`));
+    if (method === 'PATCH' && refPatch) {
+      const name = refPatch[1];
+      if (!st.branches[name]) return res(422, { message: 'Reference does not exist' });
+      if (!body.force && st.branches[name].sha !== body.sha) return res(422, { message: 'Update is not a fast forward' });
+      st.branches[name] = { sha: body.sha, fileSha: body.sha === mainSha ? mainFileSha : st.branches[name].fileSha };
+      return res(200, { object: { sha: body.sha } });
+    }
+    if (method === 'PUT' && route === `/repos/${SELF}/contents/${PATH}`) {
+      const br = st.branches[body.branch];
+      if (!br) return res(404, { message: 'Branch not found' });
+      if (body.sha !== br.fileSha) return res(409, { message: `${PATH} does not match ${body.sha}` });
+      br.fileSha = `blob-after-put-${st.calls.length}`;
+      br.sha = `commit-after-put-${st.calls.length}`;
+      return res(200, { content: { sha: br.fileSha }, commit: { sha: br.sha } });
+    }
+    if (method === 'POST' && route === `/repos/${SELF}/pulls`) {
+      const n = 100 + st.prs.length;
+      const pr = { number: n, html_url: `https://github.com/${SELF}/pull/${n}`, head: body.head };
+      st.prs.push(pr);
+      st.openPRs.add(body.head);
+      return res(201, pr);
+    }
+    return res(500, { message: `fake GitHub: unhandled ${method} ${path}` });
+  };
+  return { gh, st };
+}
+
+describe('registry-discover scaffold PR — discovery actually onboards', () => {
+  it('fresh repo: creates the branch, PUTs with the sha read from THAT branch, opens the PR', async () => {
+    const { gh, st } = fakeGitHub();
+    const r = await openScaffoldPR(CANDS, { gh, log: quiet });
+    expect(r.opened).toMatch(/\/pull\/\d+$/);
+    expect(r.candidate).toBe(CANDS[0].full);
+    expect(r.branch).toBe(branchOf(CANDS[0]));
+    const iRead = st.calls.findIndex((c) => c.method === 'GET' && c.path === `/repos/${SELF}/contents/${PATH}?ref=${branchOf(CANDS[0])}`);
+    const iPut = st.calls.findIndex((c) => c.method === 'PUT');
+    expect(iRead, 'the blob sha must be read from the branch').toBeGreaterThan(-1);
+    expect(iRead).toBeLessThan(iPut);
+    expect(st.calls[iPut].body.sha).toBe('main-file-sha');
+    expect(st.prs).toHaveLength(1);
+  });
+
+  it('THE regression: a stale branch (no open PR, diverged file) is reset and the PR opens — never a 409 skip', async () => {
+    const stale = branchOf(CANDS[0]);
+    const { gh, st } = fakeGitHub({ branches: { [stale]: { sha: 'commit-0810', fileSha: '913dbe7-diverged' } } });
+    const r = await openScaffoldPR(CANDS, { gh, log: quiet });
+    expect(r.opened).toBeTruthy();
+    expect(r.candidate).toBe(CANDS[0].full);
+    const reset = st.calls.find((c) => c.method === 'PATCH' && c.path.endsWith(`/git/refs/heads/${stale}`));
+    expect(reset?.body, 'the stale branch must be force-reset to the base head').toMatchObject({ sha: 'main-head-sha', force: true });
+    const put = st.calls.find((c) => c.method === 'PUT');
+    expect(put.body.branch).toBe(stale);
+    expect(put.body.sha, 'the PUT must carry the blob sha on the branch, not a diverged or main-assumed one').toBe('main-file-sha');
+    expect(st.prs).toHaveLength(1);
+  });
+
+  it('a candidate with an open PR is stepped over — the run advances to candidate #2', async () => {
+    const b0 = branchOf(CANDS[0]);
+    const { gh, st } = fakeGitHub({ branches: { [b0]: { sha: 'x', fileSha: 'y' } }, openPRs: [b0] });
+    const r = await openScaffoldPR(CANDS, { gh, log: quiet });
+    expect(r.candidate).toBe(CANDS[1].full);
+    expect(r.branch).toBe(branchOf(CANDS[1]));
+    expect(r.skipped).toEqual([`${CANDS[0].full}: PR already open`]);
+    expect(st.calls.some((c) => c.method !== 'GET' && (c.path.includes(b0) || c.body?.branch === b0 || c.body?.head === b0)),
+      'candidate #1 (PR open) must not be written to').toBe(false);
+  });
+
+  it('a failed write REJECTS (the job goes red) instead of logging "skip"', async () => {
+    const { gh } = fakeGitHub();
+    const conflict = async (path, opts = {}) =>
+      (opts.method === 'PUT' ? { ok: false, status: 409, json: { message: 'does not match' } } : gh(path, opts));
+    await expect(openScaffoldPR(CANDS, { gh: conflict, log: quiet })).rejects.toThrow(/409/);
+
+    const { gh: gh2 } = fakeGitHub();
+    const prBlocked = async (path, opts = {}) =>
+      (opts.method === 'POST' && path.endsWith('/pulls') ? { ok: false, status: 403, json: { message: 'blocked' } } : gh2(path, opts));
+    await expect(openScaffoldPR(CANDS, { gh: prBlocked, log: quiet })).rejects.toThrow(/403/);
+  });
+
+  it('every candidate already scaffolded → no writes at all', async () => {
+    const { gh, st } = fakeGitHub();
+    const already = [{ ...CANDS[0], full: 'MobinX/awesome-mcp-list' }]; // present in TARGETS today
+    const r = await openScaffoldPR(already, { gh, log: quiet });
+    expect(r.opened).toBeNull();
+    expect(st.calls.filter((c) => c.method !== 'GET')).toEqual([]);
+  });
+
+  it('the crawl does not swallow the throw: no fail-soft "skip" in code, and the entry catch exits 1', () => {
+    const src = readFileSync(new URL('../scripts/registry-discover.mjs', import.meta.url), 'utf8');
+    expect(src).toContain('await openScaffoldPR(candidates);');
+    expect(src).toMatch(/\.catch\(\(e\) => \{[^}]*process\.exit\(1\)/);
+    const code = src.replace(/^\s*\/\/.*$/gm, ''); // a comment may QUOTE the old line; code may not
+    expect(code).not.toMatch(/PUT failed .*— skip/);
+    expect(code).not.toMatch(/scaffold PR create failed .*\)\); *$/m);
+  });
+});
