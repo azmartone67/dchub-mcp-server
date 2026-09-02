@@ -1449,7 +1449,8 @@ export function _pathSelfTag(req) {
 // loosened, nothing is tightened, and the check cannot drift from the SDK on an
 // upgrade because it IS the SDK's schema. Only the WORDING changes: -32602
 // invalid params, naming the offending path, and echoing the caller's id
-// instead of the SDK's `id: null`.
+// instead of the SDK's `id: null`. `error.data` carries a SUMMARY (field /
+// expected / reason) and never the raw zod issue array — see the return below.
 //
 // Fail-soft: any throw returns null and the request proceeds down the exact
 // pre-fix path. Kill switch: DCHUB_INIT_PRECISE_ERROR_DISABLE=1.
@@ -1472,7 +1473,12 @@ export function _initRequestError(body) {
       message: `Invalid params: initialize requires ${path} (${expected})`
              + (missing ? ' — it is absent from this request.' : '.')
              + ' The MCP spec requires it; this is a malformed request, NOT a server outage.',
-      data: { field: path, expected, reason: missing ? 'missing' : 'invalid_type', issues },
+      // The SUMMARY only. The raw zod issue array used to ride along here; it
+      // published the SDK's internal schema-path shape in a public error
+      // envelope for no gain the three fields below don't already give a caller.
+      // ★ test/init-clientinfo-version-error.test.mjs pins its ABSENCE — putting
+      // it back is a test failure, not a silent re-leak.
+      data: { field: path, expected, reason: missing ? 'missing' : 'invalid_type' },
     };
   } catch (_) {
     return null;   // never turn a working initialize into a 500
