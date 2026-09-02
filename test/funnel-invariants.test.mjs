@@ -21,9 +21,13 @@ import { readFileSync } from 'node:fs';
 describe('funnel invariants (peace 2026-07-05)', () => {
   const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
-  it('claim_free_key daily_limit fallback is 10, not 25', () => {
-    expect(src).toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 10\b/);
+  it('claim_free_key daily_limit fallback is the canonical free rung (10), not 25', async () => {
+    // r-tier-canon (2026-09-02): the literal 10 became _rungNum('free'), read
+    // from canonical/tier_limits.json — the same guard, one source instead of two.
+    expect(src).toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : _rungNum\('free'\)/);
     expect(src).not.toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 25\b/);
+    const { _rungNum } = await import('../lib/tier-canon.mjs');
+    expect(_rungNum('free')).toBe(10);
   });
 
   it('unlock_more_data makes MPP first-class (recommended + plan entry)', () => {

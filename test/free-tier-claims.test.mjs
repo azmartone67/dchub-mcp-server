@@ -42,7 +42,13 @@ function claims() {
     const txt = read(f);
     txt.split("\n").forEach((line, i) => {
       for (const m of line.matchAll(CLAIM)) {
-        out.push({ file: f, line: i + 1, n: num(m[1]), text: line.trim() });
+        // ★2026-09-02: `text` is the WINDOW around the claim, not the whole
+        // line. A tool description is one JSON line of ~4,000 chars, and the
+        // manifests now carry them complete (the sync used to truncate chained
+        // descriptions to their first literal) — so "keyless" 3,000 chars
+        // upstream of "10 calls/day" must not read as an anonymous claim.
+        const at = m.index ?? 0;
+        out.push({ file: f, line: i + 1, n: num(m[1]), text: line.slice(Math.max(0, at - 110), at + m[0].length + 40).trim() });
       }
     });
   }
@@ -78,6 +84,37 @@ describe("published calls/day claims", () => {
       (c) => /free tier|free key|dch_live_/i.test(c.text) && c.n > CANON.identified,
     );
     expect(bad.map((b) => `${b.file}:${b.line} → ${b.n}`)).toEqual([]);
+  });
+});
+
+// ★2026-09-02 (D8): the served surface too. Measured 00:29Z: the free tier was
+// described FOUR ways across the manifest family ("10 calls/day", "10 free
+// calls total", "50 calls/day when bound", "5 dossiers/day") because every
+// figure in server.mjs was a literal. They now interpolate lib/tier-canon.mjs
+// (FREE_TIER / _callsPerDay), so a literal "<digits> calls/day" inside a
+// server.mjs string is drift by construction — this fails on the first one.
+describe("server.mjs states no rung as a literal", () => {
+  const SRC = read("server.mjs").split("\n");
+  const CODE = (l) => !/^\s*(\/\/|\/\*|\* )/.test(l);   // comments may quote history
+  const LIT = /\b\d[\d,]*\s*(?:free\s+)?calls?(?:\/day|\s+total)\b/i;
+  it("finds the interpolated sites at all (vacuity guard)", () => {
+    const hits = SRC.filter((l) => CODE(l) && /FREE_TIER\.\w+_calls_per_day|_callsPerDay\('\w+'\)/.test(l));
+    expect(hits.length).toBeGreaterThan(12);
+  });
+  it("no code line carries a literal N calls/day or N free calls total", () => {
+    const bad = SRC.map((l, i) => ({ l, n: i + 1 })).filter(({ l }) => CODE(l) && LIT.test(l));
+    expect(bad.map((b) => `server.mjs:${b.n} → ${b.l.trim().slice(0, 90)}`)).toEqual([]);
+  });
+  it("no plan entry hardcodes calls_per_day", () => {
+    const bad = SRC.map((l, i) => ({ l, n: i + 1 })).filter(({ l }) => CODE(l) && /calls_per_day:\s*\d/.test(l));
+    expect(bad.map((b) => `server.mjs:${b.n}`)).toEqual([]);
+  });
+  it("FREE_TIER mirrors the snapshot exactly", async () => {
+    const { FREE_TIER } = await import("../lib/tier-canon.mjs");
+    expect(FREE_TIER.anonymous_calls_per_day).toBe(CANON.anonymous);
+    expect(FREE_TIER.free_calls_per_day).toBe(CANON.free);
+    expect(FREE_TIER.identified_calls_per_day).toBe(CANON.identified);
+    expect(FREE_TIER.unbound_calls_total).toBe(CANON.free);
   });
 });
 

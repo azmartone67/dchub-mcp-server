@@ -43,16 +43,47 @@ const VERSION = readJSON('server.json').version;
 // Matches: trackedTool(srv, 'name', '<string literal>' …  — handles single OR
 // double quotes with escapes, across newlines. Falls back to the existing
 // description if a literal can't be safely evaluated (e.g. concatenation).
+// ★2026-09-02 (r-tier-canon): a description is a CHAIN of string literals and
+// canon terms joined by `+` — e.g. '… (' + FREE_TIER.free_calls_per_day + '
+// calls/day …'. The old matcher took the FIRST literal only, so every chained
+// description shipped TRUNCATED to the manifests (claim_free_key: 371 chars of
+// ~2,400, ending mid-sentence) — and reported clean. The chain is now evaluated
+// with the same lib/tier-canon.mjs scope server.mjs uses, so the manifest gets
+// the number the live tools/list serves. Unknown term → keep the fallback, as
+// before (never a crash, never a half-evaluated string).
+let _TC = null;
+try { _TC = await import(new URL('../lib/tier-canon.mjs', import.meta.url)); } catch { _TC = null; }
+const DESC_SCOPE = {
+  FREE_TIER:      _TC ? _TC.FREE_TIER : undefined,
+  PLAN_PRICE:     _TC ? _TC.PLAN_PRICE : undefined,
+  _priceLabel:    _TC ? _TC._priceLabel : undefined,
+  _paidPlansLine: _TC ? _TC._paidPlansLine : undefined,
+  _callsPerDay:   _TC ? _TC._callsPerDay : undefined,
+  // operator knob (env), mirrored from server.mjs with the same default
+  TRIAL_DAILY_FULL_CAP: Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10)),
+};
+function evalDescription(expr) {
+  const names = Object.keys(DESC_SCOPE);
+  const v = new Function(...names, 'return (' + expr + ');')(...names.map((n) => DESC_SCOPE[n]));
+  if (typeof v !== 'string' || /\bundefined\b|\bNaN\b|n\/a|=>|function\s*\(/.test(v)) throw new Error('description did not evaluate cleanly');
+  return v;
+}
 function canonicalTools() {
   const src = readCur('server.mjs');
-  const re = /trackedTool\(\s*srv\s*,\s*'([a-z_]+)'\s*,\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g;
+  // a term: a string literal, or a canon reference — bare (FREE_TIER.x), a
+  // no-arg call (_paidPlansLine()), or a one-literal call (_priceLabel('pro')).
+  // ★A bare identifier that is a FUNCTION must not be accepted: `+ fn +`
+  // coerces it to its own source text, which is exactly what shipped once.
+  const TERM = String.raw`(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|[A-Za-z_$][\w$.]*(?:\((?:'(?:[^'\\]|\\.)*')?\))?)`;
+  const SEP  = String.raw`(?:\s*(?:\/\/[^\n]*)?\s*\+\s*(?:\/\/[^\n]*\n\s*)*)`;
+  const re = new RegExp(String.raw`trackedTool\(\s*srv\s*,\s*'([a-z_]+)'\s*,\s*(` + TERM + `(?:` + SEP + TERM + `)*)`, 'g');
   const existing = Object.fromEntries((tryReadTools() || []).map((t) => [t.name, t.description]));
   const out = [];
   let m;
   while ((m = re.exec(src)) !== null) {
     const name = m[1];
     let description = existing[name] || '';
-    try { description = (0, eval)(m[2]); } catch { /* keep fallback */ }
+    try { description = evalDescription(m[2]); } catch { /* keep fallback */ }
     out.push({ name, description });
   }
   return out;
