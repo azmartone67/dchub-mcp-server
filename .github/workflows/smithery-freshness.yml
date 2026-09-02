@@ -11,7 +11,23 @@ name: smithery freshness heartbeat
 # description; keywords) — see the Rank Defense Master Shell. Pairs with the local
 # daily LaunchAgent (scripts/cloud.dchub.smithery-freshness.plist).
 #
-# Auth: repo secret SMITHERY_API_KEY (the smithery CLI reads $SMITHERY_API_KEY).
+# Auth: repo secret SMITHERY_API_KEY, falling back to SMITHERY_TOKEN (the smithery
+# CLI reads $SMITHERY_API_KEY, so the env name stays fixed either way).
+#
+# ★ 2026-09-02 — TWO CREDENTIALS EXIST AND ONLY ONE OF THEM WORKS.
+#   dchub-mcp-server  SMITHERY_API_KEY  (created 06-21) -> 403 servers:write
+#   dchub-backend     SMITHERY_TOKEN    (created 06-02) -> publishes fine
+# The working credential was in the OTHER REPO under a DIFFERENT NAME, so this
+# lane read as 'the key must be reissued' for days when the likelier fix was
+# 'point at the one that already works'. Accepting either name here means the
+# owner has two ways to fix it and neither repo silently owns the only copy.
+#
+# ★ NOT PROVEN EQUIVALENT: SMITHERY_TOKEN is only known to satisfy
+# `PUT /servers/{ns}/{srv}/releases` (what `smithery mcp publish` calls). The
+# write below is a DIFFERENT endpoint, `PATCH api.smithery.ai/servers/{ns}/{srv}`,
+# and Smithery does not document its scope. If SMITHERY_TOKEN also lacks
+# servers:write this lane will say so on the next run, naming the scope — which
+# is the point: the fallback is a hypothesis this workflow TESTS, not a claim.
 # `smithery mcp publish` re-scans the live server + refreshes freshness — no
 # version bump or code change required. Rotate: re-set the secret from
 # ~/Library/Application Support/smithery/settings.json .apiKey.
@@ -48,7 +64,7 @@ jobs:
       - name: Re-publish to Smithery (freshness heartbeat)
         id: publish
         env:
-          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
         run: |
           if [ -z "${SMITHERY_API_KEY:-}" ]; then
             echo "::warning::SMITHERY_API_KEY secret not set — skipping freshness heartbeat (add it to re-enable)."
@@ -185,7 +201,7 @@ jobs:
         id: whiteglove
         if: always()
         env:
-          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
           WHITE_GLOVE_SMITHERY_AUTOWRITE: ${{ vars.WHITE_GLOVE_SMITHERY_AUTOWRITE }}
         run: |
           if [ "${WHITE_GLOVE_SMITHERY_AUTOWRITE:-1}" = "0" ]; then
@@ -234,7 +250,10 @@ jobs:
                   m = re.search(r"Missing required permission:\s*([\w:.-]+)", body)
                   scope = m.group(1) if m else "servers:write"
                   print(f"::error title=SMITHERY_KEY_SCOPE::Smithery PATCH 403 — SMITHERY_API_KEY lacks the `{scope}` permission. "
-                        f"OWNER ACTION: at smithery.ai -> Settings -> API keys, generate a key WITH `{scope}` and update the "
+                        f"OWNER ACTION: check whether dchub-backend's SMITHERY_TOKEN (which publishes releases "
+                        f"successfully) carries `{scope}` — if so, copy that value into this repo's "
+                        f"SMITHERY_API_KEY secret and no new key is needed. Otherwise at smithery.ai -> "
+                        f"Settings -> API keys, generate a key WITH `{scope}` and update the "
                         f"SMITHERY_API_KEY repo secret. Until then the listing copy only moves by owner-paste "
                         f"(https://smithery.ai/servers/azmartone67/dchub -> Edit). Response: {body}")
                   out = os.environ.get("GITHUB_OUTPUT")
@@ -265,7 +284,7 @@ jobs:
         id: copycheck
         if: always()
         env:
-          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY }}
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
         run: |
           python3 - <<'PY'
           import json, os, re, sys, urllib.request
