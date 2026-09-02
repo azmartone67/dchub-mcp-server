@@ -116,6 +116,41 @@ describe('initialize with a malformed clientInfo names the field', () => {
   });
 });
 
+describe('the error envelope carries the SUMMARY only — no raw zod issues', () => {
+  // The first cut of this fix shipped `data.issues`: the raw zod issue array,
+  // which publishes the SDK's internal schema-path shape in a PUBLIC error for
+  // no gain the three summary fields don't already give a caller. Dropped.
+  // Absence has to be PINNED — a leak that nothing asserts comes back on the
+  // next edit and nobody notices, because a leak breaks no feature.
+
+  it('data has exactly field/expected/reason — no `issues`, and no new key either', async () => {
+    const r = await initialize({ name: 'probe' });
+    // An allowlist, not `expect(data.issues).toBeUndefined()`: that would pass
+    // just as happily if a DIFFERENT internal blob showed up tomorrow.
+    expect(Object.keys(r.json.error.data).sort()).toEqual(['expected', 'field', 'reason']);
+  });
+
+  it('the SDK\'s internal schema paths and zod wording never reach the wire', async () => {
+    for (const ci of [{ name: 'probe' }, undefined, { name: 'probe', version: 1 }]) {
+      const r = await initialize(ci);
+      // zod issue internals: the `path` array and zod's own message text.
+      expect(r.raw).not.toMatch(/"path"\s*:/);
+      expect(r.raw).not.toMatch(/Invalid input: expected/);
+      expect(r.raw).not.toMatch(/"code"\s*:\s*"invalid_type"/);
+      // …while the caller-facing summary is still all there.
+      expect(r.json.error.data.field).toBeTruthy();
+    }
+  });
+
+  it('the pure function does not carry them either (not merely stripped at the writer)', () => {
+    const body = { jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'probe' } } };
+    const e = S._initRequestError(body);
+    expect(Object.keys(e.data).sort()).toEqual(['expected', 'field', 'reason']);
+    expect(JSON.stringify(e)).not.toMatch(/"path"\s*:/);
+  });
+});
+
 describe('the valid arm is untouched — a spec-compliant initialize still works', () => {
   it('clientInfo with `version` → 200, a session id, and serverInfo', async () => {
     const r = await initialize({ name: 'probe', version: '1.0' });
