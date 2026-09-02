@@ -16336,52 +16336,63 @@ function createServer(descOverrides, instructionsTail) {
         if (_e) {
           let _v = null;
           try { _v = await validateKey(_e.key); } catch (_) { _v = null; }
-          if (_v && _v.valid) {
+          // The backend authoritatively rejected it (revoked/expired) → forget
+          // it and mint afresh. Anything else — confirmed, or INDETERMINATE
+          // (backend blip) — returns the held key rather than a sibling: a
+          // blip must not re-mint a real holder's identity (same rule as the
+          // presented-key branch above). Only a CONFIRMED key gets the
+          // session auto-bind and the install artifact (r-validate-artifact).
+          if (_v && _v.key_rejected) {
+            _forgetHeldKey(_fp);
+          } else {
+            const _ok = !!(_v && _v.valid);
             let _bound = false;
-            try {                                             // auto-bind, exactly like a fresh mint
-              const _c1 = getCtx();
-              const _sid1 = _c1 && _c1.session_id;
-              if (_sid1 && sessionMeta.has(_sid1)) {
-                const _m1 = sessionMeta.get(_sid1);
-                if (!_m1.api_key) {
-                  _m1.api_key = _e.key; _m1.tier = _v.tier || 'free'; _m1.auto_bound = true;
-                  sessionMeta.set(_sid1, _m1);
-                  recordSessionUpgrade(_m1.platform, _m1.tier);
-                  _bound = true;
+            if (_ok) {
+              try {                                             // auto-bind, exactly like a fresh mint
+                const _c1 = getCtx();
+                const _sid1 = _c1 && _c1.session_id;
+                if (_sid1 && sessionMeta.has(_sid1)) {
+                  const _m1 = sessionMeta.get(_sid1);
+                  if (!_m1.api_key) {
+                    _m1.api_key = _e.key; _m1.tier = _v.tier || 'free'; _m1.auto_bound = true;
+                    sessionMeta.set(_sid1, _m1);
+                    recordSessionUpgrade(_m1.platform, _m1.tier);
+                    _bound = true;
+                  }
                 }
-              }
-            } catch (_) { /* non-fatal */ }
+              } catch (_) { /* non-fatal */ }
+            }
             return {
               content: [{ type: 'text', text:
                 '🔑 **This caller already holds a DC Hub key — returning THAT key, not a new one.** ' +
                 'A previous session from the same client minted it; re-minting would orphan its usage history ' +
                 'and restart the daily allowance from zero.\n\n' +
                 '**Your key:** `' + _e.key + '`' + (_bound ? ' *(applied to this session — no reconnect)*' : '') + '\n\n' +
-                _heldKeyUrlLine(true, _connectUrl(_e.key, _via)) +
+                _heldKeyUrlLine(_ok, _connectUrl(_e.key, _via)) +
                 'Save it (header, connector URL, or `bind_email` for recovery) so the next session starts identified.' }],
               structuredContent: {
                 api_key:                 _e.key,
-                tier:                    _v.tier || 'free',
+                tier:                    (_v && _v.tier) || 'free',
                 header:                  'X-API-Key',
                 reused:                  true,
                 already_held:            true,
-                key_confirmed:           true,
+                key_confirmed:           _ok,
                 held_by:                 'caller_fingerprint',
                 auto_applied_to_session: _bound,
-                connect_url:             _connectUrl(_e.key, _via),
-                for_your_human:          _connectRelay(_e.key, _via),
-                persist_config:          _persistConfig(_e.key, _via),
+                // The install artifact is emitted ONLY for a confirmed key.
+                ...(_ok ? {
+                  connect_url:    _connectUrl(_e.key, _via),
+                  for_your_human: _connectRelay(_e.key, _via),
+                  persist_config: _persistConfig(_e.key, _via),
+                } : {
+                  connect_url_withheld: _CONNECT_URL_WITHHELD,
+                }),
                 recover_tool:            'recover_my_key',
                 next_tool:               'bind_email',
                 note: 'claim_free_key is idempotent per caller: the key this client minted earlier is returned (already_held). Bind an email (bind_email) to make it recoverable; unlock_more_data for paid depth.',
               },
             };
           }
-          // The backend authoritatively rejected it (revoked/expired) → forget
-          // and mint afresh. An INDETERMINATE answer (backend blip) falls
-          // through to the normal mint, whose own dedupe still returns the
-          // same key when it can — never a lock-out on a timeout.
-          if (_v && _v.key_rejected) _forgetHeldKey(_fp);
         }
       } catch (_) { /* fall through to the normal mint */ }
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
