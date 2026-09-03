@@ -410,10 +410,64 @@ function buildHumanFirstLine(url, specifics) {
 // doctrine the marker names is unchanged and still exactly true — the agent is
 // told to put this line FIRST in ITS OWN final answer to its human. Where it
 // sits in OUR envelope was never what "human-first" meant.
+// ── r-one-human-cta (2026-09-03) ────────────────────────────────────────────
+// r-handoff (2026-06-28) set the invariant: ONE free taste + ONE human CTA. It
+// is not being held. Measured live on an anonymous rank_markets call:
+//
+//   3,097 chars total — 1,100 data (36%), 1,992 CTA (64%)
+//     [1] 576  '🔒 Free tier: 3 of 10 results shown… your human unlocks…' + $10 URL
+//     [2] 540  '✅ Free trial key — works instantly…'          (the value demo)
+//     [3] 252  '👤 Tell your human: … $10 = 1,000 calls'      + THE SAME $10 URL
+//     [4] 231  '🧭 One call, not four…'                        (tool cross-sell)
+//     [5] 380  '→ For your human: open …'
+//
+// THREE human CTAs, and the identical 114-char signed checkout URL emitted
+// TWICE. The dedupe in composeHumanCta was real but keyed on ONE literal
+// marker, so a second human ask written with different wording ('👤 **Tell your
+// human:**' vs the '→ **For your human:**' marker) walked straight past it.
+// Every path reaching that function has its own CTA emitter and only one of
+// them checked.
+//
+// composeHumanCta is the LAST assembly point for every gated text path — all of
+// its callers hand it the fully concatenated body — so the invariant is
+// enforced there, over the whole response, rather than in emitters that cannot
+// see each other.
+//
+// Both rules are conservative: never ADD a second ask, and never REPEAT a
+// checkout URL. Nothing appearing once is ever removed, so no CTA can be
+// deleted outright — worst case the response is unchanged.
+const _HUMAN_CTA_SIGNATURES = [
+  HUMAN_FIRST_MARKER,              // '→ **For your human:**'
+  '**Tell your human:**',          // the 👤-marked $10 ask
+  'your human unlocks',            // the paywall gap line
+];
+function _hasHumanCta(text) {
+  const t = typeof text === 'string' ? text : '';
+  return _HUMAN_CTA_SIGNATURES.some((sig) => t.includes(sig));
+}
+
+// Drop any LINE carrying a checkout URL an earlier line already carried. Keeps
+// the FIRST occurrence — the one r-handoff calls the single payment ask — and
+// only ever removes an exact repeat of a URL already on the wire.
+function _dropRepeatCheckoutUrls(text) {
+  const t = typeof text === 'string' ? text : '';
+  const seen = new Set();
+  return t.split('\n').filter((line) => {
+    const urls = line.match(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g);
+    if (!urls) return true;                              // no checkout URL → keep
+    if (urls.every((u) => seen.has(u))) return false;    // every URL here is a repeat
+    urls.forEach((u) => seen.add(u));
+    return true;
+  }).join('\n');
+}
+
 function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
   const _body = typeof body === 'string' ? body : '';
   try {
-    if (_body.includes(HUMAN_FIRST_MARKER)) return _body;   // dedupe: never stack
+    // r-one-human-cta: collapse a repeated checkout URL, then refuse to stack a
+    // second human ask in ANY of its phrasings (was: this one marker only).
+    const _deduped = _dropRepeatCheckoutUrls(_body);
+    if (_hasHumanCta(_deduped)) return _deduped;   // dedupe: never stack
     // r-arms (2026-09-03): the quantified line is now the TREATMENT arm of a
     // randomized split, not a consequence of payload shape. continuationArmFor
     // decides the arm and the sentence TOGETHER — half of the responses that
@@ -425,8 +479,8 @@ function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
     try { _specific = _continuationArmFor(gatedPayload, sessionId).text; }
     catch (_e2) { _specific = null; }
     const tail = buildHumanFirstLine(humanUrl, _specific);
-    if (!tail) return _body;
-    return _body.replace(/\s*$/, '') + '\n\n' + tail;
+    if (!tail) return _deduped;
+    return _deduped.replace(/\s*$/, '') + '\n\n' + tail;
   } catch (_e) { return _body; }   // prose-only helper — never break a response
 }
 
@@ -18862,7 +18916,7 @@ export { buildHighIntentClaimBlock };
 // so its two invariants — the human link is the FIRST line, and there is
 // exactly ONE such line per response — are pinned by behavior in
 // test/human-line-first.test.mjs, not by comment.
-export { buildHumanFirstLine, composeHumanCta, HUMAN_FIRST_MARKER };
+export { buildHumanFirstLine, composeHumanCta, HUMAN_FIRST_MARKER, _hasHumanCta, _dropRepeatCheckoutUrls };
 // r-endburst (2026-08-15): the end-of-burst return hook is exported so its
 // contract — present on completion tools' successes, absent elsewhere and on
 // errors, bind clause only for unbound callers — is pinned by behavior in
