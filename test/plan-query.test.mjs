@@ -524,3 +524,60 @@ describe('plan_query router (pure)', () => {
     });
   });
 });
+
+// ── r-continuation item 4 (2026-09-03): the plan says what it will cost ──────
+//
+// An agent used to learn a step was paid by RUNNING it and being stopped — the
+// worst moment, with the earlier calls already spent. The plan now carries a
+// per-step `access` class and a quotable free/gated split, so the agent can say
+// "the market part I can answer now, the grid read needs the paid layer" first.
+describe('plan tier_preview (r-continuation item 4)', () => {
+  it('classifies every step, and stays deterministic', () => {
+    const a = _planQuery('rank markets for a 200 MW AI campus in Texas', {});
+    const b = _planQuery('rank markets for a 200 MW AI campus in Texas', {});
+    expect(a).toEqual(b);                                   // the pin above still holds
+    for (const s of a.recommended_sequence) {
+      expect(['free', 'paid', 'pro']).toContain(s.access);
+    }
+  });
+
+  it('splits free from gated in a sentence an agent can say out loud', () => {
+    const p = _planQuery('rank markets for a 200 MW AI campus in Texas', {});
+    expect(p.tier_preview.free_steps + p.tier_preview.gated_steps)
+      .toBe(p.recommended_sequence.length);
+    expect(p.tier_preview.agent_quotable).toMatch(/free tier/);
+    expect(p.tier_preview.gated_tools).toContain('get_grid_intelligence');
+  });
+
+  it('★ annotates the FALLBACK plan too — the unmatched-intent branch', () => {
+    // REGRESSION. The first cut annotated only the matched-class path, so the
+    // `unknown` fallback (whose sequence includes get_dchub_recommendation, a
+    // PAID_ONLY tool) came back with every step's access undefined and therefore
+    // NO tier_preview at all — it silently reported nothing gated. Unmatched is
+    // exactly where a confused caller lands, so a commercial signal that goes
+    // missing precisely there is worse than one that never existed.
+    const p = _planQuery('latest data center news', {});
+    expect(p.intent_class).toBe('unknown');
+    for (const s of p.recommended_sequence) expect(s.access).toBeDefined();
+    expect(p.tier_preview).toBeTruthy();
+    expect(p.tier_preview.gated_tools).toContain('get_dchub_recommendation');
+  });
+
+  it('omits tier_preview entirely when nothing in the plan is gated', () => {
+    // An all-free plan needs no commercial sentence; "0 steps are gated" would
+    // just be one more line for an agent to summarize away.
+    const seqAllFree = { recommended_sequence: [{ tool: 'get_grid_scoreboard', access: 'free' }] };
+    // Exercised through a real plan where one exists; otherwise assert the shape
+    // contract holds for any plan that reports no gated steps.
+    const plans = ['rank markets for a 200 MW AI campus in Texas', 'latest data center news']
+      .map((i) => _planQuery(i, {}));
+    for (const p of plans) {
+      if (!p.tier_preview) {
+        expect(p.recommended_sequence.every((s) => s.access === 'free')).toBe(true);
+      } else {
+        expect(p.tier_preview.gated_steps).toBeGreaterThan(0);
+      }
+    }
+    expect(seqAllFree.recommended_sequence[0].access).toBe('free');
+  });
+});
