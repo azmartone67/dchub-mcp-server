@@ -981,12 +981,25 @@ def _update_streaks(core_ranks):
 
 def _write_status(core_one, remediate, escalated, regression):
     """Machine-readable status the Rank Defense Master Shell consumes to decide
-    escalation/auto-PR without re-parsing stdout. Best-effort; never fatal."""
+    escalation/auto-PR without re-parsing stdout. Best-effort; never fatal.
+
+    `paste_pending` is a THREE-state field serialised as a string — "true",
+    "false" or "unknown" — never a bare bool. The shell reads it with a JSON
+    helper that prints "" for a missing key, and "" is falsy there; an unknown
+    that serialised as null would therefore read as "no paste needed", which is
+    the exact failure this field was added to prevent."""
+    try:
+        pending, pending_terms = smithery_paste_pending()
+    except Exception:
+        pending, pending_terms = None, []
     try:
         os.makedirs("state", exist_ok=True)
         json.dump({"core_one": core_one, "core_total": len(CORE),
                    "remediate": remediate, "escalated": escalated,
-                   "regression": bool(regression)},
+                   "regression": bool(regression),
+                   "paste_pending": ("unknown" if pending is None
+                                     else ("true" if pending else "false")),
+                   "paste_pending_terms": pending_terms},
                   open("state/rank_status.json", "w"), indent=1, sort_keys=True)
     except Exception:
         pass
@@ -1035,9 +1048,26 @@ def _reflex_kick():
         return f"kick failed ({e})"
 
 
+_BLURB_MEMO = []   # 0 or 1 entries; a per-run cache, not a persisted one.
+
+
 def _live_search_blurb():
     """The description Smithery's SEARCH index actually holds — already truncated
-    by them, so no slicing here. Returns None if unreadable (never "")."""
+    by them, so no slicing here. Returns None if unreadable (never "").
+
+    Memoised per run: two callers now need it (term visibility and paste state)
+    and one HTTP round trip is enough. A FAILED read is cached too — otherwise a
+    transient 403 makes the two callers disagree with each other inside one run,
+    which is the worst possible shape for a check whose whole job is to say
+    "unknown" honestly."""
+    if _BLURB_MEMO:
+        return _BLURB_MEMO[0]
+    val = _live_search_blurb_uncached()
+    _BLURB_MEMO.append(val)
+    return val
+
+
+def _live_search_blurb_uncached():
     try:
         d = _get("https://registry.smithery.ai/servers?" + urllib.parse.urlencode(
             {"q": "data center", "pageSize": "50"}))
@@ -1047,6 +1077,37 @@ def _live_search_blurb():
         if "dchub" in (s.get("qualifiedName") or "").lower():
             return s.get("description") or ""
     return None
+
+
+def smithery_paste_pending():
+    """Would an owner paste actually ADD anything? -> (pending, terms).
+
+    `pending` is True/False, or **None for UNKNOWN** when the live blurb cannot be
+    read. Unknown must never collapse to "nothing pending": the shell stages on
+    unknown, because failing to stage a needed paste is silent while staging an
+    unneeded one is merely noise.
+
+    Deliberately the SAME term-visibility basis as smithery_visible_terms(), not
+    text equality — repo-ahead-of-live is the normal state between a merge and a
+    paste, so a text fence would be red by design and get deleted rather than
+    fixed. A paste earns a human's attention only when the repo carries a
+    monitored term the live window does not.
+
+    ★2026-09-03: this exists because the escalation said "open and paste" for
+    weeks while the live blurb ALREADY carried every monitored term — and the
+    file it pointed at was a stale copy that would have reverted the listing.
+    """
+    blurb = _live_search_blurb()
+    if blurb is None:
+        return None, []
+    try:
+        repo = open("scripts/smithery_description.txt", encoding="utf-8").read().lower()
+    except Exception:
+        return None, []
+    low = blurb.lower()
+    terms = [t for t in CORE + RECLAIM
+             if t.lower() in repo and t.lower() not in low]
+    return bool(terms), terms
 
 
 def smithery_visible_terms(core_ranks):
