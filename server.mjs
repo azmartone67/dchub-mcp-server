@@ -17356,6 +17356,42 @@ function touchSession(sid) {
   if (sid) sessionLastActive.set(sid, Date.now());
 }
 
+// ★2026-09-02 — EVERY map a session occupies, in ONE list.
+//
+// There were two teardown paths and they did not agree. transport.onclose
+// cleared five maps; the idle sweeper below cleared THREE and left
+// sessionSrv + _urlElicitSent to onclose. That is backwards: the sweeper's
+// own comment says it exists for the case where "the client drops without
+// calling DELETE /mcp AND transport.onclose doesn't fire" — so the one path
+// that must not depend on onclose was delegating to it.
+//
+// ★sessionSrv is the EXPENSIVE map: sessionId → McpServer, one full server
+// instance carrying all 83 tool definitions (~3.4MB each). sessions holds a
+// transport. So the leak the sweeper could not reach was ~the whole heap —
+// see the 2026-09-02 OOM (NODE_OPTIONS max-old-space-size raised to 12288).
+//
+// Two callers, one list: adding a session map here fixes both paths at once.
+// ★KEYED BY NAME on purpose. As a bare array, the guard test had to seed from
+// the same list it asserted — dropping a map from the list also dropped it
+// from the test's fixture, so the test stayed green on the exact regression it
+// exists to catch. With names, the test holds its OWN expected key set and a
+// removed map fails as a named mismatch rather than a length change.
+const _SESSION_MAPS = { sessions, sessionMeta, sessionLastActive,
+                        sessionSrv, _urlElicitSent };
+
+export function _releaseSession(sid) {
+  if (!sid) return false;
+  let hit = false;
+  for (const m of Object.values(_SESSION_MAPS)) {
+    try { if (m.delete(sid)) hit = true; } catch (_) {}
+  }
+  return hit;
+}
+
+// Test seam: the named session maps, so a test can populate and read every one
+// without exporting each individually.
+export const _sessionMaps = () => _SESSION_MAPS;
+
 setInterval(() => {
   const cutoff = Date.now() - SESSION_IDLE_MS;
   let evicted = 0;
@@ -17363,13 +17399,28 @@ setInterval(() => {
     if (ts >= cutoff) continue;
     const transport = sessions.get(sid);
     try { transport?.close?.(); } catch (_) {}
-    sessions.delete(sid);
-    sessionMeta.delete(sid);
-    sessionLastActive.delete(sid);
+    _releaseSession(sid);   // ★all five maps, not the three we used to reach
     evicted++;
   }
-  if (evicted > 0) {
-    console.log(`[session-sweep] evicted ${evicted} idle sessions (active=${sessions.size})`);
+  // ★REPORT sessionSrv, not just sessions. The old log printed
+  // `active=${sessions.size}` — the CHEAP map — so if onclose ever stopped
+  // firing, sessions would stay flat while sessionSrv grew unbounded and the
+  // only symptom would be an OOM. And Railway HIDES that class of fault: the
+  // container restarts in place under the same deploymentId, so the crash
+  // loop never appears in list-deployments, only in the log stream.
+  //
+  // These two sizes are now released together, so they should track exactly.
+  // ★The `!==` cannot be noisy: sessions.set and sessionSrv.set are both in
+  // the SAME synchronous onsessioninitialized hook, and Node runs it to
+  // completion before this interval can fire — so there is no observable
+  // mid-init window. Any inequality here is a real teardown divergence, and
+  // srv > sessions is the leak direction (an McpServer outliving its
+  // transport) — the exact signature that was previously invisible.
+  if (evicted > 0 || sessionSrv.size !== sessions.size) {
+    const drift = sessionSrv.size - sessions.size;
+    console.log(`[session-sweep] evicted ${evicted} idle sessions `
+      + `(active=${sessions.size} srv=${sessionSrv.size}`
+      + (drift ? ` DRIFT=${drift > 0 ? '+' : ''}${drift}` : '') + ')');
   }
 }, SESSION_SWEEP_MS).unref();
 
@@ -18237,13 +18288,10 @@ app.post(MCP_PATHS, async (req, res) => {
       });
       transport.onclose = () => {
         const sid = transport.sessionId;
-        if (sid) {
-          sessions.delete(sid);
-          sessionMeta.delete(sid);
-          sessionLastActive.delete(sid);  // r41
-          sessionSrv.delete(sid);         // qa-0704
-          _urlElicitSent.delete(sid);     // qa-0704
-        }
+        // ★One teardown path, shared with the idle sweeper (_SESSION_MAPS).
+        // These five deletes used to be written out here and PARTIALLY
+        // duplicated in the sweeper; the two lists drifted.
+        _releaseSession(sid);
       };
 
       // Per-platform tool descriptions (ai_platform_tool_tuner). SYNCHRONOUS read
