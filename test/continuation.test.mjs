@@ -16,7 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildContinuation, buildContinueUrl, describeLocked,
-  continuationHumanText, cleanFields,
+  continuationHumanText, cleanFields, extractLockedFromPayload,
 } from '../lib/continuation.mjs';
 
 const FULL = { shown: 5, total: 47, field: 'grid_capacity',
@@ -144,5 +144,51 @@ describe('buildContinueUrl — the link into the /continue renderer', () => {
 
   it('returns null without a tool', () => {
     expect(buildContinueUrl({})).toBeNull();
+  });
+});
+
+// ── r-continuation-coverage (2026-09-03) ────────────────────────────────────
+//
+// trimForTrial writes TWO honest markers, and the first cut read only one.
+// `_<field>_total_in_pro` rides a SLICED ARRAY; `_<field>_in_pro: true` rides a
+// field masked outright (grid headroom, time-to-power).
+//
+// get_grid_intelligence is the most-gated tool on the platform and returns
+// scalars, not long arrays — so it carries the second marker and almost never
+// the first. Reading only counts meant the highest-volume gated tool fell to the
+// generic line on nearly every call, and the quantified/generic experiment would
+// have under-sampled precisely the traffic it exists to measure.
+describe('extractLockedFromPayload — both of trimForTrial\'s markers', () => {
+  it('★ reads masked-field markers when there is no sliced array at all', () => {
+    // The get_grid_intelligence shape: scalars, two fields masked to null with a
+    // purpose-built boolean beside each.
+    const grid = { demand_mw: 19297, iso: 'PJM',
+                   headroom_mw: null, _headroom_mw_in_pro: true,
+                   time_to_power_months: null, _time_to_power_months_in_pro: true };
+    const l = extractLockedFromPayload(grid);
+    expect(l).toBeTruthy();
+    expect(l.fields).toEqual(['headroom_mw', 'time_to_power_months']);
+    expect(l.total).toBeUndefined();                      // no count was measured
+    expect(continuationHumanText(l)).toContain('headroom_mw');
+    expect(continuationHumanText(l)).not.toMatch(/\d/);   // and none is invented
+  });
+
+  it('reads both markers together without double-counting the count field', () => {
+    const l = extractLockedFromPayload({
+      results: [1], _results_total_in_pro: 23, _headroom_mw_in_pro: true });
+    expect(l.field).toBe('results');
+    expect(l.total).toBe(23);
+    expect(l.fields).toEqual(['headroom_mw']);            // NOT 'results_total'
+  });
+
+  it('★ ignores a bare null — only the purpose-built boolean counts', () => {
+    // A metric masked to null has more than one cause; naming it as withheld
+    // would be the confident-wrong claim this module refuses to make.
+    expect(extractLockedFromPayload({ ok: true, headroom_mw: null })).toBeNull();
+    expect(extractLockedFromPayload({ ok: true, _headroom_mw_in_pro: false })).toBeNull();
+  });
+
+  it('still returns null when the payload carries no marker of either kind', () => {
+    expect(extractLockedFromPayload({ ok: true, demand_mw: 5 })).toBeNull();
   });
 });
