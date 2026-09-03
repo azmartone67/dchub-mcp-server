@@ -5023,8 +5023,31 @@ const TRIAL_PREVIEW_ROWS = (() => {
   return Number.isFinite(n) ? Math.max(1, Math.min(25, n)) : 3;
 })();
 
-function trimForTrial(parsed) {
+// r-typed-preview (2026-09-03): the free-tier trim nulled the very numbers it
+// then published verbatim in the same object's `value` display string.
+// rank_markets returned {"total_mw":null,"facility_count":null,
+// "operator_count":null} next to "value":"191 fac / 5793 MW / 55 ops" — the
+// figures were disclosed, just not in a form an agent could read. Measured
+// 2026-09-03: ChatGPT was asked for the largest US markets by capacity, read
+// `total_mw`, got null on every row, and answered from CBRE's published table
+// instead of ours. Nulling a metric that the same object already prints buys
+// no gating and costs the citation — the same defect class as the
+// `excluded_total` entry in _PROTECTED_KEYS above (null says "unknown" when
+// the truth is known and already on the wire).
+//
+// RAW FACTS ONLY, and scoped per tool. `score` stays nulled: the composite
+// rank IS the decision layer this tier gates (r68-conv). `result_count` stays
+// nulled too — un-nulling it would print 10 beside 3 shown rows, recreating
+// the "showing N of M" lie repaired below; `_results_total_in_pro` already
+// carries that total honestly. Row-COUNT gating is untouched.
+const _TYPED_PREVIEW_FIELDS = {
+  rank_markets: new Set(['total_mw', 'facility_count', 'operator_count']),
+};
+const _NO_TYPED_PREVIEW = new Set();
+
+function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
+  const _keepTyped = _TYPED_PREVIEW_FIELDS[toolName] || _NO_TYPED_PREVIEW;
   if (Array.isArray(parsed)) {
     if (parsed.length > TRIAL_PREVIEW_ROWS) {
       // 2026-06-07 de-spam (Devin QA): keep the DATA clean — return just the
@@ -5032,9 +5055,9 @@ function trimForTrial(parsed) {
       // upgrade CTA already lives once in the nudge header (applyTrialGuardIfFree);
       // interleaving it into the array made agents echo promo to end users AND
       // broke array typing for downstream parsers.
-      return parsed.slice(0, TRIAL_PREVIEW_ROWS).map(trimForTrial);
+      return parsed.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
     }
-    return parsed.map(trimForTrial);
+    return parsed.map((_r) => trimForTrial(_r, toolName));
   }
   if (typeof parsed !== 'object') return parsed;
   const out = {};
@@ -5046,16 +5069,16 @@ function trimForTrial(parsed) {
       // clean — no inline _gated promo object. The _total_in_pro sibling stays
       // the load-bearing honesty contract: it is the FULL length, never the
       // shown length, so an agent can always compute what it is missing.
-      out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map(trimForTrial);
+      out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
       out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
-    } else if (_isMetricKey(k) && typeof v === 'number') {
+    } else if (_isMetricKey(k) && !_keepTyped.has(k) && typeof v === 'number') {
       out[k] = null;                          // gated metric → null (was a promo STRING
                                               // that broke numeric typing for agents)
     } else if (_isMetricKey(k) && typeof v === 'object' && v !== null) {
       // stats:{}, by_quarter:{}, etc. — recurse but mask scalars inside
-      out[k] = trimForTrial(v);
+      out[k] = trimForTrial(v, toolName);
     } else if (typeof v === 'object' && v !== null) {
-      out[k] = trimForTrial(v);
+      out[k] = trimForTrial(v, toolName);
     } else {
       out[k] = v;
     }
@@ -5128,7 +5151,7 @@ function _trialGapLine(parsed) {
 function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   if (hasApiKey) return (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
   let trimmed = parsed;
-  try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed) : parsed; } catch(e) {}
+  try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed, toolName) : parsed; } catch(e) {}
   // r67-conv (2026-06-02): fixed two bugs here — (1) "Get Pro for $49/mo" was
   // wrong ($49 = Developer; Pro = $299 — canonical in tier_registry.py /
   // _stripe_links.py); (2) the "free dev key" link pointed at
@@ -10577,7 +10600,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _full = await handler(gate.params || args);
             let _parsed = null;
             try { _parsed = JSON.parse(_full?.content?.[0]?.text || '{}'); } catch (_) {}
-            const _trim = (_parsed && typeof _parsed === 'object') ? trimForTrial(_parsed) : {};
+            const _trim = (_parsed && typeof _parsed === 'object') ? trimForTrial(_parsed, name) : {};
             _trim._upgrade = {
               tier: 'credits_depleted',
               message: "You're out of pack credits. Top up $10 for 1,000 more API calls "
@@ -10996,7 +11019,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 // fields mask instead (name/city/provider/coords) — a REAL teaser.
                 _previewObj = name === 'get_facility'
                   ? _maskFacilityFieldsForFree(parsed)
-                  : trimForTrial(parsed);
+                  : trimForTrial(parsed, name);
                 _trialText = JSON.stringify(_previewObj);
               }
             } catch { /* not JSON, leave as prose */ }
@@ -11554,7 +11577,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
             status = 'anon_daily_cap';
-            const trimmed = trimForTrial(parsed);
+            const trimmed = trimForTrial(parsed, name);
             const _sidc = c.session_id || 'no-session';
             // r-tease-pack (2026-06-20): the over-cap nudge is a CARROT, not a
             // wall (still returns the preview). Lead with the free key (keep
@@ -11629,7 +11652,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             if (_t) { status = 'depth_teased'; return withBindHint(_t, name, c); }
           }
           if (parsed && typeof parsed === 'object') {
-            const trimmed = trimForTrial(parsed);
+            const trimmed = trimForTrial(parsed, name);
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
               trimmed._note = 'Free preview — a sample is shown. For complete data, call claim_free_key (free, no email) or sign in to DC Hub.';
@@ -11767,7 +11790,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
-              const trimmed = trimForTrial(parsed);
+              const trimmed = trimForTrial(parsed, name);
               const _sid = c.session_id || 'no-session';
               trimmed._upgrade = {
                 tier: _paidTaste ? String(_gateTier) : 'trial',
