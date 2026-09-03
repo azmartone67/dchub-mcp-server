@@ -108,7 +108,8 @@ import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
          buildContinuation as _buildContinuation,
-         buildContinueUrl as _buildContinueUrl } from './lib/continuation.mjs';
+         buildContinueUrl as _buildContinueUrl,
+         continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -409,20 +410,20 @@ function buildHumanFirstLine(url, specifics) {
 // doctrine the marker names is unchanged and still exactly true — the agent is
 // told to put this line FIRST in ITS OWN final answer to its human. Where it
 // sits in OUR envelope was never what "human-first" meant.
-function composeHumanCta(humanUrl, body, gatedPayload) {
+function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
   const _body = typeof body === 'string' ? body : '';
   try {
     if (_body.includes(HUMAN_FIRST_MARKER)) return _body;   // dedupe: never stack
-    // r-continuation: read the locked counts out of the payload the gate just
-    // built rather than threading them through every branch — `_teaseDepth`
-    // already wrote `_<field>_total_in_developer` beside each sliced array, so
-    // this cannot drift from what was actually served. Any failure here yields
-    // null and the generic line, never a wrong number.
+    // r-arms (2026-09-03): the quantified line is now the TREATMENT arm of a
+    // randomized split, not a consequence of payload shape. continuationArmFor
+    // decides the arm and the sentence TOGETHER — half of the responses that
+    // COULD carry a count deliberately get the old generic line instead, which
+    // is the only version of this comparison whose difference is attributable
+    // to the sentence rather than to which tools return arrays.
+    // Any failure yields the generic line, never a wrong number.
     let _specific = null;
-    try {
-      const _locked = gatedPayload ? _extractLocked(gatedPayload) : null;
-      if (_locked) _specific = _continuationHumanText(_locked);
-    } catch (_e2) { _specific = null; }
+    try { _specific = _continuationArmFor(gatedPayload, sessionId).text; }
+    catch (_e2) { _specific = null; }
     const tail = buildHumanFirstLine(humanUrl, _specific);
     if (!tail) return _body;
     return _body.replace(/\s*$/, '') + '\n\n' + tail;
@@ -11212,11 +11213,14 @@ function trackedTool(srv, name, description, schema, handler) {
               // would just become another thing everyone believes. 'generic'
               // here is not a failure: it is the honest label for a gate that
               // measured no locked counts, and it is also the control arm.
+              // r-arms: the ARM, from the same deterministic decision that chose
+              // the sentence — quantified | generic_control | ineligible.
+              // `ineligible` is NOT pooled with the control: it is the honest
+              // name for a gate that measured nothing, and pooling it would move
+              // the control rate by an unknown amount in an unknown direction.
               relay_specificity: (function () {
-                try {
-                  const _l = _previewObj ? _extractLocked(_previewObj) : null;
-                  return (_l && _continuationHumanText(_l)) ? 'quantified' : 'generic';
-                } catch (_e) { return 'generic'; }
+                try { return _continuationArmFor(_previewObj, _sid).arm; }
+                catch (_e) { return 'ineligible'; }
               })(),
               session_id: _sid,
               mcp_client: c.platform || 'mcp',
@@ -11262,7 +11266,7 @@ function trackedTool(srv, name, description, schema, handler) {
               || (_autoMintSC.for_your_human && _autoMintSC.for_your_human.url)
               || (_pwx && _pwx.for_your_human && _pwx.for_your_human.url) || null;
             return {
-              content: [{ type: 'text', text: composeHumanCta(_humanUrlB, phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText + _hiText + promoText(), /* r-continuation: the trimmed taste carries `_<field>_total_in_developer` beside each sliced array, so the human line can name what THIS query left behind. This is the dominant gated branch (~95% of gated responses); the paid_only and anon-wall branches serve no payload, so they keep the generic line — correctly, they measured nothing. */ _previewObj) }],
+              content: [{ type: 'text', text: composeHumanCta(_humanUrlB, phase9L_clean_preview(_upgradeHeader, _trialText) + _autoMintText + _hiText + promoText(), /* r-continuation: the trimmed taste carries the locked-count markers, so the human line can name what THIS query left behind. Dominant gated branch (~95% of gated responses); paid_only and anon-wall serve no payload and stay generic — correctly, they measured nothing. r-arms: _sid drives the randomized split. */ _previewObj, _sid) }],
               // r-site-headline: a real, citable headline is NOT a failure — isError:false
               // so clients surface + cite it (not summarize it away). Other tools keep the
               // r51 preview-as-error behavior (DCHUB_PREVIEW_ISERROR).
