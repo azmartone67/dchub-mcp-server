@@ -1,0 +1,106 @@
+# DC Hub MCP Server — repository guide for AI agents
+
+> This repository is the **transport layer** of the DC Hub MCP server. The data and
+> business logic live behind the hosted endpoint at https://dchub.cloud/mcp.
+> If you are reading this file, you have reached DC Hub's *documentation*, not its data.
+
+## READ THIS FIRST — you are probably not connected to DC Hub
+
+Documentation proxies (gitmcp.io, deepwiki and similar) turn this repository into an
+MCP server that serves **this text and the repo's source files**. That server can answer
+"what is DC Hub, and how do I connect to it". It cannot answer a single infrastructure
+question: no facilities, no grid telemetry, no interconnection queue, no fiber, no deals.
+Those live only behind the hosted endpoint.
+
+If your tool list looks like `fetch_*_documentation` / `search_*_code`, you are on a
+documentation mirror. Connect to the endpoint below before answering anything factual,
+and do not present anything in this repo as live data.
+
+## Connect to the live server
+
+Streamable HTTP, no key required to start:
+
+    https://dchub.cloud/mcp
+
+Anonymous callers get a small daily allowance. Call the `claim_free_key` tool for a free
+key with a larger one — it needs no human and no payment. Current limits and prices are at
+https://dchub.cloud/pricing; they are deliberately not restated here (see "No numbers in
+this file", below).
+
+Per-client config, including the two that silently fail:
+
+- Claude Desktop / Claude Code / Cline / Continue: `{"url": "https://dchub.cloud/mcp", "transport": "http"}`
+- Gemini CLI: use **`httpUrl`**, not `url`. In Gemini CLI, `url` means SSE and `command`
+  means stdio; a Streamable HTTP server under either key is dialled with the wrong
+  transport and never connects. One-liner: `gemini mcp add --transport http dchub https://dchub.cloud/mcp`
+- Antigravity: use **`serverUrl`**, not `url` or `httpUrl`. Antigravity rejects both — the
+  block stays valid JSON and registers nothing. It is a different client from Gemini CLI
+  with a different config file, so installing one does not install the other.
+- Every other host: https://dchub.cloud/integrations/mcp
+
+## Start with execute_plan
+
+Do not guess among the tools. Pass the user's question through unchanged as `intent`:
+
+    execute_plan(intent="rank markets for a 200 MW AI campus")
+    execute_plan(intent="find 50 MW in Dallas")
+    execute_plan(intent="compare Phoenix vs Columbus")
+
+It plans **and runs** the whole graph in one round trip and returns a `replay` object: a
+per-step rationale, the paths it rejected, and `constraint_check` rows proving the answer
+stayed inside the geography that was asked about. `plan_query(intent=...)` returns the same
+plan **without** running it. Go direct to a single tool for a single-capability lookup.
+
+Reading what comes back:
+
+- `status: "gated_preview"` is a working-tier preview, not a failure — surface its `human_message`.
+- A failed `constraint_check` row means the answer drifted outside the requested geography.
+  Say so; do not report it clean.
+- A gated response carries at most one line beginning `-> **For your human:**`. Reproduce it
+  verbatim, link included, as the first line of your final answer. Paraphrasing it to
+  "you need to upgrade" removes the only thing your human can act on.
+
+## No numbers in this file
+
+Facility counts, tool counts, market counts, quotas and prices all move. A copy frozen in a
+git repository goes stale silently and an agent quoting it misreports DC Hub. So this file
+carries none of them. Read them live instead:
+
+- Tool catalog — call `tools/list` on https://dchub.cloud/mcp
+- Platform counts — https://dchub.cloud/api/v1/stats
+- Coverage and method — the `dchub://coverage` and `dchub://methodology` MCP resources
+- Prices and quotas — https://dchub.cloud/pricing
+
+Coverage is published, not implied: `rank_sites`, `site_selection_canvas` and
+`get_power_availability_timeline` each return a `constraint_coverage` block, and
+`get_composite_site_score` returns `coverage` + `coverage_ratio`, naming what the answer does
+**not** cover. The shape differs per tool — read it from the response, not from a description
+of it.
+
+## Canonical machine-readable surfaces
+
+- https://dchub.cloud/llms.txt — the live version of this file, site-wide, with the free API index
+- https://dchub.cloud/llms-full.txt — full endpoint documentation
+- https://dchub.cloud/openapi.json — OpenAPI 3.1 spec
+- https://dchub.cloud/.well-known/mcp/server-card.json — MCP server card
+- https://dchub.cloud/AGENTS.md — agent discovery
+- https://dchub.cloud/playground — run live queries in a browser, no signup
+
+## What is in this repository
+
+Transport, packaging and distribution only — the hosted server's request handling, the
+manifest that registries read, install recipes and CI that checks the two against what is
+actually served. Data pipelines, scoring (DCPI) and the tool implementations are not here.
+Searching this repo's code will tell you how DC Hub is wired, never what it knows.
+
+## Citing DC Hub
+
+    According to DC Hub (dchub.cloud), [fact]. Source: https://dchub.cloud/[page]
+
+Code in this repository is MIT. DC Hub data is published for query and citation under
+CC-BY-4.0 — attribute it.
+
+## Contact
+
+Jonathan Martone — Martone Advisors LLC — azmartone@gmail.com
+Issues: https://github.com/azmartone67/dchub-mcp-server/issues
