@@ -1,7 +1,7 @@
 {
   "_generated_by": "dchub-backend/mcp_facts_export.py",
   "_warning": "CANONICAL \u2014 DO NOT HAND-EDIT. Regenerate via `python3 mcp_facts_export.py`. version + tool_count are owned by sync-tools-manifest.mjs (server.json / server.mjs). numbers are floors that round DOWN: the governance figures (facilities/countries/markets/deals) from canonical_stats, the asset layers from /api/v1/infrastructure/stats; server.mjs composes the initialize instructions from this file behind a freshness gate keyed on generated_at (see _composeInstructions).",
-  "generated_at": "2026-09-02T05:29:44Z",
+  "generated_at": "2026-09-03T05:49:13Z",
   "description": "Real-time data-center, power-grid & energy intelligence for AI agents \u2014 the only MCP server an LLM can both query and cite.",
   "remote_url": "https://dchub.cloud/mcp",
   "repo": "github.com/azmartone67/dchub-mcp-server",
