@@ -278,6 +278,13 @@ WATCH = ["grid", "infrastructure", "hyperscaler", "renewable energy", "transmiss
 # full text. Only what survives this cut can rank.
 SMITHERY_SEARCH_CHARS = 1000
 
+# Where rank_defense_master_shell.sh stages a paste. Kept in ONE place and matching
+# the shell's ${DCHUB_STAGE_DIR:-...} default — the previous message named
+# ~/Downloads, which macOS TCC had been silently refusing to let a launchd agent
+# write for 516 consecutive attempts, so the path in the advice was a path with no
+# file at it.
+PASTE_STAGE_HINT = "$DCHUB_STAGE_DIR (default ~/Library/Application Support/dchub/smithery-description-CURRENT.txt)"
+
 STATE_FILE = "state/rank_streak.json"
 
 
@@ -1110,6 +1117,38 @@ def smithery_paste_pending():
     return bool(terms), terms
 
 
+def escalate_message(term, pending, pending_terms):
+    """The ≥2-check CORE escalation, worded for what the loop will ACTUALLY do.
+
+    Three states, because `pending` has three:
+      False   -> say plainly that this is NOT a copy gap and no paste is staged.
+      None    -> unknown; a paste IS staged as a precaution, and say why.
+      True    -> prescribe the paste and NAME the terms live is missing.
+
+    ★Why it is a function: the previous version was six inline f-string lines that
+    prescribed a paste unconditionally, and once the shell learned to decline, the
+    same log said "paste the canonical listing" directly above "NO PASTE PENDING".
+    Inline strings inside main() cannot be tested; this can.
+    """
+    head = f"🚨 ESCALATE: CORE term **{term}** slipped ≥2 checks — a RELEVANCE loss"
+    if pending is False:
+        return (f"{head}, and NOT a copy gap. The live Smithery window already carries "
+                f"every monitored term scripts/smithery_description.txt does, so a paste "
+                f"would change nothing and none is staged. Decode the score instead — "
+                f"rrf_decode() in this file: a single-list hit cannot be walked up by "
+                f"adding words to a description.")
+    if pending is None:
+        return (f"{head}. The live blurb was UNREADABLE this run, so whether a paste would "
+                f"help is UNKNOWN — the loop stages one as a precaution at "
+                f"{PASTE_STAGE_HINT}. Verify the live listing by hand before pasting.")
+    missing = ", ".join(pending_terms[:6]) + ("..." if len(pending_terms) > 6 else "")
+    return (f"{head}. FIX: paste the canonical listing (source of truth "
+            f"scripts/smithery_description.txt; the local loop stages it to "
+            f"{PASTE_STAGE_HINT}) into smithery.ai/servers/{SMITHERY_SLUG} → Edit — the "
+            f"ONLY path to Smithery's `score`. Live is missing: {missing}. If '{term}' is "
+            f"missing from that file, add it there first.")
+
+
 def smithery_visible_terms(core_ranks):
     """A ranked term the copy PAYS FOR but Smithery never indexes.
 
@@ -1192,12 +1231,16 @@ def main(probe=False):
     reflex = None
     if remediate:
         reflex = _reflex_kick()
+        # ★2026-09-03: this message used to prescribe a paste unconditionally and name
+        # ~/Downloads. Both were wrong. rank_defense_master_shell.sh now declines to
+        # stage when nothing is pending, so the unconditional version made the log
+        # CONTRADICT ITSELF — "paste the canonical listing, staged to ~/Downloads" two
+        # lines above "NO PASTE PENDING — not staging a file". An escalation that
+        # prescribes a remedy the same run refuses to prepare teaches the reader to
+        # stop believing escalations.
+        _pending, _pending_terms = smithery_paste_pending()
         for t in escalated:
-            reasons.append(f"🚨 ESCALATE: CORE term **{t}** slipped ≥2 checks — a RELEVANCE loss. FIX: paste the "
-                           f"canonical listing (source of truth scripts/smithery_description.txt; the local loop "
-                           f"also stages it to ~/Downloads/smithery-description-CURRENT.txt) into "
-                           f"smithery.ai/servers/{SMITHERY_SLUG} → Edit — the ONLY path to Smithery's `score`. "
-                           f"If '{t}' is missing from that file, add it there first (it's the source of truth).")
+            reasons.append(escalate_message(t, _pending, _pending_terms))
 
     # VERIFIED tripwire (both modes): the `verified` badge is a large fixed rank
     # boost that ONLY the owner can restore — a drop pages loudly, but is NOT a

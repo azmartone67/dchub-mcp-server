@@ -200,3 +200,65 @@ describe('the paste_pending contract, produced', () => {
     expect(out).toBe(`'unknown' 'true' 'false'`);
   });
 });
+
+// ★ 2026-09-03 — THE ESCALATION MUST DESCRIBE WHAT THE LOOP WILL ACTUALLY DO.
+//
+// The shell learned to decline staging when nothing is pending. The monitor's
+// escalation did not learn anything, so one live run under launchd printed:
+//
+//   🚨 ESCALATE: ... FIX: paste the canonical listing ... the local loop also
+//      stages it to ~/Downloads/smithery-description-CURRENT.txt
+//   NO PASTE PENDING — ... A paste would change nothing; not staging a file.
+//
+// ...four lines apart, in the same log, from the same run. It also named a path
+// macOS TCC had been refusing to let a launchd agent write for 516 consecutive
+// attempts, so the advice pointed at a location with no file at it. An escalation
+// that prescribes a remedy the same run refuses to prepare teaches the reader to
+// stop believing escalations, which is worse than saying nothing.
+describe('the escalation says what the loop will actually do', () => {
+  const msg = (pending, terms = []) => execFileSync('python3', ['-c',
+    'import importlib.util\n'
+    + "spec=importlib.util.spec_from_file_location('rm','scripts/registry_monitor.py')\n"
+    + 'm=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n'
+    + `print(m.escalate_message('fiber', ${pending}, ${JSON.stringify(terms)}))`],
+    { encoding: 'utf8' }).trim();
+
+  it('pending=False: does NOT prescribe a paste, and says none is staged', () => {
+    const m = msg('False');
+    expect(m).not.toMatch(/FIX: paste/);
+    expect(m).toMatch(/NOT a copy gap/);
+    expect(m).toMatch(/none is staged/);
+  });
+
+  it('pending=False: still reports the slip as a real regression', () => {
+    // "no paste needed" must never soften into "no problem".
+    expect(msg('False')).toMatch(/ESCALATE.*slipped ≥2 checks.*RELEVANCE loss/);
+  });
+
+  it('pending=True: prescribes the paste AND names what live is missing', () => {
+    const m = msg('True', ['fiber', 'utility']);
+    expect(m).toMatch(/FIX: paste/);
+    expect(m).toMatch(/Live is missing: fiber, utility/);
+  });
+
+  it('pending=None: says UNKNOWN and that a paste is staged anyway', () => {
+    const m = msg('None');
+    expect(m).toMatch(/UNKNOWN/);
+    expect(m).toMatch(/precaution/);
+  });
+
+  it('no state names ~/Downloads — the path with no file at it', () => {
+    for (const p of ['False', 'None', 'True']) {
+      expect(msg(p, ['fiber']),
+        'the escalation names ~/Downloads again; macOS TCC denies a launchd agent '
+        + 'that folder, so it is advice pointing at nothing').not.toMatch(/Downloads/);
+    }
+  });
+
+  it('the staged path is stated in ONE place, matching the shell default', () => {
+    const mon = readFileSync('scripts/registry_monitor.py', 'utf8');
+    expect(mon).toMatch(/^PASTE_STAGE_HINT = /m);
+    expect(msg('True', ['fiber'])).toContain('DCHUB_STAGE_DIR');
+    expect(codeOnly(readFileSync(SHELL, 'utf8'))).toContain('DCHUB_STAGE_DIR');
+  });
+});
