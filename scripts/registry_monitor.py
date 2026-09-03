@@ -194,10 +194,22 @@ def connector_regressions():
     return regressions, notes
 
 
-# ── Term tiers (recalibrated 2026-07-12 from a Spearman teardown of registry.smithery.ai
-#    ordering: score[text-relevance]≈0.61-0.88 and verified≈0.80-0.88 DRIVE rank; useCount
-#    ≈0.53-0.66; createdAt[recency]≈0.00 == UNUSED. So a slip is a RELEVANCE loss to fix
-#    with description/keyword text, NOT a freshness problem — republishing barely moves rank.)
+# ── RANKING MODEL — remeasured 2026-09-03. This REPLACES the 2026-07-12 Spearman
+#    teardown that stood here ("score[text-relevance]≈0.61-0.88 and verified≈0.80-0.88
+#    DRIVE rank; useCount≈0.53-0.66; createdAt≈0.00"). Those correlations were fitted to a
+#    `score` column whose values ran 0.61-0.88. The live column now runs 0.014-0.065. That
+#    is a DIFFERENT function, not a drifted one, so nothing derived from it survives —
+#    including "a slip is a relevance loss to fix with description text", which is the
+#    premise RECLAIM was built on and which is refuted below.
+#
+#    `score` is RECIPROCAL RANK FUSION over TWO retrieval lists, k=30:
+#        score = Σ 1/(30 + rank_in_that_list)
+#    Fitted over 240 (query, server, score) observations across 12 queries: k=30 explains
+#    231/240 = 96.2%, a single unimodal peak (k=29 → 95.4%, k=31 → 92.5%, k=60 → 58.8%).
+#    So a score decodes to one or two small integers: 2/31 = #1 in BOTH lists, 1/46 = #16
+#    in ONE list and absent from the other. rrf_decode() below does that inversion, and it
+#    is the whole diagnostic value — ">20" invites a copy edit, "absent from one list"
+#    says copy cannot reach it.
 #
 # CORE  = terms we VERIFIABLY hold #1 on and that are ours to defend → a slip PAGES.
 # RECLAIM = terms we do NOT hold #1 on for a STRUCTURAL reason (an off-topic server wins the
@@ -220,17 +232,42 @@ CORE = ["data center", "data centers", "datacenter", "power grid", "fiber", "cap
         "grid interconnection", "interconnection", "interconnection queue",
         "renewables", "power"]
 #   utility added to RECLAIM 2026-09-01 — it was rank #1 on 2026-08-26 (measured, past
-#     agent-utils at 10,009 uses) and is now >20 of 162. Cause is presence, not popularity:
-#     the term had been dropped from scripts/smithery_description.txt entirely. It was in
-#     NO list — not CORE, not RECLAIM, not WATCH — so the fall from #1 to off-page was
-#     invisible to this monitor. RECLAIM (not CORE) because CORE means "we verifiably hold
-#     #1 and a slip PAGES"; a term currently off-page would fire a permanent false page,
-#     which this file's own energy CORE->RECLAIM note warns against.
+#     agent-utils at 10,009 uses) and is now >20 of 162. It was in NO list — not CORE, not
+#     RECLAIM, not WATCH — so the fall from #1 to off-page was invisible to this monitor.
+#     That half stands, and the tracking gap it opened is closed.
+#
+#   ★ 2026-09-03 — THE CAUSE RECORDED ABOVE ("presence, not popularity: the term had been
+#     dropped from scripts/smithery_description.txt entirely") IS REFUTED. #301 restored
+#     `utility` and `electricity` to the lead sentence, and the owner paste landed: the live
+#     Smithery blurb is now BYTE-IDENTICAL to scripts/smithery_description.txt, with
+#     electricity at char 48, utility at 65 and site selection at 786 — all inside the
+#     1,000-char window the search API indexes. Two days later, measured live:
+#         utility >100 of 162 · site selection >100 of 187 · electricity 14 of 117
+#     Presence was restored and rank was not. Three independent measurements say text is
+#     not the lever for these terms:
+#       1. `colocation` ranks #1 with ZERO occurrences anywhere in the description.
+#       2. EVERY top-6 winner on `utility` and `site selection` has zero occurrences of the
+#          term in BOTH its displayName and its description — agent-utils (Developer
+#          Utilities) wins "utility", netlify and recreation-gov win "site selection".
+#       3. We do not appear in the fused top-100 for either term, so there is no per-list
+#          rank to improve; on `electricity` we decode to (16,) — one list only, fused
+#          1/46 = 0.0217 against a #5 competitor at 0.054.
+#     These queries are won on EMBEDDING similarity to the query's dominant sense
+#     ("utility" → developer utilities, "site" → websites). A description cannot argue with
+#     that. Do not spend another owner paste on them.
+#   2026-09-03: `utility` and `site selection` RECLAIM -> WATCH. RECLAIM's defining
+#   promise is "structural gaps to reclaim with description TEXT" and its remedy string
+#   tells the owner to paste. The measurement above shows text does not reach either term,
+#   so leaving them in RECLAIM emits a remedy we have proven does not work — the expensive
+#   kind of wrong, because the remedy costs a human paste every time it fires. WATCH is
+#   the tier for "tracked, informational, not ours to fix with copy". `electricity` STAYS
+#   in RECLAIM: it is the one of the three we still hold a decodable list position on.
 RECLAIM = ["energy", "natural gas", "hyperscale", "PJM", "ERCOT", "CAISO", "MISO",
-           "electricity", "site selection", "utility"]
+           "electricity"]
 WATCH = ["grid", "infrastructure", "hyperscaler", "renewable energy", "transmission",
          "data center capacity", "grid capacity", "electricity grid",
-         "ai infrastructure", "compute capacity", "power plant", "substation", "DCPI"]
+         "ai infrastructure", "compute capacity", "power plant", "substation", "DCPI",
+         "utility", "site selection"]
 
 # Per-CORE-term relevance remedy surfaced on a slip. The ONLY Smithery lever that moves the
 # top-level `score` is the UI-authored description (no CLI/registry write path reaches it —
@@ -266,6 +303,38 @@ def smithery_rank(term):
         if "dchub" in (s.get("qualifiedName") or "").lower():
             return i, total, leader
     return None, total, leader
+
+
+RRF_K = 30  # measured 2026-09-03 over 240 observations; see the ranking-model note above.
+
+
+def rrf_decode(score, k=RRF_K, maxr=200, tol=1e-9):
+    """Invert a Smithery `score` back into the per-list ranks that produced it.
+
+    Smithery fuses TWO retrieval lists with reciprocal rank fusion,
+    score = Σ 1/(k + rank). Returns the contributing ranks: a 1-tuple means we
+    are in ONE list only, a 2-tuple means both. None means the score does not
+    decode at this k — which is itself the finding, because it means the fusion
+    changed underneath us and every tier decision in this file was made against
+    a function that no longer exists (exactly how the 2026-07-12 model went
+    stale without anything noticing).
+
+    This is the difference between a rank and a diagnosis. ">20" invites a copy
+    edit. "absent from one list entirely" says copy cannot reach it.
+    """
+    if not isinstance(score, (int, float)) or score <= 0:
+        return None
+    for r in range(1, maxr + 1):
+        if abs(score - 1.0 / (k + r)) < tol:
+            return (r,)
+    for r1 in range(1, maxr + 1):
+        rest = score - 1.0 / (k + r1)
+        if rest <= 0:
+            break
+        for r2 in range(r1, maxr + 1):
+            if abs(rest - 1.0 / (k + r2)) < tol:
+                return (r1, r2)
+    return None
 
 
 def self_signals(term="data center"):
@@ -1162,8 +1231,16 @@ def main(probe=False):
              f"README states: {readme_tools} tools\n")
     if sig is not None:
         _vf = "✅ verified" if sig.get("verified") else "🚨 VERIFIED LOST"
+        _dec = rrf_decode(sig.get("score"))
+        if _dec is None:
+            _lists = "**score does NOT decode at k=%d — the fusion may have changed; " \
+                     "re-fit before trusting any tier decision in this file**" % RRF_K
+        elif len(_dec) == 1:
+            _lists = "one retrieval list only, at #%d (absent from the other)" % _dec[0]
+        else:
+            _lists = "both retrieval lists, at #%d and #%d" % _dec
         L.append(f"**Smithery signals:** {_vf} · useCount {sig.get('useCount', '?')} · "
-                 f"score {sig.get('score', '?')}\n")
+                 f"score {sig.get('score', '?')} → {_lists}\n")
     L.append("### Cross-registry parity")
     L.append("| Registry | Version | Tools | Note |")
     L.append("|---|---|---|---|")
