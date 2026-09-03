@@ -17572,10 +17572,72 @@ app.get('/internal/sessions', (req, res) => {
 //   dance instead of telling them plainly that this door is not for them.
 const EDGE_KEY_HEADER = 'x-dc-edge-key';
 
-// Observe-mode evidence. Deliberately a plain counter, not a sample: the flip
-// decision needs "how many requests would this have broken", and one is enough
-// to hold it.
+// Observe-mode evidence for the enforcement flip.
+//
+// ★★2026-09-03 — THE COUNTER COULD NOT ANSWER THE QUESTION IT EXISTS FOR.
+// The flip criterion above is "flip only once /internal/edge-key shows `missing`
+// at zero for a full traffic day". Two things made that unanswerable:
+//
+//   1. NO WINDOW. These counters are in-memory and reset on every restart, and
+//      the payload said only `since`. A reader seeing {missing: 0} four minutes
+//      after a deploy would read it as "clean" — the exact
+//      number-without-its-window failure this repo has been chasing across every
+//      other surface. Measured 2026-09-03: the endpoint returned
+//      {ok:0, missing:0, bad:1, since:<4 minutes ago>} while the deploy log for
+//      the SAME process carried dozens of `bad` events. The counter was not
+//      wrong; it was young, and it did not say so.
+//
+//   2. ONE UA SLOT, AND ONLY FOR THE LAST ONE. `last_missing_ua` cannot tell you
+//      WHO would break, which is the whole decision. The live logs that day
+//      showed the offenders were FIRST-PARTY — DCHub-CatalogSync/1.0, DCHub/1.0,
+//      python-httpx2, python-requests, Python-urllib — calling the origin URL
+//      directly with a stale key. Flipping on {missing: 0} would have 403'd our
+//      own jobs, and nothing in this payload would have warned anyone.
+//
+// So the payload now carries its window, a bounded per-UA breakdown of who is
+// failing and how, and an explicit safe_to_enforce verdict with its reason. The
+// verdict is deliberately CONSERVATIVE and fail-closed: unknown reads as unsafe.
+const EDGE_KEY_UA_CAP = 25;          // bounded: evidence, not a log sink
 const _edgeKeyStats = { ok: 0, missing: 0, bad: 0, since: new Date().toISOString(), last_missing_ua: null };
+const _edgeKeyStartedMs = Date.now();
+const _edgeKeyByUa = new Map();      // ua -> { missing, bad, last }
+
+// A full traffic day is the criterion the flip comment states; hold the verdict
+// to it rather than to whatever window happens to have elapsed.
+const EDGE_KEY_MIN_WINDOW_S = 86400;
+
+function _edgeKeyNoteUa(ua, verdict) {
+  const key = String(ua || '(no user-agent)').slice(0, 200);
+  let rec = _edgeKeyByUa.get(key);
+  if (!rec) {
+    // Bounded on purpose. Once full, existing offenders keep counting — the ones
+    // already seen are the ones the flip decision is about — and new ones are
+    // recorded as an overflow tally so the payload can never claim completeness
+    // it does not have.
+    if (_edgeKeyByUa.size >= EDGE_KEY_UA_CAP) { _edgeKeyStats.ua_overflow = (_edgeKeyStats.ua_overflow || 0) + 1; return; }
+    rec = { missing: 0, bad: 0, last: null };
+    _edgeKeyByUa.set(key, rec);
+  }
+  rec[verdict] += 1;
+  rec.last = new Date().toISOString();
+}
+
+export function _edgeKeyFlipVerdict(stats, windowS, configured, enforcing) {
+  if (!configured) return { safe_to_enforce: false, reason: 'DCHUB_EDGE_KEY is not set on this service — nothing to enforce.' };
+  if (enforcing)   return { safe_to_enforce: true,  reason: 'already enforcing.' };
+  const failed = (stats.missing || 0) + (stats.bad || 0);
+  if (failed > 0) {
+    return { safe_to_enforce: false,
+             reason: `${failed} request(s) would have been refused in this window (missing=${stats.missing}, bad=${stats.bad}). ` +
+                     'Read by_user_agent: a first-party caller here means a job is pointed at the origin URL, or is carrying a stale key.' };
+  }
+  if (windowS < EDGE_KEY_MIN_WINDOW_S) {
+    return { safe_to_enforce: false,
+             reason: `clean, but the window is only ${Math.round(windowS)}s of the ${EDGE_KEY_MIN_WINDOW_S}s a full traffic day requires. ` +
+                     'These counters reset on restart, so a short clean window is evidence of a recent deploy, not of clean traffic.' };
+  }
+  return { safe_to_enforce: true, reason: `no failed request in ${Math.round(windowS)}s of observation.` };
+}
 
 // Read LAZILY, never captured at module load: a Railway variable change plus a
 // restart is the intended operating procedure, and a lazy read also lets the
@@ -17611,6 +17673,7 @@ app.use(MCP_PATHS, (req, res, next) => {
     // refused — a bare count cannot tell a forgotten first-party prober from an
     // outsider, and that distinction is the whole flip decision.
     _edgeKeyStats.last_missing_ua = String(req.headers['user-agent'] || '').slice(0, 200) || null;
+    _edgeKeyNoteUa(req.headers['user-agent'], verdict);
     console.warn(`[edge-key] ${verdict} on ${req.method} ${req.originalUrl} ua=${_edgeKeyStats.last_missing_ua} (observe mode; would 403 under DCHUB_EDGE_KEY_ENFORCE=1)`);
     return next();
   }
@@ -17626,10 +17689,22 @@ app.use(MCP_PATHS, (req, res, next) => {
 // the other /internal routes use. `missing` must be 0 for a full traffic day first.
 app.get('/internal/edge-key', (req, res) => {
   if (req.headers['x-internal-key'] !== INTERNAL_KEY) return res.sendStatus(403);
+  const configured = Boolean(_edgeKeySecret());
+  const enforcing   = _edgeKeyEnforced();
+  const windowS     = (Date.now() - _edgeKeyStartedMs) / 1000;
   res.json({
-    configured: Boolean(_edgeKeySecret()),
-    enforcing:  _edgeKeyEnforced(),
+    configured,
+    enforcing,
     ..._edgeKeyStats,
+    // ★The window is part of the reading, not metadata about it. {missing: 0}
+    // means nothing without it — these counters die with the process.
+    window_seconds: Math.round(windowS),
+    window_started: new Date(_edgeKeyStartedMs).toISOString(),
+    window_meets_criterion: windowS >= EDGE_KEY_MIN_WINDOW_S,
+    // Who would break. A bare count cannot separate an outsider from one of our
+    // own jobs pointed at the origin URL, and that is the entire flip decision.
+    by_user_agent: Object.fromEntries([..._edgeKeyByUa.entries()].map(([ua, r]) => [ua, { ...r }])),
+    ..._edgeKeyFlipVerdict(_edgeKeyStats, windowS, configured, enforcing),
   });
 });
 
