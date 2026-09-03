@@ -3394,6 +3394,69 @@ const PRO_ONLY_TOOLS = new Set([
   'export_dataset',
 ]);
 
+// ── r-continuation item 4 (2026-09-03): the plan says which steps are gated ──
+//
+// Until now an agent discovered a step was paid by RUNNING it and being stopped.
+// That is the worst possible moment: the calls before it are already spent, the
+// human is mid-answer, and the only thing the agent can report is that it hit a
+// wall. A planner that knows the sequence up front can say the useful thing
+// instead — "the market-level part I can answer now; the site-level grid read
+// needs the paid layer" — BEFORE anything is spent.
+//
+// The class is STATIC per tool, not per caller. _planQuery is a pure function
+// whose first test asserts that the same intent yields an identical plan
+// (test/plan-query.test.mjs), so keying this on the caller's tier would make the
+// planner non-deterministic to buy nothing: the caller's own tier is already on
+// the response, and execute_plan still reports per-step `gated_preview` at run
+// time. This says what a step COSTS; that says what YOU got.
+function _planAccessClass(tool) {
+  if (PRO_ONLY_TOOLS.has(tool)) return 'pro';
+  if (PAID_ONLY_TOOLS.has(tool)) return 'paid';
+  return 'free';
+}
+
+// A one-sentence, agent-quotable split of the plan. Returns null when nothing in
+// the plan is gated — an all-free plan needs no commercial sentence, and a
+// cheerful "0 steps are gated" would be one more thing to summarize away.
+// ★ ONE choke point: annotate AND summarize in a single call.
+//
+// The first cut of this had the caller do the `access` loop itself and then ask
+// for the summary separately, and the fallback plan path (the `unknown` intent
+// branch) did the second without the first — so a plan holding
+// get_dchub_recommendation, which is PAID_ONLY, reported every step
+// undefined and therefore "nothing is gated". A commercial signal that is
+// silently absent on the branch taken by every UNMATCHED intent is worse than
+// none: unmatched is exactly where a confused caller lands. Two operations that
+// must always happen together are one function.
+function _planAnnotateAccess(seq) {
+  const steps = Array.isArray(seq) ? seq : [];
+  for (const s of steps) { if (s && s.tool && !s.access) s.access = _planAccessClass(s.tool); }
+  return _planTierPreview(steps);
+}
+
+function _planTierPreview(seq) {
+  const steps = Array.isArray(seq) ? seq : [];
+  const gated = steps.filter((s) => s.access && s.access !== 'free');
+  if (!gated.length || !steps.length) return null;
+  const free = steps.length - gated.length;
+  const names = [...new Set(gated.map((s) => s.tool))];
+  return {
+    free_steps: free,
+    gated_steps: gated.length,
+    gated_tools: names,
+    highest_tier_required: names.some((t) => PRO_ONLY_TOOLS.has(t)) ? 'pro' : 'paid',
+    // Written to be said out loud, because that is the only form that reaches
+    // the person who can authorize it.
+    agent_quotable: free > 0
+      ? 'I can answer ' + free + ' of ' + steps.length + ' step' + (steps.length === 1 ? '' : 's')
+        + " of this on DC Hub's free tier. The remaining " + gated.length
+        + ' (' + names.join(', ') + ') need' + (gated.length === 1 ? 's' : '') + ' the paid layer.'
+      : 'All ' + steps.length + ' step' + (steps.length === 1 ? '' : 's') + ' of this plan ('
+        + names.join(', ') + ') need the paid layer.',
+  };
+}
+
+
 // r70 (2026-06-03): the FREE FLAGSHIP HOOKS. A tool here is the citation
 // magnet — its entire value is the COMPLETE picture (e.g. the full global
 // grid scoreboard, greenest-first across ~22 grids on 4 continents). That
@@ -10041,6 +10104,7 @@ export function _planQuery(intent, context) {
     ];
     const fbWc = _planWorkflowConfidence(fbSeq, d);
     const fbWaves = _planWaves(fbSeq);
+    const _fbTierPreview = _planAnnotateAccess(fbSeq);
     const sc = {
       _entity: 'query_plan', ok: true, intent: text, intent_class: 'unknown',
       routing_hint: _routingHint('unknown', 'discover_tools'),
@@ -10052,6 +10116,7 @@ export function _planQuery(intent, context) {
       reason: 'No intent class matched deterministically — route through the tool-family navigator, or let get_dchub_recommendation synthesize an answer server-side.',
       planner_rationale: 'Both fallback tools take the raw intent verbatim, so navigation and server-side synthesis run as one parallel wave and whichever lands better leads.',
       recommended_sequence: fbSeq,
+      ...(_fbTierPreview ? { tier_preview: _fbTierPreview } : {}),
       estimated_calls: 2,
       parallelizable: true,
       execution_waves: fbWaves,
@@ -10138,6 +10203,9 @@ export function _planQuery(intent, context) {
         rejected_because: `Scored ${Math.round(second.score * 100) / 100} vs ${Math.round(top.score * 100) / 100} — the deterministic margin favored "${top.cls.id}".` }]
     : [];
   const usesCandidates = seq.some((s) => s.tool === 'get_refined_queue' || s.tool === 'analyze_site' || s.tool === 'rank_sites');
+  // r-continuation item 4: annotate each step with what it costs, so the
+  // agent can split the answer before spending a call on a wall.
+  const _tierPreview = _planAnnotateAccess(seq);
   const sc = {
     _entity: 'query_plan', ok: true, intent: text,
     intent_class: top.cls.id,
@@ -10157,6 +10225,7 @@ export function _planQuery(intent, context) {
     planner_rationale: (typeof top.cls.rationale === 'function'
       ? top.cls.rationale(d) : top.cls.rationale),
     recommended_sequence: seq,
+    ...(_tierPreview ? { tier_preview: _tierPreview } : {}),
     estimated_calls: estimatedCalls,
     parallelizable: waves.some((w) => w.length > 1),
     execution_waves: waves,
