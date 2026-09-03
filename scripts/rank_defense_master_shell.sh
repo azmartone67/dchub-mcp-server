@@ -43,6 +43,30 @@ TS="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
 log() { echo "[$TS] $*" | tee -a "$LOG" >/dev/null; }
 
+# ── DEAD-MAN BEAT ────────────────────────────────────────────────────────────
+# ★2026-09-03: this agent ran every 90 minutes for weeks with a broken staging
+# write and NOTHING noticed — /api/v1/ops/deadman tracked 203 feeds and not one
+# of them was a LaunchAgent on this Mac. state/rank_defense_heartbeat.json below
+# claims to be a "dead-man sentinel"; a grep of both repos found NO READER for
+# it. It stays (cheap, local, useful when you are sitting here), but the real
+# watcher is now the same ledger every other loop beats.
+# shellcheck source=scripts/agent_beat.sh
+. "$(dirname "$0")/agent_beat.sh" 2>/dev/null || agent_beat() { :; }
+BEAT_FEED="agent:rank-defense"
+# ★ CADENCE IS NOT THE TICK INTERVAL. This agent ticks every 5400s (90 min), but
+# it lives on a LAPTOP that sleeps, travels and closes its lid — missing several
+# consecutive ticks is NORMAL here in a way it never is for a server cron. Worse,
+# tools/deadman/watch.py documents a hard 1.5h FLOOR: the watcher itself runs
+# every 2h and flags overdue at 2x cadence, so a declared 1.5h would sit exactly
+# on the floor and false-RED on ordinary drift (the 2026-07-30 incident that
+# file's _assert_watch_margin records). So declare what ABSENCE MEANS: 12h here,
+# i.e. alarm if this agent has not run in ~a day. That is the question worth
+# asking of a laptop agent; "did it miss one tick" is not.
+BEAT_CADENCE_H=12
+BEAT_STATUS="success"         # the LOOP's health, never the product's — a rank
+                              # slip is a successful run; a failed write is not.
+beat_out() { agent_beat "$BEAT_FEED" "$1" "$BEAT_CADENCE_H" "${2:-}" | while IFS= read -r l; do log "$l"; done; }
+
 heartbeat() {  # $1=core_one $2=remediate $3=note
   mkdir -p state 2>/dev/null
   printf '{\n "ts": "%s",\n "core_one": %s,\n "remediate": %s,\n "note": "%s"\n}\n' \
@@ -52,6 +76,9 @@ heartbeat() {  # $1=core_one $2=remediate $3=note
 if [ "${RANK_DEFENSE_DISABLE:-}" = "1" ]; then
   log "DISABLED (RANK_DEFENSE_DISABLE=1) — no-op"
   heartbeat null false "disabled"
+  # `skipped` is in the ledger's _OK_STATUS: intentionally idle is not an alarm,
+  # but the BEAT still happens, so a disabled loop cannot masquerade as a dead one.
+  beat_out skipped "RANK_DEFENSE_DISABLE=1"
   exit 0
 fi
 
@@ -80,6 +107,7 @@ ESCALATED="$(read_status escalated)"
 if [ -z "$REMEDIATE_TERMS" ]; then
   log "OK — CORE ${CORE_ONE}/9 at #1, no slip. (freshness/verified insurance healthy)"
   heartbeat "$CORE_ONE" false "ok"
+  beat_out success "CORE ${CORE_ONE} at #1, no slip"
   exit 0
 fi
 
@@ -141,6 +169,8 @@ else
         log "    folder). Use $STAGED. Any file already in ~/Downloads is STALE — do not paste it."
       fi
     else
+      BEAT_STATUS="run_failed"   # -> a RED kind on /api/v1/ops/deadman. THIS is
+                                 # the 516-silent-failures case, now visible off-box.
       log "🚨 REMEDY NOT STAGED — could not write $STAGED. Paste"
       log "   scripts/smithery_description.txt by hand. Do NOT paste an older staged copy."
     fi
@@ -173,4 +203,5 @@ fi
 
 # ---- STAGE 5: HEARTBEAT ----
 heartbeat "$CORE_ONE" true "slip:${REMEDIATE_TERMS}"
+beat_out "$BEAT_STATUS" "slip:${REMEDIATE_TERMS}"
 exit 0

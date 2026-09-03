@@ -20,7 +20,7 @@
 // So this runs the actual script against a synthetic repo. It asserts BEHAVIOUR:
 // what gets written, what does not, and what the log says when it cannot write.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -260,5 +260,96 @@ describe('the escalation says what the loop will actually do', () => {
     expect(mon).toMatch(/^PASTE_STAGE_HINT = /m);
     expect(msg('True', ['fiber'])).toContain('DCHUB_STAGE_DIR');
     expect(codeOnly(readFileSync(SHELL, 'utf8'))).toContain('DCHUB_STAGE_DIR');
+  });
+});
+
+// ★ 2026-09-03 — THE AGENT MUST BEAT THE LEDGER IT IS WATCHED BY.
+//
+// Everything above tests what the shell does locally. None of it would have
+// helped, because the failure nobody saw for 516 runs was invisible OFF this
+// machine: /api/v1/ops/deadman tracked 203 feeds and not one was a LaunchAgent.
+// These assert the wiring that makes a silent death observable.
+describe('the rank-defense agent beats the dead-man ledger', () => {
+  it('names its own feed, and says so loudly when it cannot beat', () => {
+    // No key in env and no key file -> agent_beat returns 2 and the shell logs it.
+    // "unconfigured" must never look like "beat fine".
+    writeStatus({ paste_pending: 'false' });
+    const log = run({ AGENT_BEAT_ENV: join(repo, 'no-such-file.env'), DCHUB_ADMIN_KEY: '' });
+    expect(log).toMatch(/BEAT SKIPPED/);
+    expect(log).toMatch(/agent:rank-defense/);
+    expect(log).toMatch(/INVISIBLE/);
+  });
+
+  // Record the beat with an HTTP server in a SEPARATE PROCESS.
+  //
+  // Two dead ends first, both worth naming: shadowing `curl` on PATH does not
+  // work because the shells do `export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"`,
+  // which puts the real curl ahead of any fake — the first attempt silently sent a
+  // beat to production. And an in-process server cannot answer, because
+  // execFileSync blocks Node's event loop. So: real server, own process, real POST.
+  function withRecorder(fn) {
+    const recFile = join(repo, 'beats.jsonl');
+    const portFile = join(repo, 'port.txt');
+    const srcFile = join(repo, 'recorder.mjs');
+    writeFileSync(srcFile, `
+import { createServer } from 'node:http';
+import { appendFileSync, writeFileSync } from 'node:fs';
+const s = createServer((req, res) => {
+  let b = ''; req.on('data', c => { b += c; });
+  req.on('end', () => { appendFileSync(${JSON.stringify(recFile)}, b + '\\n');
+    res.writeHead(200, {'content-type':'application/json'}); res.end('{"ok":true}'); });
+});
+s.listen(0, '127.0.0.1', () => writeFileSync(${JSON.stringify(portFile)}, String(s.address().port)));
+`);
+    const child = spawn(process.execPath, [srcFile], { stdio: 'ignore', detached: false });
+    try {
+      const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+      for (let i = 0; i < 100 && !existsSync(portFile); i++) sleep(50);
+      if (!existsSync(portFile)) throw new Error('recorder never bound a port');
+      const port = readFileSync(portFile, 'utf8').trim();
+      fn(`http://127.0.0.1:${port}/beat`);
+      for (let i = 0; i < 40 && !existsSync(recFile); i++) sleep(25);
+      return existsSync(recFile)
+        ? readFileSync(recFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse)
+        : [];
+    } finally { child.kill(); }
+  }
+
+  const beatsFor = (statusFields, env = {}) => withRecorder((url) => {
+    writeStatus(statusFields);
+    run({ AGENT_BEAT_URL: url, DCHUB_ADMIN_KEY: 'test-key', ...env });
+  });
+
+  it('beats success with its real cadence when the loop worked', () => {
+    const [body] = beatsFor({ paste_pending: 'false' });
+    expect(body).toBeDefined();
+    expect(body.feed).toBe('agent:rank-defense');
+    expect(body.status).toBe('success');
+    // NOT the 5400s tick interval. tools/deadman/watch.py documents a 1.5h floor
+    // (watcher runs every 2h, overdue at 2x), and this is a laptop agent that
+    // sleeps — so cadence declares when ABSENCE MEANS DEAD, ~a day.
+    expect(body.cadence_hours).toBe(12);
+    expect(body.cadence_hours,
+      'a cadence at or under the 1.5h floor false-REDs on ordinary drift')
+      .toBeGreaterThan(1.5);
+  });
+
+  it('a rank SLIP still beats success — the loop ran, the product slipped', () => {
+    // The ledger answers "did the loop run and do its job". Beating red on a slip
+    // would make a working watcher cry wolf about a product problem.
+    const [body] = beatsFor({ paste_pending: 'false', remediate: ['fiber'] });
+    expect(body.status).toBe('success');
+    expect(body.note).toMatch(/slip:fiber/);
+  });
+
+  it('a FAILED staging write beats run_failed — the 516-silent-failures case', () => {
+    // run_failed is in _RED_KINDS in routes/ingest_runs.py, so this surfaces as a
+    // red feed on /api/v1/ops/deadman instead of 516 lines in a local err log.
+    mkdirSync(stage, { recursive: true });
+    chmodSync(stage, 0o500);                       // unwritable
+    let beats;
+    try { beats = beatsFor({ paste_pending: 'true', remediate: ['fiber'] }); }
+    finally { chmodSync(stage, 0o700); }
+    expect(beats[0].status).toBe('run_failed');
   });
 });
