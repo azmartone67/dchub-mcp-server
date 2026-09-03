@@ -2683,12 +2683,38 @@ function _lateKeyResolve(meta, apiKey, validation) {
 // Pure decision function (unit-tested in test/invalid-bearer.test.mjs); the
 // POST /mcp handler pays the async validateKey() hop only when this passes,
 // and 401s only when that validation ALSO comes back invalid.
-function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, method, hasSession }) {
+function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, method, hasSession,
+                                 challengesIssued, challengeMax }) {
   if (!/^Bearer\s+\S/i.test(String(authHeader || ''))) return false; // no Bearer credential presented
   if (hasApiKeyHeader) return false;
   if (bearerResolved) return false;   // proven DC-Hub AS token / AuthKit JWT → identified
   if (method !== 'initialize' && method !== 'tools/call') return false;
   if (hasSession) return false;
+  // ── r-invalid-bearer-bound (2026-09-03): THIS challenge had no bound, and an
+  // unbounded challenge is a LOCKOUT, not a nudge — the rule r-challenge-bound
+  // established for the Claude-connector challenge on 2026-08-23. This path
+  // never got it.
+  //
+  // Measured 2026-09-03: an agent holding a stale Bearer was asked for the
+  // largest US markets by capacity. `initialize` 401'd, so it never got a
+  // session, so hasSession was false on the retry, so it 401'd again — the
+  // server was permanently dark to that connector and the question was answered
+  // from a competitor's data. Anonymous callers get a working free tier on the
+  // same endpoint the whole time; only presenting a bad credential earns the
+  // blackout.
+  //
+  // The 07-16 challenge is still RIGHT and still fires: a broker that can do
+  // OAuth (Gemini Custom-MCP, Copilot Studio — the original repro) converts on
+  // the first 401 and never reaches this bound. A client that cannot complete
+  // the flow now loses challengeMax calls instead of all of them.
+  //
+  // Bound is caller-keyed and fails OPEN, per the asymmetry documented at
+  // r-challenge-bound: over-counting serves a few extra calls; under-counting
+  // 401s a stranger. Defaults to CHALLENGE_MAX (3) when unset, so an omitted
+  // argument cannot silently mean "never challenge" (0) or "never stop".
+  const _max = (Number.isSafeInteger(challengeMax) && challengeMax >= 0) ? challengeMax : CHALLENGE_MAX;
+  const _seen = Number.isSafeInteger(challengesIssued) && challengesIssued > 0 ? challengesIssued : 0;
+  if (_seen >= _max) return false;   // budget spent → SERVE, do not wall
   return true;
 }
 
@@ -18304,12 +18330,19 @@ app.post(MCP_PATHS, async (req, res) => {
     // broker to refresh/re-consent rather than treat auth as unconfigured.
     // Kill switch: DCHUB_INVALID_BEARER_401_DISABLE=1.
     const _invalid401Disabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INVALID_BEARER_401_DISABLE || ''));
+    // r-invalid-bearer-bound: caller-keyed budget, namespaced 'ib:' so it cannot
+    // collide with the session-keyed Claude-connector trigger in the same Map.
+    const _ibKey = 'ib:' + ((req.headers['x-dc-client-ip'] || '').trim()
+                        || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+                        || req.socket?.remoteAddress || 'unknown');
     if (_workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
           authHeader: req.headers['authorization'],
           hasApiKeyHeader: !!req.headers['x-api-key'],
           bearerResolved: _bearerResolved,
           method: req.body?.method,
           hasSession: !!(sessionId && sessions.has(sessionId)),
+          challengesIssued: _challengesIssued(_ibKey),
+          challengeMax: CHALLENGE_MAX,
         })) {
       const _bv = await validateKey(_bearer);
       if (!_bv.valid) {
@@ -18317,6 +18350,7 @@ app.post(MCP_PATHS, async (req, res) => {
           'Bearer error="invalid_token", '
           + 'error_description="Token is not a valid DC Hub api key or AuthKit access token", '
           + 'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
+        _bumpChallengeIssued(_ibKey);                  // r-invalid-bearer-bound: spend one
         _chBump('invalid_bearer', req.body?.method);   // r-oauth-funnel: Map bump only
         console.log(`[oauth] 401 invalid bearer (${String(_bearer).slice(0, 8)}… method=${req.body?.method}) — challenging via resource_metadata`);
         return res.status(401).json({
