@@ -62,3 +62,60 @@ describe('_invalidBearerEligible — present-but-invalid Bearer challenge', () =
     expect(_invalidBearerEligible({ ...base, hasSession: true })).toBe(false);
   });
 });
+
+// ── r-invalid-bearer-bound (2026-09-03) ─────────────────────────────────────
+// The challenge above had no bound. `initialize` 401s, so no session is ever
+// created, so `hasSession` is false on the retry, so it 401s again — forever.
+// Live consequence 2026-09-03: an agent holding a stale Bearer asked for the
+// largest US markets by capacity, got -32001 on every attempt, and answered
+// from a competitor's published table. Anonymous callers were being served the
+// whole time on the same endpoint.
+//
+// r-challenge-bound settled this for the Claude-connector challenge on
+// 2026-08-23: "After CHALLENGE_MAX challenges the call is SERVED. A client that
+// can do OAuth converts on the first one and never reaches the bound; a client
+// that cannot loses CHALLENGE_MAX calls and then works forever." This path
+// never got that treatment.
+describe('_invalidBearerEligible — the challenge is BOUNDED', () => {
+  it('still challenges while the budget is unspent (OAuth brokers convert here)', () => {
+    for (const n of [0, 1, 2]) {
+      expect(_invalidBearerEligible({ ...base, challengesIssued: n, challengeMax: 3 })).toBe(true);
+    }
+  });
+
+  it('THE FIX: stops walling once the budget is spent — serves instead', () => {
+    expect(_invalidBearerEligible({ ...base, challengesIssued: 3, challengeMax: 3 })).toBe(false);
+    expect(_invalidBearerEligible({ ...base, challengesIssued: 99, challengeMax: 3 })).toBe(false);
+  });
+
+  it('binds on tools/call too, not just the handshake', () => {
+    const tc = { ...base, method: 'tools/call' };
+    expect(_invalidBearerEligible({ ...tc, challengesIssued: 2, challengeMax: 3 })).toBe(true);
+    expect(_invalidBearerEligible({ ...tc, challengesIssued: 3, challengeMax: 3 })).toBe(false);
+  });
+
+  it('challengeMax=0 is the kill switch — never challenge at all', () => {
+    expect(_invalidBearerEligible({ ...base, challengesIssued: 0, challengeMax: 0 })).toBe(false);
+  });
+
+  it('a MISSING or junk budget falls back to CHALLENGE_MAX, never to 0 or Infinity', () => {
+    // omitted entirely → today's callers keep challenging (not silently disarmed)
+    expect(_invalidBearerEligible(base)).toBe(true);
+    for (const bad of [undefined, null, NaN, -1, 1.5, '3', Infinity]) {
+      expect(_invalidBearerEligible({ ...base, challengesIssued: 0, challengeMax: bad })).toBe(true);
+    }
+    // and a junk COUNTER must not be read as "budget spent"
+    for (const bad of [undefined, null, NaN, -5, '9', Infinity]) {
+      expect(_invalidBearerEligible({ ...base, challengesIssued: bad, challengeMax: 3 })).toBe(true);
+    }
+  });
+
+  it('the bound cannot resurrect a caller the earlier gates already excluded', () => {
+    const spent = { challengesIssued: 0, challengeMax: 3 };   // budget wide open
+    expect(_invalidBearerEligible({ ...base, ...spent, authHeader: undefined })).toBe(false);
+    expect(_invalidBearerEligible({ ...base, ...spent, hasApiKeyHeader: true })).toBe(false);
+    expect(_invalidBearerEligible({ ...base, ...spent, bearerResolved: true })).toBe(false);
+    expect(_invalidBearerEligible({ ...base, ...spent, method: 'tools/list' })).toBe(false);
+    expect(_invalidBearerEligible({ ...base, ...spent, hasSession: true })).toBe(false);
+  });
+});
