@@ -17696,6 +17696,14 @@ app.get('/health', (req, res) => {
     version: SERVER_VERSION,
     tools: CANONICAL_TOOL_COUNT,   // canonical count from mcp-server.json (matches live tools/list); CI-guarded by sync-tools-manifest
     sessions: sessions.size,
+    // ★2026-09-03: sessionSrv is the EXPENSIVE map (sessionId -> McpServer,
+    // ~3.4MB of tool definitions each) and it was only ever reported into the
+    // sweeper's LOG. Railway hides log-only faults — an OOM restarts the
+    // container in place under the same deploymentId, so the crash loop never
+    // shows in list-deployments. These two are released together and should
+    // track exactly; `sessions` flat while `session_servers` climbs is the
+    // OOM signature, now readable from outside the process.
+    session_servers: sessionSrv.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
 });
@@ -18651,13 +18659,35 @@ app.get(MCP_PATHS, async (req, res) => {
   res.status(400).json({ error: 'No session. POST /mcp with initialize.' });
 });
 
+// ★2026-09-03 — the THIRD eviction site. #314 unified onclose and the idle
+// sweeper onto _releaseSession and called it "two callers, one list"; this
+// handler was the third, and it still hand-deleted three of the five maps.
+//
+// The healthy path did NOT leak: close() fires onclose as its last statement,
+// which released the other two transitively. The defect was the UNGUARDED
+// await. Express 4 does not forward async-handler rejections, so a close()
+// that threw produced NO RESPONSE AT ALL — measured: the client hangs to its
+// own deadline rather than getting a 500 — and skipped every delete below it,
+// stranding all five maps (~3.4MB of McpServer among them) until the idle
+// sweeper happened to reach them. The process survived only because
+// r-crashguard's unhandledRejection handler logs and continues.
+//
+// So: close() is best-effort, the release is unconditional, and neither
+// depends on onclose firing.
 app.delete(MCP_PATHS, async (req, res) => {
   const sid = req.headers['mcp-session-id'];
   if (sid && sessions.has(sid)) {
-    await sessions.get(sid).close();
-    sessions.delete(sid);
-    sessionMeta.delete(sid);
-    sessionLastActive.delete(sid);  // r41
+    try {
+      await sessions.get(sid)?.close?.();
+    } catch (e) {
+      // Logged, not fatal: the session is being torn down either way, and a
+      // failed close must not cost the caller its response.
+      console.error(`[MCP] DELETE close failed sid=${sid.slice(0,8)}:`, (e && e.stack) || e);
+    }
+    _releaseSession(sid);   // ★all five maps — the list, not three of it
+    // 200 even when close() threw: the session IS gone from this process, and
+    // that is the only fact the caller can act on. A 5xx would invite a retry
+    // that can now only 404.
     return res.sendStatus(200);
   }
   res.status(404).json({ error: 'Session not found' });
