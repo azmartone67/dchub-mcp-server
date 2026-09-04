@@ -58,8 +58,53 @@ describe('_invalidBearerEligible — present-but-invalid Bearer challenge', () =
     expect(_invalidBearerEligible({ ...base, method: undefined })).toBe(false);
   });
 
-  it('established session → NOT eligible (junk bearers mid-session stay with _lateKeyResolve)', () => {
-    expect(_invalidBearerEligible({ ...base, hasSession: true })).toBe(false);
+  // ── r-expired-in-session (2026-09-04) — THIS EXPECTATION IS INVERTED ─────
+  // It used to read "established session → NOT eligible (junk bearers
+  // mid-session stay with _lateKeyResolve)". _lateKeyResolve does govern the
+  // session's IDENTITY — a rejected key leaves it anonymous — but it never
+  // 401s, so the client is never TOLD. Handling and signalling are different
+  // jobs, and only the first was happening mid-session.
+  //
+  // A 401 is the ONLY signal in the OAuth spec that tells a client to refresh.
+  // Exempting sessions meant we served an expired credential silently for the
+  // life of the session and never asked the client to refresh WHILE ITS
+  // REFRESH TOKEN WAS STILL GOOD. By the time the session ended and the next
+  // `initialize` 401'd, the refresh grant could have aged out too — leaving
+  // only a human clicking reconnect. That is the report we get back verbatim:
+  // "401 Unauthorized — manual reauthentication required".
+  //
+  // MEASURED 2026-09-04, one live session, gated tools/call:
+  //     no credential        -> 200, tier "free"   (6,639 bytes)
+  //     expired-shape Bearer -> 200, tier "trial"  (12,363 bytes)
+  // A dead credential outscored no credential and was never challenged.
+  //
+  // The argument was already written for this gate's SIBLING
+  // (_claudeChallengeEligible note 2): "the connector initializes, gets a
+  // session, and every later tools/call carries it — so a hasSession bail
+  // means the challenge never fires for anyone who completed a handshake,
+  // i.e. everyone." It was applied there and not here.
+  it('established session → STILL eligible: an expired token must be told', () => {
+    expect(_invalidBearerEligible({ ...base, hasSession: true })).toBe(true);
+    expect(_invalidBearerEligible({ ...base, hasSession: true,
+                                    method: 'tools/call' })).toBe(true);
+  });
+
+  it('a session does not resurrect a caller the credential gates excluded', () => {
+    // Removing the hasSession bail must not widen WHO is challenged — only
+    // WHEN. A valid Bearer, an X-API-Key, or no Bearer at all stays exempt
+    // whether or not a session exists.
+    for (const over of [{ bearerResolved: true }, { hasApiKeyHeader: true },
+                        { authHeader: undefined }, { method: 'tools/list' }]) {
+      expect(_invalidBearerEligible({ ...base, hasSession: true, ...over })).toBe(false);
+    }
+  });
+
+  it('the bound still applies inside a session — never a lockout', () => {
+    // The anti-lockout rule is the BUDGET, not the session exemption. A client
+    // that cannot refresh loses challengeMax calls mid-session and is then
+    // served, exactly as it is when sessionless.
+    expect(_invalidBearerEligible({ ...base, hasSession: true,
+                                    challengesIssued: 3, challengeMax: 3 })).toBe(false);
   });
 });
 
@@ -116,6 +161,8 @@ describe('_invalidBearerEligible — the challenge is BOUNDED', () => {
     expect(_invalidBearerEligible({ ...base, ...spent, hasApiKeyHeader: true })).toBe(false);
     expect(_invalidBearerEligible({ ...base, ...spent, bearerResolved: true })).toBe(false);
     expect(_invalidBearerEligible({ ...base, ...spent, method: 'tools/list' })).toBe(false);
-    expect(_invalidBearerEligible({ ...base, ...spent, hasSession: true })).toBe(false);
+    // hasSession is deliberately NOT in this list any more — see
+    // r-expired-in-session above. It was never a credential gate; it was a
+    // timing exemption, and it was the one that killed the connector.
   });
 });

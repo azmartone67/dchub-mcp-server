@@ -2838,7 +2838,40 @@ function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, m
   if (hasApiKeyHeader) return false;
   if (bearerResolved) return false;   // proven DC-Hub AS token / AuthKit JWT → identified
   if (method !== 'initialize' && method !== 'tools/call') return false;
-  if (hasSession) return false;
+  // ── r-expired-in-session (2026-09-04): NO hasSession BAIL ────────────────
+  // This line is the reason a connector dies after one session, and the
+  // argument against it is already written 60 lines below, for this gate's
+  // SIBLING (_claudeChallengeEligible, note 2): "the connector initializes,
+  // gets a session, and every later tools/call carries it — so a hasSession
+  // bail means the challenge never fires for anyone who completed a handshake,
+  // i.e. everyone." That lesson was applied to the Claude gate and not to this
+  // one, which sits directly above it.
+  //
+  // ★ WHY IT MATTERS MORE HERE. The Claude gate challenges the ANONYMOUS —
+  // who lose nothing by waiting. This gate challenges a caller whose token was
+  // once VALID and has expired, and a 401 is the ONLY signal in the OAuth
+  // spec that tells a client to refresh. Bailing on hasSession means we serve
+  // an expired credential silently for the life of the session and never ask
+  // the client to refresh WHILE ITS REFRESH TOKEN IS STILL GOOD. By the time
+  // the session ends and the next `initialize` finally 401s, the refresh grant
+  // may have aged out too — and the only path left is a human clicking
+  // reconnect. That is exactly the report we get back: "401 Unauthorized —
+  // manual reauthentication required".
+  //
+  // MEASURED 2026-09-04, one live session, gated tools/call:
+  //     no credential            -> 200, tier "free"   (6,639 bytes)
+  //     expired-shape Bearer     -> 200, tier "trial"  (12,363 bytes)
+  // A dead credential scored BETTER than none and was never challenged. The
+  // connector looks healthy while being unauthenticated, so nothing in the
+  // client ever fires a refresh.
+  //
+  // ChatGPT's whole MCP history is one 42-minute session on 2026-08-13 (33
+  // calls) and silence since. This is the mechanism that shape fits.
+  //
+  // NOT A LOCKOUT: the caller-keyed budget below still bounds this to
+  // challengeMax and then SERVES — the r-invalid-bearer-bound rule, unchanged.
+  // A client that can refresh converts on the first 401 and never reaches the
+  // bound; one that cannot loses challengeMax calls, not all of them.
   // ── r-invalid-bearer-bound (2026-09-03): THIS challenge had no bound, and an
   // unbounded challenge is a LOCKOUT, not a nudge — the rule r-challenge-bound
   // established for the Claude-connector challenge on 2026-08-23. This path
