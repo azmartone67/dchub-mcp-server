@@ -1520,12 +1520,72 @@ const _SOURCE_PLATFORM = (() => {
 const MCP_SELF_PATHS = new Map([['/mcp/analyst', 'dchub-analyst']]);
 // Every path this server answers MCP on. '/mcp' stays the canonical, published
 // one; the rest are our own first-party surfaces, tagged above.
-export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys()];
+// ── r-source-path (2026-09-04): WHERE an agent came from, as a separate axis ──
+//
+// THE PROBLEM. We cannot tell which registry sends us anyone. Referrer is NULL
+// on 100% of external MCP rows and 0.6% of arrivals are attributable — but that
+// is not a defect to repair, it is the transport: an MCP client POSTing to
+// /mcp is not a browser navigation, so there is no Referer to lose. No amount
+// of header plumbing creates one. Measured cost of the blindness: Glama and
+// Smithery both return ZERO rows in /api/v1/reach while Smithery holds #1 on
+// six core terms, and no experiment on either listing can be read.
+//
+// THE MECHANISM, already proven here. r-analyst-path settled the general form
+// one line above: "the one channel we own end-to-end is the URL we hand the
+// agent, so the PATH is the tag." A registry listing is exactly that — we
+// choose the URL it publishes — and a path rides EVERY request, so unlike
+// clientInfo it cannot be lost to a replica that never saw the initialize.
+//
+// ★ WHY THIS IS A SEPARATE FIELD AND NOT A PLATFORM. `platform` answers WHICH
+// CLIENT (claude, cursor, node). Source answers WHO SENT THEM. They are
+// independent: a human copies our URL off the Glama listing into Claude
+// Desktop, and the honest row is platform=claude AND source=glama. Folding one
+// into the other would destroy the client dimension AND silently restate every
+// published platform number. So `source` is a NEW field that no existing read
+// consumes — the platform buckets we publish are byte-identical before and
+// after this change.
+//
+// ★ SAFETY, and it is WEAKER than the self-path channel above — state it
+// plainly rather than inherit that comment's assurance. _pathSelfTag can only
+// ever return 'dchub-internal', so a stranger who finds it can at worst exclude
+// themselves. _pathSource returns a BRAND, so anyone who discovers /mcp/glama
+// can attribute their own traffic to Glama. Three things bound that:
+//   · it is exactly the trust level of the X-MCP-Platform header we already
+//     honor, which has accepted a caller-supplied 'glama' since r-platform-header;
+//   · it writes only the NEW `source` field, so no number we currently publish
+//     can be moved by it; and
+//   · the incentive is absent — inflating a registry's credit costs the sender
+//     nothing and gains them nothing.
+// Treat `source` as caller-assertable evidence, not proof. If it ever carries
+// weight in a paid decision, sign the path.
+const MCP_SOURCE_PATHS = new Map([
+  ['/mcp/glama',     'glama'],
+  ['/mcp/smithery',  'smithery'],
+  ['/mcp/pulsemcp',  'pulsemcp'],
+  ['/mcp/mcpso',     'mcp-so'],
+  ['/mcp/lobehub',   'lobehub'],
+  ['/mcp/toolplex',  'toolplex'],
+  ['/mcp/mcpmarket', 'mcpmarket'],
+]);
+
+export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys(), ...MCP_SOURCE_PATHS.keys()];
+
+function _normPath(req) {
+  return (req?.path || '').replace(/\/+$/, '') || '/mcp';
+}
 
 export function _pathSelfTag(req) {
-  const path = (req?.path || '').replace(/\/+$/, '') || '/mcp';
-  return MCP_SELF_PATHS.get(path) || '';
+  return MCP_SELF_PATHS.get(_normPath(req)) || '';
 }
+
+// The arrival SOURCE for this request, or '' for the canonical /mcp path and
+// for any path that is not a declared registry path. Never returns a platform
+// and never feeds _resolvePlatform — see the separate-axis note above.
+export function _pathSource(req) {
+  return MCP_SOURCE_PATHS.get(_normPath(req)) || '';
+}
+
+export { MCP_SOURCE_PATHS };
 
 // ── r-init-precise-error (2026-09-02): say WHICH field is missing ────────────
 //
@@ -12237,6 +12297,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         referer:     c.referer || null,
         user_agent:  c.user_agent || null,
         ip_address:  c.client_ip || null,  // item-3: real XFF caller IP
+        // r-source-path: WHICH REGISTRY sent this agent, independent of which
+        // client they used. null on the canonical /mcp path. The backend
+        // reads its payload with body.get() and ignores unknown keys, so this
+        // is inert until dchub-backend adds the column (issue filed) — it is
+        // sent now so no arrival is lost in the gap between the two deploys.
+        source:      c.source || null,
       }).catch(() => {});
     }
   });
@@ -18089,6 +18155,18 @@ app.post(MCP_PATHS, async (req, res) => {
       // third alias of the same explicit-attribution channel. Same rules apply:
       // only a KNOWN-platform value is honored, unknown values fall through.
       || req.headers['x-client-info'] || '').toString();
+    // r-source-path: make the arrival source observable NOW. The `source` field
+    // rides the /track payload too, but the backend has no column for it yet,
+    // so until then this log line IS the read — one grep answers "did the Glama
+    // listing ever send anyone", which nothing has been able to answer.
+    // Canonical /mcp logs nothing, so this adds no volume to normal traffic.
+    try {
+      const _src = _pathSource(req);
+      if (_src) {
+        console.log(`[source] registry=${_src} path=${req.path} method=${req.body?.method || '?'} `
+          + `tool=${req.body?.params?.name || '-'} sid=${String(req.headers['mcp-session-id'] || '').slice(0, 8)}`);
+      }
+    } catch (_) { /* observability must never affect the handler */ }
     try { _chEnsureFlusher(); } catch (_) { /* r-oauth-funnel: never affect the handler */ }
     // r-alias (2026-07-10): normalize a GUESSED tool name to the real one here —
     // BEFORE the session/stateless branch — so it applies on EVERY tools/call
@@ -18524,6 +18602,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // from a different hop, so prefer the current one when present).
       return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment,
         auth_source: _authChannel,
+        source: _pathSource(req),   // r-source-path: rides EVERY request
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
         await transport.handleRequest(req, res, req.body);
@@ -18632,6 +18711,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier, session_id: null,
         auth_source: _authChannel,
+        source: _pathSource(req),   // r-source-path: rides EVERY request
         // r46: see sessionMeta.set above for rationale
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent,
@@ -18702,6 +18782,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null,
         auth_source: _authChannel,
+        source: _pathSource(req),   // r-source-path: rides EVERY request
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
@@ -18754,6 +18835,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier,
         auth_source: _authChannel,
+        source: _pathSource(req),   // r-source-path: rides EVERY request
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
         developer_id: validation.developer_id || null,
@@ -18820,7 +18902,7 @@ app.get(MCP_PATHS, async (req, res) => {
   if (sid && sessions.has(sid)) {
     touchSession(sid);  // r41
     const meta = sessionMeta.get(sid) || {};
-    return ctx.run({ ...meta, session_id: sid }, async () => {
+    return ctx.run({ ...meta, session_id: sid, source: _pathSource(req) }, async () => {
       await sessions.get(sid).handleRequest(req, res);
     });
   }
