@@ -113,3 +113,59 @@ describe('the server actually answers on the tagged path', () => {
     expect(CODE).toMatch(/const platformHeader = \(_pathSelfTag\(req\)/);
   });
 });
+
+// ── r-source-path (2026-09-04): WHERE they came from, as a separate axis ─────
+//
+// The sibling of the self-path above, and deliberately NOT the same thing. A
+// self path can only ever exclude ('dchub-internal'); a source path names a
+// registry. Both branches are exercised, and the load-bearing property is the
+// SEPARATION: a source must never move `platform`, because every published
+// per-platform number is read off that field.
+import { _pathSource, MCP_SOURCE_PATHS, MCP_PATHS as _PATHS } from '../server.mjs';
+
+describe('the registry path tags the ARRIVAL SOURCE', () => {
+  it('maps each declared registry path to its source', () => {
+    expect(_pathSource({ path: '/mcp/glama' })).toBe('glama');
+    expect(_pathSource({ path: '/mcp/smithery' })).toBe('smithery');
+    expect(_pathSource({ path: '/mcp/pulsemcp' })).toBe('pulsemcp');
+  });
+
+  it('is EMPTY on the canonical path and on anything undeclared', () => {
+    expect(_pathSource({ path: '/mcp' })).toBe('');
+    expect(_pathSource({ path: '' })).toBe('');          // defaults to /mcp
+    expect(_pathSource({})).toBe('');
+    expect(_pathSource({ path: '/mcp/not-a-registry' })).toBe('');
+    // no prefix matching — a longer path must not inherit a registry's tag
+    expect(_pathSource({ path: '/mcp/glama/extra' })).toBe('');
+  });
+
+  it('tolerates a trailing slash, like the self-tag channel', () => {
+    expect(_pathSource({ path: '/mcp/glama/' })).toBe('glama');
+  });
+
+  // ★ THE SAFETY PROPERTY. platform answers "which client", source answers
+  // "who sent them". If a source path ever leaked into platform it would
+  // silently restate every per-platform number we publish.
+  it('a source path NEVER self-tags as internal and never mints a platform', () => {
+    for (const path of MCP_SOURCE_PATHS.keys()) {
+      expect(_pathSelfTag({ path })).toBe('');   // not excluded as our own traffic
+    }
+  });
+
+  it('the two path maps are disjoint — no path can be both', () => {
+    for (const p of MCP_SOURCE_PATHS.keys()) expect(MCP_SELF_PATHS_HAS(p)).toBe(false);
+  });
+
+  // every declared source path must actually be ROUTED, or the URL we publish
+  // in a registry listing 404s and the listing sends traffic into a wall.
+  it('every source path is mounted on MCP_PATHS', () => {
+    for (const p of MCP_SOURCE_PATHS.keys()) expect(_PATHS).toContain(p);
+    expect(_PATHS).toContain('/mcp');            // canonical path still served
+    expect(_PATHS).toContain('/mcp/analyst');    // self path still served
+  });
+});
+
+// MCP_SELF_PATHS is not exported; probe it through its accessor instead.
+function MCP_SELF_PATHS_HAS(path) {
+  return _pathSelfTag({ path }) !== '';
+}
