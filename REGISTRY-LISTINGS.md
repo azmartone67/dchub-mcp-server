@@ -36,8 +36,8 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
 | **ToolPlex** | `https://dchub.cloud/mcp/toolplex` | ❌ dashboard (cascade-fed) |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
-| **Official MCP registry** (cascade → PulseMCP / mcp.so / Glama / ToolPlex) | `https://dchub.cloud/mcp/registry` | ✅ `server.json` — ALREADY DONE |
-| **Official MCP registry** — new listing `cloud.dchub/datacenter-power-grid-fiber` | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` |
+| **Official MCP registry** — live listing `cloud.dchub/datacenter-power-grid-fiber` (cascade → PulseMCP / mcp.so / Glama / ToolPlex) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
+| ~~Official MCP registry~~ — retired listing `cloud.dchub/mcp-server` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
 
 > **Why the official registry has TWO rows.** The listing was renamed on
 > 2026-09-04 (registry search matches the server NAME only — descriptions are
@@ -51,9 +51,10 @@ was called, so we can finally answer "did this listing ever send anyone".
 > ```
 >
 > So the new name cannot reuse `/mcp/registry` while the old entry holds it.
-> The old row stays until `cloud.dchub/mcp-server` is deprecated — keeping a
-> live listing throughout — after which `/mcp/registry` is free and this table
-> collapses back to one row.
+> `server.json` now points at `/mcp/officialregistry` and the new listing is
+> the live one. `/mcp/registry` stays SERVED — existing installs from the old
+> listing still arrive on it — until `cloud.dchub/mcp-server` is deprecated.
+> Only then is that URL free, and only then does this table collapse to one row.
 
 ### ⚠️ `server.json` carries the SHARED cascade tag — never a per-registry one
 
