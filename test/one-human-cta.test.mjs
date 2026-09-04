@@ -31,7 +31,7 @@ describe('_hasHumanCta — every phrasing, not just the marker', () => {
   });
 });
 
-describe('_dropRepeatCheckoutUrls — keep the first, drop exact repeats', () => {
+describe('_dropRepeatCheckoutUrls — exactly ONE payment ask survives', () => {
   it('drops the SECOND line carrying the same URL', () => {
     const out = _dropRepeatCheckoutUrls(
       `🔒 Free tier: 3 of 10 shown — your human unlocks → ${URL_A}\n` +
@@ -43,9 +43,17 @@ describe('_dropRepeatCheckoutUrls — keep the first, drop exact repeats', () =>
     expect(out).not.toContain('Tell your human');// the repeat is gone
   });
 
-  it('NEVER removes a URL that appears only once', () => {
+  // ── r-one-ask (2026-09-03): DELIBERATE CONTRACT REVERSAL ─────────────────
+  // This test used to assert the opposite ("NEVER removes a URL that appears
+  // only once"), and that permissive rule is what allowed the live defect:
+  // measured on an anonymous rank_markets call, a $10 metered URL and a $49/mo
+  // developer URL BOTH survived because they are not exact repeats. The
+  // invariant r-handoff set was ONE payment ask, not one unique URL.
+  it('THE FIX: a SECOND distinct payment ask is dropped, first one wins', () => {
     const t = `ask one → ${URL_A}\nask two → ${URL_B}\n`;
-    expect(_dropRepeatCheckoutUrls(t)).toBe(t);
+    const out = _dropRepeatCheckoutUrls(t);
+    expect(out).toContain(URL_A);      // r-handoff's single payment ask
+    expect(out).not.toContain(URL_B);  // the stacked second ask
   });
 
   it('keeps every line when there is no checkout URL at all', () => {
@@ -53,10 +61,41 @@ describe('_dropRepeatCheckoutUrls — keep the first, drop exact repeats', () =>
     expect(_dropRepeatCheckoutUrls(t)).toBe(t);
   });
 
-  it('a line holding a repeat AND a fresh URL is KEPT (never lose a new link)', () => {
+  // Also reversed, and the loss is intentional: under "one ask" a later line is
+  // dropped even though it carries a URL not yet seen. The old name ("never lose
+  // a new link") named a goal that is incompatible with the invariant — a second
+  // link IS a second ask however it is worded.
+  it('a later line is dropped even when it carries a NEW url (one ask wins)', () => {
     const out = _dropRepeatCheckoutUrls(`first → ${URL_A}\nboth → ${URL_A} and ${URL_B}\n`);
-    expect(out).toContain(URL_B);
-    expect(out.split('\n').length).toBe(3);
+    expect(out).toContain(URL_A);
+    expect(out).not.toContain(URL_B);
+  });
+
+  // The old behaviour survives as a strict subset — an exact repeat still goes.
+  it('an exact repeat is still dropped (old rule is a subset of the new one)', () => {
+    const out = _dropRepeatCheckoutUrls(`one → ${URL_A}\ntwo → ${URL_A}\n`);
+    expect(out.match(new RegExp(URL_A.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g')).length).toBe(1);
+  });
+
+  // Scope guard: this removes an ASK, not the envelope around it.
+  it('lines with no checkout URL are never touched (bind_email, cross-sell)', () => {
+    const t = `paid → ${URL_A}\nFree: bind_email lifts you to 10 full answers/day.\n`
+            + `🧭 Next: one execute_plan call answers a whole question.\nalso paid → ${URL_B}\n`;
+    const out = _dropRepeatCheckoutUrls(t);
+    expect(out).toContain('bind_email');
+    expect(out).toContain('execute_plan');
+    expect(out).toContain(URL_A);
+    expect(out).not.toContain(URL_B);
+  });
+
+  // The live shape that motivated the fix, reproduced end to end.
+  it('THE LIVE CASE: two stacked asks collapse to one', () => {
+    const live = `{"results":[…]}\n\n---\n\n🔒 Free tier: 3 of 5 shown … your human unlocks → ${URL_A}\n`
+               + `\n---\n🔒 Today’s free full answers are used up.\n`
+               + `💡 Self-serve upgrade ($49/mo): ${URL_B}\n🧭 Next: execute_plan …\n`;
+    const out = _dropRepeatCheckoutUrls(live);
+    expect((out.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(1);
+    expect(out).toContain('execute_plan');   // envelope intact
   });
 
   it('survives junk input', () => {

@@ -446,17 +446,37 @@ function _hasHumanCta(text) {
   return _HUMAN_CTA_SIGNATURES.some((sig) => t.includes(sig));
 }
 
-// Drop any LINE carrying a checkout URL an earlier line already carried. Keeps
-// the FIRST occurrence — the one r-handoff calls the single payment ask — and
-// only ever removes an exact repeat of a URL already on the wire.
+// ── r-one-ask (2026-09-03) ──────────────────────────────────────────────────
+// Keep exactly ONE payment ask per response. r-handoff's invariant was never a
+// phrasing, it was a COUNT — and every prior fix enforced it by adding another
+// string to _HUMAN_CTA_SIGNATURES, so the next rewording walked straight past.
+//
+// Measured live on an anonymous rank_markets call the day r-one-human-cta
+// shipped: 3,339 chars, 1,543 data (46%), 1,796 CTA (54%), TWO stacked asks —
+// a $10 metered URL and a $49/mo developer URL — while BOTH signature strings
+// ('→ **For your human:**', '**Tell your human:**') appeared ZERO times. The
+// phrase list could not have caught it, and composeHumanCta's own guard was not
+// the gap: _hasHumanCta matched, so it correctly declined to add a THIRD. What
+// nothing did was COLLAPSE the two the upstream emitters had already stacked.
+//
+// The old rule dropped a line only when EVERY URL on it was an exact repeat, so
+// two DIFFERENT checkout URLs both survived. A checkout URL *is* the payment
+// ask, so derive from that and no phrase list is needed: the first one through
+// wins (r-handoff's "single payment ask"), any later one is dropped — including
+// an exact repeat, which is the old behaviour as a strict subset.
+//
+// ★ Scoped to the payment ask ALONE. A line without a checkout URL is never
+// touched, so the free `bind_email` lift and the `execute_plan` cross-sell both
+// survive — this removes a second ASK, not the rest of the envelope.
 function _dropRepeatCheckoutUrls(text) {
   const t = typeof text === 'string' ? text : '';
-  const seen = new Set();
+  const CHECKOUT = /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g;
+  let asked = false;
   return t.split('\n').filter((line) => {
-    const urls = line.match(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g);
-    if (!urls) return true;                              // no checkout URL → keep
-    if (urls.every((u) => seen.has(u))) return false;    // every URL here is a repeat
-    urls.forEach((u) => seen.add(u));
+    if (!CHECKOUT.test(line)) { CHECKOUT.lastIndex = 0; return true; }  // no ask → keep
+    CHECKOUT.lastIndex = 0;                 // /g is stateful — reset before reuse
+    if (asked) return false;                // a SECOND payment ask → drop the line
+    asked = true;
     return true;
   }).join('\n');
 }
