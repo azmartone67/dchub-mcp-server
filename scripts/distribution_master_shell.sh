@@ -72,5 +72,16 @@ LOBE=$(curl -s -A "Mozilla/5.0" "https://lobehub.com/mcp/azmartone67-dchub-mcp-s
 
 # ---- STAGE 4: HEARTBEAT ----
 heartbeat "$SERVED_OK" "served=$SERVED canon=$CANON"
+
+# ── DEAD-MAN BEAT (2026-09-03) ───────────────────────────────────────────────
+# Weekly agent, so a silent death is the easiest of the three to miss: seven days
+# pass before anyone would even think to look. cadence 168h -> the watcher alarms
+# at 2x. A version mismatch between served and canon is the loop reporting a
+# FAULT, not the loop failing to run, so it beats `success` and says so in note.
+# shellcheck source=scripts/agent_beat.sh
+. "$(dirname "$0")/agent_beat.sh" 2>/dev/null || agent_beat() { :; }
+agent_beat "agent:distribution" success 168 "served=$SERVED canon=$CANON" \
+  | while IFS= read -r l; do log "$l"; done
+
 log "distribution pass complete"
 exit 0

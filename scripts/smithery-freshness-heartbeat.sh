@@ -30,5 +30,21 @@ OUT="$(smithery mcp publish https://dchub.cloud/mcp -n azmartone67/dchub 2>&1)"
 RC=$?
 echo "$OUT" >> "$LOG"
 echo "[$TS] exit=$RC" >> "$LOG"
+
+# ── DEAD-MAN BEAT (2026-09-03) ───────────────────────────────────────────────
+# This agent is the freshness INSURANCE for the Smithery listing, and until now
+# its only record was this local file. If it silently stopped — a moved binary, a
+# revoked credential, an unloaded plist — the listing would go stale with nothing
+# anywhere saying so. It beats /api/v1/ops/deadman now, like every other loop.
+# `smithery mcp publish` returning non-zero is a LOOP failure -> RED.
+# shellcheck source=scripts/agent_beat.sh
+. "$(dirname "$0")/agent_beat.sh" 2>/dev/null || agent_beat() { :; }
+if [ "$RC" -eq 0 ]; then BEAT_ST="success"; else BEAT_ST="run_failed"; fi
+# cadence 48h, not the 24h tick: laptop agent, alarm when it has been gone ~4
+# days rather than when one closed lid delays a daily run. See the cadence note
+# in rank_defense_master_shell.sh.
+agent_beat "agent:smithery-freshness" "$BEAT_ST" 48 "smithery mcp publish rc=$RC" \
+  | while IFS= read -r l; do echo "[$TS] $l" >> "$LOG"; done
+
 echo "----" >> "$LOG"
 exit $RC
