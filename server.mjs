@@ -4223,6 +4223,30 @@ export const CALLER_CAP_MULT = Math.max(0, parseInt(process.env.DCHUB_TRIAL_CALL
 export const CALLER_CAP_TOOL = '*';
 const _callerCapFor = (perToolCap) =>
   (CALLER_CAP_MULT > 0 && perToolCap > 0) ? perToolCap * CALLER_CAP_MULT : 0;
+
+// ── Test seam: the deadline on a bounded backend read ───────────────────────
+// Both gates that read a durable counter before deciding (_fullCapHydrate here,
+// _anonUsageCount below) bound that read with a wall-clock AbortSignal and treat
+// the deadline firing as FAIL-OPEN. The bound is a real property and is tested.
+//
+// ★WHY THIS INDIRECTION EXISTS: a real wall clock makes that test a race against
+// the OS scheduler, not a test of the gate. Under the full 158-file suite the
+// worker can be descheduled past an 800ms deadline while a 127.0.0.1 stub answers
+// in microseconds — the peek is then aborted for a backend that DID answer, the
+// count never hydrates, and the gate reports the fail-open verdict in a test that
+// asserts the gating one. Measured 2026-09-04: 3 of 3 full-suite runs failed one
+// or more of these by exactly that route, a different test each run.
+//
+// Vitest fake timers cannot fix it — AbortSignal.timeout uses Node's internal
+// timer list, which @sinonjs/fake-timers does not patch (verified: a 1000ms
+// signal is still unaborted after advancing fake timers 5000ms). So the clock is
+// injected here instead: a test installs a deadline IT fires, and proves the
+// fail-open path deterministically rather than by sleeping.
+//
+// PRODUCTION IS UNCHANGED — the default is exactly AbortSignal.timeout(ms), and
+// every call site still passes the same ms it passed before.
+export const _readDeadline = { signal: (ms) => AbortSignal.timeout(ms) };
+
 function _fullCapHydrate(localKey, identity, tool, cap) {
   try {
     // ★ Returns the promise so the gate can AWAIT it. It still never rejects —
@@ -4238,7 +4262,7 @@ function _fullCapHydrate(localKey, identity, tool, cap) {
       // Bounded: this is now on the request path for the first call per
       // (identity, tool, day) per replica. A slow backend must degrade to the
       // old local-count behaviour, not stall the answer.
-      signal: AbortSignal.timeout(FULL_CAP_PEEK_MS || 5000),
+      signal: _readDeadline.signal(FULL_CAP_PEEK_MS || 5000),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -4682,7 +4706,7 @@ export async function _anonUsageCount(ip) {
         const r = await fetch(u.toString(), {
           method: 'GET',
           headers: { 'X-Internal-Key': INTERNAL_KEY },
-          signal: AbortSignal.timeout(2500),
+          signal: _readDeadline.signal(2500),
         });
         if (r.ok) {
           const j = await r.json();
