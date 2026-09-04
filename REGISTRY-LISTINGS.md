@@ -36,20 +36,30 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
 | **ToolPlex** | `https://dchub.cloud/mcp/toolplex` | ❌ dashboard (cascade-fed) |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
-| *(official MCP registry)* | `https://dchub.cloud/mcp` — **DO NOT CHANGE** | — |
+| **Official MCP registry** (cascade → PulseMCP / mcp.so / Glama / ToolPlex) | `https://dchub.cloud/mcp/registry` | ✅ `server.json` — ALREADY DONE |
 
-### ⚠️ `server.json` MUST keep the canonical `/mcp`
+### ⚠️ `server.json` carries the SHARED cascade tag — never a per-registry one
 
-The official registry is the **cascade source for PulseMCP / mcp.so / Glama /
-ToolPlex** (see the `SERVER_VERSION` note in `server.mjs`). One URL feeds all of
-them, so pointing `server.json` at any single registry path would attribute every
-mirrored arrival to that one registry — worse than no attribution, because it
-would look precise. Leave `server.json`, `mcp-server.json` and the README install
-snippets on `https://dchub.cloud/mcp`.
+The official registry is the cascade source for **PulseMCP / mcp.so / Glama /
+ToolPlex** (see the `SERVER_VERSION` note in `server.mjs`). One URL feeds all
+four, so pointing it at any *single* registry path would credit every mirrored
+arrival to that one registry — worse than no attribution, because it would look
+precise.
 
-The corollary: for a cascade-fed registry, the per-registry URL only takes effect
-if that registry's own dashboard lets you override the mirrored value. Where it
-does not, that listing stays unattributable and there is no fix from our side.
+It therefore carries `/mcp/registry`, a shared tag meaning **"arrived from a
+registry listing"** and nothing more. As of v2.12.5 this is already set.
+
+★ Read it for what it is. `mcp-registry` CANNOT tell Glama from PulseMCP, and
+that precision is not available at any effort — Glama exposes no maintainer
+field for the endpoint (its `glama.json` schema's only property is
+`maintainers`, and the listing carries no edit affordance). What it does buy is
+the distinction that was actually blocking a decision: all four registries
+report zero today, and nothing separated *zero* from *unmeasured*.
+
+★ `_meta.canonicalRemote` stays `https://dchub.cloud/mcp`, and `/mcp` keeps
+serving every existing install unchanged. Only the URL new listings hand out is
+tagged. The README and install snippets stay on `/mcp` — a human copying from
+GitHub is not a registry arrival.
 
 ### How to switch each one
 
