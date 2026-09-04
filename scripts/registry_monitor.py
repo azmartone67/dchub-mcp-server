@@ -312,6 +312,125 @@ def smithery_rank(term):
     return None, total, leader
 
 
+# ---------------------------------------------------------------------------
+# GLAMA PLACEMENT  (added 2026-09-03)
+#
+# ★★★ WHY THIS EXISTS: every rank in this file was SMITHERY. `main()` does
+#   `core = {t: smithery_rank(t) for t in CORE}` and smithery_rank() hits
+#   registry.smithery.ai. The three Glama helpers below it (glama_page_tool_count,
+#   glama_record, glama_build_provenance) all watch whether OUR OWN PAGE is FRESH —
+#   none has ever asked where that page RANKS. So a listing sitting off page one on
+#   every generic term raised nothing for months, while state/rank_status.json
+#   reported "energy #2, fiber #3" and those were Smithery's numbers.
+#   Freshness is not placement. This closes that gap.
+#
+# ★ DELIBERATELY OBSERVATIONAL — it does NOT feed reasons/escalation/_update_streaks.
+#   Measured 2026-09-03: Glama produced 10 clicks in 30 days and ALL TEN were
+#   brand-name lookups ("dchub" 7, "Dchub" 2, "dchyb" 1 — a typo of our own name),
+#   and /api/v1/reach shows 0 Glama rows in 2,274 real external calls over 7 days.
+#   Paging on a channel that delivers nothing is how a monitor trains its owner to
+#   ignore it — the same reasoning that keeps RECLAIM terms off the paging path.
+# ---------------------------------------------------------------------------
+
+def _glama_search_html(term):
+    """Page 1 of Glama's server search. Returns (html, err) and NEVER raises: an
+    unreadable page has to stay distinguishable from an empty one (the four-state
+    rule — a boolean cannot express "I could not look").
+
+    ★ A browser UA is REQUIRED. glama.ai/api/mcp/v1/* has answered 401 since
+    2026-09-01 and needs a key; the HTML does not. Do not "fix" that 401."""
+    url = "https://glama.ai/mcp/servers?" + urllib.parse.urlencode({"query": term})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.read().decode("utf-8", "replace"), None
+    except Exception as e:                      # noqa: BLE001 - unreadable != absent
+        return None, f"{type(e).__name__}: {e}"
+
+
+# JSON-LD ItemList entries Glama emits for its own result ordering.
+_GLAMA_ITEM = re.compile(r'"position"\s*:\s*(\d+)\s*,\s*"url"\s*:\s*"([^"]+)"')
+_GLAMA_OUR_TOOL = re.compile(
+    r"/mcp/servers/azmartone67/dchub-mcp-server/tools/([A-Za-z0-9_]+)")
+
+
+def glama_rank(term, page=None):
+    """(our_position, page1_size, leader_slug) for a Glama SERVER search — the mirror
+    of smithery_rank() that this file went without.
+
+    ★ Reads the JSON-LD ItemList Glama itself emits, NOT a scrape of every <a> on the
+    page. Scraping links inflates the set with feeds/*.xml and footer chrome and
+    invents positions: measured 2026-09-03, a link-scrape put us at "28 of 29" on
+    `power grid` when the ItemList says we are not on page one at all. The scrape was
+    not a worse estimate of the same number, it was a different number.
+
+    ★ page1_size is 20 by design. Page one is the only surface a human reads, so
+    ABSENT here means absent from what anyone will see — not absent from the index.
+    Do not paginate this into a flattering number.
+
+    Returns (None, None, None) ONLY when the page could not be read.
+    (None, n, leader) means it read fine and we are not on it."""
+    if page is None:
+        page, err = _glama_search_html(term)
+        if err or page is None:
+            return None, None, None
+    items = sorted({(int(pos), u) for pos, u in _GLAMA_ITEM.findall(page)
+                    if "/mcp/servers/" in u or "/mcp/connectors/" in u})
+    leader = items[0][1].rsplit("/mcp/", 1)[-1].split("/", 1)[-1] if items else None
+    for pos, u in items:
+        if "dchub" in u.lower():
+            return pos, len(items), leader
+    return None, len(items), leader
+
+
+def glama_tool_hits(term, page=None):
+    """Our tool names surfacing in Glama's SEPARATE tool index for `term`.
+
+    ★ Glama indexes TOOLS independently of servers, and nothing in this repo has ever
+    counted that surface. Measured 2026-09-03: `colocation` returns ZERO server
+    results while our `execute_plan` renders in the tools section of the same page.
+    So "absent" on glama_rank() is not the same as "invisible for this term"."""
+    if page is None:
+        page, err = _glama_search_html(term)
+        if err or page is None:
+            return None
+    return sorted(set(_GLAMA_OUR_TOOL.findall(page)))
+
+
+# Terms measured 2026-09-03. Kept SEPARATE from CORE/RECLAIM/WATCH because those
+# tiers encode Smithery paging semantics; reusing them would imply a Glama slip
+# pages, which it must not.
+GLAMA_TERMS = ["data center", "datacenter", "power grid", "fiber", "energy",
+               "electricity", "interconnection queue", "site selection",
+               "colocation", "dchub"]
+
+
+def glama_placement_report():
+    """`--glama`: where we actually sit on Glama page one, plus the tool index.
+    Prints a table and returns the rows. Read-only, no state, never pages."""
+    rows = []
+    for t in GLAMA_TERMS:
+        page, err = _glama_search_html(t)          # ONE fetch feeds both parses
+        if err or page is None:
+            rows.append((t, None, None, None, None))
+            continue
+        pos, n, leader = glama_rank(t, page)
+        rows.append((t, pos, n, leader, glama_tool_hits(t, page)))
+    L = ["## Glama page-1 placement (observational — this channel delivers ~0 calls)"]
+    for t, pos, n, leader, tools in rows:
+        if n is None:
+            L.append(f"?? {t}: UNREADABLE (not the same as absent)")
+            continue
+        where = f"#{pos} of {n}" if pos else f"ABSENT from page 1 ({n} results)"
+        mark = "OK" if pos and pos <= 10 else "--"
+        extra = f"  leader: {leader}" if not pos and leader else ""
+        tl = f"  [tool index: {', '.join(tools)}]" if tools else ""
+        L.append(f"{mark} {t}: {where}{extra}{tl}")
+    report = "\n".join(L)
+    print(report)
+    return rows
+
+
 RRF_K = 30  # measured 2026-09-03 over 240 observations; see the ranking-model note above.
 
 
@@ -1556,6 +1675,9 @@ def _self_test():
 
 if __name__ == "__main__":
     import sys
+    if "--glama" in sys.argv:
+        glama_placement_report()
+        raise SystemExit(0)
     if "--self-test" in sys.argv:
         sys.exit(_self_test())
     main(probe="--probe" in sys.argv)
