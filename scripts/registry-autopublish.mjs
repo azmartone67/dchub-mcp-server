@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 
 const REGISTRY = 'https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub';
-const NAME = 'cloud.dchub/mcp-server';
+const NAME = 'cloud.dchub/datacenter-power-grid-fiber';
 
 const parse = (v) => { const p = String(v).split('.').map((n) => parseInt(n, 10)); return [p[0] || 0, p[1] || 0, p[2] || 0]; };
 const gt = (a, b) => { const x = parse(a), y = parse(b); for (let i = 0; i < 3; i++) { if (x[i] !== y[i]) return x[i] > y[i]; } return false; };

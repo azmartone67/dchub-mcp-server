@@ -16,8 +16,8 @@ const SERVER_JSON = JSON.parse(
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
 describe('server.json (the body GET /server.json publishes)', () => {
-  it('is a complete registry-schema entry for cloud.dchub/mcp-server', () => {
-    expect(SERVER_JSON.name).toBe('cloud.dchub/mcp-server');
+  it('is a complete registry-schema entry for cloud.dchub/datacenter-power-grid-fiber', () => {
+    expect(SERVER_JSON.name).toBe('cloud.dchub/datacenter-power-grid-fiber');
     expect(SERVER_JSON.$schema).toMatch(/server\.schema\.json$/);
     expect(SERVER_JSON.version).toMatch(/^\d+\.\d+\.\d+/);
     // ── r-cascade-path (2026-09-04) ─────────────────────────────────────

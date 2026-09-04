@@ -47,6 +47,9 @@ LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
 # of, so each listing must be named here. An empty list is a hard failure rather
 # than a quiet pass, and a slug that stops resolving is reported — a fence that
 # cannot reach its subject must not look like a clean scan.
+# Official MCP registry name (renamed 2026-09-04 from cloud.dchub/mcp-server).
+REGISTRY_NAME = "cloud.dchub/datacenter-power-grid-fiber"
+
 CONNECTOR_SLUGS = [
     # Confirmed 2026-08-31 from the address bar of each live listing. BOTH point
     # at the same server and the same 83 tools; only the stored blurb differs,
@@ -490,7 +493,17 @@ def canonical():
 def official_registry():
     try:
         d = _get("https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub&version=latest")
-        s = (d.get("servers") or [{}])[0]
+        # ★ MUST filter by name, not take [0]. The `cloud.dchub` search matches
+        #   EVERY name in the namespace, and since the 2026-09-04 rename that is
+        #   two: the active entry and the deprecated `cloud.dchub/mcp-server`
+        #   left behind as a signpost. `[0]` silently reported whichever the
+        #   registry happened to order first -- i.e. it could report the frozen
+        #   version of a deprecated listing as our live one.
+        wanted = [x for x in (d.get("servers") or [])
+                  if (x.get("server", x) or {}).get("name") == REGISTRY_NAME]
+        if not wanted:
+            return None, None
+        s = wanted[0]
         srv = s.get("server", s)
         meta = (s.get("_meta", {}) or {}).get("io.modelcontextprotocol.registry/publisher-provided", {}) or {}
         return srv.get("version"), meta.get("toolCount")

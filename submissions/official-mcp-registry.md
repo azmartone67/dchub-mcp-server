@@ -10,7 +10,7 @@ repo root. Publishing is done with the `mcp-publisher` CLI (already wired into
 
 ## Namespace authentication — the one-time blocker
 
-The namespace is `cloud.dchub/mcp-server`. The official registry requires the
+The namespace is `cloud.dchub/datacenter-power-grid-fiber`. The official registry requires the
 publisher to **prove ownership of `dchub.cloud`** (DNS namespace auth). GitHub-OIDC
 auth only covers `io.github.*` namespaces, so for `cloud.dchub` the maintainer
 must do DNS verification **once**:
