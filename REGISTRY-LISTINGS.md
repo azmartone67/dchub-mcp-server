@@ -20,6 +20,70 @@ Live server **83 tools** · official registry listing `cloud.dchub/mcp-server` *
 
 ---
 
+## ★ PER-REGISTRY ENDPOINT URLs — source attribution (2026-09-04)
+
+`dchub-mcp-server` #331 shipped **arrival attribution by path**. Each registry has
+its own live endpoint, identical to `/mcp` in every respect (same 83 tools, same
+auth, same free tier) — the ONLY difference is that the server records which one
+was called, so we can finally answer "did this listing ever send anyone".
+
+| Registry | Endpoint to list | Switchable from this repo? |
+|---|---|---|
+| **Smithery** | `https://dchub.cloud/mcp/smithery` | ✅ CLI publish — see below |
+| **Glama** | `https://dchub.cloud/mcp/glama` | ❌ dashboard only (cascade-fed) |
+| **PulseMCP** | `https://dchub.cloud/mcp/pulsemcp` | ❌ web form / dashboard |
+| **mcp.so** | `https://dchub.cloud/mcp/mcpso` | ❌ web form / dashboard |
+| **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
+| **ToolPlex** | `https://dchub.cloud/mcp/toolplex` | ❌ dashboard (cascade-fed) |
+| **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
+| *(official MCP registry)* | `https://dchub.cloud/mcp` — **DO NOT CHANGE** | — |
+
+### ⚠️ `server.json` MUST keep the canonical `/mcp`
+
+The official registry is the **cascade source for PulseMCP / mcp.so / Glama /
+ToolPlex** (see the `SERVER_VERSION` note in `server.mjs`). One URL feeds all of
+them, so pointing `server.json` at any single registry path would attribute every
+mirrored arrival to that one registry — worse than no attribution, because it
+would look precise. Leave `server.json`, `mcp-server.json` and the README install
+snippets on `https://dchub.cloud/mcp`.
+
+The corollary: for a cascade-fed registry, the per-registry URL only takes effect
+if that registry's own dashboard lets you override the mirrored value. Where it
+does not, that listing stays unattributable and there is no fix from our side.
+
+### How to switch each one
+
+- **Smithery** — republish against the source path:
+  ```bash
+  smithery mcp publish "https://dchub.cloud/mcp/smithery" -n azmartone67/dchub
+  ```
+- **Everything else** — edit the endpoint/URL field in that registry's own
+  dashboard or resubmit its form with the URL from the table. `smithery.yaml` and
+  `glama.json` do **not** declare an endpoint, so neither switch can be made by
+  committing to this repo.
+
+### Verifying a switch worked
+
+The path is live the moment it is listed — no deploy needed. Confirm the endpoint
+answers, then watch for the arrival:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://dchub.cloud/mcp/glama \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}'
+# 200 = listed URL is serving
+```
+
+Arrivals log as `[source] registry=glama path=/mcp/glama tool=… sid=…`. Until
+dchub-backend#3778 adds the `source` column, that log line is the only read —
+`/api/v1/reach` will NOT show it.
+
+★ `source` is caller-assertable, not proof: the path is public once listed, so
+anyone who finds it can credit that registry with their traffic. Fine for a growth
+read, not for a payout or a public claim.
+
+---
+
 ## One-liner (≤ 100 chars)
 The data-center, power & energy intelligence layer for AI agents — query AND cite, live.
 

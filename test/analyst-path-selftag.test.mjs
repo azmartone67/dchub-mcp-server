@@ -169,3 +169,34 @@ describe('the registry path tags the ARRIVAL SOURCE', () => {
 function MCP_SELF_PATHS_HAS(path) {
   return _pathSelfTag({ path }) !== '';
 }
+
+// ── r-source-path docs parity (2026-09-04) ──────────────────────────────────
+// REGISTRY-LISTINGS.md is the paste-ready copy an owner works from when they
+// switch a listing by hand. A URL in that table that no route serves would be
+// pasted into a public registry and 404 every arrival it sent — the listing
+// would look live and deliver nothing, which is the exact failure mode the
+// registry work exists to detect. Pin the doc to the code.
+describe('REGISTRY-LISTINGS.md cannot drift from the declared source paths', () => {
+  const DOC = readFileSync(new URL('../REGISTRY-LISTINGS.md', import.meta.url), 'utf8');
+
+  it('every dchub.cloud/mcp/<sub> URL in the doc is a route we actually serve', () => {
+    const found = [...DOC.matchAll(/dchub\.cloud(\/mcp\/[a-z0-9-]+)/g)].map((m) => m[1]);
+    expect(found.length).toBeGreaterThan(0);        // non-vacuity: the table exists
+    for (const path of new Set(found)) {
+      expect(_PATHS, `${path} is in the doc but not routed`).toContain(path);
+    }
+  });
+
+  it('every declared source path appears in the doc', () => {
+    for (const path of MCP_SOURCE_PATHS.keys()) {
+      expect(DOC, `${path} is routed but undocumented`).toContain(`dchub.cloud${path}`);
+    }
+  });
+
+  it('the doc still tells the owner to leave server.json canonical', () => {
+    expect(DOC).toContain('DO NOT CHANGE');
+    // server.json itself must NOT have been switched to a source path
+    const SERVER_JSON = readFileSync(new URL('../server.json', import.meta.url), 'utf8');
+    for (const path of MCP_SOURCE_PATHS.keys()) expect(SERVER_JSON).not.toContain(path);
+  });
+});
