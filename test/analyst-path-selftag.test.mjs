@@ -199,19 +199,36 @@ describe('REGISTRY-LISTINGS.md cannot drift from the declared source paths', () 
   // them all. That reasoning holds and is now enforced more precisely rather
   // than by a blanket ban: server.json carries the SHARED cascade tag, and
   // pointing it at a PER-REGISTRY path is the thing that must stay impossible.
+  // ★ 2026-09-04 — ASSERT THE TAG, NOT THE PATH STRING. This pinned the url to
+  //   the literal '/mcp/registry'. That is one path that happens to carry the
+  //   cascade tag, not the rule itself, and it broke the moment a SECOND
+  //   cascade path had to exist: the official registry refuses a remote URL
+  //   already used by another server ("remote URL https://dchub.cloud/mcp/registry
+  //   is already used by server cloud.dchub/mcp-server"), so the renamed listing
+  //   could not reuse it and got /mcp/officialregistry instead.
+  //
+  //   The invariant was never "this exact string". It is: whatever server.json
+  //   points at must resolve to the SHARED cascade tag, because one url feeds
+  //   four mirroring registries and a per-registry tag would mis-credit them
+  //   all. Derived from the map, so adding a cascade path keeps this honest and
+  //   adding a per-registry one still fails.
   it('server.json carries the shared cascade tag, never a per-registry one', () => {
     const sj = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
     const url = sj.remotes[0].url;
-    expect(url).toBe('https://dchub.cloud/mcp/registry');
+    const path = new URL(url).pathname;
 
     // the listing url must be a path we actually serve, or every arrival 404s
-    const path = new URL(url).pathname;
     expect(_PATHS).toContain(path);
+    // THE RULE: the tag is the shared cascade one
     expect(_pathSource({ path })).toBe('mcp-registry');
 
-    // ★ the invariant the old assertion was really protecting
+    const CASCADE = [...MCP_SOURCE_PATHS.entries()]
+      .filter(([, src]) => src === 'mcp-registry').map(([p]) => p);
+    expect(CASCADE, 'no cascade path declared').toContain(path);
+
+    // ★ the invariant the original assertion was really protecting
     for (const p of MCP_SOURCE_PATHS.keys()) {
-      if (p === '/mcp/registry') continue;
+      if (CASCADE.includes(p)) continue;
       expect(url, `server.json must not carry the per-registry path ${p}`).not.toContain(p);
     }
   });
