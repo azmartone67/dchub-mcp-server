@@ -3,13 +3,30 @@
 // -----------------------------------------------------------------------------
 // Hits the live https://dchub.cloud/mcp endpoint, exercises every tool with a
 // known-good argument set, and asserts the response shape we built validators
-// for in dchub-selfheal. Run with:  npm test
+// for in dchub-selfheal. Requires MCP_URL to be set (see the gate below):
+//     MCP_URL=https://dchub.cloud/mcp npx vitest run test/mcp.test.mjs
 //
 // MCP_URL env var overrides the target if you want to test a staging deploy.
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
 import { gateReason } from './gate-reason.mjs';
 
+// ★2026-09-04 — THIS SUITE MUST NOT RUN BY ACCIDENT.
+// MCP_URL used to fall back to the production endpoint, so a bare
+// `npx vitest run` — the command this repo's own gates line recommends —
+// collected this file and fired live traffic at https://dchub.cloud/mcp from
+// any laptop, with no opt-in and nothing in the output saying it had happened.
+// CI's live step (test.yml, "Live MCP suite — informational") sets MCP_URL
+// explicitly, so gating on it leaves CI byte-identical and makes the local
+// full-suite run skip instead.
+//
+// ★ The gate is runIf, NOT a config-level `exclude`. Measured 2026-09-04:
+//     npx vitest run test/<this file> --exclude '**/<this file>'
+//   prints "No test files found" and exits 1 — and the live step carries
+//   continue-on-error: true, so an exclude would have RETIRED the live suite
+//   while CI went on reporting green. A skip is visible in the run output; a
+//   file that was never collected is not.
+const LIVE = !!process.env.MCP_URL;
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
 
@@ -122,7 +139,7 @@ function isGated(r) {
   return gateReason(unwrap(r)) !== null || gateReason(r) !== null;
 }
 
-describe('dchub MCP smoke tests', () => {
+describe.runIf(LIVE)('dchub MCP smoke tests', () => {
   beforeAll(async () => { await init(); }, 15000);
 
   it('search_facilities returns AWS Ohio rows including Columbus', async () => {
@@ -286,7 +303,7 @@ describe('dchub MCP smoke tests', () => {
 // Live-verified defect: anon init → tools/call with X-API-Key on that
 // session-id → list_saved_sites still answered 'API 401 auth_required'.
 // Runs only when MCP_API_KEY is set (needs a real key to adopt).
-describe.runIf(!!process.env.MCP_API_KEY)('late key header on an anonymous session (r-late-key)', () => {
+describe.runIf(LIVE && !!process.env.MCP_API_KEY)('late key header on an anonymous session (r-late-key)', () => {
   it('anon initialize → tools/call WITH key → keyed identity, not auth_required', async () => {
     const ANON = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
     const initResp = await fetch(MCP_URL, {

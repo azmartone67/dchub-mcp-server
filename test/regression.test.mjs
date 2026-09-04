@@ -10,11 +10,30 @@
 //
 // Uses a real free key against the live API (MCP_API_KEY env). PAID_ONLY tools
 // that are NOT in KEYED_FREE_BONUS assert they gate (trial_preview / paywall)
-// rather than returning data. Run with: npx vitest run
+// rather than returning data. Requires MCP_URL to be set (see the gate
+// below):  MCP_URL=https://dchub.cloud/mcp npx vitest run test/regression.test.mjs
 // =============================================================================
 import { describe, it, expect, beforeAll } from 'vitest';
 import { gateReason, hasPayload } from './gate-reason.mjs';
 
+// ★2026-09-04 — THIS SUITE MUST NOT RUN BY ACCIDENT.
+// MCP_URL used to fall back to the production endpoint, so a bare
+// `npx vitest run` — the command this repo's own gates line recommends —
+// collected this file and fired live traffic at https://dchub.cloud/mcp from
+// any laptop, with no opt-in and nothing in the output saying it had happened.
+// CI's live step (test.yml, "Live MCP suite — informational") sets MCP_URL
+// explicitly, so gating on it leaves CI byte-identical and makes the local
+// full-suite run skip instead.
+//
+// ★ The gate is runIf, NOT a config-level `exclude`. Measured 2026-09-04:
+//     npx vitest run test/regression.test.mjs --exclude '**/regression.test.mjs'
+//   prints "No test files found" and exits 1 — and the live step carries
+//   continue-on-error: true, so an exclude would have RETIRED the live suite
+//   while CI went on reporting green. A skip is visible in the run output; a
+//   file that was never collected is not.
+//
+// The invariant is enforced by test/live-suite-opt-in.test.mjs.
+const LIVE = !!process.env.MCP_URL;
 const MCP_URL = process.env.MCP_URL || 'https://dchub.cloud/mcp';
 const PROTOCOL_VERSION = '2025-11-25';
 
@@ -170,7 +189,7 @@ function resultsDiffer(a, b) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-describe('MCP regression suite', () => {
+describe.runIf(LIVE)('MCP regression suite', () => {
   beforeAll(async () => { await init(); }, 20000);
 
   // ─── (a) Tool registration completeness ────────────────────────────────────
