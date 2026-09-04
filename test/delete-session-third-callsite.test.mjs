@@ -71,8 +71,18 @@ afterEach(() => {
   }
 });
 
-/** DELETE with a hard client-side deadline, so a HANG is observable as one. */
-async function del(sid, ms = 3000) {
+/** DELETE with a hard client-side deadline, so a HANG is observable as one.
+ *
+ *  ★ The deadline separates "answered" from "never answers", and the pre-fix
+ *  handler never answers at all — so any finite bound proves it, and the exact
+ *  number is not a property of the fix. It was 3000ms, which under the full
+ *  158-file suite is inside the range a loaded worker can simply be descheduled
+ *  for: measured 2026-09-04, this file reported `hung` on a handler that had
+ *  responded, in 1 of 3 full-suite runs, while passing in isolation. 20s cannot
+ *  be reached by scheduling noise and still fails in seconds against a real
+ *  hang, because a real hang has no bound at all.
+ */
+async function del(sid, ms = 20000) {
   try {
     const r = await fetch(`${base}/mcp`, {
       method: 'DELETE',

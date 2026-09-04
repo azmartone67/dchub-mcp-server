@@ -35,11 +35,22 @@ import http from 'node:http';
 
 let srv, base, mode = 'count', served = 0, fetches = 0;
 
+// A hang test must fire its deadline only once the backend actually HOLDS the
+// request. Aborting earlier proves nothing (the read never reached the stub)
+// and lets the request land during the NEXT test, inflating its fetch count —
+// which is exactly what a first cut of this file did.
+let hangSeen = 0, hangNotify = () => {};
+const untilHung = (n) => new Promise((resolve) => {
+  const check = () => { if (hangSeen >= n) resolve(); };
+  hangNotify = check;
+  check();
+});
+
 beforeAll(async () => {
   srv = http.createServer((req, res) => {
     if (!req.url.startsWith('/api/v1/mcp/anon-usage')) { res.writeHead(404); res.end('{}'); return; }
     fetches += 1;
-    if (mode === 'hang') return;                                  // never responds -> timeout
+    if (mode === 'hang') { hangSeen += 1; hangNotify(); return; }  // never responds -> timeout
     if (mode === 'error') { res.writeHead(500); res.end('boom'); return; }
     if (mode === 'garbage') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('not json'); return; }
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -58,21 +69,46 @@ async function freshServer({ cap, mult } = {}) {
   if (mult !== undefined) process.env.DCHUB_ANON_HARD_WALL_MULT = String(mult);
   const m = await import('../server.mjs');
   m._anonUsageCounts.clear();
+  // ★ DETERMINISM (2026-09-04): the anon count read is bounded by a real 2500ms
+  // AbortSignal. The stub answers on 127.0.0.1 in microseconds, so under the
+  // full 158-file suite that deadline is not a property under test — it is a
+  // race against the OS scheduler, and losing it aborts a read the stub already
+  // answered, which fails open to count 0 and flips a walling assertion to
+  // false. Measured on main 2026-09-04, that is exactly how "still reports
+  // over-CAP across that whole band" failed 2 of 3 full-suite runs while
+  // passing 10/10 in isolation. A deadline no scheduling stall can reach
+  // removes the race and changes no assertion. The one test that OWNS the
+  // deadline property installs its own controllable one — see FAIL-OPEN below.
+  m._readDeadline.signal = () => AbortSignal.timeout(120_000);
   return m;
 }
 
-beforeEach(() => { mode = 'count'; served = 0; fetches = 0; });
+beforeEach(() => { mode = 'count'; served = 0; fetches = 0; hangSeen = 0; });
 
 describe('the hard wall lands at MULT x the cap and nowhere earlier', () => {
   it('does not wall inside the carrot band, and walls at exactly 10x', async () => {
     // cap 30, mult 10 => carrot 30..299, wall at 300. The band is the whole
     // point: a real agent that hits the cap keeps getting its trimmed preview
     // and its claim_free_key nudge, exactly as before this change.
-    for (const [count, walled] of [[0, false], [30, false], [299, false], [300, true], [1345, true]]) {
+    //
+    // ★ ONE import, not five (2026-09-04). cap and mult are identical at every
+    // point on the band — only the stub-side count moves — so the four extra
+    // vi.resetModules() re-evaluations of 19k lines of server.mjs bought
+    // nothing and cost the test its determinism: at ~1s per reload under the
+    // full suite this ran past the 5s default testTimeout in 3 of 3 measured
+    // runs, while passing in isolation. Clearing the 60s per-IP cache gives
+    // each point the same cold read a fresh module did, and the `fetches`
+    // assertion proves every point really was read from the backend rather
+    // than served from that cache.
+    const m = await freshServer({ cap: 30, mult: 10 });
+    const seen = [];
+    for (const count of [0, 30, 299, 300, 1345]) {
       served = count;
-      const m = await freshServer({ cap: 30, mult: 10 });
-      expect(await m._anonHardWalled('9.9.9.9'), `count=${count}`).toBe(walled);
+      m._anonUsageCounts.clear();
+      seen.push([count, await m._anonHardWalled('9.9.9.9')]);
     }
+    expect(seen).toEqual([[0, false], [30, false], [299, false], [300, true], [1345, true]]);
+    expect(fetches, 'every point must be a fresh backend read, not the 60s cache').toBe(5);
   });
 
   it('still reports over-CAP across that whole band — the carrot is untouched', async () => {
@@ -114,15 +150,50 @@ describe('INERT — a disabled cap or a zero multiple costs nothing', () => {
 });
 
 describe('FAIL-OPEN — a backend hiccup must never wall the funnel', () => {
-  for (const bad of ['error', 'garbage', 'hang']) {
+  for (const bad of ['error', 'garbage']) {
     it(`treats an unreadable count as 0 (${bad})`, async () => {
       served = 999999;      // irrelevant: the response is unusable
       mode = bad;
       const m = await freshServer({ cap: 30, mult: 10 });
       expect(await m._anonHardWalled('9.9.9.9')).toBe(false);
       expect(await m._anonOverCap('9.9.9.9')).toBe(false);
-    }, 15000);
+    });
   }
+
+  it('treats a backend that never answers as 0, bounded by the read deadline', async () => {
+    // ★ THE DEADLINE IS THE PROPERTY HERE, so this test owns the clock instead
+    // of sleeping against one. Waiting out a real 2500ms AbortSignal made the
+    // whole file 2.5s slower AND asserted nothing about the bound itself — the
+    // test passed identically whether the read was bounded at 2.5s or 25s.
+    // Vitest fake timers cannot substitute: AbortSignal.timeout runs on Node's
+    // internal timer list, which they do not patch (a 1000ms signal survives
+    // advancing them 5000ms). So the deadline is INJECTED and fired by hand.
+    served = 999999;      // irrelevant: the backend never answers at all
+    mode = 'hang';
+    const m = await freshServer({ cap: 30, mult: 10 });
+
+    const ctl = new AbortController();
+    let armed;
+    const asked = new Promise((r) => { armed = r; });
+    m._readDeadline.signal = (ms) => { armed(ms); return ctl.signal; };
+
+    const walled = m._anonHardWalled('9.9.9.9');
+    expect(await asked).toBe(2500);      // the read IS bounded, at the declared 2500ms
+    await untilHung(1);                  // the backend HOLDS the request and will not answer
+    expect(fetches, 'the read really reached the backend').toBe(1);
+
+    // Still pending, so the false below is the deadline firing — not a read
+    // that was skipped or short-circuited before it ever reached the backend.
+    let settled = false;
+    walled.then(() => { settled = true; });
+    await new Promise((r) => setImmediate(r));
+    expect(settled).toBe(false);
+
+    ctl.abort(new DOMException('The operation was aborted', 'TimeoutError'));
+    expect(await walled).toBe(false);                       // fail-open, never walls
+    expect(await m._anonOverCap('9.9.9.9')).toBe(false);    // and the soft cap agrees
+    expect(fetches, 'the failed read is cached as 0, not retried').toBe(1);   // still 1
+  });
 });
 
 describe('one shared count feeds both thresholds', () => {
