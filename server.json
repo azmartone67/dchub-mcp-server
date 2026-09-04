@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "title": "DC Hub \u2014 Data Center & Power Intelligence",
+  "title": "DC Hub \u2014 Data Center Site Selection & Colocation: Electricity, Power Grid, Gas, Fiber",
   "description": "Live power, energy, grid, gas, fiber & data-center site-selection infrastructure \u2014 query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.12.3",
+  "version": "2.12.5",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -12,7 +12,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://dchub.cloud/mcp"
+      "url": "https://dchub.cloud/mcp/registry"
     }
   ],
   "_meta": {

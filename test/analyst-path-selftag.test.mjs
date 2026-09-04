@@ -193,10 +193,32 @@ describe('REGISTRY-LISTINGS.md cannot drift from the declared source paths', () 
     }
   });
 
-  it('the doc still tells the owner to leave server.json canonical', () => {
-    expect(DOC).toContain('DO NOT CHANGE');
-    // server.json itself must NOT have been switched to a source path
-    const SERVER_JSON = readFileSync(new URL('../server.json', import.meta.url), 'utf8');
-    for (const path of MCP_SOURCE_PATHS.keys()) expect(SERVER_JSON).not.toContain(path);
+  // ── r-cascade-path (2026-09-04): DELIBERATE CONTRACT REVERSAL ────────────
+  // This asserted server.json carried NO source path, on the reasoning that
+  // one url feeds four mirroring registries so tagging it would mis-credit
+  // them all. That reasoning holds and is now enforced more precisely rather
+  // than by a blanket ban: server.json carries the SHARED cascade tag, and
+  // pointing it at a PER-REGISTRY path is the thing that must stay impossible.
+  it('server.json carries the shared cascade tag, never a per-registry one', () => {
+    const sj = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
+    const url = sj.remotes[0].url;
+    expect(url).toBe('https://dchub.cloud/mcp/registry');
+
+    // the listing url must be a path we actually serve, or every arrival 404s
+    const path = new URL(url).pathname;
+    expect(_PATHS).toContain(path);
+    expect(_pathSource({ path })).toBe('mcp-registry');
+
+    // ★ the invariant the old assertion was really protecting
+    for (const p of MCP_SOURCE_PATHS.keys()) {
+      if (p === '/mcp/registry') continue;
+      expect(url, `server.json must not carry the per-registry path ${p}`).not.toContain(p);
+    }
+  });
+
+  it('canonicalRemote stays /mcp so the origin is still declared honestly', () => {
+    const sj = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
+    const pp = sj._meta['io.modelcontextprotocol.registry/publisher-provided'];
+    expect(pp.canonicalRemote).toBe('https://dchub.cloud/mcp');
   });
 });
