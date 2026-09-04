@@ -9,13 +9,17 @@ import { describe, it, expect } from 'vitest';
 import { trimForTrial, TRIAL_PREVIEW_ROWS } from '../server.mjs';
 
 // Shaped exactly like the live backend payload (routes/mcp_tier1_tools.py).
-// The backend's published composite, verbatim from the `methodology` string
-// this tool ships in the same object: 0.4×total_mw + 50×operators + 20×facilities.
-const composite = (fac, mw, ops) => 0.4 * mw + 50 * ops + 20 * fac;
+// What the backend ACTUALLY puts in `score` — measured live 2026-09-04 by
+// sweeping `limit`: a within-result-set position ladder, NOT the composite the
+// `methodology` string names. N is the caller's limit, so the same market scores
+// differently depending only on how many rows were requested.
+//     score = 100 × (N − rank + 1) / N
+const N_ROWS = 6;
+const ladder = (rank, n = N_ROWS) => Math.round((100 * (n - rank + 1) / n) * 10) / 10;
 const row = (rank, market, fac, mw, ops) => ({
   rank, market, metro_slug: market.replace(/-[a-z]{2}$/, ''),
   city: market, state: 'VA', country: 'US',
-  score: composite(fac, mw, ops),
+  score: ladder(rank),
   value: `${fac} fac / ${mw} MW / ${ops} ops`,
   facility_count: fac, total_mw: mw, operator_count: ops,
   url: `https://dchub.cloud/markets/${market}`,
@@ -54,31 +58,32 @@ describe('rank_markets typed preview', () => {
     }
   });
 
-  // ── r-score-derivable (2026-09-04): DELIBERATE CONTRACT REVERSAL ─────────
-  // This assertion used to read `expect(out.results[0].score).toBeNull()` with
-  // the comment "composite rank = paid". The gate it defended was vacuous: the
-  // same object publishes the formula (`methodology`) and all three inputs, so
-  // any agent that can multiply already had the number. Measured live on an
-  // anonymous call — 0.4(5793)+50(55)+20(191) = 8887.2 reproduces published
-  // rank 1 exactly. Nulling it cost the citation and withheld nothing.
-  it('THE FIX: score survives TYPED — the gate it had was derivable anyway', () => {
+  // ── r-score-not-a-composite (2026-09-04): the reversal is REVERSED ───────
+  // r-score-derivable briefly published `score`, on the finding that it was the
+  // composite named in `methodology` and so recomputable by any caller. The
+  // evidence was that the composite reproduced the published RANK ORDER — which
+  // it does, and which proves nothing, because rank order survives every
+  // monotonic transform. Measured live by sweeping `limit`, `score` is
+  // 100×(N−rank+1)/N: a position ladder that moves with the caller's own limit
+  // (Dallas is 66.7 at limit=3 and 98 at limit=50). It restates `rank`, which is
+  // published un-nulled anyway, and describes no property of the market.
+  //
+  // Gating it was vacuous; publishing it was worse. `null` is uninformative, a
+  // limit-dependent `98` is misleading. It stays out until it means something —
+  // the upstream fix belongs in the backend, where `methodology` promises a
+  // composite that `score` does not deliver.
+  it('score STAYS nulled — it is a limit-dependent ladder, not a metric', () => {
     const out = trimForTrial(payload(), 'rank_markets');
-    expect(typeof out.results[0].score).toBe('number');
-    // the live-measured figure, hardcoded — not recomputed by the same
-    // expression under test, so a broken formula cannot pass this by mirroring.
-    expect(out.results[0].score).toBeCloseTo(8887.2, 5);
-    expect(out.results[1].score).toBeCloseTo(5097.2, 5);
-    expect(out.results[2].score).toBeCloseTo(4489.2, 5);
+    expect(out.results[0].score).toBeNull();
+    for (const r of out.results) expect(r.score).toBeNull();
   });
 
-  it('the surviving score still RANKS — it is the field it claims to be', () => {
-    const out = trimForTrial(payload(), 'rank_markets');
-    // Non-vacuity guard: with every score nulled, the sort below is a no-op and
-    // this test passes while asserting nothing. Verified by mutation — without
-    // this line, dropping 'score' from the keep-set leaves this test GREEN.
-    for (const r of out.results) expect(typeof r.score).toBe('number');
-    const byScore = [...out.results].sort((a, b) => b.score - a.score).map((r) => r.rank);
-    expect(byScore).toEqual([...out.results].map((r) => r.rank).sort((a, b) => a - b));
+  // Non-vacuity: the fixture must actually CARRY a score, or the assertion above
+  // passes against a payload that never had one and guards nothing.
+  it('the fixture really does ship a score for the trim to remove', () => {
+    expect(typeof payload().results[0].score).toBe('number');
+    expect(payload().results[0].score).toBe(100);      // rank 1 of 6
+    expect(payload().results[1].score).toBe(83.3);     // rank 2 of 6 — moves with N
   });
 
   it('the ROW COUNT and result_count gates are untouched by this change', () => {

@@ -5137,37 +5137,48 @@ const TRIAL_PREVIEW_ROWS = (() => {
 //
 // RAW FACTS ONLY, and scoped per tool.
 //
-// ── r-score-derivable (2026-09-04): `score` JOINS the raw facts ─────────────
-// r-typed-preview held `score` back one day earlier on the grounds that "the
-// composite rank IS the decision layer this tier gates (r68-conv)". Measured
-// live on an anonymous rank_markets call, that gate protects NOTHING, because
-// the same object publishes the formula AND all three of its inputs:
+// ── r-score-not-a-composite (2026-09-04): `score` STAYS OUT, corrected ──────
+// r-score-derivable published `score` one commit ago on the finding that it was
+// the composite named in `methodology` and therefore recomputable by any caller.
+// That finding was WRONG, and the way it was wrong is worth keeping.
 //
-//   methodology: "Composite: 0.4×total_mw + 50×operators + 20×facilities."
-//   total_mw / operator_count / facility_count  ← un-nulled by r-typed-preview
+// The evidence was that 0.4×total_mw + 50×operators + 20×facilities, applied to
+// the published inputs, reproduced the published RANK ORDER exactly. It does.
+// But rank order survives EVERY monotonic transform, so agreeing with it proves
+// nothing about the value. Measured live after publishing, sweeping `limit`:
 //
-// Recomputing from the published fields reproduces the published ranking
-// exactly — Ashburn 0.4(5793)+50(55)+20(191) = 8887.2 → rank 1, Dallas 5097.2
-// → rank 2, Chicago 4489.2 → rank 3. Any agent that can multiply already has
-// the number; nulling it only denies the number to agents that CITE fields and
-// hands the citation to whoever publishes a table. That is the identical
-// failure r-typed-preview documents four paragraphs above ("null says
-// 'unknown' when the truth is known and already on the wire") — it was fixed
-// for the inputs and left in place for the value derived from them.
+//     limit=3   ashburn(r1)=100  dallas(r2)=66.7  chicago(r3)=33.3
+//     limit=5   ashburn(r1)=100  dallas(r2)=80    chicago(r3)=60
+//     limit=10  ashburn(r1)=100  dallas(r2)=90    chicago(r3)=80
+//     limit=25  ashburn(r1)=100  dallas(r2)=96    chicago(r3)=92
+//     limit=50  ashburn(r1)=100  dallas(r2)=98    chicago(r3)=96
 //
-// ★ This does NOT un-gate the DCPI product. `rank_markets.score` is the
-// FACILITY-REGISTRY composite defined by the methodology string above. The
-// DCPI decision layer is a different number entirely — composite_score,
-// excess_power_score, constraint_score, time_to_power_months — and it stays
-// Pro behind /api/v1/dcpi/*, which gates it honestly with `_gated:true` +
-// `_locked_fields` rather than a bare null. r68-conv conflated the two.
+//     score = 100 × (N − rank + 1) / N,  N = the `limit` argument
 //
-// `result_count` STAYS nulled — that reasoning was always sound and is
-// untouched: un-nulling it would print 10 beside 3 shown rows, recreating the
-// "showing N of M" lie repaired below, and `_results_total_in_pro` already
-// carries that total honestly. Row-COUNT gating is untouched.
+// It is a within-result-set POSITION LADDER. It carries nothing `rank` does not
+// already carry un-nulled, and it is not a property of the market at all —
+// Dallas is 66.7 or 98 purely by how many rows the caller asked for.
+//
+// So the gate was indeed vacuous (it withheld a restatement of `rank`), but
+// PUBLISHING was the wrong remedy: `null` is merely uninformative, whereas a
+// limit-dependent `98` is misleading in a tool agents use to make siting
+// decisions. Withhold it until it means something.
+//
+// ★ THE REAL DEFECT IS UPSTREAM, and this is not the place to fix it:
+// `methodology` promises a composite while `score` ships a position ladder.
+// That mismatch lives in the backend (routes/mcp_tier1_tools.py). When `score`
+// becomes the composite it claims to be, add it back here — the argument for
+// publishing a genuinely derivable market metric was sound.
+//
+// ★ TRAP for the next person: a formula that reproduces the RANK ORDER does not
+// prove it produced the SCORE. Check the VALUE, and sweep any argument that
+// could be an input to it.
+//
+// `result_count` stays nulled for its own original reason — un-nulling it would
+// print 10 beside 3 shown rows, recreating the "showing N of M" lie repaired
+// below; `_results_total_in_pro` already carries that total honestly.
 const _TYPED_PREVIEW_FIELDS = {
-  rank_markets: new Set(['total_mw', 'facility_count', 'operator_count', 'score']),
+  rank_markets: new Set(['total_mw', 'facility_count', 'operator_count']),
 };
 const _NO_TYPED_PREVIEW = new Set();
 
