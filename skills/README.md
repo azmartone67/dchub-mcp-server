@@ -1,7 +1,7 @@
 # DC Hub — Agent Skills
 
 Agent Skills that teach Claude how to use the **DC Hub** MCP server
-(`https://dchub.cloud/mcp` · registry `cloud.dchub/mcp-server`) effectively.
+(`https://dchub.cloud/mcp` · registry `cloud.dchub/datacenter-power-grid-fiber`) effectively.
 
 | Skill | Description |
 |---|---|

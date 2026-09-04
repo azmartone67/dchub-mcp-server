@@ -137,7 +137,7 @@ def _self_test() -> int:
             _git(*a, cwd=tmp)
 
     def write(tmp: str, ver: str, extra: str = "") -> None:
-        obj = {"name": "cloud.dchub/mcp-server", "version": ver}
+        obj = {"name": "cloud.dchub/datacenter-power-grid-fiber", "version": ver}
         if extra:
             obj["note"] = extra
         Path(tmp, MANIFEST).write_text(json.dumps(obj, indent=2), encoding="utf-8")

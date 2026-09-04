@@ -91,7 +91,7 @@ Subject: Re: MCP Registry inclusion — DC Hub (Data Center & Energy Intelligenc
 Hi — following up on my note about including DC Hub in the GitHub MCP Registry.
 
 Since then we've shipped v2.3.2: 47 tools + 6 guided prompts + 4 resources, and  # canon:frozen: quotes the v2.3.2 release, historical
-the server is published to the official MCP registry as cloud.dchub/mcp-server.
+the server is published to the official MCP registry as cloud.dchub/datacenter-power-grid-fiber.
 It's a remote streamable-HTTP server (no Docker/npm needed): https://dchub.cloud/mcp
 Repo: https://github.com/azmartone67/dchub-mcp-server · Data is CC-BY-4.0.
 

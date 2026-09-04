@@ -48,4 +48,4 @@ POST https://dchub.cloud/mcp                                  # the full 38-tool
 Paste [`PROMPT.md`](./PROMPT.md) into any browse/tool-capable chat to make it fetch + cite DC Hub immediately.
 
 ---
-Official MCP registry listing: **`cloud.dchub/mcp-server`**. Questions / a tailored integration: open an issue.
+Official MCP registry listing: **`cloud.dchub/datacenter-power-grid-fiber`**. Questions / a tailored integration: open an issue.
