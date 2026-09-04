@@ -9,10 +9,13 @@ import { describe, it, expect } from 'vitest';
 import { trimForTrial, TRIAL_PREVIEW_ROWS } from '../server.mjs';
 
 // Shaped exactly like the live backend payload (routes/mcp_tier1_tools.py).
+// The backend's published composite, verbatim from the `methodology` string
+// this tool ships in the same object: 0.4×total_mw + 50×operators + 20×facilities.
+const composite = (fac, mw, ops) => 0.4 * mw + 50 * ops + 20 * fac;
 const row = (rank, market, fac, mw, ops) => ({
   rank, market, metro_slug: market.replace(/-[a-z]{2}$/, ''),
   city: market, state: 'VA', country: 'US',
-  score: 100 - rank,
+  score: composite(fac, mw, ops),
   value: `${fac} fac / ${mw} MW / ${ops} ops`,
   facility_count: fac, total_mw: mw, operator_count: ops,
   url: `https://dchub.cloud/markets/${market}`,
@@ -51,12 +54,39 @@ describe('rank_markets typed preview', () => {
     }
   });
 
-  it('still gates the DECISION layer and the row count', () => {
+  // ── r-score-derivable (2026-09-04): DELIBERATE CONTRACT REVERSAL ─────────
+  // This assertion used to read `expect(out.results[0].score).toBeNull()` with
+  // the comment "composite rank = paid". The gate it defended was vacuous: the
+  // same object publishes the formula (`methodology`) and all three inputs, so
+  // any agent that can multiply already had the number. Measured live on an
+  // anonymous call — 0.4(5793)+50(55)+20(191) = 8887.2 reproduces published
+  // rank 1 exactly. Nulling it cost the citation and withheld nothing.
+  it('THE FIX: score survives TYPED — the gate it had was derivable anyway', () => {
     const out = trimForTrial(payload(), 'rank_markets');
-    expect(out.results[0].score).toBeNull();          // composite rank = paid
+    expect(typeof out.results[0].score).toBe('number');
+    // the live-measured figure, hardcoded — not recomputed by the same
+    // expression under test, so a broken formula cannot pass this by mirroring.
+    expect(out.results[0].score).toBeCloseTo(8887.2, 5);
+    expect(out.results[1].score).toBeCloseTo(5097.2, 5);
+    expect(out.results[2].score).toBeCloseTo(4489.2, 5);
+  });
+
+  it('the surviving score still RANKS — it is the field it claims to be', () => {
+    const out = trimForTrial(payload(), 'rank_markets');
+    // Non-vacuity guard: with every score nulled, the sort below is a no-op and
+    // this test passes while asserting nothing. Verified by mutation — without
+    // this line, dropping 'score' from the keep-set leaves this test GREEN.
+    for (const r of out.results) expect(typeof r.score).toBe('number');
+    const byScore = [...out.results].sort((a, b) => b.score - a.score).map((r) => r.rank);
+    expect(byScore).toEqual([...out.results].map((r) => r.rank).sort((a, b) => a - b));
+  });
+
+  it('the ROW COUNT and result_count gates are untouched by this change', () => {
+    const out = trimForTrial(payload(), 'rank_markets');
     expect(out.result_count).toBeNull();              // would contradict rows shown
     expect(out._results_total_in_pro).toBe(6);        // honest total survives
     expect(out.results.length).toBeLessThan(6);
+    expect(out.results.length).toBe(TRIAL_PREVIEW_ROWS);
   });
 
   it('changes NOTHING for any other tool (scope is per-tool)', () => {
@@ -65,6 +95,9 @@ describe('rank_markets typed preview', () => {
       expect(out.results[0].total_mw).toBeNull();
       expect(out.results[0].facility_count).toBeNull();
       expect(out.results[0].operator_count).toBeNull();
+      // r-score-derivable is scoped to rank_markets ALONE: the keep-set is
+      // keyed by tool, so no other tool starts publishing a score.
+      expect(out.results[0].score).toBeNull();
     }
   });
 });
