@@ -1581,6 +1581,20 @@ const MCP_SOURCE_PATHS = new Map([
   ['/mcp/lobehub',   'lobehub'],
   ['/mcp/toolplex',  'toolplex'],
   ['/mcp/mcpmarket', 'mcpmarket'],
+  // ★ 2026-09-04 — the OFFICIAL registry's own arrival path, and it exists for a
+  //   reason the others do not share. The official listing was renamed to
+  //   cloud.dchub/datacenter-power-grid-fiber (registry search matches the NAME
+  //   only), and the registry REFUSES a remote URL already used by another
+  //   server: publishing the new name at /mcp/registry returned
+  //     400 "remote URL https://dchub.cloud/mcp/registry is already used by
+  //          server cloud.dchub/mcp-server"
+  //   Two entries cannot share a remote. Rather than free /mcp/registry by
+  //   deprecating the old entry FIRST — which would bet the listing on an
+  //   unverified assumption that deprecation releases the URL, and leaves it
+  //   burned if it does not — the new listing gets its own path. The old entry
+  //   keeps /mcp/registry until it is deprecated, so there is never a moment
+  //   without a live listing.
+  ['/mcp/officialregistry', 'mcp-registry'],
 ]);
 
 export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys(), ...MCP_SOURCE_PATHS.keys()];

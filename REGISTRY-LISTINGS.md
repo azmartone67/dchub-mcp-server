@@ -37,6 +37,23 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **ToolPlex** | `https://dchub.cloud/mcp/toolplex` | ❌ dashboard (cascade-fed) |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
 | **Official MCP registry** (cascade → PulseMCP / mcp.so / Glama / ToolPlex) | `https://dchub.cloud/mcp/registry` | ✅ `server.json` — ALREADY DONE |
+| **Official MCP registry** — new listing `cloud.dchub/datacenter-power-grid-fiber` | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` |
+
+> **Why the official registry has TWO rows.** The listing was renamed on
+> 2026-09-04 (registry search matches the server NAME only — descriptions are
+> not indexed, so `cloud.dchub/mcp-server` was findable by nothing except the
+> literal string "dchub"). The registry REFUSES a remote URL already used by
+> another server:
+>
+> ```
+> 400 remote URL https://dchub.cloud/mcp/registry is already used by
+>     server cloud.dchub/mcp-server
+> ```
+>
+> So the new name cannot reuse `/mcp/registry` while the old entry holds it.
+> The old row stays until `cloud.dchub/mcp-server` is deprecated — keeping a
+> live listing throughout — after which `/mcp/registry` is free and this table
+> collapses back to one row.
 
 ### ⚠️ `server.json` carries the SHARED cascade tag — never a per-registry one
 
