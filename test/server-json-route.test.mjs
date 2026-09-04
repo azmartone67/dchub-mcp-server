@@ -9,6 +9,7 @@
 // same static-source style as manifest-description-heals.test.mjs.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { MCP_PATHS } from '../server.mjs';
 
 const SERVER_JSON = JSON.parse(
   readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
@@ -19,8 +20,16 @@ describe('server.json (the body GET /server.json publishes)', () => {
     expect(SERVER_JSON.name).toBe('cloud.dchub/mcp-server');
     expect(SERVER_JSON.$schema).toMatch(/server\.schema\.json$/);
     expect(SERVER_JSON.version).toMatch(/^\d+\.\d+\.\d+/);
-    // the remote the registry advertises must be the live MCP endpoint
-    expect(SERVER_JSON.remotes?.[0]?.url).toBe('https://dchub.cloud/mcp');
+    // ── r-cascade-path (2026-09-04) ─────────────────────────────────────
+    // The remote the registry advertises must be the live MCP endpoint. That
+    // was pinned to the literal '/mcp'; the endpoint is now '/mcp/registry',
+    // the shared cascade arrival tag, so the LITERAL is no longer the
+    // invariant — being genuinely routed is. Asserting membership in
+    // MCP_PATHS is strictly stronger: it would also have caught a typo'd
+    // '/mpc', which the old equality check could only catch for one value.
+    const remote = SERVER_JSON.remotes?.[0]?.url;
+    expect(remote).toMatch(/^https:\/\/dchub\.cloud\//);
+    expect(MCP_PATHS).toContain(new URL(remote).pathname);
   });
 });
 
