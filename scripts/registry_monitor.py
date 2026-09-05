@@ -19,6 +19,7 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 SMITHERY_SLUG = "azmartone67/dchub"
 REPO_SLUG = "azmartone67/dchub-mcp-server"
 LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
+CURSOR_DIRECTORY_SLUG = "mcp-dchub"
 
 # ── CONNECTOR listings ────────────────────────────────────────────────────────
 #
@@ -1030,6 +1031,46 @@ def lobehub_presence(slug=LOBEHUB_SLUG):
     return "present", (int(m.group(1)) if m else None)
 
 
+def cursor_directory_presence(slug=CURSOR_DIRECTORY_SLUG):
+    """cursor.directory listing presence + the tool count it DISPLAYS.
+
+    ★ WHY THIS EXISTS. Audited 2026-09-05 in a real browser: the listing was
+    advertising "33 MCP tools" against a live 83, "232 markets" against 327, and
+    a facility count above canon's floored phrase. Nothing re-reads this repo —
+    a cursor.directory listing is typed once into THEIR database, exactly like
+    the Glama CONNECTOR blurb whose 22-day staleness is documented above. So it
+    does not self-correct and nothing was watching it.
+
+    ★ FAIL-SAFE, FOR A MEASURED REASON. cursor.directory sits behind a Vercel
+    checkpoint that answers automated UAs with HTTP 429 and a 32 KB
+    "Vercel Security Checkpoint" body. A naive checker reads that as "our
+    listing is gone" and pages forever. Measured 2026-09-05: plain curl with a
+    browser UA -> 429, while the same URL in a real browser renders the listing
+    fine. So 429 / timeout / transport error is ("unverifiable", None) and MUST
+    NOT alert; only a clean 200 whose body has lost our listing is ("absent").
+    Same treatment lobehub_presence already applies for the same reason.
+
+    Returns ("present", tool_count|None) | ("absent", None) | ("unverifiable", None)
+    """
+    url = f"https://cursor.directory/plugins/{slug}"
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            html = r.read().decode("utf-8", "ignore")
+    except urllib.error.HTTPError as e:
+        return ("absent", None) if e.code == 404 else ("unverifiable", None)
+    except Exception:
+        return ("unverifiable", None)
+    low = html.lower()
+    # the checkpoint answers 200 in some variants — treat it as unreachable, not absent
+    if "vercel security checkpoint" in low or "just a moment" in low:
+        return "unverifiable", None
+    if "dc hub" not in low and "dchub" not in low:
+        return "absent", None
+    m = re.search(r"(\d+)\s*mcp tools", low) or re.search(r"(\d+)\s*tools", low)
+    return "present", (int(m.group(1)) if m else None)
+
+
 def _live_tools():
     """Initialize + tools/list against the LIVE MCP server → the tools ARRAY, or
     None on any error. Split out of live_tool_count() so the build-provenance
@@ -1410,6 +1451,7 @@ def main(probe=False):
     reasons.extend(_vis_reg)
     readme_tools = readme_tool_count()
     lobe_status, lobe_tools = lobehub_presence()
+    cd_status, cd_tools = cursor_directory_presence()
 
     watch = {t: smithery_rank(t) for t in WATCH}
 
@@ -1449,6 +1491,9 @@ def main(probe=False):
     if lobe_status == "absent":
         reasons.append(f"LobeHub listing **not found** at lobehub.com/mcp/{LOBEHUB_SLUG} "
                        f"(was Grade A/PREMIUM) — investigate de-listing")
+    if cd_status == "absent":
+        reasons.append(f"cursor.directory listing **not found** at "
+                       f"cursor.directory/plugins/{CURSOR_DIRECTORY_SLUG} — investigate de-listing")
     regression = bool(reasons)
 
     # Non-paging notes: owner-gated or environmental items we report but don't alert on.
@@ -1459,6 +1504,14 @@ def main(probe=False):
     if lobe_status == "unverifiable":
         notes.append("LobeHub presence **unverifiable from here** (lobehub.com rate-limits automated "
                      "requests) — confirm in a logged-in browser; not treated as a regression.")
+    if cd_status == "present" and cd_tools and live_tools and cd_tools != live_tools:
+        notes.append(f"cursor.directory shows **{cd_tools} tools** vs live **{live_tools}** — owner: the "
+                     f"blurb is typed into THEIR database and is never re-read from this repo, so this "
+                     f"does NOT self-correct. Edit the listing at "
+                     f"cursor.directory/plugins/{CURSOR_DIRECTORY_SLUG}.")
+    if cd_status == "unverifiable":
+        notes.append("cursor.directory presence **unverifiable from here** (Vercel checkpoint answers "
+                     "automated UAs with 429) — confirm in a real browser; not treated as a regression.")
 
     # --- report ---
     L = []
@@ -1485,6 +1538,8 @@ def main(probe=False):
     L.append(f"| Glama | — | {gla_tools} | {gla_desc} |")
     L.append(f"| LobeHub | — | {lobe_tools if lobe_tools is not None else '—'} | "
              f"{lobe_status} · README-synced, 429s CI |")
+    L.append(f"| cursor.directory | — | {cd_tools if cd_tools is not None else '—'} | "
+             f"{cd_status} · owner-typed, never re-read |")
     L.append("")
     L.append(f"### 🛡 Smithery competitive radar — CORE ({core_one}/{len(CORE)} held at #1)")
     L.append("| | Term | Our rank | Leader (← who to beat) | of N |")

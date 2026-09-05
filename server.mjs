@@ -1595,6 +1595,13 @@ const MCP_SOURCE_PATHS = new Map([
   //   keeps /mcp/registry until it is deprecated, so there is never a moment
   //   without a live listing.
   ['/mcp/officialregistry', 'mcp-registry'],
+  // ★ 2026-09-05 — cursor.directory (community-run; NOT cursor.com, which has no
+  //   public MCP directory path at all — /directory 301s to the homepage). We are
+  //   listed there as `mcp-dchub` and its install snippet hands out a BARE
+  //   https://dchub.cloud/mcp, so every arrival from it has been indistinguishable
+  //   from direct traffic. Tagging it is the only way to find out whether the
+  //   listing has ever sent anyone.
+  ['/mcp/cursordirectory', 'cursor-directory'],
 ]);
 
 export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys(), ...MCP_SOURCE_PATHS.keys()];
