@@ -3,7 +3,7 @@
   "name": "dchub",
   "display_name": "DC Hub \u2014 Data Center Intelligence",
   "version": "2.12.7",
-  "description": "Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents \u2014 83 tools over 20,400+ facilities, 300+ DCPI markets, real-time ISO grid telemetry, 2,100+ tracked deals. Query and cite (CC-BY-4.0).",
+  "description": "Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents \u2014 83 tools over 20,500+ facilities, 300+ DCPI markets, real-time ISO grid telemetry, 2,100+ tracked deals. Query and cite (CC-BY-4.0).",
   "long_description": "DC Hub is the live infrastructure data layer for AI agents. This extension connects Claude Desktop to the hosted DC Hub MCP server (https://dchub.cloud/mcp) \u2014 no config editing, one click. Works keyless at the free tier (5 calls/day); paste a free or paid API key in the extension settings for higher limits (claim one with the claim_free_key tool or at dchub.cloud/signup).",
   "author": {
     "name": "DC Hub",

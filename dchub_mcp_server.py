@@ -115,7 +115,7 @@ async def search_facilities(
     provider: str = "",
     limit: int = 25,
 ) -> str:
-    """Search 20,400+ global data center facilities by location, provider, or keyword.
+    """Search 20,500+ global data center facilities by location, provider, or keyword.
 
     Args:
         query: Free-text search (e.g. 'Equinix Dallas' or 'hyperscale')
