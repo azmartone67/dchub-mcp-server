@@ -32,12 +32,12 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **Smithery** | `https://dchub.cloud/mcp/smithery` | ✅ CLI publish — see below |
 | **Glama** | `https://dchub.cloud/mcp/glama` | ❌ dashboard only (cascade-fed) |
 | **PulseMCP** | `https://dchub.cloud/mcp/pulsemcp` | ❌ web form / dashboard |
-| **mcp.so** | `https://dchub.cloud/mcp/mcpso` | ❌ web form / dashboard |
+| **mcp.so** ⚠️ we are NOT listed — see note below | `https://dchub.cloud/mcp/mcpso` | ❌ paid submission ($39) + sign-in |
 | **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
-| **ToolPlex** | `https://dchub.cloud/mcp/toolplex` | ❌ dashboard (cascade-fed) |
+| **ToolPlex** ⚠️ destination UNLOCATED — see note below | `https://dchub.cloud/mcp/toolplex` | ⚠️ unverified |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
 | **cursor.directory** (community; cursor.com has no public MCP directory) | `https://dchub.cloud/mcp/cursordirectory` | ❌ owner-typed listing |
-| **Official MCP registry** — live listing `cloud.dchub/datacenter-power-grid-fiber` (cascade → PulseMCP / mcp.so / Glama / ToolPlex) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
+| **Official MCP registry** — live listing `cloud.dchub/datacenter-power-grid-fiber` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
 | ~~Official MCP registry~~ — retired listing `cloud.dchub/mcp-server` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
 
 > **Why the official registry has TWO rows.** The listing was renamed on
@@ -284,3 +284,35 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 Investigated + corrected. The canonical Flask manifest `_canonical_mcp_manifest()` (main.py, served at `/.well-known/mcp.json` + `/mcp/manifest` + `/api/v1/mcp/manifest`) listed 29 tools but was MISSING `get_gas_index` + `get_grid_scoreboard`. Added both + bumped version 2.1.13 → 2.1.20 (commit 4e49e651, additive 3-line change). After the backend redeploys, the canonical manifest lists these incl. the gas index + grid scoreboard. (Headline "38 tools" = live `/mcp` tools/list; the canonical manifest's hand-curated list differs slightly in membership — use 38 for listings.) <!-- canon:frozen: historical investigation log, not a claim about the current surface -->
 
 Remaining caveat (out-of-repo, your call): the public **`dchub.cloud/.well-known/mcp.json` edge** is served/cached by the `dchubapiproxy` Cloudflare worker and showed an OLDER copy (v2.1.11) than even Railway-direct. After the backend deploy, if the edge still lags, it needs a CF cache purge or worker refresh (the worker is not in this repo). `/api/v1/admin/drift-check` surfaces the gap. `api.dchub.cloud/.well-known/mcp.json` always reflects the fresh canonical source if you need a clean URL to hand a registry now.
+
+
+### ⚠️ The four-way cascade claim is 2 of 4 — measured 2026-09-05
+
+This file and several code comments asserted that the official registry
+"cascades to PulseMCP / mcp.so / Glama / ToolPlex". Checked each in a REAL
+BROWSER, because all of them answer automated UAs with 403/429 — curl proves
+nothing about any of them, in either direction:
+
+| | result | evidence |
+|---|---|---|
+| **PulseMCP** | ✅ listed | classification "Official", #11,607 of ~21,970 (#8,547 this week), 624 est. visitors (24 this week) |
+| **Glama** | ✅ listed | already covered by `scripts/registry_monitor.py` |
+| **mcp.so** | ❌ **ABSENT** | control-verified: `data center` (55KB) and `datacenter` (75KB) return results that do NOT include us; `dchub` / `dc hub` → "No servers match" |
+| **ToolPlex** | ⚠️ **destination unlocated** | `toolplex.ai` is a forecasting/inventory SaaS; `/mcp` `/servers` `/directory` `/registry` `/tools` all 404. This repo named ToolPlex 11× but the ONLY url it ever recorded is our own `/mcp/toolplex` — it never said where ToolPlex is |
+
+★ Both source paths are KEPT. They cost nothing, they already serve
+(`POST /mcp/mcpso` and `/mcp/pulsemcp` both return 200), and a tag that exists
+before a listing does is exactly what makes the listing attributable from its
+first day. What is removed is the CLAIM that all four mirror us.
+
+★ TIMING CAVEAT. The official listing was renamed and the old entry deprecated
+on 2026-09-04. Anything that genuinely does cascade may re-sync over the
+following days, so re-measure mcp.so before concluding the cascade never
+reached it.
+
+★ To submit to mcp.so: it is a PAID listing — $39 one-time, behind a sign-in,
+and the only automated control is "Pay and submit automatically". Submit the
+TAGGED url `https://dchub.cloud/mcp/mcpso`, never the bare `/mcp`, or the
+listing's arrivals are unattributable for its whole life. PulseMCP currently
+has submissions AND listing changes PAUSED, so its bare url cannot be corrected
+right now.

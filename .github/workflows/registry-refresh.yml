@@ -17,7 +17,7 @@ on:
     # ★2026-08-31: `branches` was absent, so a push to ANY feature branch that
     # touched server.json ran the publish job with the DNS key and pushed that
     # branch's manifest to registry.modelcontextprotocol.io — the cascade source
-    # for PulseMCP / mcp.so / Glama / ToolPlex. An unreviewed branch could
+    # for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. An unreviewed branch could
     # therefore change what every aggregator serves, and the version-bump guard
     # made it worse: bumping (which it requires) is exactly what makes the early
     # publish succeed instead of no-op. Publish only from main.
@@ -92,7 +92,7 @@ jobs:
       # changed the manifest without bumping (toolCount 82 -> 83, plus the new
       # deploymentType / canonicalRemote / gatewayNote fields). Every push since
       # re-attempted the publish, took the 400, and reported success, while the
-      # official registry — the cascade source for PulseMCP / mcp.so / Glama /
+      # official registry — the cascade source for PulseMCP + Glama (verified) /
       # ToolPlex — kept serving the old manifest. The workflow already stated
       # the rule ("bump server.json's version when you modify things"); nothing
       # enforced it. This does. It fails OPEN on insufficient history, so it can
@@ -120,7 +120,7 @@ jobs:
     runs-on: ubuntu-latest
     # AUTO-REFRESH (2026-06-14): runs on every manifest change (push to server.json),
     # the weekly cron, and manual dispatch. The official registry is the CASCADE SOURCE —
-    # publishing a NEW server.json version re-syncs PulseMCP / mcp.so / Glama / ToolPlex
+    # publishing a NEW server.json version re-syncs PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md
     # and the GitHub MCP Registry on their own cadence, so a single bump refreshes them
     # all. An UNCHANGED version is a graceful no-op (the registry rejects duplicate
     # versions). So: bump server.json's version when you modify things → everything refreshes.
@@ -165,7 +165,7 @@ jobs:
           OUT=$(./mcp-publisher publish 2>&1) || true
           echo "$OUT"
           if echo "$OUT" | grep -qi "Successfully published"; then
-            echo "::notice::✅ published $VER — PulseMCP / mcp.so / Glama / ToolPlex will re-sync from the official registry on their own cadence."
+            echo "::notice::✅ published $VER — PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md will re-sync from the official registry on their own cadence."
           elif echo "$OUT" | grep -qiE "already exists|version.*exists|invalid.*version|duplicate"; then
             echo "::notice::version $VER is already on the registry (no change). Bump server.json's version to publish a refresh — it cascades to every aggregator."
           else
