@@ -215,7 +215,28 @@ const ARG_ALIASES = {
   get_fiber_intel:          { location: 'market', city: 'market',
                               metro: 'market' },
   get_metro_fiber:          { location: 'market', city: 'market' },
-  get_market_intel:         { location: 'market', city: 'market' },
+  // ★2026-09-05 market_slug MEASURED failing, and it is the name our OWN
+  //   description teaches. get_market_intel's tools/list text reads "Params:
+  //   market is the market_slug (e.g. \"northern-virginia\", \"dallas\")" —
+  //   correct, but an agent skimming it takes `market_slug` for the parameter.
+  //   Measured live the same day, same session, seconds apart:
+  //     get_market_intel(market_slug:"dallas") -> no market data at all; the
+  //       arg is stripped, `market` is empty, and the tier gate answers with an
+  //       upgrade envelope + for_your_human link
+  //     get_market_intel(market:"dallas")      -> _gated:false, 372 facilities,
+  //       cities, top providers, related intel
+  //   So the agent tells its human DC Hub charges for Dallas market data. It
+  //   does not — the correct call returns it free. This is the exact
+  //   silently-wrong-answer class this map exists for, on the ~91% first-touch
+  //   tool, and the guess is the most likely one an agent can make.
+  get_market_intel:         { location: 'market', city: 'market',
+                              market_slug: 'market' },
+  // ★min_mw: search_facilities' own description says "there is no `status` or
+  //   `min_mw` parameter" — that sentence is evidence agents type it. Pure
+  //   rename onto the declared min_capacity_mw; `status` is deliberately NOT
+  //   aliased because it is not a filter on this tool at all (the description
+  //   routes it to get_pipeline), and a rename cannot fix a missing capability.
+  search_facilities:        { min_mw: 'min_capacity_mw' },
   get_energy_prices:        { location: 'state', region: 'state' },
   list_transactions:        { limit_results: 'limit' },
 };

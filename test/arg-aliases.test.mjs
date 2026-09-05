@@ -32,7 +32,36 @@ const EXPECTED_TARGETS = {
   get_market_intel: 'market',
   get_energy_prices: 'state',
   list_transactions: 'limit',
+  // ★2026-09-05, reviewed: search_facilities min_mw -> min_capacity_mw. Pure
+  //   rename onto a declared property. The tool's OWN description says "there
+  //   is no `status` or `min_mw` parameter", which is evidence agents type it.
+  //   `status` is deliberately not aliased — it is not a filter on this tool,
+  //   and a rename cannot add a capability.
+  search_facilities: 'min_capacity_mw',
 };
+
+// ★The guesses that were MEASURED to fail in production. Structure tests alone
+// would stay green if one of these were deleted, because deleting an entry
+// removes nothing they assert over. Pin them by name.
+const MEASURED_GUESSES = [
+  // 2026-09-05, live, same session, seconds apart:
+  //   get_market_intel(market_slug:"dallas") -> no market data; arg stripped,
+  //     `market` empty, tier gate answers with an upgrade envelope
+  //   get_market_intel(market:"dallas")      -> _gated:false, 372 facilities
+  // The agent then reports that DC Hub charges for data it returns free.
+  ['get_market_intel', 'market_slug', 'market'],
+  // search_facilities' own description names min_mw as a thing agents try.
+  ['search_facilities', 'min_mw', 'min_capacity_mw'],
+];
+
+describe('ARG_ALIASES measured guesses', () => {
+  it.each(MEASURED_GUESSES)('%s routes %s -> %s', (tool, guess, target) => {
+    expect(ARG_ALIASES[tool], `${tool} has no alias map`).toBeTruthy();
+    expect(ARG_ALIASES[tool][guess],
+      `${tool}.${guess} was measured failing in production; it must route to ${target}`)
+      .toBe(target);
+  });
+});
 
 describe('ARG_ALIASES structure', () => {
   it('every alias maps to the reviewed target for that tool', () => {
