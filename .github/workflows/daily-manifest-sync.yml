@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write   # gh pr create/merge — main is PR-only, never pushed
   # ★2026-08-11 — NO permission key can grant the repo-DESCRIPTION write.
   # `administration` is not a valid Actions permissions key (the schema accepts
   # actions/attestations/checks/contents/deployments/discussions/id-token/
@@ -55,8 +56,11 @@ jobs:
         with:
           node-version: '22'
           cache: "npm"
-      # ★2026-09-01 — this job pushes with [skip ci], so NOTHING ever tested what
-      # it shipped. On 2026-09-01 it healed canon 19,900+ -> 20,100+ and left main
+      # ★2026-09-01 — this job USED to push with [skip ci], so NOTHING ever tested
+      # what it shipped. (It now opens a PR instead — see the commit step — so CI
+      # does run on the result. The history below is why the in-job hard gate is
+      # still here: it is now a second line of defence rather than the only one.)
+      # On 2026-09-01 it healed canon 19,900+ -> 20,100+ and left main
       # RED on the hard gate for a day: test/github-description-push-behaviour.test.mjs
       # derived its "stale" fixture by substituting the literal '19,900+', which
       # after the heal matched nothing, so the fixture became identical to canon and
@@ -64,7 +68,9 @@ jobs:
       # [skip ci] is exactly the instruction not to look.
       #
       # The fixtures are fixed, but a bot that ships unverified will find the next
-      # one. So it installs deps and runs the same HARD gate before pushing.
+      # one. So it installs deps and runs the same HARD gate before opening the PR:
+      # failing here leaves the drift unhealed and loud, which beats opening a PR
+      # that CI will only reject after the fact.
       - name: Install deps (so the heal can be verified before it ships)
         run: npm ci --no-audit --no-fund
       - name: Refresh canonical phrase quantities from the owner endpoint
@@ -221,8 +227,10 @@ jobs:
 
       - name: Sync tool count + version + canon quantities into every owned surface
         run: node scripts/sync-tools-manifest.mjs --fix
-      - name: Commit + push only if a surface drifted
+      - name: Commit + open a PR only if a surface drifted
         id: commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           # ★2026-07-30: ONE list of every file the refresh + --fix can write,
@@ -286,9 +294,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # stage ONLY the files this job owns (never -A)
           git add $OWNED
-          # ★ Verify the HEALED tree before it ships. [skip ci] means no workflow
-          #   will run on the resulting commit, so this is the only opportunity —
-          #   after this push, a break is live and silent until a human trips on it.
+          # ★ Verify the HEALED tree before it ships. This used to be the ONLY
+          #   opportunity, because [skip ci] meant no workflow ran on the commit.
+          #   The PR now gets real CI, so this is no longer the last line — but it
+          #   still runs first, so a bad heal never becomes an open PR at all.
           #   Fail CLOSED: leave the drift unhealed and say so, rather than push a
           #   tree that does not pass. An unhealed surface is visible and
           #   recoverable; a red main nobody is told about is neither.
@@ -313,10 +322,40 @@ jobs:
             tail -60 /tmp/heal-gate.log
             exit 1
           fi
-          echo "[verify] hard gate green on the healed tree — pushing"
-          git commit -m "chore(canon): daily tool-count/version/quantity sync from server.mjs + canon snapshot [skip ci]"
-          git push
-          echo "✓ healed registry surfaces — Glama/PulseMCP/GitHub will re-scan the updated source"
+          echo "[verify] hard gate green on the healed tree — opening a PR"
+          # ★2026-09-04 — PR, NEVER PUSH. main is moving to required status
+          # checks, and a direct push to a protected main is rejected with GH006
+          # ("N of N required status checks are expected"). The backend learned
+          # this the expensive way: mcp-facts-export.yml carries a comment
+          # recording SEVENTEEN DAYS of daily red from exactly that, and the
+          # remediation text it shipped with told readers the failure was
+          # cosmetic, so the alarm was ignored the whole time.
+          #
+          # ★ NO [skip ci] MARKER, here or in the PR body. That marker is why
+          # this job's output was never once tested — the comment at the top of
+          # this file says so. dchub-mcp-server SQUASH-merges, which concatenates
+          # commit bodies, so the literal token would ride into main's head
+          # commit and skip CI there too. Letting CI run on the PR is the whole
+          # point: these commits are exactly the ones that move canon.
+          #
+          # ★ set -euo pipefail is load-bearing. A push loop in this repo's sister
+          # workflows ended with `done` and therefore exited 0 after failing every
+          # attempt (fixed in dchub-frontend#1344) — three jobs reported SUCCESS
+          # while their push to main was rejected. Here, any failure below fails
+          # the step: a PR that cannot be opened must be LOUD, never a silent 0.
+          BRANCH="bot/canon-sync-$(date -u +%Y%m%dT%H%M%SZ)"
+          git checkout -b "$BRANCH"
+          git commit -q -m "chore(canon): daily tool-count/version/quantity sync from server.mjs + canon snapshot"
+          git push -q -u origin "$BRANCH"
+          PR_URL=$(gh pr create --base main --head "$BRANCH" \
+            --title "chore(canon): daily tool-count/version/quantity sync" \
+            --body "Automated canon heal from \`daily-manifest-sync.yml\`. The hard gate was run against the healed tree in this job before the PR was opened; CI re-runs it here because that is the check main will require.")
+          echo "opened $PR_URL"
+          # --auto lands it once the required checks report. With no required
+          # checks configured yet it merges immediately, which is the same
+          # behaviour as the old direct push.
+          gh pr merge --auto --squash --delete-branch "$PR_URL"
+          echo "✓ healed registry surfaces via $PR_URL — Glama/PulseMCP/GitHub re-scan after merge"
       - name: Detect registry drift (is the LIVE registry behind server.json?)
         id: regdrift
         run: |
