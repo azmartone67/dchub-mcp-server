@@ -1502,7 +1502,7 @@
   },
   {
     "name": "list_transactions",
-    "description": "M&A and capital transactions in the data center sector — 2,000+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers \"which data-center deals closed this year\", \"what was that acquisition worth\". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter — use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).",
+    "description": "M&A and capital transactions in the data center sector — 2,100+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers \"which data-center deals closed this year\", \"what was that acquisition worth\". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter — use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).",
     "inputSchema": {
       "type": "object",
       "properties": {
