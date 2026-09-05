@@ -7170,15 +7170,43 @@ function _writeRpcError(res, id, error, status = 400) {
 // side effect (mint a key, bind an email, create an alert/saved-site, open a
 // Stripe checkout), so they must NOT be annotated readOnlyHint:true. (2026-06-20,
 // for the Anthropic Connectors Directory: reviewers check annotation accuracy and
-// a write mislabeled read-only gets incorrect auto-permission in Claude.) All are
-// create/upsert/side-effect, none DELETE → destructiveHint:false. list_saved_sites
-// and export_dataset are READS and correctly stay read-only.
+// a write mislabeled read-only gets incorrect auto-permission in Claude.)
+// list_saved_sites and export_dataset are READS and correctly stay read-only.
+//
+// ★2026-09-05 — `standing_intent` was MISSING here, so it was advertised
+// readOnlyHint:true + idempotentHint:true. It registers a persistent watch,
+// POSTs an HMAC-signed webhook to a caller-supplied external URL, and has a
+// `delete` action. That is the exact mislabel the note above says produces
+// incorrect auto-permission in Claude — on the one tool that can make the
+// server call out to an address the caller chooses. Found from the outside:
+// Glama's listing scored it 1/5 on "does the description disclose side
+// effects, auth requirements, rate limits, or destructive operations".
 const WRITE_TOOLS = new Set([
   'save_site', 'set_market_alert', 'set_site_alert',
   'save_to_shortlist', 'set_shortlist_alert',
   'bind_email', 'claim_free_key', 'recover_my_key', 'unlock_more_data',
-  'subscribe_digest',
+  'subscribe_digest', 'standing_intent',
 ]);
+
+// ★ The two hints WRITE_TOOLS membership alone gets wrong.
+//
+// The old comment asserted "All are create/upsert/side-effect, none DELETE →
+// destructiveHint:false", and that was true of the ten tools listed then. It is
+// not a property of writes in general, and hardcoding it as one is how the
+// eleventh arrived carrying a false hint. Both sets are keyed BY NAME so the
+// claim is per-tool and auditable, rather than inferred from a category.
+//
+// destructiveHint: the tool can REMOVE state a caller would not want removed by
+// an auto-approved call. standing_intent action="delete" retires a registered
+// watch permanently.
+const DESTRUCTIVE_TOOLS = new Set(['standing_intent']);
+
+// openWorldHint: the tool interacts with something OUTSIDE DC Hub's own curated
+// dataset. Every read tool queries our closed corpus; standing_intent makes the
+// SERVER issue an outbound HTTPS request to an endpoint the CALLER supplies
+// (private/internal hosts are rejected, which is the mitigation — not a reason
+// to describe the interaction as closed-world).
+const OPEN_WORLD_TOOLS = new Set(['standing_intent']);
 
 // Distinct registered tool NAMES — a Set so the per-connection createServer()
 // re-registrations dedupe (a plain counter would multiply). /health reports
@@ -10639,9 +10667,10 @@ function trackedTool(srv, name, description, schema, handler) {
   // Per-platform override (ai_platform_tool_tuner) when present; else generic.
   const _ov = _activeDescOverrides && _activeDescOverrides[name];
   const _desc = (typeof _ov === 'string' && _ov.trim()) ? _ov : description;
-  // ChatGPT Apps directory requires ALL FOUR hints on every tool. openWorldHint:false
-  // — DC Hub tools query DC Hub's own curated dataset (closed world), not the open web;
-  // destructiveHint:false — read tools mutate nothing, write tools create/update, none DELETE.
+  // ChatGPT Apps directory requires ALL FOUR hints on every tool. openWorldHint is
+  // false for the closed DC Hub corpus and true for OPEN_WORLD_TOOLS; destructiveHint
+  // is false unless the tool is named in DESTRUCTIVE_TOOLS. Both are per-tool sets
+  // rather than a category rule — see their definitions for why.
   // r-idempotent (2026-07-15): add the 4th hint. Read tools are idempotent (repeat calls
   // with the same args return the same data, no side effect) → true; write tools mutate
   // state (mint key, bind email, save/alert) → false. Completes the 4-hint set ChatGPT
@@ -10666,9 +10695,11 @@ function trackedTool(srv, name, description, schema, handler) {
   // `description`) so a per-platform override carrying a WITHDRAWN marker is
   // the text the withdrawal verdict reads.
   const _maturityTag = _maturityAnnotation(name, _desc);
+  const _destructive = DESTRUCTIVE_TOOLS.has(name);
+  const _openWorld = OPEN_WORLD_TOOLS.has(name);
   const _annot = WRITE_TOOLS.has(name)
-    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false, ..._accessTag, ..._maturityTag }
-    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false, ..._accessTag, ..._maturityTag };
+    ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: _destructive, idempotentHint: false, openWorldHint: _openWorld, ..._accessTag, ..._maturityTag }
+    : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: _destructive, idempotentHint: true, openWorldHint: _openWorld, ..._accessTag, ..._maturityTag };
   const _stamped = _stampEntityCb(name, async (args, extra) => {
     // r-cohort: normalize the experiment tag on the ORIGINAL args object,
     // before the tier gate (which may hand the handler a spread COPY via
@@ -14873,7 +14904,7 @@ function createServer(descOverrides, instructionsTail) {
     market: 'market_narratives', narratives: 'market_narratives',
   };
   trackedTool(srv, 'search_intelligence',
-    'Semantic search over DC Hub live intelligence corpus — news, M&A deals, facilities, and market analysis narratives. Natural-language query returns the most relevant cited records.',
+    'Semantic (meaning-based) search over DC Hub\'s live intelligence corpus — industry news, M&A deals, discovered facilities and per-market DCPI analysis narratives — returning the most relevant records with citable source fields. This is the agent-friendly alias over the SAME retrieval layer as semantic_search: same results, different call shape. It takes `query` plus human-readable corpus names (news | deals | facilities | market_narratives); semantic_search takes `q` plus the raw table names. Call ONE of them, not both. Params: query (required, natural language); corpus (optional CSV of the four names above, default all); limit (1-15, default 8). BEHAVIOUR: read-only — it writes nothing, and repeat calls with the same arguments return the same records. ACCESS: works with no key, but anonymous results come back as a TRIMMED PREVIEW; the session X-API-Key hydrates full depth per key, and the free tier is capped per day (call claim_free_key once — no email — if you do not hold a key). Do NOT use when you can filter exactly: search_facilities for structured facility filters, get_news for date/keyword news, list_transactions for deal filters — those match fields and return complete sets, where this ranks by meaning and returns a top-N.',
     { query: S.describe('Natural-language query (required), e.g. "grids opening up for AI load in the Southeast"'),
       q: S.describe('Alias for query'),
       corpus: S.describe('Optional corpus to restrict to: news | deals | facilities | market_narratives. CSV of several is allowed; default searches all.'),

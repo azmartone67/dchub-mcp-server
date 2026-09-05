@@ -77,7 +77,7 @@
     },
     {
       "name": "search_intelligence",
-      "description": "Semantic search over DC Hub live intelligence corpus — news, M&A deals, facilities, and market analysis narratives. Natural-language query returns the most relevant cited records."
+      "description": "Semantic (meaning-based) search over DC Hub's live intelligence corpus — industry news, M&A deals, discovered facilities and per-market DCPI analysis narratives — returning the most relevant records with citable source fields. This is the agent-friendly alias over the SAME retrieval layer as semantic_search: same results, different call shape. It takes `query` plus human-readable corpus names (news | deals | facilities | market_narratives); semantic_search takes `q` plus the raw table names. Call ONE of them, not both. Params: query (required, natural language); corpus (optional CSV of the four names above, default all); limit (1-15, default 8). BEHAVIOUR: read-only — it writes nothing, and repeat calls with the same arguments return the same records. ACCESS: works with no key, but anonymous results come back as a TRIMMED PREVIEW; the session X-API-Key hydrates full depth per key, and the free tier is capped per day (call claim_free_key once — no email — if you do not hold a key). Do NOT use when you can filter exactly: search_facilities for structured facility filters, get_news for date/keyword news, list_transactions for deal filters — those match fields and return complete sets, where this ranks by meaning and returns a top-N."
     },
     {
       "name": "get_market_context",
