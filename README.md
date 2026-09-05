@@ -46,6 +46,15 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 **83 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
+> **These counts are served, not stated.** Every number above is rendered from a
+> live source and this file is a copy of it — mirrors and registry listings copy
+> it again, and each hop can freeze. Read the current values instead of trusting
+> any page that quotes them, including this one:
+> **[`/api/v1/canon/phrases`](https://dchub.cloud/api/v1/canon/phrases)** for
+> quantities, **[`/api/v1/ops/deadman`](https://dchub.cloud/api/v1/ops/deadman)**
+> for per-source ingest freshness (keyless, both), and `tools/list` on the MCP
+> endpoint for the canonical tool catalog.
+
 **Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
 
 ## Guided prompts & resources
