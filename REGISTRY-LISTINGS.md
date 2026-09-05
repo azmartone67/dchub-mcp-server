@@ -36,6 +36,7 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
 | **ToolPlex** | `https://dchub.cloud/mcp/toolplex` | ❌ dashboard (cascade-fed) |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
+| **cursor.directory** (community; cursor.com has no public MCP directory) | `https://dchub.cloud/mcp/cursordirectory` | ❌ owner-typed listing |
 | **Official MCP registry** — live listing `cloud.dchub/datacenter-power-grid-fiber` (cascade → PulseMCP / mcp.so / Glama / ToolPlex) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
 | ~~Official MCP registry~~ — retired listing `cloud.dchub/mcp-server` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
 
