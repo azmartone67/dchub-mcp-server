@@ -230,7 +230,24 @@ jobs:
       - name: Commit + open a PR only if a surface drifted
         id: commit
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ★2026-09-04 — MUST NOT be GITHUB_TOKEN. Measured on the first real
+          # run after main became PR-only: a PR opened with GITHUB_TOKEN is
+          # authored by github-actions[bot], and every workflow on it lands as
+          # `action_required` — queued, awaiting a human clicking "Approve and
+          # run". With required status checks now on main, those checks never
+          # report, `gh pr merge --auto` never fires, and the canon sync stalls
+          # silently until someone notices. Run 33939357361 opened PR #346 that
+          # way and it sat BLOCKED with 6 runs in action_required.
+          #
+          # A user PAT makes the PR user-authored, so its checks run
+          # immediately. dchub-backend's mcp-facts-export.yml already does this
+          # (PR_SUBMIT_TOKEN || GH_PAT) — this is the same fix on the sibling.
+          #
+          # REGISTRY_PR_PAT, not REPO_ADMIN_TOKEN: the comment ~line 111 of this
+          # file records REPO_ADMIN_TOKEN as "CONFIGURED but DEAD". GITHUB_TOKEN
+          # stays only as a last-resort fallback so a missing secret degrades to
+          # needing approval rather than to no PR at all.
+          GH_TOKEN: ${{ secrets.REGISTRY_PR_PAT || secrets.GITHUB_TOKEN }}
         run: |
           set -e
           # ★2026-07-30: ONE list of every file the refresh + --fix can write,
