@@ -208,6 +208,41 @@ const TOOL_ALIASES = {
 // util/iso_taxonomy, backend-side. analyze_site {location:"Ashburn, VA"} is
 // likewise absent: it needs geocoding to lat/lon, and its existing error
 // already names exactly what to send.
+// ── ONE-OF REQUIRED ARGUMENTS (2026-09-05) ─────────────────────────────────
+// Tools whose identifier is satisfiable by ANY ONE of several arguments. That
+// is a JSON-Schema `anyOf`, which `inputSchema` here does not express — so Zod
+// cannot reject a call naming NONE of them, and the call falls through to the
+// tier gate, which answers about MONEY instead of about the missing argument.
+//
+// ★ MEASURED LIVE 2026-09-05, get_facility with `{}` — no identifier at all:
+//
+//     isError: false
+//     "🔒 Free-tier preview of `get_facility`. Full results: your human unlocks
+//      in one click — $10 one-time = 1,000 API calls …"
+//
+//   The agent asked for a facility without naming one and was told the answer
+//   costs money. It cannot recover from that: nothing in the response says an
+//   argument is missing, so the rational next step is to tell its human to pay.
+//   That is the same failure family as ARG_ALIASES above — a call that does not
+//   fail LOUDLY — with a worse ending, because this one asks for a credit card.
+//
+// ★ DELIBERATELY NOT A BLANKET RULE. Most tools are already correct and were
+//   verified so before this table was written, with `{}` against production:
+//     get_market_dcpi_rank / score_facility / get_gas_economics
+//                        -32602 Input validation error  (Zod `required` works)
+//     analyze_site       {"error":"missing_coordinates", …}  (own check)
+//     get_market_intel   returns the market LIST — no identifier required
+//     get_grid_data      returns default grid data — no identifier required
+//   Adding either of those last two here would BREAK a working list mode. Only
+//   add a tool after measuring that a no-identifier call is meaningless for it.
+//
+// ★ Runs AFTER ARG_ALIASES normalization (applied on req.body at the HTTP
+//   layer), so `slug`/`id` guesses are already resolved when this is checked.
+const ONE_OF_REQUIRED = {
+  get_facility: ['facility_id', 'id', 'slug', 'name'],
+};
+
+
 const ARG_ALIASES = {
   get_dchub_recommendation: { intent: 'context', query: 'context',
                               question: 'context', use_case: 'context',
@@ -10914,6 +10949,41 @@ function trackedTool(srv, name, description, schema, handler) {
           }
         }
       }
+      // ★ ONE-OF REQUIRED — before the gate, on purpose. The gate answers
+      //   "you need to pay"; a call missing its identifier needs "you need to
+      //   name one". Asking for money first is the defect (see ONE_OF_REQUIRED).
+      const _oneOf = ONE_OF_REQUIRED[name];
+      if (_oneOf && !_oneOf.some((k) => {
+        const v = args && args[k];
+        return v !== undefined && v !== null && v !== '';
+      })) {
+        const _named = _oneOf.map((k) => `\`${k}\``).join(' or ');
+        const _detail = `${name} needs an identifier: pass ${_named}. `
+          + 'None was supplied, so there is nothing to look up. This is not a '
+          + 'tier limit and paying changes nothing.';
+        const _payload = {
+          error: 'missing_identifier',
+          detail: _detail,
+          code: 'invalid_parameter',
+          error_version: 1,
+          accepts: _oneOf,
+          _error_mitigation: {
+            error_code: 'invalid_parameter',
+            severity: 'parameter_adjustment',
+            deterministic_hint: `Re-call ${name} with one of: ${_oneOf.join(', ')}. `
+              + 'If you do not have an identifier yet, discover one first with '
+              + 'search_facilities, then pass its `slug`.',
+          },
+        };
+        // Content IS the error channel here — an agent reads content[0].text,
+        // and isError makes clients surface it instead of swallowing a 200 with
+        // a refusal inside. Same shape as the monthly-quota path above.
+        return {
+          content: [{ type: 'text', text: JSON.stringify(_payload) }],
+          isError: true,
+          structuredContent: _payload,
+        };
+      }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
@@ -19238,7 +19308,7 @@ export { trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause };
 // app. Exporting an existing object changes no runtime behavior.
 // r-argalias (2026-08-29): exported for test only — the alias map's structural
 // invariants are guarded in test/arg-aliases.test.mjs.
-export { ARG_ALIASES, TOOL_ALIASES };
+export { ARG_ALIASES, TOOL_ALIASES, ONE_OF_REQUIRED };
 // Exported for test/site-headline-envelope.test.mjs — the tier projection
 // is a pure function of the parsed payload, so the honesty fields it must
 // carry can be pinned directly instead of only through the network.
