@@ -166,6 +166,18 @@ const TOOL_ALIASES = {
   get_free_key: 'claim_free_key', claim_key: 'claim_free_key',
   // discovery
   list_tools: 'discover_tools', get_tools: 'discover_tools',
+  // ★2026-09-06 — REGULARISED NAMES. Our own catalog is inconsistent:
+  // `get_fiber_intel` and `get_grid_intelligence` are siblings that abbreviate
+  // differently, and `site_selection_canvas` is the only tool whose name is a
+  // phrase agents also use bare. An agent that reads the list and normalises it
+  // guesses wrong in a predictable direction, in BOTH directions.
+  // MEASURED: Copilot and Mistral each published a DC Hub connector manifest
+  // naming `get_grid_intel` and `site_selection` as capabilities — neither is a
+  // real tool, and an agent following that manifest gets tool-not-found and
+  // concludes DC Hub does not work.
+  get_grid_intel: 'get_grid_intelligence',
+  get_fiber_intelligence: 'get_fiber_intel',
+  site_selection: 'site_selection_canvas',
 };
 
 
