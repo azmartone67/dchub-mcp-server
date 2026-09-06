@@ -142,6 +142,12 @@ export { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum,
 // every hit is logged so we can grow this map from what agents actually type.
 // (Keys must NOT collide with a real tool name; values MUST be real tools.)
 const TOOL_ALIASES = {
+  // ★2026-09-06: standing_intent was SPLIT (register/list/delete). Its default
+  //   action was `register`, so that is where the retired name points. An old
+  //   caller sending action="delete" lands on register WITHOUT a webhook_url
+  //   and gets register's required-argument error naming the three tools — an
+  //   error, never a silent wrong action.
+  standing_intent: 'register_standing_intent',
   // alerts / watches
   create_alert: 'set_market_alert', set_alert: 'set_market_alert',
   watch_market: 'set_market_alert', watch_market_dcpi: 'set_market_alert',
@@ -3801,7 +3807,7 @@ const FREE_FULL_TOOLS = new Set([
   // deltas_applied and emptied results for anon callers).
   'simulate_scenario',
   'research_task',
-  'standing_intent',
+  'register_standing_intent', 'list_standing_intents', 'delete_standing_intent',
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
   'get_power_availability_timeline',  // composed timing view over the same public EIA-860M/LBNL facts — same free-citation class (shell 2026-07-30)
   'get_global_power',      // public GEM Global Integrated Power (CC-BY facts) — worldwide operating+planned power, same free-citation class
@@ -6357,7 +6363,9 @@ const _ENTITY_MAP = {
   get_permitting_intel: 'permitting_records',
   simulate_scenario: 'scenario_results',
   research_task: 'research_dossier',
-  standing_intent: 'intent',
+  register_standing_intent: 'intent',
+  list_standing_intents: 'intents',
+  delete_standing_intent: 'intent',
 };
 function _entityType(name) { return _ENTITY_MAP[name] || (name || 'record'); }
 
@@ -7034,7 +7042,9 @@ const _TOOL_TITLE_OVERRIDES = {
   get_permitting_intel: "Permitting & Moratorium Intel",
   simulate_scenario: "Market Scenario Simulator",
   research_task: "Research Dossier (async)",
-  standing_intent: "Standing Intents (webhook push)",
+  register_standing_intent: "Register Standing Intent (webhook push)",
+  list_standing_intents: "List Standing Intents",
+  delete_standing_intent: "Delete Standing Intent",
 };
 function _toolTitle(name) {
   return _TOOL_TITLE_OVERRIDES[name]
@@ -7276,7 +7286,7 @@ const WRITE_TOOLS = new Set([
   'save_site', 'set_market_alert', 'set_site_alert',
   'save_to_shortlist', 'set_shortlist_alert',
   'bind_email', 'claim_free_key', 'recover_my_key', 'unlock_more_data',
-  'subscribe_digest', 'standing_intent',
+  'subscribe_digest', 'register_standing_intent', 'delete_standing_intent',
 ]);
 
 // ★ The two hints WRITE_TOOLS membership alone gets wrong.
@@ -7290,14 +7300,14 @@ const WRITE_TOOLS = new Set([
 // destructiveHint: the tool can REMOVE state a caller would not want removed by
 // an auto-approved call. standing_intent action="delete" retires a registered
 // watch permanently.
-const DESTRUCTIVE_TOOLS = new Set(['standing_intent']);
+const DESTRUCTIVE_TOOLS = new Set(['delete_standing_intent']);
 
 // openWorldHint: the tool interacts with something OUTSIDE DC Hub's own curated
 // dataset. Every read tool queries our closed corpus; standing_intent makes the
 // SERVER issue an outbound HTTPS request to an endpoint the CALLER supplies
 // (private/internal hosts are rejected, which is the mitigation — not a reason
 // to describe the interaction as closed-world).
-const OPEN_WORLD_TOOLS = new Set(['standing_intent']);
+const OPEN_WORLD_TOOLS = new Set(['register_standing_intent']);
 
 // Distinct registered tool NAMES — a Set so the per-connection createServer()
 // re-registrations dedupe (a plain counter would multiply). /health reports
@@ -8324,7 +8334,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
       }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY router: collapses 83 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
+    }, 'ADVISORY router: collapses 85 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -8576,7 +8586,7 @@ export const _TOOL_FAMILIES_TABLE = [
   // tools that let an agent stop polling and keep state across conversations,
   // invisible to the tool an agent calls to learn what DC Hub does.
   { family: 'saved_work', when: 'Keep state across conversations: save sites/shortlists, re-score them on refresh, arm drift alerts, subscribe your human to digests, register webhook standing queries, or export what you saved.', keywords: ['save','saved','shortlist','alert','watch','notify','digest','subscribe','webhook','standing','export','track','monitor','drift','reallocate'],
-    tools: ['save_site','save_to_shortlist','get_shortlist','list_saved_sites','set_site_alert','set_market_alert','set_shortlist_alert','subscribe_digest','standing_intent','suggest_reallocation','export_dataset'] },
+    tools: ['save_site','save_to_shortlist','get_shortlist','list_saved_sites','set_site_alert','set_market_alert','set_shortlist_alert','subscribe_digest','register_standing_intent','list_standing_intents','delete_standing_intent','suggest_reallocation','export_dataset'] },
   { family: 'account_meta', when: 'Keys/access + recovery, semantic search across DC Hub, and why-use meta.', keywords: ['key','access','unlock','billing','semantic','search','why','email','recover','intelligence'],
     tools: ['claim_free_key','unlock_more_data','semantic_search','search_intelligence','why_dchub','get_agent_registry','discover_tools','plan_query','bind_email','recover_my_key','summarize_for_citation'] },
 ];
@@ -16757,32 +16767,87 @@ function createServer(descOverrides, instructionsTail) {
               + sub.task_id + '" in ~30s to fetch it.' }) }] };
     });
 
-  trackedTool(srv, 'standing_intent',
-    'STANDING QUERIES with webhook push — register an intent once and DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: action ("register" default | "list" | "delete"), kind ("new_deal_in_market" watches deals in params market · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (public HTTPS only — private/internal hosts rejected), intent_id (for delete). Register returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers "notify my system whenever a new moratorium appears", "push me new matches instead of making me poll". Try: standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (use get_news / list_transactions) or email alerts (use set_market_alert); this is machine-to-machine push.',
-    { action: S.describe('"register" (default), "list" (your intents), or "delete" (needs intent_id)'),
-      kind: S.describe('Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change"'),
+  // ★2026-09-06 — SPLIT from a single `standing_intent` tool that took
+  //   action="register"|"list"|"delete".
+  //
+  //   One tool cannot be honestly annotated when it both reads and deletes: the
+  //   bundle was advertised readOnlyHint:true until 2026-09-05, which is what
+  //   tells Claude a call may run WITHOUT per-call confirmation — so a delete
+  //   could auto-run. That was corrected in place, but the correction could only
+  //   pick ONE label for three different operations, and the safe label for a
+  //   tool containing `delete` makes the two harmless operations prompt too.
+  //
+  //   Annotations are per TOOL, so the fix is per tool:
+  //     list     readOnly    — auto-runs, as a read should
+  //     register write + openWorld — we POST to a URL the CALLER supplies
+  //     delete   destructive — always prompts
+  //
+  //   The retired name is aliased to `register_standing_intent` (its old default
+  //   action); TOOL_ALIASES never appears in tools/list, so nothing advertises a
+  //   bundled tool any more.
+  trackedTool(srv, 'list_standing_intents',
+    'List the standing intents (webhook watches) registered on your key. Read-only. Returns each intent_id, kind, watch params, webhook_url and enabled state — use it to find the intent_id for delete_standing_intent, or to confirm a register landed. Requires a key. Answers "what am I currently watching". Do NOT use to create a watch (register_standing_intent) or for one-shot reads (get_news / list_transactions).',
+    {},
+    async () => {
+      const out = await callAPI('/api/v1/agentic/intents', {});
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
+
+  trackedTool(srv, 'register_standing_intent',
+    'Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: kind ("new_deal_in_market" watches deals in the market param · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers "notify my system whenever a new moratorium appears", "push me new matches instead of making me poll", "tell my orchestrator when a deal lands in Columbus". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.',
+    { kind: Sreq.describe('Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change"'),
+      webhook_url: Sreq.describe('Your public HTTPS webhook endpoint (required)'),
       market: S.describe('For new_deal_in_market: the market/region substring to watch, e.g. columbus'),
       q: S.describe('For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium'),
-      state: S.describe('For permitting_change: optional US state filter, e.g. MN'),
-      webhook_url: S.describe('Your public HTTPS webhook endpoint (required for register)'),
-      intent_id: S.describe('The intent_id to delete (from register/list)') },
+      state: S.describe('For permitting_change: optional US state filter, e.g. MN') },
     async (a) => {
-      const act = String(a.action || 'register').toLowerCase();
-      let out;
-      if (act === 'list') {
-        out = await callAPI('/api/v1/agentic/intents', {});
-      } else if (act === 'delete') {
-        out = await callAPIWrite(
-          `/api/v1/agentic/intents/${encodeURIComponent(a.intent_id || '')}`,
-          {}, { method: 'DELETE' });
-      } else {
-        const params = {};
-        if (a.market) params.market = a.market;
-        if (a.q) params.q = a.q;
-        if (a.state) params.state = a.state;
-        out = await callAPIWrite('/api/v1/agentic/intents',
-          { kind: a.kind, params, webhook_url: a.webhook_url });
+      // ★ Named, actionable, and it names the SIBLING tools — an old caller
+      //   aliased here from `standing_intent action="delete"` arrives with no
+      //   webhook_url, and this is the message that tells them where to go.
+      const kind = String(a.kind || '').trim();
+      const hook = String(a.webhook_url || '').trim();
+      if (!kind || !hook) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'missing_required_argument',
+          detail: 'register_standing_intent needs both `kind` and `webhook_url`.',
+          accepts: { kind: ['new_deal_in_market', 'news_keyword', 'permitting_change'],
+                     webhook_url: 'public https URL' },
+          siblings: { list: 'list_standing_intents', delete: 'delete_standing_intent' },
+          _error_mitigation: {
+            error_code: 'invalid_parameter', severity: 'parameter_adjustment',
+            deterministic_hint: 'To CREATE a watch pass kind + webhook_url. To see existing '
+              + 'watches call list_standing_intents. To remove one call '
+              + 'delete_standing_intent with its intent_id.',
+          },
+        }) }], isError: true };
       }
+      const params = {};
+      if (a.market) params.market = a.market;
+      if (a.q) params.q = a.q;
+      if (a.state) params.state = a.state;
+      const out = await callAPIWrite('/api/v1/agentic/intents',
+        { kind, params, webhook_url: hook });
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
+
+  trackedTool(srv, 'delete_standing_intent',
+    'Permanently retire a registered standing intent (webhook watch) by intent_id — deliveries stop and the watch cannot be recovered. Requires a key. Get the intent_id from list_standing_intents or from the register response. Answers "stop watching this". Do NOT use to pause temporarily; there is no pause, this removes the watch.',
+    { intent_id: Sreq.describe('The intent_id to delete (from list_standing_intents or register)') },
+    async (a) => {
+      const id = String(a.intent_id || '').trim();
+      if (!id) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'missing_required_argument',
+          detail: 'delete_standing_intent needs `intent_id`.',
+          siblings: { list: 'list_standing_intents' },
+          _error_mitigation: {
+            error_code: 'invalid_parameter', severity: 'parameter_adjustment',
+            deterministic_hint: 'Call list_standing_intents to find the intent_id, then retry.',
+          },
+        }) }], isError: true };
+      }
+      const out = await callAPIWrite(
+        `/api/v1/agentic/intents/${encodeURIComponent(id)}`, {}, { method: 'DELETE' });
       return { content: [{ type: 'text', text: JSON.stringify(out) }] };
     });
 
@@ -17718,7 +17783,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 83 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 85 tools; start with get_grid_scoreboard (free, no key).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',

@@ -14,6 +14,22 @@ import ast, io, json, re, sys, types, urllib.request
 WF = ".github/workflows/smithery-freshness.yml"
 WANT = open("scripts/smithery_description.txt", encoding="utf-8").read()
 
+# ★2026-09-06 — DERIVED, not pinned. This read `WANT.replace("83 live MCP tools",
+#   ...)`. str.replace on a string that is not present is a silent no-op, so when
+#   the catalog moved 83 -> 85 the fixture injected NO stale marker, the checker
+#   correctly found none, and the test failed with "expected +0 to be 1" — a
+#   green-looking fixture that had quietly stopped constructing its own scenario.
+#   The count moves every time a tool is added; the PHRASE does not.
+#   Raising on a miss matters as much as the regex: a fixture that cannot build
+#   its scenario must fail loudly, not assert against nothing.
+_m = re.search(r"\b\d+ live MCP tools\b", WANT)
+if not _m:
+    raise SystemExit(
+        "run_copycheck fixture: no '<N> live MCP tools' phrase in "
+        "scripts/smithery_description.txt — the stale scenario cannot be built, "
+        "and injecting nothing would make the test assert against an empty case.")
+_TOOLS_PHRASE = _m.group(0)
+
 def block():
     src = open(WF, encoding="utf-8").read()
     at = src.index("id: copycheck")
@@ -29,7 +45,7 @@ SCENARIOS = {
     "flap":        [WANT[:-40], WANT],
     "match":       [WANT],
     "drift":       ["a completely different description. It has sentences. Two of them."] * 12,
-    "stale":       [WANT.replace("83 live MCP tools", "the DCGI is live now. 65 tracked feeds")],
+    "stale":       [WANT.replace(_TOOLS_PHRASE, "the DCGI is live now. 65 tracked feeds")],
     "unreadable":  [None] * 12,
     "empty":       [""] * 12,
 }

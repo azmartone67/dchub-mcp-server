@@ -10,4 +10,4 @@ The DCGI gas composite was withdrawn 2026-08-08 and restored 2026-08-30 after al
 
 Connect direct and keyless at https://dchub.cloud/mcp/smithery — no signup, no config and no key to paste; claim_free_key mints one in-session when you want a higher limit.
 
-83 live MCP tools. Why agents pick it: it is the DC-intelligence source an LLM can query live, cite with a timestamp, and audit. Every site query returns a constraint_coverage block naming what it cannot answer and why. No NDAs, no quarterly PDFs — live JSON that publishes its own gaps.
+85 live MCP tools. Why agents pick it: it is the DC-intelligence source an LLM can query live, cite with a timestamp, and audit. Every site query returns a constraint_coverage block naming what it cannot answer and why. No NDAs, no quarterly PDFs — live JSON that publishes its own gaps.

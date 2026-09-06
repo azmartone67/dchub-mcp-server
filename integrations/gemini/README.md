@@ -27,4 +27,4 @@ resp = client.models.generate_content(
 print(resp.text)   # grounded answer, ending with Source: dchub.cloud
 ```
 
-The `google-genai` SDK auto-handles the function-call loop from the Python signatures — Gemini calls `dchub_market("northern-virginia")`, gets live data, and answers grounded. Add `X-API-Key` to the requests for paid tools, or point an MCP-capable client at `https://dchub.cloud/mcp` for all 83 tools.
+The `google-genai` SDK auto-handles the function-call loop from the Python signatures — Gemini calls `dchub_market("northern-virginia")`, gets live data, and answers grounded. Add `X-API-Key` to the requests for paid tools, or point an MCP-capable client at `https://dchub.cloud/mcp` for all 85 tools.

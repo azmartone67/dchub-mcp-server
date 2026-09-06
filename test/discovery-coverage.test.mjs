@@ -77,7 +77,7 @@ describe('discover_tools navigation coverage', () => {
   it('the saved-work surface is navigable (it was entirely invisible before)', () => {
     const saved = _TOOL_FAMILIES_TABLE.find(f => f.family === 'saved_work');
     expect(saved, 'saved_work family missing').toBeTruthy();
-    for (const t of ['save_site', 'get_shortlist', 'set_site_alert', 'standing_intent', 'subscribe_digest']) {
+    for (const t of ['save_site', 'get_shortlist', 'set_site_alert', 'register_standing_intent', 'subscribe_digest']) {
       expect(saved.tools).toContain(t);
     }
   });

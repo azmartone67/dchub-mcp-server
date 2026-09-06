@@ -11,7 +11,7 @@
 
 The only MCP server combining facility data, infrastructure, and live grid intelligence into one queryable interface. Built for Claude, Cursor, Gemini CLI, Antigravity, VS Code, Cline, Continue, Windsurf, and any AI assistant doing data center site selection, energy analysis, or market research.
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![DC Hub quality](https://dchub.cloud/api/v1/mcp/quality/badge.svg)](https://dchub.cloud/api/v1/mcp/quality) [![Tools](https://img.shields.io/badge/tools-83-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![DC Hub quality](https://dchub.cloud/api/v1/mcp/quality/badge.svg)](https://dchub.cloud/api/v1/mcp/quality) [![Tools](https://img.shields.io/badge/tools-85-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
 
 > ⭐ **Star this repo** — if DC Hub is useful to your agents, a star helps other builders (and their AI assistants) discover it across the MCP registries; it's the #1 signal Smithery, Glama & awesome-mcp-servers rank on. **[→ Star `azmartone67/dchub-mcp-server`](https://github.com/azmartone67/dchub-mcp-server)** &nbsp; [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=social)](https://github.com/azmartone67/dchub-mcp-server)
 
@@ -44,7 +44,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **Tax incentives** by state with eligibility details
 - **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
 
-**83 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
+**85 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
 > **These counts are served, not stated.** Every number above is rendered from a
 > live source and this file is a copy of it — mirrors and registry listings copy
@@ -59,7 +59,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## Guided prompts & resources
 
-Beyond the 83 tools, DC Hub ships **13 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
+Beyond the 85 tools, DC Hub ships **13 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)

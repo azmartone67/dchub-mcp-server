@@ -109,14 +109,6 @@
         "include_fiber": {
           "description": "Include fiber-connectivity analysis (default true)",
           "type": "boolean"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -220,14 +212,6 @@
         "capacity_mw": {
           "description": "Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)",
           "type": "number"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -249,6 +233,22 @@
           "type": "string"
         }
       }
+    }
+  },
+  {
+    "name": "delete_standing_intent",
+    "description": "Permanently retire a registered standing intent (webhook watch) by intent_id — deliveries stop and the watch cannot be recovered. Requires a key. Get the intent_id from list_standing_intents or from the register response. Answers \"stop watching this\". Do NOT use to pause temporarily; there is no pause, this removes the watch.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "intent_id": {
+          "type": "string",
+          "description": "The intent_id to delete (from list_standing_intents or register)"
+        }
+      },
+      "required": [
+        "intent_id"
+      ]
     }
   },
   {
@@ -681,14 +681,6 @@
         "include_sources": {
           "description": "Include upstream data-source/provenance metadata in the response",
           "type": "boolean"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -862,14 +854,6 @@
         },
         "market": {
           "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — \"Ashburn\" is not a grid code.",
-          "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
           "type": "string"
         }
       }
@@ -1084,14 +1068,6 @@
         },
         "compare_to": {
           "description": "Optional second market slug to compare against, e.g. dallas",
-          "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
           "type": "string"
         }
       }
@@ -1501,6 +1477,14 @@
     }
   },
   {
+    "name": "list_standing_intents",
+    "description": "List the standing intents (webhook watches) registered on your key. Read-only. Returns each intent_id, kind, watch params, webhook_url and enabled state — use it to find the intent_id for delete_standing_intent, or to confirm a register landed. Requires a key. Answers \"what am I currently watching\". Do NOT use to create a watch (register_standing_intent) or for one-shot reads (get_news / list_transactions).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
     "name": "list_transactions",
     "description": "M&A and capital transactions in the data center sector — 2,100+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers \"which data-center deals closed this year\", \"what was that acquisition worth\". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter — use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).",
     "inputSchema": {
@@ -1734,6 +1718,39 @@
       },
       "required": [
         "email"
+      ]
+    }
+  },
+  {
+    "name": "register_standing_intent",
+    "description": "Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: kind (\"new_deal_in_market\" watches deals in the market param · \"news_keyword\" watches news matching q · \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Watch kind: \"new_deal_in_market\" | \"news_keyword\" | \"permitting_change\""
+        },
+        "webhook_url": {
+          "type": "string",
+          "description": "Your public HTTPS webhook endpoint (required)"
+        },
+        "market": {
+          "description": "For new_deal_in_market: the market/region substring to watch, e.g. columbus",
+          "type": "string"
+        },
+        "q": {
+          "description": "For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium",
+          "type": "string"
+        },
+        "state": {
+          "description": "For permitting_change: optional US state filter, e.g. MN",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "webhook_url"
       ]
     }
   },
@@ -2137,51 +2154,6 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
-        }
-      }
-    }
-  },
-  {
-    "name": "standing_intent",
-    "description": "STANDING QUERIES with webhook push — register an intent once and DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: action (\"register\" default | \"list\" | \"delete\"), kind (\"new_deal_in_market\" watches deals in params market · \"news_keyword\" watches news matching q · \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (public HTTPS only — private/internal hosts rejected), intent_id (for delete). Register returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers \"notify my system whenever a new moratorium appears\", \"push me new matches instead of making me poll\". Try: standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (use get_news / list_transactions) or email alerts (use set_market_alert); this is machine-to-machine push.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "action": {
-          "description": "\"register\" (default), \"list\" (your intents), or \"delete\" (needs intent_id)",
-          "type": "string"
-        },
-        "kind": {
-          "description": "Watch kind: \"new_deal_in_market\" | \"news_keyword\" | \"permitting_change\"",
-          "type": "string"
-        },
-        "market": {
-          "description": "For new_deal_in_market: the market/region substring to watch, e.g. columbus",
-          "type": "string"
-        },
-        "q": {
-          "description": "For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium",
-          "type": "string"
-        },
-        "state": {
-          "description": "For permitting_change: optional US state filter, e.g. MN",
-          "type": "string"
-        },
-        "webhook_url": {
-          "description": "Your public HTTPS webhook endpoint (required for register)",
-          "type": "string"
-        },
-        "intent_id": {
-          "description": "The intent_id to delete (from register/list)",
-          "type": "string"
         }
       }
     }

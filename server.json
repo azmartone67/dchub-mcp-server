@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/datacenter-power-grid-fiber",
-  "title": "DC Hub \u2014 Data Center Site Selection & Colocation: Electricity, Power Grid, Gas, Fiber",
-  "description": "Live power, energy, grid, gas, fiber & data-center site-selection infrastructure \u2014 query and cite.",
+  "title": "DC Hub — Data Center Site Selection & Colocation: Electricity, Power Grid, Gas, Fiber",
+  "description": "Live power, energy, grid, gas, fiber & data-center site-selection infrastructure — query and cite.",
   "websiteUrl": "https://dchub.cloud",
   "version": "2.12.7",
   "repository": {
@@ -19,12 +19,12 @@
     "io.modelcontextprotocol.registry/publisher-provided": {
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
-      "toolCount": 83,
+      "toolCount": 85,
       "license": "CC-BY-4.0 for DCPI scores + methodology and DC Hub's own grid analysis; other layers per https://dchub.cloud/data-sources",
       "freeTier": true,
       "deploymentType": "origin",
       "canonicalRemote": "https://dchub.cloud/mcp",
-      "gatewayNote": "This entry is the ORIGIN. DC Hub is also reachable through hosted gateways, which share one upstream identity across many end users \u2014 a client that binds here directly is counted as itself, and its own key and clientInfo reach the server unaltered. When a call does arrive through a known gateway, the response says so in identity.connection; the field is absent otherwise, because a gateway forwarding a generic client identity cannot be distinguished from a direct caller."
+      "gatewayNote": "This entry is the ORIGIN. DC Hub is also reachable through hosted gateways, which share one upstream identity across many end users — a client that binds here directly is counted as itself, and its own key and clientInfo reach the server unaltered. When a call does arrive through a known gateway, the response says so in identity.connection; the field is absent otherwise, because a gateway forwarding a generic client identity cannot be distinguished from a direct caller."
     }
   }
 }
