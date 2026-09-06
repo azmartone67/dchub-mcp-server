@@ -113,7 +113,14 @@ const MUST_NOT_REQUIRE = {
   get_facility_risk_delta: { args: ['facility_id', 'market'],    why: 'verified live: {market} alone returns a full delta' },
   // second modes
   research_task:         { args: ['question', 'task_id'],        why: 'task_id polls an earlier submission with no question' },
-  standing_intent:       { args: ['kind', 'action'],             why: 'verified live: {action:"list"} returns intents with no kind' },
+  // ★2026-09-06 — the bundled standing_intent is SPLIT. It could not declare
+  //   `kind` required, because action="list" legitimately took none — a
+  //   conditional requirement JSON Schema cannot express. Splitting removes
+  //   the condition: the lister takes nothing, and each writer can state
+  //   plainly what it needs.
+  //   Nothing replaces it here: `kind` and `webhook_url` on register, and
+  //   `intent_id` on delete, are now genuinely REQUIRED and belong in the
+  //   required-args contract, not in this optional-by-design table.
   // coordinate tools — lat/lon carry the aliases latitude/lng/longitude, so no
   // single name can be required without rejecting the other spelling
   analyze_site:            { args: ['lat', 'lon'], why: 'latitude/lng/longitude aliases' },
@@ -264,8 +271,13 @@ describe('the change is bounded', () => {
     }
   });
 
-  it('exactly 24 tools declare a required argument', () => {
+  it('exactly 26 tools declare a required argument', () => {
+    // ★2026-09-06 24 -> 26. The standing_intent split retired one tool that
+    //   declared NO required args (its `kind` was conditional on action, which a
+    //   schema cannot say) and added two that declare real ones —
+    //   register_standing_intent (kind + webhook_url) and delete_standing_intent
+    //   (intent_id) — plus a lister that correctly requires nothing. Net +2.
     const withReq = TOOLS.filter((t) => (t.inputSchema.required || []).length).map((t) => t.name);
-    expect(withReq.length, `got: ${withReq.sort().join(', ')}`).toBe(24);
+    expect(withReq.length, `got: ${withReq.sort().join(', ')}`).toBe(26);
   });
 });

@@ -39,23 +39,64 @@ describe('write-tool annotation accuracy', () => {
   it('the tools/list result is actually populated', () => {
     // A guard over an empty list passes vacuously. Assert we can see.
     expect(TOOLS.length).toBeGreaterThan(50);
-    expect(byName('standing_intent')).toBeTruthy();
+    expect(byName('register_standing_intent')).toBeTruthy();
   });
 
-  it('standing_intent is a destructive, open-world write', () => {
-    const a = byName('standing_intent').annotations;
-    expect(a.readOnlyHint).toBe(false);    // registers persistent state
-    expect(a.idempotentHint).toBe(false);  // register creates a new intent
-    expect(a.destructiveHint).toBe(true);  // action="delete" retires a watch
-    expect(a.openWorldHint).toBe(true);    // POSTs to a caller-supplied URL
+  // ★2026-09-06 — was ONE assertion over a bundled `standing_intent` that took
+  //   action="register"|"list"|"delete". That tool could not be honestly
+  //   annotated: one label had to cover a read, a create and a delete, so the
+  //   safe choice (destructive) made the two harmless operations prompt, and the
+  //   convenient choice (readOnly, which it carried until 2026-09-05) let a
+  //   DELETE auto-run without confirmation. Annotations are per tool, so the
+  //   operations are now per tool — and each gets the label it actually earns.
+  it('the read is annotated read-only, so it can auto-run', () => {
+    const a = byName('list_standing_intents').annotations;
+    expect(a.readOnlyHint).toBe(true);
+    expect(a.destructiveHint).toBe(false);
+  });
+
+  it('register is a non-idempotent, open-world write', () => {
+    const a = byName('register_standing_intent').annotations;
+    expect(a.readOnlyHint).toBe(false);     // creates persistent state
+    expect(a.idempotentHint).toBe(false);   // each call creates a new intent
+    expect(a.destructiveHint).toBe(false);  // it creates; it removes nothing
+    expect(a.openWorldHint).toBe(true);     // we POST to a CALLER-supplied URL
+  });
+
+  it('delete is destructive, so it always prompts', () => {
+    const a = byName('delete_standing_intent').annotations;
+    expect(a.readOnlyHint).toBe(false);
+    expect(a.destructiveHint).toBe(true);   // retires a watch permanently
+  });
+
+  it('no tool bundles read and delete behind one action argument', () => {
+    // The shape itself, not just its labels. Anthropic's directory review
+    // rejects a single tool accepting both safe and unsafe operations, and
+    // documenting the split inside one description does not satisfy it.
+    const offenders = TOOLS.filter((t) => {
+      const props = Object.keys(t.inputSchema?.properties || {});
+      if (!props.includes('action')) return false;
+      const d = (t.inputSchema.properties.action.description || '').toLowerCase();
+      return d.includes('delete') || d.includes('remove');
+    }).map((t) => t.name);
+    expect(offenders).toEqual([]);
   });
 
   it('a tool that advertises a delete action is annotated destructive', () => {
     // Derived from the published description, not from a hand-kept list — the
     // failure mode this file exists for is a NEW tool nobody remembered to add.
     const DELETES = /\b(?:"|')?delete(?:"|')?\b|\bcancel(?:s|led)?\b|\bretire(?:s|d)?\b/i;
+    // ★2026-09-06 — strip snake_case IDENTIFIERS before testing. A description
+    //   that NAMES a sibling tool ("get the id from list_standing_intents, then
+    //   delete_standing_intent") is cross-referencing, not advertising a delete,
+    //   and the split made that phrasing normal. Without this the heuristic
+    //   flags the read-only lister for mentioning its own delete sibling —
+    //   which would push a FALSE destructive hint onto a tool that should
+    //   auto-run. Prose still trips it: "deletes your saved sites" has no
+    //   underscore to hide behind.
+    const prose = (s) => String(s || '').replace(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g, ' ');
     const offenders = TOOLS
-      .filter((t) => DELETES.test(t.description || ''))
+      .filter((t) => DELETES.test(prose(t.description)))
       .filter((t) => t.annotations?.destructiveHint !== true)
       .map((t) => t.name);
     expect(offenders).toEqual([]);
@@ -93,7 +134,7 @@ describe('write-tool annotation accuracy', () => {
     const writesInScope = TOOLS
       .filter((t) => WRITES.test(firstSentence(t.description)))
       .map((t) => t.name);
-    expect(writesInScope).toContain('standing_intent');
+    expect(writesInScope).toContain('register_standing_intent');
     expect(writesInScope.length).toBeGreaterThanOrEqual(3);
   });
 
