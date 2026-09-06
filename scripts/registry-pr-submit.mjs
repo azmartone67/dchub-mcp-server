@@ -88,6 +88,92 @@ export const TARGETS = [
     alphabetical: false,                    // section isn't sorted — append at end
     entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, free tier, no signup)`,
   },
+  // ── VETTED 2026-09-06 · e2b-dev/awesome-mcp-gateways (★168) — NOT A FIT ──
+  // Kept here DECLINED rather than deleted: discovery dedupes on presence in
+  // this file, so removing the stub makes the crawl re-propose it every Monday
+  // forever. This is the "we looked, and the answer was no" record.
+  // Its two sections are "Open-source MCP Gateways" and "Commercial MCP
+  // Gateways", and its entries are proxies/multiplexers (agentgateway, AIRIS
+  // MCP Gateway). DC Hub is an MCP SERVER, not a gateway — there is nothing
+  // for it to sit in front of. Submitting would waste a maintainer's review.
+  {
+    key: 'awesome-mcp-gateways', upstream: 'e2b-dev/awesome-mcp-gateways', base: 'main', path: 'README.md',
+    enabled: false,
+    declined: 'gateways/proxies only; DC Hub is a server, not a gateway',
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: 'n/a — declined, gateways only',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── VETTED 2026-09-06 · AlexMili/Awesome-MCP (★146) — ENABLED ──
+  // Passes its "is it really an MCP server?" test: the entry points at
+  // dchub-mcp-server, whose reason for being IS the MCP server — remove it and
+  // the repo has no purpose. (Pointing at dchub.cloud would FAIL that test, and
+  // is the most common reason it closes PRs.)
+  // ★ TABLE, not a bullet list. Columns are Server | Description | Lang |
+  //   Activity | ⭐. Per its CONTRIBUTING only Name, Description and section
+  //   must be right; Lang/Activity/⭐ are recomputed on merge, so the documented
+  //   placeholders (`—`, `🟢 0d`, `0`) are correct rather than lazy.
+  // ★ NO LINKS IN THE DESCRIPTION (their rule), so the shared DESC constant —
+  //   which carries the homepage URL — cannot be used here.
+  {
+    key: 'awesome-mcp', upstream: 'AlexMili/Awesome-MCP', base: 'main', path: 'README.md',
+    enabled: true,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### Databases & Data',
+    alphabetical: false,               // table is not sorted; CONTRIBUTING sets no order
+    entry: `| [DC Hub](${REPO_URL}) | Live data-center, power-grid, fiber, gas and M&A intelligence for AI agents, with market power scores, ISO grid telemetry and interconnection-queue data queried by name or coordinate. | — | 🟢 0d | 0 |`,
+  },
+  // ── VETTED 2026-09-06 · bh-rat/awesome-mcp-enterprise (★120) — NOT A FIT ──
+  // Every section is MCP TOOLING or PLATFORM: Private Registries, Gateways &
+  // Proxies, Build Tools & Frameworks, MCP Apps, Security & Governance,
+  // Infrastructure & Deployment, Directories & Marketplaces. Its "Infrastructure
+  // & Deployment" reads as deployment platforms for MCP servers (Alpic, Blaxel,
+  // Cloudflare Agents), not infrastructure DATA. There is no section a domain
+  // data server belongs in, and inventing one is what its contributing rules
+  // ask you not to do. Declined; kept so discovery stops re-proposing it.
+  {
+    key: 'awesome-mcp-enterprise', upstream: 'bh-rat/awesome-mcp-enterprise', base: 'main', path: 'README.md',
+    enabled: false,
+    declined: 'every section is MCP tooling/platforms; no home for a domain data server',
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: 'n/a — declined, MCP tooling only',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── VETTED 2026-09-06 · AIAnytime/Awesome-MCP-Server (★67) — ENABLED ──
+  // ★ ALPHABETICAL IS REQUIRED HERE and the scaffold defaulted it to false.
+  //   Its CONTRIBUTING: "insert your entry in alphabetical order within that
+  //   category". Appending at the end is a documented reason for closure, so
+  //   this one flag is the difference between a merge and a decline.
+  // Category chosen from its own list rather than invented ("don't invent a new
+  // one unless you have three or more servers for it"): Cloud, ops & data.
+  // Format copied from a live neighbour (Zopnight): bold name, backticked
+  // transport, em-dash, then the description. Bullets, never numbers.
+  {
+    key: 'awesome-mcp-server', upstream: 'AIAnytime/Awesome-MCP-Server', base: 'main', path: 'README.md',
+    enabled: true,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### Cloud, ops & data',
+    alphabetical: true,
+    entry: `- **[DC Hub](${REPO_URL})** \`http\` — Live data-center, power-grid, fiber and energy intelligence: facilities worldwide, DC Hub Power Index market scores, ISO grid telemetry, interconnection queues, fiber routes and tracked M&A, queried by name or coordinate with cited sources. Install: \`claude mcp add --transport http dchub https://dchub.cloud/mcp\` — keyless at free-tier depth.`,
+  },
+  // ── VETTED 2026-09-06 · beriberikix/awesome-mcp-hardware (★51) — NOT A FIT ──
+  // Scope is "MCP servers for interacting with hardware and the physical
+  // world" — tinymcp ("control embedded devices"), embedded-debugger-mcp
+  // ("embedded debugging with probe-rs"). DC Hub answers questions ABOUT
+  // physical infrastructure and explicitly does not touch it; our own /mcp
+  // envelope says "Nothing here connects to or operates your infrastructure."
+  // Listing it here would contradict our own product statement. Declined.
+  {
+    key: 'awesome-mcp-hardware', upstream: 'beriberikix/awesome-mcp-hardware', base: 'main', path: 'README.md',
+    enabled: false,
+    declined: 'scope is servers that CONTROL hardware; DC Hub does not touch infrastructure',
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: 'n/a — declined, hardware control only',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
@@ -309,7 +395,17 @@ if (_IS_MAIN) (async () => {
     // Auto-discovered stubs land here with enabled:false (registry-discover.mjs
     // opens the PR; a human vets the section + flips this). Skip until vetted so
     // a placeholder `section` can never blind-insert our entry in the wrong spot.
-    if (t.enabled === false) { console.log(`  ⏸ ${t.key}: disabled stub — awaiting human vet (set enabled:true) — skip`); continue; }
+    // ★2026-09-06: a stub can be disabled for two OPPOSITE reasons — not vetted
+    // yet, or vetted and DECLINED. Printing "awaiting human vet" for a decided
+    // one invites someone to re-do the review that already happened, every week
+    // forever. `declined` carries the finding; without it the message is
+    // unchanged.
+    if (t.enabled === false) {
+      console.log(t.declined
+        ? `  ⛔ ${t.key}: DECLINED — ${t.declined} — skip`
+        : `  ⏸ ${t.key}: disabled stub — awaiting human vet (set enabled:true) — skip`);
+      continue;
+    }
     const res = await fetch(raw(t.upstream, t.base, t.path));
     if (!res.ok) { console.log(`  ~ ${t.key}: README fetch ${res.status} — skip`); continue; }
     const text = await res.text();
