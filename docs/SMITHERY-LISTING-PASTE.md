@@ -70,3 +70,51 @@ under a type that reads `configSchema`). If they cannot, the fallback already
 ships in the server: `claim_free_key` now returns a paste-ready `connect_url`
 for the Smithery cohort, which replaces the Smithery connection with a direct,
 identified one.
+
+---
+
+## 5 · What `useCount` is, and what it is NOT (measured 2026-09-05)
+
+`useCount` on the listing is **Smithery's all-time counter since 2026-05-03,
+their own listability probes included**. It is not users, not sessions, and not
+a window.
+
+Read against the local rank-defense log, it went:
+
+```
+2026-08-20  4328
+2026-08-21  4328 → 3573    (between 19:18 and 20:48 MST)
+2026-08-22 … 2026-09-05    3573, frozen to the unit for 16 days
+```
+
+★ **A counter that goes DOWN is a vendor recompute, not our traffic.** Nothing
+we serve can remove past calls. The ~755 removed matches Smithery's own
+listability scan ending that same day (1,042 calls on 08-20 → 710 on 08-21 → 0).
+There was no serving break to find, and looking for one cost a day.
+
+★ **It counts arrivals at THEIR gateway, so it is not evidence about us.** The
+registry record's `deploymentUrl` is `https://dchub--azmartone67.run.tools` — an
+authenticated proxy in front of our keyless server:
+
+```
+POST https://dchub--azmartone67.run.tools
+→ 401 {"error":"invalid_token","error_description":"Missing Authorization header"}
+   www-authenticate: … resource_metadata=…/.well-known/oauth-protected-resource
+   → {"authorization_servers":["https://auth.smithery.ai/azmartone67/dchub"]}
+```
+
+Post-Arcade, an account with no credits is told *"Your access to MCP servers is
+paused."* So a flat `useCount` is consistent with a wall **they** put in front
+of a server that has none.
+
+★ **Prove OUR side separately, and never from that counter:**
+
+```bash
+python3 scripts/verify_smithery_converged.py --checks 1
+```
+
+Measured the same day: anonymous `initialize` → 200 with a session,
+`notifications/initialized` → 202, `tools/call get_market_intel` → data with
+`_gated:false`; listing tools **83, set-identical to live**. Nothing on our side
+turns Smithery away. `registry_monitor.py` now prints this interpretation next
+to the number (`usecount_note()`) instead of leaving it to be rediscovered.
