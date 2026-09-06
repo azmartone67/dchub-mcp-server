@@ -26,6 +26,13 @@ const CANON = JSON.parse(read("canonical/tier_limits.json")).calls_per_day;
 
 // Everything an agent, a registry or an installing human actually reads.
 const SURFACES = [
+  // ★2026-09-05: scripts/smithery_description.txt was NOT here, and it is the
+  // copy on the highest-volume external channel — the one surface an installing
+  // agent reads before it ever reaches this repo. It carries no calls/day claim
+  // today, so adding it changes nothing now; that is the point. The next person
+  // to write a number into the listing gets the same gate as every other surface
+  // instead of a silent third answer to "what is the free tier".
+  "scripts/smithery_description.txt",
   "README.md", "llms-install.md", "DATA_QUALITY.md", "smithery.yaml",
   "mcp-server.json", "dxt/manifest.json", "integrations/README.md",
   "integrations/cohere/README.md", "integrations/chatgpt/README.md",
