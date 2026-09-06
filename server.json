@@ -4,7 +4,7 @@
   "title": "DC Hub — Data Center Site Selection & Colocation: Electricity, Power Grid, Gas, Fiber",
   "description": "Live power, energy, grid, gas, fiber & data-center site-selection infrastructure — query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.12.7",
+  "version": "2.12.8",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
