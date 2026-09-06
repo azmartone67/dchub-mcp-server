@@ -88,6 +88,19 @@ export const TARGETS = [
     alphabetical: false,                    // section isn't sorted — append at end
     entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, free tier, no signup)`,
   },
+  // ── AUTO-DISCOVERED e2b-dev/awesome-mcp-gateways (★168) — VET BEFORE ENABLING ──
+  // A list of MCP gateways
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-mcp-gateways', upstream: 'e2b-dev/awesome-mcp-gateways', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
