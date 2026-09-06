@@ -26,6 +26,7 @@
 // ============================================================================
 
 import { pathToFileURL } from 'node:url';
+import { TARGETS } from './registry-pr-submit.mjs';
 
 const TOKEN = process.env.GITHUB_TOKEN || process.env.REGISTRY_PR_PAT || '';
 const LIVE = TOKEN && ['1', 'true', 'yes'].includes(String(process.env.DISCOVER_LIVE || '').toLowerCase());
@@ -200,7 +201,27 @@ async function probeSurface(sfc) {
   }
 }
 
+// ★2026-09-06 — KNOWN now includes every TARGETS upstream, derived not typed.
+//
+// A decision about a list used to have to be recorded in TWO files: TARGETS in
+// registry-pr-submit.mjs (so the scaffold skips it) and this hand-typed Set (so
+// the CRAWL skips it). Miss the second and the list is re-proposed every Monday
+// forever, no matter what was decided — which is exactly what the
+// "vetted-out from discover issue #73" entries below are: manual patches for a
+// dedupe that should have been automatic.
+//
+// It bit immediately. #362 onboarded five candidates — two enabled, three
+// DECLINED with reasons — and every one of them would have come straight back
+// in the next crawl, because none is in this Set. Closing the tracking issue
+// would have produced a new one the following Monday with the same five.
+//
+// Deriving from TARGETS means one decision in one file is enough, for both
+// halves. The literals below STAY: they cover lists that are not TARGETS at all
+// (wong2/appcypher disabled PRs; toolsdk-ai uses a JSON registry), which is a
+// different reason to skip and has no TARGETS entry to derive from.
 const KNOWN = new Set([
+  ...TARGETS.map((t) => t.upstream),
+
   'mobinx/awesome-mcp-list',
   'tensorblock/awesome-mcp-servers',
   'yuzehao2023/awesome-mcp-servers',
