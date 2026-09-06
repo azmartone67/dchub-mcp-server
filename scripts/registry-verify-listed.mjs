@@ -92,7 +92,21 @@ async function ourPrs(upstream) {
 
 const ageDays = (iso) => (Date.now() - new Date(iso).getTime()) / 86400000;
 
-export function verdictFor(listed, prs, kind = 'add') {
+export function verdictFor(listed, prs, kind = 'add', target = {}) {
+  // ★2026-09-06 — A DECISION IS NOT A FAILED SUBMISSION.
+  //   #362 put five auto-discovered stubs into TARGETS: two enabled, three
+  //   DECLINED with written reasons, and the declined ones kept deliberately so
+  //   the crawl stops re-proposing them. This verifier iterated TARGETS without
+  //   looking at `enabled`, so all three read as MISSING — "not listed and no PR
+  //   of ours exists" — which exits 1. The weekly lane would have gone red
+  //   forever, for three lists we had decided NOT to submit to.
+  //   MISSING means "the lane believes it submitted and did not". A stub we
+  //   chose never to submit has no such belief to betray.
+  if (target.enabled === false) {
+    return target.declined
+      ? { state: 'DECLINED_BY_US', why: `we chose not to submit: ${target.declined}` }
+      : { state: 'UNVETTED', why: 'stub awaiting human vet — never submitted, by design' };
+  }
   if (listed === null) return { state: 'UNREADABLE', why: 'could not read the target file' };
   if (listed) {
     // ★ LISTED is not the whole truth for a REFRESH target. punkpeye lists us
@@ -143,25 +157,41 @@ async function main() {
   const rows = [];
   for (const t of all) {
     const [listed, prs] = await Promise.all([isListed(t), ourPrs(t.upstream)]);
-    const v = verdictFor(listed, prs, t.kind);
+    const v = verdictFor(listed, prs, t.kind, t);
     rows.push({ key: t.key, upstream: t.upstream, kind: t.kind, ...v });
-    const icon = { LISTED: '✅', PENDING: '⏳', DECLINED: '🚫', MISSING: '❌', UNREADABLE: '⚪' }[v.state];
+    const icon = { LISTED: '✅', PENDING: '⏳', DECLINED: '🚫', MISSING: '❌', UNREADABLE: '⚪', DECLINED_BY_US: '⛔', UNVETTED: '⏸' }[v.state];
     console.log(`  ${icon} ${v.state.padEnd(10)} ${t.key.padEnd(12)} ${t.upstream}`);
     console.log(`     ${v.why}`);
   }
 
   const n = (s) => rows.filter((r) => r.state === s).length;
-  console.log(`\n  listed ${n('LISTED')} · pending ${n('PENDING')} · declined ${n('DECLINED')}`
-    + ` · missing ${n('MISSING')} · unreadable ${n('UNREADABLE')}`);
+  // ★2026-09-06 — `stale` was COMPUTED AND DISCARDED. verdictFor() has set it
+  //   since STALE_PR_DAYS was introduced, and nothing downstream read it: the
+  //   counts line, the job summary and the closing sentence all treated a PR
+  //   open 3 days and one open 58 days as the same "pending". So the one number
+  //   that says whether submitting is WORKING was calculated every run and
+  //   thrown away.
+  //   Measured the day this landed: MobinX #346 open 58d, YuzeHao #378 41d,
+  //   docker/mcp-registry #4644 31d — 1 merge out of 6 submissions, under a
+  //   green check reading "every list is either listed, pending a maintainer,
+  //   or declined by one". True, and the reason nobody looked.
+  const stale = rows.filter((r) => r.stale);
+  console.log(`\n  listed ${n('LISTED')} · pending ${n('PENDING')} (${stale.length} stale)`
+    + ` · declined ${n('DECLINED')}`
+    + ` · missing ${n('MISSING')} · unreadable ${n('UNREADABLE')}`
+    + ` · ours-declined ${n('DECLINED_BY_US')} · unvetted ${n('UNVETTED')}`);
 
   if (process.env.GITHUB_STEP_SUMMARY) {
     const md = ['## 📋 Registry listing status\n',
       '| | list | state | detail |', '|---|---|---|---|',
-      ...rows.map((r) => `| ${{ LISTED: '✅', PENDING: '⏳', DECLINED: '🚫', MISSING: '❌', UNREADABLE: '⚪' }[r.state]}`
-        + ` | \`${r.upstream}\` | ${r.state} | ${r.why} |`),
+      ...rows.map((r) => `| ${r.stale ? '🕰️' : { LISTED: '✅', PENDING: '⏳', DECLINED: '🚫', MISSING: '❌', UNREADABLE: '⚪', DECLINED_BY_US: '⛔', UNVETTED: '⏸' }[r.state]}`
+        + ` | \`${r.upstream}\` | ${r.state}${r.stale ? ' (stale)' : ''} | ${r.why} |`),
       '',
       '_`PENDING` waits on a maintainer and is not a failure. `MISSING` means the',
-      'lane believes it submitted and did not — that one is ours._', ''].join('\n');
+      'lane believes it submitted and did not — that one is ours._',
+      `_🕰️ = our PR has been open past ${STALE_PR_DAYS}d. Still not a build failure —`,
+      'we do not control merges — but it is a different state from "just submitted",',
+      'and it is the one that says submitting has stopped working._', ''].join('\n');
     try {
       const { appendFileSync } = await import('node:fs');
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
@@ -173,6 +203,19 @@ async function main() {
   if (n('MISSING')) {
     console.error(`\n❌ ${n('MISSING')} list(s) have no entry AND no PR — the lane did not submit.`);
     process.exit(1);
+  }
+  // ★ Stale does NOT exit 1, deliberately — we control whether a PR exists, not
+  //   whether a stranger merges it, and failing a build over someone else's
+  //   queue is how this step gets muted. But it must not be reported as clean
+  //   either: that closing sentence was TRUE while five PRs sat unmerged, the
+  //   oldest 58 days, and being true is exactly what made it useless.
+  if (stale.length) {
+    console.log(`\n🕰️  ${stale.length} of our PR(s) open past ${STALE_PR_DAYS}d — `
+      + 'submitted, not landed:');
+    for (const r of stale) console.log(`     ${r.upstream} — ${r.why}`);
+    console.log('   Not a failure and not ours to fix. Worth a nudge, a different '
+      + 'list, or accepting that this one will not land.');
+    return;
   }
   console.log('\n✓ every list is either listed, pending a maintainer, or declined by one.');
 }
