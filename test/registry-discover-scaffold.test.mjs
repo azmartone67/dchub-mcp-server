@@ -36,10 +36,28 @@ const MAIN_SRC = readFileSync(new URL(`../${PATH}`, import.meta.url), 'utf8');
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const quiet = () => {};
 
-// the top two candidates from issue #73 on 2026-08-31
+// ★2026-09-06 — SYNTHETIC candidates, and that is the whole point.
+//
+// These used to be two REAL names off issue #73 (e2b-dev/awesome-mcp-gateways,
+// AlexMili/Awesome-MCP). The fixture reads the REAL scripts/registry-pr-submit.mjs
+// as the file being edited, and openScaffoldPR skips any candidate already
+// present in it — so the moment the scaffold PR landed those very names in
+// TARGETS, every test here failed on that branch:
+//
+//     only the genuinely new list is staged: expected [] to deeply equal
+//     [ 'AlexMili/Awesome-MCP' ]
+//
+// The tests were asserting against a file the feature under test MUTATES, using
+// the same names the feature puts there. Correct behaviour, self-defeating
+// fixture — it went red on the branch that proved the feature works.
+//
+// Names that can never appear in TARGETS fix it permanently. The real file is
+// still what gets edited, so insertStub is still exercised against the true
+// TARGETS shape; only the candidate identities are synthetic.
+// `test_no_synthetic_name_is_real` below keeps them that way.
 const CANDS = [
-  { full: 'e2b-dev/awesome-mcp-gateways', stars: 168, url: 'https://github.com/e2b-dev/awesome-mcp-gateways', base: 'main', desc: 'A list of MCP gateways' },
-  { full: 'AlexMili/Awesome-MCP', stars: 145, url: 'https://github.com/AlexMili/Awesome-MCP', base: 'main', desc: 'Awesome ModelContextProtocol resources' },
+  { full: 'dchub-test-fixture/awesome-mcp-alpha', stars: 168, url: 'https://github.com/dchub-test-fixture/awesome-mcp-alpha', base: 'main', desc: 'Synthetic list A (test fixture)' },
+  { full: 'dchub-test-fixture/awesome-mcp-beta', stars: 145, url: 'https://github.com/dchub-test-fixture/awesome-mcp-beta', base: 'main', desc: 'Synthetic list B (test fixture)' },
 ];
 const branchOf = (c) => `discover/add-target-${buildStub(c).key}`;
 // ★2026-09-06: the scaffold now batches EVERY outstanding candidate into ONE PR
@@ -157,6 +175,17 @@ describe('registry-discover scaffold PR — discovery actually onboards', () => 
     expect(st.calls.some((c) => c.method !== 'GET'),
       'nothing may be written while the batch PR is open').toBe(false);
     expect(st.prs, 'no second PR is opened').toHaveLength(0);
+  });
+
+  it('a fixture name can never collide with a real TARGETS entry', () => {
+    // The guard on the guard: if someone swaps a synthetic name back for a real
+    // discovery candidate, these tests start failing the moment that candidate
+    // is scaffolded — which is exactly the breakage this fixture change fixes.
+    for (const c of CANDS) {
+      expect(MAIN_SRC.includes(c.full),
+        `${c.full} appears in the real TARGETS file — fixture names must be synthetic`)
+        .toBe(false);
+    }
   });
 
   it('candidates already present in TARGETS are excluded from the batch', async () => {
