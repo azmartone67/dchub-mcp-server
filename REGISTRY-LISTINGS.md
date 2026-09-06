@@ -36,6 +36,7 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
 | **ToolPlex** ⚠️ destination UNLOCATED — see note below | `https://dchub.cloud/mcp/toolplex` | ⚠️ unverified |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
+| **Docker MCP Catalog** — ships in Docker Desktop's MCP Toolkit (one-click install into Claude Desktop / Cursor / VS Code). ⚠️ we are NOT listed — measured 404 on `servers/dchub/server.yaml` | `https://dchub.cloud/mcp/docker` | ✅ PR to `docker/mcp-registry` (remote-server entry: server.yaml + tools.json + readme.md) |
 | **cursor.directory** (community; cursor.com has no public MCP directory) | `https://dchub.cloud/mcp/cursordirectory` | ❌ owner-typed listing |
 | **Official MCP registry** — live listing `cloud.dchub/datacenter-power-grid-fiber` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
 | ~~Official MCP registry~~ — retired listing `cloud.dchub/mcp-server` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
