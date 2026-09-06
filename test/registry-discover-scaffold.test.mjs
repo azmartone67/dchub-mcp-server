@@ -42,6 +42,14 @@ const CANDS = [
   { full: 'AlexMili/Awesome-MCP', stars: 145, url: 'https://github.com/AlexMili/Awesome-MCP', base: 'main', desc: 'Awesome ModelContextProtocol resources' },
 ];
 const branchOf = (c) => `discover/add-target-${buildStub(c).key}`;
+// ★2026-09-06: the scaffold now batches EVERY outstanding candidate into ONE PR
+// on ONE stable branch. Separate per-candidate PRs were not just slow (five
+// candidates = five Mondays, and issue #73 carried five for 48 days) — they were
+// UNSOUND: every stub edits the same TARGETS array in the same file, so parallel
+// PRs from the same base conflict the moment the first one merges. branchOf()
+// stays, because the stale-branch reset still has to cope with the per-candidate
+// branches left behind by the old scheme.
+const BATCH = 'discover/add-targets';
 
 /**
  * In-memory GitHub REST. `branches` = {name: {sha, fileSha}}, `openPRs` = Set of
@@ -111,22 +119,25 @@ describe('registry-discover scaffold PR — discovery actually onboards', () => 
     const { gh, st } = fakeGitHub();
     const r = await openScaffoldPR(CANDS, { gh, log: quiet });
     expect(r.opened).toMatch(/\/pull\/\d+$/);
-    expect(r.candidate).toBe(CANDS[0].full);
-    expect(r.branch).toBe(branchOf(CANDS[0]));
-    const iRead = st.calls.findIndex((c) => c.method === 'GET' && c.path === `/repos/${SELF}/contents/${PATH}?ref=${branchOf(CANDS[0])}`);
+    expect(r.branch).toBe(BATCH);
+    // EVERY outstanding candidate lands, in ONE PR — not just the top one.
+    expect(r.candidates).toEqual(CANDS.map((c) => c.full));
+    expect(st.prs, 'one PR, because the stubs share a file').toHaveLength(1);
+    const iRead = st.calls.findIndex((c) => c.method === 'GET' && c.path === `/repos/${SELF}/contents/${PATH}?ref=${BATCH}`);
     const iPut = st.calls.findIndex((c) => c.method === 'PUT');
     expect(iRead, 'the blob sha must be read from the branch').toBeGreaterThan(-1);
     expect(iRead).toBeLessThan(iPut);
     expect(st.calls[iPut].body.sha).toBe('main-file-sha');
-    expect(st.prs).toHaveLength(1);
+    // both stubs are in the single write
+    const written = Buffer.from(st.calls[iPut].body.content, 'base64').toString('utf8');
+    for (const c of CANDS) expect(written).toContain(c.full);
   });
 
   it('THE regression: a stale branch (no open PR, diverged file) is reset and the PR opens — never a 409 skip', async () => {
-    const stale = branchOf(CANDS[0]);
+    const stale = BATCH;
     const { gh, st } = fakeGitHub({ branches: { [stale]: { sha: 'commit-0810', fileSha: '913dbe7-diverged' } } });
     const r = await openScaffoldPR(CANDS, { gh, log: quiet });
     expect(r.opened).toBeTruthy();
-    expect(r.candidate).toBe(CANDS[0].full);
     const reset = st.calls.find((c) => c.method === 'PATCH' && c.path.endsWith(`/git/refs/heads/${stale}`));
     expect(reset?.body, 'the stale branch must be force-reset to the base head').toMatchObject({ sha: 'main-head-sha', force: true });
     const put = st.calls.find((c) => c.method === 'PUT');
@@ -135,15 +146,28 @@ describe('registry-discover scaffold PR — discovery actually onboards', () => 
     expect(st.prs).toHaveLength(1);
   });
 
-  it('a candidate with an open PR is stepped over — the run advances to candidate #2', async () => {
-    const b0 = branchOf(CANDS[0]);
-    const { gh, st } = fakeGitHub({ branches: { [b0]: { sha: 'x', fileSha: 'y' } }, openPRs: [b0] });
+  it('an OPEN batch PR is left alone — a reviewer\'s edits are never force-reset away', async () => {
+    // Vetting a stub means a human EDITS this branch: filling in the real
+    // section header, flipping enabled:true. A weekly force-reset would delete
+    // that work and read as the bot fighting the reviewer.
+    const { gh, st } = fakeGitHub({ branches: { [BATCH]: { sha: 'x', fileSha: 'y' } }, openPRs: [BATCH] });
     const r = await openScaffoldPR(CANDS, { gh, log: quiet });
-    expect(r.candidate).toBe(CANDS[1].full);
-    expect(r.branch).toBe(branchOf(CANDS[1]));
-    expect(r.skipped).toEqual([`${CANDS[0].full}: PR already open`]);
-    expect(st.calls.some((c) => c.method !== 'GET' && (c.path.includes(b0) || c.body?.branch === b0 || c.body?.head === b0)),
-      'candidate #1 (PR open) must not be written to').toBe(false);
+    expect(r.preexisting, 'an already-open batch PR is reported, not recreated').toBe(true);
+    expect(r.opened).toMatch(/\/pull\/\d+$/);
+    expect(st.calls.some((c) => c.method !== 'GET'),
+      'nothing may be written while the batch PR is open').toBe(false);
+    expect(st.prs, 'no second PR is opened').toHaveLength(0);
+  });
+
+  it('candidates already present in TARGETS are excluded from the batch', async () => {
+    const { gh, st } = fakeGitHub();
+    const already = { ...CANDS[0], full: 'punkpeye/awesome-mcp-servers' };
+    const r = await openScaffoldPR([already, CANDS[1]], { gh, log: quiet });
+    expect(r.candidates, 'only the genuinely new list is staged').toEqual([CANDS[1].full]);
+    expect(r.skipped.join(' ')).toContain('already scaffolded');
+    const put = st.calls.find((c) => c.method === 'PUT');
+    const written = Buffer.from(put.body.content, 'base64').toString('utf8');
+    expect(written).toContain(CANDS[1].full);
   });
 
   it('a failed write REJECTS (the job goes red) instead of logging "skip"', async () => {

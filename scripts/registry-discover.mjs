@@ -41,6 +41,8 @@ const LISTED_RE = /dchub|dc[\s-]?hub/i;
 // is enough (no PAT/fork). Kill-switch: DISCOVER_PR_DISABLE=1 keeps the tracking
 // issue but skips the PR.
 const SUBMIT_PATH = 'scripts/registry-pr-submit.mjs';
+// ★ One stable branch for the batched scaffold — see openScaffoldPR.
+const BATCH_BRANCH = 'discover/add-targets';
 const DEFAULT_BRANCH = process.env.DISCOVER_BASE_BRANCH || 'main';
 const PR_ENABLED = !['1', 'true', 'yes'].includes(String(process.env.DISCOVER_PR_DISABLE || '').toLowerCase());
 
@@ -315,64 +317,91 @@ export async function openScaffoldPR(candidates, deps = {}) {
   const ref = await api(`/repos/${SELF}/git/ref/heads/${DEFAULT_BRANCH}`);
   const baseSha = ref.json?.object?.sha;
   if (!baseSha) throw new Error(`can't resolve ${DEFAULT_BRANCH} head (HTTP ${ref.status})`);
+
+  // ★ ONE BRANCH, ONE PR, EVERY OUTSTANDING CANDIDATE (2026-09-06).
+  //
+  // This used to scaffold the TOP candidate and `return`, so five candidates
+  // took five Mondays — and issue #73 carried five for 48 days. The obvious
+  // change (drop the return, open one PR each) is WRONG: every stub edits the
+  // same TARGETS array in the same file, so N parallel PRs from the same base
+  // conflict with each other the moment the first one merges. Batching is what
+  // makes throughput safe, not a loop.
   const skipped = [];
+  const staged = [];
+  let updated = src;
   for (const c of candidates || []) {
     if (src.includes(c.full)) { skipped.push(`${c.full}: already scaffolded`); continue; }
-    const { key, text } = buildStub(c);
-    const branch = `discover/add-target-${key}`;
-    const open = await api(`/repos/${SELF}/pulls?head=${owner}:${branch}&state=open`);
-    if (open.ok && Array.isArray(open.json) && open.json.length) {
-      log(`  ↳ ${c.full}: scaffold PR already open: ${open.json[0].html_url} — trying the next candidate`);
-      skipped.push(`${c.full}: PR already open`);
-      continue;
-    }
-    const updated = insertStub(src, text);
-    if (!updated) throw new Error(`TARGETS array not found in ${SUBMIT_PATH} — cannot scaffold`);
-    // Branch: create it, or RESET a stale one (exists, no open PR) to the base head.
-    const existing = await api(`/repos/${SELF}/git/ref/heads/${branch}`);
-    if (existing.ok && existing.json?.object?.sha) {
-      log(`  ↻ ${branch} already exists with no open PR (stale from a prior run) — resetting to ${DEFAULT_BRANCH}@${baseSha.slice(0, 7)}`);
-      const upd = await api(`/repos/${SELF}/git/refs/heads/${branch}`, {
-        method: 'PATCH', body: JSON.stringify({ sha: baseSha, force: true }),
-      });
-      if (!upd.ok) throw new Error(`branch reset failed HTTP ${upd.status} on ${branch}: ${JSON.stringify(upd.json).slice(0, 120)}`);
-    } else {
-      const mk = await api(`/repos/${SELF}/git/refs`, {
-        method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
-      });
-      if (!mk.ok) throw new Error(`branch create failed HTTP ${mk.status} on ${branch}: ${JSON.stringify(mk.json).slice(0, 120)}`);
-    }
-    // ★ The blob sha MUST be the one on the branch we are writing to. Sending
-    // main's sha against a diverged branch is the 409 that wedged this for weeks.
-    const onBranch = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}?ref=${branch}`);
-    const sha = onBranch.ok ? onBranch.json?.sha : null;
-    if (!sha) throw new Error(`can't read ${SUBMIT_PATH} on ${branch} (HTTP ${onBranch.status})`);
-    const put = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}`, { method: 'PUT', body: JSON.stringify({
-      message: `chore(registry): scaffold onboarding target ${c.full} (auto-discovery, disabled)`,
-      content: Buffer.from(updated, 'utf8').toString('base64'), branch, sha,
-    }) });
-    if (!put.ok) throw new Error(`contents PUT failed HTTP ${put.status} on ${branch}: ${JSON.stringify(put.json).slice(0, 120)}`);
-    const prBody = [
-      `Auto-discovered curated MCP list ${c.full} (★${c.stars}) that accepts PRs and does not yet list DC Hub.`,
-      '',
-      'Appends a DISABLED TARGETS stub to scripts/registry-pr-submit.mjs so onboarding is propose-only-automated.',
-      'Before merging: confirm the README path, set the exact section header, and flip enabled:true.',
-      'Left enabled:false so the submit loop skips it until vetted.',
-      '',
-      `List: ${c.url}`,
-      '',
-      'Opened by registry-discover.mjs. Safe to close if the list is not a fit.',
-    ].join('\n');
-    const pr = await api(`/repos/${SELF}/pulls`, { method: 'POST', body: JSON.stringify({
-      title: `Scaffold onboarding target: ${c.full} (disabled — vet + enable)`,
-      head: branch, base: DEFAULT_BRANCH, body: prBody,
-    }) });
-    if (!pr.ok) throw new Error(`scaffold PR create failed HTTP ${pr.status} for ${branch}: ${JSON.stringify(pr.json).slice(0, 120)}`);
-    log(`  🆕 scaffold PR opened: ${pr.json.html_url}`);
-    return { opened: pr.json.html_url, candidate: c.full, branch, skipped };
+    const { text } = buildStub(c);
+    const next = insertStub(updated, text);
+    if (!next) throw new Error(`TARGETS array not found in ${SUBMIT_PATH} — cannot scaffold`);
+    updated = next;
+    staged.push(c);
   }
-  log(`  ✓ nothing to scaffold — ${skipped.length ? skipped.join('; ') : 'no candidates'}`);
-  return { opened: null, candidate: null, branch: null, skipped };
+  if (!staged.length) {
+    log(`  ✓ nothing to scaffold — ${skipped.length ? skipped.join('; ') : 'no candidates'}`);
+    return { opened: null, candidate: null, candidates: [], branch: null, skipped };
+  }
+
+  const branch = BATCH_BRANCH;
+  // ★ AN OPEN BATCH PR IS NOT TOUCHED. Vetting a stub means a human EDITS this
+  // branch — filling in the real section header and flipping enabled:true. A
+  // weekly force-reset would delete that work and look like the bot fighting
+  // the reviewer. Refresh only when no PR is open; otherwise report and stop.
+  const open = await api(`/repos/${SELF}/pulls?head=${owner}:${branch}&state=open`);
+  if (open.ok && Array.isArray(open.json) && open.json.length) {
+    const url = open.json[0].html_url;
+    log(`  ↳ batch scaffold PR already open (${url}) — leaving it alone so a reviewer's edits survive`);
+    return { opened: url, candidate: staged[0].full,
+             candidates: staged.map((c) => c.full), branch, skipped,
+             preexisting: true };
+  }
+
+  // Branch: create it, or RESET a stale one (exists, no open PR) to the base head.
+  const existing = await api(`/repos/${SELF}/git/ref/heads/${branch}`);
+  if (existing.ok && existing.json?.object?.sha) {
+    log(`  ↻ ${branch} already exists with no open PR (stale from a prior run) — resetting to ${DEFAULT_BRANCH}@${baseSha.slice(0, 7)}`);
+    const upd = await api(`/repos/${SELF}/git/refs/heads/${branch}`, {
+      method: 'PATCH', body: JSON.stringify({ sha: baseSha, force: true }),
+    });
+    if (!upd.ok) throw new Error(`branch reset failed HTTP ${upd.status} on ${branch}: ${JSON.stringify(upd.json).slice(0, 120)}`);
+  } else {
+    const mk = await api(`/repos/${SELF}/git/refs`, {
+      method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+    });
+    if (!mk.ok) throw new Error(`branch create failed HTTP ${mk.status} on ${branch}: ${JSON.stringify(mk.json).slice(0, 120)}`);
+  }
+  // ★ The blob sha MUST be the one on the branch we are writing to. Sending
+  // main's sha against a diverged branch is the 409 that wedged this for weeks.
+  const onBranch = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}?ref=${branch}`);
+  const sha = onBranch.ok ? onBranch.json?.sha : null;
+  if (!sha) throw new Error(`can't read ${SUBMIT_PATH} on ${branch} (HTTP ${onBranch.status})`);
+  const names = staged.map((c) => c.full).join(', ');
+  const put = await api(`/repos/${SELF}/contents/${SUBMIT_PATH}`, { method: 'PUT', body: JSON.stringify({
+    message: `chore(registry): scaffold ${staged.length} onboarding target(s) (auto-discovery, disabled)`,
+    content: Buffer.from(updated, 'utf8').toString('base64'), branch, sha,
+  }) });
+  if (!put.ok) throw new Error(`contents PUT failed HTTP ${put.status} on ${branch}: ${JSON.stringify(put.json).slice(0, 120)}`);
+  const prBody = [
+    `Auto-discovered ${staged.length} curated MCP list(s) that accept PRs and do not yet list DC Hub.`,
+    '',
+    ...staged.map((c) => `- **${c.full}** (★${c.stars}) — ${c.url}`),
+    '',
+    'Appends a DISABLED TARGETS stub per list to scripts/registry-pr-submit.mjs, so onboarding is propose-only-automated.',
+    'Before merging, FOR EACH stub: confirm the README path, set the exact section header, then flip enabled:true.',
+    'Left enabled:false so the submit loop skips anything unvetted.',
+    '',
+    'One PR on purpose: every stub edits the same TARGETS array, so separate PRs would conflict as soon as the first merged.',
+    '',
+    'Opened by registry-discover.mjs. Safe to close, or to drop individual stubs, if a list is not a fit.',
+  ].join('\n');
+  const pr = await api(`/repos/${SELF}/pulls`, { method: 'POST', body: JSON.stringify({
+    title: `Scaffold ${staged.length} onboarding target(s) (disabled — vet + enable)`,
+    head: branch, base: DEFAULT_BRANCH, body: prBody,
+  }) });
+  if (!pr.ok) throw new Error(`scaffold PR create failed HTTP ${pr.status} for ${branch}: ${JSON.stringify(pr.json).slice(0, 120)}`);
+  log(`  🆕 scaffold PR opened for ${staged.length} candidate(s) (${names}): ${pr.json.html_url}`);
+  return { opened: pr.json.html_url, candidate: staged[0].full,
+           candidates: staged.map((c) => c.full), branch, skipped };
 }
 
 // ★ ENTRYPOINT GUARD: the crawl only runs when this file is executed directly,
