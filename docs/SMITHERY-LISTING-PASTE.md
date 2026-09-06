@@ -56,9 +56,19 @@ cat scripts/smithery_description.txt
 across 50 servers, 2026-09-01) and only what survives that cut can rank — so the
 ordering of the first paragraph is load-bearing and the tail is for the human or
 agent already reading the detail page. The direct keyless connect URL
-(`https://dchub.cloud/mcp`) sits at char ~1,811, deliberately past the cut: it
-costs no ranking real estate, and it is the one route that does not depend on a
-Smithery account. Their own pricing FAQ: *"RPC usage is billed to the account
+(`https://dchub.cloud/mcp/smithery`) sits at char ~1,811, deliberately past the
+cut: it costs no ranking real estate, and it is the one route that does not
+depend on a Smithery account.
+
+★ **It is the TAGGED path, and that is the whole point.** Referrer is
+structurally absent on MCP, so the path is the only arrival tag we own
+(r-source-path). Smithery's gateway proxies to **bare** `/mcp` — so a listing
+handing out bare `/mcp` produces arrivals indistinguishable from gateway traffic,
+and "did the listing URL send anyone" becomes unanswerable. `/mcp/smithery`
+serves the identical 83 tools and logs `[source] registry=smithery`, which is how
+the two routes are told apart. This copy shipped untagged for about an hour on
+2026-09-05; `test/listing-paste-single-origin.test.mjs` R4 now rejects the bare
+form. Their own pricing FAQ: *"RPC usage is billed to the account
 making the calls"* — so every agent arriving through their gateway spends its own
 RPCs to reach us, on top of our free tier.
 

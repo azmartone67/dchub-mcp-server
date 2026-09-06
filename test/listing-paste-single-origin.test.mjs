@@ -39,6 +39,19 @@ const SRC = readFileSync(new URL('../scripts/smithery_description.txt', import.m
 // SMITHERY_SEARCH_CHARS. Only what survives the cut can rank.
 const SEARCH_CHARS = 1000;
 
+// ★★★ THE TAGGED PATH, NOT BARE /mcp (2026-09-05, same day it shipped wrong).
+// Referrer is structurally absent on MCP — an MCP client POSTing to /mcp is not
+// a browser navigation — so the PATH is the only arrival tag we own
+// (r-source-path, #331). Smithery's own gateway proxies to BARE
+// https://dchub.cloud/mcp, so a listing that hands out bare /mcp produces
+// arrivals byte-indistinguishable from gateway traffic AND from every other
+// anonymous client. The listing copy shipped that way for about an hour and the
+// question "did the direct URL move anything" was unanswerable by construction.
+// server.mjs MCP_SOURCE_PATHS maps /mcp/smithery -> source 'smithery'; the
+// deployed server serves it identically (83 tools) and 404s an undeclared
+// sibling, so this is an exact-match tag, not a guess.
+const CONNECT_URL = 'https://dchub.cloud/mcp/smithery';
+
 /** Every fenced block in the doc, with its language tag. */
 function blocks() {
   return [...DOC.matchAll(/^```(\w*)\n([\s\S]*?)^```/gm)]
@@ -88,8 +101,18 @@ describe('SMITHERY-LISTING-PASTE.md — one origin for the description', () => {
   });
 
   it('R4 the direct keyless connect URL is in the SOURCE, past the search cut', () => {
-    const at = SRC.indexOf('https://dchub.cloud/mcp');
-    expect(at, 'the direct keyless connect URL is not in the listing copy at all').toBeGreaterThan(-1);
+    const at = SRC.indexOf(CONNECT_URL);
+    expect(
+      at,
+      `the listing copy does not carry ${CONNECT_URL}. A bare /mcp here is NOT ` +
+      `equivalent: Smithery's gateway proxies to bare /mcp, so an untagged URL makes ` +
+      `listing arrivals indistinguishable from gateway arrivals and unmeasurable.`,
+    ).toBeGreaterThan(-1);
+    // and the untagged form must not be the one we advertise
+    expect(
+      /Connect direct and keyless at https:\/\/dchub\.cloud\/mcp(?!\/)/.test(SRC),
+      'the listing advertises the UNTAGGED /mcp — arrivals from it cannot be attributed',
+    ).toBe(false);
     // Deliberate: the first 1,000 chars are the only text that can RANK, so the
     // connect URL — which is for an agent already reading the detail page — must
     // not be spent there. Moving it earlier is a ranking decision, not a typo.
