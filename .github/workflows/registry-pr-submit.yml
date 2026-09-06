@@ -11,7 +11,11 @@ name: registry PR auto-submit
 #     owned by the account that should author the PRs (azmartone67).
 #   - vars.REGISTRY_PR_LIVE=1: flips scheduled runs from dry-run to live.
 # Idempotent (skips if already listed or an open PR exists) + rate-limited
-# (REGISTRY_PR_MAX, default 1 PR/run) so it never spams maintainers.
+# (REGISTRY_PR_MAX, 2 PR/run) so it never spams maintainers. The cap is
+# per RUN across ALL targets, and each target is a DIFFERENT upstream repo —
+# so 2/run is at most one PR per maintainer, which is not the spamming this
+# exists to prevent (that would be repeated PRs into the SAME repo, and the
+# idempotence + declined-bound guards handle that separately).
 
 on:
   schedule:
@@ -43,7 +47,14 @@ jobs:
       - name: Detect gaps / open PRs
         env:
           REGISTRY_PR_PAT: ${{ secrets.REGISTRY_PR_PAT }}
-          REGISTRY_PR_MAX: '1'
+          # ★2026-09-06 1 -> 2. #362 enabled two vetted targets at once
+          # (AlexMili, AIAnytime). At 1/run a weekly lane takes two Mondays to
+          # reach both, and registry-verify-listed correctly reports the
+          # unreached one as MISSING — so the lane sits RED for a fortnight
+          # over a backlog that is draining normally. Training people to
+          # ignore a red registry lane is a worse outcome than one extra PR
+          # to a different repo.
+          REGISTRY_PR_MAX: '2'
         run: |
           # A manual dispatch with dry_run=true (the default) forces dry-run
           # regardless of the REGISTRY_PR_LIVE variable, so you can preview
