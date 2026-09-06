@@ -1649,6 +1649,17 @@ const MCP_SOURCE_PATHS = new Map([
   //   A URL published into a third-party catalogue is expensive to correct, so
   //   the path is registered and verified live FIRST, then listed.
   ['/mcp/docker',    'docker'],
+  // ★ 2026-09-06 — Anthropic Connectors Directory. Registered BEFORE applying,
+  //   for the reason /mcp/docker records: GET /mcp/<anything> answers 200 from
+  //   the worker health blob, so an unregistered path looks healthy to a
+  //   reviewer probing it while POST returns `Cannot POST` and every install
+  //   fails at initialize. Verified the same way before the listing exists.
+  //   ★ This is the placement where attribution matters most: ~100% of measured
+  //   external reach already arrives as Claude, and today NOTHING separates
+  //   "found us in the directory" from "was already using us". The submission
+  //   portal takes one server URL and the listing slug is permanent, so this is
+  //   the only moment that distinction can be bought.
+  ['/mcp/anthropic', 'anthropic-directory'],
   // ★ 2026-09-04 — the OFFICIAL registry's own arrival path, and it exists for a
   //   reason the others do not share. The official listing was renamed to
   //   cloud.dchub/datacenter-power-grid-fiber (registry search matches the NAME
