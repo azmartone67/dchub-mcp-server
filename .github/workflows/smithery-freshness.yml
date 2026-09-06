@@ -82,93 +82,26 @@ jobs:
       # seat: what the registry actually serves to an agent, compared against what
       # our live server serves. Convergence was ~60s when measured; the budget is
       # 10 minutes.
+      # ★2026-09-05: the check itself moved to scripts/verify_smithery_converged.py
+      # so the LOCAL LaunchAgent lane runs the SAME one. It had no convergence
+      # check at all and beat the dead-man ledger `success` off the publish CLI's
+      # exit code — 637 of 637 releases reported PENDING and every beat was green.
+      # A check that exists in two places drifts; this one now exists once.
       - name: Verify the listing actually converged
         id: converge
         run: |
-          python3 - <<'PY'
-          import json, sys, time, urllib.request
-
-          REG = "https://registry.smithery.ai/servers/azmartone67/dchub"
-          MCP = "https://dchub.cloud/mcp"
-          UA  = {"User-Agent": "dchub-smithery-freshness-verify/1.0"}
-
-          def get(url):
-              req = urllib.request.Request(url, headers=UA)
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  return json.loads(r.read().decode())
-
-          def rpc(body, sid=None):
-              """Streamable-HTTP MCP call. Responses may arrive as SSE frames."""
-              h = dict(UA, **{"Content-Type": "application/json",
-                              "Accept": "application/json, text/event-stream"})
-              if sid:
-                  h["Mcp-Session-Id"] = sid
-              req = urllib.request.Request(MCP, data=json.dumps(body).encode(), headers=h)
-              with urllib.request.urlopen(req, timeout=45) as r:
-                  raw, hdr = r.read().decode(), r.headers.get("Mcp-Session-Id")
-              if "data:" in raw[:200]:
-                  raw = next(l[5:].strip() for l in raw.splitlines() if l.startswith("data:"))
-              return json.loads(raw), hdr
-
-          # Compare against tools/list — the exact surface Smithery crawls.
-          # NOT /api/v1/mcp/tools.json: its `summary` is a separately curated
-          # field that legitimately differs from the MCP `description` on 46 of
-          # 81 tools, so comparing the two would fail this job every single day
-          # while telling us nothing about whether the listing is fresh.
-          try:
-              _, sid = rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                            "params": {"protocolVersion": "2024-11-05", "capabilities": {},
-                                       "clientInfo": {"name": "dchub-freshness-verify",
-                                                      "version": "1.0"}}})
-              tl, _ = rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}, sid)
-              live_tools = {t["name"]: (t.get("description") or "")[:80]
-                            for t in tl["result"]["tools"]}
-          except Exception as e:
-              print(f"::warning::cannot read our own tools/list ({e}) — "
-                    "nothing to compare against, not failing the heartbeat")
-              sys.exit(0)
-
-          if not live_tools:
-              print("::warning::live tools/list parsed empty — not failing")
-              sys.exit(0)
-          print(f"live tools/list: {len(live_tools)} tools")
-
-          last = ""
-          for attempt in range(1, 21):          # 20 x 30s = 10 minutes
-              try:
-                  reg = get(REG)
-                  reg_tools = {t["name"]: (t.get("description") or "")[:80]
-                               for t in (reg.get("tools") or [])}
-              except Exception as e:
-                  last = f"registry unreadable: {e}"
-                  reg_tools = {}
-
-              if reg_tools:
-                  missing = sorted(set(live_tools) - set(reg_tools))
-                  extra   = sorted(set(reg_tools) - set(live_tools))
-                  # Descriptions matter as much as membership: the stale listing
-                  # had the right COUNT for days while plan_query still read
-                  # "START HERE". Compare the text an agent actually reads.
-                  changed = sorted(n for n in set(live_tools) & set(reg_tools)
-                                   if live_tools[n] != reg_tools[n])
-                  if not (missing or extra or changed):
-                      print(f"::notice::listing converged after {attempt} check(s): "
-                            f"{len(reg_tools)} tools, descriptions match live")
-                      sys.exit(0)
-                  last = (f"{len(reg_tools)} listed vs {len(live_tools)} live; "
-                          f"missing={missing[:5]} extra={extra[:5]} stale_desc={changed[:5]}")
-
-              print(f"  attempt {attempt}/20: {last}")
-              time.sleep(30)
-
-          print(f"::error::Smithery published but the listing did NOT converge "
-                f"within 10 minutes. {last}. The publish was ACCEPTED and the "
-                f"re-crawl did not land — this is exactly the failure that used "
-                f"to report green. Check https://smithery.ai/servers/azmartone67/dchub/releases "
-                f"for the release status, and correct the listing by hand if the "
-                f"deployment is stuck.")
-          sys.exit(1)
-          PY
+          set +e
+          python3 scripts/verify_smithery_converged.py --checks 20 --interval 30
+          rc=$?
+          set -e
+          # 0 converged · 1 diverged (real failure) · 2 inconclusive (we could not
+          # read our OWN tools/list, so there was nothing to compare — that must
+          # not turn the publish lane red, and it must not read green either).
+          if [ "$rc" -eq 2 ]; then
+            echo "::warning::convergence UNVERIFIED — see the reason above. Not failing the heartbeat."
+            exit 0
+          fi
+          exit "$rc"
 
       # ★ 2026-08-22 — the listing COPY is owner-pasted and nothing compared it.
       # `smithery mcp publish` refreshes tools/verification; the `description`

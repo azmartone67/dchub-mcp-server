@@ -13,7 +13,7 @@ Glama index lag is reported but NOT alerted (they re-crawl on their own cadence)
 Read-only. No secrets. Smithery's API 403s the default urllib UA, so a browser
 UA is set on every request.
 """
-import datetime, json, os, re, urllib.request, urllib.parse, urllib.error
+import datetime, json, os, re, time, urllib.request, urllib.parse, urllib.error
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 SMITHERY_SLUG = "azmartone67/dchub"
@@ -1185,6 +1185,95 @@ def _write_status(core_one, remediate, escalated, regression):
         pass
 
 
+# ── Reflex cooldown + useCount telemetry state ──────────────────────────────
+# Both live under state/ (gitignored, regenerated): they are observations of a
+# vendor, not facts about this repo.
+_REFLEX_STATE = "state/reflex_last_kick.json"
+_USECOUNT_STATE = "state/usecount_history.json"
+_REFLEX_COOLDOWN_H = 48.0     # see _reflex_kick(); override RANK_REFLEX_COOLDOWN_H
+_USECOUNT_FLAT_DAYS = 7       # below this, a flat counter is just a quiet week
+
+
+def _state_read(path):
+    try:
+        return json.load(open(path))
+    except Exception:
+        return None
+
+
+def _state_write(path, obj):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        json.dump(obj, open(path, "w"), indent=1, sort_keys=True)
+        return True
+    except Exception:
+        return False
+
+
+def _hours_since_last_kick():
+    """Hours since the last reflex kick, or None if never (or unreadable)."""
+    d = _state_read(_REFLEX_STATE) or {}
+    try:
+        return (time.time() - float(d["ts"])) / 3600.0
+    except Exception:
+        return None
+
+
+def usecount_note(sig):
+    """One honest line about Smithery's `useCount`, or None when it says nothing new.
+
+    ★★★ WHY THIS EXISTS (2026-09-05). `useCount` read 4,328 on 2026-08-20, then
+    3,573 on 08-21, then EXACTLY 3,573 for the next 16 days. That was read as
+    "Smithery traffic stopped — what did we block?" and cost a serving-path
+    investigation. Two things were true and neither was visible from a single
+    number printed once per run:
+
+      · A counter that goes DOWN is a vendor RECOMPUTE, not our traffic. The
+        ~755 removed matches Smithery's own listability scan ending that same
+        day. Nothing we serve can make a counter fall.
+      · It is THEIR gateway's counter. The listing connects through
+        `dchub--azmartone67.run.tools`, which 401s without a Smithery bearer
+        (authorization server auth.smithery.ai) — so a frozen useCount measures
+        arrivals at their paywalled proxy, NOT whether our server is reachable.
+        Ours is proven separately by scripts/verify_smithery_converged.py.
+
+    So: keep the history, report the DELTA, and name the interpretation at the
+    moment the number is read — not in a memory file someone has to already have.
+    """
+    v = (sig or {}).get("useCount")
+    if not isinstance(v, int):
+        return None
+    now = time.time()
+    hist = _state_read(_USECOUNT_STATE)
+    if not isinstance(hist, list):
+        hist = []
+    prev = hist[-1] if hist else None
+    # Append only on CHANGE (plus the first sighting): a flat counter must not
+    # grow an unbounded file, and "when did it last move" is the question.
+    if prev is None or prev.get("v") != v:
+        hist.append({"ts": now, "v": v})
+        _state_write(_USECOUNT_STATE, hist[-200:])
+    if prev is None:
+        return None
+    pv = prev.get("v")
+    if not isinstance(pv, int):
+        return None
+    if v < pv:
+        return (f"useCount FELL {pv} → {v} ({v - pv}). A counter that DROPS is a "
+                f"vendor recompute, not our traffic — nothing we serve can remove "
+                f"past calls. Do NOT debug a serving path against it.")
+    if v > pv:
+        return f"useCount {pv} → {v} (+{v - pv})."
+    flat_days = (now - float(prev.get("ts") or now)) / 86400.0
+    if flat_days >= _USECOUNT_FLAT_DAYS:
+        return (f"useCount FLAT at {v} for {flat_days:.0f}d. This counts arrivals at "
+                f"SMITHERY's gateway (the listing connects via their authenticated "
+                f"proxy, which 401s without a Smithery bearer), so it is not evidence "
+                f"about our own reachability — prove that with "
+                f"scripts/verify_smithery_converged.py.")
+    return None
+
+
 def _reflex_kick():
     """INSURANCE ONLY. Recency has ~0 rank weight (createdAt is frozen at first-publish),
     so this republish does NOT recover rank — it only keeps `verified`/deployment/tool-catalog
@@ -1217,12 +1306,33 @@ def _reflex_kick():
                 "removed 2026-07-13 as ineffective. The remedy is OWNER-GATED: "
                 "paste scripts/smithery_description.txt into the Smithery owner "
                 "UI (see the ESCALATE line for the exact URL)")
+    # ★★ COOLDOWN (2026-09-05). This fires on ANY CORE term off #1, and 2-4 are
+    # off #1 most of the time, so on a 90-minute probe it fired essentially every
+    # run: MEASURED 17-21 `smithery mcp publish` calls PER DAY, every day, for
+    # weeks — against a file whose own header said "~2x/week" and a CI lane that
+    # already republishes daily. The docstring above already knew the republish
+    # does not move rank; nothing capped the rate at which it was spent anyway.
+    # An insurance action worth ~2/week must not be fired ~20x/day at a partner.
+    try:
+        cooldown = float(os.environ.get("RANK_REFLEX_COOLDOWN_H", _REFLEX_COOLDOWN_H))
+    except (TypeError, ValueError):
+        cooldown = _REFLEX_COOLDOWN_H
+    since = _hours_since_last_kick()
+    if since is not None and since < cooldown:
+        return (f"suppressed — cloud.dchub.smithery-freshness ran {since:.1f}h ago "
+                f"and the cooldown is {cooldown:.0f}h. A republish keeps the "
+                f"catalogue fresh; it does not move rank (recency ≈ 0 weight), and "
+                f"the daily CI lane already covers freshness. The remedy for THIS "
+                f"slip is the owner paste named in the ESCALATE line.")
     try:
         import subprocess
         uid = os.getuid()
         subprocess.run(["launchctl", "kickstart", "-k",
                         f"gui/{uid}/cloud.dchub.smithery-freshness"],
                        check=False, capture_output=True, timeout=20)
+        # Record AFTER the call, so a kick that threw does not start a cooldown
+        # during which nothing ever runs.
+        _state_write(_REFLEX_STATE, {"ts": time.time()})
         return "kicked cloud.dchub.smithery-freshness (insurance; recency≈0 rank weight)"
     except Exception as e:
         return f"kick failed ({e})"
@@ -1530,6 +1640,9 @@ def main(probe=False):
             _lists = "both retrieval lists, at #%d and #%d" % _dec
         L.append(f"**Smithery signals:** {_vf} · useCount {sig.get('useCount', '?')} · "
                  f"score {sig.get('score', '?')} → {_lists}\n")
+        _ucn = usecount_note(sig)
+        if _ucn:
+            L.append(f"> {_ucn}\n")
     L.append("### Cross-registry parity")
     L.append("| Registry | Version | Tools | Note |")
     L.append("|---|---|---|---|")
@@ -1606,6 +1719,9 @@ def _emit_probe(core, core_one, reclaim, reasons, remediate, reflex, escalated, 
     _vf = "?" if not sig else ("✅" if sig.get("verified") else "🚨 LOST")
     _uc = (sig or {}).get("useCount", "?")
     L = [f"## rank probe — CORE {core_one}/{len(CORE)} at #1 · verified {_vf} · useCount {_uc}"]
+    _ucn = usecount_note(sig)
+    if _ucn:
+        L.append(f"! {_ucn}")
     for t, (pos, _tot, leader) in core.items():
         held = "✅" if pos == 1 else "🔻"
         L.append(f"{held} {t}: {('#'+str(pos)) if pos else '>50'}"
