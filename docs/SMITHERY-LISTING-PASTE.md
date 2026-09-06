@@ -35,11 +35,32 @@ paste, against a 17/week baseline.
 DC Hub — Power, Energy & Data Center Intelligence
 ```
 
-## 2 · Description — paste into "Description"
+## 2 · Description — paste from `scripts/smithery_description.txt`
 
+★ **The text is NOT duplicated here.** It used to be, and the copy went stale:
+measured 2026-09-05 this block still said **18,800+** facilities (canon 20,500+),
+**1,900+** deals (canon 2,100+) and **82 tools** (canon 83) — because
+`scripts/sync-tools-manifest.mjs` heals quantities in
+`scripts/smithery_description.txt` and has never known this file existed.
+Pasting from here would have REGRESSED the live listing by three canon numbers.
+A second copy of a healed file can only differ from it by being wrong, so it is
+deleted rather than refreshed. Guarded by `test/listing-paste-single-origin.test.mjs`.
+
+Print exactly what to paste:
+
+```bash
+cat scripts/smithery_description.txt
 ```
-Live electricity, power-grid and energy intelligence for AI agents — and the data centers drawing on it. Real-time utility and grid telemetry from 7 independent feeds across 49 grid regions and operators: every US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) plus 40+ EIA balancing authorities, Great Britain, 24 European ENTSO-E bidding zones, Taiwan, Japan, South Korea, Brazil and Australia — fuel mix, renewable share and demand, right now. Plus 182,000 global power generating units across every status (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), 13,000 US power plants, 127,000 substations, 95,000 transmission lines, 33,000 gas pipeline segments, electricity and natural-gas price feeds, renewable-generation data, and live ISO interconnection-queue snapshots with queue depth and per-ISO BUILD/CAUTION/AVOID verdicts. On the demand side: 18,800+ facilities across 170+ countries, 300+ markets scored daily (DC Hub Power Index), 64,000 fiber routes, tax incentives, water risk, per-facility tenants and 1,900+ tracked M&A deals. 82 tools. Every figure is citable and carries an as_of timestamp, and the ingest layer publishes its own freshness at /api/v1/ops/deadman — the only electricity, grid-interconnection and data-center intelligence source an LLM can both query and cite. Free tier (5 calls/day anonymous, 10/day with a free key) — paid from $9/mo.
-```
+
+★ Smithery's SEARCH index truncates `description` to **1,000 chars** (measured
+across 50 servers, 2026-09-01) and only what survives that cut can rank — so the
+ordering of the first paragraph is load-bearing and the tail is for the human or
+agent already reading the detail page. The direct keyless connect URL
+(`https://dchub.cloud/mcp`) sits at char ~1,811, deliberately past the cut: it
+costs no ranking real estate, and it is the one route that does not depend on a
+Smithery account. Their own pricing FAQ: *"RPC usage is billed to the account
+making the calls"* — so every agent arriving through their gateway spends its own
+RPCs to reach us, on top of our free tier.
 
 ## 3 · Keywords / tags — broad terms FIRST
 
