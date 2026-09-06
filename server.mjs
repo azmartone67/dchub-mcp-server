@@ -1637,6 +1637,18 @@ const MCP_SOURCE_PATHS = new Map([
   ['/mcp/lobehub',   'lobehub'],
   ['/mcp/toolplex',  'toolplex'],
   ['/mcp/mcpmarket', 'mcpmarket'],
+  // ★ 2026-09-06 — Docker MCP Catalog (ships in Docker Desktop's MCP Toolkit).
+  //   Added BEFORE the listing exists, on purpose. GET /mcp/<anything> already
+  //   answers 200 from the worker's health blob, so an unregistered path LOOKS
+  //   healthy to a registry that verifies by GET — while POST returns
+  //   `Cannot POST /mcp/docker` and every install fails at initialize.
+  //   Measured 2026-09-06 before submitting anything:
+  //     GET  /mcp/docker            200 application/json   (worker health)
+  //     POST /mcp/docker            Cannot POST            (no endpoint)
+  //     POST /mcp/smithery          initialize OK          (registered)
+  //   A URL published into a third-party catalogue is expensive to correct, so
+  //   the path is registered and verified live FIRST, then listed.
+  ['/mcp/docker',    'docker'],
   // ★ 2026-09-04 — the OFFICIAL registry's own arrival path, and it exists for a
   //   reason the others do not share. The official listing was renamed to
   //   cloud.dchub/datacenter-power-grid-fiber (registry search matches the NAME
