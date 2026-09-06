@@ -220,33 +220,85 @@ jobs:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
         run: |
           python3 - <<'PY'
-          import json, os, re, sys, urllib.request
+          import json, os, re, sys, time, urllib.request
           # ★2026-08-22: read api.smithery.ai (authed) — the AUTHORITATIVE store the
           # auto-write step targets. registry.smithery.ai is an eventually-consistent
           # projection that flaps across edges and false-failed this check. Fall back
           # to the public registry only when no key is present.
+          #
+          # ★★2026-09-05: THAT WAS NOT ENOUGH — api.smithery.ai flaps too, and this
+          # step false-RED with the receipts one line apart in the same log:
+          #
+          #   00:47:18.078  ::notice:: white-glove wrote ... and CONFIRMED it on
+          #                            api.smithery.ai (2243 chars)
+          #   00:47:18.346  ::error::  Smithery listing DESCRIPTION drifted
+          #
+          # 268 ms, same authoritative store, opposite answers — the confirming read
+          # and this one landed on different edges. The listing was correct the whole
+          # time (verified 2,243 chars, byte-identical, from outside). It beat the
+          # dead-man ledger RED, which is worse than not checking: a lane that cries
+          # wolf on its own successful write teaches you to ignore it.
+          #
+          # A SINGLE READ OF AN EVENTUALLY-CONSISTENT STORE IS A COIN FLIP. The
+          # `converge` step above already learned this for the tool catalogue and
+          # polls with a budget; this step never got the lesson. It does now. A real
+          # drift still fails — it simply has to still be there after the budget.
           KEY = os.environ.get("SMITHERY_API_KEY", "")
+          ATTEMPTS, INTERVAL = 8, 15   # 7 sleeps = 1m45s, well past the observed flap
           REG = ("https://api.smithery.ai/servers/azmartone67/dchub" if KEY
                  else "https://registry.smithery.ai/servers/azmartone67/dchub")
           want = open("scripts/smithery_description.txt", encoding="utf-8").read()
           norm = lambda t: re.sub(r"\s+", " ", t.replace("\\&", "&")).strip()
-          try:
+          def read_live():
               _h = {"User-Agent": "dchub-smithery-freshness-verify/1.0"}
               if KEY: _h["Authorization"] = f"Bearer {KEY}"
               req = urllib.request.Request(REG, headers=_h)
-              live = (json.load(urllib.request.urlopen(req, timeout=30)).get("description") or "")
-          except Exception as e:
-              print(f"::warning::registry unreadable ({e}) — listing copy UNMEASURED, not drift"); sys.exit(0)
-          if not live.strip():
-              print("::warning::registry served an empty description — UNMEASURED"); sys.exit(0)
-          stale = [m for m in (r"\bDCGI\b(?![^.]*withdrawn)", r"\b\d+ tracked feeds\b") if re.search(m, live, re.I)]
-          if norm(live) == norm(want) and not stale:
-              print(f"::notice::Smithery listing copy matches scripts/smithery_description.txt ({len(live)} chars)"); sys.exit(0)
-          print("::error::Smithery listing DESCRIPTION drifted from scripts/smithery_description.txt"
-                + (f" (stale markers in the live text: {stale})" if stale else "")
-                + ". The white-glove auto-write step above pushes this via api.smithery.ai; a RED here means that "
-                  "write failed or was skipped (no SMITHERY_API_KEY / disabled var). Check that step; the "
-                  "owner-paste at https://smithery.ai/servers/azmartone67/dchub -> Edit is the fallback.")
+              return (json.load(urllib.request.urlopen(req, timeout=30)).get("description") or "")
+
+          last, unread, empty = None, None, False
+          for attempt in range(1, ATTEMPTS + 1):
+              try:
+                  live = read_live()
+              except Exception as e:
+                  unread = e; live = ""
+              else:
+                  unread = None
+              empty = not live.strip()
+              if live.strip():
+                  stale = [m for m in (r"\bDCGI\b(?![^.]*withdrawn)", r"\b\d+ tracked feeds\b")
+                           if re.search(m, live, re.I)]
+                  if norm(live) == norm(want) and not stale:
+                      print(f"::notice::Smithery listing copy matches scripts/smithery_description.txt "
+                            f"({len(live)} chars, after {attempt} read(s))")
+                      sys.exit(0)
+                  # A STALE MARKER IS NOT A LAG. Retrying cannot turn withdrawn-DCGI
+                  # copy into current copy, so fail it immediately and say why.
+                  if stale:
+                      print(f"::error::Smithery listing copy carries STALE MARKERS {stale} — that is "
+                            f"published-copy drift, not replication lag. Fix "
+                            f"scripts/smithery_description.txt and re-run.")
+                      sys.exit(1)
+                  last = f"{len(live)} live chars vs {len(want)} wanted"
+              else:
+                  # An empty description is UNMEASURED, not drift — preserved from the
+                  # pre-retry version on purpose. Nothing about an empty read says our
+                  # copy is wrong, and calling it drift would page for their outage.
+                  empty = True
+                  last = f"empty description (read error: {unread})" if unread else "empty description"
+              if attempt < ATTEMPTS:
+                  time.sleep(INTERVAL)
+
+          if unread is not None or empty:
+              print(f"::warning::listing copy UNMEASURED after {ATTEMPTS} attempts "
+                    f"({last}) — not drift")
+              sys.exit(0)
+          print(f"::error::Smithery listing DESCRIPTION still differs from "
+                f"scripts/smithery_description.txt after {ATTEMPTS} reads over "
+                f"{(ATTEMPTS - 1) * INTERVAL}s ({last}). This is NOT the sub-second edge flap "
+                f"the retry loop exists to absorb. If the white-glove step above reported a "
+                f"confirmed write, the store has genuinely diverged; if it reported no key or "
+                f"was skipped, that is the cause. Owner fallback: paste at "
+                f"https://smithery.ai/servers/azmartone67/dchub -> Edit.")
           sys.exit(1)
           PY
 
