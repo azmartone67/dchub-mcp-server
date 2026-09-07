@@ -380,6 +380,69 @@
     }
   },
   {
+    "name": "find_sites",
+    "description": "FRONT DOOR CHECK — if the question spans more than one capability (\"find 200MW near Dallas with fiber, then rank the markets\"), call `execute_plan(intent=\"<the user's question, unchanged>\")`. find_sites is the right single call when the user has NO site yet and wants candidates to start from. THE INVERSE QUERY: every other DC Hub siting tool needs a coordinate you already have — analyze_site scores one, get_composite_site_score grades one, rank_sites orders candidates YOU already enriched, find_alternatives needs a seed facility. This one answers \"where should I even be looking?\". Returns candidate SEARCH AREAS anchored on real HIFLD substations at or above min_voltage_kv, spatially de-duplicated by cluster_km so a dense metro yields distinct areas instead of 40 near-identical rows, each carrying measured distance to the nearest gas pipeline and fiber route plus state-grain moratorium context, and a next_calls handoff. ★ WHAT A CANDIDATE IS NOT: a search area is NOT a parcel, NOT a listing, and NOT land known to be for sale — DC Hub holds no land-ownership or availability data, and hosted parcel boundaries cover ONE county (Loudoun VA), so analyze_parcel will 404 on most of these points BY DESIGN. Read each as \"start looking here\", then score the coordinate with analyze_site. ★ READ constraint_coverage BEFORE CALLING THIS A SCREENED LIST: a constraint filters ONLY when its layer actually answered. If a layer errors, the set comes back UNFILTERED with applied:false plus a reason and an instead, the names repeated in top-level unapplied_constraints and an unapplied_constraints_warning — an unevaluable constraint is never a passed constraint. fiber_distance_km is a straight-line CHORD between a route's endpoints, NOT the true polyline path; its basis is stamped on every candidate and get_fiber_readiness at the coordinate is the engineered read. hazard/moratorium are STATE grain, never a site verdict. A geography is REQUIRED — pass state, or lat+lon (+radius_km); without one you get a legible 400 (error_code geography_required), never a nationwide scan. Free tier coarsens coordinates to ~11 km and withholds operator/capacity. Answers \"where should I even be looking for 200 MW in Ohio\" and \"which areas near Dallas sit on 230kV with gas within 5 miles\". Try: find_sites state=OH min_voltage_kv=230 max_gas_km=8 — or find_sites lat=39.04 lon=-77.48 radius_km=60 min_voltage_kv=500. Do NOT use to score a site you already have (analyze_site), to rank candidates you already enriched (rank_sites), to find similar FACILITIES to a known one (find_alternatives), or for interconnection-queue survivors (get_refined_queue).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "description": "2-letter US state to search, e.g. OH — required unless you pass lat + lon",
+          "type": "string"
+        },
+        "lat": {
+          "description": "Latitude of a search centre, e.g. 39.04 — use with lon (+ radius_km) instead of state",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Longitude of a search centre, e.g. -77.48",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Alias for lat — either name works",
+          "type": "number"
+        },
+        "lng": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "radius_km": {
+          "description": "Search radius in km around lat/lon (default 80, clamped 5-400); ignored in state mode",
+          "type": "number"
+        },
+        "min_voltage_kv": {
+          "description": "Only anchor on substations at or above this voltage in kV (default 115). 230+ for hyperscale, 500 for the largest campuses",
+          "type": "number"
+        },
+        "max_gas_km": {
+          "description": "Drop candidates farther than this from the nearest gas pipeline. Applied ONLY if the gas layer answers — check constraint_coverage",
+          "type": "number"
+        },
+        "max_fiber_km": {
+          "description": "Drop candidates farther than this from the nearest fiber route (CHORD approximation — see fiber_distance_basis). Applied ONLY if the fiber layer answers",
+          "type": "number"
+        },
+        "exclude_moratorium": {
+          "description": "true = drop candidates in a state with a published data-center moratorium. STATE grain, not jurisdiction grain",
+          "type": "boolean"
+        },
+        "cluster_km": {
+          "description": "Collapse anchors within this many km into one candidate area (default 8, max 100). Raise it for broader coverage, lower it for denser results",
+          "type": "number"
+        },
+        "limit": {
+          "description": "Max results to return (1-500; default varies by tool)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    }
+  },
+  {
     "name": "generate_site_analysis",
     "description": "Use when a user wants a SHAREABLE, branded multi-page Site Analysis PDF for ONE lat/lon (a powered-land parcel, a candidate campus) — the polished client deliverable, not just a score. Example: \"Make the Site Analysis PDF for this Carrier Mills parcel, 150 MW, for TON Infrastructure.\" — generate_site_analysis lat=37.694 lon=-88.65 capacity_mw=150 prepared_for=\"TON Infrastructure\" prepared_by=\"Martone Advisors\". Params: lat (-90 to 90, required), lon (-180 to 180, required), capacity_mw (target load MW, e.g. 50-500), prepared_for (client name on the cover), prepared_by (your firm — brands the report; defaults to DC Hub), latency_target (optional metro override; default = nearest real carrier hotel). Returns: {survey:{verdict, power/transmission, gas, water, air-permitting, fiber carriers, latency-to-nearest-carrier-hotel, market, tax}, pdf_report_url}. pdf_report_url is a ready-to-open link to download the branded 5-page PDF — no login needed, valid ~7 days; hand it to your human. For just the numeric suitability score (no PDF), use analyze_site instead.",
     "inputSchema": {
@@ -1723,7 +1786,7 @@
   },
   {
     "name": "register_standing_intent",
-    "description": "Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: kind (\"new_deal_in_market\" watches deals in the market param · \"news_keyword\" watches news matching q · \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.",
+    "description": "Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: kind (\"new_deal_in_market\" watches deals in the market param · \"news_keyword\" watches news matching q · \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers \"notify my system whenever a new moratorium appears\", \"push me new matches instead of making me poll\", \"tell my orchestrator when a deal lands in Columbus\". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.",
     "inputSchema": {
       "type": "object",
       "properties": {
