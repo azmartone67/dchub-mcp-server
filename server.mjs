@@ -8334,7 +8334,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
       }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY router: collapses 86 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
+    }, 'ADVISORY router: collapses 88 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -8575,8 +8575,8 @@ export const _TOOL_FAMILIES_TABLE = [
   { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+hazard+climate+tax+permitting+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select','find','search','where','candidates','shortlist','hazard','flood','wildfire','seismic','climate','permitting','moratorium','composite','verdict'],
     front_door_when: 'Use execute_plan for a site VERDICT spanning grid + fiber + water + tax + climate instead of hand-chaining these tools. One factor on its own (water risk, renewables, tax) is a single lookup — call that tool directly.',
     tools: ['find_sites','analyze_site','analyze_parcel','rank_sites','compare_sites','get_water_risk','get_tax_incentives','get_dchub_recommendation','site_selection_canvas','generate_site_analysis','get_infrastructure','get_renewable_energy','get_composite_site_score','get_disaster_risk','get_climate_intel','get_permitting_intel'] },
-  { family: 'fiber', when: 'Fiber routes, carrier connectivity, lead-in planning, latency clustering, metro-level fiber depth.', keywords: ['fiber','carrier','connectivity','dark fiber','lead-in','longhaul','latency','cluster','metro'],
-    tools: ['get_fiber_intel','get_fiber_readiness','plan_fiber_leadin','cluster_sites_by_latency','get_metro_fiber'] },
+  { family: 'fiber', when: 'Fiber routes, carrier connectivity, lead-in planning, latency clustering, metro-level fiber depth, subsea cable landings and internet-exchange peering density.', keywords: ['fiber','carrier','connectivity','dark fiber','lead-in','longhaul','latency','cluster','metro','subsea','submarine','cable','landing','ix','ixp','internet exchange','peering','transit','network'],
+    tools: ['get_fiber_intel','get_fiber_readiness','plan_fiber_leadin','cluster_sites_by_latency','get_metro_fiber','get_subsea_cables','get_peering_intel'] },
   { family: 'deals_news', when: 'M&A transactions, hyperscaler capex, industry news, and commissioned research dossiers.', keywords: ['deal','m&a','acquisition','transaction','hyperscaler','capex','news','research','dossier'],
     front_door_when: 'Use execute_plan when news or deal flow is one input to a bigger read ("is this market heating up, should we still build here"). If the user wants the headlines or the transaction list itself, call get_news / list_transactions directly.',
     tools: ['list_transactions','deal_autopsy','hyperscaler_deals','get_news','research_task'] },
@@ -16225,6 +16225,51 @@ function createServer(descOverrides, instructionsTail) {
       radius_km: N.describe('Search radius in km for reachable fiber carriers (default 50, range 5-200)') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/infrastructure/connectivity/score', _foldCoordArgs(a))) }] }));
 
+  // r-subsea-ix (2026-09-07): both datasets were already ingested and
+  // reachable over HTTP but had NO tool — the server description advertised
+  // '710+ subsea cables and 1,900+ cable landings' and named PeeringDB as a
+  // source while every reference to either lived in that description string.
+  // ★ Both upstreams want `lng`, not `lon`. _foldCoordArgs emits `lon`, so the
+  // remap below is load-bearing: without it the call is a 400 'lat and lng
+  // required', which reads to an agent as a bad coordinate rather than a bad
+  // parameter name.
+  trackedTool(srv, 'get_subsea_cables',
+    'Subsea (submarine) cable landings near a coordinate, or the global cable catalogue. The physical internet crossing an ocean lands at a finite number of points, and distance to one is a real siting factor for anything latency- or transit-sensitive. Pass lat+lon (+radius_km) for LANDING POINTS near a site — each with name, coordinates and distance_km. Omit coordinates for the CATALOGUE of tracked cables (712 tracked; each with cable_id, name, owners, length_km, rfs_year, is_planned — sparse fields are null, not guessed). ★ READ field_coverage AND connectivity_note BEFORE DRAWING A CONCLUSION: cable_count per landing point is NOT populated — the ingest writes the column but the upstream TeleGeography feed does not supply what it derives from, so every row carries the default 0. That is why connectivity_grade comes back null rather than graded: proximity to a landing point does NOT establish how many cables are reachable from it, and DC Hub will not infer a grade it cannot source. A filter over cable_count returns nothing for the same reason. Treat 0 as UNKNOWN, never as "no cables". Answers "which subsea cables land near this Virginia site" and "how far is the nearest cable landing from my campus". Try: get_subsea_cables lat=36.85 lon=-75.98 radius_km=200 — or get_subsea_cables (no args) for the catalogue. Do NOT use for terrestrial fiber routes (get_fiber_intel), a parcel fiber verdict (get_fiber_readiness), metro fiber depth (get_metro_fiber), or internet-exchange / peering density (get_peering_intel).',
+    { lat: N.describe('Latitude of the site, e.g. 36.85 — with lon, returns landing points near it; omit both for the cable catalogue'),
+      lon: N.describe('Longitude of the site, e.g. -75.98'),
+      ...COORD_ALIASES,
+      radius_km: N.describe('Search radius in km around lat/lon for landing points (default 200)'),
+      limit: LIMIT },
+    async (a) => {
+      const p = _foldCoordArgs(a);
+      if (p.lat != null && p.lon != null) {
+        p.lng = p.lon; delete p.lon;   // upstream contract is lat/lng
+        return withFreshness({ content: [{ type: 'text',
+          text: JSON.stringify(await callAPI('/api/v1/subsea/nearby', p)) }] }, 'get_subsea_cables');
+      }
+      delete p.lat; delete p.lon; delete p.radius_km;
+      return withFreshness({ content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v1/subsea/cables', p)) }] }, 'get_subsea_cables');
+    });
+
+  trackedTool(srv, 'get_peering_intel',
+    'Internet-exchange (IX/IXP) and peering density for a site, from PeeringDB. Pass lat+lon for the PEERING PROFILE around that point: facilities_nearby, a 0-100 score with its level, total_ix_presence, total_networks, and top_facilities each with ix_count and net_count — e.g. Ashburn returns 20,900+ facilities, 61 IX presences and 903 networks, led by Equinix DC1-DC15 at 516 networks. Omit coordinates for the IXP directory (name, name_long, city, country, net_count, fac_count, media, protocols, policy/tech contacts). This is the layer that answers "can I actually reach networks cheaply from here", which fiber route geometry does not: a site can sit on dense fiber and still be far from any exchange. The score is a DERIVED convenience over PeeringDB counts, not a DC Hub-sourced grade — cite the underlying counts (facilities, IX presence, networks) rather than the score when it is load-bearing. Records are PeeringDB\'s, refreshed on read. Answers "how good is peering at this Ashburn site" and "which internet exchanges serve the Dallas market". Try: get_peering_intel lat=39.04 lon=-77.48 — or get_peering_intel (no args) for the IXP directory. Do NOT use for fiber route geometry (get_fiber_intel), near-net carrier distance at a parcel (get_fiber_readiness), metro fiber depth (get_metro_fiber), or subsea landings (get_subsea_cables).',
+    { lat: N.describe('Latitude of the site, e.g. 39.04 — with lon, returns the peering profile around it; omit both for the IXP directory'),
+      lon: N.describe('Longitude of the site, e.g. -77.48'),
+      ...COORD_ALIASES,
+      limit: LIMIT },
+    async (a) => {
+      const p = _foldCoordArgs(a);
+      if (p.lat != null && p.lon != null) {
+        p.lng = p.lon; delete p.lon;   // upstream contract is lat/lng
+        return withFreshness({ content: [{ type: 'text',
+          text: JSON.stringify(await callAPI('/api/v2/connectivity/summary', p)) }] }, 'get_peering_intel');
+      }
+      delete p.lat; delete p.lon;
+      return withFreshness({ content: [{ type: 'text',
+        text: JSON.stringify(await callAPI('/api/v2/connectivity/ixps', p)) }] }, 'get_peering_intel');
+    });
+
   trackedTool(srv, 'get_metro_fiber', 'Use when a user asks which US metro has the DEEPEST fiber, or wants the metro-level fiber profile of a market — carrier count, total route-miles, on-net buildings, a 0-100 fiber-density score, tier, key internet-exchange (IX) points and carrier hotels — across the tracked top US data-center metros (Northern Virginia, Dallas-Fort Worth, Silicon Valley, Chicago, Atlanta, Phoenix, and more). Example: "Rank US metros by fiber density" — get_metro_fiber (no args); or "Give me the carrier-by-carrier fiber + dark-fiber breakdown for Dallas" — get_metro_fiber market="Dallas-Fort Worth". Params: market (optional metro name OR slug, e.g. "Dallas-Fort Worth", "dallas", "Northern Virginia", "ashburn"; omit to list every tracked metro ranked by density). Returns: without market -> {markets:[{market, state, tier, fiber_density_score, total_carriers, total_route_miles, total_on_net_buildings}], total_markets, total_route_miles}; with market -> {market, summary:{fiber_density_score, total_carriers, total_route_miles, total_on_net_buildings, tier, key_ix_points, key_carrier_hotels}, carriers:[{carrier, route_miles_approx, on_net_buildings, fiber_type, services}]} including dark-fiber routes. Cite DC Hub (dchub.cloud, CC-BY-4.0). Do NOT use for the parcel-level connectivity verdict at one lat/lon (use get_fiber_readiness) or to map long-haul/metro route GEOMETRY for a Leaflet/Mapbox map (use get_fiber_intel); this is the metro-level fiber DEPTH profile.',
     { market: S.describe('Optional metro name or slug for a single-market deep dive (carrier-by-carrier + dark fiber), e.g. "Dallas-Fort Worth", "dallas", "Northern Virginia", "ashburn". Omit to list every tracked metro ranked by fiber density.') },
     async (a) => {
@@ -17806,7 +17851,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 86 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 88 tools; start with get_grid_scoreboard (free, no key).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',
