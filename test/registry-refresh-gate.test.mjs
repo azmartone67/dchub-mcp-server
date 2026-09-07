@@ -24,14 +24,40 @@ const ME = 'azmartone67';
 const pr = (number, state, merged_at = null) =>
   ({ number, state, created_at: '2026-08-01T00:00:00Z', pull_request: { merged_at } });
 
-/** Fake gh(method, path) that serves one search result set (or an HTTP error). */
-const search = (items, status = 200) => async (method, path) => {
+/**
+ * Fake gh(method, path). ★2026-09-07: prGate now asks TWO endpoints, because the
+ * search index lags PR creation (see ourPullRequests). This serves both and
+ * REFUSES anything else, so a mis-shaped URL still fails loudly instead of
+ * quietly returning undefined and reading as "unreadable".
+ *
+ * @param items    what /search/issues returns (the INDEX — may be behind)
+ * @param status   HTTP status for the search call
+ * @param opts.head   what /repos/…/pulls?head=… returns (the PRIMARY STORE)
+ * @param opts.headStatus  HTTP status for the head calls
+ */
+const search = (items, status = 200, opts = {}) => async (method, path) => {
   expect(method).toBe('GET');
-  expect(decodeURIComponent(path)).toContain(`repo:${T.upstream} author:${ME} type:pr`);
-  return status < 300
-    ? { ok: true, status, json: { total_count: items.length, items } }
-    : { ok: false, status, json: { message: 'boom' } };
+  const decoded = decodeURIComponent(path);
+  if (decoded.startsWith('/search/issues')) {
+    expect(decoded).toContain(`repo:${T.upstream} author:${ME} type:pr`);
+    return status < 300
+      ? { ok: true, status, json: { total_count: items.length, items } }
+      : { ok: false, status, json: { message: 'boom' } };
+  }
+  if (decoded.startsWith(`/repos/${T.upstream}/pulls?head=`)) {
+    expect(decoded).toContain(`head=${ME}:`);
+    expect(decoded).toContain('state=all');
+    const hs = opts.headStatus ?? 200;
+    return hs < 300
+      ? { ok: true, status: hs, json: opts.head ?? [] }
+      : { ok: false, status: hs, json: { message: 'boom' } };
+  }
+  throw new Error(`prGate asked an endpoint no fake serves: ${decoded}`);
 };
+
+/** A PR as the PULLS api returns it — merged_at at the top level, not nested. */
+const storePr = (number, state, merged_at = null, created_at = '2026-08-01T00:00:00Z') =>
+  ({ number, state, created_at, merged_at });
 
 const declinedN = (n, from = 8000) => Array.from({ length: n }, (_, i) => pr(from + i, 'closed'));
 // the measured punkpeye state
@@ -103,9 +129,79 @@ describe('prGate — fails closed', () => {
       expect(g.skipped, `HTTP ${status}`).toMatch(/cannot read our PR history/);
       expect(g.open).toBeNull();
     }
-    const malformed = async () => ({ ok: true, status: 200, json: { items: 'not-an-array' } });
+    const malformed = async (_m, path) => (decodeURIComponent(path).startsWith('/search/issues')
+      ? { ok: true, status: 200, json: { items: 'not-an-array' } }
+      : { ok: true, status: 200, json: [] });
     const g = await prGate(T, ME, { kind: 'refresh', gh: malformed });
     expect(g.skipped).toMatch(/cannot read/);
+  });
+
+  // ★2026-09-07 — the head lookup is a SECOND source, so it gets the same rule.
+  it('a readable search + an unreadable head lookup still refuses to assert absence', async () => {
+    const g = await prGate(T, ME, { kind: 'refresh', gh: search([], 200, { headStatus: 500 }) });
+    expect(g.skipped).toMatch(/cannot read our PR history/);
+    expect(g.open).toBeNull();
+  });
+
+  it('…but an unreadable head lookup does NOT hide a PR the search DID find', async () => {
+    // Absence is the only claim that needs both sources. When the index already
+    // proves a PR exists, one blind source must not turn a gate into a shrug.
+    const g = await prGate(T, ME, { kind: 'add', gh: search([pr(99, 'open')], 200, { headStatus: 500 }) });
+    expect(g.skipped).toContain('#99');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE INDEX LAG — the defect that reddened the weekly lane on 2026-09-07.
+// prGate had the same blind spot as the verifier: it asks GitHub's SEARCH INDEX
+// whether an open PR of ours exists, and the index does not contain a PR opened
+// seconds ago. A workflow re-dispatch minutes after a scheduled run therefore
+// sees "no open PR" and opens the duplicate this gate exists to prevent.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('prGate — the search index lags, the pulls API does not', () => {
+  it('gates on a just-opened PR the index has not picked up yet', async () => {
+    // The index is EMPTY (as it was for AIAnytime/Awesome-MCP-Server#85 five
+    // seconds after that PR was created); the primary store has it.
+    const g = await prGate(T, ME, {
+      kind: 'refresh',
+      gh: search([], 200, { head: [storePr(85, 'open')] }),
+    });
+    expect(g.skipped).toMatch(/open PR of ours already exists/);
+    expect(g.skipped).toContain('#85');
+    expect(g.open).toBe(1);
+  });
+
+  it('counts a decline the index has not caught up on either', async () => {
+    const g = await prGate(T, ME, {
+      kind: 'refresh', maxDeclined: 3,
+      gh: search(declinedN(2), 200, { head: [storePr(9000, 'closed')] }),
+    });
+    expect(g.declined).toBe(3);
+    expect(g.stopped).toBe(true);
+  });
+
+  it('does not double-count a PR both sources return', async () => {
+    const g = await prGate(T, ME, {
+      kind: 'refresh', maxDeclined: 9,
+      gh: search([pr(8016, 'closed')], 200, { head: [storePr(8016, 'closed')] }),
+    });
+    expect(g.declined).toBe(1);
+  });
+
+  it('asks for BOTH of our head branches, not just this call\'s kind', async () => {
+    // #12454 was hand-opened on a different head and invisible to a head check
+    // scoped to one branch. The add and refresh branches are both ours.
+    const asked = [];
+    const spy = async (_m, path) => {
+      const d = decodeURIComponent(path);
+      if (d.startsWith('/repos/')) asked.push(d);
+      return d.startsWith('/search/issues')
+        ? { ok: true, status: 200, json: { items: [] } }
+        : { ok: true, status: 200, json: [] };
+    };
+    await prGate(T, ME, { kind: 'add', gh: spy });
+    expect(asked.some((d) => d.includes(`head=${ME}:add-dchub-${T.key}`))).toBe(true);
+    expect(asked.some((d) => d.includes(`head=${ME}:refresh-dchub-${T.key}`))).toBe(true);
   });
 });
 

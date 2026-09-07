@@ -37,7 +37,7 @@
  * Exit 1 ONLY on MISSING. A pending PR must never fail a build, or the signal
  * gets muted and the genuinely-broken case goes with it.
  */
-import { TARGETS, REFRESH_TARGETS } from './registry-pr-submit.mjs';
+import { TARGETS, REFRESH_TARGETS, headBranch, ourPullRequests } from './registry-pr-submit.mjs';
 
 const OWNER = 'azmartone67';
 const UA = { 'User-Agent': 'dchub-registry-verify', 'Accept': 'application/vnd.github+json' };
@@ -64,29 +64,28 @@ async function isListed(t) {
 
 /** Our PRs to this upstream, newest first. null = could not read.
  *
- * ★ SEARCH BY AUTHOR, never `/pulls?per_page=N`. The first version listed the
- *   50 most recent PRs REPO-WIDE and filtered locally — which works on a quiet
- *   list and silently returns nothing on a busy one. punkpeye has thousands of
- *   PRs, so ours (#8016 #8198 #8200 #9013) sat far outside that window and the
- *   verifier reported a clean "LISTED" while four of our PRs had been declined.
- *   A pagination default is not a filter.
+ * ★2026-09-07 — this used to be the author SEARCH alone, and the search index
+ * lags PR creation. Run 34097298531 opened AIAnytime/Awesome-MCP-Server#85 and
+ * called it "MISSING — not listed and no PR of ours exists" five seconds later,
+ * exit 1, while the sibling PR opened four seconds earlier WAS found. The
+ * predicate now lives in registry-pr-submit.mjs::ourPullRequests() — imported,
+ * never re-spelled, and shared with prGate() which had the identical blind spot
+ * — and it unions the index with a lag-free `head=` lookup against the pulls
+ * API for the exact branch names this lane pushes.
  */
-async function ourPrs(upstream) {
+async function ourPrs(upstream, heads) {
+  // Adapt verify's one-arg fetch wrapper to the (method, path) -> {ok,json}
+  // shape the shared predicate speaks. It only ever issues GETs.
+  const api = async (_method, path) => {
+    try {
+      const r = await gh(path);
+      let json = null;
+      try { json = await r.json(); } catch { /* non-JSON body */ }
+      return { ok: r.ok, status: r.status, json };
+    } catch { return { ok: false, status: 0, json: null }; }
+  };
   try {
-    const q = encodeURIComponent(`repo:${upstream} author:${OWNER} type:pr`);
-    const r = await gh(`/search/issues?q=${q}&per_page=100`);
-    if (!r.ok) return null;
-    const d = await r.json();
-    if (!Array.isArray(d.items)) return null;
-    return d.items
-      .map((p) => ({
-        number: p.number,
-        state: p.state,
-        created_at: p.created_at,
-        // The search API nests merge state under pull_request.merged_at.
-        merged_at: p.pull_request?.merged_at || null,
-      }))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return await ourPullRequests(upstream, { api, owner: OWNER, heads });
   } catch { return null; }
 }
 
@@ -131,9 +130,14 @@ export function verdictFor(listed, prs, kind = 'add', target = {}) {
   const open = prs.find((p) => p.state === 'open');
   if (open) {
     const d = Math.round(ageDays(open.created_at));
+    // ★ Say when the PR was found ONLY in the primary store. That sentence is
+    // the whole 2026-09-07 failure, rendered instead of hidden: without it a
+    // reader has no way to tell a just-opened PR from one the index simply has,
+    // and no way to see this fix working.
+    const lagging = open.indexed === false ? ' (not yet in GitHub\'s PR search index)' : '';
     return {
       state: 'PENDING',
-      why: `PR #${open.number} open ${d}d${d >= STALE_PR_DAYS ? ' — past the stale mark' : ''}`,
+      why: `PR #${open.number} open ${d}d${d >= STALE_PR_DAYS ? ' — past the stale mark' : ''}${lagging}`,
       stale: d >= STALE_PR_DAYS,
     };
   }
@@ -156,7 +160,10 @@ async function main() {
 
   const rows = [];
   for (const t of all) {
-    const [listed, prs] = await Promise.all([isListed(t), ourPrs(t.upstream)]);
+    // BOTH heads, not just this target's kind: "did WE submit" is a question
+    // about the upstream, and a target can appear in TARGETS and REFRESH_TARGETS.
+    const heads = [headBranch(t, 'add'), headBranch(t, 'refresh')];
+    const [listed, prs] = await Promise.all([isListed(t), ourPrs(t.upstream, heads)]);
     const v = verdictFor(listed, prs, t.kind, t);
     rows.push({ key: t.key, upstream: t.upstream, kind: t.kind, ...v });
     const icon = { LISTED: '✅', PENDING: '⏳', DECLINED: '🚫', MISSING: '❌', UNREADABLE: '⚪', DECLINED_BY_US: '⛔', UNVETTED: '⏸' }[v.state];

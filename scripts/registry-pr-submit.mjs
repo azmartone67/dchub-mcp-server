@@ -44,7 +44,18 @@ const N_TOOLS = (Number.isInteger(_snap.tools) && _snap.tools > 20 && _snap.tool
   ? _snap.tools
   : (_readJ('server.json')?._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.toolCount || 81);
 const REPO_URL = 'https://github.com/azmartone67/dchub-mcp-server';
-const HEAD_BRANCH = 'add-dchub-mcp';
+
+// ★2026-09-07 — ONE spelling of our head-branch name. There were three live ones
+// (openPR's `add-dchub-${key}` default, the refresh call site's
+// `refresh-dchub-${key}`, and prGate's comment quoting a literal) plus a DEAD
+// `HEAD_BRANCH = 'add-dchub-mcp'` declared here and referenced nowhere — a name
+// that matched no branch this lane has ever pushed. The branch name is now a
+// LOOKUP KEY, not just a push target: registry-verify-listed.mjs asks the pulls
+// API for it by name to escape the search index's lag, so a fourth spelling
+// would make the verifier look for a branch that does not exist and call our own
+// PR missing.
+export const headBranch = (t, kind = 'add') =>
+  `${kind === 'refresh' ? 'refresh' : 'add'}-dchub-${t.key}`;
 const MAX_PR_PER_RUN = Number(process.env.REGISTRY_PR_MAX || 1);
 const PAT = process.env.REGISTRY_PR_PAT || '';
 const LIVE = PAT && ['1', 'true', 'yes'].includes(String(process.env.REGISTRY_PR_LIVE || '').toLowerCase());
@@ -270,14 +281,14 @@ async function openPR(t, newContent, opts = {}) {
   // appcypher do exactly this). No fork/PR is possible there by anyone.
   const prCheck = await gh('GET', `/repos/${t.upstream}/pulls?per_page=1`);
   if (prCheck.status === 404) return { skipped: 'PRs disabled on this repo (owner setting) — cannot submit' };
-  const headBranch = opts.branch || `add-dchub-${t.key}`;   // per-target so branches never collide across forks
+  const head = opts.branch || headBranch(t, 'add');   // per-target so branches never collide across forks
   // 1) fork (idempotent). ★ Use the RETURNED full_name — you can only have one
   // fork of a repo per account, and when the basename collides GitHub renames
   // it (awesome-mcp-servers-1), so never assume {me}/{basename}.
   const forkRes = await gh('POST', `/repos/${t.upstream}/forks`);
   const fork = forkRes.json?.full_name;
   if (!fork) throw new Error(`fork failed ${forkRes.status}: ${JSON.stringify(forkRes.json).slice(0, 120)}`);
-  console.log(`      fork=${fork} head=${me}:${headBranch}`);
+  console.log(`      fork=${fork} head=${me}:${head}`);
   // 2) wait for the fork's base branch to be ready (fork copy is async)
   const readBase = async () => {
     for (let k = 0; k < 15; k++) {
@@ -295,19 +306,19 @@ async function openPR(t, newContent, opts = {}) {
   const baseSha = await readBase();
   if (!baseSha) throw new Error(`fork ${fork} base '${t.base}' not readable after sync`);
   // 3) idempotency: open PR from our head already?
-  const existing = await gh('GET', `/repos/${t.upstream}/pulls?head=${me}:${headBranch}&state=open`);
+  const existing = await gh('GET', `/repos/${t.upstream}/pulls?head=${me}:${head}&state=open`);
   if (existing.ok && Array.isArray(existing.json) && existing.json.length) {
     return { skipped: `open PR already exists: ${existing.json[0].html_url}` };
   }
   // 4) branch off the fork's base (idempotent — 422 = already exists)
-  const mkRef = await gh('POST', `/repos/${fork}/git/refs`, { ref: `refs/heads/${headBranch}`, sha: baseSha });
+  const mkRef = await gh('POST', `/repos/${fork}/git/refs`, { ref: `refs/heads/${head}`, sha: baseSha });
   if (!mkRef.ok && mkRef.status !== 422) throw new Error(`branch create failed ${mkRef.status}`);
   // 5) write the file on our branch
-  const cur = await gh('GET', `/repos/${fork}/contents/${t.path}?ref=${headBranch}`);
+  const cur = await gh('GET', `/repos/${fork}/contents/${t.path}?ref=${head}`);
   const putRes = await gh('PUT', `/repos/${fork}/contents/${t.path}`, {
     message: opts.message || `Add DC Hub MCP server`,
     content: Buffer.from(newContent, 'utf8').toString('base64'),
-    branch: headBranch,
+    branch: head,
     sha: cur.json?.sha,
   });
   if (!putRes.ok) throw new Error(`contents PUT failed ${putRes.status}: ${JSON.stringify(putRes.json).slice(0, 160)}`);
@@ -316,7 +327,7 @@ async function openPR(t, newContent, opts = {}) {
   let pr;
   for (let a = 0; a < 2; a++) {
     pr = await gh('POST', `/repos/${t.upstream}/pulls`, {
-      title: opts.title || `Add DC Hub MCP server`, head: `${me}:${headBranch}`, base: t.base, body, maintainer_can_modify: true,
+      title: opts.title || `Add DC Hub MCP server`, head: `${me}:${head}`, base: t.base, body, maintainer_can_modify: true,
     });
     if (pr.ok) break;
     if (pr.status === 422 && /already exists/i.test(JSON.stringify(pr.json))) {
@@ -328,7 +339,7 @@ async function openPR(t, newContent, opts = {}) {
   // GitHub sometimes blocks API-created PRs to popular repos (anti-spam) or the
   // token type can't createPullRequest on a non-owned repo. The fork+branch+entry
   // are READY — hand back the one-click compare URL so a human opens it in 1 click.
-  const compare = `https://github.com/${t.upstream}/compare/${encodeURIComponent(t.base)}...${me}:${encodeURIComponent(headBranch)}?expand=1`;
+  const compare = `https://github.com/${t.upstream}/compare/${encodeURIComponent(t.base)}...${me}:${encodeURIComponent(head)}?expand=1`;
   return { blocked: `${pr.status} ${JSON.stringify(pr.json).slice(0, 90)}`, compare };
 }
 
@@ -352,20 +363,107 @@ async function openPR(t, newContent, opts = {}) {
 //     from it (verify-listed already renders the same count as DECLINED);
 //   · unreadable search → skip. Opening blind is the duplicate this exists to
 //     prevent: a skip costs one week, a duplicate costs the maintainer.
+/**
+ * Every PR of OURS on `upstream`, newest first. `null` = we could not look.
+ *
+ * ★2026-09-07 — TWO SOURCES, because neither one is sufficient, and using only
+ * the first cost a red weekly lane on a PR the lane had just opened itself.
+ *
+ *   (a) /search/issues?q=repo:X author:Y type:pr — sees a PR on ANY head, which
+ *       is the only way to find hand-opened ones (#12454 was hand-opened on a
+ *       different head and invisible to openPR's head check). But it is an
+ *       INDEX, and the index LAGS creation by seconds to minutes.
+ *   (b) /repos/X/pulls?head=owner:branch&state=all — the PRIMARY STORE. No lag,
+ *       and it is the same call openPR() already trusts for idempotency. It only
+ *       sees the deterministic heads this lane pushes, which is exactly the set
+ *       "did WE submit?" is asking about.
+ *
+ * MEASURED, run 34097298531 (2026-09-07), one workflow run:
+ *     07:48:41  PR opened  AlexMili/Awesome-MCP#191
+ *     07:48:45  PR opened  AIAnytime/Awesome-MCP-Server#85
+ *     07:48:49  verify: PENDING  AlexMili/Awesome-MCP — PR #191 open 0d   (+8.4s, indexed)
+ *     07:48:50  verify: MISSING  AIAnytime/Awesome-MCP-Server            (+5.6s, NOT indexed)
+ *               "not listed and no PR of ours exists"  -> exit 1
+ * Both PRs were open the whole time. The older of two PRs opened four seconds
+ * apart was in the index and the younger was not; that four seconds was the
+ * entire difference between a green lane and a red one. Retrying would only have
+ * hidden it — the fix is to stop asking an index a question about the present.
+ *
+ * ★ NOT a revert to `/pulls?per_page=N`. That was the FIRST version and it read
+ * the 50 most recent PRs repo-wide, so ours sat outside a busy repo's window and
+ * the verifier reported a clean LISTED while four of our PRs had been declined.
+ * `head=` is a FILTER, not a pagination default; the author search stays for
+ * everything outside our own branch names.
+ *
+ * ★ ABSENCE IS ONLY ASSERTED WHEN BOTH SOURCES COULD SPEAK. If the search is
+ * unreadable and the head lookups found nothing, or a head lookup failed while
+ * we were about to report "no PR at all", this returns null -> UNREADABLE.
+ * "I could not look" is not "it is not there" — the rule this harness is built
+ * on, applied to its own new source.
+ *
+ * @param {string} upstream          "owner/repo"
+ * @param {object} o
+ * @param {Function} [o.api]         gh(method, path) -> {ok,status,json}
+ * @param {string} o.owner           our GitHub login
+ * @param {string[]} [o.heads]       our deterministic branch names on that repo
+ * @returns {Promise<null | Array<{number,state,created_at,merged_at,indexed}>>}
+ */
+export async function ourPullRequests(upstream, { api = gh, owner, heads = [] } = {}) {
+  const q = encodeURIComponent(`repo:${upstream} author:${owner} type:pr`);
+  const [searchRes, ...headRes] = await Promise.all([
+    api('GET', `/search/issues?q=${q}&per_page=100`),
+    ...heads.map((h) => api('GET',
+      `/repos/${upstream}/pulls?head=${encodeURIComponent(`${owner}:${h}`)}&state=all&per_page=100`)),
+  ]);
+
+  // The two APIs disagree on shape: search nests merge state under
+  // pull_request.merged_at, the pulls list puts it at the top level.
+  const norm = (p) => ({
+    number: p.number,
+    state: p.state,
+    created_at: p.created_at,
+    merged_at: p.pull_request?.merged_at ?? p.merged_at ?? null,
+  });
+
+  const searched = searchRes?.ok && Array.isArray(searchRes.json?.items)
+    ? searchRes.json.items.map(norm) : null;
+  const byHead = headRes.map((r) => (r?.ok && Array.isArray(r.json) ? r.json.map(norm) : null));
+  const headUnreadable = byHead.some((x) => x === null);
+
+  const indexed = new Set((searched || []).map((p) => p.number));
+  // The PRIMARY STORE goes in first and is never overwritten: it is current,
+  // the index is a snapshot that can be minutes old on state as well as on
+  // existence. The search then contributes only the PRs it alone can see.
+  const merged = new Map();
+  for (const p of byHead.flatMap((x) => x || [])) merged.set(p.number, p);
+  for (const p of (searched || [])) if (!merged.has(p.number)) merged.set(p.number, p);
+  const all = [...merged.values()]
+    .map((p) => ({ ...p, indexed: indexed.has(p.number) }))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  if (!all.length && (searched === null || headUnreadable)) return null;
+  return all;
+}
+
 export const REFRESH_MAX_DECLINED = Number(process.env.REGISTRY_REFRESH_MAX_DECLINED || 3);
 
 export async function prGate(t, me, opts = {}) {
   const api = opts.gh || gh;
   const kind = opts.kind || 'add';
   const maxDeclined = Number.isFinite(opts.maxDeclined) ? opts.maxDeclined : REFRESH_MAX_DECLINED;
-  const q = encodeURIComponent(`repo:${t.upstream} author:${me} type:pr`);
-  const r = await api('GET', `/search/issues?q=${q}&per_page=100`);
-  const items = r.ok && Array.isArray(r.json?.items) ? r.json.items : null;
+  // ★2026-09-07 — the SAME predicate the verifier uses, not a second spelling of
+  // it. This gate had the identical index blind spot: a re-dispatch minutes after
+  // a scheduled run asks the search index about a PR that is not in it yet, the
+  // gate sees no open PR, and the lane opens the duplicate this gate exists to
+  // prevent. openPR()'s own head check catches that for the SAME head, and only
+  // for that head — which is precisely the hole #12454/#13272 went through.
+  const items = await ourPullRequests(t.upstream, { api, owner: me,
+    heads: [headBranch(t, 'add'), headBranch(t, 'refresh')] });
   if (!items) {
-    return { skipped: `cannot read our PR history on ${t.upstream} (HTTP ${r.status}) — not opening a PR blind`, open: null, declined: null };
+    return { skipped: `cannot read our PR history on ${t.upstream} — not opening a PR blind`, open: null, declined: null };
   }
   const open = items.filter((p) => p.state === 'open');
-  const declined = items.filter((p) => p.state === 'closed' && !p.pull_request?.merged_at);
+  const declined = items.filter((p) => p.state === 'closed' && !p.merged_at);
   if (open.length) {
     return {
       skipped: `an open PR of ours already exists on ${t.upstream} (${open.map((p) => `#${p.number}`).join(' ')}) — one at a time`,
@@ -453,7 +551,7 @@ if (_IS_MAIN) (async () => {
       const gate = await prGate(t, await whoAmI(), { kind: 'refresh' });
       if (gate.skipped) { console.log(`      ⏸ ${gate.skipped}`); gated.push({ key: `${t.key}-refresh`, why: gate.skipped }); continue; }
       const r = await openPR(t, refreshed, {
-        branch: `refresh-dchub-${t.key}`,
+        branch: headBranch(t, 'refresh'),
         title: `Refresh DC Hub MCP entry (${N_TOOLS} tools, ${MARKETS} markets, ${DEALS} deals)`,
         message: 'Refresh DC Hub stats',
         body: `Updates the existing DC Hub entry to current stats: **${N_TOOLS} tools**, **${MARKETS} markets** (DC Hub Power Index), **${DEALS} M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
