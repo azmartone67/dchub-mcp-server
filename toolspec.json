@@ -109,14 +109,6 @@
         "include_fiber": {
           "description": "Include fiber-connectivity analysis (default true)",
           "type": "boolean"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -220,14 +212,6 @@
         "capacity_mw": {
           "description": "Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)",
           "type": "number"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -760,14 +744,6 @@
         "include_sources": {
           "description": "Include upstream data-source/provenance metadata in the response",
           "type": "boolean"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -941,14 +917,6 @@
         },
         "market": {
           "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — \"Ashburn\" is not a grid code.",
-          "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
           "type": "string"
         }
       }
@@ -1164,14 +1132,6 @@
         "compare_to": {
           "description": "Optional second market slug to compare against, e.g. dallas",
           "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
@@ -1224,6 +1184,41 @@
         "min_relevance": {
           "description": "Minimum relevance score 0-1 to include an item, e.g. 0.5",
           "type": "number"
+        }
+      }
+    }
+  },
+  {
+    "name": "get_peering_intel",
+    "description": "Internet-exchange (IX/IXP) and peering density for a site, from PeeringDB. Pass lat+lon for the PEERING PROFILE around that point: facilities_nearby, a 0-100 score with its level, total_ix_presence, total_networks, and top_facilities each with ix_count and net_count — e.g. Ashburn returns 20,900+ facilities, 61 IX presences and 903 networks, led by Equinix DC1-DC15 at 516 networks. Omit coordinates for the IXP directory (name, name_long, city, country, net_count, fac_count, media, protocols, policy/tech contacts). This is the layer that answers \"can I actually reach networks cheaply from here\", which fiber route geometry does not: a site can sit on dense fiber and still be far from any exchange. The score is a DERIVED convenience over PeeringDB counts, not a DC Hub-sourced grade — cite the underlying counts (facilities, IX presence, networks) rather than the score when it is load-bearing. Records are PeeringDB's, refreshed on read. Answers \"how good is peering at this Ashburn site\" and \"which internet exchanges serve the Dallas market\". Try: get_peering_intel lat=39.04 lon=-77.48 — or get_peering_intel (no args) for the IXP directory. Do NOT use for fiber route geometry (get_fiber_intel), near-net carrier distance at a parcel (get_fiber_readiness), metro fiber depth (get_metro_fiber), or subsea landings (get_subsea_cables).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "description": "Latitude of the site, e.g. 39.04 — with lon, returns the peering profile around it; omit both for the IXP directory",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Longitude of the site, e.g. -77.48",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Alias for lat — either name works",
+          "type": "number"
+        },
+        "lng": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "limit": {
+          "description": "Max results to return (1-500; default varies by tool)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
         }
       }
     }
@@ -1482,6 +1477,45 @@
       "required": [
         "name"
       ]
+    }
+  },
+  {
+    "name": "get_subsea_cables",
+    "description": "Subsea (submarine) cable landings near a coordinate, or the global cable catalogue. The physical internet crossing an ocean lands at a finite number of points, and distance to one is a real siting factor for anything latency- or transit-sensitive. Pass lat+lon (+radius_km) for LANDING POINTS near a site — each with name, coordinates and distance_km. Omit coordinates for the CATALOGUE of tracked cables (712 tracked; each with cable_id, name, owners, length_km, rfs_year, is_planned — sparse fields are null, not guessed). ★ READ field_coverage AND connectivity_note BEFORE DRAWING A CONCLUSION: cable_count per landing point is NOT populated — the ingest writes the column but the upstream TeleGeography feed does not supply what it derives from, so every row carries the default 0. That is why connectivity_grade comes back null rather than graded: proximity to a landing point does NOT establish how many cables are reachable from it, and DC Hub will not infer a grade it cannot source. A filter over cable_count returns nothing for the same reason. Treat 0 as UNKNOWN, never as \"no cables\". Answers \"which subsea cables land near this Virginia site\" and \"how far is the nearest cable landing from my campus\". Try: get_subsea_cables lat=36.85 lon=-75.98 radius_km=200 — or get_subsea_cables (no args) for the catalogue. Do NOT use for terrestrial fiber routes (get_fiber_intel), a parcel fiber verdict (get_fiber_readiness), metro fiber depth (get_metro_fiber), or internet-exchange / peering density (get_peering_intel).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "description": "Latitude of the site, e.g. 36.85 — with lon, returns landing points near it; omit both for the cable catalogue",
+          "type": "number"
+        },
+        "lon": {
+          "description": "Longitude of the site, e.g. -75.98",
+          "type": "number"
+        },
+        "latitude": {
+          "description": "Alias for lat — either name works",
+          "type": "number"
+        },
+        "lng": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Alias for lon — either name works",
+          "type": "number"
+        },
+        "radius_km": {
+          "description": "Search radius in km around lat/lon for landing points (default 200)",
+          "type": "number"
+        },
+        "limit": {
+          "description": "Max results to return (1-500; default varies by tool)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
     }
   },
   {
@@ -2257,14 +2291,6 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
-        },
-        "mpp_pay": {
-          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
-          "type": "string"
         }
       }
     }
