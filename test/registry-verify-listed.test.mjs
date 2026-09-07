@@ -181,6 +181,44 @@ describe('ourPullRequests — the index is not the only source', () => {
     expect(verdictFor(false, await look([], [], { headStatus: 500 })).state).toBe('UNREADABLE');
   });
 
+  it('★ a blind source is blind even when the other one returned SOMETHING', async () => {
+    // MEASURED against 8f564dc, the commit that added the guard above. That
+    // guard asked `!all.length` — "did we end up with nothing?" — when the
+    // question is "could every source speak?". The two differ exactly when the
+    // readable source returns history that settles nothing.
+    //
+    //   search: one old MERGED pr (#1136 is this shape) · head lookup: 500
+    //     -> all = [#1136 closed+merged], non-empty, guard silent
+    //     -> no open pr, no closed-UNMERGED pr -> verdictFor: MISSING -> exit 1
+    //
+    // …while the ONLY source that can see a PR opened moments ago had failed.
+    // That is the same false red as the index lag, reached by a different door:
+    // a partial API failure instead of a slow index.
+    const merged = await look([idx(1136, 'closed', '2026-07-02T00:00:00Z')], [], { headStatus: 500 });
+    expect(merged).toBeNull();
+    expect(verdictFor(false, merged).state).toBe('UNREADABLE');
+    expect(verdictFor(false, merged).state).not.toBe('MISSING');
+  });
+
+  it('…but readable evidence that SETTLES the question still stands alone', async () => {
+    // The widening must not swallow the verdicts we can already justify, or
+    // every partial failure becomes UNREADABLE and the step stops saying
+    // anything. An open pr (PENDING) and a closed-unmerged one (DECLINED) are
+    // both conclusions a blind second source cannot overturn.
+    expect((await look([idx(99, 'open')], [], { headStatus: 500 })).map((p) => p.number)).toEqual([99]);
+    const declined = await look([idx(8016, 'closed')], [], { headStatus: 500 });
+    expect(verdictFor(false, declined).state).toBe('DECLINED');
+  });
+
+  it('★ MISSING stays reachable when both sources DID speak and found nothing', async () => {
+    // The negative control for the widening. If "no verdict-settling pr" alone
+    // returned null, MISSING could never fire again and the step would be
+    // incapable of reporting the failure it exists for.
+    const none = await look([], []);
+    expect(none).toEqual([]);
+    expect(verdictFor(false, none).state).toBe('MISSING');
+  });
+
   it('…but one blind source does not hide a PR the other found', async () => {
     expect((await look([idx(99, 'open')], [], { headStatus: 500 })).map((p) => p.number)).toEqual([99]);
     expect((await look([], [store(85, 'open')], { indexStatus: 403 })).map((p) => p.number)).toEqual([85]);
