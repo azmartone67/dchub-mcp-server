@@ -253,3 +253,142 @@ describe('head-branch names have ONE spelling', () => {
     expect(code).toMatch(/headBranch\(t, 'add'\)/);
   });
 });
+
+// =============================================================================
+// SUBMIT RECEIPTS — the source that never asks GitHub.
+// -----------------------------------------------------------------------------
+// #379 added the primary store beside the index; #380 stopped an absence being
+// asserted while a source was blind. Both still ASK GitHub at verify time, so
+// both still have a failure mode: if the head lookup 500s and the index has not
+// caught up, the honest answer is UNREADABLE — correct, and still not the
+// answer, because the run KNOWS it opened the PR.
+//
+//   sources blind          #379+#380        with the receipt
+//   ─────────────────────  ───────────────  ─────────────────
+//   index lagging          PENDING (pulls)  PENDING
+//   index lagging + 500    UNREADABLE       PENDING      <- the receipt's job
+//   nothing opened         MISSING          MISSING      <- must stay reachable
+//
+// The receipt is written by the previous STEP OF THE SAME JOB from the number
+// GitHub returned when it created the PR. It cannot lag, and it makes no
+// request of its own.
+// =============================================================================
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readPrReceipts, recordPrReceipt } from '../scripts/registry-pr-submit.mjs';
+
+const AT = '2026-09-07T07:48:46.560Z';
+/** A receipt exactly as the submit step writes one on a successful create. */
+const rcpt = (over = {}) => ({
+  key: 'awesome-mcp-server', upstream: UPSTREAM, kind: 'add', number: 85,
+  url: 'https://github.com/AIAnytime/Awesome-MCP-Server/pull/85',
+  run: '34097298531', at: AT, ...over,
+});
+const lookR = (index, head, receipts, o) =>
+  ourPullRequests(UPSTREAM, { api: api(index, head, o), owner: ME, heads, receipts });
+
+describe('ourPullRequests — a receipt is proof that needs no request', () => {
+  it('★ BOTH live sources blind + this run opened #85 → PENDING, not UNREADABLE', async () => {
+    // The case #379 and #380 cannot answer: the index has not caught up AND the
+    // head lookup failed. They correctly say "I could not look" — but the run
+    // did not need to look. It created the PR four seconds ago.
+    const prs = await lookR([], [], [rcpt()], { headStatus: 500 });
+    expect(prs.map((p) => p.number)).toEqual([85]);
+    expect(verdictFor(false, prs).state).toBe('PENDING');
+    expect(prs[0].viaReceipt).toBe(true);
+
+    // …and without the receipt, the same call is UNREADABLE. That contrast is
+    // the entire justification for this source; if it ever stops holding, the
+    // receipt has become decoration.
+    const blind = await look([], [], { headStatus: 500 });
+    expect(blind).toBeNull();
+    expect(verdictFor(false, blind).state).toBe('UNREADABLE');
+  });
+
+  it('★ MISSING stays reachable — a run that opened nothing certifies nothing', async () => {
+    // The negative control. If receipts could rescue a target they say nothing
+    // about, the step could no longer report the failure it exists for.
+    const none = await lookR([], [], []);
+    expect(verdictFor(false, none).state).toBe('MISSING');
+    // a receipt for a DIFFERENT upstream is not evidence about this one
+    const elsewhere = await lookR([], [], [rcpt({ upstream: 'AlexMili/Awesome-MCP', number: 191 })]);
+    expect(elsewhere).toEqual([]);
+    expect(verdictFor(false, elsewhere).state).toBe('MISSING');
+  });
+
+  it('★ a live read OUTRANKS the receipt — closed stays closed', async () => {
+    // A receipt records a CREATION, never a current state. Insert receipts
+    // ahead of the live sources and this returns PENDING for a PR a maintainer
+    // has already closed — a machine for reporting dead PRs as pending forever.
+    const declined = await lookR([idx(85, 'closed')], [], [rcpt()]);
+    expect(declined).toHaveLength(1);
+    expect(declined[0].state).toBe('closed');
+    expect(verdictFor(false, declined).state).toBe('DECLINED');
+
+    // same for a merge the receipt cannot know about
+    const merged = await lookR([], [store(85, 'closed', '2026-09-08T00:00:00Z')], [rcpt()]);
+    expect(merged[0].merged_at).toBeTruthy();
+    expect(verdictFor(false, merged).state).toBe('MISSING');
+  });
+
+  it('does not double-count a PR the live sources also returned', async () => {
+    const prs = await lookR([idx(85, 'open')], [store(85, 'open')], [rcpt()]);
+    expect(prs).toHaveLength(1);
+    expect(prs[0].viaReceipt).toBe(false);
+    expect(prs[0].indexed).toBe(true);
+  });
+
+  it('says out loud that a receipted PR is not in the index yet', async () => {
+    const prs = await lookR([], [], [rcpt()], { headStatus: 500 });
+    expect(verdictFor(false, prs).why).toContain('not yet in GitHub');
+  });
+});
+
+describe('receipts cannot outlive the run that wrote them', () => {
+  const tmp = () => join(mkdtempSync(join(tmpdir(), 'dchub-receipts-')), 'receipts.json');
+
+  it('★ a receipt from ANOTHER run is ignored — or MISSING is masked forever', () => {
+    // Unscoped, one successful Monday would certify every later Monday.
+    const path = tmp();
+    writeFileSync(path, JSON.stringify([rcpt({ run: '34097298531' })]));
+    expect(readPrReceipts({ path, runId: '34097298531' })).toHaveLength(1);
+    expect(readPrReceipts({ path, runId: '99999999999' })).toHaveLength(0);
+  });
+
+  it('with no run id (local), a stale receipt ages out', () => {
+    const path = tmp();
+    const now = Date.parse('2026-09-07T09:00:00Z');
+    writeFileSync(path, JSON.stringify([rcpt({ run: '', at: '2026-09-07T08:50:00Z' })]));
+    expect(readPrReceipts({ path, runId: '', now })).toHaveLength(1);
+    writeFileSync(path, JSON.stringify([rcpt({ run: '', at: '2026-09-06T08:50:00Z' })]));
+    expect(readPrReceipts({ path, runId: '', now })).toHaveLength(0);
+  });
+
+  it('round-trips what the submitter writes, and survives a missing file', () => {
+    const path = tmp();
+    expect(readPrReceipts({ path, runId: '' })).toEqual([]);      // never throws
+    recordPrReceipt({ key: 'awesome-mcp-server', upstream: UPSTREAM, kind: 'add', number: 85 },
+      { path, runId: 'r1', at: AT });
+    expect(readPrReceipts({ path, runId: 'r1' })[0])
+      .toMatchObject({ upstream: UPSTREAM, number: 85, run: 'r1', at: AT });
+  });
+
+  it('a malformed receipt is dropped, not trusted', () => {
+    // ★ The junk carries THIS RUN'S id on purpose. Written without it, the
+    //   run-scoping filter above dropped these rows for the wrong reason and
+    //   the shape check was never exercised — measured: deleting the shape
+    //   check left all 47 tests green. A fixture that the previous guard
+    //   already rejects cannot test the next one.
+    const path = tmp();
+    writeFileSync(path, JSON.stringify([
+      { upstream: UPSTREAM, run: '34097298531' },              // no number
+      { number: 9, run: '34097298531' },                       // no upstream
+      { upstream: UPSTREAM, number: '85', run: '34097298531' }, // number as a string
+      rcpt(),
+    ]));
+    const kept = readPrReceipts({ path, runId: '34097298531' });
+    expect(kept).toHaveLength(1);
+    expect(kept[0].number).toBe(85);
+  });
+});

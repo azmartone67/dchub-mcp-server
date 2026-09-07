@@ -21,7 +21,7 @@
 //     no auto-guessed categories.
 // ============================================================================
 
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -308,7 +308,11 @@ async function openPR(t, newContent, opts = {}) {
   // 3) idempotency: open PR from our head already?
   const existing = await gh('GET', `/repos/${t.upstream}/pulls?head=${me}:${head}&state=open`);
   if (existing.ok && Array.isArray(existing.json) && existing.json.length) {
-    return { skipped: `open PR already exists: ${existing.json[0].html_url}` };
+    // ★ This came from `/pulls?head=…` — the PRIMARY STORE — so it is proof the
+    //   PR exists right now. Hand the object back, not just a sentence: the
+    //   caller records it, and the verify step must not re-discover it.
+    const ex = existing.json[0];
+    return { skipped: `open PR already exists: ${ex.html_url}`, pr: { number: ex.number, url: ex.html_url } };
   }
   // 4) branch off the fork's base (idempotent — 422 = already exists)
   const mkRef = await gh('POST', `/repos/${fork}/git/refs`, { ref: `refs/heads/${head}`, sha: baseSha });
@@ -335,7 +339,7 @@ async function openPR(t, newContent, opts = {}) {
     }
     await sleep(4000);
   }
-  if (pr.ok) return { url: pr.json.html_url };
+  if (pr.ok) return { url: pr.json.html_url, number: pr.json.number };
   // GitHub sometimes blocks API-created PRs to popular repos (anti-spam) or the
   // token type can't createPullRequest on a non-owned repo. The fork+branch+entry
   // are READY — hand back the one-click compare URL so a human opens it in 1 click.
@@ -363,6 +367,87 @@ async function openPR(t, newContent, opts = {}) {
 //     from it (verify-listed already renders the same count as DECLINED);
 //   · unreadable search → skip. Opening blind is the duplicate this exists to
 //     prevent: a skip costs one week, a duplicate costs the maintainer.
+// ============================================================================
+// SUBMIT RECEIPTS — the third source, and the only one that never asks GitHub.
+// ----------------------------------------------------------------------------
+// ★2026-09-07, third pass. #379 stopped the false MISSING by reading the
+// PRIMARY STORE alongside the search index, and #380 stopped it asserting an
+// absence while a source was blind. Both still ask GitHub at verify time.
+//
+// The submitter does not have to ask. It HOLDS the number GitHub returned from
+// the create call, in the previous step of the SAME JOB on the same runner — a
+// fact about the wire, obtained before any index or replica could lag. So it
+// writes it down and the verifier reads it off disk:
+//
+//   receipt   this run created #85. Correct by construction: no index, no
+//             propagation, no second request, no failure mode of its own.
+//   pulls     current, but one API call that can 500 — which is #380's case.
+//   search    complete for history, late for the last few minutes.
+//
+// ★ WHAT A RECEIPT DOES NOT SAY. It records a CREATION, never a current state.
+//   It is inserted LAST, so it can only contribute a PR neither live source
+//   returned; a receipt must never be able to report a PR as open after a
+//   maintainer closed it. Both live sources outrank it on state, by the same
+//   insertion-order rule the primary store already uses over the index.
+//
+// ★ WHY prGate() DOES NOT READ THEM. It asks "is a PR of ours already open"
+//   BEFORE openPR(), so within a run no receipt for that target exists yet, and
+//   receipts are run-scoped so a later run sees none. Measured 2026-09-07:
+//   TARGETS (9) and REFRESH_TARGETS (1) share no upstream, so there is no
+//   second pass over the same repo either. Wiring them in would be inert code
+//   that reads like a safeguard, and this repo has been bitten by present-but-
+//   inert rules often enough. The head lookup is what covers prGate.
+// ============================================================================
+
+// state/ is gitignored and regenerated per run; on Actions the workspace is a
+// fresh checkout, so a receipt cannot outlive the run that wrote it there.
+export const RECEIPTS_PATH = process.env.REGISTRY_PR_RECEIPTS
+  || path.join(_ROOT, 'state', 'registry-pr-receipts.json');
+
+// A receipt is evidence about ONE run. On Actions the run id settles that;
+// locally, fall back to a short TTL. Unscoped, one successful Monday would
+// certify every later Monday and MISSING could never fire again.
+const RECEIPT_TTL_MIN = Number(process.env.REGISTRY_RECEIPT_TTL_MIN || 60);
+
+/** Receipts written by THIS run. Never throws; an unreadable file is no receipts. */
+export function readPrReceipts(opts = {}) {
+  const file = opts.path || RECEIPTS_PATH;
+  const runId = opts.runId !== undefined ? opts.runId : (process.env.GITHUB_RUN_ID || '');
+  const now = opts.now || Date.now();
+  let recs;
+  try { recs = JSON.parse(readFileSync(file, 'utf8')); } catch { return []; }
+  if (!Array.isArray(recs)) return [];
+  return recs.filter((r) => {
+    if (!r || typeof r.upstream !== 'string' || !Number.isInteger(r.number)) return false;
+    if (runId) return String(r.run || '') === String(runId);
+    const age = (now - new Date(r.at || 0).getTime()) / 60000;
+    return Number.isFinite(age) && age >= 0 && age <= RECEIPT_TTL_MIN;
+  });
+}
+
+/** Record a PR we have PROVED exists — from a create response or a primary-store hit. */
+export function recordPrReceipt(rec, opts = {}) {
+  const file = opts.path || RECEIPTS_PATH;
+  const entry = {
+    ...rec,
+    run: opts.runId !== undefined ? opts.runId : (process.env.GITHUB_RUN_ID || ''),
+    at: opts.at || new Date().toISOString(),
+  };
+  let recs = [];
+  try { const j = JSON.parse(readFileSync(file, 'utf8')); if (Array.isArray(j)) recs = j; } catch { /* first write */ }
+  recs.push(entry);
+  try {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(recs, null, 2));
+  } catch (e) {
+    // A receipt is evidence, not the submission. Losing it costs the verifier a
+    // shortcut it already has two fallbacks for; failing the submit over it
+    // would trade a false MISSING for a real outage.
+    console.log(`      (receipt not written: ${e.message})`);
+  }
+  return entry;
+}
+
 /**
  * Every PR of OURS on `upstream`, newest first. `null` = we could not look.
  *
@@ -406,9 +491,10 @@ async function openPR(t, newContent, opts = {}) {
  * @param {Function} [o.api]         gh(method, path) -> {ok,status,json}
  * @param {string} o.owner           our GitHub login
  * @param {string[]} [o.heads]       our deterministic branch names on that repo
- * @returns {Promise<null | Array<{number,state,created_at,merged_at,indexed}>>}
+ * @param {object[]} [o.receipts]    PRs THIS RUN opened (see readPrReceipts)
+ * @returns {Promise<null | Array<{number,state,created_at,merged_at,indexed,viaReceipt}>>}
  */
-export async function ourPullRequests(upstream, { api = gh, owner, heads = [] } = {}) {
+export async function ourPullRequests(upstream, { api = gh, owner, heads = [], receipts = [] } = {}) {
   const q = encodeURIComponent(`repo:${upstream} author:${owner} type:pr`);
   const [searchRes, ...headRes] = await Promise.all([
     api('GET', `/search/issues?q=${q}&per_page=100`),
@@ -434,11 +520,21 @@ export async function ourPullRequests(upstream, { api = gh, owner, heads = [] } 
   // The PRIMARY STORE goes in first and is never overwritten: it is current,
   // the index is a snapshot that can be minutes old on state as well as on
   // existence. The search then contributes only the PRs it alone can see.
+  // ★ Receipts go in LAST, behind both live reads, and only for a number
+  //   neither of them returned. That ordering IS the rule "a receipt records a
+  //   creation, never a current state" — put them first and a receipt would
+  //   report a PR open after a maintainer closed it.
   const merged = new Map();
   for (const p of byHead.flatMap((x) => x || [])) merged.set(p.number, p);
   for (const p of (searched || [])) if (!merged.has(p.number)) merged.set(p.number, p);
+  const fromReceipt = new Set();
+  for (const r of receipts) {
+    if (r?.upstream !== upstream || !Number.isInteger(r.number) || merged.has(r.number)) continue;
+    fromReceipt.add(r.number);
+    merged.set(r.number, { number: r.number, state: 'open', created_at: r.at, merged_at: null });
+  }
   const all = [...merged.values()]
-    .map((p) => ({ ...p, indexed: indexed.has(p.number) }))
+    .map((p) => ({ ...p, indexed: indexed.has(p.number), viaReceipt: fromReceipt.has(p.number) }))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   // ★2026-09-07, second pass. `!all.length` was the wrong test for "did every
@@ -513,6 +609,13 @@ if (_IS_MAIN) (async () => {
   const readyLinks = [];   // blocked-but-ready: {key, compare} for the run summary
   const gated = [];        // gate verdicts (open PR exists / refresh stopped) for the summary
   let _me = null;
+  // ★ Write down every PR this run PROVED exists — from the create response
+  //   (`number`) or from the primary-store idempotency hit (`r.pr`). Both are
+  //   facts about the wire; the verify step reads them off disk seconds later.
+  const receipt = (t, kind, pr) => {
+    if (!Number.isInteger(pr?.number)) return;
+    recordPrReceipt({ key: t.key, upstream: t.upstream, kind, number: pr.number, url: pr.url });
+  };
   const whoAmI = async () => {
     if (_me) return _me;
     _me = (await gh('GET', '/user')).json?.login;
@@ -549,9 +652,9 @@ if (_IS_MAIN) (async () => {
       const gate = await prGate(t, await whoAmI(), { kind: 'add' });
       if (gate.skipped) { console.log(`      ⏸ ${gate.skipped}`); gated.push({ key: t.key, why: gate.skipped }); continue; }
       const r = await openPR(t, updated);
-      if (r.skipped) console.log(`      skip: ${r.skipped}`);
+      if (r.skipped) { console.log(`      skip: ${r.skipped}`); receipt(t, 'add', r.pr); }
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked})`); console.log(`      → branch is READY — open the PR in 1 click:\n        ${r.compare}`); readyLinks.push({ key: t.key, compare: r.compare }); }
-      else { console.log(`      ✅ PR opened: ${r.url}`); opened++; }
+      else { console.log(`      ✅ PR opened: ${r.url}`); receipt(t, 'add', r); opened++; }
     } catch (e) { console.log(`      ❌ ${e.message}`); }
   }
 
@@ -573,9 +676,9 @@ if (_IS_MAIN) (async () => {
         message: 'Refresh DC Hub stats',
         body: `Updates the existing DC Hub entry to current stats: **${N_TOOLS} tools**, **${MARKETS} markets** (DC Hub Power Index), **${DEALS} M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
       });
-      if (r.skipped) console.log(`      skip: ${r.skipped}`);
+      if (r.skipped) { console.log(`      skip: ${r.skipped}`); receipt(t, 'refresh', r.pr); }
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }
-      else { console.log(`      ✅ refresh PR opened: ${r.url}`); opened++; }
+      else { console.log(`      ✅ refresh PR opened: ${r.url}`); receipt(t, 'refresh', r); opened++; }
     } catch (e) { console.log(`      ❌ ${e.message}`); }
   }
 

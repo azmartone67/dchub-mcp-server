@@ -37,7 +37,7 @@
  * Exit 1 ONLY on MISSING. A pending PR must never fail a build, or the signal
  * gets muted and the genuinely-broken case goes with it.
  */
-import { TARGETS, REFRESH_TARGETS, headBranch, ourPullRequests } from './registry-pr-submit.mjs';
+import { TARGETS, REFRESH_TARGETS, headBranch, ourPullRequests, readPrReceipts } from './registry-pr-submit.mjs';
 
 const OWNER = 'azmartone67';
 const UA = { 'User-Agent': 'dchub-registry-verify', 'Accept': 'application/vnd.github+json' };
@@ -73,7 +73,7 @@ async function isListed(t) {
  * — and it unions the index with a lag-free `head=` lookup against the pulls
  * API for the exact branch names this lane pushes.
  */
-async function ourPrs(upstream, heads) {
+async function ourPrs(upstream, heads, receipts = []) {
   // Adapt verify's one-arg fetch wrapper to the (method, path) -> {ok,json}
   // shape the shared predicate speaks. It only ever issues GETs.
   const api = async (_method, path) => {
@@ -85,7 +85,7 @@ async function ourPrs(upstream, heads) {
     } catch { return { ok: false, status: 0, json: null }; }
   };
   try {
-    return await ourPullRequests(upstream, { api, owner: OWNER, heads });
+    return await ourPullRequests(upstream, { api, owner: OWNER, heads, receipts });
   } catch { return null; }
 }
 
@@ -158,12 +158,21 @@ async function main() {
   console.log(`▶ registry-verify-listed — ${all.length} list(s)`
     + (TOKEN ? '' : ' (no token: PR state UNREADABLE)') + '\n');
 
+  // ★ The submit step is the PREVIOUS STEP of this same job, on this same
+  //   runner. Whatever it opened seconds ago is simply on disk here — no index,
+  //   no second API call, nothing to lag.
+  const receipts = readPrReceipts();
+  if (receipts.length) {
+    console.log(`  (this run's submit step recorded ${receipts.length} PR(s): `
+      + receipts.map((r) => `${r.upstream}#${r.number}`).join(', ') + ')\n');
+  }
+
   const rows = [];
   for (const t of all) {
     // BOTH heads, not just this target's kind: "did WE submit" is a question
     // about the upstream, and a target can appear in TARGETS and REFRESH_TARGETS.
     const heads = [headBranch(t, 'add'), headBranch(t, 'refresh')];
-    const [listed, prs] = await Promise.all([isListed(t), ourPrs(t.upstream, heads)]);
+    const [listed, prs] = await Promise.all([isListed(t), ourPrs(t.upstream, heads, receipts)]);
     const v = verdictFor(listed, prs, t.kind, t);
     rows.push({ key: t.key, upstream: t.upstream, kind: t.kind, ...v });
     const icon = { LISTED: '✅', PENDING: '⏳', DECLINED: '🚫', MISSING: '❌', UNREADABLE: '⚪', DECLINED_BY_US: '⛔', UNVETTED: '⏸' }[v.state];
