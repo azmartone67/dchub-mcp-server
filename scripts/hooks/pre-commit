@@ -10,6 +10,12 @@
 # by CI (red PR) or the daily job. This moves the catch to the moment you
 # commit the tool.
 #
+# ★2026-09-07 — the same check now also refuses a commit that changes
+# server.json's CONTENT without bumping its version. The official registry
+# rejects a duplicate version, so that tree publishes NOTHING and the cascade
+# source (PulseMCP / mcp.so / Glama / ToolPlex) keeps serving the old manifest.
+# It stalled the publish twice before anything asked at write time.
+#
 # Only runs when the commit actually touches server.mjs or a manifest surface,
 # so unrelated commits pay zero cost. Bypass (rarely needed) with:
 #   git commit --no-verify
@@ -25,7 +31,9 @@ esac
 if ! node scripts/sync-tools-manifest.mjs; then
   echo ""
   echo "✗ MCP manifest drift — the surfaces registries scrape are out of sync with server.mjs."
-  echo "  Fix:  npm run sync:fix   (rewrites the counts), then re-stage & commit."
-  echo "  Skip: git commit --no-verify   (not recommended — CI will still block the PR)."
+  echo "  Fix:  npm run sync:fix   (rewrites the counts AND patch-bumps server.json's"
+  echo "        version if its content moved), then re-stage & commit."
+  echo "  Skip: git commit --no-verify   (not recommended — manifest-consistency is a"
+  echo "        REQUIRED check, so it will block the PR instead)."
   exit 1
 fi
