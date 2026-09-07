@@ -10,7 +10,14 @@ on:
     paths: ['integrations/chatgpt/openapi.json', 'integrations/chatgpt/validate_actions_openapi.py']
   workflow_dispatch: {}
 jobs:
-  check:
+  # ★2026-09-07 renamed from `check`. A job with no `name:` posts its JOB ID as the
+  # status context, and `check` is one of the three REQUIRED contexts on main —
+  # owned by manifest-consistency.yml, which runs on every pull_request. This
+  # workflow is path-filtered, so on a PR touching integrations/chatgpt/openapi.json
+  # AND server.json there were TWO check runs called `check`, and which one branch
+  # protection reads is not something to leave to chance — manifest-consistency now
+  # carries the server.json version fence that has to be un-maskable.
+  openapi-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

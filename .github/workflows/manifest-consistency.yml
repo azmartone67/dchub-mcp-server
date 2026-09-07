@@ -9,7 +9,20 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # ★2026-09-07 fetch-depth: 0 is LOAD-BEARING. sync-tools-manifest.mjs now
+      # asks whether server.json's content moved since the version it declares
+      # was published (scripts/server-json-baseline.mjs), which means walking
+      # server.json's history back to the commit that set that version. That
+      # fence FAILS OPEN by design — on a depth-1 checkout it sees no history,
+      # declines to judge, and prints "did not run". This job is the REQUIRED
+      # `check` context on main, so a fence that silently declines here is the
+      # difference between blocking the stalled publish before it merges and
+      # discovering it afterwards in registry-refresh, which is what happened on
+      # 2026-08-31 and again on 2026-09-07. Read the run log: the fence prints
+      # "[server.json version fence] …" on every run, pass or fail.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with: { node-version: '22' }
       - run: node scripts/sync-tools-manifest.mjs

@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
+import { versionFence, nextPatch } from './server-json-baseline.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = process.argv.includes('--fix');
@@ -33,11 +34,22 @@ const readJSON = (f) => JSON.parse(read(f));
 // the HEALED descriptions instead of converging one run later.
 const problems = [];
 const pending = new Map();
+// Set by the server.json version fence below; reported at the end so a bump
+// (or a fence that could not run) is never silent.
+let bumped = null;
+let fenceNote = null;
 const readCur = (f) => pending.get(f) ?? read(f);
 const pend = (f, content) => pending.set(f, content);
 
 // ---- canonical version -----------------------------------------------------
-const VERSION = readJSON('server.json').version;
+// ★2026-09-07 — `let`, not `const`. The server.json block far below may BUMP this
+// (see the version fence there) when --fix is about to change the manifest's
+// content, and every DERIVED surface after that point must be written with the
+// bumped number, not the one that was on disk when this line ran. Nothing between
+// here and that block reads VERSION, so the reassignment cannot half-apply — the
+// 2.12.1 split-brain (registry advertising one version while the running server
+// reported another) is exactly what a partially-propagated bump looks like.
+let VERSION = readJSON('server.json').version;
 
 // ---- canonical tool list (parsed from server.mjs) --------------------------
 // Matches: trackedTool(srv, 'name', '<string literal>' …  — handles single OR
@@ -471,17 +483,89 @@ const names = new Set(tools.map((t) => t.name));
 
 // server.json — the OFFICIAL-registry publish source (cascades to the GitHub MCP
 // Registry mirror). Its description is evergreen (no tool count to drift); the only
-// count lives in _meta.toolCount, so keep just that honest daily. We do NOT bump
-// server.json.version here — the canonical version is operator-owned. When this fix
-// changes server.json, daily-manifest-sync.yml auto-publishes a PUBLISH-ONLY patch
-// bump (scripts/registry-autopublish.mjs) so the listing refreshes the SAME DAY.
+// count lives in _meta.toolCount, so keep just that honest daily.
+//
+// ★2026-09-07 — THIS BLOCK NOW OWNS THE VERSION BUMP, and that is the whole fix.
+// It used to say "We do NOT bump server.json.version here — the canonical version
+// is operator-owned", and leave `version` alone while rewriting toolCount. So the
+// ONE command a contributor is told to run (`npm run sync:fix`) produced exactly
+// the tree the official registry refuses: new content, old version. The publish
+// no-ops, the workflow goes green or red AFTER the commit, and the registry — the
+// cascade source for PulseMCP / mcp.so / Glama / ToolPlex — keeps serving the old
+// manifest. It stalled twice: 2026-08-31 (toolCount 82 -> 83) and 2026-09-07
+// (c5b45b5, 86 -> 88, three failed registry-refresh runs, repaired by hand in
+// #376). a1df751/#370 is the same shape a week earlier.
+//
+// Ownership is not what changed — the OPERATOR still decides major and minor, and
+// still edits this file directly. What changed is that a PATCH bump is no longer
+// something a human has to remember at the exact moment a machine rewrote the
+// content underneath them. The bump fires only when the content actually moved
+// away from what the registry already holds under this number (see the fence
+// below), so an unchanged tree still publishes nothing and burns no version.
+//
+// ★ scripts/registry_version_bump_guard.py is UNCHANGED and stays the backstop:
+// it is the only reason either occurrence was ever noticed, and it judges the
+// COMMITTED tree, which this cannot. Both read the same predicate out of
+// scripts/server-json-baseline.mjs / the guard's check(), and
+// test/registry-version-bump-write-time.test.mjs pins that they agree.
+//
+// ★ The canon-quantity heal server.json used to receive from the COVERAGE loop
+// far below happens HERE instead. The fence must judge the bytes this run
+// actually leaves on disk, and one file must have ONE pend and ONE write — the
+// same rule the mcp-server.json description block states below.
 {
-  const sj = readJSON('server.json');
+  const SJ = 'server.json';
+  const diskText = read(SJ);
+  const sj = JSON.parse(diskText);
   const meta = sj._meta && sj._meta['io.modelcontextprotocol.registry/publisher-provided'];
   if (meta && meta.toolCount !== COUNT) {
-    problems.push(`server.json _meta.toolCount ${meta.toolCount} != ${COUNT}`);
-    if (FIX) { meta.toolCount = COUNT; pend('server.json', JSON.stringify(sj, null, 2) + '\n'); }
+    problems.push(`${SJ} _meta.toolCount ${meta.toolCount} != ${COUNT}`);
+    // Healed in BOTH modes, in memory. CHECK mode never writes it — it heals so
+    // the fence below asks its question about the tree --fix would produce,
+    // rather than reporting "bump me" one run later than the count drift.
+    meta.toolCount = COUNT;
   }
+  // Heal the canon quantities ONCE, then treat the version as a pure parameter.
+  // Rendering twice (before and after a bump) would run applyQuantities twice and
+  // report every stale phrase in this file twice — and a doubled problem line
+  // reads as two stale surfaces, the exact complaint the mcp-server.json block
+  // below records. Spreading over an existing key keeps its position, and this
+  // file round-trips through JSON byte-for-byte (asserted by the fence itself:
+  // an unchanged tree must produce text identical to what is on disk).
+  const healed = JSON.parse(applyQuantities(SJ, JSON.stringify(sj, null, 2) + '\n', QUANTITIES, false));
+  const renderAt = (v) => JSON.stringify({ ...healed, version: v }, null, 2) + '\n';
+  let text = renderAt(VERSION);
+
+  // The fence strips `version` before comparing, so which version `text` carries
+  // here cannot change its verdict — only the CONTENT can.
+  const fence = versionFence(ROOT, VERSION, text);
+  if (fence.drifted) {
+    const next = nextPatch(VERSION);
+    if (!next) {
+      problems.push(`${SJ}: ${fence.reason}, and version "${VERSION}" is not a bare x.y.z, `
+        + 'so it cannot be patch-bumped automatically — bump it by hand.');
+    } else if (FIX) {
+      VERSION = next;
+      text = renderAt(next);
+      bumped = `${VERSION} (content moved since ${fence.commit.slice(0, 7)})`;
+    } else {
+      problems.push(`${SJ}: ${fence.reason}, so the official registry already holds ${VERSION} `
+        + `with DIFFERENT content. The next publish is rejected as a duplicate and the registry `
+        + `keeps serving the OLD manifest — silently. Fix: node scripts/sync-tools-manifest.mjs `
+        + `--fix (bumps to ${next} and carries it to every publish surface). `
+        + `See: git diff ${fence.commit.slice(0, 7)} -- ${SJ}`);
+    }
+  }
+  // ★ Say so out loud, on EVERY run and in BOTH modes. This fence FAILS OPEN on
+  // shallow history (see server-json-baseline.mjs), and a check that can silently
+  // decline to run is indistinguishable from one that ran and passed — which is
+  // the whole reason the stall went unnoticed twice. manifest-consistency.yml
+  // carries fetch-depth: 0 so this line reads "unchanged since …" rather than a
+  // did-not-run reason; if it ever reads the latter, the fence is off in CI.
+  fenceNote = fence.reason;
+  // Only pend a real change: an unconditional write would list server.json in
+  // every run's "wrote:" line and make a no-op look like a heal.
+  if (FIX && text !== diskText) pend(SJ, text);
 }
 
 // mcp-server.json — the manifest that feeds registry scrapes
@@ -802,7 +886,12 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   const COVERAGE = [
     'README.md', 'smithery.yaml', 'llms-install.md', 'REGISTRY-LISTINGS.md',
     'canonical/github_description.txt',
-    'server.json', 'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
+    // ★2026-09-07: 'server.json' is NOT here any more. It is healed with the
+    // identical applyQuantities() call inside its own block above, because the
+    // version fence there has to judge the file's FINAL content and a second
+    // pend() from this loop would both clobber that decision and double-report
+    // the same stale phrase.
+    'integrations/chatgpt/openapi.json', 'integrations/chatgpt/instructions.txt',
     'scripts/tier3_presence.sh', 'skills/README.md',
     'skills/dc-hub-data-center-intelligence/SKILL.md',
     // ★2026-07-30 additions — all pure current-claim copy:
@@ -899,11 +988,21 @@ if (facts) {
 // ---- apply / report --------------------------------------------------------
 if (FIX) {
   for (const [f, content] of pending) fs.writeFileSync(path.join(ROOT, f), content);
+  // ★ The bump is announced BEFORE the summary line, because a version change is
+  // the one thing here a reviewer must not discover from a diff. It also names
+  // every surface that moved with it — the 2.12.1 incident was a bump that
+  // reached seven surfaces and missed server.mjs, so the running server said
+  // 2.12.0 while the registry advertised 2.12.1.
+  if (fenceNote) console.log(`[server.json version fence] ${fenceNote}`);
+  if (bumped) console.log(`↑ server.json version bumped to ${bumped} — the registry rejects a duplicate version, so unchanged content + changed manifest = a silent publish no-op.`);
   console.log(`✓ synced to v${VERSION} / ${COUNT} tools / ${P.facilities} facilities · ${P.countries} countries · ${P.deals} deals · ${P.markets} markets — wrote: ${[...pending.keys()].join(', ') || '(nothing)'}`);
   if (factProblems.length) console.warn('⚠ FACTS DRIFT (not auto-fixable — re-run dchub-backend/mcp_facts_export.py, then edit the surface):\n  - ' + factProblems.join('\n  - '));
   process.exit(0);
 }
 console.log(`canonical: v${VERSION} / ${COUNT} tools / ${P.facilities} facilities · ${P.countries} countries · ${P.deals} deals · ${P.markets} markets${SNAP ? '' : ' (snapshot missing — fallback constants)'}`);
+// Always printed, pass or fail. A fence that fails open must SAY it failed open;
+// "did not run" and "ran and passed" look identical in a green log otherwise.
+if (fenceNote) console.log(`[server.json version fence] ${fenceNote}`);
 const allProblems = [...problems, ...factProblems];
 if (allProblems.length) { console.error('MANIFEST/FACTS DRIFT:\n  - ' + allProblems.join('\n  - ') + '\n\nTool drift → node scripts/sync-tools-manifest.mjs --fix. Facts drift → match canonical/mcp_facts.json.'); process.exit(1); }
 console.log('✓ all manifest + facts surfaces consistent');

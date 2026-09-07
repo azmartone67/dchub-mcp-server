@@ -184,3 +184,53 @@ export function fingerprintDiff(before, after) {
   for (const rel of after.keys()) if (!before.has(rel)) changed.push(`${rel} (new)`);
   return changed;
 }
+
+/**
+ * A throwaway directory — optionally an empty git repo — for tests that need to
+ * BUILD a tree rather than copy this one.
+ *
+ * ★2026-09-07. It lives here for one reason: smithery-canon-guard's static
+ * write-scan flags ANY test file containing `fs.writeFileSync(` / `fs.rmSync(`
+ * and friends, with exactly one exemption — this helper. That rule is coarse on
+ * purpose (a source scan cannot tell os.tmpdir() from the working tree, and the
+ * race it closes is worth more than the convenience), so the right answer to
+ * "my writes are already safe" is to route them through here, never to widen
+ * the exemption list. test/registry-version-bump-write-time.test.mjs needs
+ * synthetic git repos with a handful of server.json commits; that is what this
+ * gives it, with the same refuse-outside-the-sandbox rule createRepoSandbox
+ * enforces.
+ *
+ * @param {string} label            temp-dir prefix
+ * @param {{git?: boolean}} [opts]  git:false leaves it a plain directory
+ * @returns {{root: string, write: (rel: string, content: string) => void,
+ *            git: (...args: string[]) => string, commit: (msg: string, ...paths: string[]) => void,
+ *            cleanup: () => void}}
+ */
+export function createScratchRepo(label = 'dchub-scratch', { git: init = true } = {}) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `${label}-`)));
+  const run = (...args) => execFileSync('git', args, {
+    cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (init) {
+    run('init', '-q', '-b', 'main');
+    run('config', 'user.email', 'scratch@example.com');
+    run('config', 'user.name', 'scratch');
+  }
+  return {
+    root,
+    write(rel, content) {
+      const abs = path.resolve(root, rel);
+      if (abs !== root && !abs.startsWith(root + path.sep)) {
+        throw new Error(`refusing to write OUTSIDE the scratch repo: ${abs}`);
+      }
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, content);
+    },
+    git: run,
+    commit(msg, ...paths) {
+      run('add', ...(paths.length ? paths : ['-A']));
+      run('commit', '-q', '-m', msg);
+    },
+    cleanup() { fs.rmSync(root, { recursive: true, force: true }); },
+  };
+}
