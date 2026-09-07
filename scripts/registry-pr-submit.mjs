@@ -174,6 +174,19 @@ export const TARGETS = [
     alphabetical: false,
     entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
   },
+  // ── AUTO-DISCOVERED RankSpotAI/awesome-seo-mcp (★85) — VET BEFORE ENABLING ──
+  // A curated list of MCP servers for SEO. Search Console, keywords, backlinks, crawling, SERPs and AI s
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-seo-mcp', upstream: 'RankSpotAI/awesome-seo-mcp', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
