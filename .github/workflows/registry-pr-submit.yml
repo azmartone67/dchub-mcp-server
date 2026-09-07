@@ -73,6 +73,18 @@ jobs:
       #   lane genuinely did not submit). A PR pending a maintainer is reported,
       #   not failed — failing on it would train everyone to ignore this step,
       #   and the genuinely-broken case would go with it.
+      #
+      # ★2026-09-07 — THESE TWO STEPS ARE NOW COUPLED BY A FILE, ON PURPOSE.
+      #   The submit step writes each PR number GitHub handed it to
+      #   state/registry-pr-receipts.json (gitignored; scoped to GITHUB_RUN_ID
+      #   so a receipt cannot outlive its run), and this step reads it. SAME
+      #   JOB, same runner — so a PR opened four seconds ago is just on disk,
+      #   with nothing to lag and no request to fail. That is the case run
+      #   34097298531 got wrong, and the one the two GitHub-side lookups can
+      #   still only answer "I could not look" for when both are blind.
+      #   Splitting these into separate jobs loses the receipt handoff; the
+      #   verifier degrades to the head-filtered /pulls read (#379) rather than
+      #   breaking, but it stops being correct-by-construction.
       - name: Verify the listings actually landed
         if: always()
         env:
