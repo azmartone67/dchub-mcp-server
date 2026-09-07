@@ -441,7 +441,24 @@ export async function ourPullRequests(upstream, { api = gh, owner, heads = [] } 
     .map((p) => ({ ...p, indexed: indexed.has(p.number) }))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  if (!all.length && (searched === null || headUnreadable)) return null;
+  // ★2026-09-07, second pass. `!all.length` was the wrong test for "did every
+  //   source get to speak". A blind source is blind whether or not the readable
+  //   one happened to return something — what matters is whether what it
+  //   returned SETTLES the question. Only an open PR (PENDING) or a
+  //   closed-unmerged one (DECLINED) does. History that supports neither falls
+  //   through verdictFor() to MISSING, the one verdict that exits 1.
+  //
+  //   Measured against this file at 8f564dc: search readable and holding only
+  //   an old MERGED PR (#1136 is exactly that shape), head lookup 500 —
+  //   `all` = [#1136 closed+merged], non-empty, so the guard did not fire, and
+  //   a target whose entry had been removed upstream read MISSING while the
+  //   ONLY source that can see a just-opened PR had failed. Same false red as
+  //   the index lag, one partial API failure away.
+  //
+  //   When `all` is empty this is identical to the old condition — a widening,
+  //   not a change of meaning.
+  const settled = all.some((p) => p.state === 'open' || (p.state === 'closed' && !p.merged_at));
+  if (!settled && (searched === null || headUnreadable)) return null;
   return all;
 }
 
