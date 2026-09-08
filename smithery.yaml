@@ -195,7 +195,7 @@ pricing:
   free: "Free dev key (call claim_free_key — no email) — 10 calls/day, all 88 tools"
   starter: "$9/mo — 200 calls/day, unlocks paid tools"
   developer: "$49/mo — 500 calls/day, all 88 tools, full results"
-  pro: "$299/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
+  pro: "$99/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
   enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
 
 gated_tools:

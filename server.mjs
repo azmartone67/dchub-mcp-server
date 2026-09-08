@@ -129,8 +129,8 @@ import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL } from './lib/tier-canon.mjs';
-export { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL };
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+export { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL, PRO_URL };
 
 // r-alias (2026-07-10): agents that CAN'T read tools/list (or don't) guess our
 // tool surface and invent plausible-but-wrong names. A live cross-platform test
@@ -1111,7 +1111,7 @@ const _GO_PLAN_BY_LINK = {
   '9B69AU08y2FfbSR55UaZi0i': 'metered',    // $10 one-time = 1,000 calls
   '8x2dRa5sS0x75uteGuaZi0g': 'starter',    // $9/mo
   '7sY5kE8F4fs13ml0PEaZi0c': 'developer',  // $49/mo
-  '7sY7sM9J8enX7CB69YaZi0l': 'pro',        // $299/mo
+  '7sY7sM9J8enX7CB69YaZi0l': 'pro',        // RETIRED $299/mo link — kept for legacy click attribution
 };
 // r-price-canon (2026-09-02): the founding licence rides the SAME measured rail.
 // Its link comes from the canonical ladder snapshot (never a literal here);
@@ -1119,6 +1119,11 @@ const _GO_PLAN_BY_LINK = {
 {
   const m = FOUNDING_URL && /buy\.stripe\.com\/([A-Za-z0-9]+)$/.exec(FOUNDING_URL);
   if (m && !_GO_PLAN_BY_LINK[m[1]]) _GO_PLAN_BY_LINK[m[1]] = 'founding';
+  // The CURRENT pro link, same rail. The literal above ('7sY7sM...Zi0l') is the
+  // RETIRED $299 link and stays mapped so clicks on links already in the wild
+  // still attribute rather than passing through _goUrl unmeasured.
+  const mp = PRO_URL && /buy\.stripe\.com\/([A-Za-z0-9]+)$/.exec(PRO_URL);
+  if (mp && !_GO_PLAN_BY_LINK[mp[1]]) _GO_PLAN_BY_LINK[mp[1]] = 'pro';
 }
 function _goUrl(url) {
   try {
@@ -1199,16 +1204,17 @@ export function _keyBoundSubUrl(url, apiKey) {
   } catch (_) { return url; }
 }
 export function _keyBoundPackUrl(apiKey) { return _goUrl(_stripeWithKey(CREDITS_URL, apiKey)); }
-// The ONE "upgrade this key" link: founding while the programme is open (the
-// only subscription SKU with sales — 10 of 14 active external subs), else
-// Developer. Pro access either way for founding (backend rule: founding == pro).
+// The ONE "upgrade this key" link: Pro at $99 — the price that sells (8 of 43
+// checkout opens closed at $99; every price above it closed 0 of 76). This was
+// FOUNDING_URL while that programme was open; founding is retired as an OFFER
+// (r-price-collapse, owner call 2026-09-05) and new buyers are sold Pro at the
+// same $99 on a different link, so the webhook stamps plan_name='pro'.
 export function _keyBoundUpgradeUrl(apiKey) {
-  return _keyBoundSubUrl(FOUNDING_URL || (DEVELOPER_URL + promoParam()), apiKey);
+  return _keyBoundSubUrl(PRO_URL || (DEVELOPER_URL + promoParam()), apiKey);
 }
 export function _keyBoundTiers(apiKey) {
   return {
     starter:   _keyBoundSubUrl(STARTER_URL, apiKey),
-    ...(FOUNDING_URL ? { founding: _keyBoundSubUrl(FOUNDING_URL, apiKey) } : {}),
     developer: _keyBoundSubUrl(DEVELOPER_URL + promoParam(), apiKey),
     pro:       _keyBoundSubUrl(PRO_URL, apiKey),
   };
@@ -4373,10 +4379,10 @@ export async function buildDepthTease(name, result, ctx, tier) {
     // webhook branch, one click shorter, and the click is measured.
     const _tiers = _keyBoundTiers(ctx.api_key);
     const _starterKeyUrl = _tiers.starter;
-    teased._upgrade.upgrade_this_key_url   = _tiers.founding || _starterKeyUrl;
+    teased._upgrade.upgrade_this_key_url   = _tiers.pro || _starterKeyUrl;
     teased._upgrade.upgrade_this_key_pitch =
-      (_tiers.founding
-        ? 'Upgrade THIS key in place — Founding ' + _priceLabel('founding') + ' (Pro access while seats last), or Starter '
+      (_tiers.pro
+        ? 'Upgrade THIS key in place — Pro ' + _priceLabel('pro') + ' (everything), or Starter '
           + _priceLabel('starter') + ' (' + _callsPerDay('starter') + ' calls/day), no key swap: the instant your '
         : 'Upgrade THIS key in place — Starter ' + _priceLabel('starter') + ' (' + _callsPerDay('starter') + ' calls/day), no key swap: the instant your ')
       + 'human pays, this same key unlocks and you just call `' + name + '` again (no reconnect, no re-config).';
@@ -4394,7 +4400,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
       + 'pay once and this same key keeps returning full data; the cheapest durable unlock.';
     teased._upgrade.message += ' — Or bind a paid upgrade to THIS key (no swap, no reconnect): '
       + '💳 $10 one-time = 1,000 API calls → ' + _packKeyUrl
-      + (_tiers.founding ? '  ·  or Founding ' + _priceLabel('founding') + ' (Pro access) → ' + _tiers.founding : '')
+      + (_tiers.pro ? '  ·  or Pro ' + _priceLabel('pro') + ' (everything) → ' + _tiers.pro : '')
       + '  ·  or Starter ' + _priceLabel('starter') + ' → ' + _starterKeyUrl
       + ' (the moment your human pays, this same key unlocks).';
   }
@@ -5777,8 +5783,9 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   let trimmed = parsed;
   try { trimmed = (typeof trimForTrial === 'function') ? trimForTrial(parsed, toolName) : parsed; } catch(e) {}
   // r67-conv (2026-06-02): fixed two bugs here — (1) "Get Pro for $49/mo" was
-  // wrong ($49 = Developer; Pro = $299 — canonical in tier_registry.py /
-  // _stripe_links.py); (2) the "free dev key" link pointed at
+  // wrong ($49 = Developer; Pro was $299 at the time — canonical in
+  // tier_registry.py / _stripe_links.py, and $99 since r-price-collapse
+  // 2026-09-05); (2) the "free dev key" link pointed at
   // /api/v1/redeem/<session_id>, which returns "Invalid session ID" for an MCP
   // session id (that path expects a DCM- pair code, not a session id) — a dead
   // CTA. Now: accurate prices → the working /pricing page, and the honest note
@@ -5854,10 +5861,12 @@ function phase9L_clean_preview(cta, body) {
 // through to the generic header (which now mentions $9 Starter alongside
 // $49 Developer — was previously $49-only, missing the cheapest entry).
 //
-// Stripe Payment Links (verified 2026-05-25 against routes/_stripe_links.py):
+// Stripe Payment Links. Re-verified 2026-09-08 by loading each live Stripe
+// page and reading the amount it actually charges — not by reading a comment:
 //   Starter $9      → 8x2dRa5sS0x75uteGuaZi0g
 //   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
-//   Pro $299        → 7sY7sM9J8enX7CB69YaZi0l
+//   Pro $99         → dRm28s2gGcfP6yx0PEaZi0p  (canon; PRO_URL reads this)
+//   Pro $299        → 7sY7sM9J8enX7CB69YaZi0l  RETIRED — do not re-point here
 const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();
 
 // r-pack10 (2026-06-25, owner): the old usage-based / metered SKU is RETIRED.
@@ -5868,7 +5877,11 @@ const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoPara
 const METERED_URL = 'https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i';
 // r-unlock (2026-06-16): direct Pro Stripe link (canonical — matches
 // routes/_stripe_links.py). DEVELOPER_URL already declared module-level above.
-const PRO_URL = 'https://buy.stripe.com/7sY7sM9J8enX7CB69YaZi0l';   // $299/mo
+// PRO_URL is imported from lib/tier-canon.mjs (canonical/tier_limits.json).
+// It was a literal here pointing at the $299 payment link; Pro has been $99
+// since r-price-collapse (2026-09-05), so that literal sent every Pro buyer
+// to a checkout charging 3x. Verified live 2026-09-08 against both Stripe
+// pages. Do not restate it here again — read the snapshot.
 // r-pack10 (2026-06-25, owner): the SINGLE $10 / 1,000 API-call one-time PACK —
 // the only one-time credit pack now (the old $1/100 metered SKU and the old
 // $5/1,000 pack are both RETIRED, replaced by this one $10 charge). One click,
@@ -12372,8 +12385,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API calls (no subscription) — the cheapest unlock.',
               starter_url: _stripeWithAnon(_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid)),
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
-              ...(FOUNDING_URL ? { founding_url: _subCheckoutUrl(FOUNDING_URL, _sid),
-                                   founding_hint: 'Founding member ' + _priceLabel('founding') + ' — Pro access while seats last (the plan most humans choose).' } : {}),
+              ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
+                              pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
               ...promoSC(),
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
@@ -12509,8 +12522,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 upgrade_url: UPGRADE_URL,
                 starter_url: _stripeWithAnon(_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid)),
                 developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
-                ...(FOUNDING_URL ? { founding_url: _subCheckoutUrl(FOUNDING_URL, _sid),
-                                     founding_hint: 'Founding member ' + _priceLabel('founding') + ' — Pro access while seats last (the plan most humans choose).' } : {}),
+                ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
+                                pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
                 ...promoSC(),
               };
               // r-fresh-zero (2026-07-01): this response hands out a checkout link —
@@ -17867,9 +17880,8 @@ function createServer(descOverrides, instructionsTail) {
       const starter   = _subCheckoutUrl(STARTER_URL,   _sid);
       const developer = _subCheckoutUrl(DEVELOPER_URL, _sid);
       const pro       = _subCheckoutUrl(PRO_URL,       _sid);
-      // r-price-canon (2026-09-02): the founding $99 licence — the SKU that
-      // sells — was absent from this ladder (live 00:33Z: $10/$9/$49/$299).
-      const founding  = FOUNDING_URL ? _subCheckoutUrl(FOUNDING_URL, _sid) : null;
+      // r-price-collapse (2026-09-05): founding is RETIRED as an offer. `pro`
+      // above is the same $99, on the link that stamps plan_name='pro'.
       const reason = (a.reason || '').toString().trim().slice(0, 240);
       const _why = reason
         ? '\nYou asked me for: *' + reason + '* — that needs DC Hub’s full depth.\n'
@@ -17900,7 +17912,6 @@ function createServer(descOverrides, instructionsTail) {
         '🔓 **I can unlock full DC Hub data for you.** I can’t enter a card myself, but here’s a one-click link — ' + _afterPay + ':' + _why + '\n' +
         '**💳 $10 one-time = 1,000 API calls** (no subscription — less than two coffees, and DataCenterHawk is an annual contract) → ' + credits + '\n\n' +
         '*Other options:* ' + [
-          founding && (_priceLabel('founding') + ' Founding (Pro access, while seats last) → ' + founding),
           _priceLabel('starter') + ' Starter → ' + starter,
           _priceLabel('developer') + ' Developer → ' + developer,
           _priceLabel('pro') + ' Pro → ' + pro,
@@ -17947,7 +17958,6 @@ function createServer(descOverrides, instructionsTail) {
                             best_for: 'autonomous agents (no card-holder in the loop)',
                             how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
             { id: 'credits',   label: '$10 one-time — 1,000 API calls', best_for: 'cheapest human start, no subscription', checkout_url: credits },
-            ...(founding ? [{ id: 'founding', label: _priceLabel('founding'), note: 'Founding member — Pro access (everything) at the founding price while seats last', checkout_url: founding }] : []),
             { id: 'starter',   label: _priceLabel('starter'),   calls_per_day: _rungNum('starter'), checkout_url: starter },
             { id: 'developer', label: _priceLabel('developer'), note: 'full depth at scale', checkout_url: developer },
             { id: 'pro',       label: _priceLabel('pro'),       note: 'everything', checkout_url: pro },
@@ -18042,7 +18052,7 @@ function createServer(descOverrides, instructionsTail) {
      '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
-     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 20,900+ across 170+ countries.\n\n**Infrastructure:** 330,000+ mapped assets — 127k substations, 95k transmission lines, 66k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 20,900+ across 170+ countries.\n\n**Infrastructure:** 330,000+ mapped assets — 127k substations, 94k transmission lines, 66k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
 
   // ── r-promres (2026-07-18): recipe PROMPTS + reference RESOURCES ──────────
   // The two MCP capabilities registry scorecards (LobeHub et al.) still mark
