@@ -1,5 +1,5 @@
 {
-  "_comment": "DERIVED — do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs",
+  "_comment": "DERIVED \u2014 do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs",
   "source": "/api/v1/tiers",
   "calls_per_day": {
     "anonymous": 5,
@@ -12,9 +12,8 @@
   },
   "price_usd_month": {
     "starter": 9,
-    "founding": 99,
     "developer": 49,
-    "pro": 299,
+    "pro": 99,
     "team": 699,
     "enterprise": null
   },
@@ -22,7 +21,7 @@
     "starter": "https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g",
     "founding": "https://buy.stripe.com/14A9AUcVk4Nn1edcymaZi0o",
     "developer": "https://buy.stripe.com/7sY5kE8F4fs13ml0PEaZi0c",
-    "pro": "https://buy.stripe.com/7sY7sM9J8enX7CB69YaZi0l",
+    "pro": "https://buy.stripe.com/dRm28s2gGcfP6yx0PEaZi0p",
     "team": "https://buy.stripe.com/14AbJ2bRga7H0a98i6aZi0m"
   }
 }
