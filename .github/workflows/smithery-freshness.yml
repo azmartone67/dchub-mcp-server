@@ -34,7 +34,14 @@ name: smithery freshness heartbeat
 
 on:
   schedule:
-    - cron: '23 14 * * *'   # DAILY 14:23 UTC. INSURANCE re-publish (keeps verified/deploy/tool-catalog fresh); recency ≈ 0 for rank, so this does NOT hold #1 — relevance does. Local daily LaunchAgent is the redundant backup.
+    # ── r-stop-the-rank-chase (2026-09-07): DAILY -> WEEKLY.
+    # KEPT, unlike the four rank-chasing schedules disabled in this PR, because
+    # this one is not a rank lever and never claimed to be — its own header says
+    # recency is ~0 for Smithery rank. What it buys is INSURANCE: the publish
+    # re-scans the live server so verified / deployment / tool-catalog stay
+    # healthy, and losing `verified` on a live listing is a real regression.
+    # Insurance does not need 7 runs a week to do that, so this drops 6 of 7.
+    - cron: '23 14 * * 1'   # WEEKLY Monday 14:23 UTC (was DAILY). INSURANCE re-publish (keeps verified/deploy/tool-catalog fresh); recency ≈ 0 for rank, so this does NOT hold #1 — relevance does. Local daily LaunchAgent is the redundant backup.
   workflow_dispatch:
 
 permissions:

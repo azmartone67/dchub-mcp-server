@@ -1,27 +1,30 @@
 // =============================================================================
-// Registry onboarding: DISCOVER must be scheduled before PR-SUBMIT
+// Registry onboarding: the ordering guard SURVIVES its own schedules
 // -----------------------------------------------------------------------------
-// The two halves of auto-onboarding a new MCP partner:
+// ORIGINAL PURPOSE (2026-08-30). Two halves of auto-onboarding a new MCP
+// partner: registry-discover crawls for new curated lists and files a stub PR
+// into pr-submit's TARGETS; registry-pr-submit opens the listing PR to each
+// TARGET. They ran in the WRONG ORDER — submit 07:30, discover 07:40 — so
+// discovery could not reach the submit run it feeds, by construction. This
+// test held the order.
 //
-//   registry-discover.yml    crawls for NEW curated MCP lists, files a stub PR
-//                            adding each candidate to pr-submit's TARGETS
-//   registry-pr-submit.yml   opens the listing PR to every configured TARGET
+// 2026-09-07 — r-stop-the-rank-chase. BOTH schedules were removed. The channel
+// they serve produced, over 30 days on production: 1 install-page key minted
+// (client_name `verify-durability` — our own probe), 0 calls, 0 returns; and
+// 0 of 2 honest paid sales bridged to any MCP signal. The workflows stay
+// runnable via workflow_dispatch; only the cron is gone.
 //
-// Measured 2026-08-30, they ran in the WRONG ORDER: pr-submit at Monday 07:30,
-// discover at Monday 07:40 — ten minutes later. Discovery therefore could not
-// reach the submit run it feeds, by construction. Every candidate found on a
-// Monday had already missed that Monday's window and waited a full week.
-//
-// ★ This ordering is necessary, NOT sufficient, and the test says so rather
-// than implying a fix it did not make: a candidate still clears a HUMAN vet
-// between the two — discover's stub PR must be MERGED into TARGETS before
-// pr-submit acts on it. On 2026-08-29 the submission queue had held one item
-// for 32 days; that is the review step, not this schedule. What the order
-// buys is that discovery is no longer structurally guaranteed to miss.
+// ★ THE GUARD IS NOT DELETED, IT IS REPOINTED. An ordering assertion over two
+// unscheduled workflows is vacuous — the old `weeklyCronMinutes()` would have
+// failed on "no '- cron:' schedule line found", and the tempting fix (delete
+// the file) silently discards the constraint. If either workflow is ever
+// re-scheduled, the ordering requirement comes back with it and nothing would
+// have been left to say so. So this now asserts the CURRENT state and fails
+// loudly, with instructions, the moment that state changes.
 //
 // Why a test and not a comment: both files already carried a comment naming
-// their relationship ("right after pr-submit"), and that comment described the
-// broken order approvingly for six weeks. A comment cannot fail.
+// their relationship, and that comment described the broken order approvingly
+// for six weeks. A comment cannot fail.
 // =============================================================================
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -50,31 +53,44 @@ describe('registry onboarding cron order', () => {
   const discover = wf('registry-discover.yml');
   const submit = wf('registry-pr-submit.yml');
 
-  it('discovery is scheduled before submission', () => {
-    const d = weeklyCronMinutes(discover, 'registry-discover.yml');
-    const s = weeklyCronMinutes(submit, 'registry-pr-submit.yml');
-    expect(
-      d,
-      `registry-discover is scheduled AFTER registry-pr-submit ` +
-        `(discover=${d}, submit=${s}, minutes-of-week). Discovery feeds ` +
-        `submission's TARGETS, so running it second means anything it finds ` +
-        `misses that week's submit run by construction — the exact defect ` +
-        `fixed on 2026-08-30.`,
-    ).toBeLessThan(s);
+  // A workflow is "scheduled" iff it has an ACTIVE `- cron:` line. The
+  // disabling PR left the original crons in place as comments so restoring
+  // them is one edit, so this must not match a commented line.
+  const activeCrons = (yaml) =>
+    yaml.split('\n')
+      .filter((l) => !l.trim().startsWith('#'))
+      .filter((l) => /^\s*-\s*cron:/.test(l));
+
+  it('both onboarding workflows are dispatch-only', () => {
+    for (const [name, yaml] of [['registry-discover.yml', discover],
+                                ['registry-pr-submit.yml', submit]]) {
+      expect(
+        activeCrons(yaml),
+        `${name} has regained a schedule. That is allowed — but the ordering ` +
+          `constraint this file was written for comes BACK with it: discovery ` +
+          `feeds submission's TARGETS, so discover must run BEFORE pr-submit ` +
+          `in minutes-of-week. Restore the weeklyCronMinutes() comparison ` +
+          `(see git history for this file) rather than deleting this test.`,
+      ).toEqual([]);
+      expect(yaml, `${name} lost workflow_dispatch — it is now unrunnable`)
+        .toMatch(/^\s*workflow_dispatch:/m);
+    }
   });
 
-  it('both run on the same weekday, so the order is meaningful', () => {
-    const dow = (yaml) =>
-      yaml.match(/^\s*-\s*cron:\s*['"]\S+\s+\S+\s+\S+\s+\S+\s+(\S+)['"]/m)?.[1];
-    expect(
-      dow(discover),
-      'discover and pr-submit run on different weekdays; the ordering ' +
-        'assertion above would still pass while the real gap became a week.',
-    ).toBe(dow(submit));
+  it('the original crons are preserved as comments, so restoring is one edit', () => {
+    expect(discover, 'registry-discover.yml lost its commented-out cron')
+      .toMatch(/#\s*-\s*cron:\s*'30 7 \* \* 1'/);
+    expect(submit, 'registry-pr-submit.yml lost its commented-out cron')
+      .toMatch(/#\s*-\s*cron:\s*'40 7 \* \* 1'/);
   });
 
-  it('neither file still describes discovery as following submission', () => {
-    // The stale comment that made the wrong order look intentional.
-    expect(discover).not.toMatch(/right after pr-submit/i);
+  it('the stale-number guard is NOT disabled', () => {
+    // registry-refresh's first job fails the build if a forbidden/stale figure
+    // ($324B, wrong facility counts) reappears in the source files the public
+    // registries pull from. That is correctness, not rank, and it stays.
+    expect(activeCrons(wf('registry-refresh.yml')).length,
+      'registry-refresh lost its schedule — the stale-number guard that keeps ' +
+      'retracted figures off journalist-facing registry pages no longer runs',
+    ).toBeGreaterThan(0);
   });
 });
