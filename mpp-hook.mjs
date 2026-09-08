@@ -101,6 +101,44 @@ const MPP_PRICE = {
   // overlapped. Priced at the $0.50 Stripe SPT fiat minimum (x402's $0.10 is USDC,
   // which has no fiat floor — a sub-$0.50 SPT would be rejected by Stripe).
   get_grid_intelligence: '0.50', get_fiber_intel: '0.50', get_market_intel: '0.50',
+  // ── r-mpp-refused-coverage (2026-09-08) ─────────────────────────────────
+  // MEASURED on mcp_call_log, 30d, external, with self-traffic AND harvesters
+  // removed: 2,580 refusals, and **67.8% of them (1,749) were on tools with no
+  // autonomous exit at all**. Only 32.2% sat on this rail. So the funnel's
+  // standing "agents don't pay" reads over a population that, two times in
+  // three, COULD NOT pay — the wall told them to relay to a human or nothing.
+  // `get_interconnection_queue` — the single most-refused tool in the
+  // catalogue, and the highest-value siting question we answer ("when can I
+  // get power") — returned machine_payable:false.
+  //
+  // The seven added here are exactly the non-payable tools in that measured
+  // top-12, no others; refusals in the window:
+  //   get_energy_prices 144 · get_water_risk 133 · get_renewable_energy 133
+  //   get_grid_data 127 · rank_markets 127 · search_facilities 116
+  //   get_interconnection_queue 112
+  // Coverage of refusals moves 32.2% -> ~67%.
+  //
+  // ★ ADDITIVE ON PURPOSE. This adds an exit; it removes no free access,
+  // raises no cap and changes no gate. The three prior attempts on this funnel
+  // all made the OFFER more reachable and each still read zero, so nothing
+  // here should be read as expecting revenue on its own — it removes a
+  // structural reason the number cannot move, which is a different claim.
+  //
+  // ★ PRICE IS THE SAME $0.50 for all seven — the Stripe SPT fiat minimum
+  // named above, not a per-tool valuation. A sub-floor price would issue a
+  // challenge Stripe rejects: an agent that agreed to pay, billed nothing, and
+  // handed an error. If these are ever priced individually, that floor is the
+  // constraint, and test/mpp-price-floor.test.mjs enforces it.
+  //
+  // ★ SIDE EFFECT TO WATCH: `rank_markets` is also in ALWAYS_PARTIAL_PREVIEW,
+  // and the pre-wall offer fires only for tools in BOTH sets — so this newly
+  // makes rank_markets eligible for `mpp_offer_prewall`. That is intended, but
+  // it means `trial_taste_inline` volume on rank_markets will partly re-label
+  // to mpp_offer_prewall; any trend across 2026-09-08 must SUM the two.
+  // The other six are not in ALWAYS_PARTIAL_PREVIEW and gain no offer.
+  get_energy_prices: '0.50', get_water_risk: '0.50', get_renewable_energy: '0.50',
+  get_grid_data: '0.50', rank_markets: '0.50', search_facilities: '0.50',
+  get_interconnection_queue: '0.50',
 };
 const MPP_TOOLS = new Set(Object.keys(MPP_PRICE));
 // r-mpp-at-wall (2026-08-10): the covered list was ALSO hardcoded a second time
