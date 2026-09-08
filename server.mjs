@@ -12280,6 +12280,54 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // drop the cached (possibly zero) balance so the post-payment call
               // re-checks credits immediately instead of riding a stale 0 for 2 min.
               _dropCreditCache(c);
+              // ── r-cap-signal (2026-09-07): WRITE THE SIGNAL FOR THE BIGGEST WALL
+              //
+              // This branch is the deprivation moment and it has been firing
+              // since 2026-08-06 — 39,344 gated calls across 10,562 sessions by
+              // 2026-09-07, a steady ~8,400/week. It labelled itself on the call
+              // row (status='trial_cap_exceeded', assigned above) but it NEVER
+              // wrote mcp_upgrade_signals. The two branches either side of it do:
+              // trial_preview at :11683 and paid_tool_blocked at :11935.
+              //
+              // Two consequences, both measured:
+              //   • the funnel published upgrade_signals_7d = 366 for a week in
+              //     which this wall fired 8,442 times — a 23x understatement;
+              //   • mcp_upgrade_signals carried 2,945 rows in 30d across exactly
+              //     three types (trial_preview 2,054, paid_tool_blocked 890,
+              //     checkout_link_issued 1). The outreach path reads THAT table,
+              //     so ~35,000 deprivations/30d had no caller_id to follow up.
+              //
+              // ★ Fired HERE, not beside the status assignment above, and the
+              // difference is not cosmetic. `status` is set before the JSON
+              // parse; on a parse throw the catch falls through and the caller
+              // is served the FULL answer anyway. A signal written up there
+              // would count callers who were never actually walled. This site is
+              // inside the `if (parsed …)` that returns the trimmed payload, so
+              // one row here means one caller who was actually deprived.
+              //
+              // Distinct signal_type so existing per-type rollups are unchanged
+              // and the new volume is separable. Kill switch, same shape as the
+              // rest of the telemetry: DCHUB_CAP_SIGNAL_DISABLE=1 -> inert.
+              if (!/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CAP_SIGNAL_DISABLE || ''))) {
+                signalPaywall({
+                  tool: name,
+                  args,
+                  signal_type: 'trial_cap_exceeded',
+                  session_id: _sid,
+                  mcp_client: c.platform || 'mcp',
+                  user_agent: c.client_ua || null,
+                  ip_address: c.client_ip || null,
+                  api_key: c.api_key || null,
+                  tier_current: _paidTaste ? String(_gateTier) : (tier || 'free'),
+                  tier_required: 'paid',
+                  // daily_limit only. The exact n consumed is not in scope here
+                  // (_trialFullRemaining reads 0 at the wall by construction),
+                  // and publishing _cap as `daily_usage` would assert a number
+                  // that is a floor, not the count.
+                  daily_limit: _cap,
+                  message_shown: 'trial_cap_exceeded',
+                });
+              }
               return { content: [
                 { type: 'text', text: JSON.stringify(trimmed) },
                 // r-overcap-cta (2026-06-26): the $10 CTA was ONLY nested in
