@@ -2950,6 +2950,42 @@ function _lateKeyResolve(meta, apiKey, validation) {
 // Pure decision function (unit-tested in test/invalid-bearer.test.mjs); the
 // POST /mcp handler pays the async validateKey() hop only when this passes,
 // and 401s only when that validation ALSO comes back invalid.
+// ── r-invalid-bearer-credkey (2026-09-08): key the BOUND to the CREDENTIAL ────
+// This counter was keyed by caller IP. The note at _CHALLENGES_ISSUED argues
+// that coarse identity here "fails OPEN — it serves MORE calls than strictly
+// needed", which holds for MANY CALLERS BEHIND ONE IP. The inverse — ONE CALLER
+// ACROSS MANY IPs — fails CLOSED, and that is the case that matters: a connector
+// egressing from a rotating pool starts a fresh budget of CHALLENGE_MAX on every
+// new IP and so NEVER reaches the bound. The documented guarantee — "a client
+// that cannot [do OAuth] loses CHALLENGE_MAX calls and then works forever" —
+// did not hold for exactly the clients it was written to protect. ChatGPT and
+// Claude-User both egress from large pools.
+//
+// The credential is the right identity for THIS counter: one dead token spends
+// one budget however many IPs present it, and however many callers share an
+// egress. Hashed — the raw token already appears only as an 8-char prefix in
+// the challenge log line, and must not gain a second home here.
+//
+// ★ The TRIGGER stays session-keyed. Per the asymmetry note: the trigger fails
+// CLOSED on coarse identity (401s a stranger), the bound fails OPEN (serves a
+// few extra). They must not share a key, and this changes only the bound.
+//
+// ★ STILL IN-PROCESS: _CHALLENGES_ISSUED is a Map, so a deploy resets budgets.
+// Under IP keying that was unbounded (fresh IPs forever); under credential
+// keying a deploy costs a client at most CHALLENGE_MAX extra challenges and
+// then self-heals. Bounded and tolerable — a durable store is the follow-up.
+export function _challengeBudgetKey({ bearer, clientIp, forwardedFor, remoteAddress }) {
+  const b = String(bearer || '').trim();
+  if (b) return 'ib:c:' + createHash('sha256').update(b).digest('hex').slice(0, 32);
+  // No credential presented: nothing to key on but the caller. This path cannot
+  // reach the invalid-bearer challenge anyway (it requires a Bearer), so it
+  // exists only so the key is always well-formed.
+  return 'ib:ip:' + (String(clientIp || '').trim()
+    || String(forwardedFor || '').split(',')[0].trim()
+    || String(remoteAddress || '') || 'unknown');
+}
+
+
 function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, method, hasSession,
                                  challengesIssued, challengeMax }) {
   if (!/^Bearer\s+\S/i.test(String(authHeader || ''))) return false; // no Bearer credential presented
@@ -18952,9 +18988,33 @@ app.post(MCP_PATHS, async (req, res) => {
     const _invalid401Disabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INVALID_BEARER_401_DISABLE || ''));
     // r-invalid-bearer-bound: caller-keyed budget, namespaced 'ib:' so it cannot
     // collide with the session-keyed Claude-connector trigger in the same Map.
-    const _ibKey = 'ib:' + ((req.headers['x-dc-client-ip'] || '').trim()
-                        || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
-                        || req.socket?.remoteAddress || 'unknown');
+    // ── r-invalid-bearer-credkey (2026-09-08): key the BOUND to the CREDENTIAL ──
+    // This key was the caller IP. The note above argues coarse identity here
+    // "fails OPEN — it serves MORE calls than strictly needed", and that is true
+    // for MANY CALLERS BEHIND ONE IP. The inverse case — ONE CALLER ACROSS MANY
+    // IPs — fails CLOSED, and it is the case that matters: a connector egressing
+    // from a rotating pool starts a fresh budget of CHALLENGE_MAX on every new
+    // IP, so it NEVER reaches the bound. The documented guarantee ("a client
+    // that cannot [do OAuth] loses CHALLENGE_MAX calls and then works forever")
+    // did not hold for exactly the clients it was written to protect —
+    // ChatGPT and Claude-User both egress from large pools.
+    //
+    // The credential is the right identity for this counter: one dead token
+    // spends one budget, no matter how many IPs present it or how many callers
+    // share an egress. Hashed, never logged raw — the raw value already only
+    // appears in the 8-char prefix the challenge log line prints.
+    //
+    // ★ STILL IN-PROCESS. _CHALLENGES_ISSUED is a Map, so a deploy resets every
+    // budget. With IP keying that was unbounded (fresh IPs forever); with
+    // credential keying a deploy costs one client at most CHALLENGE_MAX extra
+    // challenges and then self-heals, which is a bounded, tolerable cost. A
+    // durable store is the follow-up, not a prerequisite.
+    const _ibKey = _challengeBudgetKey({
+      bearer: _bearer,
+      clientIp: req.headers['x-dc-client-ip'],
+      forwardedFor: req.headers['x-forwarded-for'],
+      remoteAddress: req.socket?.remoteAddress,
+    });
     if (_workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
           authHeader: req.headers['authorization'],
           hasApiKeyHeader: !!req.headers['x-api-key'],
