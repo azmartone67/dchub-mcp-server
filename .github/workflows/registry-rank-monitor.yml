@@ -10,9 +10,34 @@ name: registry rank + drift monitor
 # is a RELEVANCE loss (recency ≈ 0 for Smithery rank) — the monitor emits `remediate`
 # so this workflow can fire the automatable half (registry-pr-submit) when armed.
 
+# ── r-stop-the-rank-chase (2026-09-07) ────────────────────────────────────────
+# SCHEDULE REMOVED. Kept as `workflow_dispatch` so this stays runnable on
+# demand; the cron is preserved verbatim below so restoring it is one edit.
+#
+# WHY. Measured on production 2026-09-07, the registry/install channel over
+# 30 days:
+#     install_artifact_30d: 1 key minted, 0 called, 0 returned
+#     ...and that one key's client_name is `verify-durability` — our OWN
+#     durability probe, not a user. Zero real keys traced to the install pages.
+#     signals_by_platform_30d: smithery 421 signals / 16 IPs / conv_rate 0.0%
+#     calls_by_platform_30d:   `smithery connect` 2,238 calls from ONE IP
+#                              (kind: tooling — the gateway itself, not users)
+#     paid_signal_attribution_30d: 2 honest paid, 0 bridged to any MCP signal
+# Against that, the merged-PR log for 2026-09-03..09-07 in this repo is almost
+# entirely registry/listing work.
+#
+# ★ This does NOT claim the channel is worthless — install_artifact_30d is a
+# declared FLOOR (an existing key-holder re-claiming gets their old key back
+# and never appears), so 0 means "no NEW keys traced", not "nobody visited".
+# It claims the AUTOMATED CADENCE is not earning its runs, and that a decision
+# to spend here should be a human one, taken deliberately, not a cron.
+#
+# NOT disabled (deliberately): registry-refresh.yml — its first job is the
+# stale-number GUARD that keeps $324B / wrong facility counts off
+# journalist-facing registry pages. That is correctness, not rank.
 on:
-  schedule:
-    - cron: '17 */6 * * *'       # every 6 hours (00:17, 06:17, 12:17, 18:17 UTC)
+  #   schedule:
+  #     - cron: '17 */6 * * *'       # every 6 hours (00:17, 06:17, 12:17, 18:17 UTC)
   workflow_dispatch:
 
 permissions:

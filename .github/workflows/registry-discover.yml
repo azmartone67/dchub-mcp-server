@@ -10,20 +10,45 @@ name: registry discovery crawl
 # issue on THIS repo, gated on DISCOVER_LIVE=1. Discovery PROPOSES; the curated
 # registry-pr-submit disposes. GITHUB_TOKEN (issues: write) is enough — no PAT.
 
+# ── r-stop-the-rank-chase (2026-09-07) ────────────────────────────────────────
+# SCHEDULE REMOVED. Kept as `workflow_dispatch` so this stays runnable on
+# demand; the cron is preserved verbatim below so restoring it is one edit.
+#
+# WHY. Measured on production 2026-09-07, the registry/install channel over
+# 30 days:
+#     install_artifact_30d: 1 key minted, 0 called, 0 returned
+#     ...and that one key's client_name is `verify-durability` — our OWN
+#     durability probe, not a user. Zero real keys traced to the install pages.
+#     signals_by_platform_30d: smithery 421 signals / 16 IPs / conv_rate 0.0%
+#     calls_by_platform_30d:   `smithery connect` 2,238 calls from ONE IP
+#                              (kind: tooling — the gateway itself, not users)
+#     paid_signal_attribution_30d: 2 honest paid, 0 bridged to any MCP signal
+# Against that, the merged-PR log for 2026-09-03..09-07 in this repo is almost
+# entirely registry/listing work.
+#
+# ★ This does NOT claim the channel is worthless — install_artifact_30d is a
+# declared FLOOR (an existing key-holder re-claiming gets their old key back
+# and never appears), so 0 means "no NEW keys traced", not "nobody visited".
+# It claims the AUTOMATED CADENCE is not earning its runs, and that a decision
+# to spend here should be a human one, taken deliberately, not a cron.
+#
+# NOT disabled (deliberately): registry-refresh.yml — its first job is the
+# stale-number GUARD that keeps $324B / wrong facility counts off
+# journalist-facing registry pages. That is correctness, not rank.
 on:
-  schedule:
-    # ★2026-08-30: was 07:40 — TEN MINUTES AFTER registry-pr-submit, which
-    # meant discovery could not reach the submit run it fed, by construction:
-    # every candidate found here had already missed that Monday's window and
-    # waited a full week for the next one. Discovery now LEADS submission.
-    #
-    # ★ The gap is not the binding constraint and this change does not
-    # pretend otherwise: a candidate still has to clear a HUMAN vet — the
-    # stub PR this files must be merged into pr-submit's TARGETS before that
-    # workflow will act on it. Measured 2026-08-29, the submission queue had
-    # held one item for 32 days, which is that review step, not this cron.
-    # What the swap removes is the structural guarantee of missing.
-    - cron: '30 7 * * 1'    # weekly, Monday 07:30 UTC — BEFORE pr-submit (07:40)
+  #   schedule:
+  #     # ★2026-08-30: was 07:40 — TEN MINUTES AFTER registry-pr-submit, which
+  #     # meant discovery could not reach the submit run it fed, by construction:
+  #     # every candidate found here had already missed that Monday's window and
+  #     # waited a full week for the next one. Discovery now LEADS submission.
+  #     #
+  #     # ★ The gap is not the binding constraint and this change does not
+  #     # pretend otherwise: a candidate still has to clear a HUMAN vet — the
+  #     # stub PR this files must be merged into pr-submit's TARGETS before that
+  #     # workflow will act on it. Measured 2026-08-29, the submission queue had
+  #     # held one item for 32 days, which is that review step, not this cron.
+  #     # What the swap removes is the structural guarantee of missing.
+  #     - cron: '30 7 * * 1'    # weekly, Monday 07:30 UTC — BEFORE pr-submit (07:40)
   workflow_dispatch:
     inputs:
       report_only:
