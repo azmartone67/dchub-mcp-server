@@ -1,0 +1,86 @@
+{
+  "_comment": "Claude Managed Agents (/v1/agents). configs is an ARRAY; defer_loading is NOT supported. default_config.permission_policy must be set explicitly — the toolset default is always_ask, which hangs any bridge with no human-approval surface on the FIRST tool call.",
+  "mcp_server_url": "https://dchub.cloud/mcp/siting",
+  "mcp_toolset": {
+    "default_config": {
+      "enabled": false,
+      "permission_policy": {
+        "type": "always_allow"
+      }
+    },
+    "configs": [
+      {
+        "name": "execute_plan",
+        "enabled": true
+      },
+      {
+        "name": "find_sites",
+        "enabled": true
+      },
+      {
+        "name": "analyze_site",
+        "enabled": true
+      },
+      {
+        "name": "compare_sites",
+        "enabled": true
+      },
+      {
+        "name": "rank_sites",
+        "enabled": true
+      },
+      {
+        "name": "rank_markets",
+        "enabled": true
+      },
+      {
+        "name": "get_composite_site_score",
+        "enabled": true
+      },
+      {
+        "name": "site_selection_canvas",
+        "enabled": true
+      },
+      {
+        "name": "get_market_intel",
+        "enabled": true
+      },
+      {
+        "name": "get_fiber_readiness",
+        "enabled": true
+      },
+      {
+        "name": "get_water_risk",
+        "enabled": true
+      },
+      {
+        "name": "get_disaster_risk",
+        "enabled": true
+      },
+      {
+        "name": "get_climate_intel",
+        "enabled": true
+      },
+      {
+        "name": "get_tax_incentives",
+        "enabled": true
+      },
+      {
+        "name": "discover_tools",
+        "enabled": true
+      },
+      {
+        "name": "claim_free_key",
+        "enabled": true
+      },
+      {
+        "name": "unlock_more_data",
+        "enabled": true
+      },
+      {
+        "name": "summarize_for_citation",
+        "enabled": true
+      }
+    ]
+  }
+}

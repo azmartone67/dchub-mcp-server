@@ -227,6 +227,14 @@ jobs:
 
       - name: Sync tool count + version + canon quantities into every owned surface
         run: node scripts/sync-tools-manifest.mjs --fix
+      - name: Regenerate the per-pack listings
+        # r-pack (2026-09-08): integrations/packs/* are DERIVED from MCP_PACKS +
+        # mcp-server.json. Placed AFTER sync-tools-manifest on purpose — that
+        # step owns the catalog these listings quote, so running first would
+        # regenerate them from yesterday's descriptions. A pack naming a tool
+        # the catalog no longer has exits 1 here rather than silently shipping
+        # a listing that references a dead tool.
+        run: node scripts/emit-pack-manifests.mjs --fix
       - name: Commit + open a PR only if a surface drifted
         id: commit
         env:

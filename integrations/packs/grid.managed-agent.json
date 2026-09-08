@@ -1,0 +1,78 @@
+{
+  "_comment": "Claude Managed Agents (/v1/agents). configs is an ARRAY; defer_loading is NOT supported. default_config.permission_policy must be set explicitly — the toolset default is always_ask, which hangs any bridge with no human-approval surface on the FIRST tool call.",
+  "mcp_server_url": "https://dchub.cloud/mcp/grid",
+  "mcp_toolset": {
+    "default_config": {
+      "enabled": false,
+      "permission_policy": {
+        "type": "always_allow"
+      }
+    },
+    "configs": [
+      {
+        "name": "get_grid_intelligence",
+        "enabled": true
+      },
+      {
+        "name": "get_grid_data",
+        "enabled": true
+      },
+      {
+        "name": "get_grid_scoreboard",
+        "enabled": true
+      },
+      {
+        "name": "get_interconnection_queue",
+        "enabled": true
+      },
+      {
+        "name": "get_refined_queue",
+        "enabled": true
+      },
+      {
+        "name": "get_hosting_capacity",
+        "enabled": true
+      },
+      {
+        "name": "get_power_availability_timeline",
+        "enabled": true
+      },
+      {
+        "name": "get_power_pipeline",
+        "enabled": true
+      },
+      {
+        "name": "get_retirement_headroom",
+        "enabled": true
+      },
+      {
+        "name": "get_energy_prices",
+        "enabled": true
+      },
+      {
+        "name": "compare_isos",
+        "enabled": true
+      },
+      {
+        "name": "get_iso_context",
+        "enabled": true
+      },
+      {
+        "name": "discover_tools",
+        "enabled": true
+      },
+      {
+        "name": "claim_free_key",
+        "enabled": true
+      },
+      {
+        "name": "unlock_more_data",
+        "enabled": true
+      },
+      {
+        "name": "summarize_for_citation",
+        "enabled": true
+      }
+    ]
+  }
+}

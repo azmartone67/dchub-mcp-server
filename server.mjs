@@ -1701,8 +1701,6 @@ const MCP_SOURCE_PATHS = new Map([
   ['/mcp/cursordirectory', 'cursor-directory'],
 ]);
 
-export const MCP_PATHS = ['/mcp', ...MCP_SELF_PATHS.keys(), ...MCP_SOURCE_PATHS.keys()];
-
 function _normPath(req) {
   return (req?.path || '').replace(/\/+$/, '') || '/mcp';
 }
@@ -1719,6 +1717,209 @@ export function _pathSource(req) {
 }
 
 export { MCP_SOURCE_PATHS };
+
+// ── r-pack (2026-09-08): the path selects WHICH tools are LISTED ─────────────
+//
+// THE PROBLEM, measured on live /mcp the day this shipped. tools/list is one
+// unpaginated page: 88 tools, 420,946 bytes minified, ~117k tokens, no
+// nextCursor, and byte-identical on every path (verified /mcp vs /mcp/analyst).
+// Every caller pays for the whole catalog no matter what it came to do. The two
+// populations that hurt most:
+//   · Claude Managed Agents have NO defer_loading, so every enabled tool's text
+//     rides the prompt EVERY TURN — an integrator either carries all of it or
+//     hand-allowlists 88 entries themselves.
+//   · The OpenAI Deep Research connector wants a server whose surface IS
+//     search+fetch. We hand it 88 and ask it to ignore 86.
+// And the surface cannot be narrowed by TELLING agents to use less: a configured
+// agent follows its operator-authored prompt and never reads our `initialize`
+// instructions (proven 0/3 -> 3/3, Mistral Org Agent, 2026-07-27). Only the
+// SERVED list narrows it.
+//
+// THE MECHANISM. r-source-path already established that the path is the one
+// channel we own end-to-end and that it rides EVERY request (unlike clientInfo,
+// which arrives once and is lost to a replica that never saw the initialize).
+// This reuses that axis for a second, independent purpose: source answers WHO
+// SENT THEM, pack answers WHAT THEY CAME FOR.
+//
+// ★★★ THIS IS A LISTING PROJECTION, NOT ACCESS CONTROL. A pack narrows what
+// tools/list ADVERTISES. It does not gate tools/call, and it must never be
+// asked to: the path is caller-assertable by anyone who discovers it (the
+// r-source-path safety note above says so in as many words), so hanging
+// entitlement on it would rebuild the internal-key-as-entitlement defect on a
+// fresh axis. Entitlement stays where it is — on the key, at call time, in
+// PAID_ONLY_TOOLS / PRO_ONLY_TOOLS / the metered gate. Same contract the
+// call-time TOOL_ALIASES already run under: the callable set is deliberately a
+// SUPERSET of the listed set, so an agent that knows a name still succeeds.
+//
+// ★★ WHERE THIS LIVES, AND WHY IT IS NOT INSIDE createServer(). The filter is
+// applied to the FINISHED ListToolsResult on the way out of the HTTP handler.
+// createServer() keeps building the one canonical catalog, which is what every
+// existing count guard reads — test/schema-dialect-neutral.test.mjs builds a
+// server in-process, test/required-args.test.mjs fetches /mcp by name,
+// test/invalid-param-hint.test.mjs reads the manifest file. Parameterising
+// createServer() by pack would have made all three read a subset while still
+// reporting they had checked "the tool list". A projection cannot: a pack is
+// literally a filter over the canonical result, so a pack can never contain a
+// tool the canonical surface does not, and the guards keep guarding.
+//
+// ★★ NEVER WIDEN ON FAILURE. The tools/list branch has a fail-soft ladder that
+// ends at the ephemeral SDK path, which knows nothing about packs. On a pack
+// path that fallback would answer with all 88 — a failure mode that silently
+// publishes MORE than the endpoint advertises. So a pack path does not take the
+// ladder: it errors instead. A fail-soft that widens the advertised surface is
+// not fail-soft.
+
+// The four tools every pack carries. The rule they encode: a pack must never be
+// a dead end. An agent that hits the paywall, needs to cite, or needs something
+// this pack does not have must have a move available from INSIDE the pack.
+const PACK_SPINE = [
+  'discover_tools',          // the only in-pack way to learn /mcp has more
+  'claim_free_key',          // a keyless caller at the anonymous cap has no other move
+  'unlock_more_data',        // the documented exit from a partial preview
+  'summarize_for_citation',  // attribution is the product claim; do not strand it
+];
+
+// path -> { pack, spine, tools }. `spine:false` is deliberate and rare — see
+// deepresearch. Names are validated against the live catalog by
+// test/mcp-packs.test.mjs; a typo here silently omits a tool, so the test
+// asserts EXACT membership and exact counts rather than a floor.
+const MCP_PACKS = new Map([
+  // The OpenAI Deep Research / ChatGPT connector contract is search + fetch.
+  // The spine is omitted ON PURPOSE: this is the one consumer whose expected
+  // surface is exactly two tools, and padding it with four more would be us
+  // deciding we know its schema better than it does. 5,479 b vs 420,946.
+  ['/mcp/deepresearch', { pack: 'deepresearch', spine: false, tools: [
+    'search', 'fetch',
+  ] }],
+
+  // The in-browser agent surface (Cloudflare WebMCP "Site MCP server"). A
+  // visitor's agent on a facility or market page needs to find a record, read
+  // it, quote it and mint a key — not run an interconnection study.
+  ['/mcp/site', { pack: 'site', spine: true, tools: [
+    'search', 'fetch', 'get_facility', 'get_market_dcpi_rank',
+    'get_market_context', 'why_dchub',
+  ] }],
+
+  // Power availability end to end: live ISO telemetry, queue position, feeder
+  // headroom, retirement headroom, forward supply.
+  ['/mcp/grid', { pack: 'grid', spine: true, tools: [
+    'get_grid_intelligence', 'get_grid_data', 'get_grid_scoreboard',
+    'get_interconnection_queue', 'get_refined_queue', 'get_hosting_capacity',
+    'get_power_availability_timeline', 'get_power_pipeline',
+    'get_retirement_headroom', 'get_energy_prices', 'compare_isos',
+    'get_iso_context',
+  ] }],
+
+  // The Managed Agent pack — a full siting decision from capacity target to
+  // verdict. plan_query is excluded deliberately: it is INSPECT-ONLY and at
+  // 18,414 b the single heaviest entry in the catalog, and execute_plan is the
+  // front door this pack actually wants.
+  ['/mcp/siting', { pack: 'siting', spine: true, tools: [
+    'execute_plan', 'find_sites', 'analyze_site', 'compare_sites', 'rank_sites',
+    'rank_markets', 'get_composite_site_score', 'site_selection_canvas',
+    'get_market_intel', 'get_fiber_readiness', 'get_water_risk',
+    'get_disaster_risk', 'get_climate_intel', 'get_tax_incentives',
+  ] }],
+
+  // Route, depth and physics.
+  ['/mcp/fiber', { pack: 'fiber', spine: true, tools: [
+    'get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness',
+    'plan_fiber_leadin', 'get_peering_intel', 'get_subsea_cables',
+    'cluster_sites_by_latency',
+  ] }],
+
+  // Behind-the-meter and gas-fired economics, paired with the grid prices and
+  // forward generation they get compared against. ★ This pack carries a LIVE
+  // WITHDRAWAL: DCGI score/verdict were withdrawn 2026-08-08 and restored
+  // 2026-08-30, while gas_to_grid_usd_per_mwh and the behind-the-meter-vs-grid
+  // delta are STILL withdrawn. A pack that presents itself as the gas surface
+  // inherits the duty to keep those two states apart — the tool descriptions
+  // already do, and must keep doing so.
+  ['/mcp/gas', { pack: 'gas', spine: true, tools: [
+    'get_gas_intelligence', 'get_gas_economics', 'get_gas_index',
+    'get_energy_prices', 'get_power_pipeline',
+  ] }],
+
+  // Transaction and movement research.
+  ['/mcp/deals', { pack: 'deals', spine: true, tools: [
+    'list_transactions', 'hyperscaler_deals', 'deal_autopsy', 'get_pipeline',
+    'get_news', 'search_intelligence', 'get_market_intel',
+    'get_intelligence_index', 'predict_market_trajectory',
+  ] }],
+]);
+
+// The full ordered name list a pack advertises, spine included.
+export function packToolNames(def) {
+  return def.spine ? [...def.tools, ...PACK_SPINE] : [...def.tools];
+}
+
+// The pack definition for this request, or null for /mcp and for every source
+// or self path (which are attribution tags and serve the full catalog).
+export function _pathPack(req) {
+  return MCP_PACKS.get(_normPath(req)) || null;
+}
+
+// Project a canonical ListToolsResult onto a pack. Order follows the pack
+// declaration, not the catalog, so the tools a pack exists for read first.
+//
+// A name in the pack that is absent from the catalog is a DEFECT (a rename or a
+// typo), and it is logged loudly — but it can only ever make the pack SHORTER.
+// The result-level _meta rides through unchanged; it carries the maturity basis
+// an agent reads once per session.
+export function _packFilter(result, def) {
+  const want = packToolNames(def);
+  const have = new Map((result?.tools || []).map((t) => [t.name, t]));
+  const tools = [];
+  const missing = [];
+  for (const n of want) {
+    const t = have.get(n);
+    if (t) tools.push(t); else missing.push(n);
+  }
+  if (missing.length) {
+    console.error(`[pack:${def.pack}] declares ${missing.length} name(s) absent from the catalog — serving short: ${missing.join(', ')}`);
+  }
+  return result?._meta ? { tools, _meta: result._meta } : { tools };
+}
+
+export const MCP_PACK_PATHS = [...MCP_PACKS.keys()];
+export { MCP_PACKS, PACK_SPINE };
+
+// The per-session instructions tail a pack path appends, or '' everywhere else.
+//
+// WHY IT EXISTS. The canonical instructions blob states the FULL catalog size,
+// which is true of /mcp and false of /mcp/site. An agent told "88 tools" in
+// prose and handed ten in tools/list has been given two different answers by
+// one handshake, and the one a model acts on is the prose. So a pack says what
+// it lists and where the rest is.
+//
+// ★ It is a TAIL, never a rewrite. _INSTRUCTIONS stays the single canonical
+// string composed from canonical/mcp_facts.json, so every canon fence that
+// scans it keeps reading exactly what it read before — a pack cannot introduce
+// a second published tool count into the text those fences guard.
+//
+// ★ It states the scope is a LISTING scope. The path is caller-assertable, so
+// an agent must not read a short list as a downgraded key: entitlements are
+// unchanged and tools/call still accepts the full catalog.
+//
+// Shape mirrors _INSTR_TAIL_HELD deliberately — same mechanism, same contract,
+// and keeping the call site to one line is what lets the held-key wiring stay
+// adjacent to createServer() where its own anchored guard reads it.
+export function _INSTR_TAIL_PACK(def) {
+  if (!def) return '';
+  const n = packToolNames(def).length;
+  return `\n\nENDPOINT SCOPE — this connection is /mcp/${def.pack}, which lists ${n} DC Hub tools chosen for this use case rather than the full catalog. This is a LISTING scope, not a permission scope: your key's entitlements are unchanged and tools/call still accepts any DC Hub tool by name. Call discover_tools to see what else exists, or connect to https://dchub.cloud/mcp for the complete catalog.`;
+}
+
+// Declared HERE, below MCP_PACKS, rather than beside MCP_SOURCE_PATHS above:
+// a const cannot be read before its initialiser runs, and every consumer
+// (app.use / app.post / app.get / app.delete) is registered further down the
+// module, so the move is invisible to them.
+export const MCP_PATHS = [
+  '/mcp',
+  ...MCP_SELF_PATHS.keys(),
+  ...MCP_SOURCE_PATHS.keys(),
+  ...MCP_PACKS.keys(),
+];
 
 // ── r-init-precise-error (2026-09-02): say WHICH field is missing ────────────
 //
@@ -19196,6 +19397,7 @@ app.post(MCP_PATHS, async (req, res) => {
           if (_held) _instrTail = _INSTR_TAIL_HELD(_held.key);
         }
       } catch (_) { _instrTail = ''; }
+      try { _instrTail += _INSTR_TAIL_PACK(_pathPack(req)); } catch (_) { /* r-pack: additive */ }
       const mcpServer = createServer(_descOverrides, _instrTail);
       await mcpServer.connect(transport);
 
@@ -19245,15 +19447,38 @@ app.post(MCP_PATHS, async (req, res) => {
       // failure) the original ephemeral-SDK path below → outer catch.
       // Notifications (no id) get 202 exactly like the SDK's handlePostRequest.
       // Kill switch: DCHUB_TOOLSLIST_CACHE_DISABLE=1 → original SDK path only.
-      const _listCacheOff = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_TOOLSLIST_CACHE_DISABLE || ''));
+      // r-pack (2026-09-08): a pack path advertises a SUBSET. Two rules govern
+      // this block, and both exist because the alternative fails open:
+      //   1. The pack filter is applied to the FINISHED canonical result, so a
+      //      pack can only ever be a projection of what /mcp serves.
+      //   2. A pack path NEVER takes the fail-soft ladder below. The ephemeral
+      //      SDK path knows nothing about packs, so falling through to it would
+      //      answer a 10-tool endpoint with all 88 — publishing MORE than the
+      //      endpoint advertises, at exactly the moment something is already
+      //      wrong. The same reasoning covers the cache kill switch: it may
+      //      disable an optimisation, it may not widen a declared surface.
+      const _pack = _pathPack(req);
+      const _listCacheOff = _pack
+        ? false
+        : /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_TOOLSLIST_CACHE_DISABLE || ''));
       if (!_listCacheOff) {
         if (body.id === undefined) return res.status(202).end();
         if (body.method === 'ping') return _writeRpcResult(req, res, body.id, {});
         try {
           const _cachedList = await _toolsListCached(platform, _descOverrides);
-          if (_cachedList) return _writeRpcResult(req, res, body.id, _cachedList);
+          if (_cachedList) {
+            return _writeRpcResult(req, res, body.id, _pack ? _packFilter(_cachedList, _pack) : _cachedList);
+          }
+          if (_pack) throw new Error('cache returned no result');
         } catch (e) {
           console.error('[tools-list-cache] fast path failed — falling back to SDK path:', e.message);
+          if (_pack) {
+            console.error(`[pack:${_pack.pack}] refusing to widen to the full catalog on failure`);
+            return res.status(503).json({
+              jsonrpc: '2.0', id: body.id,
+              error: { code: -32603, message: `tools/list is temporarily unavailable on /mcp/${_pack.pack}. Retry, or use https://dchub.cloud/mcp for the full catalog.` },
+            });
+          }
         }
       }
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
