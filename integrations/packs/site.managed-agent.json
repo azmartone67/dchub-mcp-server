@@ -1,0 +1,54 @@
+{
+  "_comment": "Claude Managed Agents (/v1/agents). configs is an ARRAY; defer_loading is NOT supported. default_config.permission_policy must be set explicitly — the toolset default is always_ask, which hangs any bridge with no human-approval surface on the FIRST tool call.",
+  "mcp_server_url": "https://dchub.cloud/mcp/site",
+  "mcp_toolset": {
+    "default_config": {
+      "enabled": false,
+      "permission_policy": {
+        "type": "always_allow"
+      }
+    },
+    "configs": [
+      {
+        "name": "search",
+        "enabled": true
+      },
+      {
+        "name": "fetch",
+        "enabled": true
+      },
+      {
+        "name": "get_facility",
+        "enabled": true
+      },
+      {
+        "name": "get_market_dcpi_rank",
+        "enabled": true
+      },
+      {
+        "name": "get_market_context",
+        "enabled": true
+      },
+      {
+        "name": "why_dchub",
+        "enabled": true
+      },
+      {
+        "name": "discover_tools",
+        "enabled": true
+      },
+      {
+        "name": "claim_free_key",
+        "enabled": true
+      },
+      {
+        "name": "unlock_more_data",
+        "enabled": true
+      },
+      {
+        "name": "summarize_for_citation",
+        "enabled": true
+      }
+    ]
+  }
+}

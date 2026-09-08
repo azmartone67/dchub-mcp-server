@@ -1,0 +1,26 @@
+{
+  "pack": "deepresearch",
+  "endpoint": "https://dchub.cloud/mcp/deepresearch",
+  "version": "2.12.9",
+  "scope": "listing",
+  "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
+  "full_catalog": "https://dchub.cloud/mcp",
+  "full_catalog_tool_count": 88,
+  "tool_count": 2,
+  "carries_shared_spine": false,
+  "authentication": {
+    "type": "api-key",
+    "header": "X-API-Key",
+    "registration_url": "https://dchub.cloud"
+  },
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search DC Hub for relevant records (OpenAI Deep Research / ChatGPT connector format). Returns a list of matching data-center facilities as {id, title, url}; pass an id to the `fetch` tool for the record, or open the url to cite the live facility page. For structured queries (by MW, operator, status, market) use search_facilities directly."
+    },
+    {
+      "name": "fetch",
+      "description": "Fetch a DC Hub record for an id returned by the `search` tool (OpenAI Deep Research / ChatGPT connector format). Returns {id, title, text, url, metadata} — a citable public summary of one data-center facility (name, operator, location, status, market). For full structured specs (capacity MW, coordinates) use get_facility or open the url."
+    }
+  ]
+}

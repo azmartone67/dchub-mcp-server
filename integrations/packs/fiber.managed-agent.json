@@ -1,0 +1,58 @@
+{
+  "_comment": "Claude Managed Agents (/v1/agents). configs is an ARRAY; defer_loading is NOT supported. default_config.permission_policy must be set explicitly — the toolset default is always_ask, which hangs any bridge with no human-approval surface on the FIRST tool call.",
+  "mcp_server_url": "https://dchub.cloud/mcp/fiber",
+  "mcp_toolset": {
+    "default_config": {
+      "enabled": false,
+      "permission_policy": {
+        "type": "always_allow"
+      }
+    },
+    "configs": [
+      {
+        "name": "get_fiber_intel",
+        "enabled": true
+      },
+      {
+        "name": "get_metro_fiber",
+        "enabled": true
+      },
+      {
+        "name": "get_fiber_readiness",
+        "enabled": true
+      },
+      {
+        "name": "plan_fiber_leadin",
+        "enabled": true
+      },
+      {
+        "name": "get_peering_intel",
+        "enabled": true
+      },
+      {
+        "name": "get_subsea_cables",
+        "enabled": true
+      },
+      {
+        "name": "cluster_sites_by_latency",
+        "enabled": true
+      },
+      {
+        "name": "discover_tools",
+        "enabled": true
+      },
+      {
+        "name": "claim_free_key",
+        "enabled": true
+      },
+      {
+        "name": "unlock_more_data",
+        "enabled": true
+      },
+      {
+        "name": "summarize_for_citation",
+        "enabled": true
+      }
+    ]
+  }
+}
