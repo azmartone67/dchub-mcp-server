@@ -109,6 +109,14 @@
         "include_fiber": {
           "description": "Include fiber-connectivity analysis (default true)",
           "type": "boolean"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -212,6 +220,14 @@
         "capacity_mw": {
           "description": "Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)",
           "type": "number"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -744,6 +760,14 @@
         "include_sources": {
           "description": "Include upstream data-source/provenance metadata in the response",
           "type": "boolean"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -917,6 +941,14 @@
         },
         "market": {
           "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — \"Ashburn\" is not a grid code.",
+          "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
           "type": "string"
         }
       }
@@ -1132,6 +1164,14 @@
         "compare_to": {
           "description": "Optional second market slug to compare against, e.g. dallas",
           "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -1190,7 +1230,7 @@
   },
   {
     "name": "get_peering_intel",
-    "description": "Internet-exchange (IX/IXP) and peering density for a site, from PeeringDB. Pass lat+lon for the PEERING PROFILE around that point: facilities_nearby, a 0-100 score with its level, total_ix_presence, total_networks, and top_facilities each with ix_count and net_count — e.g. Ashburn returns 20,900+ facilities, 61 IX presences and 903 networks, led by Equinix DC1-DC15 at 516 networks. Omit coordinates for the IXP directory (name, name_long, city, country, net_count, fac_count, media, protocols, policy/tech contacts). This is the layer that answers \"can I actually reach networks cheaply from here\", which fiber route geometry does not: a site can sit on dense fiber and still be far from any exchange. The score is a DERIVED convenience over PeeringDB counts, not a DC Hub-sourced grade — cite the underlying counts (facilities, IX presence, networks) rather than the score when it is load-bearing. Records are PeeringDB's, refreshed on read. Answers \"how good is peering at this Ashburn site\" and \"which internet exchanges serve the Dallas market\". Try: get_peering_intel lat=39.04 lon=-77.48 — or get_peering_intel (no args) for the IXP directory. Do NOT use for fiber route geometry (get_fiber_intel), near-net carrier distance at a parcel (get_fiber_readiness), metro fiber depth (get_metro_fiber), or subsea landings (get_subsea_cables).",
+    "description": "Internet-exchange (IX/IXP) and peering density for a site, from PeeringDB. Pass lat+lon for the PEERING PROFILE around that point: facilities_nearby, a 0-100 score with its level, total_ix_presence, total_networks, and top_facilities each with ix_count and net_count — e.g. Ashburn comes back with 61 IX presences and 903 networks across the nearby sites, led by Equinix DC1-DC15 at 516 networks. Omit coordinates for the IXP directory (name, name_long, city, country, net_count, fac_count, media, protocols, policy/tech contacts). This is the layer that answers \"can I actually reach networks cheaply from here\", which fiber route geometry does not: a site can sit on dense fiber and still be far from any exchange. The score is a DERIVED convenience over PeeringDB counts, not a DC Hub-sourced grade — cite the underlying counts (facilities, IX presence, networks) rather than the score when it is load-bearing. Records are PeeringDB's, refreshed on read. Answers \"how good is peering at this Ashburn site\" and \"which internet exchanges serve the Dallas market\". Try: get_peering_intel lat=39.04 lon=-77.48 — or get_peering_intel (no args) for the IXP directory. Do NOT use for fiber route geometry (get_fiber_intel), near-net carrier distance at a parcel (get_fiber_readiness), metro fiber depth (get_metro_fiber), or subsea landings (get_subsea_cables).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2291,6 +2331,14 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
