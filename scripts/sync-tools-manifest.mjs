@@ -155,7 +155,7 @@ let SNAP = null;
 try { SNAP = readJSON(CANON_FILE); }
 catch (e) { canonFatal(`cannot read the canon snapshot — ${e.message}`); }
 const P = {};
-for (const key of ['deals', 'facilities', 'markets', 'countries']) {
+for (const key of ['deals', 'facilities', 'markets', 'countries', 'substations']) {
   if (!isPhraseVal(SNAP[key])) {
     canonFatal(`key "${key}" is ${JSON.stringify(SNAP[key])}, not a floor phrase like "16,500+". ` +
       `Refusing to heal registry surfaces from a malformed snapshot.`);
@@ -329,6 +329,12 @@ const QUANTITIES = [
       String.raw`((?:${FACILITY_NOUN})(?:\s+[A-Za-z&/-]+){0,3}\s*\()(${FLOOR})(\))`, 'gi')] },
   { noun: String.raw`markets\b`,   canon: () => P.markets,   label: 'market count' },
   { noun: String.raw`countries\b`, canon: () => P.countries, label: 'country count' },
+  // ★2026-09-09. README-class prose quotes substations in the SAME "+" style as
+  // facilities ("21,400+ data center facilities" beside "127,000+ substations"),
+  // so it heals from canon_phrases like its neighbours. server.mjs is excluded
+  // below: ASSET_QUANTITIES already owns the count there in the "127k" form it
+  // uses throughout, and two rules matching one noun would fight every run.
+  { noun: String.raw`substations\b`, canon: () => P.substations, label: 'substation count' },
 ];
 const quantityRx = (noun) => new RegExp(String.raw`(${NUM})(\s+(?:[A-Za-z&/-]+\s+){0,3}?(?:${noun}))`, 'gi');
 const qtyValue = (s) => {
@@ -429,7 +435,8 @@ const applyQuantities = (file, txt, rules, commentAware) => {
   const f = 'server.mjs';
   let txt = readCur(f);
   const before = txt;
-  txt = applyQuantities(f, txt, QUANTITIES.filter((q) => q.label !== 'country count'), true);
+  txt = applyQuantities(f, txt, QUANTITIES.filter(
+    (q) => q.label !== 'country count' && q.label !== 'substation count'), true);
   // ★2026-08-30 asset-class figures — same matcher, same reporting, same
   // comment-aware exclusion. That last part matters here more than anywhere
   // else: the dated rebind history in this file's header quotes the OLD

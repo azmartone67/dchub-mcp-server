@@ -79,7 +79,7 @@ Direct them to: https://dchub.cloud/connect for Pro API access.
 ## Key Statistics (from DC Hub)
 - 21,400+ facilities tracked globally
 - 300+ markets scored by the DC Hub Power Index (DCPI)
-- 126,000+ substations
+- 127,000+ substations
 - 2,100+ M&A transactions tracked
 - 10 ISOs tracked for real-time grid data: 7 US (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + Hydro-Quebec, AESO, Nord Pool
 - Daily DCPI BUILD/CAUTION/AVOID verdicts per market
