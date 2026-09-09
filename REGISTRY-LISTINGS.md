@@ -39,9 +39,33 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **Docker MCP Catalog** — ships in Docker Desktop's MCP Toolkit (one-click install into Claude Desktop / Cursor / VS Code). ⚠️ we are NOT listed — measured 404 on `servers/dchub/server.yaml` | `https://dchub.cloud/mcp/docker` | ✅ PR to `docker/mcp-registry` (remote-server entry: server.yaml + tools.json + readme.md) |
 | **Anthropic Connectors Directory** — in-app, submitted from claude.ai org settings. ⚠️ needs a **Team/Enterprise org** + Owner role; ends in 7 policy acknowledgments the owner must make. | `https://dchub.cloud/mcp/anthropic` | ⚠️ portal only — not submittable from this repo |
 | **cursor.directory** (community; cursor.com has no public MCP directory) | `https://dchub.cloud/mcp/cursordirectory` | ❌ owner-typed listing |
-| **Official MCP registry** — live listing `cloud.dchub/datacenter-power-grid-fiber` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
-| ~~Official MCP registry~~ — retired listing `cloud.dchub/mcp-server` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
+| **Official MCP registry** — live listing `cloud.dchub/mcp-server` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
+| ~~Official MCP registry~~ — retiring listing `cloud.dchub/datacenter-power-grid-fiber` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
 
+> **★2026-09-08 — THE RENAME WAS REVERTED. The name is an IDENTITY, not a label.**
+> `cloud.dchub/mcp-server` is the live listing again. The #338 finding below is
+> still TRUE — registry search matches the name only — but acting on it cost
+> more than it bought, and here is the mechanism so it is not repeated:
+>
+> Renaming does not move a listing. It creates a NEW server and orphans the old
+> one. The old name was then deprecated to avoid two canonical entries (correct
+> in isolation), which took `cloud.dchub/mcp-server` to 27 versions / **0
+> active**. `github.com/mcp` is a CURATED surface that was pinned to that name.
+> With nothing active to point at, DC Hub dropped off it entirely — measured
+> 2026-09-08: `github.com/mcp` returns 200, 267 KB, **zero** occurrences of
+> "dchub". That listing was worth more than topical search on a slug nobody had
+> linked yet.
+>
+> ★ THE CHECK THAT WAS MISSING: before renaming a registry entry, enumerate what
+> else KEYS ON THE NAME — curated mirrors, aggregator cascades, anything that
+> stored it as an id. Search findability was measured; downstream identity was
+> not. Keywords live in `title` now, which is what a human reads on the card and
+> costs nothing to change.
+>
+> ★ The revert reuses `/mcp/registry` — the remote this name already holds.
+> The registry REFUSES a remote URL held by another server, so the short name
+> could not take `/mcp/officialregistry` while the long name still holds it.
+>
 > **Why the official registry has TWO rows.** The listing was renamed on
 > 2026-09-04 (registry search matches the server NAME only — descriptions are
 > not indexed, so `cloud.dchub/mcp-server` was findable by nothing except the
