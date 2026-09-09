@@ -16,8 +16,26 @@ const SERVER_JSON = JSON.parse(
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
 describe('server.json (the body GET /server.json publishes)', () => {
-  it('is a complete registry-schema entry for cloud.dchub/datacenter-power-grid-fiber', () => {
-    expect(SERVER_JSON.name).toBe('cloud.dchub/datacenter-power-grid-fiber');
+  // ★2026-09-08 REVERTED to the short name. The 2026-09-04 rename (#338) was
+  // measured and its finding still stands — registry search matches the NAME
+  // only, so the long slug is the findable one. It cost more than it bought:
+  // the curated GitHub MCP listing was keyed on cloud.dchub/mcp-server, that
+  // name went fully deprecated (27 versions, 0 active), and DC Hub dropped off
+  // github.com/mcp entirely. Brand search for "dchub" plus a live GitHub
+  // listing beats topical search on a name nobody had linked yet. The KEYWORDS
+  // stay in `title`, which is what a human reads on the card.
+  it('is a complete registry-schema entry for cloud.dchub/mcp-server', () => {
+    expect(SERVER_JSON.name).toBe('cloud.dchub/mcp-server');
+    // ★ The remote must be the URL THIS name already holds. The registry 400s
+    // on a remote URL held by another server —
+    //   "400 remote URL https://dchub.cloud/mcp/registry is already used by
+    //    server cloud.dchub/mcp-server"
+    // is the exact error the rename hit in the other direction. Until
+    // cloud.dchub/datacenter-power-grid-fiber is deprecated it holds
+    // /mcp/officialregistry, so publishing the short name at that URL would be
+    // refused. /mcp/registry is also this listing's original arrival-
+    // attribution path, so reverting the name restores the attribution too.
+    expect(SERVER_JSON.remotes[0].url).toBe('https://dchub.cloud/mcp/registry');
     expect(SERVER_JSON.$schema).toMatch(/server\.schema\.json$/);
     expect(SERVER_JSON.version).toMatch(/^\d+\.\d+\.\d+/);
     // ── r-cascade-path (2026-09-04) ─────────────────────────────────────
