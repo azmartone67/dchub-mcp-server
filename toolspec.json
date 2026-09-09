@@ -667,6 +667,14 @@
         "iso": {
           "description": "ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE",
           "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -917,6 +925,14 @@
         "period": {
           "description": "Optional time window for the metric, e.g. 24h",
           "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -1082,6 +1098,14 @@
       "properties": {
         "iso": {
           "description": "ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot",
+          "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
           "type": "string"
         }
       }
@@ -1458,6 +1482,14 @@
         "longitude": {
           "description": "Alias for lon — either name works",
           "type": "number"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -1599,6 +1631,14 @@
         },
         "state": {
           "description": "US state abbreviation as an alternative to lat/lon, e.g. AZ",
+          "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
           "type": "string"
         }
       }
@@ -1838,6 +1878,14 @@
             "market_summary",
             "identity_only"
           ]
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -2111,6 +2159,14 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100000
+        },
+        "mpp_pay": {
+          "description": "Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.",
+          "type": "string"
         }
       }
     }
@@ -2414,7 +2470,7 @@
   },
   {
     "name": "unlock_more_data",
-    "description": "Unlock DC Hub's full depth. Call this when a result came back as a partial preview (e.g. \"3 of 12 results shown\"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · Founding $99/mo (Pro access, while seats last) · Developer $49/mo · Pro $299/mo. Want the FREE tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.",
+    "description": "Unlock DC Hub's full depth. Call this when a result came back as a partial preview (e.g. \"3 of 12 results shown\"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API calls (no subscription). Also $9/mo Starter · Developer $49/mo · Pro $99/mo. Want the FREE tier instead (no payment, 10 calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.",
     "inputSchema": {
       "type": "object",
       "properties": {
