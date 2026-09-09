@@ -911,6 +911,11 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     'integrations/llamaindex/dchub_tools.py',
     'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
     'dchub_mcp_server.py', 'toolspec.json', 'TELEGEOGRAPHY-OUTREACH.md',
+    // 2026-09-09: the why_dchub pack's own tool DESCRIPTION carried a
+    // facility count and was outside COVERAGE, so it stayed at 20,900+
+    // through this sync while all 28 siblings healed. A number an AGENT
+    // reads back to a user is as published as a README.
+    'integrations/packs/site.json',
   ];
   for (const f of COVERAGE) {
     let txt; try { txt = readCur(f); } catch { continue; }

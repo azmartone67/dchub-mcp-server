@@ -32,6 +32,7 @@
 // ============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +40,24 @@ const OUT = path.join(ROOT, 'canonical', 'canon_phrases.json');
 const URL_ = 'https://dchub.cloud/api/v1/canon/phrases';
 
 const isPhrase = (s) => typeof s === 'string' && /^\d[\d,]*\+$/.test(s);
+
+// ── the source decision, hoisted so it can be tested without a network call ──
+// The endpoint labels its body "<resolver> (<marker>)". Only the MARKER is a
+// claim about freshness; the resolver name in front of it is an implementation
+// detail that has now changed twice.
+export const KNOWN_MARKERS = ['live', 'pinned', 'degraded', 'fallback', 'cached'];
+
+export function sourceMarker(source) {
+  return String(source || '').match(/\(([a-z][a-z-]*)\)\s*$/)?.[1] || null;
+}
+
+/** 'heal' | 'keep' | 'fail' — what a body entitles us to do to canon. */
+export function decide(body) {
+  const marker = sourceMarker(body?.source);
+  if (body?.ok === true && marker && !KNOWN_MARKERS.includes(marker)) return 'fail';
+  if (body?.ok !== true || marker !== 'live') return 'keep';
+  return 'heal';
+}
 
 async function main() {
   let body;
@@ -57,7 +76,33 @@ async function main() {
   // Only a LIVE resolution may move the snapshot. The endpoint's PINNED
   // fallback path is itself honest floors, but "last verified live" beats
   // "current fallback" — a degraded backend must not update canon.
-  if (body?.ok !== true || !/resolve_canon \(live\)/.test(String(body?.source || ''))) {
+  //
+  // ★ GATE ON THE MARKER, NOT ON THE RESOLVER'S NAME. This used to require
+  //   /resolve_canon \(live\)/. On 2026-09-08 04:53 the backend renamed that
+  //   label to "resolve_public_floors (live)" (dchub-backend 90648b2de). The
+  //   body stayed live, healthy and correct; only the function's name moved.
+  //   The gate stopped matching, this script took the quiet fallback below,
+  //   and the workflow went on reporting SUCCESS. canon_phrases.json froze at
+  //   2026-09-07 while live canon went 20,900+ -> 21,400+, and because every
+  //   registry file and README quantity is generated FROM this snapshot, one
+  //   dead predicate published a stale count in 34 places.
+  //
+  //   "(live)" is the claim that actually matters. The name in front of it is
+  //   an implementation detail and has now changed twice.
+  const marker = sourceMarker(body?.source);
+  const verdict = decide(body);
+
+  if (verdict === 'fail') {
+    // ★ LOUD, not quiet. A healthy body wearing a marker we do not recognise is
+    //   the exact shape that froze canon for two days behind a green workflow.
+    //   Fail the run so the next rename is a red build, not silent staleness.
+    console.error(`canon-phrases refresh: UNRECOGNISED source marker "(${marker})" `
+      + `in source "${body?.source}". Canon is NOT being healed. Teach `
+      + `KNOWN_MARKERS this marker (and add it to the live list if it means live).`);
+    process.exit(1);
+  }
+
+  if (verdict === 'keep') {
     console.log(`canon-phrases refresh: source is "${body?.source}" (not live) — keeping the committed snapshot`);
     return;
   }
@@ -92,4 +137,8 @@ async function main() {
   console.log(`canon-phrases refresh: ✓ wrote ${path.relative(ROOT, OUT)} — tools ${tools} · facilities ${snap.facilities} · countries ${snap.countries} · deals ${snap.deals} · markets ${snap.markets}`);
 }
 
-main();
+// Run only as a CLI. Importing this module (the guard test does) must not fire
+// a network fetch or rewrite the snapshot.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
