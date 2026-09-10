@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import {
   _execEnrichEnvelope, _dealDeskEligible, _execMintDealDesk, _dealDeskMinted,
   _dealDeskHumanRelay, _dealDeskHumanLine, _DEAL_DESK_SKIP_TIERS,
+  _DEAL_DESK_TIMEOUT_MS, _DEAL_DESK_MIN_BUDGET_MS, _execStepBudget,
   HUMAN_FIRST_MARKER,
 } from '../server.mjs';
 
@@ -137,6 +138,86 @@ describe('the tier check is a COST gate, not the correctness gate', () => {
 describe('a brief is never advertised unless it was minted', () => {
   it('returns null for a caller the cost gate skipped, without a round-trip', async () => {
     expect(await _execMintDealDesk({ executed: [] }, new Map(), { tier: 'free' })).toBeNull();
+  });
+
+  // ★ These two watch the WIRE, not the return value. `_execMintDealDesk`
+  // returns null both when it declines to start and when it starts and fails,
+  // so a `toBeNull()` assertion cannot tell the two apart — the first version
+  // of the budget test below passed against a removed floor, because with no
+  // network in the test env the call it should never have made failed anyway.
+  // Counting fetches makes "did not start" observable; recording the argument
+  // to AbortSignal.timeout makes "started with WHICH budget" observable.
+  // Counts only the requests to the MINT path — the same handler also emits a
+  // telemetry POST, and counting both makes "did not start the mint" read as
+  // two calls whether the floor held or not. The timeout is read back off the
+  // signal that rode with THAT request, so it cannot be confused with another
+  // call site's.
+  function onTheWire(fn) {
+    const realFetch = globalThis.fetch;
+    const realTimeout = AbortSignal.timeout;
+    const mint = [];
+    AbortSignal.timeout = (ms) => {
+      const s = new AbortController().signal;
+      try { Object.defineProperty(s, '__ms', { value: ms }); } catch (_e) {}
+      return s;
+    };
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes('/api/v1/deal-desk')) {
+        mint.push({ url: String(url), method: init && init.method,
+                    timeout: init && init.signal && init.signal.__ms });
+      }
+      return new Response('{}', { status: 200 });
+    };
+    return Promise.resolve(fn()).finally(() => {
+      globalThis.fetch = realFetch;
+      AbortSignal.timeout = realTimeout;
+    }).then(() => mint);
+  }
+
+  it('★ does not start a mint the plan has no budget left for', async () => {
+    // #210, one call site over. DEADLINE_MS is a START gate — a run can legally
+    // finish its steps at ~40s, and a fixed 8s tacked on after that lands at
+    // 48s, past the edge's 45s route budget, where the WHOLE envelope is
+    // discarded rather than one leg. Failing soft on the mint cannot rescue an
+    // answer the edge already threw away, so the mint must never be STARTED.
+    const pro = { api_key: 'k', tier: 'pro' };
+    for (const left of [0, 1, 500, _DEAL_DESK_MIN_BUDGET_MS - 1]) {
+      const mint = await onTheWire(async () => {
+        expect(await _execMintDealDesk({ executed: [] }, new Map(), pro, left)).toBeNull();
+      });
+      expect(mint.length, `budget ${left}ms still POSTed to the mint`).toBe(0);
+    }
+  });
+
+  it('★ hands the POST the budget it was given, not the constant', async () => {
+    // Reaching for _DEAL_DESK_TIMEOUT_MS here re-opens the same hole: at 34s of
+    // a 40s plan the clamp says 6000 and the constant says 8000, which is the
+    // 2s that carries the request past the edge.
+    const pro = { api_key: 'k', tier: 'pro' };
+    const mint = await onTheWire(async () => {
+      await _execMintDealDesk({ executed: [] }, new Map(), pro, 6000);
+    });
+    expect(mint.length).toBe(1);
+    expect(mint[0].method).toBe('POST');
+    expect(mint[0].timeout).toBe(6000);
+    expect(mint[0].timeout).not.toBe(_DEAL_DESK_TIMEOUT_MS);
+  });
+
+  it('the floor sits above the slowest mint measured against production', () => {
+    // 0.54s at 62KB, 0.81s at 433KB (2026-09-10). Below this there is no point
+    // starting: the abort does not cancel the INSERT the backend already ran,
+    // so a row lands that nobody is ever handed a URL for.
+    expect(_DEAL_DESK_MIN_BUDGET_MS).toBeGreaterThan(810);
+    expect(_DEAL_DESK_MIN_BUDGET_MS).toBeLessThan(_DEAL_DESK_TIMEOUT_MS);
+  });
+
+  it('derives its ceiling from what is LEFT, never from the constant', () => {
+    // The same clamp every loopback step uses. At 39.9s of a 40s plan the mint
+    // gets 100ms — which is under the floor, so it is skipped rather than run
+    // into the edge.
+    expect(_execStepBudget(39900, 40000, _DEAL_DESK_TIMEOUT_MS)).toBe(100);
+    expect(_execStepBudget(1000, 40000, _DEAL_DESK_TIMEOUT_MS)).toBe(_DEAL_DESK_TIMEOUT_MS);
+    expect(_execStepBudget(41000, 40000, _DEAL_DESK_TIMEOUT_MS)).toBe(0);
   });
 
   it('reads a real pdf_url as the ONLY proof a row landed', () => {
