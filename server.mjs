@@ -10534,7 +10534,16 @@ export function _execAnswerGuide(executed) {
 // <tool> directly for the full payload", a limit that stops being true the
 // moment the brief is built from the untruncated payload.
 const _DEAL_DESK_PATH = '/api/v1/deal-desk';
-const _DEAL_DESK_TIMEOUT_MS = 8000;
+export const _DEAL_DESK_TIMEOUT_MS = 8000;
+// ★ DO NOT START A MINT WE CANNOT FINISH.
+//
+// Measured against production: 0.54s at 62KB, 0.81s at 433KB. A budget under
+// this floor cannot complete one, and starting anyway is WORSE than skipping:
+// aborting the client does not cancel the INSERT the backend already ran, so a
+// brief row lands that nobody is ever handed a URL for. Orphan rows in the
+// store are exactly what store_brief()'s RETURNING id check exists to prevent
+// on the other side of the wire.
+export const _DEAL_DESK_MIN_BUDGET_MS = 2000;
 // ★ A SKIP LIST, DELIBERATELY NOT AN ALLOWLIST.
 //
 // The correctness gate is the backend's, and it is the caller's own key that
@@ -10601,14 +10610,39 @@ export function _dealDeskMinted(r) {
   return !!(r && r.ok === true && typeof r.pdf_url === 'string' && r.pdf_url);
 }
 
-export async function _execMintDealDesk(env, fullByEntry, c) {
+export async function _execMintDealDesk(env, fullByEntry, c, budgetMs = _DEAL_DESK_TIMEOUT_MS) {
   const t0 = Date.now();
   try {
     if (!_dealDeskEligible(c)) return null;
+    // ★ THE MINT RIDES INSIDE THE PLAN'S BUDGET, NOT AFTER IT.
+    //
+    // This is #210 again, one call site over. DEADLINE_MS is a START gate,
+    // checked before a step is admitted and never again, so a run can legally
+    // finish its steps at ~40s. A fixed 8s tacked on after that reaches 48s,
+    // past the edge's ROUTE_TIMEOUTS['/mcp'] = 45,000ms — and the edge killing
+    // the request loses the WHOLE ENVELOPE, not just the brief. Failing soft on
+    // the mint cannot save an answer the edge already discarded.
+    //
+    // _execStepBudget is the same clamp every loopback step derives from; the
+    // brief is not exempt from it just because it is not a step.
+    if (!(budgetMs >= _DEAL_DESK_MIN_BUDGET_MS)) {
+      try {
+        trackToolCall({
+          timestamp: new Date().toISOString(), tool: 'deal_desk_automint',
+          params: { minted: false, skipped: 'budget', budget_ms: budgetMs,
+                    steps_total: (env.executed || []).length,
+                    tier: (c && c.tier) || null },
+          platform: (c && c.platform) || 'unknown', client_name: null,
+          api_key: null, tier: null, session_id: (c && c.session_id) || null,
+          status: 'error', duration_ms: 0,
+        });
+      } catch (_e) { /* telemetry never blocks the answer */ }
+      return null;
+    }
     const rich = _execEnrichEnvelope(env, fullByEntry);
     const body = { plan: (rich && rich.env) || env, source: 'execute_plan' };
     const r = await callAPI(_DEAL_DESK_PATH, {}, {
-      method: 'POST', body, timeout: _DEAL_DESK_TIMEOUT_MS });
+      method: 'POST', body, timeout: budgetMs });
     const ok = _dealDeskMinted(r);
     try {
       // Measured on the way IN, not discovered later. The DB row carries
@@ -14613,7 +14647,10 @@ function createServer(descOverrides, instructionsTail) {
       // the brief mints only for callers who ARE. Pinned in
       // test/deal-desk-automint.test.mjs.
       let _dealDesk = null;
-      try { _dealDesk = await _execMintDealDesk(out, fullByEntry, c); } catch (_e) { _dealDesk = null; }
+      try {
+        _dealDesk = await _execMintDealDesk(out, fullByEntry, c,
+          _execStepBudget(Date.now() - t0, DEADLINE_MS, _DEAL_DESK_TIMEOUT_MS));
+      } catch (_e) { _dealDesk = null; }
       if (_dealDesk) {
         out.deal_desk = _dealDesk;
         const _rel = _dealDeskHumanRelay(_dealDesk);

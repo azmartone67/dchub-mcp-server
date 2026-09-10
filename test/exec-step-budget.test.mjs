@@ -16,7 +16,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { _execStepBudget, _execAnswerGuide } from '../server.mjs';
+import { _execStepBudget, _execAnswerGuide, _DEAL_DESK_TIMEOUT_MS } from '../server.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
@@ -61,6 +61,33 @@ describe('execute_plan step budget (#210)', () => {
       expect(args, `bare numeric budget in _execLoopbackCall(${args})`)
         .not.toMatch(/,\s*\d+\s*$/);
     }
+  });
+
+  it('★ EVERY outbound call inside the handler rides the plan budget', () => {
+    // The rule was written for _execLoopbackCall and the next outbound call
+    // walked straight past it. The deal-desk mint (#398) POSTed with a fixed
+    // 8000ms AFTER the steps, so a run that legally finished at ~40s reached
+    // 48s — past EDGE_BUDGET_MS, where the edge discards the whole envelope
+    // rather than one leg. Same defect as #210, one call site over.
+    //
+    // So the guard is on the HANDLER, not on one function name: every awaited
+    // call in execute_plan's body that takes a timeout must derive it from
+    // _execStepBudget. A literal here is the bug.
+    const body = SRC.slice(SRC.indexOf("trackedTool(srv, 'execute_plan',"),
+                           SRC.indexOf("trackedTool(srv, 'search_facilities',"));
+    const timed = [...body.matchAll(/_execStepBudget\(((?:[^()]|\([^()]*\))*)\)/g)];
+    // A floor: this scan must never pass by finding nothing to check.
+    expect(timed.length).toBeGreaterThanOrEqual(3);   // wave + retry + mint
+    for (const [, args] of timed) {
+      // Each one clamps against the elapsed time AND the plan deadline, rather
+      // than against a constant that cannot know how much is left.
+      expect(args).toMatch(/Date\.now\(\)\s*-\s*t0/);
+      expect(args).toMatch(/DEADLINE_MS/);
+    }
+    // …and the mint's own ceiling is the third argument, never the whole budget.
+    expect(body).toMatch(/_execStepBudget\(Date\.now\(\) - t0, DEADLINE_MS, _DEAL_DESK_TIMEOUT_MS\)/);
+    // The plan's own worst case must still land inside the edge's route budget.
+    expect(40000 + _DEAL_DESK_TIMEOUT_MS).toBeGreaterThan(EDGE_BUDGET_MS);  // why the clamp exists
   });
 
   it('labels OUR deadline as timed_out, never as failed', () => {
