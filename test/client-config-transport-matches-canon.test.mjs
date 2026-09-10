@@ -73,8 +73,20 @@ const CFG_MARKERS = ["mcpServers", '"servers"', "'servers'"];
 const CFG_WINDOW = 10;
 const FENCE = "```";
 
-// sdk/ vendors its own examples and ships its own runners; not our surface.
-const SKIP = /^(sdk|node_modules)\//;
+// What this guard protects is PUBLISHED surfaces — the docs, manifests and
+// snippets a human or a registry actually reads. sdk/ vendors its own examples
+// and ships its own runners; node_modules/ is not ours.
+//
+// ★ test/ is skipped for the same reason, and it is not self-service: a guard
+// that forbids a token cannot also live in the set it scans, because its own
+// probes MUST contain that token to prove detection works. This exact file
+// flagged its own five probe strings on the first full-suite run after it was
+// committed — and passed before that only because an uncommitted file is
+// invisible to `git ls-files`, which is a nastier version of the same trap.
+// Nobody pastes a vitest fixture into Claude Desktop; server.mjs, docs/,
+// submissions/ and the manifests are the surfaces that matter, and they are all
+// still scanned. `does not flag its own probes` below pins this.
+const SKIP = /^(sdk|node_modules|test)\//;
 
 function trackedFiles() {
   return execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" })
@@ -166,7 +178,10 @@ describe("no client config in this repo names streamable-http", () => {
   // scan reports clean.
   it("the scan actually reaches the repo", () => {
     const files = trackedFiles();
-    expect(files.length).toBeGreaterThan(200);
+    // 163 after SKIP today (352 tracked, ~176 of them test/). ~20% under, so
+    // retiring a doc or two does not manufacture a red build, while a broken
+    // `git ls-files` or a widened SKIP collapses well below it.
+    expect(files.length).toBeGreaterThan(130);
     expect(files).toContain("server.mjs");
     expect(files).toContain("docs/one-click-install.md");
   });
@@ -207,6 +222,21 @@ describe("no client config in this repo names streamable-http", () => {
       expect(flagged, `${name} was NOT flagged — detection is off, and every ` +
         `other assertion here passes on an empty result`).toBe(true);
     }
+  });
+
+  // ★ A guard that forbids a token cannot scan itself. This file's probes must
+  // contain `streamable-http` to prove detection works, so a scan that includes
+  // test/ reports its own fixtures as defects. Caught on the first full-suite
+  // run after commit; it passed before that only because an UNCOMMITTED file is
+  // invisible to `git ls-files` — same trap, quieter.
+  it("does not flag its own probes", () => {
+    const bad = violationsIn(trackedFiles());
+    expect(bad.filter((b) => b.includes("client-config-transport"))).toEqual([]);
+    // ...and the file really is full of the forbidden token, so this is not
+    // passing because the probes went missing.
+    const self = readFileSync(
+      join(ROOT, "test/client-config-transport-matches-canon.test.mjs"), "utf8");
+    expect(self.split("streamable-http").length - 1).toBeGreaterThan(5);
   });
 
   // ★ NEGATIVE PROBE 1 — directional. A self-description whose only marker
