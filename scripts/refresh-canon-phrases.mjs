@@ -107,7 +107,15 @@ async function main() {
     return;
   }
   const tools = Number(body.tools);
-  const fields = { facilities: body.facilities, countries: body.countries, deals: body.deals, markets: body.markets };
+  // ★ substations JOINS THE PHRASE SET 2026-09-09. The endpoint has always
+  //   published it ("127,000+"), but this script copied only four fields, so
+  //   every surface quoting a substation count was hand-typed and drifted:
+  //   README and integrations/chatgpt/instructions.txt said 126,000+ while
+  //   scripts/smithery_description.txt said 127,000+ — three files, two
+  //   answers, none of them healable. A field the source publishes and the
+  //   snapshot drops is a number nothing owns.
+  const fields = { facilities: body.facilities, countries: body.countries, deals: body.deals,
+                   markets: body.markets, substations: body.substations };
   const bad = Object.entries(fields).filter(([, v]) => !isPhrase(v)).map(([k]) => k);
   if (!Number.isInteger(tools) || tools < 20 || tools > 500) bad.push('tools');
   if (bad.length) {
@@ -125,9 +133,10 @@ async function main() {
     countries: fields.countries,
     deals: fields.deals,
     markets: fields.markets,
+    substations: fields.substations,
   };
   const prev = (() => { try { return JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch { return null; } })();
-  const same = prev && ['tools', 'facilities', 'countries', 'deals', 'markets'].every((k) => prev[k] === snap[k]);
+  const same = prev && ['tools', 'facilities', 'countries', 'deals', 'markets', 'substations'].every((k) => prev[k] === snap[k]);
   if (same) {
     console.log('canon-phrases refresh: ✓ snapshot already matches live canon — not rewriting (retrieved_at stays at last change)');
     return;
