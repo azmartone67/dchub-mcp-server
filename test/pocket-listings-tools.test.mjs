@@ -679,3 +679,37 @@ describe('initialize instructions mention the program', () => {
     if (scope > -1) expect(i).toBeLessThan(scope);
   });
 });
+
+// ── licence: listing answers are confidential, never CC-BY ───────────────────
+// The shared stamps (withCitation's CC-BY footer, _embedSourceInContent0's _cite,
+// lib/attribution.mjs) each defer to attribution a result already carries. Run
+// the WHOLE handler chain per result shape and search the WHOLE result: a bare
+// listing answer would leave labelled "CC-BY-4.0: cite this data".
+describe('pocket-listing answers carry a confidential licence end to end', () => {
+  const slug = 'dfw-40mw-powered-shell';
+  const shapes = [
+    ['teaser feed', READ, {}, () => json(200, listWithItems(2))],
+    ['locked detail', READ, { slug }, () => json(200, DETAIL_LOCKED)],
+    ['unlocked detail', READ, { slug }, () => json(200, DETAIL_UNLOCKED)],
+    ['identity wall', WRITE, { ...COMPLETE, slug }, () => json(401, E401_SIGN_IN)],
+    ['intro receipt', WRITE, { ...COMPLETE, slug }, () => json(200, INTRO_OK)],
+    ['interest receipt', WRITE, { ...COMPLETE }, () => json(200, INTEREST_OK)],
+    ['terms refusal', WRITE, { ...COMPLETE, accept_terms: false }, null],
+  ];
+  it.each(shapes)('%s', async (_label, tool, args, respond) => {
+    responder = respond;
+    const r = await call(tool, args, identifiedSeat());
+    expect(r.isError).not.toBe(true);
+    expect(JSON.stringify(r)).not.toMatch(/CC-BY/i);
+    const first = JSON.parse(r.content[0].text);
+    for (const view of [first, r.structuredContent]) {
+      expect(view.citation.license).toBe(S.LISTING_LICENSE);
+      expect(view.provenance.license).toBe(S.LISTING_LICENSE);
+      expect(view.provenance.redistribution).toBe('not_permitted');
+    }
+    // Not vacuous: the shared stamps DID run over this result — attribution.mjs
+    // merged its retrieved_at in, and the source line the tools emit is present.
+    expect(typeof r.structuredContent.citation.retrieved_at).toBe('string');
+    expect(textOf(r)).toContain('Source: DC Hub Pocket Listings');
+  });
+});

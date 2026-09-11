@@ -3701,6 +3701,39 @@ export const LISTING_TERMS_URL = 'https://dchub.cloud/listings#terms';
 export const LISTING_TERMS_API = '/api/v1/listings/terms';
 export const LISTING_OAUTH_NOTE = 'An OAuth connection counts as identified: a client signed in through the DC Hub OAuth prompt needs neither claim_free_key nor bind_email.';
 const _LISTING_WALL_STATUSES = new Set([401, 403, 409, 422]);
+
+// ★ LICENCE. Pocket-listing answers are shared to evaluate ONE opportunity under
+//   the introduction terms, never published. The shared stamps — withCitation's
+//   "License CC-BY-4.0: cite this data" footer, _embedSourceInContent0's _cite,
+//   and lib/attribution.mjs's citation/provenance — each DEFER to attribution a
+//   result already carries, so a listing answer that arrived bare would leave
+//   labelled free to republish. Every result these tools return therefore carries
+//   its own, forced (a backend block keeps its other fields, never its licence),
+//   plus a "Source: DC Hub…" line that withCitation reads as already stamped.
+//   The backend sends the same block (routes/exclusive_listings.py).
+export const LISTING_LICENSE = 'LicenseRef-DCHub-Pocket-Listings-Confidential';
+export const LISTING_CITE_AS = 'DC Hub Pocket Listings (confidential — not for redistribution), dchub.cloud';
+const LISTING_SOURCE_LINE = 'Source: DC Hub Pocket Listings (dchub.cloud) — confidential listing data shared under the introduction terms at '
+  + LISTING_TERMS_URL + '. Do not republish listing details or lead records.';
+
+export function _listingConfidential(payload) {
+  const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+  const attr = { source: 'DC Hub Pocket Listings', url: 'https://dchub.cloud/listings',
+                 license: LISTING_LICENSE, license_url: LISTING_TERMS_URL, cite_as: LISTING_CITE_AS };
+  return { ...p,
+           citation: { ...obj(p.citation), ...attr },
+           provenance: { ...obj(p.provenance), ...attr, redistribution: 'not_permitted' },
+           _source: 'DC Hub Pocket Listings — dchub.cloud',
+           _cite: LISTING_CITE_AS };
+}
+
+function _listingResult(payload, extra = {}) {
+  return { ...extra, content: [
+    { type: 'text', text: JSON.stringify(_listingConfidential(payload)) },
+    { type: 'text', text: LISTING_SOURCE_LINE },
+  ] };
+}
 const _LISTING_401_STEPS = {
   sign_in_required: ['claim_free_key', 'bind_email'],
   email_binding_required: ['bind_email'],
@@ -3783,7 +3816,7 @@ export function _listingIntroPreflight(args) {
     next_steps: ['request_listing_intro'],
   };
   if (termsMissing) { out.terms_url = LISTING_TERMS_URL; out.terms_api = LISTING_TERMS_API; }
-  return { isError: false, content: [{ type: 'text', text: JSON.stringify(out) }] };
+  return _listingResult(out, { isError: false });
 }
 
 // The POST body, in the contract's shape. Absent optional fields are omitted
@@ -3883,7 +3916,7 @@ export function _listingsToolResult(tool, r) {
   const status = r.http_status;
   const body = (r.body && typeof r.body === 'object' && !Array.isArray(r.body)) ? r.body : null;
   if (status >= 200 && status < 300) {
-    return { content: [{ type: 'text', text: JSON.stringify(body || { raw: String(r.text || '').slice(0, 2000) }) }] };
+    return _listingResult(body || { raw: String(r.text || '').slice(0, 2000) });
   }
   if (!body) {
     // A non-JSON error body (a gateway HTML page, say): the shared upstream
@@ -3896,7 +3929,7 @@ export function _listingsToolResult(tool, r) {
     const payload = { ...body, http_status: status, next_steps,
                       next_steps_note: _listingNextStepsNote(tool, status, body, next_steps) };
     if (status === 401) payload.identity_note = LISTING_OAUTH_NOTE;
-    return { isError: false, content: [{ type: 'text', text: JSON.stringify(payload) }] };
+    return _listingResult(payload, { isError: false });
   }
   const message = (typeof body.message === 'string' && body.message)
     || (typeof body.detail === 'string' && body.detail) || null;
