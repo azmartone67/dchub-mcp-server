@@ -1,11 +1,11 @@
 {
   "pack": "site",
   "endpoint": "https://dchub.cloud/mcp/site",
-  "version": "2.12.11",
+  "version": "2.12.12",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
-  "full_catalog_tool_count": 88,
+  "full_catalog_tool_count": 90,
   "tool_count": 10,
   "carries_shared_spine": true,
   "authentication": {

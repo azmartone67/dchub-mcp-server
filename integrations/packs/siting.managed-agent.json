@@ -66,6 +66,14 @@
         "enabled": true
       },
       {
+        "name": "get_pocket_listings",
+        "enabled": true
+      },
+      {
+        "name": "request_listing_intro",
+        "enabled": true
+      },
+      {
         "name": "discover_tools",
         "enabled": true
       },

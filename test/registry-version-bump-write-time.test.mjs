@@ -329,7 +329,18 @@ describe('sync:fix produces a publishable tree', () => {
     const bundle = readZipEntries(fs.readFileSync(path.join(box.root, 'dchub.dxt')));
     const embedded = bundle.get('manifest.json').toString('utf8');
     expect(embedded).toBe(fs.readFileSync(path.join(box.root, 'dxt/manifest.json'), 'utf8'));
-    expect(embedded).toMatch(/89 tools/);               // the new count reached the file a user installs
+    // The new count reached the file a user installs. ★2026-09-11: this used to
+    // pin the literal /89 tools/ ("today's catalog plus the probe"), so the next
+    // real tool addition turned it red on a correct tree: 88 -> 90 registrations
+    // made the sandbox 91. Derived instead: the registrations the sandbox was
+    // copied from, plus the one probe the RED control above appended. The old
+    // count must be GONE as well, or a bundle carrying both would pass.
+    const registered = new Set([...fs.readFileSync(path.join(REPO, 'server.mjs'), 'utf8')
+      .matchAll(/trackedTool\(\s*srv\s*,\s*'([a-z_]+)'/g)].map((m) => m[1]));
+    expect(registered.size).toBeGreaterThan(50);   // a parse that found nothing must not pass
+    const toolsClaim = (n) => new RegExp(`(?<![\\d,])${n} tools\\b`);
+    expect(embedded).toMatch(toolsClaim(registered.size + 1));
+    expect(embedded).not.toMatch(toolsClaim(registered.size));
   });
 
   it('is idempotent — running --fix again does not walk the version forward', () => {
