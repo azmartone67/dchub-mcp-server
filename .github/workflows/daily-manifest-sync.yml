@@ -274,6 +274,12 @@ jobs:
           # 16,300+ against a canon of 16,500+ and could never converge, which is
           # what turned smithery-canon-guard's "reports the committed tree as
           # clean" red on main. If you add a file to the heal, add it HERE.
+          # ★2026-09-11: the 14 integrations/packs/* listings, written by
+          #  emit-pack-manifests --fix since #387 (09-08), were never added. On
+          #  09-10 a canon move re-rendered integrations/packs/site.json, the
+          #  UNOWNED gate below failed the whole job (run 34484328331), and the
+          #  day's canon_phrases.json refresh + server.mjs heal shipped nothing.
+          #  Live /.well-known/mcp.json kept "21,400+" x3 against canon 21,500+.
           OWNED="README.md smithery.yaml mcp-server.json server.json package.json \
                  server.mjs canonical/canon_phrases.json canonical/problem_taxonomy.json \
                  canonical/tool_maturity.json \
@@ -289,7 +295,14 @@ jobs:
                  integrations/gemini/README.md integrations/openrouter/README.md \
                  integrations/langchain/dchub_tools.py \
                  integrations/llamaindex/dchub_tools.py \
-                 canonical/github_description.txt canonical/tier_limits.json"
+                 canonical/github_description.txt canonical/tier_limits.json \
+                 integrations/packs/deals.json integrations/packs/deals.managed-agent.json \
+                 integrations/packs/deepresearch.json integrations/packs/deepresearch.managed-agent.json \
+                 integrations/packs/fiber.json integrations/packs/fiber.managed-agent.json \
+                 integrations/packs/gas.json integrations/packs/gas.managed-agent.json \
+                 integrations/packs/grid.json integrations/packs/grid.managed-agent.json \
+                 integrations/packs/site.json integrations/packs/site.managed-agent.json \
+                 integrations/packs/siting.json integrations/packs/siting.managed-agent.json"
           # ★2026-08-05 UNOWNED-HEAL GATE. The comment above warned that a heal
           # writing a file this list omits is a no-op with a green log — and then
           # it happened here for seven files, undetected for days, because
