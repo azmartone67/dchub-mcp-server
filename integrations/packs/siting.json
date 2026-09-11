@@ -1,12 +1,12 @@
 {
   "pack": "siting",
   "endpoint": "https://dchub.cloud/mcp/siting",
-  "version": "2.12.11",
+  "version": "2.12.12",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
-  "full_catalog_tool_count": 88,
-  "tool_count": 18,
+  "full_catalog_tool_count": 90,
+  "tool_count": 20,
   "carries_shared_spine": true,
   "authentication": {
     "type": "api-key",
@@ -69,6 +69,14 @@
     {
       "name": "get_tax_incentives",
       "description": "Use when a user asks \"what tax breaks does <state> give data centers?\" — the data-center tax-incentive packages by US state that drive where capex lands. Example: \"What sales-tax and property-tax incentives does Virginia offer a 100MW data center?\" — get_tax_incentives state=VA. Params: state (2-letter US code; required). Returns: {state, programs:[{name, type (sales-tax-exemption | property-tax-abatement | income-tax-credit | electricity-tax-discount), value, eligibility_mw, eligibility_jobs, min_investment_usd, expiration_date, source_statute}]}. Cite the statute with attribution to DC Hub (CC-BY-4.0). Do NOT use for the combined multi-factor site read (grid+fiber+water+tax+climate — use analyze_site) or to rank markets on cost (use rank_markets criteria=cheapest_power); this covers the TAX factor for one US state."
+    },
+    {
+      "name": "get_pocket_listings",
+      "description": "Use for OFF-MARKET data-center capacity DC Hub is bringing to market — pocket listings: powered shells, available MW and development sites that are not publicly marketed. Returns teaser cards (market, state, capacity, status) to any caller plus the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: full detail needs an identified caller (a key with an email bound via claim_free_key then bind_email, or an OAuth connection); others get the teaser and the unlock steps. Operator contact is never returned — call request_listing_intro and DC Hub makes the introduction. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions)."
+    },
+    {
+      "name": "request_listing_intro",
+      "description": "Use when your human wants an introduction to the operator behind a pocket listing (pass slug), or wants first access to upcoming off-market capacity matching a requirement (omit slug; pass capacity_mw, markets or states, timeline). DC Hub records the request in its lead register, emails your human a one-click confirmation, and once confirmed introduces them to the operator. Requires an identified caller (claim_free_key, then bind_email with your human's address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and a verify_url your human can share with the operator. Do NOT use to save or monitor a site (use save_site / set_site_alert)."
     },
     {
       "name": "discover_tools",

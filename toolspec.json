@@ -1346,6 +1346,44 @@
     }
   },
   {
+    "name": "get_pocket_listings",
+    "description": "Use for OFF-MARKET data-center capacity DC Hub is bringing to market — pocket listings: powered shells, available MW and development sites that are not publicly marketed. Returns teaser cards (market, state, capacity, status) to any caller plus the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: full detail needs an identified caller (a key with an email bound via claim_free_key then bind_email, or an OAuth connection); others get the teaser and the unlock steps. Operator contact is never returned — call request_listing_intro and DC Hub makes the introduction. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "description": "One listing: its slug or numeric id exactly as items[].slug / items[].id return it. Omit to browse teaser cards",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "market": {
+          "description": "Browse filter: market name as it appears on a listing, e.g. \"Dallas\"",
+          "type": "string"
+        },
+        "state": {
+          "description": "Browse filter: two-letter US state, e.g. \"TX\"",
+          "type": "string"
+        },
+        "min_mw": {
+          "description": "Browse filter: only listings with at least this much capacity, in MW",
+          "type": "number"
+        },
+        "limit": {
+          "description": "Max results to return (1-500; default varies by tool)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    }
+  },
+  {
     "name": "get_power_availability_timeline",
     "description": "Power-availability TIMING for one US state — when power gets EASIER, year by year. Composes: new generation coming online from EIA-860M monthly, split by confidence class (under-construction vs planned vs testing — never blended); scheduled retirements as dated subtractions; LBNL interconnection-queue depth as congestion context (NO delivery dates — the feed has none and most queued MW never completes). The one derived number, cumulative_firm_signal_mw, counts ONLY under-construction+testing minus retirements — speculative permitting-stage MW is shown but never folded in. Answers \"when is new capacity landing in Ohio\", \"what comes online in Georgia by 2027\" with dated, sourced, per-lane-vintaged numbers. HONESTY LINE: supply-side signals, not a load-interconnection promise — generation ≠ deliverable load, and utility study timelines / large-load tariff processes / substation-grain delivery are declared out of coverage in constraint_coverage rather than estimated. Try: get_power_availability_timeline state=OH. Do NOT use for the raw project list (get_power_pipeline), live headroom today (get_grid_intelligence), queue survivors (get_refined_queue), or where-to-build ranking (rank_markets / ai_capacity_index) — this answers WHEN, for one state.",
     "inputSchema": {
@@ -1977,6 +2015,74 @@
         "kind",
         "webhook_url"
       ]
+    }
+  },
+  {
+    "name": "request_listing_intro",
+    "description": "Use when your human wants an introduction to the operator behind a pocket listing (pass slug), or wants first access to upcoming off-market capacity matching a requirement (omit slug; pass capacity_mw, markets or states, timeline). DC Hub records the request in its lead register, emails your human a one-click confirmation, and once confirmed introduces them to the operator. Requires an identified caller (claim_free_key, then bind_email with your human's address) and accept_terms=true only after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Returns lead_id, status and a verify_url your human can share with the operator. Do NOT use to save or monitor a site (use save_site / set_site_alert).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "description": "The listing to request an introduction for: its slug or id from get_pocket_listings. Omit to register a standing requirement for upcoming listings instead",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "name": {
+          "description": "Your human's full name. Nothing is sent without it; use only what they gave you, never invent it",
+          "type": "string"
+        },
+        "company": {
+          "description": "Your human's company. Nothing is sent without it",
+          "type": "string"
+        },
+        "role": {
+          "description": "Your human's role or title",
+          "type": "string"
+        },
+        "capacity_mw": {
+          "description": "Capacity needed, in MW",
+          "type": "number"
+        },
+        "markets": {
+          "description": "Comma-separated markets of interest, e.g. \"Dallas, Phoenix\"",
+          "type": "string"
+        },
+        "states": {
+          "description": "Comma-separated US states of interest, e.g. \"TX, AZ\"",
+          "type": "string"
+        },
+        "timeline": {
+          "description": "When the capacity is needed, e.g. a quarter and year",
+          "type": "string"
+        },
+        "use_case": {
+          "description": "What the capacity is for, e.g. \"AI inference\"",
+          "type": "string"
+        },
+        "notes": {
+          "description": "Anything else the operator should know about the requirement",
+          "type": "string"
+        },
+        "message": {
+          "description": "A short note from your human to the operator",
+          "type": "string"
+        },
+        "accept_terms": {
+          "description": "Set true ONLY after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Unless it is exactly true, nothing is sent",
+          "type": "boolean"
+        },
+        "terms_version": {
+          "description": "The terms version your human agreed to, e.g. program.terms.version from get_pocket_listings. Omit to send the version currently published",
+          "type": "string"
+        }
+      }
     }
   },
   {

@@ -39,14 +39,17 @@ let S, PORT, httpServer, CANON;
 // PINNED. Not derived from MCP_PACKS — a count read out of the thing it is
 // checking cannot fail. Change these deliberately, in the commit that changes
 // the pack.
+// ★2026-09-11 siting 18 -> 20 and deals 13 -> 15: get_pocket_listings and
+// request_listing_intro joined both packs (off-market capacity is a siting
+// input and a deal flow).
 const EXPECTED = {
   deepresearch: 2,
   site: 10,
   grid: 16,
-  siting: 18,
+  siting: 20,
   fiber: 11,
   gas: 9,
-  deals: 13,
+  deals: 15,
 };
 
 async function listTools(path) {
