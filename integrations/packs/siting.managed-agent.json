@@ -74,6 +74,10 @@
         "enabled": true
       },
       {
+        "name": "accept_capacity_terms",
+        "enabled": true
+      },
+      {
         "name": "discover_tools",
         "enabled": true
       },
