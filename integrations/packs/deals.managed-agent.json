@@ -46,11 +46,11 @@
         "enabled": true
       },
       {
-        "name": "get_pocket_listings",
+        "name": "source_capacity",
         "enabled": true
       },
       {
-        "name": "request_listing_intro",
+        "name": "request_capacity_intro",
         "enabled": true
       },
       {
