@@ -29,6 +29,7 @@ const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 const BASE = 'http://127.0.0.1:1';
 const READ = 'source_capacity';
 const WRITE = 'request_capacity_intro';
+const ACCEPT = 'accept_capacity_terms';
 
 // ── contract fixtures ────────────────────────────────────────────────────────
 const VIEWER_ANON = {
@@ -144,6 +145,20 @@ const E422_INVALID = {
 const E429 = { ok: false, error: 'rate_limited', message: 'Too many introduction requests.', retry_after_s: 60 };
 const E503 = { ok: false, error: 'ledger_unavailable', message: 'The lead register is temporarily unavailable.' };
 const TERMS_OK = { ok: true, terms: { ...TERMS_BLOCK, text: '…' } };
+const ACCEPT_OK = {
+  ok: true, accepted: true, already_accepted: false, terms: TERMS_BLOCK,
+  accepted_at: '2026-09-13T04:10:00.000000+00:00', ledger: { seq: 14, entry_hash: HEX64 },
+};
+const ACCEPT_ALREADY = { ok: true, accepted: true, already_accepted: true, terms: TERMS_BLOCK };
+const ACCESS_TERMS = {
+  required: 'registered', granted: false, reason: 'terms_acceptance_required',
+  unlock: { web_sign_in_url: null, mcp_steps: ['accept_capacity_terms'], pricing_url: null,
+            terms: TERMS_BLOCK, accept: { method: 'POST', path: '/api/v1/listings/terms/accept' } },
+};
+const DETAIL_LOCKED_TERMS = {
+  ok: true, locked: true, listing: { ...TEASER, lock_reason: 'terms_acceptance_required' },
+  access: ACCESS_TERMS, introduction: INTRODUCTION, viewer: VIEWER_IDENTIFIED, caller_tier: 'free',
+};
 
 // ── a stubbed network that records every call ────────────────────────────────
 let S, TOOLS, realFetch;
@@ -292,7 +307,7 @@ function setLiteral(decl) {
 
 describe('registration', () => {
   it('both tools are registered on a real createServer()', () => {
-    for (const n of [READ, WRITE]) {
+    for (const n of [READ, WRITE, ACCEPT]) {
       expect(TOOLS[n], `${n} not registered`).toBeTruthy();
       expect(typeof TOOLS[n].handler).toBe('function');
     }
@@ -306,6 +321,7 @@ describe('registration', () => {
     expect(topArgs(blank(four, { strings: true }), 1).length).toBe(4);
     expect(registration(READ)).toEqual({ count: 1, arity: 5 });
     expect(registration(WRITE)).toEqual({ count: 1, arity: 5 });
+    expect(registration(ACCEPT)).toEqual({ count: 1, arity: 5 });
   });
 
   it('source_capacity is FREE_FULL and read-only, and not a write tool', () => {
@@ -329,14 +345,14 @@ describe('registration', () => {
   });
 
   it('descriptions carry no digits', () => {
-    for (const n of [READ, WRITE]) {
+    for (const n of [READ, WRITE, ACCEPT]) {
       expect(TOOLS[n].description.length, `${n} description implausibly short`).toBeGreaterThan(300);
       expect(TOOLS[n].description, n).not.toMatch(/\d/);
     }
   });
 
   it('declares no required argument, so {} passes schema validation and the handler decides', async () => {
-    for (const n of [READ, WRITE]) {
+    for (const n of [READ, WRITE, ACCEPT]) {
       expect((await TOOLS[n].inputSchema.safeParseAsync({})).success, n).toBe(true);
     }
   });
@@ -353,6 +369,10 @@ describe('outputSchema accepts every contract response verbatim', () => {
     [WRITE, 'intro — 401 identity_required body', E401_SIGN_IN],
     [WRITE, 'interest — registered', INTEREST_OK],
     [WRITE, 'interest — pending email confirmation', INTEREST_PENDING],
+    [READ, 'detail — locked until the terms are accepted', DETAIL_LOCKED_TERMS],
+    [ACCEPT, 'accept — recorded', ACCEPT_OK],
+    [ACCEPT, 'accept — already accepted', ACCEPT_ALREADY],
+    [ACCEPT, 'accept — 401 identity_required body', E401_SIGN_IN],
   ];
   for (const [tool, label, fixture] of CASES) {
     it(`${tool}: ${label}`, async () => {
@@ -362,7 +382,7 @@ describe('outputSchema accepts every contract response verbatim', () => {
   }
 
   it('control: the schema really validates (a wrong-typed envelope key is rejected)', async () => {
-    for (const n of [READ, WRITE]) {
+    for (const n of [READ, WRITE, ACCEPT]) {
       expect((await accepts(n, { _entity: 42 })).ok, n).toBe(false);
     }
   });
@@ -676,6 +696,7 @@ describe('initialize instructions mention the program', () => {
     const sentence = inst.slice(i, inst.indexOf('LIVENESS IS THE PRODUCT', i));
     expect(sentence).toContain('source_capacity');
     expect(sentence).toContain('request_capacity_intro');
+    expect(sentence).toContain('accept_capacity_terms');
     expect(sentence).not.toMatch(/\d/);
     const scope = inst.indexOf(' IN SCOPE');
     if (scope > -1) expect(i).toBeLessThan(scope);
@@ -697,6 +718,9 @@ describe('Capacity Source answers carry a confidential licence end to end', () =
     ['intro receipt', WRITE, { ...COMPLETE, slug }, () => json(200, INTRO_OK)],
     ['interest receipt', WRITE, { ...COMPLETE }, () => json(200, INTEREST_OK)],
     ['terms refusal', WRITE, { ...COMPLETE, accept_terms: false }, null],
+    ['terms-locked detail', READ, { slug }, () => json(200, DETAIL_LOCKED_TERMS)],
+    ['acceptance receipt', ACCEPT, { accept_terms: true, terms_version: '2026-09-11' }, () => json(200, ACCEPT_OK)],
+    ['acceptance refusal', ACCEPT, {}, null],
   ];
   it.each(shapes)('%s', async (_label, tool, args, respond) => {
     responder = respond;
@@ -739,5 +763,89 @@ describe('the 2026-09-11 names resolve to the renamed tools', () => {
     }
     // Control: the same parser finds the renamed registration.
     expect(registration(READ).count).toBe(1);
+  });
+});
+
+// ── the terms gate (2026-09-13): accepted once, at the first listing opened ──
+describe('accept_capacity_terms — the one write the gate needs', () => {
+  it('is a write: WRITE_TOOLS, readOnlyHint false, quota- and nudge-exempt, backend-gated', () => {
+    expect(setLiteral('const WRITE_TOOLS = new Set([')).toContain(`'${ACCEPT}'`);
+    expect(TOOLS[ACCEPT].annotations.readOnlyHint).toBe(false);
+    expect(TOOLS[ACCEPT].annotations.destructiveHint).toBe(false);
+    expect(S.QUOTA_EXEMPT_TOOLS.has(ACCEPT)).toBe(true);
+    expect(S.FREE_FULL_TOOLS.has(ACCEPT)).toBe(true);
+    expect(setLiteral('const _RETURN_NUDGE_SKIP = new Set([')).toContain(`'${ACCEPT}'`);
+    // The gate did not turn browsing into a write.
+    expect(TOOLS[READ].annotations.readOnlyHint).toBe(true);
+  });
+
+  it('without accept_terms exactly true, nothing reaches the backend', async () => {
+    responder = () => json(200, ACCEPT_OK);
+    for (const args of [{}, { accept_terms: false }]) {
+      calls = [];
+      const r = await call(ACCEPT, args, identifiedSeat());
+      expect(listingCalls(), JSON.stringify(args)).toHaveLength(0);
+      expect(r.isError).toBeFalsy();
+      expect(r.structuredContent.sent).toBe(false);
+      expect(r.structuredContent.error).toBe('terms_not_accepted');
+      expect(r.structuredContent.next_steps).toEqual([ACCEPT]);
+      expect(r.structuredContent.terms_url).toBe('https://dchub.cloud/listings#terms');
+    }
+    expect((await TOOLS[ACCEPT].inputSchema.safeParseAsync({ accept_terms: 'true' })).success).toBe(false);
+  });
+
+  it('MUST-FAIL CONTROL: accept_terms=true POSTs the acceptance once, with the identity headers', async () => {
+    responder = () => json(200, ACCEPT_OK);
+    const r = await call(ACCEPT, { accept_terms: true, terms_version: '2026-09-11' }, identifiedSeat());
+    const lc = listingCalls();
+    expect(lc).toHaveLength(1);
+    expect(`${lc[0].method} ${lc[0].pathname}`).toBe('POST /api/v1/listings/terms/accept');
+    expect(lc[0].body).toEqual({ accept_terms: true, terms_version: '2026-09-11' });
+    expect(lc[0].headers['X-API-Key']).toBe('dch_live_listing_test');
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.accepted).toBe(true);
+    const ok = await accepts(ACCEPT, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('without terms_version it reads the published version first, then sends that', async () => {
+    responder = (rec) => (rec.pathname === '/api/v1/listings/terms' ? json(200, TERMS_OK) : json(200, ACCEPT_OK));
+    await call(ACCEPT, { accept_terms: true }, identifiedSeat());
+    const lc = listingCalls();
+    expect(lc.map((c) => `${c.method} ${c.pathname}`)).toEqual(['GET /api/v1/listings/terms', 'POST /api/v1/listings/terms/accept']);
+    expect(lc[1].body.terms_version).toBe('2026-09-11');
+  });
+
+  it('walls come back structured: 401 names the identity steps, 409 the version to retry with', async () => {
+    responder = () => json(401, E401_SIGN_IN);
+    const wall = await call(ACCEPT, { accept_terms: true, terms_version: '2026-09-11' });
+    expect(wall.isError).toBeFalsy();
+    expect(wall.structuredContent.next_steps).toEqual(['claim_free_key', 'bind_email', ACCEPT]);
+    responder = () => json(409, E409);
+    const moved = await call(ACCEPT, { accept_terms: true, terms_version: '2026-09-11' }, identifiedSeat());
+    expect(moved.isError).toBeFalsy();
+    expect(moved.structuredContent.next_steps).toEqual([ACCEPT]);
+    expect(moved.structuredContent.next_steps_note).toContain('2026-10-01');
+  });
+});
+
+describe('source_capacity — a listing locked until the terms are accepted', () => {
+  it('names the next calls in order, and the result still passes the schema', async () => {
+    responder = () => json(200, DETAIL_LOCKED_TERMS);
+    const r = await call(READ, { slug: 'dfw-40mw-powered-shell' }, identifiedSeat());
+    const sc = r.structuredContent;
+    expect(r.isError).toBeFalsy();
+    expect(sc.locked).toBe(true);
+    expect(sc.next_steps).toEqual([ACCEPT, READ]);
+    expect(sc.next_steps_note).toContain('terms_version="2026-09-11"');
+    const ok = await accepts(READ, sc);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('control: a sign-in-locked listing comes back as before, with no next_steps added', async () => {
+    responder = () => json(200, DETAIL_LOCKED);
+    const r = await call(READ, { slug: 'dfw-40mw-powered-shell' });
+    expect(r.structuredContent.locked).toBe(true);
+    expect(r.structuredContent.next_steps).toBeUndefined();
   });
 });

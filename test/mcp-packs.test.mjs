@@ -43,14 +43,16 @@ let S, PORT, httpServer, CANON;
 // request_listing_intro joined both packs (off-market capacity is a siting
 // input and a deal flow). ★2026-09-13 renamed source_capacity and
 // request_capacity_intro (Capacity Source) — a rename, so both counts hold.
+// ★2026-09-13 siting 20 -> 21 and deals 15 -> 16: accept_capacity_terms joined
+// both packs beside the other two listing tools (the terms gate's one write).
 const EXPECTED = {
   deepresearch: 2,
   site: 10,
   grid: 16,
-  siting: 20,
+  siting: 21,
   fiber: 11,
   gas: 9,
-  deals: 15,
+  deals: 16,
 };
 
 async function listTools(path) {
