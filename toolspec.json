@@ -1,5 +1,22 @@
 [
   {
+    "name": "accept_capacity_terms",
+    "description": "Use ONLY after your human has read and agreed to DC Hub's introduction terms (https://dchub.cloud/listings#terms): records that acceptance, once per terms version, so Capacity Source listing details open for them. Call it when source_capacity returns a listing locked with access.reason terms_acceptance_required, never on your own judgement: nothing opens without your human's agreement. Requires an identified caller (claim_free_key, then bind_email with your human's address, or an OAuth connection) and accept_terms=true. Returns accepted and the terms version, recorded in DC Hub's lead register. Do NOT use to request an introduction (use request_capacity_intro) or to browse listings (use source_capacity).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "accept_terms": {
+          "description": "Set true ONLY after your human has read and agreed to the introduction terms at https://dchub.cloud/listings#terms. Unless it is exactly true, nothing is sent",
+          "type": "boolean"
+        },
+        "terms_version": {
+          "description": "The terms version your human agreed to, e.g. access.unlock.terms.version from source_capacity. Omit to send the version currently published",
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
     "name": "ai_capacity_index",
     "description": "AI Compute Capacity Index — ranks data center markets by where 100MW of AI training capacity can land in the next 30/60/90 days. Returns top markets with facility_count, operator_count, deployable_mw estimate (megawatts), hyperscale_ready flag, rack power density and cooling-type signals where facility data carries them, and composite score (depth + diversity + power). Refreshed Fridays 14:00 UTC. Use for AI capex planning, GPU cluster siting, hyperscaler deal forecasting. Do NOT use for a general best-markets ranking (use rank_markets) or forward grid-emergence (use grid_transition_radar).",
     "inputSchema": {
@@ -2469,7 +2486,7 @@
   },
   {
     "name": "source_capacity",
-    "description": "Use when your human needs data-center CAPACITY to buy or lease — DC Hub Capacity Source: listings of powered land, powered shells and turnkey capacity, including sites that are not publicly marketed, for enterprise and agent-led procurement. Returns listing cards (market, state, capacity, status and when each listing was last updated) to any caller plus the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: full detail needs an identified caller (a key with an email bound via claim_free_key then bind_email, or an OAuth connection); others get the card and the unlock steps. Operator contact is never returned — call request_capacity_intro and DC Hub makes the introduction. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).",
+    "description": "Use when your human needs data-center CAPACITY to buy or lease — DC Hub Capacity Source: listings of powered land, powered shells and turnkey capacity, including sites that are not publicly marketed, for enterprise and agent-led procurement. Returns listing cards (market, state, capacity, status and when each listing was last updated) to any caller plus the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: full detail needs an identified caller (a key with an email bound via claim_free_key then bind_email, or an OAuth connection); others get the card and the unlock steps. The first time, a listing also stays locked until your human accepts the introduction terms, which accept_capacity_terms records. Operator contact is never returned — call request_capacity_intro and DC Hub makes the introduction. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).",
     "inputSchema": {
       "type": "object",
       "properties": {
