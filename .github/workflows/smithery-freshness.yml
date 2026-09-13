@@ -160,9 +160,16 @@ jobs:
           norm = lambda t: re.sub(r"\s+", " ", (t or "").replace("\\&", "&")).strip()
           STALE = [r"\bDCGI\b(?![^.]*withdrawn)", r"\b\d+ tracked feeds\b"]
           def get(url, auth):
+              # ★2026-09-13: a unique query string on EVERY read. registry.smithery.ai
+              # served our plain URL as a CDN HIT 3.5h old, and api.smithery.ai sends
+              # the same s-maxage=14400. Run 34736406217 pre-read a stale 2,588-char
+              # description while the store held the 2,243 chars this file wants,
+              # PATCHed text that already matched, then "confirmed" against the same
+              # stale copy and went red.
               h = {"User-Agent": "dchub-white-glove/1.0"}
               if auth: h["Authorization"] = f"Bearer {KEY}"
-              return json.load(urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=30))
+              fresh = f"{url}{'&' if '?' in url else '?'}_={int(time.time() * 1000)}"
+              return json.load(urllib.request.urlopen(urllib.request.Request(fresh, headers=h), timeout=30))
           def clean(desc): return norm(desc) == norm(WANT) and not any(re.search(p, desc, re.I) for p in STALE)
           # already in sync on the authoritative store?
           try:
@@ -257,9 +264,13 @@ jobs:
           want = open("scripts/smithery_description.txt", encoding="utf-8").read()
           norm = lambda t: re.sub(r"\s+", " ", t.replace("\\&", "&")).strip()
           def read_live():
+              # ★2026-09-13: a unique query string on every read. A retry budget absorbs
+              # an edge FLAP; it cannot outlast a CDN copy of the plain URL that is kept
+              # for hours (s-maxage=14400). Run 34736406217 read that cached copy for its
+              # whole budget and failed a listing whose store already matched.
               _h = {"User-Agent": "dchub-smithery-freshness-verify/1.0"}
               if KEY: _h["Authorization"] = f"Bearer {KEY}"
-              req = urllib.request.Request(REG, headers=_h)
+              req = urllib.request.Request(f"{REG}?_={int(time.time() * 1000)}", headers=_h)
               return (json.load(urllib.request.urlopen(req, timeout=30)).get("description") or "")
 
           last, unread, empty = None, None, False

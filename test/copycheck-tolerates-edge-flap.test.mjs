@@ -75,4 +75,41 @@ describe('copycheck — replication lag is not drift', () => {
       expect(r.out).toMatch(/UNMEASURED/);
     }
   });
+
+  // ★2026-09-13: a retry budget absorbs an edge FLAP; it cannot outlast a CDN
+  // copy of the plain URL that is kept for hours. Run 34736406217 read that
+  // cached copy for its whole budget and failed a listing whose store matched.
+  it('THE 2026-09-13 DEFECT: an hours-old CDN copy of the plain URL is not drift', () => {
+    const r = run('cached_edge');
+    expect(r.exit, 'the check still reads the cached plain URL').toBe(0);
+    expect(r.reads, 'it needed a retry, so a read skipped the query string').toBe(1);
+    expect(r.out).toMatch(/after 1 read\(s\)/);
+  });
+});
+
+// The white-glove WRITE step reads the same store before and after it writes. A
+// stale cached copy there is worse than a failed check: it PATCHes text that
+// already matches, then "confirms" against the stale copy and goes red. That is
+// what run 34736406217 did.
+const runWG = (scenario) => JSON.parse(execFileSync(
+  'python3', ['test/helpers/run_whiteglove.py', scenario],
+  { encoding: 'utf8', env: { ...process.env, SMITHERY_API_KEY: 'stub' } },
+));
+
+describe('whiteglove — a cached copy never triggers a write', () => {
+  it('MUST-FAIL CONTROL: the step python is really extracted and executed', () => {
+    const r = runWG('in_sync');
+    expect(r.exit, 'the whiteglove python could not be extracted from the workflow').not.toBe(99);
+    expect(r.reads, 'the stub was never consulted — the block did not run').toBeGreaterThan(0);
+    expect(r.writes).toBe(0);
+    expect(r.out).toMatch(/already matches/);
+  });
+
+  it('THE 2026-09-13 DEFECT: a stale plain-URL copy causes no PATCH and no red', () => {
+    const r = runWG('cached_edge');
+    expect(r.exit, r.out).toBe(0);
+    expect(r.writes, 'it wrote because it read the stale cached copy').toBe(0);
+    expect(r.busted_reads, 'a read went to the cached plain URL').toBe(r.reads);
+    expect(r.out).toMatch(/already matches/);
+  });
 });

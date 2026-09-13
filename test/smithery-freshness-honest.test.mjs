@@ -67,14 +67,22 @@ describe('verify_smithery_converged.py — the listing is compared, not the exit
     { name: 'get_facility', description: 'One facility by id or name.' },
   ];
   let registryTools;
+  // ★2026-09-13: what a CDN serves for the PLAIN registry URL. Smithery sends
+  // s-maxage=14400 with stale-while-revalidate=86400, and the edge copy of our
+  // listing was measured as a HIT 3.5h old, still listing the pre-rename tools,
+  // while any query string read the renamed ones. null = no stale edge copy.
+  let edgeCachedTools = null;
+  let registryUrls = [];
 
   beforeAll(async () => {
     hits = { mcp: 0, registry: 0 };
     server = createServer((req, res) => {
       if (req.url.startsWith('/registry')) {
         hits.registry += 1;
+        registryUrls.push(req.url);
+        const busted = /[?&]_=/.test(req.url);
         res.writeHead(200, { 'content-type': 'application/json' });
-        return res.end(JSON.stringify({ tools: registryTools }));
+        return res.end(JSON.stringify({ tools: edgeCachedTools && !busted ? edgeCachedTools : registryTools }));
       }
       let body = '';
       req.on('data', (c) => { body += c; });
@@ -100,6 +108,26 @@ describe('verify_smithery_converged.py — the listing is compared, not the exit
     '--registry', `http://127.0.0.1:${port}/registry`,
     ...extra,
   ]);
+
+  // ★ THE 2026-09-13 FALSE RED. ecosystem-sync dispatched this lane after a tool
+  // rename. The publish landed (a cache-busted read showed the new names within
+  // minutes), yet this script reported DIVERGED 20 times, because it read the
+  // CDN's copy of the plain URL. Every registry read must bypass that copy.
+  it('a stale CDN copy of the plain URL does not fail a publish the store took', async () => {
+    registryTools = liveTools;
+    edgeCachedTools = [{ name: 'get_pocket_listings', description: 'pre-rename entry' }, liveTools[1]];
+    registryUrls = [];
+    try {
+      const r = await verify();
+      expect(r.code, r.stdout).toBe(0);
+      expect(registryUrls.length).toBeGreaterThan(0);
+      for (const u of registryUrls) {
+        expect(u, 'a registry read went to the cached plain URL').toMatch(/[?&]_=\d+/);
+      }
+    } finally {
+      edgeCachedTools = null;
+    }
+  });
 
   it('MUST-FAIL CONTROL: the harness really drives the script and the stubs answer', async () => {
     registryTools = liveTools;
