@@ -339,16 +339,23 @@ jobs:
           #   Fail CLOSED: leave the drift unhealed and say so, rather than push a
           #   tree that does not pass. An unhealed surface is visible and
           #   recoverable; a red main nobody is told about is neither.
-          # The gate's file list is DERIVED from test.yml, never copied: a second
-          # copy is a second thing to forget, and this job exists because a canon
-          # value lived in two places. If the extraction comes back empty, fail —
-          # `vitest run` with no files would sweep everything and could pass
-          # vacuously, which is the silent-green this repo keeps re-learning.
-          HARD_GATE=$(grep -oE 'npx vitest run test/[^"]*' .github/workflows/test.yml | head -1 | sed 's|^npx vitest run ||')
+          # The gate's file list is READ from test/hard-gate.txt, the same file
+          # test.yml's hard gate expands, never copied: a second copy is a second
+          # thing to forget, and this job exists because a canon value lived in
+          # two places. If it comes back empty, fail — `vitest run` with no files
+          # would sweep everything and could pass vacuously, which is the
+          # silent-green this repo keeps re-learning.
+          # ★2026-09-12: this used to grep test.yml for its first
+          # `npx vitest run test/…` line. When the list moved out of that line
+          # the grep did NOT come back empty: its first match became the LIVE
+          # step (mcp.test.mjs + regression.test.mjs), so the empty check passed
+          # and the heal would have been "verified" by the two network suites
+          # instead of the hard gate. Read the list; never scrape a workflow for it.
+          HARD_GATE=$(grep -v '^[[:space:]]*$' test/hard-gate.txt || true)
           if [ -z "$HARD_GATE" ]; then
-            echo "::error::[verify] could not extract the hard-gate file list from test.yml."
-            echo "::error::Refusing to push an unverified heal. Check that test.yml still has a"
-            echo "::error::'npx vitest run test/…' line, and fix this extraction if it moved."
+            echo "::error::[verify] test/hard-gate.txt lists no test files."
+            echo "::error::Refusing to push an unverified heal. test.yml's hard gate runs the"
+            echo "::error::files in that list; restore it, or fix this read if the list moved."
             exit 1
           fi
           echo "[verify] running the hard gate against the healed tree…"
