@@ -1,0 +1,32 @@
+{
+  "name": "dchub",
+  "version": "1.0.0",
+  "description": "Live data-center, power-grid, fiber, interconnection-queue & M&A intelligence for AI agents — 21,800+ facilities, 91 tools. Remote MCP at https://dchub.cloud/mcp.",
+  "author": {
+    "name": "Jonathan Martone",
+    "email": "jonathan@dchub.cloud"
+  },
+  "homepage": "https://dchub.cloud",
+  "repository": "https://github.com/azmartone67/dchub-mcp-server",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "data-center",
+    "power",
+    "grid",
+    "energy",
+    "fiber",
+    "site-selection"
+  ],
+  "logo": "dchub-logo.png",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "DCHUB_API_KEY": {
+        "type": "string",
+        "title": "DC Hub API key",
+        "description": "Optional X-API-Key from https://dchub.cloud/connect. Free tier works without a key; a key raises daily limits."
+      }
+    }
+  }
+}
