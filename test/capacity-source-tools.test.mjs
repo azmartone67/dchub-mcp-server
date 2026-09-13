@@ -1,7 +1,9 @@
-// ── pocket listings: two tools, the wall contract, and the lead gate ─────────
+// ── Capacity Source: two tools, the wall contract, and the lead gate ─────────
 //
-// get_pocket_listings and request_listing_intro front /api/v1/listings*, a
-// backend contract built in parallel with these tools. Every response below is
+// source_capacity and request_capacity_intro front /api/v1/listings*, a
+// backend contract built in parallel with these tools. They were named
+// get_pocket_listings and request_listing_intro until 2026-09-13; those names
+// still resolve through TOOL_ALIASES (pinned at the bottom of this file). Every response below is
 // a FIXTURE in that contract's shape; nothing here reaches a network.
 //
 // ★ WHAT FAILS SILENTLY, and therefore what this file pins:
@@ -25,8 +27,8 @@ import { readFileSync } from 'node:fs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 const BASE = 'http://127.0.0.1:1';
-const READ = 'get_pocket_listings';
-const WRITE = 'request_listing_intro';
+const READ = 'source_capacity';
+const WRITE = 'request_capacity_intro';
 
 // ── contract fixtures ────────────────────────────────────────────────────────
 const VIEWER_ANON = {
@@ -54,10 +56,10 @@ const TEASER = {
 };
 const TERMS_BLOCK = { version: '2026-09-11', url: 'https://dchub.cloud/listings#terms', summary: '…' };
 const PROGRAM = {
-  name: 'DC Hub Pocket Listings', status: 'upcoming',
-  headline: 'Off-market data center capacity, introduced by DC Hub', summary: '…',
+  name: 'DC Hub Capacity Source', status: 'upcoming',
+  headline: 'The live source for data center capacity', summary: '…',
   how_it_works: ['…', '…', '…'],
-  register_interest: { method: 'POST', path: '/api/v1/listings/interest', mcp_tool: 'request_listing_intro' },
+  register_interest: { method: 'POST', path: '/api/v1/listings/interest', mcp_tool: 'request_capacity_intro' },
   terms: TERMS_BLOCK,
 };
 const LIST_UPCOMING_EMPTY = {
@@ -77,7 +79,7 @@ const listWithItems = (n) => {
 };
 const INTRODUCTION = {
   method: 'POST', path: '/api/v1/listings/dfw-40mw-powered-shell/intro',
-  mcp_tool: 'request_listing_intro', operator_contact: 'never_shared',
+  mcp_tool: 'request_capacity_intro', operator_contact: 'never_shared',
 };
 const DETAIL_LOCKED = {
   ok: true, locked: true, listing: TEASER, access: ACCESS_LOCKED,
@@ -185,7 +187,7 @@ const listingCalls = () => calls.filter((c) => c.pathname.startsWith('/api/v1/li
 const identifiedSeat = (over = {}) => ({
   api_key: 'dch_live_listing_test', tier: 'free', platform: 'claude',
   client_name_raw: 'claude-ai', source: 'glama', client_ip: '203.0.113.7',
-  session_id: 'sess-pocket-listings', ...over,
+  session_id: 'sess-capacity-source', ...over,
 });
 async function call(name, args, seat) {
   const T = TOOLS[name];
@@ -306,7 +308,7 @@ describe('registration', () => {
     expect(registration(WRITE)).toEqual({ count: 1, arity: 5 });
   });
 
-  it('get_pocket_listings is FREE_FULL and read-only, and not a write tool', () => {
+  it('source_capacity is FREE_FULL and read-only, and not a write tool', () => {
     expect(S.FREE_FULL_TOOLS.has(READ)).toBe(true);
     const writes = setLiteral('const WRITE_TOOLS = new Set([');
     expect(writes).toContain("'bind_email'");            // control: the slice is the real set
@@ -314,7 +316,7 @@ describe('registration', () => {
     expect(TOOLS[READ].annotations.readOnlyHint).toBe(true);
   });
 
-  it('request_listing_intro is a write: WRITE_TOOLS, readOnlyHint false, quota- and nudge-exempt', () => {
+  it('request_capacity_intro is a write: WRITE_TOOLS, readOnlyHint false, quota- and nudge-exempt', () => {
     expect(setLiteral('const WRITE_TOOLS = new Set([')).toContain(`'${WRITE}'`);
     const a = TOOLS[WRITE].annotations;
     expect(a.readOnlyHint).toBe(false);
@@ -366,7 +368,7 @@ describe('outputSchema accepts every contract response verbatim', () => {
   });
 });
 
-describe('get_pocket_listings', () => {
+describe('source_capacity', () => {
   it('browses with the filters as a GET to /api/v1/listings and returns the backend JSON', async () => {
     responder = () => json(200, LIST_UPCOMING_EMPTY);
     const r = await call(READ, { market: 'Dallas', state: 'TX', min_mw: 20, limit: 25 });
@@ -457,11 +459,11 @@ describe('get_pocket_listings', () => {
     expect(r.isError).toBe(true);
     expect(r.structuredContent.error).toBe('not_found');
     expect(r.structuredContent.http_status).toBe(404);
-    expect(r.structuredContent._error_mitigation.deterministic_hint).toMatch(/get_pocket_listings/);
+    expect(r.structuredContent._error_mitigation.deterministic_hint).toMatch(/source_capacity/);
   });
 });
 
-describe('request_listing_intro — nothing leaves without accepted terms', () => {
+describe('request_capacity_intro — nothing leaves without accepted terms', () => {
   it('accept_terms=false never reaches the backend', async () => {
     responder = () => json(200, INTRO_OK);
     const r = await call(WRITE, { ...COMPLETE, slug: 'dfw-40mw-powered-shell', accept_terms: false }, identifiedSeat());
@@ -504,7 +506,7 @@ describe('request_listing_intro — nothing leaves without accepted terms', () =
   });
 });
 
-describe('request_listing_intro — the request as sent', () => {
+describe('request_capacity_intro — the request as sent', () => {
   it('a slug POSTs the contract body to /intro with identity headers and client hints', async () => {
     responder = () => json(200, INTRO_OK);
     const r = await call(WRITE, { ...COMPLETE, slug: 'dfw-40mw-powered-shell' }, identifiedSeat());
@@ -520,7 +522,7 @@ describe('request_listing_intro — the request as sent', () => {
       client: { name: 'claude-ai', platform: 'claude', source: 'glama' },
     });
     expect(lc[0].headers['X-API-Key']).toBe('dch_live_listing_test');
-    expect(lc[0].headers['X-MCP-Session']).toBe('sess-pocket-listings');
+    expect(lc[0].headers['X-MCP-Session']).toBe('sess-capacity-source');
     expect(lc[0].headers['X-MCP-Platform']).toBe('claude');
     expect(lc[0].headers['X-Forwarded-For']).toBe('203.0.113.7');
     expect(r.isError).toBeFalsy();
@@ -578,12 +580,12 @@ describe('walls come back as structured results an agent can act on', () => {
     expect(flagged.isError).toBe(true);
   });
 
-  it('401 sign_in_required → next_steps claim_free_key, bind_email, request_listing_intro', async () => {
+  it('401 sign_in_required → next_steps claim_free_key, bind_email, request_capacity_intro', async () => {
     responder = () => json(401, E401_SIGN_IN);
     const r = await call(WRITE, COMPLETE);
     const sc = r.structuredContent;
     expect(r.isError).toBeFalsy();
-    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', 'request_listing_intro']);
+    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', 'request_capacity_intro']);
     expect(sc.error).toBe('identity_required');
     expect(sc.reason).toBe('sign_in_required');
     expect(sc.access).toEqual(ACCESS_LOCKED);
@@ -595,11 +597,11 @@ describe('walls come back as structured results an agent can act on', () => {
     expect(ok.ok, ok.issues).toBe(true);
   });
 
-  it('401 email_binding_required → next_steps bind_email, request_listing_intro', async () => {
+  it('401 email_binding_required → next_steps bind_email, request_capacity_intro', async () => {
     responder = () => json(401, E401_BIND);
     const r = await call(WRITE, COMPLETE, identifiedSeat());
     expect(r.isError).toBeFalsy();
-    expect(r.structuredContent.next_steps).toEqual(['bind_email', 'request_listing_intro']);
+    expect(r.structuredContent.next_steps).toEqual(['bind_email', 'request_capacity_intro']);
     expect(r.structuredContent.identity_note).toMatch(/OAuth/);
   });
 
@@ -615,10 +617,10 @@ describe('walls come back as structured results an agent can act on', () => {
 
   it('403, 409 and both 422s are structured results carrying the body and next_steps', async () => {
     const cases = [
-      [E403, 403, ['unlock_more_data', 'request_listing_intro'], 'access'],
-      [E409, 409, ['request_listing_intro'], 'terms'],
-      [E422_TERMS, 422, ['request_listing_intro'], 'terms'],
-      [E422_INVALID, 422, ['request_listing_intro'], 'fields'],
+      [E403, 403, ['unlock_more_data', 'request_capacity_intro'], 'access'],
+      [E409, 409, ['request_capacity_intro'], 'terms'],
+      [E422_TERMS, 422, ['request_capacity_intro'], 'terms'],
+      [E422_INVALID, 422, ['request_capacity_intro'], 'fields'],
     ];
     for (const [body, status, steps, carried] of cases) {
       responder = () => json(status, body);
@@ -669,11 +671,11 @@ describe('walls come back as structured results an agent can act on', () => {
 describe('initialize instructions mention the program', () => {
   it('names both tools, carries no digits, and sits before the scope section', () => {
     const inst = S._INSTRUCTIONS;
-    const i = inst.indexOf('OFF-MARKET CAPACITY:');
+    const i = inst.indexOf('CAPACITY SOURCE:');
     expect(i).toBeGreaterThan(-1);
     const sentence = inst.slice(i, inst.indexOf('LIVENESS IS THE PRODUCT', i));
-    expect(sentence).toContain('get_pocket_listings');
-    expect(sentence).toContain('request_listing_intro');
+    expect(sentence).toContain('source_capacity');
+    expect(sentence).toContain('request_capacity_intro');
     expect(sentence).not.toMatch(/\d/);
     const scope = inst.indexOf(' IN SCOPE');
     if (scope > -1) expect(i).toBeLessThan(scope);
@@ -685,7 +687,7 @@ describe('initialize instructions mention the program', () => {
 // lib/attribution.mjs) each defer to attribution a result already carries. Run
 // the WHOLE handler chain per result shape and search the WHOLE result: a bare
 // listing answer would leave labelled "CC-BY-4.0: cite this data".
-describe('pocket-listing answers carry a confidential licence end to end', () => {
+describe('Capacity Source answers carry a confidential licence end to end', () => {
   const slug = 'dfw-40mw-powered-shell';
   const shapes = [
     ['teaser feed', READ, {}, () => json(200, listWithItems(2))],
@@ -710,6 +712,32 @@ describe('pocket-listing answers carry a confidential licence end to end', () =>
     // Not vacuous: the shared stamps DID run over this result — attribution.mjs
     // merged its retrieved_at in, and the source line the tools emit is present.
     expect(typeof r.structuredContent.citation.retrieved_at).toBe('string');
-    expect(textOf(r)).toContain('Source: DC Hub Pocket Listings');
+    expect(textOf(r)).toContain('Source: DC Hub Capacity Source');
+  });
+});
+
+// ── the rename: the 2026-09-11 names keep working ────────────────────────────
+// Pocket listings became Capacity Source on 2026-09-13. get_pocket_listings and
+// request_listing_intro were REAL tool names for two days, and agents, saved
+// prompts and the What's New history already carry them, so each must resolve
+// to its renamed tool at call time. Neither may be registered again: that would
+// advertise one program twice in tools/list and move the tool count.
+describe('the 2026-09-11 names resolve to the renamed tools', () => {
+  const RENAMED = [['get_pocket_listings', READ], ['request_listing_intro', WRITE]];
+
+  it('TOOL_ALIASES maps each old name to its renamed, registered tool', () => {
+    for (const [old, now] of RENAMED) {
+      expect(S.TOOL_ALIASES[old], old).toBe(now);
+      expect(TOOLS[now], now).toBeTruthy();
+    }
+  });
+
+  it('the old names are aliases only, never registrations', () => {
+    for (const [old] of RENAMED) {
+      expect(TOOLS[old], old).toBeUndefined();
+      expect(registration(old).count, old).toBe(0);
+    }
+    // Control: the same parser finds the renamed registration.
+    expect(registration(READ).count).toBe(1);
   });
 });

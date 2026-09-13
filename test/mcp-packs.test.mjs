@@ -41,7 +41,8 @@ let S, PORT, httpServer, CANON;
 // the pack.
 // ★2026-09-11 siting 18 -> 20 and deals 13 -> 15: get_pocket_listings and
 // request_listing_intro joined both packs (off-market capacity is a siting
-// input and a deal flow).
+// input and a deal flow). ★2026-09-13 renamed source_capacity and
+// request_capacity_intro (Capacity Source) — a rename, so both counts hold.
 const EXPECTED = {
   deepresearch: 2,
   site: 10,
