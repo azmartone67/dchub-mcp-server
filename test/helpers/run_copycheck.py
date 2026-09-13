@@ -48,6 +48,9 @@ SCENARIOS = {
     "stale":       [WANT.replace(_TOOLS_PHRASE, "the DCGI is live now. 65 tracked feeds")],
     "unreadable":  [None] * 12,
     "empty":       [""] * 12,
+    # ★2026-09-13: a CDN copy of the plain URL, hours old, beside a current store.
+    # Served by URL rather than by sequence: stale unless the read carries `_=`.
+    "cached_edge": [],
 }
 
 def main():
@@ -55,6 +58,11 @@ def main():
     reads = {"n": 0}
 
     def fake_urlopen(req, timeout=None):
+        if sys.argv[1] == "cached_edge":
+            reads["n"] += 1
+            url = getattr(req, "full_url", str(req))
+            v = WANT if re.search(r"[?&]_=", url) else WANT[:-40]
+            return io.BytesIO(json.dumps({"description": v}).encode())
         i = min(reads["n"], len(seq) - 1)
         reads["n"] += 1
         v = seq[i]
