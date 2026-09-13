@@ -1,0 +1,154 @@
+name: ecosystem sync (live capabilities to every listing)
+
+# WHY THIS EXISTS (2026-09-13)
+# ---------------------------------------------------------------------------
+# The listings that tell agents what DC Hub can do were refreshed daily at
+# best, while the source moves within the day. Measured the night this was
+# written, with live serving 90 tools / 21,800+ facilities: LobeHub validated
+# 2.12.9 with 88 tools, MCP Hive said 88 tools and 21,200+, mcp.so said 79
+# tools and "$299/mo" Pro, and Glama's server listing reached 90 only ~27h
+# after the official registry did.
+#
+# Every 30 minutes this job reads the single source and every sink, and acts
+# ONLY on measured drift, by dispatching the lane that already owns the sink:
+#   daily-manifest-sync.yml   repo surfaces (README, server.json, ...) behind canon
+#   registry-refresh.yml      official MCP registry behind server.json
+#   smithery-freshness.yml    Smithery catalogue or copy behind the live server
+# It is not a third publisher. Cooldowns are read from the Actions API, and a
+# run that cannot read that API dispatches nothing.
+#
+# ★ WHAT DOES NOT COME BACK. #355 capped a Smithery reflex that republished
+# about 20 times a day whether or not anything had changed, and #383 retired
+# the automated rank chase. This job has no rank input and never dispatches
+# without drift.
+#
+# Listings with no API (mcp.so, PulseMCP, LobeHub, MCP Hive, and our open PRs
+# on curated lists) are escalated on the full sweep, every second hour, into
+# ONE issue labelled `prospecting`. It is edited in place, gains a comment only
+# when a listing newly gets stuck, and closes itself when nothing is left.
+#
+# All logic and its tests live in scripts/ecosystem-sync.mjs and
+# test/ecosystem-sync.test.mjs. This file only wires outputs to actions.
+
+on:
+  schedule:
+    # The full sweep has its own cron line, so the scope is decided by which
+    # line fired rather than by a clock a late-starting runner can skew.
+    - cron: '11 */2 * * *'
+    - cron: '11 1-23/2 * * *'
+    - cron: '41 * * * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'core = our surfaces, Smithery and the official registry; full = also every listing and our open listing PRs'
+        type: choice
+        options: [full, core]
+        default: full
+      act:
+        description: 'Dispatch the owning lanes on drift (off = observe and report only)'
+        type: boolean
+        default: true
+  repository_dispatch:
+    types: [capabilities-changed]
+
+permissions:
+  contents: read
+  actions: write        # dispatch the three owning lanes
+  issues: write         # the one prospecting issue
+  pull-requests: read   # an open heal PR means no second heal
+
+concurrency:
+  group: ecosystem-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Observe the single source and every sink
+        id: observe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.scope || github.event_name == 'repository_dispatch' && 'full' || github.event.schedule == '11 */2 * * *' && 'full' || 'core' }}
+        run: node scripts/ecosystem-sync.mjs --scope "$SCOPE" --out ecosystem-sync
+
+      - name: Dispatch the repo heal
+        if: steps.observe.outputs.dispatch_heal == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.act)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHY: ${{ steps.observe.outputs.heal_why }}
+        run: |
+          gh workflow run daily-manifest-sync.yml --ref main
+          echo "::notice title=heal dispatched::$WHY"
+
+      - name: Dispatch the official registry publish
+        if: steps.observe.outputs.dispatch_registry == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.act)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHY: ${{ steps.observe.outputs.registry_why }}
+        run: |
+          gh workflow run registry-refresh.yml --ref main
+          echo "::notice title=registry publish dispatched::$WHY"
+
+      - name: Dispatch the Smithery republish
+        if: steps.observe.outputs.dispatch_smithery == 'yes' && (github.event_name != 'workflow_dispatch' || inputs.act)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHY: ${{ steps.observe.outputs.smithery_why }}
+        run: |
+          gh workflow run smithery-freshness.yml --ref main
+          echo "::notice title=Smithery republish dispatched::$WHY"
+
+      - name: Keep the prospecting issue current (full sweep only)
+        if: steps.observe.outputs.scope == 'full' && steps.observe.outputs.state != 'unobserved'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: ${{ steps.observe.outputs.issue_title }}
+          ISSUE: ${{ steps.observe.outputs.issue_number }}
+          STUCK: ${{ steps.observe.outputs.stuck_count }}
+          OURS: ${{ steps.observe.outputs.ours_drift_count }}
+          NEWLY: ${{ steps.observe.outputs.newly_stuck }}
+        run: |
+          gh label create prospecting --color 5319e7 \
+            --description "A listing we cannot update by API; needs a person" 2>/dev/null || true
+          if [ "${STUCK:-0}" != "0" ] || [ "${OURS:-0}" != "0" ]; then
+            if [ -n "$ISSUE" ]; then
+              gh issue edit "$ISSUE" --body-file ecosystem-sync.issue.md
+              if [ -n "$NEWLY" ]; then
+                gh issue comment "$ISSUE" --body "Newly stuck on a manual step: $NEWLY. The issue body says what each one shows now and what fixes it."
+              fi
+            else
+              gh issue create --title "$TITLE" --label prospecting --body-file ecosystem-sync.issue.md
+            fi
+          elif [ -n "$ISSUE" ]; then
+            gh issue close "$ISSUE" --comment "Every listing and every DC Hub surface matched the live source on this full sweep. Closing."
+          fi
+
+      - name: Beat the dead-man ledger
+        if: always()
+        env:
+          DCHUB_ADMIN_KEY: ${{ secrets.DCHUB_ADMIN_KEY }}
+          BEAT_STATUS: ${{ steps.observe.outcome == 'success' && steps.observe.outputs.beat_status || 'run_failed' }}
+          BEAT_NOTE: ${{ steps.observe.outputs.beat_note }}
+        run: |
+          . scripts/agent_beat.sh 2>/dev/null || agent_beat() { echo "beat helper unavailable"; return 2; }
+          agent_beat "ci:ecosystem-sync" "$BEAT_STATUS" 1 "$BEAT_NOTE" || true
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecosystem-sync-${{ github.run_id }}
+          path: |
+            ecosystem-sync.json
+            ecosystem-sync.issue.md
+          retention-days: 7
+          if-no-files-found: ignore
