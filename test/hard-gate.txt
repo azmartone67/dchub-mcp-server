@@ -60,6 +60,7 @@ test/gitignore-patterns-bite.test.mjs
 test/glama-build-provenance.test.mjs
 test/glama-placement-probe.test.mjs
 test/go-checkout-link.test.mjs
+test/go-sid-and-two-rungs.test.mjs
 test/grid-region-unresolved.test.mjs
 test/handler-args-declared.test.mjs
 test/held-key-persists.test.mjs
