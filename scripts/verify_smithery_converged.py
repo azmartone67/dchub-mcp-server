@@ -66,7 +66,21 @@ def _say(level, msg):
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers=UA)
+    """GET a registry record, bypassing the CDN copy of the plain URL.
+
+    ★2026-09-13: registry.smithery.ai answers the plain URL from a CDN that keeps
+    it for hours (cache-control s-maxage=14400, stale-while-revalidate=86400).
+    Measured at 04:02Z, the plain URL was a HIT with age 12539 and still listed
+    the pre-rename tools, while the same URL with any query string listed the
+    renamed ones. Run 34736406217 compared against that cached copy 20 times and
+    reported DIVERGED for a publish Smithery had already taken.
+
+    This script asks whether the STORE took the publish, so every read carries a
+    unique query string. What a plain reader sees catches up on Smithery's own
+    cache clock, and nothing on our side can purge it.
+    """
+    sep = "&" if "?" in url else "?"
+    req = urllib.request.Request(f"{url}{sep}_={time.time_ns()}", headers=UA)
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read().decode())
 
