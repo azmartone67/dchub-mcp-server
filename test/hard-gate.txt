@@ -110,6 +110,7 @@ test/oauth.test.mjs
 test/one-human-cta.test.mjs
 test/one-of-required.test.mjs
 test/origin-edge-key.test.mjs
+test/paid-lift-in-session.test.mjs
 test/payload-diet.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
