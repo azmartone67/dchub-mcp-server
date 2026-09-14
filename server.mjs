@@ -1255,11 +1255,22 @@ function _packCheckoutUrl(sessionId) {
 // resolves the tier FROM the Stripe line item (never the ref) and stamps mcp_dev_keys.tier
 // for that key-hash. Keyless → byte-for-byte the previous session-bind. Takes the url as
 // an arg (subs have 3 different links). Reads api_key from AsyncLocalStorage. NEVER throws.
+// r-trial-sub-bind (2026-09-14): a k- ref only lands where the backend's k- branch
+// looks, `UPDATE mcp_dev_keys … WHERE sha256(api_key) = <ref>`. An UNBOUND dch_trial_
+// key is not in that table (auto_trial_keys holds it; binding an email is what copies
+// it into mcp_dev_keys), and Fix E skips k- refs, so a subscription bought through
+// k-<sha256(trial key)> stamped no tier on any key and unlocked no session — only the
+// webhook's email provisioning delivered anything. A trial key therefore binds a
+// SUBSCRIPTION by session, exactly as a keyless caller does. The $10 pack keeps pk-:
+// its credits are stored by key hash whichever table holds the key.
+export function _subRefLandsOnKey(apiKey) {
+  return !!apiKey && !/^dch_trial_/.test(String(apiKey));
+}
 function _subCheckoutUrl(url, sessionId) {
   let _k = '';
   try { _k = (getCtx() && getCtx().api_key) || ''; } catch (_) {}
   // r-anon-attrib: keyless AND sessionless → ephemeral anon ref (see _stripeWithAnon).
-  if (!_k) return _goUrl(_stripeWithAnon(_stripeWithSession(url, sessionId)), sessionId);
+  if (!_subRefLandsOnKey(_k)) return _goUrl(_stripeWithAnon(_stripeWithSession(url, sessionId)), sessionId);
   try {
     if (!url) return url;
     if (/[?&]client_reference_id=/.test(url)) return _goUrl(url, sessionId);  // idempotent
@@ -1287,6 +1298,12 @@ export function _keyBoundSubUrl(url, apiKey) {
   try {
     if (!url || !apiKey) return url;
     if (/[?&]client_reference_id=/.test(url)) return _goUrl(url);   // idempotent
+    // r-trial-sub-bind: a trial key's k- ref has no row to land on — bind the session.
+    if (!_subRefLandsOnKey(apiKey)) {
+      let _sid = '';
+      try { _sid = (getCtx() && getCtx().session_id) || ''; } catch (_) {}
+      return _goUrl(_stripeWithAnon(_stripeWithSession(url, _sid)), _sid);
+    }
     const h = createHash('sha256').update(String(apiKey)).digest('hex');
     const sep = url.includes('?') ? '&' : '?';
     return _goUrl(url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h));
@@ -3121,9 +3138,21 @@ async function _mintDurableForPaidAgent(source) {
 // never a downgrade; the trial is bounded server-side (7-day expiry + daily cap
 // + ip/ua dedup at /keys/auto-mint); is_trial=true routes grid/fiber through the
 // trial_taste gate (full), it does NOT unlock the deep Pro-only tools.
+// r-trial-refused (2026-09-14): /keys/auto-mint can hand back a trial key the backend
+// REFUSES on the very next validate — `bind_required:true, gate:'bind_email_required'`
+// once the caller's identity has spent its unbound calls (the counter carries onto the
+// key; re-minting does not reset it). Binding it made the session keyed on a credential
+// the backend rejects, and the block still said "Free trial unlocked on THIS session".
+// Read from the mint response on purpose: a validate here would itself count a call.
+export function _mintRefused(mint) {
+  return !!(mint && (mint.bind_required === true
+    || (typeof mint.gate === 'string' && mint.gate !== '')));
+}
+
 function _autoBindTrialToSession(mint) {
   try {
     if (!mint || !mint.api_key) return false;
+    if (_mintRefused(mint)) return false;         // r-trial-refused: never bind a refused key
     const _ctx = getCtx();
     const _sid = _ctx && _ctx.session_id;
     if (!_sid || !sessionMeta.has(_sid)) return false;
@@ -4812,7 +4841,9 @@ export async function buildDepthTease(name, result, ctx, tier) {
   // key on payment — the proven rail the $9/$49/$299 conversions already ride. The
   // credits/developer/metered URLs above stay session-bound; this is the durable
   // key-bound option. Smallest move-#3 increment: gateway-only, reuse, no backend change.
-  if (_isKeyed && ctx.api_key) {
+  // r-trial-sub-bind: a trial key cannot take the in-place k- upgrade this block
+  // promises ("this same key unlocks"); the identity-aware links above still apply.
+  if (_isKeyed && ctx.api_key && _subRefLandsOnKey(ctx.api_key)) {
     // r-go-everywhere (2026-09-02): every link here was /upgrade?key=… (the
     // /pricing wall). Now key-bound /go/c links (k-<sha256> ref) — the same
     // webhook branch, one click shorter, and the click is measured.
@@ -5769,14 +5800,21 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // r-attrib (2026-07-01): omit &tool= entirely when there is no tool name —
   // an empty tool= param polluted conversion attribution downstream.
   // r-go-everywhere (2026-09-02): was /upgrade?key=…&tool=… (the /pricing wall).
-  // Key-bound /go/c: the webhook's k- branch flips THIS mint.api_key in place.
-  const upgradeUrl = _keyBoundUpgradeUrl(mint.api_key);
+  // r-trial-sub-bind (2026-09-14): was _keyBoundUpgradeUrl(mint.api_key), a k- ref for
+  // the TRIAL key that the webhook's k- branch cannot find (see _subRefLandsOnKey),
+  // beside the session-bound Pro rung _rungsText already put in the same envelope.
+  // One identity for both links: the caller's, as the request store holds it.
+  let _sid = '';
+  try { _sid = (getCtx() && getCtx().session_id) || ''; } catch (_) {}
+  const upgradeUrl = _subCheckoutUrl(PRO_URL || (DEVELOPER_URL + promoParam()), _sid);
+  let _upgradeOnKey = false;
+  try { _upgradeOnKey = _subRefLandsOnKey(getCtx().api_key); } catch (_) {}
+  const _refused = _mintRefused(mint);
   // Fix E (2026-06-06): bind METERED_URL to the current MCP session_id so a
   // direct usage-based checkout (skipping the pair-code path) also closes the
   // conversion loop via the webhook's client_reference_id binding.
   let _meteredUrl = METERED_URL;
   try {
-    const _sid = (getCtx() && getCtx().session_id) || '';
     // r-durable-key (2026-07-15): bind the $10 pack to the caller's DURABLE key
     // (pk-) when they hold one so the 1,000 credits survive session rotation;
     // keyless falls back to the session bind. Was _stripeWithSession (session-only).
@@ -5817,6 +5855,13 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     '🔒 **Today’s free full `' + name + '` answers are used up.**\n' +
     '\n\u{1F464} **Tell your human:** unlock the complete `' + name + '` now — ' + _rungsText(name, mint.tier || 'trial') + ' (' + _afterPayClause('', name) + ').\n' +
     '\nFree: `bind_email` (your human’s email, no card) lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.\n';
+  // r-trial-refused: the backend already refuses this key (see _mintRefused), so it was
+  // not bound and a retry would come back gated. Say what it needs — the same one-ask
+  // ladder as the exhausted copy — instead of "unlocked on THIS session".
+  const leadRefused =
+    '🔒 **This free trial key is not active yet — it needs your human’s email first.**\n' +
+    'Free: `bind_email` (your human’s email, no card) activates it and lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day; then call `' + name + '` again.\n' +
+    '\n\u{1F464} **Tell your human:** or unlock the complete `' + name + '` now — ' + _rungsText(name, mint.tier || 'trial') + ' (' + _afterPayClause('', name) + ').\n';
   // r-handoff (2026-06-28): ONE free taste + ONE human CTA. The prior block
   // stacked ~8 CTAs and led with the free key, so agents self-served and never
   // handed off to a human (110 relay links → 0 human action / 0 paid, 30d).
@@ -5838,6 +5883,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
        '🔒 **`' + name + '` is a DC Hub Pro decision tool — the preview above is the free taste.**\n' +
        '\n\u{1F464} **Tell your human:** to run the full `' + name + '` — ' + _rungsText(name, mint.tier || 'trial') + '\n' +
        '\n_(Separately: the free identified tier for 18+ other DC Hub tools is one call away — `claim_free_key`.)_\n')
+    : _refused
+    ? ('\n\n---\n' + leadRefused)
     : _exhausted
     ? ('\n\n---\n' + leadExhausted)
     : ('\n\n---\n' +
@@ -5864,7 +5911,9 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     auto_bound_session:        !!autoBound,   // r87-conv: trial already applied to this session
     digest_optin:              { next_tool: 'subscribe_digest', how: 'With the human’s consent + their email, call subscribe_digest with {email} for a weekly market-change digest (double opt-in, unsubscribe anytime) — fills the retention/win-back audience.' },
     first_call_nudge:          { ..._FRONT_DOOR, ...(_dcpiTeaserSC || {}) },
-    retry_instructions: stillPro
+    retry_instructions: _refused
+      ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (free, no card), then call ' + name + ' again.')
+      : stillPro
       ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it ($10 one-time = 1,000 API calls) at ' + _meteredUrl + '.')
       : _exhausted
       ? ('Today’s free full ' + name + ' answers are used. \u{1F4B3} $10 one-time = 1,000 calls (' + _meteredUrl + ' — or call unlock_more_data for one-click links) returns complete answers the moment your human pays. Free: bind_email lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.')
@@ -5881,7 +5930,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
          + '. If it is still gated, your client did not carry the key — add header X-API-Key: ' + mint.api_key
          + ' (session binding is per-connection, so a reconnect can drop it). Save persist_command to keep it across future sessions.'),
     ...(_capKnown ? { remaining_full_today: remainingFull } : {}),
-    trial_unlocks_this_tool:   !stillPro,
+    trial_unlocks_this_tool:   !stillPro && !_refused,
+    ...(_refused ? { auto_trial_bind_required: true } : {}),
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
     unlocked_tools_hint:       _TRIAL_UNLOCKED_HINT,
     owner_purchase_url:        _meteredUrl,
@@ -5891,8 +5941,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     identify_hint:             ('Attach the owner email to RAISE this key’s daily cap ' + calls + ' → ' + boundCalls + ' calls/day (plus key recovery + upgrade receipts). Ask your human for their email and POST identify_payload to identify_endpoint. Idempotent; invalid emails are rejected softly and the key keeps working.'),
     daily_calls_when_email_bound: boundCalls,
     upgrade_url:               upgradeUrl,
-    upgrade_model:             'go_c_key_bound',
-    upgrade_instructions:      'Have the human open upgrade_url and complete checkout (' + _paidPlansLine() + '). This SAME api_key auto-upgrades to the paid tier — no key swap, no copy-paste. Then call the tool again.',
+    upgrade_model:             _upgradeOnKey ? 'go_c_key_bound' : 'go_c_session_bound',
+    upgrade_instructions:      _upgradeOnKey
+      ? 'Have the human open upgrade_url and complete checkout (' + _paidPlansLine() + '). The X-API-Key on this call auto-upgrades to the paid tier in place — no key swap. Then call the tool again.'
+      : 'Have the human open upgrade_url and complete checkout (' + _paidPlansLine() + '): ' + _afterPayClause(_sid, name) + '. The trial key itself is not upgraded; DC Hub emails the paid key to the payer.',
     // r-price-canon: every number here is read from canonical/tier_limits.json.
     // founding leads while the rung exists (MEASURED: it is the plan that sells).
     pricing:                   { ...(Number.isFinite(PLAN_PRICE.founding) ? { founding_usd_month: PLAN_PRICE.founding } : {}),
@@ -12747,7 +12799,7 @@ function trackedTool(srv, name, description, schema, handler) {
 
 You're on **free tier** — \`${name}\` returns its full result on a paid plan.
 
-\u{1F464} **Tell your human:** unlock \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, this key unlocks — just call \`${name}\` again.
+\u{1F464} **Tell your human:** unlock \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, ${_subRefLandsOnKey(c.api_key) ? 'this key' : 'this session'} unlocks — just call \`${name}\` again.
 
 Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), \`get_market_intel\`, \`get_grid_data\`, \`get_water_risk\`, \`get_energy_prices\`, \`get_renewable_energy\`, \`get_news\`.`;
 

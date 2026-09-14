@@ -143,6 +143,14 @@ describe('r-two-rungs — the relayed ask names the $10 page and Pro checkout', 
     });
   });
 
+  it('r-trial-sub-bind: a dch_trial_ key in the store gets the session-bound Pro rung, not k-', () => {
+    withCtx({ session_id: SID, api_key: 'dch_trial_testkey_not_real' }, () => {
+      const go = _rungsText('rank_markets', 'free').match(GO_RE);
+      expect(go).toHaveLength(1);
+      expect(fields(go[0], GO).parts).toEqual(['pro', SID]);
+    });
+  });
+
   it('the Pro rung is the canon Pro link, never a founding or retired one', () => {
     expect(PRO_URL).toBe('https://buy.stripe.com/dRm28s2gGcfP6yx0PEaZi0p');
   });

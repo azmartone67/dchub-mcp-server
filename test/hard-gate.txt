@@ -8,6 +8,7 @@ test/anon-seat-fence.test.mjs
 test/arg-aliases.test.mjs
 test/as-of-record-scope.test.mjs
 test/auth-source.test.mjs
+test/automint-trial-rungs.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs
 test/cap-signal.test.mjs
 test/capacity-context.test.mjs
