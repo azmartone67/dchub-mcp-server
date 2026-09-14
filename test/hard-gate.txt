@@ -13,6 +13,7 @@ test/automint-trial-rungs.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs
 test/cap-signal.test.mjs
 test/capacity-context.test.mjs
+test/capacity-source-pointers.test.mjs
 test/capacity-source-tools.test.mjs
 test/challenge-after-n.test.mjs
 test/challenge-bound-and-widen.test.mjs
