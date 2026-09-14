@@ -12,20 +12,51 @@
 //      lesson: the test reads the RUNTIME source, never its own copy).
 // Plus replay.why_live_data (planner v5.9): a per-class "why this answer
 // needed live data" reason on plan_query AND execute_plan results.
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  _composeScopeSection, _INSTRUCTIONS, _CLASS_WHY_LIVE, _PLAN_CLASSES,
-  _planQuery, _planReplay, createServer,
-} from '../server.mjs';
+
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP = JSON.parse(fs.readFileSync(path.join(ROOT, 'canonical', 'problem_taxonomy.json'), 'utf8'));
 
-let tools;
-beforeAll(() => { tools = createServer()._registeredTools; });
+// Bound from server.mjs in beforeAll. It is imported there, after DCHUB_API_BASE
+// points at an unroutable address, because API_BASE is captured at module
+// evaluation and the discover_tools call below fires tool-call tracking at it: a
+// static import is hoisted and evaluated server.mjs with the production default.
+let tools, prevBase;
+let _composeScopeSection, _INSTRUCTIONS, _CLASS_WHY_LIVE, _PLAN_CLASSES, _planQuery, _planReplay;
+beforeAll(async () => {
+  prevBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';   // unroutable: no upstream; set until afterAll
+  const S = await import('../server.mjs');
+  ({ _composeScopeSection, _INSTRUCTIONS, _CLASS_WHY_LIVE, _PLAN_CLASSES, _planQuery, _planReplay } = S);
+  tools = S.createServer()._registeredTools;
+}, 60000);
+afterAll(() => {
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
+});
 
 describe('committed snapshot (canonical/problem_taxonomy.json)', () => {
   it('carries what a consumer needs to derive', () => {
@@ -147,5 +178,11 @@ describe('replay.why_live_code + why_live_data (planner v5.10, additive at repla
     const ur = _planReplay(un);
     expect('why_live_code' in ur).toBe(false);
     expect('why_live_data' in ur).toBe(false);
+  });
+});
+
+describe('hard gate: no network', () => {
+  it('no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
   });
 });

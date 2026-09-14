@@ -29,21 +29,45 @@
 // the SDK's own schema rejects, asserted against that schema.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import net from 'node:net';
 
-let S, PORT, httpServer;
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
+
+let S, PORT, httpServer, prevBase;
 
 beforeAll(async () => {
-  const prevBase = process.env.DCHUB_API_BASE;
-  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';   // unroutable: no upstream
+  // Unroutable: no upstream. It stays set until afterAll because
+  // restoreSessionKey reads DCHUB_API_BASE per call, not at import: restored
+  // right after the import, a request on an anonymous session (session id, no
+  // key) fetched the production default.
+  prevBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';
   S = await import('../server.mjs');
-  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
-  else process.env.DCHUB_API_BASE = prevBase;
   await new Promise((r) => { httpServer = S.app.listen(0, '127.0.0.1', r); });
   PORT = httpServer.address().port;
 }, 60000);
 
 afterAll(async () => {
   await new Promise((r) => (httpServer ? httpServer.close(r) : r()));
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
 });
 
 // One raw initialize over HTTP. Accept advertises BOTH json and SSE exactly as
@@ -221,5 +245,11 @@ describe('rejection set unchanged: exactly what the SDK schema already rejected'
     expect(S._initRequestError({ jsonrpc: '2.0', id: 1, method: 'ping' })).toBeNull();
     expect(S._initRequestError(null)).toBeNull();
     expect(S._initRequestError(undefined)).toBeNull();
+  });
+});
+
+describe('hard gate: no network', () => {
+  it('no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
   });
 });

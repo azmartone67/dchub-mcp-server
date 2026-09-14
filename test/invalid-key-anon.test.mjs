@@ -34,10 +34,30 @@
 // assertions mean "junk is anonymous" rather than "nothing authenticates".
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
+import net from 'node:net';
 
-let S, PORT, httpServer, stub, STUB_PORT;
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
+
+let S, PORT, httpServer, stub, STUB_PORT, prevBase;
 let validateHits = 0;
 let facilitiesHits = 0;
+let sessionKeyHits = 0;
 
 const JUNK = 'totally_made_up_zzz';
 const GOOD = 'dchub_live_test_goodkey';
@@ -82,6 +102,8 @@ beforeAll(async () => {
         res.end(JSON.stringify({ success: true, count: ROWS.length, data: ROWS }));
         return;
       }
+      // restoreSessionKey asks here for an anonymous session; 404 = nothing to restore.
+      if (url.pathname === '/api/v1/mcp/session-key') sessionKeyHits += 1;
       res.statusCode = 404;
       res.end(JSON.stringify({ error: 'not found', path: url.pathname }));
     });
@@ -90,13 +112,13 @@ beforeAll(async () => {
   STUB_PORT = stub.address().port;
 
   // API_BASE is captured ONCE at module evaluation, so this must be set BEFORE
-  // the import and restored right after — vitest shares a worker's process.env
-  // and leaving it set points sibling live-network tests at this stub.
-  const prevBase = process.env.DCHUB_API_BASE;
+  // the import. It stays set until afterAll because restoreSessionKey reads
+  // DCHUB_API_BASE per call, not at import: restored right after the import, the
+  // anonymous sessioned flow (initialize, then notifications/initialized with a
+  // session id and no key) fetched the production default instead of this stub.
+  prevBase = process.env.DCHUB_API_BASE;
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${STUB_PORT}`;
   S = await import('../server.mjs');
-  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
-  else process.env.DCHUB_API_BASE = prevBase;
 
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = httpServer.address().port;
@@ -105,6 +127,9 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise((resolve) => (httpServer ? httpServer.close(resolve) : resolve()));
   await new Promise((resolve) => (stub ? stub.close(resolve) : resolve()));
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
 });
 
 function decode(raw) {
@@ -313,5 +338,13 @@ describe('_lateKeyResolve — a rejected key may not adopt onto an anon session'
     expect(r.persist).toBe(true);
     expect(r.meta.api_key).toBe(GOOD);
     expect(r.meta.tier).toBe('paid');
+  });
+});
+
+describe('hard gate: no network', () => {
+  it('the anonymous session-key restore reached the stub, and no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
+    // A restore the stub never saw proves nothing about where it went; fail it.
+    expect(sessionKeyHits, 'restoreSessionKey never asked the stub').toBeGreaterThan(0);
   });
 });
