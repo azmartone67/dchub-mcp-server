@@ -59,7 +59,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 
 ## Guided prompts & resources
 
-Beyond the 91 tools, DC Hub ships **13 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
+Beyond the 91 tools, DC Hub ships **14 guided prompts** — they surface as slash-commands in Claude Desktop, Cursor, and other MCP clients (every invocation is telemetry-tracked as `recipe:<name>`):
 
 - `/dchub:analyze-site` — full buildability read for an address or lat,lon
 - `/dchub:pick-a-market` — where to build N MW (DCPI-ranked, with time-to-power)
@@ -74,6 +74,7 @@ Beyond the 91 tools, DC Hub ships **13 guided prompts** — they surface as slas
 - `/dchub:hyperscaler_activity` — deals + forward pipeline: who is buying and building
 - `/dchub:whats_changed` — what moved since your last call (the return hook)
 - `/dchub:fiber_power_pairing` — where fiber density and available power overlap in a market
+- `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then an introduction (operator contact is never shared)
 
 Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
 

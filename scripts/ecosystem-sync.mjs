@@ -29,6 +29,8 @@
 //                           end up on one page.
 //   /mcp tools/list         the tool count every client actually reads.
 //   /api/v1/whats-new       the MCP pack cards the owner published.
+// Plus one read that judges nothing: /api/v1/listings/summary, which lets the
+// paste line name Capacity Source listings while (and only while) some are live.
 //
 // WHAT IT DOES
 //   observe   every sink from the outside, identity before content
@@ -51,6 +53,8 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decide, sourceMarker } from './refresh-canon-phrases.mjs';
+import { CAPACITY_SUMMARY_PATH, capacityPasteClause, capacityPointersEnabled, capacitySummaryFromHttp, isCapacityLive }
+  from '../lib/capacity-source-summary.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ORIGIN = (process.env.DCHUB_ORIGIN || 'https://dchub.cloud').replace(/\/+$/, '');
@@ -772,6 +776,13 @@ async function readIssue() {
 
 const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 
+/** Adds Capacity Source to the single source only while listings are live. */
+export function attachCapacity(ssot, res) {
+  const capacity = capacityPointersEnabled() ? capacitySummaryFromHttp(res) : null;
+  if (ssot && isCapacityLive(capacity)) ssot.capacity = capacity;   // absent, not null, while dormant
+  return ssot;
+}
+
 export function pasteLine(ssot) {
   const parts = [
     `${ssot.tools} MCP tools`,
@@ -779,7 +790,10 @@ export function pasteLine(ssot) {
     ssot.markets ? `${ssot.markets} markets` : null,
     ssot.deals ? `${ssot.deals} tracked deals` : null,
   ].filter(Boolean);
-  return `DC Hub: live data-center, power-grid, fiber and gas infrastructure data for AI agents. ${parts.join(', ')}. Remote MCP: https://dchub.cloud/mcp`;
+  // Capacity Source joins the line only while GET /api/v1/listings/summary
+  // reports live listings. Unknown or zero leaves the line byte-identical.
+  const cap = capacityPointersEnabled() && isCapacityLive(ssot.capacity) ? capacityPasteClause(ssot.capacity) : null;
+  return `DC Hub: live data-center, power-grid, fiber and gas infrastructure data for AI agents. ${parts.join(', ')}.${cap ? ` ${cap}` : ''} Remote MCP: https://dchub.cloud/mcp`;
 }
 
 export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) {
@@ -874,10 +888,17 @@ async function main() {
   } catch { /* no packs dir */ }
 
   // 1. the single source
-  const [canonR, liveR, wnR] = await Promise.all([
+  // The fourth read is Capacity Source's public summary. It never judges a
+  // sink and never plans a heal; it only lets the paste line name live
+  // listings. Any non-200 (the route 404s until the backend ships it) is
+  // unknown, and unknown or zero leaves every output byte-identical.
+  const [canonR, liveR, wnR, capR] = await Promise.all([
     readCanon(),
     mcpToolList(`${ORIGIN}/mcp`),
     fetchText(bust(`${ORIGIN}/api/v1/whats-new`), { ua: SELF_UA, accept: 'application/json' }),
+    capacityPointersEnabled()
+      ? fetchText(bust(`${ORIGIN}${CAPACITY_SUMMARY_PATH}`), { ua: SELF_UA, accept: 'application/json', timeoutMs: 10000 })
+      : Promise.resolve(null),
   ]);
   let packs = null;
   if (wnR.ok) { try { packs = packCodes(JSON.parse(wnR.text)); } catch { packs = null; } }
@@ -893,6 +914,7 @@ async function main() {
     packs,
     notes: [],
   };
+  attachCapacity(ssot, capR);
   if (!canonR.read) ssot.notes.push(`canon not usable: ${canonR.error}. Floors are UNMEASURED this cycle, so no floor is judged and no heal is planned from them.`);
   if (!liveR.read) ssot.notes.push(`live tools/list unreadable: ${liveR.error}. Tool counts are UNMEASURED this cycle.`);
   if (canonR.read && liveR.read && canonR.canon.tools !== liveR.count) {
