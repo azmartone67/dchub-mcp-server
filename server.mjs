@@ -2816,6 +2816,29 @@ function _invalidKeyAnonDisabled() {
   return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INVALID_KEY_ANON_DISABLE || ''));
 }
 
+// ── r-auth-refused (2026-09-14): a REFUSED key must not read as accepted ──────
+// identity.credential_source is read from the raw request before validation, so
+// it names the CHANNEL a key arrived on, not whether the backend accepted it.
+// When the backend answers 200 + valid:false, the drops above serve the call
+// anonymously while identity still said {credential_source:'header', tier:'free'}.
+// Measured 2026-09-14: a real key gated bind_email_required got the anonymous 3
+// rows of search_facilities under that identity, and an investigation concluded
+// the request store was losing free keys.
+//
+// This names the refusal next to the channel. It puts NOTHING back into api_key,
+// so r-invalid-key-anon stays closed. Refused means BOTH of:
+//   • the backend authoritatively rejected the key (key_rejected). An
+//     INDETERMINATE answer (5xx, timeout) is never a refusal; that key rides.
+//   • the call is not served under that key. The kill switch above lets a
+//     rejected key ride, and then nothing was refused.
+// A session that already holds a different key is still served under that key;
+// the refusal is reported and _identitySource says which key served.
+export function _authRefusal(presentedKey, servedKey, validation) {
+  if (!presentedKey || servedKey === presentedKey) return null;
+  if (!validation || validation.key_rejected !== true) return null;
+  return validation.reason || 'rejected';
+}
+
 // ── Monthly quota: the GATEWAY CONSUMER of /api/v1/mcp/monthly-usage ──────
 //
 // The backend shipped the monthly-quota decision on 2026-08-06 (PR #2289) and
@@ -14071,15 +14094,39 @@ export function _identitySource(ctxLike) {
   const conn = _connectionShape(c.platform);
   if (conn) out.connection = conn;
   if (src === 'none') {
-    // The only actionable case, so the only one that pays for prose.
+    // Actionable: a caller that believes it is authenticated is not.
     out.means = 'This call was served ANONYMOUSLY — no credential reached DC Hub. '
       + 'If you believed you were authenticated, the credential did not arrive: a '
       + 'header your host strips, a key held in chat that your client cannot resend, '
       + 'or a connector configured without one. Precedence is header > bearer > '
       + 'query > inline_argument; `claim_free_key` returns a `connect_url` that '
       + 'carries the key in the URL for hosts that have a URL box and no header field.';
+  } else if (c.auth_refused) {
+    // r-auth-refused: a credential arrived and the backend refused it, which is
+    // just as actionable. A key that was accepted, or could not be checked, gets
+    // neither the field nor prose.
+    out.credential_refused = c.auth_refused;
+    out.means = _refusedMeans(src, c.auth_refused, !!c.api_key);
   }
   return out;
+}
+
+// r-auth-refused: prose for a credential that arrived and was refused (see
+// _authRefusal). servedUnderSessionKey: the session already held another key and
+// that key served this call, so the call was not anonymous.
+function _refusedMeans(src, reason, servedUnderSessionKey) {
+  const head = servedUnderSessionKey
+    ? `The key that arrived via '${src}' was REFUSED by DC Hub (${reason}); this call was `
+      + 'served under the key this session already held, not that one.'
+    : `This call was served ANONYMOUSLY: the key that arrived via '${src}' reached DC Hub `
+      + `and was REFUSED (${reason}), so it bought no keyed depth.`;
+  if (reason === 'bind_email_required') {
+    return head + ' That key is real: it has used its free unbound calls and serves again '
+      + 'once bound to an email. Ask your human which address to use (never invent one), '
+      + 'then call `bind_email` with {email, api_key: <that key>}. Pass api_key: without it '
+      + 'bind_email binds the key active on this session, and a refused key is not active.';
+  }
+  return head + ' Send a key DC Hub accepts; `claim_free_key` issues one.';
 }
 
 export function _stampIdentitySource(result) {
@@ -20070,10 +20117,12 @@ app.post(MCP_PATHS, async (req, res) => {
       // present AND differs from the session's, so the hot path (keyless
       // follow-up calls, unchanged key re-sent every request) pays nothing.
       // Kill switch: DCHUB_LATE_KEY_DISABLE=1 → pre-fix behavior.
+      let _authRefused = null;   // r-auth-refused: set only when this request's key was refused
       if (apiKey && apiKey !== meta.api_key
           && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_LATE_KEY_DISABLE || ''))) {
         const _v = await validateKey(apiKey);
         const _r = _lateKeyResolve(meta, apiKey, _v);
+        _authRefused = _authRefusal(apiKey, (_r ? _r.meta : meta).api_key, _v);
         if (_r) {
           meta = _r.meta;
           if (_r.persist) {
@@ -20088,6 +20137,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // from a different hop, so prefer the current one when present).
       return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment,
         auth_source: _authChannel,
+        auth_refused: _authRefused,   // r-auth-refused: per request, never carried in meta
         source: _pathSource(req),   // r-source-path: rides EVERY request
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
@@ -20333,6 +20383,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // r-invalid-key-anon: same drop as the initialize branch. This path is the
       // one the Smithery gateway takes (stale session id → stateless serve), so
       // it carried the bypass just as fully. See _effectiveCallerKey.
+      const _keyPresented = apiKey;   // r-auth-refused: the key as sent, before the drop
       apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
       let _descOverrides = null;
       try { _ensureDescRefresher(); _descOverrides = _platformOverrides(platform); } catch (_) {}
@@ -20345,6 +20396,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier,
         auth_source: _authChannel,
+        auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         source: _pathSource(req),   // r-source-path: rides EVERY request
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
