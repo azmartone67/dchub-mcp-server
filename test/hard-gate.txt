@@ -65,6 +65,7 @@ test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
 test/grid-region-unresolved.test.mjs
 test/handler-args-declared.test.mjs
+test/hard-gate-no-network.test.mjs
 test/held-key-persists.test.mjs
 test/honest-tier.test.mjs
 test/hosting-capacity.test.mjs

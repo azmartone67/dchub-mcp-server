@@ -279,7 +279,15 @@ jobs:
             exit 1
           fi
           echo "hard gate: $(wc -w <<< "$files") files from test/hard-gate.txt"
-          npx vitest run $files
+          # No network, for every listed file: the preload refuses and logs each
+          # connect off loopback in every vitest worker, and the verdict fails the
+          # step on that log, or on a log no worker wrote. See both files' headers.
+          log="$RUNNER_TEMP/hard-gate-no-network.jsonl"
+          rm -f "$log"
+          status=0
+          NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require $PWD/test/helpers/no-network-preload.cjs" DCHUB_NO_NETWORK_LOG="$log" npx vitest run $files || status=$?
+          node scripts/hard-gate-no-network.mjs "$log" || status=1
+          exit $status
 
       # r-pack (2026-09-08): integrations/packs/* are DERIVED from MCP_PACKS +
       # mcp-server.json, and a PR that edits a pack without regenerating them
