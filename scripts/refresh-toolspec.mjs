@@ -40,7 +40,7 @@
 // ============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'toolspec.json');
@@ -120,4 +120,5 @@ async function main() {
   console.log(`toolspec refresh: ✓ wrote toolspec.json — ${spec.length} tools, ${withProps} with schemas, ${props} declared properties`);
 }
 
-main();
+// Only when run as a script. An import (a test's) must not fetch or write.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
