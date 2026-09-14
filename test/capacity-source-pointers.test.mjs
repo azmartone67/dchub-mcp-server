@@ -262,12 +262,11 @@ describe('summary client', () => {
     summaryAnswer = () => new Promise((resolve) => { release = resolve; });
     S._capacitySummary.arm();
     const base = { content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } };
-    let done = false;
-    const pending = S._withCapacityPointer(base, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE)
-      .then((x) => { done = true; return x; });
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();   // microtasks only: no timer has moved
-    expect(done).toBe(true);
-    expect(await pending).toBe(base);
+    // Synchronous: the result is back before any timer or microtask can run,
+    // while the summary read it started is still pending.
+    const out = S._withCapacityPointer(base, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE);
+    expect(out).toBe(base);
+    expect(out && typeof out.then).toBe('undefined');
     expect(summaryCalls()).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(L.CAPACITY_SUMMARY_TIMEOUT_MS - 1);
     expect(S._capacitySummary.state().inflight).toBe(true);

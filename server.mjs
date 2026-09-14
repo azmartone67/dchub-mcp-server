@@ -4093,10 +4093,11 @@ export function _capacityPointerQuery(name, args, result) {
 /**
  * The one finalization step that adds a capacity_source pointer. Applied in
  * trackedTool directly inside _flagUpstreamError, after every other stamp,
- * where all return paths have merged. Reads the cache synchronously; a cold or
- * stale cache starts a background refresh that this call never awaits.
+ * where all return paths have merged. SYNCHRONOUS on purpose: it cannot await
+ * anything, so it cannot delay a result. A cold or stale cache starts a
+ * background refresh that nothing waits on.
  */
-export async function _withCapacityPointer(result, name, args, outSchema) {
+export function _withCapacityPointer(result, name, args, outSchema) {
   try {
     if (!_CAPACITY_POINTER_TOOLS.has(name) || !capacityPointersEnabled()) return result;
     if (!result || typeof result !== 'object' || result.isError || !Array.isArray(result.content)) return result;
@@ -4117,12 +4118,15 @@ export async function _withCapacityPointer(result, name, args, outSchema) {
     // telemetry logs success (hyperscaler_deals died that way twice). So the
     // block enters structuredContent only when THIS tool's registered schema
     // accepts the exact object; otherwise it rides in _meta, which the SDK
-    // does not validate. The text line is added either way.
+    // does not validate. The text line is added either way. safeParse is the
+    // synchronous twin of the SDK's safeParseAsync; a schema with an async
+    // refinement makes it throw, and the catch below then returns the result
+    // without a pointer rather than risking a -32602.
     const sc = result.structuredContent;
     if (sc && typeof sc === 'object' && !Array.isArray(sc) && !(CAPACITY_POINTER_KEY in sc)
-        && outSchema && typeof outSchema.safeParseAsync === 'function') {
+        && outSchema && typeof outSchema.safeParse === 'function') {
       const candidate = { ...sc, [CAPACITY_POINTER_KEY]: block };
-      const verdict = await outSchema.safeParseAsync(candidate);
+      const verdict = outSchema.safeParse(candidate);
       if (verdict && verdict.success) {
         out.structuredContent = candidate;
         return out;
@@ -14094,7 +14098,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   that same predicate first and leaves anything it would flag untouched,
   //   so an upstream error never carries a pointer. It never waits on the
   //   network.
-  }, async (args, extra) => _flagUpstreamError(await _withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
          name, getCtx()),
