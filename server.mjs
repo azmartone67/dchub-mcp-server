@@ -4092,14 +4092,17 @@ export function _capacityPointerQuery(name, args, result) {
 
 /**
  * The one finalization step that adds a capacity_source pointer. Applied in
- * trackedTool OUTSIDE every other stamp, where all return paths have merged.
- * Reads the cache synchronously; a cold or stale cache starts a background
- * refresh that this call never awaits.
+ * trackedTool directly inside _flagUpstreamError, after every other stamp,
+ * where all return paths have merged. Reads the cache synchronously; a cold or
+ * stale cache starts a background refresh that this call never awaits.
  */
 export async function _withCapacityPointer(result, name, args, outSchema) {
   try {
     if (!_CAPACITY_POINTER_TOOLS.has(name) || !capacityPointersEnabled()) return result;
     if (!result || typeof result !== 'object' || result.isError || !Array.isArray(result.content)) return result;
+    // _flagUpstreamError runs AFTER this step and marks upstream failures
+    // isError. Ask the same predicate now, so an error never carries a pointer.
+    if (_flagUpstreamError(result, name).isError) return result;
     // Lean-output platforms get the data and nothing else, the rule the
     // front-door and cookbook nudges already follow.
     if (_isCleanPlatform()) return result;
@@ -14086,15 +14089,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   top-level citation and no provenance at all (verified live 2026-08-12).
   //   The caller's tier is passed so `completeness` can only read
   //   'unrestricted' when the tier genuinely removes the gates.
-  // ★ _withCapacityPointer sits outside even _flagUpstreamError: it must see
-  //   the final isError verdict (errors never carry a pointer) and nothing
-  //   after it may rebuild content. It never waits on the network.
-  }, async (args, extra) => _withCapacityPointer(_flagUpstreamError(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
+  // ★ _withCapacityPointer sits directly INSIDE _flagUpstreamError, which stays
+  //   outermost so nothing after it can drop the flag. The pointer step asks
+  //   that same predicate first and leaves anything it would flag untouched,
+  //   so an upstream error never carries a pointer. It never waits on the
+  //   network.
+  }, async (args, extra) => _flagUpstreamError(await _withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))), name),
-       name, args, _outSchema));
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))),
+       name, args, _outSchema), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.

@@ -131,6 +131,10 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     const window = SRC.slice(Math.max(0, i - 900), i);
     expect(window).toContain('if (!apiKey) {');
     expect(window).toContain('_instrTail = _INSTR_TAIL_HELD(_held.key)');
-    expect(SRC).toMatch(/instructions: _INSTRUCTIONS \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
+    // The per-session tail is appended after the base instructions. Since
+    // 2026-09-14 the base passes through _capacityInstructions first (it
+    // splices a Capacity Source live clause inside a sentence, and returns the
+    // base unchanged while no listings are live); the tail contract is the same.
+    expect(SRC).toMatch(/instructions: _capacityInstructions\(_INSTRUCTIONS\) \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
   });
 });

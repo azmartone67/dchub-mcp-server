@@ -78,6 +78,7 @@ let S, TOOLS, realFetch;
 let calls = [];
 let summaryAnswer = null;         // null -> 404, which is production today
 let rankPayload = RANK_MATCH;
+let sitesStatus = 200;            // find_sites' backend status
 const json = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' },
 });
@@ -91,6 +92,9 @@ beforeAll(async () => {
     calls.push({ url, pathname, headers: init.headers || {} });
     if (pathname === SUMMARY) return summaryAnswer ? summaryAnswer() : json(404, { ok: false, error: 'not_found' });
     if (pathname === '/api/v1/mcp/tools/rank_markets') return json(200, rankPayload);
+    if (pathname === '/api/v1/sites/find' && sitesStatus !== 200) {
+      return json(sitesStatus, { ok: false, detail: 'upstream fixture failure' });
+    }
     return json(200, { ok: true, success: true });   // tool backends, telemetry, heartbeats
   };
   // server.mjs captures API_BASE at module evaluation; restore right after.
@@ -104,7 +108,7 @@ beforeAll(async () => {
 
 afterAll(() => { globalThis.fetch = realFetch; });
 beforeEach(() => {
-  calls = []; summaryAnswer = null; rankPayload = RANK_MATCH;
+  calls = []; summaryAnswer = null; rankPayload = RANK_MATCH; sitesStatus = 200;
   delete process.env[KILL];
   S._capacitySummary.reset();
 });
@@ -337,6 +341,23 @@ describe('pointers on tool results', () => {
     const lean = await S._ctxALS.run({ ...SEAT, platform: 'chatgpt' },
       () => S._withCapacityPointer(ok, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE));
     expect(lean).toBe(ok);
+  });
+
+  it('live: an upstream failure is flagged isError and never carries a pointer', async () => {
+    await withSummary(LIVE);
+    // Control: the same shape without the error markers DOES get a pointer.
+    const ok = { content: [{ type: 'text', text: '{}' }], structuredContent: { _entity: 'response' } };
+    expect(pointerOf(await S._withCapacityPointer(ok, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE))).toBeTruthy();
+    // Not yet flagged: _flagUpstreamError runs after the pointer step.
+    const upstream = { content: [{ type: 'text', text: '{}' },],
+      structuredContent: { error: 'API 503', _error_mitigation: { error_code: 'upstream_unavailable' } } };
+    expect(await S._withCapacityPointer(upstream, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE)).toBe(upstream);
+    // Through the real dispatch chain: the backend fails, the result is flagged, no pointer.
+    sitesStatus = 503;
+    const r = await call('find_sites', { state: 'TX' });
+    expect(r.isError, JSON.stringify(r.structuredContent).slice(0, 300)).toBe(true);
+    expect(pointerOf(r)).toBeNull();
+    expect(pointerLines(r)).toEqual([]);
   });
 
   it('the note is one sentence: DC Hub makes the introduction, operator contact is never shared', () => {
