@@ -163,6 +163,7 @@ test/smithery-freshness-honest.test.mjs
 test/smithery-freshness-ledger.test.mjs
 test/smithery-reclaim-terms.test.mjs
 test/snapshot-repairs-missing-keys.test.mjs
+test/starter-links-through-go-c.test.mjs
 test/starter-pack.test.mjs
 test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs

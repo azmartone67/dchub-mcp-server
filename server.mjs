@@ -6746,7 +6746,10 @@ function phase9L_clean_preview(cta, body) {
 //   Developer $49   → 7sY5kE8F4fs13ml0PEaZi0c  (same as UPGRADE_URL ref)
 //   Pro $99         → dRm28s2gGcfP6yx0PEaZi0p  (canon; PRO_URL reads this)
 //   Pro $299        → 7sY7sM9J8enX7CB69YaZi0l  RETIRED — do not re-point here
-const STARTER_URL = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();
+// STARTER_LINK is the bare link, for a site that evaluates promoParam() per request the way
+// DEVELOPER_URL + promoParam() does. STARTER_URL fixes the promo once, when this module loads.
+const STARTER_LINK = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
+const STARTER_URL = STARTER_LINK + promoParam();
 
 // r-pack10 (2026-06-25, owner): the old usage-based / metered SKU is RETIRED.
 // This Stripe Payment Link now sells the SINGLE $10 one-time = 1,000 API-call
@@ -13316,11 +13319,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // CTA from a dead-end curl to a working Stripe link should
         // capture even 2-3% = +3-5 conversions/mo from this cohort alone.
         const _isClaude = (c.platform || '').toLowerCase() === 'claude';
-        // Fix E (2026-06-06): bind to MCP session_id so the checkout.session.completed
-        // webhook can mark THIS session as upgraded.
-        const _starterUrl_anon = _stripeWithAnon(_stripeWithSession(
-          'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(),
-          c.session_id));
+        // Neither branch leads with a Starter link any more: both asks come from _rungsText.
         const _mdAnon = _isClaude
           ? `## \u{1F512} \`${name}\` is a paid feature
 
@@ -13581,7 +13580,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
               credits_url: _packCheckoutUrl(_sid),
               credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API calls (no subscription) — the cheapest unlock.',
-              starter_url: _stripeWithAnon(_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid)),
+              // r-starter-go-c (2026-09-14): Starter was the one direct buy.stripe.com link here, so a
+              // human's click on it never reached mcp_checkout_clicks. /go/c 302s to the plan's link
+              // plus client_reference_id only: a promo code rides the fail-open direct link alone.
+              starter_url: _subCheckoutUrl(STARTER_LINK + promoParam(), _sid),
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
               ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
                               pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
@@ -13718,7 +13720,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
                 upgrade_url: UPGRADE_URL,
-                starter_url: _stripeWithAnon(_stripeWithSession('https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam(), _sid)),
+                // r-starter-go-c: measured like the rungs below, and a keyed caller's Starter link now
+                // binds k-<sha256(key)> as they do (it bound the session). See the anonymous trim above.
+                starter_url: _subCheckoutUrl(STARTER_LINK + promoParam(), _sid),
                 developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
                 ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
                                 pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
