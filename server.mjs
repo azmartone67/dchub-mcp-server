@@ -1247,6 +1247,57 @@ function _packCheckoutUrl(sessionId) {
                    : _stripeWithAnon(_stripeWithSession(CREDITS_URL, sessionId)), sessionId);
 }
 
+// ── r-paid-lift (2026-09-14): a purchase reaches the session that made it ───────
+// A keyed caller's Pro link is /go/c pro|k-<sha256(key)>|sid. The webhook's k- branch
+// stamps mcp_dev_keys.tier and nothing else — Fix E skips k- refs, so trial-check never
+// returns a tier_upgrade for that purchase. This server fixed the session's tier at
+// initialize, re-validated only when a DIFFERENT header key arrived, and cached every
+// validation for KEY_CACHE_TTL. The paid_only wall said "this key unlocks — just call X
+// again"; the next call was walled again, for the life of the session.
+//
+// The re-read cannot be /keys/validate on a timer. Validate COUNTS for the keys most
+// likely to be here: each call spends part of an unbound dch_live_ key's free allowance
+// (the key is bind-gated once it runs out) and of a dch_trial_ key's daily count. The
+// re-read is /mcp/monthly-usage, which the keyed path already calls before every tool
+// call: its `tier` is the backend's own read-only highest-of-3 resolution of the key.
+// Validate runs only when that tier outranks the session's (see _liftKeyTier) — and a
+// key the webhook has stamped paid is no longer counted by validate.
+//
+// A quota decision is cached for up to 5 minutes. For a key this replica handed a k-
+// link within KEY_TIER_PROBE_WINDOW_MS, a decision that still reads below Starter is
+// re-read once it is KEY_TIER_PROBE_MS old (_quotaTierStale). Marking the link rather
+// than busting a cache when it is shown: a busted cache is refilled before anyone pays.
+const KEY_TIER_PROBE_MS = parseInt(process.env.DCHUB_KEY_TIER_PROBE_MS || '15000', 10);
+const KEY_TIER_PROBE_WINDOW_MS = parseInt(process.env.DCHUB_KEY_TIER_PROBE_WINDOW_MS || '3600000', 10);
+const _KEY_SUB_LINK_AT = new Map();   // api_key → ms this replica last minted a k- ref for it
+function _noteKeySubLink(apiKey) {
+  if (!apiKey) return;
+  _KEY_SUB_LINK_AT.delete(apiKey);    // re-insert keeps the Map oldest-first
+  if (_KEY_SUB_LINK_AT.size >= 5000) _KEY_SUB_LINK_AT.delete(_KEY_SUB_LINK_AT.keys().next().value);
+  _KEY_SUB_LINK_AT.set(apiKey, Date.now());
+}
+export function _keySubLinkRecent(apiKey, now = Date.now()) {
+  const t = apiKey ? _KEY_SUB_LINK_AT.get(apiKey) : undefined;
+  return t !== undefined && now - t < KEY_TIER_PROBE_WINDOW_MS;
+}
+// Both vocabularies the backend answers in: /keys/validate's node tiers (free|identified|
+// starter|developer|paid|enterprise) and the plan names trial-check and monthly-usage use,
+// where pro|founding|team|metered are what 'paid' means. An unknown name ranks -1, so it
+// can never read as an upgrade.
+const _TIER_RANK = { anonymous: 0, anon: 0, free: 0, identified: 1, starter: 2, developer: 3,
+  paid: 4, pro: 4, founding: 4, team: 4, metered: 4, enterprise: 5, research_seed: 5 };
+export function _tierRank(t) {
+  const r = _TIER_RANK[String(t || '').toLowerCase()];
+  return r === undefined ? -1 : r;
+}
+// applyTierGate knows Pro-class only as 'paid'. Handed 'pro' it matched no tier and fell
+// through to the PAID_ONLY refusal — below what a free caller gets.
+export function _nodeTier(t) {
+  const s = String(t || '').toLowerCase();
+  return (s === 'pro' || s === 'founding' || s === 'team' || s === 'metered') ? 'paid' : s;
+}
+const _SESSION_UPGRADE_TIERS = new Set(['developer', 'pro', 'founding', 'paid', 'enterprise']);
+
 // r-durable-sub-key (2026-07-13): bind a keyed caller's SUBSCRIPTION checkout
 // (Starter/Developer/Pro) to their DURABLE key so the paid tier lands on the agent's
 // OWN key (survives session rotation) — the post-payment leak, same class the pk- pack
@@ -1276,6 +1327,7 @@ function _subCheckoutUrl(url, sessionId) {
     if (/[?&]client_reference_id=/.test(url)) return _goUrl(url, sessionId);  // idempotent
     const h = createHash('sha256').update(String(_k)).digest('hex');
     const sep = url.includes('?') ? '&' : '?';
+    _noteKeySubLink(_k);
     return _goUrl(url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h), sessionId);
   } catch (_) {
     return _goUrl(_stripeWithAnon(_stripeWithSession(url, sessionId)), sessionId);
@@ -1306,6 +1358,7 @@ export function _keyBoundSubUrl(url, apiKey) {
     }
     const h = createHash('sha256').update(String(apiKey)).digest('hex');
     const sep = url.includes('?') ? '&' : '?';
+    _noteKeySubLink(apiKey);
     return _goUrl(url + sep + 'client_reference_id=' + encodeURIComponent('k-' + h));
   } catch (_) { return url; }
 }
@@ -2784,6 +2837,44 @@ async function _validateKeyUncached(api_key) {
   }
 }
 
+// r-paid-lift: the ONE confirmation hop, run only when monthly-usage resolved the key
+// above the tier this call carries (why the trigger is not validate: _noteKeySubLink).
+// Bypasses keyCache, whose entry is the stale one, and refreshes it on success, so a new
+// session or stateless call on this replica reads the new tier too. At most once per key
+// per KEY_TIER_PROBE_MS; an authoritative answer that does not confirm backs off 10
+// minutes, so a disagreement between the two reads cannot become a validate loop. Never
+// lowers a tier. Returns the lifted tier, or null.
+const _TIER_LIFT_AT = new Map();   // api_key → { at, wait }
+export async function _liftKeyTier(c, resolvedTier) {
+  const key = c && c.api_key;
+  const from = _tierRank((c && c.tier) || 'free');
+  if (!key || _tierRank(resolvedTier) < _tierRank('starter') || _tierRank(resolvedTier) <= from) return null;
+  const now = Date.now();
+  const last = _TIER_LIFT_AT.get(key);
+  if (last && now - last.at < last.wait) return null;
+  if (_TIER_LIFT_AT.size >= 5000) _TIER_LIFT_AT.clear();
+  let v = null;
+  try { v = await _validateKeyUncached(key); } catch (_) { v = null; }
+  const confirmed = !!(v && v.valid === true && _tierRank(v.tier) > from);
+  _TIER_LIFT_AT.set(key, { at: now, wait: (confirmed || !v || v.indeterminate) ? KEY_TIER_PROBE_MS : 600_000 });
+  if (!confirmed) return null;
+  c.tier = v.tier;
+  c.is_trial = v.is_trial === true;
+  c.metered_enforce = v.metered_enforce === true;
+  const sid = c.session_id;
+  const m = sid ? sessionMeta.get(sid) : null;
+  if (m && m.api_key === key) {
+    m.tier = v.tier;
+    m.is_trial = c.is_trial;
+    m.metered_enforce = c.metered_enforce;
+    sessionMeta.set(sid, m);
+  }
+  try { recordSessionUpgrade(c.platform, v.tier); } catch (_) {}
+  _dropQuotaCache(key);
+  console.log(`[paid-lift] key=${String(key).slice(0, 6)}… sid=${String(sid || '').slice(0, 8)} tier→${v.tier}`);
+  return v.tier;
+}
+
 // ── r-invalid-key-anon (2026-08-28): an UNRESOLVABLE credential must not buy
 // authenticated depth ───────────────────────────────────────────────────────
 // ★THE DEFECT THIS CLOSES. Every gating decision in this file asks `!!c.api_key`
@@ -2931,16 +3022,24 @@ async function _monthlyQuotaUncached(api_key, tier) {
   return await resp.json();
 }
 
+// r-paid-lift: a cached decision for a key recently handed a k- link, still reading
+// below Starter, is re-read once it is KEY_TIER_PROBE_MS old. See _noteKeySubLink.
+export function _quotaTierStale(api_key, hit, now = Date.now()) {
+  if (!hit || !_keySubLinkRecent(api_key, now)) return false;
+  if (_tierRank(hit.d && hit.d.tier) >= _tierRank('starter')) return false;
+  return now - (hit.at || 0) >= KEY_TIER_PROBE_MS;
+}
+
 export async function checkMonthlyQuota(api_key, tier) {
   if (!api_key) return _QUOTA_OPEN;               // anon has its own budget
   const hit = QUOTA_CACHE.get(api_key);
-  if (hit && hit.exp > Date.now()) return hit.d;
+  if (hit && hit.exp > Date.now() && !_quotaTierStale(api_key, hit)) return hit.d;
   const inflight = _quotaInflight.get(api_key);
   if (inflight) return inflight;                  // collapse a burst into one hop
   const p = (async () => {
     try {
       const d = await _monthlyQuotaUncached(api_key, tier);
-      QUOTA_CACHE.set(api_key, { d, exp: Date.now() + _quotaTtlMs(d) });
+      QUOTA_CACHE.set(api_key, { d, exp: Date.now() + _quotaTtlMs(d), at: Date.now() });
       return d;
     } catch (err) {
       // Never cache a failure — see the fail-open note above.
@@ -11809,7 +11908,7 @@ function trackedTool(srv, name, description, schema, handler) {
     const c = getCtx();
     const t0 = Date.now();
     let status = 'ok';
-    const tier = c.tier || 'free';
+    let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
     // Returns isError=true with a friendly identification CTA. Counts the
     // call for telemetry but skips the tool handler entirely.
@@ -11863,7 +11962,7 @@ function trackedTool(srv, name, description, schema, handler) {
       return _argErr;
     }
     try {
-      let _gateTier = tier;  // r41-session-upgrade may mutate this in-place
+      let _gateTier = _nodeTier(tier);  // r41-session-upgrade may mutate this in-place
       // r-session-tier-bind (2026-07-22, flag DCHUB_SESSION_TIER_BIND, default on):
       // give an agent the IDENTIFIED TIER in-session right after claim_free_key — the
       // in-session half of the retention fix (the backend /track resolver already fixes
@@ -11880,15 +11979,27 @@ function trackedTool(srv, name, description, schema, handler) {
       // reflects it on every later call (no repeat lookup). UPGRADE-ONLY (claim keys are
       // free/identified tier — can NEVER grant paid) and resolved by EXACT session_id
       // (no cross-session leak). Fully wrapped — never blocks a tool call.
+      // r-paid-lift (2026-09-14): three changes. The poll also runs for the keyed sessions
+      // that can hold a session-bound purchase: a key AUTO-bound here (a session-bound link
+      // can predate it) and a key whose Pro link is session-bound because a k- ref cannot
+      // land on it (_subRefLandsOnKey). It stops once the session is Pro-class. And a paid
+      // tier_upgrade (Fix E, redeem) is applied instead of dropped: the
+      // ALWAYS_PARTIAL_PREVIEW tools never call trial-check themselves, so this poll is
+      // the only place they can see a session-bound purchase.
       if ((process.env.DCHUB_SESSION_TIER_BIND ?? 'on') !== 'off'
-          && c && !c.api_key && c.session_id && !_TIER_BIND_SKIP.has(name)) {
+          && c && c.session_id && !_TIER_BIND_SKIP.has(name)
+          && _tierRank(_gateTier) < _tierRank('paid')) {
         try {
           const _sid = c.session_id;
           const _sm = sessionMeta.get(_sid);
           const _throttled = _sm && _sm.tierTriedAt && (Date.now() - _sm.tierTriedAt < 60000);
-          if (!(_sm && _sm.api_key) && !_throttled) {
+          const _anon = !c.api_key && !(_sm && _sm.api_key);
+          const _autoBound = !!(c.api_key && _sm && _sm.auto_bound === true && _sm.api_key === c.api_key);
+          const _sessionLinks = !!c.api_key && !_subRefLandsOnKey(c.api_key);
+          if ((_anon || _autoBound || _sessionLinks) && !_throttled) {
             const _tk = await checkTrialEligibility(_sid, name);
             const _m2 = sessionMeta.get(_sid) || {};
+            const _up = String((_tk && _tk.tier_upgrade) || '').toLowerCase();
             if (_tk && _tk.session_api_key && !_m2.api_key) {
               _m2.api_key    = _tk.session_api_key;
               _m2.tier       = String(_tk.tier_upgrade || 'identified').toLowerCase();
@@ -11899,6 +12010,14 @@ function trackedTool(srv, name, description, schema, handler) {
               _gateTier = _m2.tier;
               try { recordSessionUpgrade(c.platform, _m2.tier); } catch (_) {}
               console.log(`[MCP] session-tier-bind sid=${String(_sid).slice(0, 8)} → ${_m2.tier} (early · all-tool · cross-replica)`);
+            } else if (_SESSION_UPGRADE_TIERS.has(_up) && _tierRank(_up) > _tierRank(_gateTier)) {
+              _m2.tier  = _up;
+              sessionMeta.set(_sid, _m2);
+              c.tier    = _up;
+              _gateTier = _nodeTier(_up);
+              tier      = _up;
+              try { recordSessionUpgrade(c.platform, _up); } catch (_) {}
+              console.log(`[MCP] session-tier-bind sid=${String(_sid).slice(0, 8)} → ${_up} (session-bound purchase)`);
             } else {
               _m2.tierTriedAt = Date.now();     // throttle a miss for 60s (a mid-session claim is picked up next window)
               sessionMeta.set(_sid, _m2);
@@ -11935,6 +12054,17 @@ function trackedTool(srv, name, description, schema, handler) {
       if (c && c.api_key && !QUOTA_EXEMPT_TOOLS.has(name)) {
         let _q = _QUOTA_OPEN;
         try { _q = await checkMonthlyQuota(c.api_key, c.tier || _gateTier); } catch (_) {}
+        // r-paid-lift: the backend resolved this key ABOVE the tier the call carries — a
+        // purchase since that tier was read. Confirm it (_liftKeyTier) and re-derive.
+        if (_q && _tierRank(_q.tier) > _tierRank(c.tier || 'free')) {
+          try {
+            if (await _liftKeyTier(c, _q.tier)) {
+              _gateTier = _nodeTier(c.tier);
+              tier = c.tier;
+              if ((_gateTier === 'developer' || _gateTier === 'starter') && !PRO_ONLY_TOOLS.has(name)) _gateTier = 'paid';
+            }
+          } catch (_) { /* never block a tool call on the lift */ }
+        }
         if (_q && _q.allowed === false) {
           // A prepaid-pack holder bought a call bundle outright; their tier is
           // still 'free' (300/mo), so walling them here would confiscate calls
@@ -12397,7 +12527,9 @@ function trackedTool(srv, name, description, schema, handler) {
                 sessionMeta.set(_sid, _m);
                 console.log(`[MCP] session_upgrade sid=${_sid.slice(0,8)} tier=free→${_newTier} (redeem detected)`);
                 recordSessionUpgrade(c.platform, _newTier);
-                _gateTier = _newTier;
+                // r-paid-lift: the gate's vocabulary, not the plan name (see _nodeTier).
+                _gateTier = _nodeTier(_newTier);
+                if (_gateTier === 'developer' && !PRO_ONLY_TOOLS.has(name)) _gateTier = 'paid';
                 // Re-evaluate the gate at the new tier — should now allow.
                 const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
                 if (_gate2.allowed) {
@@ -16071,7 +16203,7 @@ function createServer(descOverrides, instructionsTail) {
   trackedTool(srv, 'get_intelligence_index', 'Real-time composite market health score (0-100) aggregating supply/demand balance, vacancy, absorption velocity, fiber depth, power availability, and pricing trend. Returns the index value, percentile rank across the 300+ market set, 7d/30d trend direction, and underlying component scores. Answers "is this market healthy", "how does Northern Virginia look overall right now". Try: get_intelligence_index market=northern-virginia. Returns ONE composite health number for a market; do NOT use for the full market metric set (use get_market_intel) or to rank multiple markets (use rank_markets).', {},
     async () => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/agents/intelligence-index')) }] }));
 
-  trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — 2,100+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers "which data-center deals closed this year", "what was that acquisition worth". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter \u2014 use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).',
+  trackedTool(srv, 'list_transactions', 'M&A and capital transactions in the data center sector — 2,200+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers "which data-center deals closed this year", "what was that acquisition worth". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter \u2014 use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).',
     { buyer: S.describe('Filter by acquiring company name, e.g. Blackstone, KKR, Digital Realty'),
       seller: S.describe('Filter by selling/target company name, e.g. CyrusOne'),
       min_value_usd: N.describe('Minimum disclosed deal value in US dollars, e.g. 1000000000 for $1B+'),
@@ -17667,7 +17799,7 @@ function createServer(descOverrides, instructionsTail) {
       text: JSON.stringify(_citationBlock(a || {})) }] }));
 
   trackedTool(srv, 'why_dchub',
-    'Use when a human asks how DC Hub compares to other data-center data sources — DataCenterHawk (DCHawk), DC Byte, Data Center Dynamics (DCD), Data Center Frontier (DCF), Baxtel, datacenters.com — or asks "why should I use DC Hub / is it better than <X> / what can you give me a PDF or directory can\'t?". Returns DC Hub\'s honest, source-verified differentiators (agent-native MCP access, live multi-continent grid & energy telemetry, the proprietary daily DCPI index (and its DCGI gas sibling, withdrawn 2026-08-08 rather than published wrong, and restored 2026-08-30 once every defective term was repaired), CC-BY-4.0 citation rights on DCPI scores & grid analysis, 21,800+ facilities + 340,000+ mapped power/grid/gas/fiber assets) each with a proof URL, a citation line, plus the canonical head-to-head comparison pages. Free, no key required. Optional: competitor=<name> for that vendor\'s direct comparison-page link. Do NOT use to query infrastructure data itself (use the data tools); this answers positioning / "how do you compare" questions with citable facts.',
+    'Use when a human asks how DC Hub compares to other data-center data sources — DataCenterHawk (DCHawk), DC Byte, Data Center Dynamics (DCD), Data Center Frontier (DCF), Baxtel, datacenters.com — or asks "why should I use DC Hub / is it better than <X> / what can you give me a PDF or directory can\'t?". Returns DC Hub\'s honest, source-verified differentiators (agent-native MCP access, live multi-continent grid & energy telemetry, the proprietary daily DCPI index (and its DCGI gas sibling, withdrawn 2026-08-08 rather than published wrong, and restored 2026-08-30 once every defective term was repaired), CC-BY-4.0 citation rights on DCPI scores & grid analysis, 21,800+ facilities + 330,000+ mapped power/grid/gas/fiber assets) each with a proof URL, a citation line, plus the canonical head-to-head comparison pages. Free, no key required. Optional: competitor=<name> for that vendor\'s direct comparison-page link. Do NOT use to query infrastructure data itself (use the data tools); this answers positioning / "how do you compare" questions with citable facts.',
     { competitor: S.describe('Optional competitor/vendor name for a direct comparison-page link, e.g. DataCenterHawk, "DC Byte", DCD, Baxtel') },
     async (a) => {
       const why = await callAPI('/api/v1/competitive/why-dchub');
@@ -18923,7 +19055,7 @@ function createServer(descOverrides, instructionsTail) {
       async () => ({ contents: [{ uri, mimeType: 'text/markdown', text }] }));
   _R('about', 'dchub://about', 'About DC Hub',
      'What DC Hub is, what it covers, and how to cite it.',
-     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,800+ facilities across 170+ countries\n- 300+ markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, 24 EU zones, Taiwan, Japan, South Korea, Brazil; Australia + Singapore partial)\n- 2,100+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
+     '# DC Hub — Data Center & Energy Intelligence\n\nReal-time, neutral data layer for data-center infrastructure that AI agents can both QUERY (MCP) and CITE (CC-BY-4.0).\n\n- 21,800+ facilities across 170+ countries\n- 300+ markets scored by the DCPI (Data Center Power Index)\n- Live grid telemetry for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + live global scoreboard (GB/NESO, 24 EU zones, Taiwan, Japan, South Korea, Brazil; Australia + Singapore partial)\n- 2,200+ tracked M&A deals + hyperscaler $1B+ tracker\n- Fiber routes, gas pipelines, interconnection queues, tax incentives, water risk\n\nHomepage: https://dchub.cloud · MCP: https://dchub.cloud/mcp · License: CC-BY-4.0.\nAttribute as "Source: DC Hub (dchub.cloud), CC-BY-4.0".');
   _R('pack-ai-campus-power', 'dchub://packs/ai-campus-power', 'Starter pack: AI Campus Power + Interconnect',
      'The scoped 10-tool pack + 6 ready intents for the hyperscale AI-campus wave (Grok + Perplexity converged spec).',
      '# Starter pack — AI Campus Power + Interconnect\n\nScope your client\'s allowed_tools to this set for the energy-first AI-campus workflow (10 tools):\n\n`execute_plan` · `plan_query` · `get_grid_scoreboard` · `get_interconnection_queue` · `get_retirement_headroom` · `rank_markets` · `get_market_dcpi_rank` · `search_facilities` · `get_fiber_intel` · `analyze_site` (+ `get_water_risk` if cooling matters)\n\n## Six first-call intents (each is one execute_plan call)\n\n1. "rank markets for a 200 MW AI campus"\n2. "how much power is available in ERCOT for a 100 MW data center"\n3. "find 100 MW of buildable capacity near Dallas"\n4. "compare Phoenix vs Columbus for an AI campus"\n5. "where do fiber density and grid headroom overlap in Atlanta"\n6. "analyze the site at 39.0438,-77.4874 for a 200 MW build"\n\nEvery response carries the auditable replay + a `next_recipe` follow-up. Free tier answers all six at preview depth — `claim_free_key` (no email) raises it.\n\nCite results as "DC Hub, dchub.cloud" (CC-BY-4.0).');
@@ -18935,7 +19067,7 @@ function createServer(descOverrides, instructionsTail) {
      '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
-     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 21,800+ across 170+ countries.\n\n**Infrastructure:** 340,000+ mapped assets — 127k substations, 95k transmission lines, 67k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 21,800+ across 170+ countries.\n\n**Infrastructure:** 330,000+ mapped assets — 127k substations, 95k transmission lines, 58k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
 
   // ── r-promres (2026-07-18): recipe PROMPTS + reference RESOURCES ──────────
   // The two MCP capabilities registry scorecards (LobeHub et al.) still mark

@@ -15,22 +15,53 @@
 // snapshot in BOTH directions on purpose: while the snapshot is still v5 it
 // pins graceful degradation (no key, no crash), and the moment the daily sync
 // lands v6 the same assertion starts pinning that the field is published.
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createServer } from '../server.mjs';
+
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'server.mjs'), 'utf8');
 const SNAP = JSON.parse(
   fs.readFileSync(path.join(ROOT, 'canonical', 'problem_taxonomy.json'), 'utf8'));
 
-let envelope;
+let envelope, prevBase;
 beforeAll(async () => {
+  // server.mjs is imported here, after DCHUB_API_BASE points at an unroutable
+  // address, because API_BASE is captured at module evaluation and the handler
+  // call below fires tool-call tracking at it. A static import is hoisted and
+  // evaluated server.mjs with the production default. Set until afterAll.
+  prevBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';   // unroutable: no upstream
+  const { createServer } = await import('../server.mjs');
   const tools = createServer()._registeredTools;
   const res = await tools.discover_tools.handler({}, { signal: new AbortController().signal });
   envelope = res.structuredContent;
+}, 60000);
+
+afterAll(() => {
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
 });
 
 describe('discover_tools envelope', () => {
@@ -88,5 +119,11 @@ describe('the guard itself', () => {
         expect(desc.toLowerCase(), `${name} claims '${term}'`).not.toContain(term);
       }
     }
+  });
+});
+
+describe('hard gate: no network', () => {
+  it('no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
   });
 });

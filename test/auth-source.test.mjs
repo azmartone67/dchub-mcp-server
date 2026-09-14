@@ -17,21 +17,48 @@
 // exactly how Stage 0a shipped inert for eight days
 // (test/request-interpretation.test.mjs:126 greps source; it cannot execute it).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import net from 'node:net';
 
-let S, PORT, httpServer;
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
+
+let S, PORT, httpServer, prevBase;
+let _connectionShape, _KNOWN_GATEWAYS, _identitySource;   // bound from S in beforeAll
 
 beforeAll(async () => {
-  const prevBase = process.env.DCHUB_API_BASE;
-  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';   // unroutable: no upstream
+  // Unroutable: no upstream. server.mjs is imported ONLY here, after the env is
+  // set, because API_BASE is captured at module evaluation: a static import of
+  // server.mjs anywhere in this file is hoisted and evaluates it first, with the
+  // production default. The env stays set until afterAll because
+  // restoreSessionKey reads DCHUB_API_BASE per call, not at import.
+  prevBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';
   S = await import('../server.mjs');
-  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
-  else process.env.DCHUB_API_BASE = prevBase;
+  ({ _connectionShape, _KNOWN_GATEWAYS, _identitySource } = S);
   await new Promise((r) => { httpServer = S.app.listen(0, '127.0.0.1', r); });
   PORT = httpServer.address().port;
 }, 60000);
 
 afterAll(async () => {
   await new Promise((r) => (httpServer ? httpServer.close(r) : r()));
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
 });
 
 // One self-contained MCP session: initialize, then one tools/call.
@@ -120,7 +147,8 @@ describe('_identitySource — fail-soft contract', () => {
 // A gateway forwarding a generic clientInfo is indistinguishable from a direct
 // caller by construction, so the field can only ever say 'gateway' or be
 // ABSENT. Every other assertion here would still pass if that rule broke.
-import { _connectionShape, _KNOWN_GATEWAYS, _identitySource } from '../server.mjs';
+// _connectionShape, _KNOWN_GATEWAYS and _identitySource are bound from beforeAll's
+// import of server.mjs (top of file), never from a static import here.
 import { readFileSync } from 'node:fs';
 
 describe('identity.connection', () => {
@@ -189,5 +217,11 @@ describe('the registry entry declares itself the origin', () => {
   it('points at OUR host, so the direct-bind advice cannot be redirected', () => {
     expect(new URL(M.canonicalRemote).hostname).toBe('dchub.cloud');
     expect(M.gatewayNote).toMatch(/identity\.connection/);
+  });
+});
+
+describe('hard gate: no network', () => {
+  it('no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
   });
 });
