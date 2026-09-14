@@ -176,6 +176,7 @@ test/toplevel-attribution.test.mjs
 test/typed-iso-is-scope.test.mjs
 test/typed-preview-rank-markets.test.mjs
 test/uncovered-constraints.test.mjs
+test/unlock-leads-with-both-rungs.test.mjs
 test/upstream-error-contract.test.mjs
 test/upstream-error-iserror.test.mjs
 test/version-consistency.test.mjs
