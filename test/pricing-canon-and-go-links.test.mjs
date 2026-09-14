@@ -138,6 +138,18 @@ describe('#7 — every key-bound upgrade link pays, and is measured', () => {
   it('the single upgrade link is Pro — NOT founding, and never Developer', () => {
     expect(decode(_keyBoundUpgradeUrl(KEY)).plan).toBe('pro');
   });
+  it('r-trial-sub-bind: a dch_trial_ key gets no k- ref (no row to land on); its pack keeps pk-', () => {
+    const TRIAL = 'dch_trial_test_key_0001';
+    const THASH = createHash('sha256').update(TRIAL).digest('hex');
+    const subs = [['pro', _keyBoundSubUrl(PRO_URL, TRIAL)], ['pro', _keyBoundUpgradeUrl(TRIAL)],
+      ...Object.entries(_keyBoundTiers(TRIAL))];
+    for (const [plan, url] of subs) {
+      const got = decode(url);
+      expect(got.plan).toBe(plan);
+      expect(String(got.ref || '')).not.toMatch(/^k-/);
+    }
+    expect(decode(_keyBoundPackUrl(TRIAL)).ref).toBe('pk-' + THASH);
+  });
   it('the tier map is starter/developer/pro — founding is not offered', () => {
     const t = _keyBoundTiers(KEY);
     expect(Object.keys(t)).toEqual(['starter', 'developer', 'pro']);
@@ -156,7 +168,8 @@ describe('#7 — every key-bound upgrade link pays, and is measured', () => {
   });
   it('the three former /upgrade?key= sites now call the key-bound builders', () => {
     expect(SRC).toContain('? _keyBoundUpgradeUrl(redeemed.api_key)');
-    expect(SRC).toContain('const upgradeUrl = _keyBoundUpgradeUrl(mint.api_key);');
+    // r-trial-sub-bind: the auto-mint block's link follows the request store's identity.
+    expect(SRC).toContain('const upgradeUrl = _subCheckoutUrl(PRO_URL || (DEVELOPER_URL + promoParam()), _sid);');
     expect(SRC).toContain('const _tiers = _keyBoundTiers(ctx.api_key);');
     expect(SRC).toContain('const _packKeyUrl = _keyBoundPackUrl(ctx.api_key);');
   });
