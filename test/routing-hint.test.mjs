@@ -14,7 +14,42 @@
 // re-opening a decision that was made deliberately, and should have to delete a
 // test that says so.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { _routingHint } from '../server.mjs';
+import net from 'node:net';
+
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
+
+// server.mjs is imported ONLY here, after DCHUB_API_BASE points at an unroutable
+// address, because API_BASE is captured at module evaluation: a static import is
+// hoisted and evaluates server.mjs first, with the production default. The env
+// stays set until afterAll because restoreSessionKey reads it per call.
+let S, _routingHint, prevBase;
+beforeAll(async () => {
+  prevBase = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';   // unroutable: no upstream
+  S = await import('../server.mjs');
+  ({ _routingHint } = S);
+}, 60000);
+afterAll(() => {
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
+});
 
 const CLASSES = ['market_ranking', 'market_comparison', 'capacity_search', 'site_analysis',
   'grid_headroom', 'interconnection_queue', 'hosting_capacity', 'water_climate', 'deals_ma',
@@ -166,12 +201,10 @@ describe('routing_hint — external_sources_recommended', () => {
 // plan_query over HTTP. plan_query is inspect-only and runs the deterministic
 // no-LLM planner, so it needs no upstream.
 describe('routing_hint reaches a real plan_query response', () => {
-  let S, PORT, httpServer;
+  let PORT, httpServer;
   beforeAll(async () => {
-    const prev = process.env.DCHUB_API_BASE;
-    process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';
-    S = await import('../server.mjs');
-    if (prev === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prev;
+    // S is the file's one import of server.mjs (top of file), made with
+    // DCHUB_API_BASE already pointed at an unroutable address.
     await new Promise((r) => { httpServer = S.app.listen(0, '127.0.0.1', r); });
     PORT = httpServer.address().port;
   }, 60000);
@@ -235,4 +268,10 @@ describe('routing_hint reaches a real plan_query response', () => {
     expect(obj, 'routing_hint has no object branch to declare fields in').toBeTruthy();
     expect(Object.keys(obj.properties)).toContain('external_sources_recommended');
   }, 30000);
+});
+
+describe('hard gate: no network', () => {
+  it('no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
+  });
 });

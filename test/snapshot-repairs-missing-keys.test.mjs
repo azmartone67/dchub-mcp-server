@@ -11,11 +11,49 @@
 // Two things are pinned here: the new keys are copied, and the staleness gate
 // is CONTENT-AWARE so any future field added to the owner repairs itself
 // rather than needing a human to notice.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSnapshot } from '../scripts/refresh-problem-taxonomy.mjs';
+
+// ★HARD GATE, NO NETWORK. Importing the script also runs its main(), which fetches
+// the live canon taxonomy and, when a valid answer differs from the committed
+// snapshot, rewrites canonical/problem_taxonomy.json. That starts while the imports
+// above evaluate, before any module-body code runs, so this setup is in vi.hoisted,
+// which runs before every import:
+//   - that one endpoint answers 503 until afterAll, which takes main()'s "keeping
+//     the committed snapshot" exit: no network, no write;
+//   - every socket connect to a host other than loopback is refused and recorded,
+//     and the last test fails if one was attempted.
+const { foreign, realConnect, realFetch } = await vi.hoisted(async () => {
+  const { default: netMod } = await import('node:net');
+  const TAXONOMY_URL = 'https://dchub.cloud/api/v1/canon/taxonomy';
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => (String(input?.url ?? input) === TAXONOMY_URL
+    ? new Response('stubbed by test', { status: 503 })
+    : origFetch(input, init));
+  const refused = [];
+  const origConnect = netMod.Socket.prototype.connect;
+  netMod.Socket.prototype.connect = function connect(...args) {
+    let o = args[0];
+    if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+    if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+    const host = String(o.host || 'localhost');
+    if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+      refused.push(`${host}:${o.port}`);
+      process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+      return this;
+    }
+    return origConnect.apply(this, args);
+  };
+  return { foreign: refused, realConnect: origConnect, realFetch: origFetch };
+});
+afterAll(() => {
+  globalThis.fetch = realFetch;
+  net.Socket.prototype.connect = realConnect;
+});
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SNAP = JSON.parse(
@@ -74,5 +112,11 @@ describe('the committed snapshot is not silently behind its own hash', () => {
           `snapshot: instead for ${f.field} offers a substitute`).not.toContain(a);
       }
     }
+  });
+});
+
+describe('hard gate: no network', () => {
+  it('no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
   });
 });

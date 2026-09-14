@@ -24,6 +24,27 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
+import net from 'node:net';
+
+// ★HARD GATE, NO NETWORK. Installed at module evaluation, before beforeAll imports
+// server.mjs, so nothing it starts slips past: every socket connect to a host other
+// than loopback is refused and recorded, and the last test fails if one was attempted.
+const foreign = [];
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(...args) {
+  let o = args[0];
+  if (Array.isArray(o)) o = o[0];                        // net.connect's normalized form
+  if (!o || typeof o !== 'object') o = { port: args[0], host: args[1] };
+  const host = String(o.host || 'localhost');
+  if (!o.path && !/^(127\.0\.0\.1|localhost|::1)$/.test(host)) {
+    foreign.push(`${host}:${o.port}`);
+    process.nextTick(() => this.destroy(new Error(`network refused by test: ${host}`)));
+    return this;
+  }
+  return realConnect.apply(this, args);
+};
+let prevBase;
+let sessionKeyHits = 0;       // restoreSessionKey's asks for an anonymous session
 
 const SECRET = 'test-internal-key-not-a-real-secret';
 const TRIAL = 'dch_trial_automintrungstest0001';
@@ -85,18 +106,27 @@ beforeAll(async () => {
         res.end(JSON.stringify({ trial_used: used, prior_calls: used ? 1 : 0 }));
         return;
       }
+      if (url.pathname === '/api/v1/mcp/session-key') {
+        // restoreSessionKey asks here for an anonymous session; 404 = nothing to
+        // restore. Answered before the catch-all so it never counts as a data call.
+        sessionKeyHits += 1;
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'not found' }));
+        return;
+      }
       dataKeys.push({ path: url.pathname, key: req.headers['x-api-key'] || '' });
       res.end(JSON.stringify({ success: true, count: ROWS.length, data: ROWS, results: ROWS }));
     });
     stub.listen(0, '127.0.0.1', resolve);
   });
 
-  // API_BASE is captured once at import: set it BEFORE the import, restore right after.
-  const prevBase = process.env.DCHUB_API_BASE;
+  // API_BASE is captured once at import, so set it BEFORE the import. It stays set
+  // until afterAll because restoreSessionKey reads DCHUB_API_BASE per call, not at
+  // import: restored right after the import, the anonymous restore went to the
+  // production default instead of this stub.
+  prevBase = process.env.DCHUB_API_BASE;
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   S = await import('../server.mjs');
-  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
-  else process.env.DCHUB_API_BASE = prevBase;
   // _goUrl reads the signing secret per call; without it links stay raw Stripe URLs.
   prevSecret = process.env.DCHUB_INTERNAL_KEY;
   process.env.DCHUB_INTERNAL_KEY = SECRET;
@@ -110,6 +140,9 @@ afterAll(async () => {
   else process.env.DCHUB_INTERNAL_KEY = prevSecret;
   await new Promise((resolve) => (httpServer ? httpServer.close(resolve) : resolve()));
   await new Promise((resolve) => (stub ? stub.close(resolve) : resolve()));
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE;
+  else process.env.DCHUB_API_BASE = prevBase;
+  net.Socket.prototype.connect = realConnect;
 });
 
 async function post(headers, body) {
@@ -249,4 +282,12 @@ describe('r-trial-refused — a mint the backend refuses is neither bound nor ad
       mintMode = 'accepted';
     }
   }, 30000);
+});
+
+describe('hard gate: no network', () => {
+  it('the anonymous session-key restore reached the stub, and no connection left 127.0.0.1', () => {
+    expect(foreign).toEqual([]);
+    // A restore the stub never saw proves nothing about where it went; fail it.
+    expect(sessionKeyHits, 'restoreSessionKey never asked the stub').toBeGreaterThan(0);
+  });
 });
