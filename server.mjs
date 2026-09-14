@@ -2546,7 +2546,19 @@ function isBotOrInternalCtx(c) {
   return _CLAIM_BOT_RE.test(s);
 }
 
+// r-hi-needs-session (2026-09-14): a high-intent count belongs to ONE MCP session. The
+// paywall branches fall back to the literal 'no-session' when a call carries no
+// Mcp-Session-Id, and mcp_high_intent_sessions keyed its counter on that string, so every
+// sessionless caller shared one row per tool. Read on Neon 2026-09-14: 17 tools, 15 claims
+// minted on that shared row between 07-26 and 09-13, 14 of them auto-redeemed within
+// seconds, from callers as different as ChatGPT, Codex, node clients and a QA script.
+// Without a session there is nothing to count, so neither helper calls the backend.
+function _isRealSession(sessionId) {
+  return !!sessionId && sessionId !== 'no-session';
+}
+
 async function trackPaidHit(sessionId, toolName) {
+  if (!_isRealSession(sessionId)) return;
   try {
     const c = getCtx();
     if (isBotOrInternalCtx(c)) return;  // r72: don't track bot/probe paid-hits
@@ -2580,7 +2592,7 @@ async function trackPaidHit(sessionId, toolName) {
 }
 
 async function shouldMintClaim(sessionId, toolName) {
-  if (!sessionId || !toolName) return null;
+  if (!_isRealSession(sessionId) || !toolName) return null;
   try {
     const c = getCtx();
     if (isBotOrInternalCtx(c)) return null;  // r72: never mint claims for bots/probes
@@ -2794,8 +2806,10 @@ async function buildHighIntentClaimBlock(claim, name) {
   // (mcp_paid_intent) that actually closes. claim_url stays in sc as a fallback
   // for machine consumers; the visible ask is now ONE thing (email → follow-up),
   // not a competing link. Variant keying unchanged so the A/B keeps measuring.
+  // r-hi-needs-session (2026-09-14): through /go/c whatever the caller holds. It was wrapped
+  // only when the context had a session, so a sessionless claim printed the direct link.
   let devUrl = DEVELOPER_URL + promoParam();
-  try { const _sid = (getCtx() && getCtx().session_id) || ''; if (_sid) devUrl = _subCheckoutUrl(devUrl, _sid); } catch (_) {}
+  try { devUrl = _subCheckoutUrl(devUrl, (getCtx() && getCtx().session_id) || ''); } catch (_) {}
   // r-agent-redeem RESTORED (2026-07-04): the 07-03 pivot dropped the auto-redeem
   // call, freezing claims_used at 2 (the metric that measures THIS cohort). But its
   // own evidence only argued against RELAYING A LINK to an agent — auto-redeem does
