@@ -160,6 +160,43 @@ const DETAIL_LOCKED_TERMS = {
   access: ACCESS_TERMS, introduction: INTRODUCTION, viewer: VIEWER_IDENTIFIED, caller_tier: 'free',
 };
 
+// ── deal registration (2026-09-15) ───────────────────────────────────────────
+// GET /api/v1/listings takes min_kw, region, location, delivery_type and
+// available_by and answers with `filters`; every card gains capacity_kw, region
+// and update_cadence; GET /api/v1/listings/<slug> gains `disclosure`, which carries
+// the provider's identity, site and contact only once the provider has accepted
+// a deal registration. The contract's first draft named it `identity`; the backend
+// renamed it because structuredContent.identity is the caller identity stamp.
+const TERMS_V15 = { ...TERMS_BLOCK, version: '2026-09-15' };
+const TEASER_EU = {
+  ...TEASER, id: 31, slug: 'fra-500kw-colocation', title: '500 kW colocation — Frankfurt',
+  market: 'Frankfurt', state: null, country: 'DE', capacity_mw: 0.5, capacity_kw: 500,
+  region: 'europe', update_cadence: 'monthly', url: 'https://dchub.cloud/listings?l=fra-500kw-colocation',
+};
+const FILTERS_EU = {
+  min_kw: 500, min_mw: null, region: ['europe'], country: null, location: null, market: null,
+  state: null, delivery_type: 'colocation', available_by: '2027-06', limit: 25,
+};
+const LIST_FILTERED = {
+  ok: true, program: { ...PROGRAM, status: 'live', terms: TERMS_V15 }, viewer: VIEWER_ANON, count: 1,
+  items: [TEASER_EU], filters: FILTERS_EU, pocket_locked_count: 1, caller_tier: 'anonymous', can_see_pocket: false,
+};
+const DISCLOSURE_RELEASED = {
+  released: true, status: 'accepted', lead_id: 'LD-7K2M9QXA', accepted_at: '2026-09-15T16:20:00+00:00',
+  provider: 'Northwind Data Centers', site: '1200 Industrial Blvd, Garland, TX',
+  latitude: 32.91, longitude: -96.63, substation: 'Garland 345 kV',
+  contact: { name: 'Sam Lee', email: 'sam.lee@northwind.example', phone: '+1 214 555 0100' },
+  how: 'The provider accepted your deal registration.',
+};
+const DISCLOSURE_PENDING = {
+  released: false, status: 'pending', lead_id: 'LD-7K2M9QXA', accepted_at: null,
+  provider: null, site: null, latitude: null, longitude: null, substation: null, contact: null,
+  how: 'The provider has your deal registration and has not answered yet.',
+};
+const LISTING_KW = { ...DETAIL_UNLOCKED.listing, capacity_kw: 40000, region: 'north_america', update_cadence: 'weekly' };
+const DETAIL_RELEASED = { ...DETAIL_UNLOCKED, listing: LISTING_KW, disclosure: DISCLOSURE_RELEASED };
+const DETAIL_PENDING = { ...DETAIL_UNLOCKED, listing: LISTING_KW, disclosure: DISCLOSURE_PENDING };
+
 // ── a stubbed network that records every call ────────────────────────────────
 let S, TOOLS, realFetch;
 let calls = [];
@@ -344,10 +381,17 @@ describe('registration', () => {
     expect(nudge).toContain(`'${WRITE}'`);
   });
 
-  it('descriptions carry no digits', () => {
+  // 2026-09-15: source_capacity was asked to carry ONE size example, and an
+  // example is digits. It is cut out before the check and must be there exactly
+  // once, so the rule still holds for everything else in all three descriptions.
+  const SIZE_EXAMPLE = '"500 kW anywhere in Europe" → min_kw=500, region=europe';
+  it("descriptions carry no digits, apart from source_capacity's one size example", () => {
     for (const n of [READ, WRITE, ACCEPT]) {
-      expect(TOOLS[n].description.length, `${n} description implausibly short`).toBeGreaterThan(300);
-      expect(TOOLS[n].description, n).not.toMatch(/\d/);
+      const d = TOOLS[n].description;
+      expect(d.length, `${n} description implausibly short`).toBeGreaterThan(300);
+      const parts = d.split(SIZE_EXAMPLE);
+      expect(parts.length - 1, `${n}: size example count`).toBe(n === READ ? 1 : 0);
+      expect(parts.join(' '), n).not.toMatch(/\d/);
     }
   });
 
@@ -373,6 +417,9 @@ describe('outputSchema accepts every contract response verbatim', () => {
     [ACCEPT, 'accept — recorded', ACCEPT_OK],
     [ACCEPT, 'accept — already accepted', ACCEPT_ALREADY],
     [ACCEPT, 'accept — 401 identity_required body', E401_SIGN_IN],
+    [READ, 'list — filtered by size and region, cards with capacity_kw', LIST_FILTERED],
+    [READ, 'detail — disclosure released after the provider accepted', DETAIL_RELEASED],
+    [READ, 'detail — disclosure not released, deal registration pending', DETAIL_PENDING],
   ];
   for (const [tool, label, fixture] of CASES) {
     it(`${tool}: ${label}`, async () => {
@@ -698,6 +745,10 @@ describe('initialize instructions mention the program', () => {
     expect(sentence).toContain('request_capacity_intro');
     expect(sentence).toContain('accept_capacity_terms');
     expect(sentence).not.toMatch(/\d/);
+    // 2026-09-15: a deal registration, not an introduction DC Hub makes up front.
+    expect(sentence).toContain('`request_capacity_intro` registers a deal');
+    expect(sentence).toContain("DC Hub sends the provider only your human's company name and requirement");
+    expect(sentence).not.toMatch(/introduces them to the operator|operator contact is never exposed/);
     const scope = inst.indexOf(' IN SCOPE');
     if (scope > -1) expect(i).toBeLessThan(scope);
   });
@@ -847,5 +898,220 @@ describe('source_capacity — a listing locked until the terms are accepted', ()
     const r = await call(READ, { slug: 'dfw-40mw-powered-shell' });
     expect(r.structuredContent.locked).toBe(true);
     expect(r.structuredContent.next_steps).toBeUndefined();
+  });
+});
+
+// ── deal registration (2026-09-15) ───────────────────────────────────────────
+// Every text block after content[0], which is the confidential JSON. The
+// rendered lines are judged here, never the payload, which carries whatever the
+// backend sent.
+const renderedLines = (r) => r.content.slice(1).map((c) => c.text || '').join('\n').split('\n');
+
+describe('source_capacity — search by size and location', () => {
+  it('passes min_kw, region, location, delivery_type and available_by through to /api/v1/listings', async () => {
+    responder = () => json(200, LIST_FILTERED);
+    const r = await call(READ, {
+      market: 'Frankfurt', state: 'TX', min_mw: 1, min_kw: 500, region: 'europe, apac',
+      location: 'Germany, Texas', delivery_type: 'colocation', available_by: '2027-06', limit: 10,
+    });
+    const lc = listingCalls();
+    expect(lc).toHaveLength(1);
+    expect(`${lc[0].method} ${lc[0].pathname}`).toBe('GET /api/v1/listings');
+    expect(Object.fromEntries(new URL(lc[0].url).searchParams)).toEqual({
+      market: 'Frankfurt', state: 'TX', min_mw: '1', min_kw: '500', region: 'europe, apac',
+      location: 'Germany, Texas', delivery_type: 'colocation', available_by: '2027-06', limit: '10',
+    });
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent.filters).toEqual(FILTERS_EU);
+    expect(r.structuredContent.items[0].capacity_kw).toBe(500);
+    const ok = await accepts(READ, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('the description example maps as written, and nothing unasked is sent', async () => {
+    responder = () => json(200, LIST_FILTERED);
+    await call(READ, { min_kw: 500, region: 'europe' });
+    expect(new URL(listingCalls()[0].url).search).toBe('?min_kw=500&region=europe');
+  });
+
+  it('delivery_type takes exactly the four backend values; anything else is refused by the schema', async () => {
+    for (const v of ['land', 'powered_shell', 'turnkey', 'colocation']) {
+      expect((await TOOLS[READ].inputSchema.safeParseAsync({ delivery_type: v })).success, v).toBe(true);
+    }
+    for (const v of ['powered shell', 'hyperscale', '']) {
+      expect((await TOOLS[READ].inputSchema.safeParseAsync({ delivery_type: v })).success, v).toBe(false);
+    }
+  });
+
+  it("renders the filters applied and each card's capacity in kW, and leaves the JSON as sent", async () => {
+    responder = () => json(200, LIST_FILTERED);
+    const r = await call(READ, { min_kw: 500, region: 'europe' });
+    const lines = renderedLines(r);
+    expect(lines).toContain('Filters applied: min_kw=500; region=europe; delivery_type=colocation; available_by=2027-06; limit=25');
+    expect(lines).toContain('Capacity by listing:');
+    expect(lines).toContain('- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe)');
+    const first = JSON.parse(r.content[0].text);
+    expect(first.filters).toEqual(FILTERS_EU);
+    expect(first.items[0]).toEqual(TEASER_EU);
+    expect(first.provenance.redistribution).toBe('not_permitted');
+    expect(lines.some((l) => l.startsWith('Source: DC Hub Capacity Source (dchub.cloud)'))).toBe(true);
+  });
+
+  it('a card with MW only still renders, and a body without filters renders no filters line', async () => {
+    responder = () => json(200, listWithItems(1));
+    const r = await call(READ, {});
+    const lines = renderedLines(r);
+    expect(lines).toContain('- dfw-40mw-powered-shell: 40 MW in Dallas, TX, US');
+    expect(lines.some((l) => l.startsWith('Filters applied'))).toBe(false);
+  });
+});
+
+describe('source_capacity — the disclosure block', () => {
+  const SLUG = 'dfw-40mw-powered-shell';
+  const open = async (fixture) => {
+    responder = () => json(200, fixture);
+    const r = await call(READ, { slug: SLUG }, identifiedSeat());
+    return { r, lines: renderedLines(r) };
+  };
+  const disclosureLines = (lines) => lines.filter((l) => /^(Provider|Site|Contact)\b/.test(l));
+
+  it('released: provider, site and contact lines, beside the listing capacity in kW', async () => {
+    const { r, lines } = await open(DETAIL_RELEASED);
+    expect(disclosureLines(lines)).toEqual([
+      'Provider: Northwind Data Centers',
+      'Site: 1200 Industrial Blvd, Garland, TX; 32.91, -96.63; substation Garland 345 kV',
+      'Contact: name: Sam Lee; email: sam.lee@northwind.example; phone: +1 214 555 0100',
+    ]);
+    expect(lines).toContain('Capacity: 40,000 kW (40 MW)');
+    expect(r.structuredContent.disclosure).toEqual(DISCLOSURE_RELEASED);
+    const ok = await accepts(READ, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('not released: ONE line with the status and the next step, and no provider, site or contact line', async () => {
+    const { r, lines } = await open(DETAIL_PENDING);
+    expect(disclosureLines(lines)).toEqual([
+      'Provider identity, site and contact: not released (deal registration status: pending). Next: The provider has your deal registration and has not answered yet.',
+    ]);
+    expect(r.structuredContent.disclosure).toEqual(DISCLOSURE_PENDING);
+    const ok = await accepts(READ, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('not released and no how from the backend: the next step names the tool and the slug', async () => {
+    const cases = [
+      ['none', `call request_capacity_intro with slug="${SLUG}" to register a deal; the provider sees only your human's company name and the requirement until they accept.`],
+      ['pending', `wait for the provider to accept or decline; nothing has been shared yet, and source_capacity with slug="${SLUG}" shows their answer.`],
+      ['declined', 'nothing was shared; call source_capacity for other listings, or request_capacity_intro without a slug to register the requirement.'],
+    ];
+    for (const [status, next] of cases) {
+      calls = [];
+      const { lines } = await open({ ...DETAIL_PENDING, disclosure: { ...DISCLOSURE_PENDING, status, how: null } });
+      expect(disclosureLines(lines), status).toEqual([
+        `Provider identity, site and contact: not released (deal registration status: ${status}). Next: ${next}`,
+      ]);
+    }
+  });
+
+  it('provider fields print only when released is exactly true, whatever else the body carries', async () => {
+    // Control first: the same fixture with released:true DOES print them, so the
+    // absence below is the released check, not a renderer that prints nothing.
+    const control = await open(DETAIL_RELEASED);
+    expect(control.lines.join('\n')).toContain('Northwind');
+    for (const released of [false, 'true', 1, undefined]) {
+      calls = [];
+      const { lines } = await open({ ...DETAIL_RELEASED, disclosure: { ...DISCLOSURE_RELEASED, released } });
+      const shown = disclosureLines(lines);
+      expect(shown, String(released)).toHaveLength(1);
+      expect(shown[0], String(released))
+        .toMatch(/^Provider identity, site and contact: not released \(deal registration status: accepted\)\. Next: /);
+      expect(lines.join('\n'), String(released)).not.toContain('Northwind');
+      expect(lines.join('\n'), String(released)).not.toContain('sam.lee@northwind.example');
+    }
+  });
+
+  it('a listing detail with disclosure still gets the caller identity stamp in structuredContent.identity', async () => {
+    const seat = identifiedSeat({ auth_source: 'header' });
+    const stamp = S._identitySource(seat);
+    // Premise: this seat produces a stamp at all, so the assertions below cannot pass on an absent one.
+    expect(stamp).toEqual({ credential_source: 'header', tier: 'free' });
+    responder = () => json(200, DETAIL_RELEASED);
+    const r = await call(READ, { slug: SLUG }, seat);
+    expect(r.structuredContent.identity).toEqual(stamp);
+    expect(r.structuredContent.disclosure).toEqual(DISCLOSURE_RELEASED);
+    expect(JSON.parse(r.content[0].text).disclosure).toEqual(DISCLOSURE_RELEASED);
+    expect(disclosureLines(renderedLines(r))).toHaveLength(3);
+    const ok = await accepts(READ, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+
+    // Control, the collision the rename removed: the same block under `identity`
+    // makes _stampIdentitySource skip the caller stamp, and nothing renders it.
+    calls = [];
+    const { disclosure, ...withoutDisclosure } = DETAIL_RELEASED;
+    responder = () => json(200, { ...withoutDisclosure, identity: disclosure });
+    const clash = await call(READ, { slug: SLUG }, seat);
+    expect(clash.structuredContent.identity).toEqual(DISCLOSURE_RELEASED);
+    expect(clash.structuredContent.identity).not.toEqual(stamp);
+    expect(disclosureLines(renderedLines(clash))).toEqual([]);
+  });
+});
+
+describe('request_capacity_intro — the requirement carries kW, regions and countries', () => {
+  it('capacity_kw is sent as a number, and comma-separated regions and countries become arrays', async () => {
+    responder = () => json(200, INTEREST_OK);
+    await call(WRITE, { ...COMPLETE, capacity_kw: 500, regions: ' europe, apac ,', countries: 'Germany,  Netherlands' }, identifiedSeat());
+    const lc = listingCalls();
+    expect(lc).toHaveLength(1);
+    expect(`${lc[0].method} ${lc[0].pathname}`).toBe('POST /api/v1/listings/interest');
+    expect(lc[0].body.requirement).toEqual({
+      capacity_mw: 40, capacity_kw: 500, markets: ['Dallas'], states: ['TX'],
+      regions: ['europe', 'apac'], countries: ['Germany', 'Netherlands'],
+      timeline: 'Q2 2027', use_case: 'AI inference', notes: 'Needs expansion rights.',
+    });
+  });
+
+  it('the same fields ride on a listing deal registration, and blank lists are omitted', async () => {
+    responder = () => json(200, INTRO_OK);
+    const { capacity_mw: _mw, markets: _m, states: _s, ...rest } = COMPLETE;
+    await call(WRITE, { ...rest, slug: 'fra-500kw-colocation', capacity_kw: 500, regions: 'emea', countries: 'DE' }, identifiedSeat());
+    let [sent] = listingCalls();
+    expect(sent.pathname).toBe('/api/v1/listings/fra-500kw-colocation/intro');
+    expect(sent.body.requirement).toEqual({
+      capacity_kw: 500, regions: ['emea'], countries: ['DE'],
+      timeline: 'Q2 2027', use_case: 'AI inference', notes: 'Needs expansion rights.',
+    });
+    calls = [];
+    await call(WRITE, { ...COMPLETE, regions: ' , ', countries: '' }, identifiedSeat());
+    [sent] = listingCalls();
+    expect(sent.body.requirement).not.toHaveProperty('regions');
+    expect(sent.body.requirement).not.toHaveProperty('countries');
+    expect(sent.body.requirement).not.toHaveProperty('capacity_kw');
+    expect(sent.body.requirement.markets).toEqual(['Dallas']);   // control: the lists that were given still go
+  });
+});
+
+describe('the descriptions state the deal registration', () => {
+  it('source_capacity leads with size and location, and says when the provider identity is released', () => {
+    const d = TOOLS[READ].description;
+    expect(d.startsWith('Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro).')).toBe(true);
+    expect(d).toContain('a signed-in human who has accepted the introduction terms sees its specs');
+    expect(d).toContain("The provider's identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits");
+    expect(d).toContain("the listing's disclosure block says whether they have been");
+    expect(d).not.toContain('identity block');
+  });
+
+  it('request_capacity_intro says what is shared, with whom, and when', () => {
+    const d = TOOLS[WRITE].description;
+    expect(d).toContain("sends the provider ONLY your human's company name and the requirement");
+    expect(d).toContain('The provider accepts or declines.');
+    expect(d).toContain('shows the deal status in the disclosure block');
+    expect(d).not.toContain('identity block');
+    expect(d).toContain("Only if the provider accepts does DC Hub share the provider's identity, site details and contact with your human, and your human's name, role and email with the provider; on a decline nothing is shared.");
+  });
+
+  it('neither description still says DC Hub introduces anyone', () => {
+    for (const n of [READ, WRITE]) {
+      expect(TOOLS[n].description, n).not.toMatch(/makes the introduction|introduces|introduction to the operator|operator contact/i);
+    }
   });
 });
