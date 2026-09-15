@@ -26,6 +26,7 @@ test/claude-passive-arrivals.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/comparison-symmetry.test.mjs
 test/composite-shell.test.mjs
+test/connect-query-key-reaches-track.test.mjs
 test/connect-url-install-artifact.test.mjs
 test/constraint-iso-shape.test.mjs
 test/continuation.test.mjs
