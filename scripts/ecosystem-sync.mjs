@@ -39,8 +39,14 @@
 //             behind server.json), smithery-freshness (Smithery behind live).
 //             It is not a third publisher. Cooldowns come from the Actions
 //             API, and a run that cannot read that API dispatches nothing.
-//   escalate  listings with no API — mcp.so, PulseMCP, LobeHub, MCP Hive, the
-//             curated GitHub lists — into ONE issue for prospecting.
+//   escalate  listings a person can edit but no API reaches — mcp.so, LobeHub,
+//             MCP Hive, our open PRs on curated GitHub lists — into ONE issue
+//             for prospecting.
+//   watch     listings with no lever at all — PulseMCP, the mcpservers.org
+//             card, the Glama server listing, the deprecated Glama duplicate —
+//             are VERIFIED every full sweep and reported, never escalated.
+//             Nobody is asked to email a directory (prospecting brief,
+//             2026-09-15).
 //
 // THREE STATES, never two: in_sync / drift / unreadable. A 403, a timeout, or
 // a page that does not carry our identity is UNREADABLE. It is never counted
@@ -91,6 +97,9 @@ const CONFIRM_DELAY_MS = Number(process.env.ECOSYSTEM_CONFIRM_DELAY_MS || 40000)
 // kind: push   — an API we drive; the dispatched lane fixes it
 //       pull   — re-crawls us on its own clock; stuck only past PULL_GRACE_H
 //       manual — nothing re-crawls it; a person has to edit it
+//       watch  — verify-only: no API, no self-serve edit, no re-scrape that
+//                works. Reported every full sweep and NEVER stuck, so it never
+//                asks a person for anything. Its fix text says what was measured
 //       ours   — a DC Hub surface; fixed in a repo or the worker, never by
 //                prospecting
 export const SINKS = {
@@ -123,12 +132,18 @@ export const SINKS = {
   glama_connector: { label: 'Glama connector', kind: 'pull', scope: 'full',
     url: 'https://glama.ai/mcp/connectors/cloud.dchub/mcp-server',
     fix: 'mirrors the official registry and re-tests the live server on Glama\'s own clock' },
-  glama_server: { label: 'Glama server listing', kind: 'pull', scope: 'full',
+  glama_server: { label: 'Glama server listing', kind: 'watch', scope: 'full',
     url: 'https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server',
-    fix: 'owner, in Glama admin: Repository tab, Sync Server, THEN Deploy. A deploy alone rebuilds the old commit' },
-  pulsemcp: { label: 'PulseMCP', kind: 'manual', scope: 'full',
+    fix: 'verify-only. Glama re-syncs the repo and rebuilds on its own clock (a new count took ~27h to appear on 2026-09-12), and no API can trigger it' },
+  pulsemcp: { label: 'PulseMCP', kind: 'watch', scope: 'full',
     url: 'https://www.pulsemcp.com/servers/dchub',
-    fix: 'the blurb is written by PulseMCP. Ask them to refresh it (pulsemcp.com server submit form or hello@pulsemcp.com)' },
+    fix: 'verify-only. PulseMCP writes this blurb itself, and the listing has no claim or edit control' },
+  mcpservers_org: { label: 'mcpservers.org card', kind: 'watch', scope: 'full',
+    url: 'https://mcpservers.org/servers/azmartone67/dchub-mcp-server', slug: 'azmartone67/dchub-mcp-server',
+    fix: 'verify-only. The card is the description mcpservers.org stored when the listing was made: the record has never been updated, and its Request update control changed nothing after 2026-07-27. The page body below it is our README' },
+  glama_duplicate: { label: 'Glama duplicate connector', kind: 'watch', scope: 'full',
+    url: 'https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server',
+    fix: 'verify-only. A Glama-native copy of cloud.dchub/mcp-server, deprecated 2026-09-05 (Glama offers no deletion). Its frozen AI review still quotes a retired tool count. In sync means it is still deprecated' },
   lobehub: { label: 'LobeHub', kind: 'manual', scope: 'full',
     url: 'https://market.lobehub.com/api/v1/plugins/azmartone67-dchub-mcp-server',
     page: 'https://market.lobehub.com/s/plugins/azmartone67-dchub-mcp-server',
@@ -280,6 +295,68 @@ export function hiveItem(html) {
     }
   }
   return null;
+}
+
+/** mcpservers.org server-renders a page's records into one seroval payload: a
+ *  sponsor before ours and related servers after it, each with its own
+ *  description. Ours is the record carrying our slug, and it ends where the next
+ *  record's slug begins. Its `description` is the card (meta description,
+ *  search result, link preview), a copy stored when the listing was made; the
+ *  README rendered below it is a separate, re-scraped document. */
+export function mcpserversRecord(html, slug) {
+  const s = String(html || '');
+  const at = s.indexOf(`slug:${JSON.stringify(slug)}`);
+  if (at < 0) return null;
+  const next = s.indexOf('slug:"', at + 1);
+  const rec = s.slice(at, next < 0 ? at + 4000 : next);
+  const str = (key) => {
+    const m = rec.match(new RegExp(`[,{]${key}:"((?:[^"\\\\]|\\\\.)*)"`));
+    if (!m) return null;
+    try { return JSON.parse(`"${m[1]}"`); } catch { return m[1]; }
+  };
+  const date = (key) => rec.match(new RegExp(`[,{]${key}:\\$R\\[\\d+\\]=new Date\\("([^"]+)"\\)`))?.[1] || null;
+  const description = str('description');
+  if (description == null) return null;
+  return { name: str('name'), description, updatedAt: date('updatedAt'), repoPushedAt: date('repoPushedAt') };
+}
+
+/** What the mcpservers.org card claims. The record describes one server, so a
+ *  tool count in it is a claim about the whole catalogue, whatever its size. */
+export function observeMcpServers(html, ssot, slug) {
+  const rec = mcpserversRecord(html, slug);
+  if (!rec) return { read: false, error: 'our record is not on the page (bot wall, or the listing is gone)' };
+  const live = Number.isInteger(ssot?.tools) ? ssot.tools : null;
+  return {
+    read: true,
+    floors: facilityFloors(rec.description),
+    banned: bannedClaims(rec.description),
+    extra: live == null ? [] : toolClaims(rec.description).filter((n) => n !== live).map((n) => `card says ${n} tools (live ${live})`),
+    info: `record ${rec.updatedAt ? `updated ${rec.updatedAt}` : 'never updated'}; repo last seen ${rec.repoPushedAt || 'unknown'}`,
+  };
+}
+
+/** A deprecated Glama connector renders a banner, and its page payload carries
+ *  deprecatedAt with a timestamp. A live connector's payload names the key with
+ *  no value after it. Neither marker means the page cannot be judged. */
+export function glamaDeprecation(html) {
+  const s = String(html || '');
+  if (/has been deprecated\s*<\/strong>/i.test(s)) {
+    const at = s.match(/deprecatedAt\\*",\\*"(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)/);
+    return { deprecated: true, at: at ? at[1] : null };
+  }
+  if (/deprecatedAt\\*",\\*"deprecationComment/.test(s)) return { deprecated: false, at: null };
+  return null;
+}
+
+/** The duplicate's verdict is its deprecation, never its text: the frozen AI
+ *  review on it is Glama's own copy, and no commit or admin edit reaches it. */
+export function observeGlamaDuplicate(html) {
+  if (!/cloud\.dchub/.test(String(html || ''))) return { read: false, error: 'no DC Hub identity on the page' };
+  const d = glamaDeprecation(html);
+  if (!d) return { read: false, error: 'deprecation state is not on the page' };
+  return d.deprecated
+    ? { read: true, info: `deprecated${d.at ? ` since ${d.at}` : ''}` }
+    : { read: true, extra: ['the duplicate is live again: it is no longer deprecated'] };
 }
 
 /** Pack names from the What's New MCP pack cards ("/mcp/grid" -> "grid"). */
@@ -675,6 +752,18 @@ async function readGlama(key) {
   };
 }
 
+async function readMcpServers(ssot) {
+  const r = await fetchText(bust(SINKS.mcpservers_org.url));
+  if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
+  return observeMcpServers(r.text, ssot, SINKS.mcpservers_org.slug);
+}
+
+async function readGlamaDuplicate() {
+  const r = await fetchText(bust(SINKS.glama_duplicate.url));
+  if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
+  return observeGlamaDuplicate(r.text);
+}
+
 async function readPulse() {
   const r = await fetchText(bust(SINKS.pulsemcp.url));
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
@@ -832,10 +921,17 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
   } else {
     out.push('None.');
   }
-  const waiting = results.filter((r) => r.verdict.state === 'drift' && !stuck.includes(r.key) && r.kind !== 'ours');
+  const waiting = results.filter((r) => r.verdict.state === 'drift' && !stuck.includes(r.key) && r.kind !== 'ours' && r.kind !== 'watch');
   if (waiting.length) {
     out.push('', '### Catching up on their own (inside the re-crawl or publish window)');
     for (const r of waiting) out.push(`- ${esc(r.label)}: ${esc(r.verdict.reasons.join('; '))}`);
+  }
+  // Verify-only listings are reported, never escalated: nothing we can call
+  // reaches them, they have no self-serve edit, and nobody is asked to email one.
+  const watched = results.filter((r) => r.kind === 'watch' && r.verdict.state === 'drift');
+  if (watched.length) {
+    out.push('', '### Verify-only (watched every full sweep; nobody is asked to act)');
+    for (const r of watched) out.push(`- ${where(r)}: ${esc(r.verdict.reasons.join('; '))}. ${esc(r.fix)}`);
   }
   const unread = results.filter((r) => r.verdict.state === 'unreadable');
   if (unread.length) {
@@ -945,6 +1041,8 @@ async function main() {
     glama_connector: () => readGlama('glama_connector'),
     glama_server: () => readGlama('glama_server'),
     pulsemcp: () => readPulse(),
+    mcpservers_org: () => readMcpServers(ssot),
+    glama_duplicate: () => readGlamaDuplicate(),
     lobehub: () => readLobe(),
     mcphive: () => readHive(),
     mcp_so: () => readMcpSo('mcp_so'),

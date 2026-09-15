@@ -17,7 +17,8 @@ import {
   pickOfficial, glamaBadge, glamaLatestRelease, stripChangelogDiffs, visibleText,
   hiveItem, packCodes, usableCanon, repoDrift, judge, gate, planActions, stuckKeys,
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
-  COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS,
+  mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
+  COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
 
@@ -326,6 +327,97 @@ describe('MCP Hive: our record, not the other providers on the page', () => {
 
   it('returns null when we are not on the page', () => {
     expect(hiveItem('<script type="application/ld+json">{"itemListElement":[{"item":{"name":"Weather API"}}]}</script>')).toBeNull();
+  });
+});
+
+describe('verify-only listings: watched every full sweep, never a request to anyone', () => {
+  const r = (key, kind, state) => ({ key, kind, label: key, fix: 'verify-only. f', url: `https://example.test/${key}`,
+    verdict: { state, reasons: state === 'drift' ? ['says 20K+ facilities (canon 21,800+)'] : [] } });
+  const results = [r('pulsemcp', 'watch', 'drift'), r('mcp_so', 'manual', 'drift'), r('glama_server', 'watch', 'drift')];
+
+  it('a watch listing that drifts is never stuck, whatever the change time', () => {
+    for (const hoursSinceChange of [1, PULL_GRACE_H + 1, null]) {
+      expect(stuckKeys(results, { hoursSinceChange })).toEqual(['mcp_so']);
+    }
+  });
+
+  it('the issue reports it under Verify-only, never in the stuck table or the catch-up list', () => {
+    const body = renderIssue({ ssot: SSOT, results, stuck: ['mcp_so'], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    const [head, rest] = body.split('### Verify-only');
+    expect(rest).toContain('- [pulsemcp](https://example.test/pulsemcp): says 20K+ facilities (canon 21,800+). verify-only. f');
+    expect(rest).toContain('- [glama_server](https://example.test/glama_server): ');
+    expect(head).toContain('| [mcp_so](https://example.test/mcp_so) |');
+    expect(head).not.toMatch(/pulsemcp|glama_server/);
+  });
+
+  it('no fix text asks anyone to email a directory, and the listings with no lever are verify-only', () => {
+    for (const [key, s] of Object.entries(SINKS)) {
+      expect(s.fix, key).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}|\be-?mail\b/i);
+    }
+    for (const key of ['pulsemcp', 'mcpservers_org', 'glama_server', 'glama_duplicate']) {
+      expect(SINKS[key].kind, key).toBe('watch');
+      expect(SINKS[key].fix, key).toMatch(/^verify-only\. /);
+    }
+  });
+});
+
+describe('mcpservers.org: the card is our record, not the servers printed beside it', () => {
+  // Shape cut from the live page on 2026-09-15: one seroval payload holds a
+  // sponsor record before ours and related servers after it, each with its own
+  // description. Ours is the record whose slug is ours.
+  const SLUG = 'azmartone67/dchub-mcp-server';
+  const page = 'featured:$R[21]=[$R[22]={id:9001,slug:"adsos/adsos",registryName:null,name:"AdsOS",description:"Ad automation with 40 tools",content:null}],'
+    + 'l:$R[26]={server:$R[27]={id:7674,slug:"azmartone67/dchub-mcp-server",registryName:null,name:"DC Hub — Data Center Intelligence MCP Server",'
+    + 'description:"Data center intelligence MCP server — search 20,000+ facilities across 140+ countries, monitor real-time grid \\"fuel mix\\". 15 tools via Streamable HTTP. Free tier included.",'
+    + 'content:null,url:"https://github.com/azmartone67/dchub-mcp-server",websiteUrl:null,category:"productivity",official:!1,featured:!1,historicalImport:!1,'
+    + 'updatedAt:null,repoPushedAt:$R[29]=new Date("2026-09-14T19:39:09.000Z"),remoteEndpoints:$R[30]=[]},descriptionTranslationFallback:!1,'
+    + 'relatedServers:$R[32]=[$R[33]={id:6767,slug:"propbar/mcp",registryName:null,name:"Propbar",description:"UK property data near 21,800+ data centres, 88 tools",content:null}]';
+
+  it('reads the stored description, when it was last updated, and the repo clock', () => {
+    const rec = mcpserversRecord(page, SLUG);
+    expect(rec.name).toBe('DC Hub — Data Center Intelligence MCP Server');
+    expect(rec.description).toMatch(/^Data center intelligence MCP server — search 20,000\+/);
+    expect(rec.description).toContain('grid "fuel mix". 15 tools');
+    expect(rec.updatedAt).toBeNull();
+    expect(rec.repoPushedAt).toBe('2026-09-14T19:39:09.000Z');
+  });
+
+  it("judges the card alone: its floor and its tool count, never a neighbour's", () => {
+    expect(judge(observeMcpServers(page, SSOT, SLUG), SSOT).reasons)
+      .toEqual(['says 20,000+ facilities (canon 21,800+)', 'card says 15 tools (live 90)']);
+  });
+
+  it('a page without our record is unreadable, never clean', () => {
+    const wall = '<html><title>Just a moment...</title></html>';
+    expect(mcpserversRecord(wall, SLUG)).toBeNull();
+    expect(judge(observeMcpServers(wall, SSOT, SLUG), SSOT).state).toBe('unreadable');
+    // A record that lost its description must not borrow the next server's.
+    expect(mcpserversRecord(page.replace('description:"Data center', 'summary:"Data center'), SLUG)).toBeNull();
+  });
+});
+
+describe('Glama duplicate connector: demoted stays demoted', () => {
+  // Cut from both connector pages on 2026-09-15. The duplicate renders a banner
+  // and its payload carries deprecatedAt; the keeper's payload names the key
+  // with no value after it. The duplicate's frozen AI review is never judged.
+  const dupe = '<strong>This connector has been deprecated</strong><div class="iPpNxm"><p>duplicate</p></div>'
+    + '<script>\\"cloud.dchub/dc-hub-data-center-intelligence-mcp-server\\",\\"claimable\\",\\"deprecatedAt\\",\\"2026-09-05T17:14:48.727945Z\\",'
+    + '\\"deprecationComment\\",\\"duplicate\\",\\"With 82 tools, this server is extremely over-scoped. 21,800+ facilities\\"</script>';
+  const keeper = '<script>\\"cloud.dchub/mcp-server\\",\\"claimable\\",\\"deprecatedAt\\",\\"deprecationComment\\",\\"Live power, energy\\"</script>';
+
+  it('in sync while Glama shows it deprecated, whatever its frozen review says', () => {
+    expect(glamaDeprecation(dupe)).toEqual({ deprecated: true, at: '2026-09-05T17:14:48.727945Z' });
+    expect(judge(observeGlamaDuplicate(dupe), SSOT)).toEqual({ state: 'in_sync', reasons: [] });
+  });
+
+  it('drift the moment it is live again', () => {
+    expect(glamaDeprecation(keeper)).toEqual({ deprecated: false, at: null });
+    expect(judge(observeGlamaDuplicate(keeper), SSOT).state).toBe('drift');
+  });
+
+  it('a page with neither marker is unreadable, never clean', () => {
+    expect(glamaDeprecation('<p>cloud.dchub</p>')).toBeNull();
+    expect(judge(observeGlamaDuplicate('<p>cloud.dchub</p>'), SSOT).state).toBe('unreadable');
   });
 });
 
