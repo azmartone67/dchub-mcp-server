@@ -163,9 +163,10 @@ const DETAIL_LOCKED_TERMS = {
 // ── deal registration (2026-09-15) ───────────────────────────────────────────
 // GET /api/v1/listings takes min_kw, region, location, delivery_type and
 // available_by and answers with `filters`; every card gains capacity_kw, region
-// and update_cadence; GET /api/v1/listings/<slug> gains `identity`, which carries
+// and update_cadence; GET /api/v1/listings/<slug> gains `disclosure`, which carries
 // the provider's identity, site and contact only once the provider has accepted
-// a deal registration.
+// a deal registration. The contract's first draft named it `identity`; the backend
+// renamed it because structuredContent.identity is the caller identity stamp.
 const TERMS_V15 = { ...TERMS_BLOCK, version: '2026-09-15' };
 const TEASER_EU = {
   ...TEASER, id: 31, slug: 'fra-500kw-colocation', title: '500 kW colocation — Frankfurt',
@@ -180,21 +181,21 @@ const LIST_FILTERED = {
   ok: true, program: { ...PROGRAM, status: 'live', terms: TERMS_V15 }, viewer: VIEWER_ANON, count: 1,
   items: [TEASER_EU], filters: FILTERS_EU, pocket_locked_count: 1, caller_tier: 'anonymous', can_see_pocket: false,
 };
-const IDENTITY_RELEASED = {
+const DISCLOSURE_RELEASED = {
   released: true, status: 'accepted', lead_id: 'LD-7K2M9QXA', accepted_at: '2026-09-15T16:20:00+00:00',
   provider: 'Northwind Data Centers', site: '1200 Industrial Blvd, Garland, TX',
   latitude: 32.91, longitude: -96.63, substation: 'Garland 345 kV',
   contact: { name: 'Sam Lee', email: 'sam.lee@northwind.example', phone: '+1 214 555 0100' },
   how: 'The provider accepted your deal registration.',
 };
-const IDENTITY_PENDING = {
+const DISCLOSURE_PENDING = {
   released: false, status: 'pending', lead_id: 'LD-7K2M9QXA', accepted_at: null,
   provider: null, site: null, latitude: null, longitude: null, substation: null, contact: null,
   how: 'The provider has your deal registration and has not answered yet.',
 };
 const LISTING_KW = { ...DETAIL_UNLOCKED.listing, capacity_kw: 40000, region: 'north_america', update_cadence: 'weekly' };
-const DETAIL_RELEASED = { ...DETAIL_UNLOCKED, listing: LISTING_KW, identity: IDENTITY_RELEASED };
-const DETAIL_PENDING = { ...DETAIL_UNLOCKED, listing: LISTING_KW, identity: IDENTITY_PENDING };
+const DETAIL_RELEASED = { ...DETAIL_UNLOCKED, listing: LISTING_KW, disclosure: DISCLOSURE_RELEASED };
+const DETAIL_PENDING = { ...DETAIL_UNLOCKED, listing: LISTING_KW, disclosure: DISCLOSURE_PENDING };
 
 // ── a stubbed network that records every call ────────────────────────────────
 let S, TOOLS, realFetch;
@@ -417,8 +418,8 @@ describe('outputSchema accepts every contract response verbatim', () => {
     [ACCEPT, 'accept — already accepted', ACCEPT_ALREADY],
     [ACCEPT, 'accept — 401 identity_required body', E401_SIGN_IN],
     [READ, 'list — filtered by size and region, cards with capacity_kw', LIST_FILTERED],
-    [READ, 'detail — identity released after the provider accepted', DETAIL_RELEASED],
-    [READ, 'detail — identity not released, deal registration pending', DETAIL_PENDING],
+    [READ, 'detail — disclosure released after the provider accepted', DETAIL_RELEASED],
+    [READ, 'detail — disclosure not released, deal registration pending', DETAIL_PENDING],
   ];
   for (const [tool, label, fixture] of CASES) {
     it(`${tool}: ${label}`, async () => {
@@ -965,34 +966,34 @@ describe('source_capacity — search by size and location', () => {
   });
 });
 
-describe('source_capacity — the identity block', () => {
+describe('source_capacity — the disclosure block', () => {
   const SLUG = 'dfw-40mw-powered-shell';
   const open = async (fixture) => {
     responder = () => json(200, fixture);
     const r = await call(READ, { slug: SLUG }, identifiedSeat());
     return { r, lines: renderedLines(r) };
   };
-  const identityLines = (lines) => lines.filter((l) => /^(Provider|Site|Contact)\b/.test(l));
+  const disclosureLines = (lines) => lines.filter((l) => /^(Provider|Site|Contact)\b/.test(l));
 
   it('released: provider, site and contact lines, beside the listing capacity in kW', async () => {
     const { r, lines } = await open(DETAIL_RELEASED);
-    expect(identityLines(lines)).toEqual([
+    expect(disclosureLines(lines)).toEqual([
       'Provider: Northwind Data Centers',
       'Site: 1200 Industrial Blvd, Garland, TX; 32.91, -96.63; substation Garland 345 kV',
       'Contact: name: Sam Lee; email: sam.lee@northwind.example; phone: +1 214 555 0100',
     ]);
     expect(lines).toContain('Capacity: 40,000 kW (40 MW)');
-    expect(r.structuredContent.identity).toEqual(IDENTITY_RELEASED);
+    expect(r.structuredContent.disclosure).toEqual(DISCLOSURE_RELEASED);
     const ok = await accepts(READ, r.structuredContent);
     expect(ok.ok, ok.issues).toBe(true);
   });
 
   it('not released: ONE line with the status and the next step, and no provider, site or contact line', async () => {
     const { r, lines } = await open(DETAIL_PENDING);
-    expect(identityLines(lines)).toEqual([
+    expect(disclosureLines(lines)).toEqual([
       'Provider identity, site and contact: not released (deal registration status: pending). Next: The provider has your deal registration and has not answered yet.',
     ]);
-    expect(r.structuredContent.identity).toEqual(IDENTITY_PENDING);
+    expect(r.structuredContent.disclosure).toEqual(DISCLOSURE_PENDING);
     const ok = await accepts(READ, r.structuredContent);
     expect(ok.ok, ok.issues).toBe(true);
   });
@@ -1005,8 +1006,8 @@ describe('source_capacity — the identity block', () => {
     ];
     for (const [status, next] of cases) {
       calls = [];
-      const { lines } = await open({ ...DETAIL_PENDING, identity: { ...IDENTITY_PENDING, status, how: null } });
-      expect(identityLines(lines), status).toEqual([
+      const { lines } = await open({ ...DETAIL_PENDING, disclosure: { ...DISCLOSURE_PENDING, status, how: null } });
+      expect(disclosureLines(lines), status).toEqual([
         `Provider identity, site and contact: not released (deal registration status: ${status}). Next: ${next}`,
       ]);
     }
@@ -1019,14 +1020,39 @@ describe('source_capacity — the identity block', () => {
     expect(control.lines.join('\n')).toContain('Northwind');
     for (const released of [false, 'true', 1, undefined]) {
       calls = [];
-      const { lines } = await open({ ...DETAIL_RELEASED, identity: { ...IDENTITY_RELEASED, released } });
-      const shown = identityLines(lines);
+      const { lines } = await open({ ...DETAIL_RELEASED, disclosure: { ...DISCLOSURE_RELEASED, released } });
+      const shown = disclosureLines(lines);
       expect(shown, String(released)).toHaveLength(1);
       expect(shown[0], String(released))
         .toMatch(/^Provider identity, site and contact: not released \(deal registration status: accepted\)\. Next: /);
       expect(lines.join('\n'), String(released)).not.toContain('Northwind');
       expect(lines.join('\n'), String(released)).not.toContain('sam.lee@northwind.example');
     }
+  });
+
+  it('a listing detail with disclosure still gets the caller identity stamp in structuredContent.identity', async () => {
+    const seat = identifiedSeat({ auth_source: 'header' });
+    const stamp = S._identitySource(seat);
+    // Premise: this seat produces a stamp at all, so the assertions below cannot pass on an absent one.
+    expect(stamp).toEqual({ credential_source: 'header', tier: 'free' });
+    responder = () => json(200, DETAIL_RELEASED);
+    const r = await call(READ, { slug: SLUG }, seat);
+    expect(r.structuredContent.identity).toEqual(stamp);
+    expect(r.structuredContent.disclosure).toEqual(DISCLOSURE_RELEASED);
+    expect(JSON.parse(r.content[0].text).disclosure).toEqual(DISCLOSURE_RELEASED);
+    expect(disclosureLines(renderedLines(r))).toHaveLength(3);
+    const ok = await accepts(READ, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+
+    // Control, the collision the rename removed: the same block under `identity`
+    // makes _stampIdentitySource skip the caller stamp, and nothing renders it.
+    calls = [];
+    const { disclosure, ...withoutDisclosure } = DETAIL_RELEASED;
+    responder = () => json(200, { ...withoutDisclosure, identity: disclosure });
+    const clash = await call(READ, { slug: SLUG }, seat);
+    expect(clash.structuredContent.identity).toEqual(DISCLOSURE_RELEASED);
+    expect(clash.structuredContent.identity).not.toEqual(stamp);
+    expect(disclosureLines(renderedLines(clash))).toEqual([]);
   });
 });
 
@@ -1070,12 +1096,16 @@ describe('the descriptions state the deal registration', () => {
     expect(d.startsWith('Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro).')).toBe(true);
     expect(d).toContain('a signed-in human who has accepted the introduction terms sees its specs');
     expect(d).toContain("The provider's identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits");
+    expect(d).toContain("the listing's disclosure block says whether they have been");
+    expect(d).not.toContain('identity block');
   });
 
   it('request_capacity_intro says what is shared, with whom, and when', () => {
     const d = TOOLS[WRITE].description;
     expect(d).toContain("sends the provider ONLY your human's company name and the requirement");
     expect(d).toContain('The provider accepts or declines.');
+    expect(d).toContain('shows the deal status in the disclosure block');
+    expect(d).not.toContain('identity block');
     expect(d).toContain("Only if the provider accepts does DC Hub share the provider's identity, site details and contact with your human, and your human's name, role and email with the provider; on a decline nothing is shared.");
   });
 
