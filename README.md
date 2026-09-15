@@ -74,7 +74,7 @@ Beyond the 91 tools, DC Hub ships **14 guided prompts** — they surface as slas
 - `/dchub:hyperscaler_activity` — deals + forward pipeline: who is buying and building
 - `/dchub:whats_changed` — what moved since your last call (the return hook)
 - `/dchub:fiber_power_pairing` — where fiber density and available power overlap in a market
-- `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then an introduction (operator contact is never shared)
+- `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then a deal registration (the provider's identity, site and contact are released only if the provider accepts)
 
 Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
 

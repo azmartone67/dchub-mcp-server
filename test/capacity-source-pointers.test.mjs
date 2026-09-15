@@ -359,12 +359,15 @@ describe('pointers on tool results', () => {
     expect(pointerLines(r)).toEqual([]);
   });
 
-  it('the note is one sentence: DC Hub makes the introduction, operator contact is never shared', () => {
+  it('the note is one sentence: a deal registration, contact exchanged only if the provider accepts', () => {
     const n = L.CAPACITY_POINTER_NOTE;
     expect(n.match(/[.!?](\s|$)/g)).toHaveLength(1);
     expect(n.endsWith('.')).toBe(true);
-    expect(n).toContain('DC Hub makes the introduction');
-    expect(n).toContain('operator contact is never shared');
+    expect(n).toContain('DC Hub deal registration');
+    expect(n).toContain("the provider sees only your human's company name and requirement");
+    expect(n).toContain('exchanged only if the provider accepts');
+    // The 2026-09-14 flow is gone: DC Hub no longer introduces anyone up front.
+    expect(n).not.toMatch(/makes the introduction|never shared/);
   });
 
   it('markets match exactly, never by prefix, and a row whose state disagrees is rejected', () => {
@@ -578,7 +581,10 @@ describe('find_capacity prompt', () => {
     const text = got.messages[0].content.text;
     expect(text).toContain('40 MW powered shell, energized by Q2 2027');
     expect(text).toContain('Call source_capacity state="TX" min_mw=40');
-    expect(text).toContain('operator contact is never shared');
+    expect(text).toContain('min_kw');
+    expect(text).toContain("DC Hub sends the provider only your human's company name and the requirement");
+    expect(text).toContain("only on acceptance are the provider's identity, site and contact shared with your human");
+    expect(text).not.toContain('operator contact is never shared');
     const bare = await client.getPrompt({ name: 'find_capacity', arguments: { requirement: 'turnkey capacity' } });
     expect(bare.messages[0].content.text).toContain('1. Call source_capacity — ');
   });
