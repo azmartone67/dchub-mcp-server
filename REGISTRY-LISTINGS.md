@@ -1,7 +1,7 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **91 tools** · official registry listing `cloud.dchub/datacenter-power-grid-fiber` **v2.3.3** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **91 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.17** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
 ## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
 - ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.3.3 live.** Auto-republishes on every `server.json` version bump (GitHub Action `registry-refresh.yml`, DNS-auth). **Most directories mirror this**, so you're already broadly listed.
@@ -39,8 +39,8 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **Docker MCP Catalog** — ships in Docker Desktop's MCP Toolkit (one-click install into Claude Desktop / Cursor / VS Code). ⚠️ we are NOT listed — measured 404 on `servers/dchub/server.yaml` | `https://dchub.cloud/mcp/docker` | ✅ PR to `docker/mcp-registry` (remote-server entry: server.yaml + tools.json + readme.md) |
 | **Anthropic Connectors Directory** — in-app, submitted from claude.ai org settings. ⚠️ needs a **Team/Enterprise org** + Owner role; ends in 7 policy acknowledgments the owner must make. | `https://dchub.cloud/mcp/anthropic` | ⚠️ portal only — not submittable from this repo |
 | **cursor.directory** (community; cursor.com has no public MCP directory) | `https://dchub.cloud/mcp/cursordirectory` | ❌ owner-typed listing |
-| **Official MCP registry** — live listing `cloud.dchub/mcp-server` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/officialregistry` | ✅ `server.json` — CURRENT |
-| ~~Official MCP registry~~ — retiring listing `cloud.dchub/datacenter-power-grid-fiber` | `https://dchub.cloud/mcp/registry` | ⏳ still served; awaiting `deprecated` |
+| **Official MCP registry** — live listing `cloud.dchub/mcp-server` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/registry` | ✅ `server.json` — CURRENT |
+| ~~Official MCP registry~~ — orphaned listing `cloud.dchub/datacenter-power-grid-fiber` | `https://dchub.cloud/mcp/officialregistry` | ⛔ `deprecated`, frozen at 2.12.9 — see below |
 
 > **★2026-09-08 — THE RENAME WAS REVERTED. The name is an IDENTITY, not a label.**
 > `cloud.dchub/mcp-server` is the live listing again. The #338 finding below is
@@ -77,11 +77,99 @@ was called, so we can finally answer "did this listing ever send anyone".
 >     server cloud.dchub/mcp-server
 > ```
 >
-> So the new name cannot reuse `/mcp/registry` while the old entry holds it.
-> `server.json` now points at `/mcp/officialregistry` and the new listing is
-> the live one. `/mcp/registry` stays SERVED — existing installs from the old
-> listing still arrive on it — until `cloud.dchub/mcp-server` is deprecated.
-> Only then is that URL free, and only then does this table collapse to one row.
+> ~~So the new name cannot reuse `/mcp/registry` while the old entry holds it.~~
+> **★2026-09-15 — the four lines that stood here were PRE-REVERT text, and they
+> outlived the thing they described by a week.** They said `server.json` points
+> at `/mcp/officialregistry`; since #390 it points at `/mcp/registry`, and the
+> table above said the same wrong thing in the opposite direction — it credited
+> `/mcp/officialregistry` to the LIVE listing and `/mcp/registry` to the orphan,
+> which is exactly backwards and would misattribute every registry arrival we
+> measure. The 400 above is still the real constraint and is why the two paths
+> cannot be swapped back. Measured state is in the section below; read that
+> before believing any sentence on this page about which name is live.
+
+### ★2026-09-15 — TWO ENTRIES, ONE MAINTAINED. This is settled; do not re-open it.
+
+If you search the official registry for `dchub` you get **two** names. That is
+expected, it is not a bug, and the split is **not** repairable by publishing
+harder. Read this before acting on it.
+
+**Measured 2026-09-15** — `curl -sS "https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub&version=latest"`:
+
+| name | version | status | isLatest | remote | toolCount |
+|---|---|---|---|---|---|
+| `cloud.dchub/mcp-server` | **2.12.17** | **active** | true | `/mcp/registry` | 91 |
+| `cloud.dchub/datacenter-power-grid-fiber` | 2.12.9 | **deprecated** | true | `/mcp/officialregistry` | 88 |
+
+The orphan is the #338 rename that #390 reverted (see the block above). **It was
+already deprecated** — all three of its versions are — so the job "retire the old
+entry" is DONE. What deprecation does not do is remove it: `version=latest` still
+returns it, `isLatest` is still true *for its own name*, and any aggregator that
+does not read `status` will mirror a DC Hub with no Capacity Source and
+toolCount 88, indefinitely.
+
+**What the registry actually permits** (`./mcp-publisher status --help`):
+a published *version* is immutable, but its **status is not**. `mcp-publisher
+status --status <active|deprecated|deleted> [--all-versions] <name> [version]`
+sets it. So "a published version cannot be withdrawn" — the comment in
+`registry-refresh.yml` — is right about content and wrong about lifecycle.
+`deleted` exists and would drop the entry from the API. **We have not run it and
+should not.** It is the spam/security lever; using it to tidy a listing would
+break any mirror that stored the name as an id, which is the precise mistake
+that cost us `github.com/mcp` eight days ago.
+
+**Decision — leave it deprecated. Do not publish to it, do not delete it.**
+
+- **A second publish target is the #338 mistake wearing a different hat.**
+  Publishing `server.json` under both names would make two ACTIVE canonical
+  entries for one server. `scripts/ecosystem-sync.mjs` already treats that as a
+  regression ("two canonical entries"), and correctly.
+- **Deleting is irreversible and outward-facing**, and buys nothing a deprecation
+  has not already bought.
+- **The downstream cost is unproven and looks small.** Measured the same day,
+  four-state (a listing we could not read is **UNREADABLE**, never "clean"):
+
+  | surface | verdict | evidence |
+  |---|---|---|
+  | `github.com/mcp` | **ABSENT** (floor-verified) | 200, 270 KB, **0** × "dchub"; control terms present in the same HTML (stripe 15, notion 24, figma 17), so the page does render server names and DC Hub is genuinely not on it — still gone, 7 days after the revert that was meant to restore it |
+  | Glama | **UNREADABLE as a listing** | `/mcp/servers/dchub` 302s → `/mcp/servers?query=author%3Adchub`; API 401. Neither registry name appears on the page — Glama keys on its own slug |
+  | mcp.so | **name-absent** | search returns one card, `/servers/dchub-backend` (repo-derived), not either registry entry |
+  | PulseMCP | **UNREADABLE** | API 410 Gone, page 403 |
+  | ToolPlex | **UNREADABLE** | 404 on the search path; destination still unlocated |
+
+  **Nothing we can read mirrors the orphan.** Three of five could not be read at
+  all, so this is "no evidence of downstream cost", NOT "no downstream cost".
+
+**The cost was never downstream — it was in here.** Both of the repo's automated
+registry consumers had the orphan's name TYPED into them and kept reading it for
+a week after the revert:
+
+- `scripts/registry_monitor.py` reported the orphan's frozen 2.12.9 as "Official
+  MCP registry" and raised drift against canon every run. `monitor_report.md`
+  (2026-09-14) carries the proof: `| Official MCP registry | 2.12.9 | None |` and
+  *"Official registry version 2.12.9 ≠ repo canonical 2.12.12"* — both false of
+  the live listing, which was 2.12.12 that day, exactly level with canon.
+  (`None` was a second bug: `publisher-provided` was read off the response
+  wrapper instead of the server object, so the toolCount gate never once fired.)
+- `scripts/registry-autopublish.mjs`, run **daily** by `daily-manifest-sync.yml`,
+  compared the repo against a version list frozen at 2.12.9. Every repo version
+  outranks that, so it took the "repo is already above the registry" branch every
+  day and its publish-only **+1 — the only branch that avoids a duplicate-version
+  400 — was unreachable code.** With `server.json` at 2.12.17 and the live entry
+  at 2.12.17, the daily healing publish re-publishes 2.12.17, takes the 400, and
+  heals nothing. Reading the live name yields 2.12.18, `write=true`.
+
+Both now derive the name from `server.json`, the only thing that is definitionally
+what we publish under — the rule `scripts/ecosystem-sync.mjs` already followed,
+which is why it was the one consumer that never drifted. Pinned by
+`test/registry-name-single-source.test.mjs` (mutation-verified: restoring either
+hardcode, the wrapper-level read, or either status alarm turns it red).
+
+**If you ever rename again:** the name is an identity. Enumerate what KEYS ON IT
+(curated mirrors, aggregator caches, anything storing it as an id) before you
+publish, then expect the old name to sit deprecated in search forever — that is
+the permanent, unavoidable cost of a rename, and it is why the answer is
+usually don't.
 
 ### ⚠️ `server.json` carries the SHARED cascade tag — never a per-registry one
 

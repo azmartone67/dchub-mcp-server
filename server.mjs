@@ -1982,6 +1982,15 @@ const MCP_SOURCE_PATHS = new Map([
   //   burned if it does not — the new listing gets its own path. The old entry
   //   keeps /mcp/registry until it is deprecated, so there is never a moment
   //   without a live listing.
+  //   ★ 2026-09-15 — THAT QUESTION IS NOW ANSWERED, AND THE ANSWER IS NO.
+  //   #390 reverted the rename, so cloud.dchub/mcp-server is live again on
+  //   /mcp/registry and the renamed entry is the orphan. That orphan has been
+  //   `deprecated` since 2026-09-08 and it STILL holds /mcp/officialregistry
+  //   (measured 2026-09-15: status=deprecated, remotes[0]=/mcp/officialregistry).
+  //   So deprecation does NOT release a remote URL — the unverified assumption
+  //   this comment declined to bet the listing on is now measured false. Both
+  //   paths stay served and both stay mapped; see REGISTRY-LISTINGS.md,
+  //   "TWO ENTRIES, ONE MAINTAINED".
   ['/mcp/officialregistry', 'mcp-registry'],
   // ★ 2026-09-05 — cursor.directory (community-run; NOT cursor.com, which has no
   //   public MCP directory path at all — /directory 301s to the homepage). We are

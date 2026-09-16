@@ -43,7 +43,32 @@ import { pathToFileURL } from 'node:url';
 // port to drive the "registry unreadable" branch. Never set in production.
 const REGISTRY = process.env.MCP_REGISTRY_SEARCH_URL
   || 'https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub';
-const NAME = 'cloud.dchub/datacenter-power-grid-fiber';
+// ★2026-09-15 — THE NAME IS DERIVED, NOT TYPED.
+//
+// It was hardcoded to `cloud.dchub/datacenter-power-grid-fiber` — the #338
+// rename that #390 REVERTED. That name has been `deprecated` on the registry
+// since the revert and is frozen at 2.12.9, so `published` below was the version
+// list of a DEAD listing. Every repo version outranks 2.12.9, so
+// choosePublishVersion took the "repo is already above the registry" branch
+// every single day and the publish-only +1 — the ONLY branch that avoids a
+// duplicate — became unreachable code.
+//
+// Measured 2026-09-15: server.json 2.12.17, live `cloud.dchub/mcp-server`
+// 2.12.17. As coded this publishes 2.12.17 again and takes the duplicate-version
+// 400, so daily-manifest-sync.yml heals the repo and publishes NOTHING — the one
+// thing that step exists to do. Reading the live name yields 2.12.18, write=true.
+//
+// server.json's own `name` is the single source of truth — the same rule
+// scripts/ecosystem-sync.mjs already follows (it reads serverJson.name, and it
+// is the one registry consumer that never pointed at the dead entry).
+// Unreadable => null => fetchPublished returns [] => documented "assume taken"
+// => +1 bump. Fails toward a wasted version number, never toward a silent 400.
+function publishedName() {
+  try {
+    const n = JSON.parse(fs.readFileSync('server.json', 'utf8')).name;
+    return (typeof n === 'string' && n.includes('/')) ? n : null;
+  } catch { return null; }
+}
 
 const parse = (v) => { const p = String(v).split('.').map((n) => parseInt(n, 10)); return [p[0] || 0, p[1] || 0, p[2] || 0]; };
 const gt = (a, b) => { const x = parse(a), y = parse(b); for (let i = 0; i < 3; i++) { if (x[i] !== y[i]) return x[i] > y[i]; } return false; };
@@ -54,7 +79,8 @@ const gt = (a, b) => { const x = parse(a), y = parse(b); for (let i = 0; i < 3; 
  * mistake; getting this table wrong is a stalled cascade nobody sees for days.
  *
  * @param {string} repoVersion       server.json's committed version
- * @param {string[]} published       every version the registry lists for NAME.
+ * @param {string[]} published       every version the registry lists under
+ *                                   server.json's own name (see publishedName).
  *                                   EMPTY means "could not read it", not "none".
  * @returns {{version: string, write: boolean, why: string}}
  *   write:false ⇒ publish server.json untouched (nothing for the caller to revert).
@@ -83,11 +109,16 @@ export function choosePublishVersion(repoVersion, published) {
 }
 
 async function fetchPublished() {
+  const name = publishedName();
+  if (!name) {
+    console.error('::warning::server.json carries no usable `name` — treating the registry as unreadable');
+    return [];
+  }
   try {
     const res = await fetch(REGISTRY, { signal: AbortSignal.timeout(15000) });
     const data = await res.json();
     return (data.servers || [])
-      .filter((x) => x.server && x.server.name === NAME)
+      .filter((x) => x.server && x.server.name === name)
       .map((x) => x.server.version)
       .filter(Boolean);
   } catch (e) {
