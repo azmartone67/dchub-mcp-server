@@ -326,7 +326,24 @@ describe('the rebuilt worker carries no baked facility count', () => {
     expect(red).toContain('why_dchub');
     expect(red).toContain('search_facilities');
     expect(red).toContain('semantic_search');
-    expect(unscrubbed.out).toContain('21,900+ global data center facilities');
+    // ★ 2026-09-16: this was pinned to the literal '21,900+ …'. Canon moved to
+    //   22,100+, the heal correctly rewrote toolspec.json, and this control — the
+    //   only assertion in this block reading rendered TEXT rather than the decoded
+    //   array — failed the hard gate, so daily-manifest-sync stayed red for a day
+    //   (run 35142511932) and every registry kept serving the old floor. The
+    //   invariant is "the count the corpus carries survives once the scrub is
+    //   removed", never "the count is 21,900+". Derive it from the same corpus this
+    //   run consumed. Non-vacuity is asserted, not assumed: a toolspec regenerated
+    //   clean leaves nothing to carry, and that has to fail loudly rather than pass
+    //   as a control over an empty set.
+    const carried = (() => {
+      const d = served.find((t) => t.name === 'search_facilities')?.description || '';
+      return (/[\d,]+\+ global data center facilities/.exec(d) || [])[0];
+    })();
+    expect(carried,
+      'the corpus carries no facility count on search_facilities, so this control proves nothing')
+      .toBeTruthy();
+    expect(unscrubbed.out).toContain(carried);
   });
 
   it('as committed, not one baked description carries a facility count', () => {
