@@ -5271,6 +5271,43 @@ const METERED_ENFORCE_TOOLS = new Set([
   'get_refined_queue', 'get_retirement_headroom', 'grid_transition_radar',
   'get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness', 'plan_fiber_leadin',
 ]);
+// ★ r-gated-cta (2026-09-16): the access tag's pricing_url was the BARE
+// https://dchub.cloud/pricing on all 91 tools, on both tools/list paths. Two
+// things were wrong with that, and both cost conversions:
+//   1. It is UNATTRIBUTED. A human who lands there from a tool annotation is
+//      indistinguishable from one who typed the URL, so the tools that drive
+//      upgrade interest cannot be told apart from the ones that do not.
+//   2. It is the WALL, not a way through. /pricing/upgrade?tool= resolves the
+//      tier this specific tool needs and hands off to checkout start (measured
+//      live 2026-09-16: 302 -> /pricing/checkout/start?tool=…&tier=pro&ref=…).
+// What it deliberately does NOT do is mint a token here. The real
+// session-bound links — /go/c/<token> and /upgrade/h/<token> — carry an HMAC
+// over the CALLER's session and a mint timestamp, and this tag rides a tools/
+// list result that is CACHED AND SHARED across sessions. Freezing one caller's
+// token into a shared list would misattribute every other caller's click. So
+// the static tag is attributed, and `upgrade_relay` tells the agent where the
+// tokenized link actually comes from: the gated RESULT, minted per call.
+function _accessTagFor(name) {
+  const access = PAID_ONLY_TOOLS.has(name) ? 'paid'
+    : METERED_ENFORCE_TOOLS.has(name) ? 'metered'
+    : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
+  const q = encodeURIComponent(name || '');
+  const gated = (access === 'paid' || access === 'metered');
+  const tag = {
+    access,
+    pricing_url: gated
+      ? `https://dchub.cloud/pricing/upgrade?tool=${q}&ref=mcp-tools-list`
+      : `https://dchub.cloud/pricing?ref=mcp-tools-list&tool=${q}`,
+  };
+  if (gated) {
+    tag.upgrade_relay = 'Call the tool first: a gated result carries a '
+      + 'session-bound checkout link (dchub.cloud/go/c/<token>) and a human '
+      + 'relay (dchub.cloud/upgrade/h/<token>) minted for THIS session — relay '
+      + 'those verbatim. This URL is only the fallback for a client that '
+      + 'renders annotations before any call.';
+  }
+  return tag;
+}
 const MAP_URL = 'https://dchub.cloud/land-power-map';
 // x402 (2026-06-20): the flagship value-moment tools that advertise the
 // agent-autonomous pay-per-call (USDC) rail. Prices mirror the backend
@@ -8552,11 +8589,10 @@ async function _buildToolsListResult(descOverrides) {
     // mirrored in annotations for UIs that render them.
     try {
       for (const t of r.tools) {
-        const access = PAID_ONLY_TOOLS.has(t.name) ? 'paid'
-          : METERED_ENFORCE_TOOLS.has(t.name) ? 'metered'
-          : FREE_FULL_TOOLS.has(t.name) ? 'free'
-          : 'free_preview';   // free-tier depth with paid full-fidelity
-        const tag = { access, pricing_url: 'https://dchub.cloud/pricing' };
+        // ★ r-gated-cta (2026-09-16): one derivation, shared with the
+        // registration path below — the two used to type the same four-way
+        // ladder and the same bare pricing URL twice.
+        const tag = _accessTagFor(t.name);
         t._meta = { ...(t._meta || {}), 'cloud.dchub/access': tag };
         // r-maturity (2026-08-12): re-applied here for the SAME reason the
         // access tag is — this path builds the result through an SDK Client
@@ -12446,10 +12482,7 @@ function trackedTool(srv, name, description, schema, handler) {
   // stateless cached path (verified live: stateless 80/80 tagged, sessioned
   // 0/80 because the SDK serializes from its registry). Same derivation as
   // the gate sets, so declaration can't drift from enforcement.
-  const _access = PAID_ONLY_TOOLS.has(name) ? 'paid'
-    : METERED_ENFORCE_TOOLS.has(name) ? 'metered'
-    : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
-  const _accessTag = { access: _access, pricing_url: 'https://dchub.cloud/pricing' };
+  const _accessTag = _accessTagFor(name);
   // r-maturity (2026-08-12): maturity + the published coverage limits ride
   // here for the same reason the access tag does — declared AT REGISTRATION so
   // the SDK-sessioned tools/list (Claude Desktop et al.) carries them too. The
@@ -21322,6 +21355,10 @@ export { createServer };
 // just the registration map — the SDK probe in the middle strips annotation
 // keys, and that difference is exactly where the access tags were once lost.
 export { _buildToolsListResult };
+// r-gated-cta (2026-09-16): exported so test/gated-tool-cta.test.mjs can assert
+// the ONE derivation both tools/list paths use. Unexported, the guard would
+// have to re-type the ladder, which is how a second source of truth starts.
+export { _accessTagFor, METERED_ENFORCE_TOOLS };
 // r-tuner-kimi-driftgate (2026-07-18): the platform-detection maps + the
 // tuned-description fetch list are exported so test/platform-desc-sync.test.mjs
 // can assert the 3-list sync (this drift has now shipped twice — the 07-11 wave
