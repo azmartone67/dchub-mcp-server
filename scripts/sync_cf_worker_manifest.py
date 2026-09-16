@@ -29,7 +29,10 @@ File mode:  python3 scripts/sync_cf_worker_manifest.py worker.js [out.js] [--ver
 The live tool surface is fetched from MCP_URL (default https://dchub.cloud/mcp).
 
 WHAT THIS TOUCHES, and nothing else:
-  • MCP_FALLBACK_TOOLS — rebuilt from the live tools/list.
+  • MCP_FALLBACK_TOOLS — rebuilt from the live tools/list. Each description is
+    baked VERBATIM but for ONE edit: a comma-grouped FACILITY count is dropped
+    on the way in (see _scrub_facility_magnitude). It is canon-derived upstream
+    and stops tracking canon the moment it is frozen in a pasted worker.
   • "NN tools" / "manifest-NN" inside STRING LITERALS the worker serves at
     runtime (MCP_SERVER_INFO.description, MCP_LANDING_HTML_V1, the manifest
     `note` strings, …) — see _rewrite_served_counts.
@@ -50,6 +53,42 @@ import sys
 import urllib.request
 
 MCP_URL = os.environ.get("MCP_URL", "https://dchub.cloud/mcp")
+
+# ── the facility-magnitude scrub ─────────────────────────────────────────────
+# WHAT: a comma-grouped COUNT is dropped from a tool description as it is baked,
+# and only where a facility noun follows it. The noun stays; every other
+# magnitude in the same sentence stays, including one sitting right beside it.
+#
+#   "Search 21,900+ global data center facilities across 170+ countries"
+#     -> "Search global data center facilities across 170+ countries"
+#   "...21,900+ facilities + 330,000+ mapped power/grid/gas/fiber assets..."
+#     -> "...facilities + 330,000+ mapped power/grid/gas/fiber assets..."
+#
+# WHY ONLY THIS ONE. Those three sentences (why_dchub, search_facilities,
+# semantic_search) are built BACKEND-side through canon_text("{canon_facilities}")
+# in dchub-backend routes/mcp_tool_catalog.py, so on the live surface the number
+# is a rendered placeholder that re-reads canon on every tools/list. Baking the
+# RENDERED text turns a phrase that tracks into a literal that cannot: worker.js
+# imports no canon and ships by a manual Cloudflare dashboard paste, so the number
+# is frozen for as long as that paste lasts — on the manifest agents and
+# registries discover us through. Every other magnitude in these descriptions —
+# deals, grid assets, queue projects, call quotas — is hand-written prose that
+# tracks nothing upstream, so freezing it costs nothing and rewriting it would be
+# this script inventing copy. Same rule as the count rewrite below: move only
+# what goes stale, leave everything else byte-identical.
+#
+# WHY AT THE BAKE. dchub-backend #4635 removed the three literals by hand and
+# fenced them in tests/test_wellknown_manifest_version_derived.py::
+# test_fallback_tool_descriptions_carry_no_facility_count. A hand removal does not
+# survive a re-sync — the next run of THIS script bakes them straight back and
+# turns that fence red, with no commit responsible — so the removal has to live
+# where the text is baked.
+#
+# ★ The lookahead is the fence's OWN tail, character for character. The predicate
+# is COPIED, not re-derived, so "what this leaves behind" and "what the fence
+# accepts" cannot drift into a scrub that runs and still ships red.
+FACILITY_COUNT_TAIL = r"(?:[a-z][a-z-]*\s+){0,4}facilit\w*"
+FACILITY_MAGNITUDE_RE = re.compile(r"~?\d{1,3}(?:,\d{3})+\+?\s*(?=" + FACILITY_COUNT_TAIL + ")")
 
 COUNT_RE = re.compile(r"\b\d{2,3} tools\b")
 MANIFEST_TOKEN_RE = re.compile(r"manifest-\d{2,3}")
@@ -295,11 +334,28 @@ def _count_array_elements(src: str, start: int, end: int) -> int:
     return n
 
 
+def _scrub_facility_magnitude(desc: str) -> str:
+    """Drop comma-grouped facility COUNTS; keep the noun and every other number.
+
+    Applied until STABLE rather than once. The fence looks up to four words back,
+    so removing one magnitude can pull an earlier one into its reach:
+    "1,234+ audits and 21,900+ facilities" -> "1,234+ audits and facilities",
+    which the fence still reads as a facility count. Each pass deletes at least
+    one character, so this terminates.
+    """
+    while True:
+        out = FACILITY_MAGNITUDE_RE.sub("", desc)
+        if out == desc:
+            return out
+        desc = out
+
+
 def _build_array_js(marker: str, tools: list) -> str:
     elems = []
     for t in tools:
         elems.append("  { name: %s, description: %s, inputSchema: %s }" % (
-            json.dumps(t["name"]), json.dumps(t["description"]),
+            json.dumps(t["name"]),
+            json.dumps(_scrub_facility_magnitude(t["description"])),
             json.dumps(t["inputSchema"])))
     return marker + " = [\n" + ",\n".join(elems) + "\n]"
 
@@ -381,6 +437,8 @@ def main(argv=None):
 
     tools = _fetch_live_tools()
     n = len(tools)
+    scrubbed = [t["name"] for t in tools
+                if _scrub_facility_magnitude(t["description"]) != t["description"]]
 
     s, e = _find_array_span(src, "MCP_FALLBACK_TOOLS")
     was = _count_array_elements(src, src.index("[", s), e)
@@ -398,6 +456,9 @@ def main(argv=None):
                        ", ".join(str(ln) for ln, _, _ in sites))
     else:
         changed.append("0 served count strings needed rewriting")
+    if scrubbed:
+        changed.append(f"facility count dropped from {len(scrubbed)} description(s): "
+                       + ", ".join(scrubbed))
 
     if version is not None:
         vspan, old_version = _worker_version_span(src)
