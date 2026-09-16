@@ -4,6 +4,8 @@ Coverage: 21,900+ data centers across 170+ countries. 300+ markets scored by the
 
 Also live: Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; retirement headroom; per-state pipeline and midstream presence with live Henry Hub; water stress, tax incentives and FEMA/USGS/NOAA hazard reads.
 
+Capacity Source: data-center capacity to buy or lease — powered land, powered shells, turnkey capacity and colocation, including sites that are not publicly marketed. source_capacity searches it by size (kW or MW) and by location (region, country, state or metro); browse it at https://dchub.cloud/listings. An introduction is a deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identity, site and contact are exchanged only if the provider accepts.
+
 Liveness is the product, and it is checkable. DC Hub is rebuilt continuously from its sources rather than published and left. Every collection response carries a provenance as_of. The ingest layer itself is public and keyless at https://dchub.cloud/api/v1/ops/deadman — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Including the ones that are late. Verify it rather than take the sentence for it.
 
 The DCGI gas composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh stays withdrawn.
