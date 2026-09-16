@@ -93,6 +93,8 @@ Everything above answers *where to build*. **[Capacity Source](https://dchub.clo
 
 So *"500 kW anywhere in Europe"* is `min_kw=500, region=europe`. Any caller — keyless included — gets the listing cards, the filters that were applied, and when each listing was last updated.
 
+**A size is matched against what a listing can actually deliver, not just its headline total.** A listing may declare `contiguous_kw` — the largest single contiguous block available — and `min_contract_kw` — the smallest chunk the provider will contract. A colocation with 2 MW available but only 500 kW contiguous does not answer a 1 MW search; a 40 MW site willing to contract 1 MW chunks does. Both are teaser-level, so they come back on the cards and the single-listing read, and the rendered lines carry them beside the capacity.
+
 **Then a deal registration, not a lead form.** `request_capacity_intro` registers a deal: DC Hub sends the provider your company name and your requirement, and nothing more. The provider accepts or declines. Identities, site detail and contacts are exchanged **only if the provider accepts** — on a decline, nothing is shared. `accept_capacity_terms` records your agreement to the [introduction terms](https://dchub.cloud/listings#terms) once, which is what opens listing detail for you.
 
 The `/dchub:find_capacity` prompt runs the whole path: requirement → listings → deal registration.

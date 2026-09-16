@@ -1141,6 +1141,162 @@ describe('source_capacity — search by size and location', () => {
   });
 });
 
+// ── what a listing can ACTUALLY deliver (2026-09-16) ─────────────────────────
+// A teaser or a detail may declare contiguous_kw (the largest single contiguous
+// block available) and min_contract_kw (the smallest chunk the provider will
+// contract). The backend matches a requested size against THEM, not against the
+// headline total, so a card that shows only the total cannot explain its own
+// hit or miss. Each half renders independently: both, either one, or neither,
+// and neither must render exactly what it rendered before this existed.
+describe('source_capacity — contiguous_kw and min_contract_kw beside the capacity', () => {
+  const card = (over) => ({ ...TEASER_EU, ...over });
+  const feed = (over) => ({ ...LIST_FILTERED, items: [card(over)] });
+  const rowsOf = (lines) => lines.filter((l) => l.startsWith('- '));
+  const FIT_NOTE_HEAD = 'Fit: a size search is matched against the block a listing can actually deliver';
+
+  // A rendered line must never carry a separator with nothing on one side of it:
+  // that is what a half-declared listing would produce if the halves were glued
+  // together rather than composed.
+  const noBrokenLine = (lines) => {
+    for (const l of lines.filter((x) => x.startsWith('- ') || x.startsWith('Capacity: '))) {
+      expect(l, `dangling separator in ${JSON.stringify(l)}`).not.toMatch(/—\s*$|—\s*—|:\s*$|\s\s|,\s*$|\bin\s+$/);
+      expect(l, `empty value in ${JSON.stringify(l)}`).not.toMatch(/(^-\s+\S+:\s*(—|in\b))|:\s*$/);
+    }
+  };
+
+  const render = async (body) => {
+    responder = () => json(200, body);
+    const r = await call(READ, {}, identifiedSeat());
+    const lines = renderedLines(r);
+    noBrokenLine(lines);
+    return { r, lines };
+  };
+
+  it('both declared: the card names the contiguous block and the smallest contract', async () => {
+    const { r, lines } = await render(feed({ contiguous_kw: 400, min_contract_kw: 100 }));
+    expect(rowsOf(lines)).toEqual([
+      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe)'
+      + ' — largest contiguous block 400 kW, smallest contract 100 kW',
+    ]);
+    expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
+    // The payload is the backend's, unchanged, and the wider fields still pass
+    // the declared outputSchema.
+    expect(JSON.parse(r.content[0].text).items[0].contiguous_kw).toBe(400);
+    const ok = await accepts(READ, r.structuredContent);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('contiguous only: the contiguous block alone, no smallest-contract phrase', async () => {
+    const { lines } = await render(feed({ contiguous_kw: 400 }));
+    expect(rowsOf(lines)).toEqual([
+      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — largest contiguous block 400 kW',
+    ]);
+    expect(rowsOf(lines).some((l) => l.includes('smallest contract'))).toBe(false);
+    expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
+  });
+
+  it('smallest chunk only: the smallest contract alone, no contiguous phrase', async () => {
+    const { lines } = await render(feed({ min_contract_kw: 100 }));
+    expect(rowsOf(lines)).toEqual([
+      '- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — smallest contract 100 kW',
+    ]);
+    expect(rowsOf(lines).some((l) => l.includes('contiguous'))).toBe(false);
+    expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
+  });
+
+  it('neither declared: the line is what it was, and nothing explains a number that is not there', async () => {
+    const { lines } = await render(feed({}));
+    expect(rowsOf(lines)).toEqual(['- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe)']);
+    expect(lines.some((l) => /contiguous|smallest contract/.test(l)), 'the fit phrases leaked onto a card that declares neither').toBe(false);
+    expect(lines.some((l) => l.startsWith(FIT_NOTE_HEAD))).toBe(false);
+  });
+
+  it('a card with no total but a declared block still renders, in the capacity slot', async () => {
+    const { capacity_kw, capacity_mw, ...noTotal } = TEASER_EU;
+    responder = () => json(200, { ...LIST_FILTERED, items: [{ ...noTotal, contiguous_kw: 400 }] });
+    const r = await call(READ, {}, identifiedSeat());
+    const lines = renderedLines(r);
+    noBrokenLine(lines);
+    expect(rowsOf(lines)).toEqual([
+      '- fra-500kw-colocation: largest contiguous block 400 kW in Frankfurt, DE (europe)',
+    ]);
+  });
+
+  it('an opened listing carries them on its Capacity line, beside the disclosure block', async () => {
+    responder = () => json(200, {
+      ...DETAIL_RELEASED,
+      listing: { ...LISTING_KW, contiguous_kw: 10000, min_contract_kw: 1000 },
+    });
+    const r = await call(READ, { slug: 'dfw-40mw-powered-shell' }, identifiedSeat());
+    const lines = renderedLines(r);
+    noBrokenLine(lines);
+    expect(lines).toContain('Capacity: 40,000 kW (40 MW) — largest contiguous block 10,000 kW, smallest contract 1,000 kW');
+    expect(lines.filter((l) => l.startsWith(FIT_NOTE_HEAD))).toHaveLength(1);
+    // Unchanged: the confidential citation behaviour and the disclosure lines.
+    expect(lines).toContain('Provider: Northwind Data Centers');
+    expect(JSON.parse(r.content[0].text).provenance.redistribution).toBe('not_permitted');
+  });
+
+  it('an opened listing that declares neither renders the capacity line it always did', async () => {
+    responder = () => json(200, DETAIL_RELEASED);
+    const r = await call(READ, { slug: 'dfw-40mw-powered-shell' }, identifiedSeat());
+    const lines = renderedLines(r);
+    noBrokenLine(lines);
+    expect(lines).toContain('Capacity: 40,000 kW (40 MW)');
+    expect(lines.some((l) => l.startsWith(FIT_NOTE_HEAD))).toBe(false);
+  });
+});
+
+// ★ Asserted on the description string the RUNNING server built — TOOLS comes
+// from a real createServer() — never on a copy of the literal kept here, which
+// would go on passing after the shipped wording changed.
+describe('the size copy names what a listing can actually deliver', () => {
+  const argShape = () => {
+    const s = TOOLS[READ].inputSchema.shape;
+    expect(Object.keys(s), 'inputSchema.shape did not resolve').toContain('min_kw');
+    return s;
+  };
+
+  // ★ ANCHORED, not merely present. A bare toContain passes on a description
+  //   long enough to name the fields SOMEWHERE — measured: stripping both names
+  //   out of the size clause left the two in the returns clause and the check
+  //   stayed green. Each assertion pins the names to the clause that has to
+  //   carry them.
+  it("source_capacity's own description names both fields where it explains the size", () => {
+    const d = TOOLS[READ].description;
+    expect(d, 'the size clause does not name what the size is matched against')
+      .toMatch(/Size is min_kw[\s\S]*?contiguous_kw[\s\S]*?min_contract_kw[\s\S]*?Location is region/);
+    expect(d).toContain('ACTUALLY deliver');
+    expect(d, 'the returns clause does not say the cards carry them')
+      .toMatch(/Returns listing cards[\s\S]*?contiguous_kw[\s\S]*?min_contract_kw[\s\S]*?to any caller/);
+  });
+
+  it('min_kw and min_mw each name both fields, and neither still claims a plain total floor', () => {
+    const shape = argShape();
+    for (const arg of ['min_kw', 'min_mw']) {
+      const d = String(shape[arg].description || '');
+      expect(d, arg).toContain('contiguous_kw');
+      expect(d, arg).toContain('min_contract_kw');
+      expect(d, arg).not.toContain('only listings with at least this much capacity');
+    }
+    // Control: the reader resolves ONE property's own description rather than a
+    // blob of the whole schema — a sibling filter says nothing about size.
+    expect(String(shape.region.description || '')).not.toContain('contiguous_kw');
+  });
+
+  it('the find_capacity prompt and the buy/lease planner step name them too', async () => {
+    const prompts = S.createServer()._registeredPrompts;
+    const text = prompts.find_capacity.callback({ requirement: '40 MW powered shell in Dallas' })
+      .messages.map((m) => m.content.text).join('\n');
+    expect(text).toContain('contiguous_kw');
+    expect(text).toContain('min_contract_kw');
+    const step = S._capacityProcurementStep('lease 40 MW of colocation space in Dallas', {}, []);
+    expect(step && step.tool).toBe('source_capacity');
+    expect(step.why).toContain('contiguous_kw');
+    expect(step.why).toContain('min_contract_kw');
+  });
+});
+
 describe('source_capacity — the disclosure block', () => {
   const SLUG = 'dfw-40mw-powered-shell';
   const open = async (fixture) => {
