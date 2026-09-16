@@ -20,6 +20,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import * as L from '../lib/capacity-source-summary.mjs';
 import { pasteLine, attachCapacity } from '../scripts/ecosystem-sync.mjs';
+import { CAPACITY_BLURB } from '../lib/capacity-source-summary.mjs';
 
 const BASE = 'http://127.0.0.1:1';
 const SUMMARY = '/api/v1/listings/summary';
@@ -626,9 +627,31 @@ describe('ecosystem-sync paste line', () => {
     });
   }
 
-  it('live: the line names the listings, just before the remote URL', () => {
+  it('live: the line names the capability, the tool, the page and the listings', () => {
     const ssot = attachCapacity({ ...SSOT }, { ok: true, status: 200, text: JSON.stringify(LIVE) });
-    expect(pasteLine(ssot)).toBe(BASE_LINE.replace(' Remote MCP:', ` Capacity Source: ${CLAUSE}. Remote MCP:`));
+    expect(pasteLine(ssot)).toBe(
+      BASE_LINE.replace(' Remote MCP:', ` ${CAPACITY_BLURB} Live now: ${CLAUSE}. Remote MCP:`));
+  });
+
+  // ★2026-09-16. The clause alone read "Capacity Source: 2 live listings,
+  // 41.2 MW across Dallas-Fort Worth, updated 2026-09-16." — an inventory, and
+  // nothing a reader could act on. A directory listing has to carry the way IN:
+  // the tool for an agent, the page for a human.
+  it('live: the reader is given a way in, not only a count', () => {
+    const line = pasteLine(attachCapacity({ ...SSOT }, { ok: true, status: 200, text: JSON.stringify(LIVE) }));
+    expect(line).toContain('source_capacity');
+    expect(line).toContain('dchub.cloud/listings');
+  });
+
+  // The backend builds the same copy for the white-glove lane from its own
+  // literal (routes/mcp_presence_crawler.py CAPACITY_SOURCE_BLURB). Two repos
+  // cannot share a constant, so each pins the other's text. If you change one,
+  // this fails until you change both.
+  it('the blurb is byte-identical to the backend literal, and count-free', () => {
+    expect(CAPACITY_BLURB).toBe(
+      'Capacity Source: powered land/shell/turnkey incl. off-market listings '
+      + 'via source_capacity; browse dchub.cloud/listings.');
+    expect(CAPACITY_BLURB).not.toMatch(/\d/);
   });
 });
 

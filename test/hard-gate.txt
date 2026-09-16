@@ -137,6 +137,7 @@ test/recipe-lifecycle.test.mjs
 test/recommendation-returns-contract.test.mjs
 test/recommendation-returns-truth.test.mjs
 test/refresh-scripts-import-inert.test.mjs
+test/registry-copy-names-capacity-source.test.mjs
 test/registry-cron-order.test.mjs
 test/registry-discover-scaffold.test.mjs
 test/registry-name-single-source.test.mjs
