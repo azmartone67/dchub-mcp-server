@@ -71,7 +71,14 @@ const NOT_MATCHING = [
   ['rank_markets', {}, RANK_NO_MATCH],
   ['get_market_intel', { market: 'northern-virginia' }],
   ['analyze_site', { lat: 39.04, lon: -77.48, state: 'VA' }],
-  ['get_market_context', { market: 'dallas-fort-worth' }],
+  // ★2026-09-16: was { market: 'dallas-fort-worth' }, which is no longer a
+  // different place — a leading metro token now matches, so a call about the
+  // Dallas-Fort Worth metro DOES point at the Dallas listing, on purpose. The
+  // two replacements are the cases that must still come back empty: a metro
+  // whose name merely CONTAINS this one, and a two-letter state tail that
+  // disagrees with the listing's state.
+  ['get_market_context', { market: 'north-dallas' }],
+  ['get_market_context', { market: 'dallas-az' }],
 ];
 
 // ── a stubbed network that records every call ────────────────────────────────
@@ -371,11 +378,20 @@ describe('pointers on tool results', () => {
     expect(n).not.toMatch(/makes the introduction|never shared/);
   });
 
-  it('markets match exactly, never by prefix, and a row whose state disagrees is rejected', () => {
+  it('markets match exactly or on a LEADING metro token, never mid-name, and a disagreeing state is rejected', () => {
+    // ★2026-09-16: 'dallas-fort-worth' MOVED from the reject list to the accept
+    // list, deliberately. Equality-only matching left a call about "dallas"
+    // pointing at nothing while live listings sat in "Dallas-Fort Worth" —
+    // measured against the live summary that day — and "dallas" is the name
+    // everything else uses (the DCPI market slug, execute_plan's own verdict
+    // line). The rejects below are what keeps that from becoming a substring
+    // match: 'dal' is a truncation, 'north-dallas' is a different metro whose
+    // name merely contains this one, and 'dallas-az' is a two-letter STATE tail
+    // that disagrees with the listing's state.
     const s = L.normalizeCapacitySummary(LIVE);
     const names = (q) => L.matchCapacityMarkets(s, q).map((m) => m.market);
-    for (const id of ['Dallas', 'dallas', 'dallas-tx', 'Dallas, TX']) expect(names({ markets: [id] }), id).toEqual(['Dallas']);
-    for (const id of ['dallas-fort-worth', 'dal', 'north-dallas', 'dallas-az']) expect(names({ markets: [id] }), id).toEqual([]);
+    for (const id of ['Dallas', 'dallas', 'dallas-tx', 'Dallas, TX', 'dallas-fort-worth']) expect(names({ markets: [id] }), id).toEqual(['Dallas']);
+    for (const id of ['dal', 'north-dallas', 'dallas-az']) expect(names({ markets: [id] }), id).toEqual([]);
     expect(names({ states: ['tx'] })).toEqual(['Dallas']);
     expect(names({ marketRows: [{ ids: ['phoenix'], state: 'TX' }] })).toEqual([]);
     expect(names({ marketRows: [{ ids: ['phoenix-az'], state: 'AZ' }] })).toEqual(['Phoenix']);
@@ -688,5 +704,48 @@ describe('kill switch: DCHUB_CAPACITY_POINTERS=off', () => {
     for (const v of [undefined, '', 'on', '1', 'true']) {
       expect(L.capacityPointersEnabled({ [KILL]: v }), String(v)).toBe(true);
     }
+  });
+});
+
+// ── the metro-alias miss (★2026-09-16) ───────────────────────────────────────
+//
+// MEASURED, not hypothesised. With two live listings in "Dallas-Fort Worth",
+// live calls to get_market_intel carried the pointer for
+// {market:"Dallas-Fort Worth", state:"TX"} and carried NOTHING for
+// {market:"dallas"} — while "dallas" is the name every other DC Hub surface
+// uses for that market (the DCPI slug, execute_plan's own verdict line). The
+// pointer was silent exactly where a buyer was standing.
+describe('metro aliases: a leading token matches, a lookalike does not', () => {
+  const SUM = () => L.normalizeCapacitySummary({
+    ok: true, program_status: 'live', live_count: 2, total_mw: 41.2,
+    latest_updated_at: '2026-09-16T00:02:41+00:00', generated_at: '2026-09-16T05:47:48+00:00',
+    markets: [market('Dallas-Fort Worth', 'TX', 2, 41.2, ['powered_shell', 'colocation'])],
+    delivery_types: { powered_shell: 1, colocation: 1 },
+  });
+  const names = (markets) => L.matchCapacityMarkets(SUM(), { markets }).map((m) => m.market);
+
+  it('the short metro name reaches the long listing name', () => {
+    for (const id of ['dallas', 'Dallas', 'dallas-fort-worth', 'Dallas-Fort Worth',
+                      'dallas-fort-worth-tx', 'dallas-fort-worth-metro']) {
+      expect(names([id]), id).toEqual(['Dallas-Fort Worth']);
+    }
+  });
+
+  it('a mid-name token, a truncation and a disagreeing state still reach nothing', () => {
+    // 'fort'/'worth' are inside the name but not leading; 'dal' is a truncation
+    // below the token floor; 'houston' is simply elsewhere.
+    for (const id of ['fort', 'worth', 'fort-worth', 'dal', 'houston']) {
+      expect(names([id]), id).toEqual([]);
+    }
+  });
+
+  it('MUST-FAIL CONTROL: equality-only matching leaves the short name pointing at nothing', () => {
+    // The pre-fix behaviour, written out. If someone narrows the matcher back to
+    // equality this control still passes, and the two tests above go red — which
+    // is the whole point of keeping it.
+    const equalityOnly = (id, m) => L.capacitySlug(id) === L.capacitySlug(m.market);
+    const summary = SUM();
+    expect(summary.markets.some((m) => equalityOnly('dallas', m))).toBe(false);
+    expect(summary.markets.some((m) => equalityOnly('dallas-fort-worth', m))).toBe(true);
   });
 });
