@@ -12,6 +12,7 @@ test/auth-source.test.mjs
 test/automint-trial-rungs.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs
 test/cap-signal.test.mjs
+test/cap-trim-spares-capacity-teaser.test.mjs
 test/capacity-context.test.mjs
 test/capacity-source-pointers.test.mjs
 test/capacity-source-tools.test.mjs
