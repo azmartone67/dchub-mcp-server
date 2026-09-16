@@ -4235,30 +4235,101 @@ export const LISTING_TERMS_ACCEPT_API = '/api/v1/listings/terms/accept';
 export const LISTING_OAUTH_NOTE = 'An OAuth connection counts as identified: a client signed in through the DC Hub OAuth prompt needs neither claim_free_key nor bind_email.';
 const _LISTING_WALL_STATUSES = new Set([401, 403, 409, 422]);
 
-// ★ LICENCE. Capacity Source answers are shared to evaluate ONE opportunity under
-//   the introduction terms, never published. The shared stamps — withCitation's
-//   "License CC-BY-4.0: cite this data" footer, _embedSourceInContent0's _cite,
-//   and lib/attribution.mjs's citation/provenance — each DEFER to attribution a
-//   result already carries, so a listing answer that arrived bare would leave
-//   labelled free to republish. Every result these tools return therefore carries
-//   its own, forced (a backend block keeps its other fields, never its licence),
-//   plus a "Source: DC Hub…" line that withCitation reads as already stamped.
-//   The backend sends the same block (routes/exclusive_listings.py).
+// ★ LICENCE, IN TWO HALVES. Confidential Capacity Source answers are shared to
+//   evaluate ONE opportunity under the introduction terms, never published;
+//   TEASER facts are public and quotable with attribution (owner decision,
+//   2026-09-15 — see _listingIsTeaser for where the line falls). The shared
+//   stamps — withCitation's "License CC-BY-4.0: cite this data" footer,
+//   _embedSourceInContent0's _cite, and lib/attribution.mjs's citation/provenance
+//   — each DEFER to attribution a result already carries, so a listing answer
+//   that arrived bare would leave labelled free to republish. Every result these
+//   tools return therefore carries its own, classified per response, plus a
+//   "Source: DC Hub…" line matching it that withCitation reads as already
+//   stamped. The backend sends the same blocks (routes/exclusive_listings.py).
 export const LISTING_LICENSE = 'LicenseRef-DCHub-Capacity-Source-Confidential';
 export const LISTING_CITE_AS = 'DC Hub Capacity Source (confidential — not for redistribution), dchub.cloud';
+export const LISTING_REDISTRIBUTION = 'not_permitted';
 const LISTING_SOURCE_LINE = 'Source: DC Hub Capacity Source (dchub.cloud) — confidential listing data shared under the introduction terms at '
   + LISTING_TERMS_URL + '. Do not republish listing details or lead records.';
+
+// ★ TEASER FACTS ARE PUBLIC (owner decision, 2026-09-15; dchub-backend #4654).
+//   The half of Capacity Source that is meant to travel — the listings feed, the
+//   summary aggregate, and a listing card a caller has not opened — is quotable
+//   WITH attribution, because an agent that cannot quote the teaser cannot bring
+//   a buyer to it. What stays confidential is the half a provider only ever
+//   shares to evaluate ONE opportunity: full detail, and anything released after
+//   the provider accepts a deal registration.
+//
+//   This server used to stamp EVERY listings answer confidential, including the
+//   teasers, so the backend's public citation lost to ours and agents were told
+//   not to redistribute facts they were free to quote. It now classifies the
+//   RESPONSE (see _listingIsTeaser) and stamps to match.
+export const LISTING_TEASER_LICENSE = 'CC-BY-4.0';
+export const LISTING_TEASER_CITE_AS = 'DC Hub Capacity Source, dchub.cloud';
+export const LISTING_TEASER_REDISTRIBUTION = 'permitted_with_attribution';
+export const LISTING_TEASER_LICENSE_URL = 'https://creativecommons.org/licenses/by/4.0/';
+// Rendered beside a teaser payload. It KEEPS the "Source: DC Hub" prefix, which
+// is what withCitation reads as already-stamped — without it the generic CC-BY
+// footer would be appended and claim the whole service's licence for a listing.
+const LISTING_SOURCE_LINE_TEASER = 'Source: DC Hub Capacity Source (dchub.cloud) — teaser listing facts under '
+  + LISTING_TEASER_LICENSE + ': quotable with attribution as "' + LISTING_TEASER_CITE_AS
+  + '". Full listing detail, and anything released once a provider accepts a deal registration, is confidential and'
+  + ' governed by the introduction terms at ' + LISTING_TERMS_URL + '.';
+
+// ★ WHICH HALF IS THIS? Derived from the RESPONSE, never from the tool that is
+//   asking — the same handler returns both halves, and `source_capacity` alone
+//   answers a public feed, a locked card and a fully released listing.
+//
+//   TEASER   — a locked single listing (`locked === true`), the listings feed
+//              (an `items` array) and the cached summary read (`live_count`).
+//   CONFIDENTIAL — full detail (`locked === false`), a released disclosure
+//              (`disclosure.released === true`), and every terms, registration
+//              or ledger answer, which carries none of the teaser markers and
+//              so lands on the fail-closed default below.
+//
+//   ★ FAIL CLOSED. The confidential signals are tested FIRST, so a contradictory
+//     body (released details beside `locked: true`) is confidential, and
+//     anything unrecognised — a non-object, a wall, a receipt, a shape we have
+//     not seen — is confidential too. A teaser mislabelled confidential costs a
+//     quote; a confidential answer mislabelled teaser leaks a provider's site.
+export function _listingIsTeaser(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const d = payload.disclosure;
+  if (d && typeof d === 'object' && !Array.isArray(d) && d.released === true) return false;
+  if (payload.locked === false) return false;
+  if (payload.locked === true) return true;
+  if (Array.isArray(payload.items)) return true;
+  if (Number.isInteger(payload.live_count)) return true;
+  return false;
+}
 
 export function _listingConfidential(payload) {
   const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
-  const attr = { source: 'DC Hub Capacity Source', url: 'https://dchub.cloud/listings',
-                 license: LISTING_LICENSE, license_url: LISTING_TERMS_URL, cite_as: LISTING_CITE_AS };
+  const teaser = _listingIsTeaser(payload);
+  const attr = teaser
+    ? { source: 'DC Hub Capacity Source', url: 'https://dchub.cloud/listings',
+        license: LISTING_TEASER_LICENSE, license_url: LISTING_TEASER_LICENSE_URL,
+        cite_as: LISTING_TEASER_CITE_AS, redistribution: LISTING_TEASER_REDISTRIBUTION }
+    : { source: 'DC Hub Capacity Source', url: 'https://dchub.cloud/listings',
+        license: LISTING_LICENSE, license_url: LISTING_TERMS_URL,
+        cite_as: LISTING_CITE_AS, redistribution: LISTING_REDISTRIBUTION };
+  // The backend owns the teaser licence, so on that half its block WINS and ours
+  // only fills what it did not send (this server is then no longer an override,
+  // and the licence flips the moment #4654 deploys). On the confidential half
+  // ours still wins, because a listing answer that arrived bare — or labelled
+  // public by mistake — must never leave quotable.
+  const merge = teaser
+    ? (block) => ({ ...attr, ...obj(block) })
+    : (block) => ({ ...obj(block), ...attr });
+  const citation = merge(p.citation);
+  const cite = (typeof citation.cite_as === 'string' && citation.cite_as.trim())
+    ? citation.cite_as.trim() : (teaser ? LISTING_TEASER_CITE_AS : LISTING_CITE_AS);
   return { ...p,
-           citation: { ...obj(p.citation), ...attr },
-           provenance: { ...obj(p.provenance), ...attr, redistribution: 'not_permitted' },
+           citation,
+           provenance: merge(p.provenance),
            _source: 'DC Hub Capacity Source — dchub.cloud',
-           _cite: LISTING_CITE_AS };
+           _cite: cite };
 }
 
 // Rendered lines (2026-09-15) ride BETWEEN the confidential JSON and the source
@@ -4266,10 +4337,17 @@ export function _listingConfidential(payload) {
 // that renders reads or changes the licence.
 function _listingResult(payload, extra = {}, lines = []) {
   const text = (Array.isArray(lines) ? lines : []).filter((l) => typeof l === 'string' && l).join('\n');
+  const stamped = _listingConfidential(payload);
+  // ★ The line is read off the licence the payload ACTUALLY carries, not off the
+  //   predicate a second time: if the backend hands a teaser shape a confidential
+  //   citation, the stamp defers to it, and the rendered text must say the same
+  //   thing. Re-running the predicate here could disagree with the JSON above it.
+  const sourceLine = stamped.citation && stamped.citation.license === LISTING_TEASER_LICENSE
+    ? LISTING_SOURCE_LINE_TEASER : LISTING_SOURCE_LINE;
   return { ...extra, content: [
-    { type: 'text', text: JSON.stringify(_listingConfidential(payload)) },
+    { type: 'text', text: JSON.stringify(stamped) },
     ...(text ? [{ type: 'text', text }] : []),
-    { type: 'text', text: LISTING_SOURCE_LINE },
+    { type: 'text', text: sourceLine },
   ] };
 }
 const _LISTING_401_STEPS = {

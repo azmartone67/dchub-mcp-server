@@ -197,6 +197,30 @@ const LISTING_KW = { ...DETAIL_UNLOCKED.listing, capacity_kw: 40000, region: 'no
 const DETAIL_RELEASED = { ...DETAIL_UNLOCKED, listing: LISTING_KW, disclosure: DISCLOSURE_RELEASED };
 const DETAIL_PENDING = { ...DETAIL_UNLOCKED, listing: LISTING_KW, disclosure: DISCLOSURE_PENDING };
 
+// ── the licence split (2026-09-15, owner decision; dchub-backend #4654) ──────
+// The backend sends the PUBLIC block on teaser-level responses (the feed, the
+// summary, a locked or anonymous single listing) and the CONFIDENTIAL block on
+// full detail, a released identity and every terms/registration/ledger answer.
+// Both blocks appear here verbatim, so this server's deference is tested
+// against what actually arrives rather than against a paraphrase of it.
+const CITATION_PUBLIC = {
+  source: 'DC Hub Capacity Source', url: 'https://dchub.cloud/listings',
+  license: 'CC-BY-4.0', redistribution: 'permitted_with_attribution',
+  cite_as: 'DC Hub Capacity Source, dchub.cloud',
+};
+const CITATION_CONFIDENTIAL = {
+  source: 'DC Hub Capacity Source', url: 'https://dchub.cloud/listings',
+  license: 'LicenseRef-DCHub-Capacity-Source-Confidential', redistribution: 'not_permitted',
+  license_url: 'https://dchub.cloud/listings#terms',
+  cite_as: 'DC Hub Capacity Source (confidential — not for redistribution), dchub.cloud',
+};
+// GET /api/v1/listings/summary — the cached aggregate behind the pointers.
+const SUMMARY_BODY = {
+  ok: true, live_count: 2, total_mw: 40.5, latest_updated_at: '2026-09-15T12:00:00+00:00',
+  generated_at: '2026-09-15T12:05:00+00:00', program_status: 'live',
+  markets: [{ market: 'Dallas', state: 'TX', country: 'US', count: 1, mw: 40, delivery_types: ['powered_shell'] }],
+};
+
 // ── a stubbed network that records every call ────────────────────────────────
 let S, TOOLS, realFetch;
 let calls = [];
@@ -754,22 +778,36 @@ describe('initialize instructions mention the program', () => {
   });
 });
 
-// ── licence: listing answers are confidential, never CC-BY ───────────────────
-// The shared stamps (withCitation's CC-BY footer, _embedSourceInContent0's _cite,
-// lib/attribution.mjs) each defer to attribution a result already carries. Run
-// the WHOLE handler chain per result shape and search the WHOLE result: a bare
-// listing answer would leave labelled "CC-BY-4.0: cite this data".
-describe('Capacity Source answers carry a confidential licence end to end', () => {
+// ── licence: the TWO halves of Capacity Source ───────────────────────────────
+// Owner decision (2026-09-15; dchub-backend #4654): TEASER facts — the listings
+// feed, the summary aggregate, and a listing card nobody has opened — are public
+// and quotable WITH attribution, because an agent that may not quote the teaser
+// cannot bring a buyer to it. FULL detail, a released provider identity and
+// every terms/registration/ledger answer stay confidential.
+//
+// This server used to stamp BOTH halves confidential, overriding the backend.
+// The shared stamps (withCitation's footer, _embedSourceInContent0's _cite,
+// lib/attribution.mjs) each defer to attribution a result already carries, so
+// run the WHOLE handler chain per result shape and search the WHOLE result.
+
+// The generic whole-service footer withCitation appends to an UNSTAMPED result.
+// It claims CC-BY over DC Hub as a whole and must ride NEITHER half: on the
+// teaser half, CC-BY has to come from the listing's own citation, not from this
+// footer sailing past a result that was never stamped at all.
+const SERVICE_FOOTER = 'License CC-BY-4.0: cite this data as "DC Hub, dchub.cloud"';
+const CONFIDENTIAL_LINE = 'confidential listing data shared under the introduction terms';
+const TEASER_LINE = 'teaser listing facts under CC-BY-4.0';
+const views = (r) => [JSON.parse(r.content[0].text), r.structuredContent];
+
+describe('Capacity Source: the confidential half carries the confidential licence end to end', () => {
   const slug = 'dfw-40mw-powered-shell';
   const shapes = [
-    ['teaser feed', READ, {}, () => json(200, listWithItems(2))],
-    ['locked detail', READ, { slug }, () => json(200, DETAIL_LOCKED)],
     ['unlocked detail', READ, { slug }, () => json(200, DETAIL_UNLOCKED)],
+    ['released disclosure', READ, { slug }, () => json(200, DETAIL_RELEASED)],
     ['identity wall', WRITE, { ...COMPLETE, slug }, () => json(401, E401_SIGN_IN)],
     ['intro receipt', WRITE, { ...COMPLETE, slug }, () => json(200, INTRO_OK)],
     ['interest receipt', WRITE, { ...COMPLETE }, () => json(200, INTEREST_OK)],
     ['terms refusal', WRITE, { ...COMPLETE, accept_terms: false }, null],
-    ['terms-locked detail', READ, { slug }, () => json(200, DETAIL_LOCKED_TERMS)],
     ['acceptance receipt', ACCEPT, { accept_terms: true, terms_version: '2026-09-11' }, () => json(200, ACCEPT_OK)],
     ['acceptance refusal', ACCEPT, {}, null],
   ];
@@ -778,9 +816,9 @@ describe('Capacity Source answers carry a confidential licence end to end', () =
     const r = await call(tool, args, identifiedSeat());
     expect(r.isError).not.toBe(true);
     expect(JSON.stringify(r)).not.toMatch(/CC-BY/i);
-    const first = JSON.parse(r.content[0].text);
-    for (const view of [first, r.structuredContent]) {
+    for (const view of views(r)) {
       expect(view.citation.license).toBe(S.LISTING_LICENSE);
+      expect(view.citation.redistribution).toBe('not_permitted');
       expect(view.provenance.license).toBe(S.LISTING_LICENSE);
       expect(view.provenance.redistribution).toBe('not_permitted');
     }
@@ -788,6 +826,141 @@ describe('Capacity Source answers carry a confidential licence end to end', () =
     // merged its retrieved_at in, and the source line the tools emit is present.
     expect(typeof r.structuredContent.citation.retrieved_at).toBe('string');
     expect(textOf(r)).toContain('Source: DC Hub Capacity Source');
+    expect(textOf(r)).toContain(CONFIDENTIAL_LINE);
+    expect(textOf(r)).not.toContain(TEASER_LINE);
+  });
+});
+
+describe('Capacity Source: the teaser half stays public and quotable', () => {
+  const slug = 'dfw-40mw-powered-shell';
+  const shapes = [
+    ['teaser feed', READ, {}, () => json(200, listWithItems(2))],
+    ['teaser feed carrying the backend public citation', READ, {},
+      () => json(200, { ...listWithItems(2), citation: CITATION_PUBLIC })],
+    ['empty upcoming feed', READ, {}, () => json(200, LIST_UPCOMING_EMPTY)],
+    ['locked detail', READ, { slug }, () => json(200, DETAIL_LOCKED)],
+    ['terms-locked detail', READ, { slug }, () => json(200, DETAIL_LOCKED_TERMS)],
+  ];
+  it.each(shapes)('%s', async (_label, tool, args, respond) => {
+    responder = respond;
+    const r = await call(tool, args, identifiedSeat());
+    expect(r.isError).not.toBe(true);
+    for (const view of views(r)) {
+      // The override this change removes: the confidential stamp is GONE, and
+      // the answer is not rewritten to not_permitted.
+      expect(view.citation.license).toBe(S.LISTING_TEASER_LICENSE);
+      expect(view.citation.redistribution).toBe('permitted_with_attribution');
+      expect(view.provenance.license).toBe(S.LISTING_TEASER_LICENSE);
+      expect(view.provenance.redistribution).toBe('permitted_with_attribution');
+    }
+    expect(typeof r.structuredContent.citation.retrieved_at).toBe('string');
+    // The rendered line matches the licence it rides beside — and CC-BY is here
+    // because the listing's own citation says so, not because the generic
+    // whole-service footer was appended to an unstamped result.
+    expect(textOf(r)).toContain('Source: DC Hub Capacity Source');
+    expect(textOf(r)).toContain(TEASER_LINE);
+    expect(textOf(r)).not.toContain(CONFIDENTIAL_LINE);
+    expect(textOf(r)).not.toContain(SERVICE_FOOTER);
+  });
+});
+
+// ── the predicate itself, read off the RESPONSE ──────────────────────────────
+// Derived from the body, never from which handler called: `source_capacity`
+// alone answers a public feed, a locked card and a fully released listing.
+describe('_listingIsTeaser classifies the response, not the caller', () => {
+  it('names the teaser half', () => {
+    for (const [label, body] of [
+      ['listings feed', listWithItems(2)],
+      ['empty upcoming feed', LIST_UPCOMING_EMPTY],
+      ['filtered feed', LIST_FILTERED],
+      ['cached summary read', SUMMARY_BODY],
+      ['locked single listing', DETAIL_LOCKED],
+      ['terms-locked single listing', DETAIL_LOCKED_TERMS],
+      ['locked card with a pending disclosure', { ...DETAIL_LOCKED, disclosure: DISCLOSURE_PENDING }],
+    ]) expect(S._listingIsTeaser(body), label).toBe(true);
+  });
+
+  it('names the confidential half', () => {
+    for (const [label, body] of [
+      ['full detail', DETAIL_UNLOCKED],
+      ['full detail, price withheld', DETAIL_UNLOCKED_PRICE_WITHHELD],
+      ['released disclosure', DETAIL_RELEASED],
+      ['pending disclosure on an unlocked listing', DETAIL_PENDING],
+      ['intro receipt', INTRO_OK],
+      ['standing-requirement receipt', INTEREST_OK],
+      ['acceptance receipt', ACCEPT_OK],
+      ['already-accepted receipt', ACCEPT_ALREADY],
+      ['terms read', TERMS_OK],
+      ['identity wall', E401_SIGN_IN],
+      ['upgrade wall', E403],
+      ['terms-version mismatch', E409],
+      ['terms not accepted', E422_TERMS],
+    ]) expect(S._listingIsTeaser(body), label).toBe(false);
+  });
+
+  it('a released disclosure beside locked:true fails CLOSED', () => {
+    // A contradictory body must not be readable as a teaser: the confidential
+    // signals are tested first, so the provider's site never leaves quotable.
+    expect(S._listingIsTeaser({ ...DETAIL_LOCKED, disclosure: DISCLOSURE_RELEASED })).toBe(false);
+    expect(S._listingIsTeaser({ ...listWithItems(2), disclosure: DISCLOSURE_RELEASED })).toBe(false);
+  });
+
+  it('anything it cannot classify is confidential', () => {
+    for (const bad of [null, undefined, 'a string', 42, true, [], [TEASER], {}, { ok: true },
+                       { error: 'boom' }, { locked: 'true' }, { items: 'not an array' }]) {
+      const label = String(JSON.stringify(bad));
+      expect(S._listingIsTeaser(bad), label).toBe(false);
+      const out = S._listingConfidential(bad);
+      expect(out.citation.license, label).toBe(S.LISTING_LICENSE);
+      expect(out.citation.cite_as, label).toBe(S.LISTING_CITE_AS);
+      expect(out.provenance.redistribution, label).toBe('not_permitted');
+      expect(out._cite, label).toBe(S.LISTING_CITE_AS);
+    }
+  });
+});
+
+describe('_listingConfidential stamps the half it classified', () => {
+  it('a teaser with no citation gets the public one', () => {
+    const out = S._listingConfidential(listWithItems(1));
+    expect(out.citation.license).toBe('CC-BY-4.0');
+    expect(out.citation.cite_as).toBe('DC Hub Capacity Source, dchub.cloud');
+    expect(out.citation.redistribution).toBe('permitted_with_attribution');
+    expect(out.provenance.redistribution).toBe('permitted_with_attribution');
+    expect(out._cite).toBe('DC Hub Capacity Source, dchub.cloud');
+  });
+
+  it("a teaser PREFERS the backend's own citation", () => {
+    const out = S._listingConfidential({
+      ...listWithItems(1),
+      citation: { ...CITATION_PUBLIC, cite_as: 'DC Hub Capacity Source (teaser), dchub.cloud' },
+    });
+    expect(out.citation.cite_as).toBe('DC Hub Capacity Source (teaser), dchub.cloud');
+    expect(out.citation.license).toBe('CC-BY-4.0');
+    expect(out._cite).toBe('DC Hub Capacity Source (teaser), dchub.cloud');
+  });
+
+  it('a teaser the backend still labels confidential stays confidential', () => {
+    // dchub-backend #4654 had NOT deployed when this landed — the live feed was
+    // measured still sending the confidential block. Deferring on the teaser
+    // half is what makes the flip happen on the backend's deploy, not ours.
+    const out = S._listingConfidential({ ...listWithItems(1), citation: CITATION_CONFIDENTIAL });
+    expect(out.citation.license).toBe(S.LISTING_LICENSE);
+    expect(out.citation.redistribution).toBe('not_permitted');
+  });
+
+  it('a confidential answer OVERRIDES a backend citation that says otherwise', () => {
+    const out = S._listingConfidential({ ...DETAIL_UNLOCKED, citation: CITATION_PUBLIC });
+    expect(out.citation.license).toBe(S.LISTING_LICENSE);
+    expect(out.citation.redistribution).toBe('not_permitted');
+    expect(out.provenance.redistribution).toBe('not_permitted');
+    expect(out._cite).toBe(S.LISTING_CITE_AS);
+  });
+
+  it('keeps every other field the backend sent, on both halves', () => {
+    expect(S._listingConfidential(LIST_FILTERED).filters).toEqual(FILTERS_EU);
+    expect(S._listingConfidential(LIST_FILTERED).items).toEqual([TEASER_EU]);
+    expect(S._listingConfidential(DETAIL_UNLOCKED).listing).toEqual(DETAIL_UNLOCKED.listing);
+    expect(S._listingConfidential(DETAIL_RELEASED).disclosure).toEqual(DISCLOSURE_RELEASED);
   });
 });
 
@@ -953,7 +1126,9 @@ describe('source_capacity — search by size and location', () => {
     const first = JSON.parse(r.content[0].text);
     expect(first.filters).toEqual(FILTERS_EU);
     expect(first.items[0]).toEqual(TEASER_EU);
-    expect(first.provenance.redistribution).toBe('not_permitted');
+    // A feed is teaser-level, so it keeps the public licence rather than the
+    // confidential stamp this server used to force onto every listings answer.
+    expect(first.provenance.redistribution).toBe('permitted_with_attribution');
     expect(lines.some((l) => l.startsWith('Source: DC Hub Capacity Source (dchub.cloud)'))).toBe(true);
   });
 
