@@ -48,8 +48,39 @@ CURSOR_DIRECTORY_SLUG = "mcp-dchub"
 # of, so each listing must be named here. An empty list is a hard failure rather
 # than a quiet pass, and a slug that stops resolving is reported — a fence that
 # cannot reach its subject must not look like a clean scan.
-# Official MCP registry name (renamed 2026-09-04 from cloud.dchub/mcp-server).
-REGISTRY_NAME = "cloud.dchub/datacenter-power-grid-fiber"
+# ── The official-registry name we watch ──────────────────────────────────────
+#
+# ★2026-09-15 — DERIVED FROM server.json, NEVER TYPED HERE.
+#
+# This was hardcoded to `cloud.dchub/datacenter-power-grid-fiber`: the #338
+# rename that #390 REVERTED on 2026-09-08. That name has been `deprecated` ever
+# since and is frozen at 2.12.9 / toolCount 88, so this monitor spent a week
+# reading a DEAD listing and calling it "the official registry". The evidence is
+# committed in monitor_report.md (2026-09-14):
+#
+#   | Official MCP registry | 2.12.9 | None | cascade source |
+#   - Official registry version **2.12.9** ≠ repo canonical **2.12.12**
+#
+# Both lines are false of the live listing: `cloud.dchub/mcp-server` was 2.12.12
+# that day, exactly level with canon. A standing FALSE drift alarm is worse than
+# no alarm — it trains the reader to skip the one line that would matter.
+#
+# A hardcoded name cannot follow a rename, and this repo has now renamed twice.
+# server.json's `name` is what actually gets published, so it is the only honest
+# source — the same rule scripts/ecosystem-sync.mjs follows (serverJson.name), and
+# that is the one registry consumer that never pointed at the dead entry.
+# Unreadable => None => official_registry() reports "could not check", which is a
+# distinct state from clean. Never fall back to a literal: the literal is exactly
+# what was wrong.
+def _registry_name():
+    try:
+        n = json.load(open("server.json")).get("name")
+        return n if isinstance(n, str) and "/" in n else None
+    except Exception:
+        return None
+
+
+REGISTRY_NAME = _registry_name()
 
 CONNECTOR_SLUGS = [
     # Confirmed 2026-08-31 from the address bar of each live listing. BOTH point
@@ -492,24 +523,63 @@ def canonical():
 
 
 def official_registry():
+    """(version, toolCount, notes) for the name server.json actually publishes under.
+
+    `notes` are REGRESSION strings, not chatter: our own entry not being active,
+    or a SECOND active name in the namespace (two canonical entries). The
+    namespace holding a deprecated orphan is expected and is reported as info —
+    see REGISTRY-LISTINGS.md, "Two entries, one maintained".
+    """
+    if not REGISTRY_NAME:
+        # Never silently pick a name. Unreadable is its own verdict.
+        return None, None, ["server.json unreadable — cannot tell which official-registry name is ours (UNCHECKED, not clean)"]
     try:
         d = _get("https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub&version=latest")
         # ★ MUST filter by name, not take [0]. The `cloud.dchub` search matches
-        #   EVERY name in the namespace, and since the 2026-09-04 rename that is
-        #   two: the active entry and the deprecated `cloud.dchub/mcp-server`
-        #   left behind as a signpost. `[0]` silently reported whichever the
-        #   registry happened to order first -- i.e. it could report the frozen
-        #   version of a deprecated listing as our live one.
-        wanted = [x for x in (d.get("servers") or [])
-                  if (x.get("server", x) or {}).get("name") == REGISTRY_NAME]
+        #   EVERY name in the namespace, and since #338/#390 that is two: the
+        #   active `cloud.dchub/mcp-server` and the deprecated
+        #   `cloud.dchub/datacenter-power-grid-fiber` left behind by the reverted
+        #   rename. `[0]` silently reported whichever the registry happened to
+        #   order first -- i.e. it could report the frozen version of a
+        #   deprecated listing as our live one.
+        #   ★2026-09-15: the comment here used to name the deprecated one as
+        #   `cloud.dchub/mcp-server`. It had the two backwards, which is how the
+        #   wrong name survived review — the comment agreed with the bug.
+        rows = [x for x in (d.get("servers") or []) if (x.get("server", x) or {}).get("name")]
+        wanted = [x for x in rows if (x.get("server", x) or {}).get("name") == REGISTRY_NAME]
+        notes = []
         if not wanted:
-            return None, None
+            return None, None, [f"{REGISTRY_NAME} has no entry in the official registry search response (UNCHECKED, not clean)"]
         s = wanted[0]
         srv = s.get("server", s)
-        meta = (s.get("_meta", {}) or {}).get("io.modelcontextprotocol.registry/publisher-provided", {}) or {}
-        return srv.get("version"), meta.get("toolCount")
-    except Exception:
-        return None, None
+        official = (s.get("_meta", {}) or {}).get("io.modelcontextprotocol.registry/official", {}) or {}
+        # ★2026-09-15: publisher-provided lives on the SERVER object, not on the
+        # wrapper. Reading it off the wrapper returned None every single time, so
+        # the toolCount parity gate below (`if off_tools and ...`) was dead code
+        # for as long as it has existed. monitor_report.md carried the proof in
+        # its own table: "| Official MCP registry | 2.12.9 | None |".
+        meta = (srv.get("_meta", {}) or {}).get("io.modelcontextprotocol.registry/publisher-provided", {}) or {}
+        status = official.get("status")
+        if status and status != "active":
+            notes.append(f"Official registry entry **{REGISTRY_NAME}** is **{status}**, not active — the published listing is not live")
+        ns = REGISTRY_NAME.split("/")[0] + "/"
+        for x in rows:
+            other = (x.get("server", x) or {})
+            o_meta = (x.get("_meta", {}) or {}).get("io.modelcontextprotocol.registry/official", {}) or {}
+            o_name = other.get("name") or ""
+            if o_name == REGISTRY_NAME or not o_name.startswith(ns) or not o_meta.get("isLatest"):
+                continue
+            if o_meta.get("status") == "active":
+                notes.append(f"SECOND ACTIVE name **{o_name}**@{other.get('version')} in our namespace — two canonical entries")
+            else:
+                print(f"note: namespace also holds {o_name}@{other.get('version')} ({o_meta.get('status')}) — known orphan, see REGISTRY-LISTINGS.md")
+        return srv.get("version"), meta.get("toolCount"), notes
+    except Exception as e:
+        # Visible, but not a REGRESSION: a transient fetch failure should not page
+        # anyone, and it must not read as clean either. The table below then shows
+        # version `None`, which is what "we did not look" is supposed to look like.
+        print(f"note: official registry unreachable ({type(e).__name__}: {e}) — registry parity UNCHECKED this run, not clean")
+        return None, None, []
 
 
 def smithery_record():
@@ -1544,7 +1614,8 @@ def main(probe=False):
     # comparison — _live_tools() returns the array, the count is derived from it.
     live_list = _live_tools()
     live_tools = len(live_list) if isinstance(live_list, list) else None
-    off_ver, off_tools = official_registry()
+    off_ver, off_tools, off_notes = official_registry()
+    reasons.extend(off_notes)
     smi_name, smi_tools = smithery_record()
     gla_tools, gla_desc = glama_record()
     _conn_reg, _conn_notes = connector_regressions()

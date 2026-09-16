@@ -30,10 +30,11 @@ describe('server.json (the body GET /server.json publishes)', () => {
     // on a remote URL held by another server —
     //   "400 remote URL https://dchub.cloud/mcp/registry is already used by
     //    server cloud.dchub/mcp-server"
-    // is the exact error the rename hit in the other direction. Until
-    // cloud.dchub/datacenter-power-grid-fiber is deprecated it holds
-    // /mcp/officialregistry, so publishing the short name at that URL would be
-    // refused. /mcp/registry is also this listing's original arrival-
+    // is the exact error the rename hit in the other direction.
+    // cloud.dchub/datacenter-power-grid-fiber is now deprecated (2026-09-08) and
+    // STILL holds /mcp/officialregistry — measured 2026-09-15, deprecation does
+    // NOT release a remote URL — so publishing the short name at that URL would
+    // still be refused. /mcp/registry is also this listing's original arrival-
     // attribution path, so reverting the name restores the attribution too.
     expect(SERVER_JSON.remotes[0].url).toBe('https://dchub.cloud/mcp/registry');
     expect(SERVER_JSON.$schema).toMatch(/server\.schema\.json$/);
