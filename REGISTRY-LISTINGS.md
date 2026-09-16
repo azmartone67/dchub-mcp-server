@@ -250,6 +250,37 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 ## Categories / tags
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
 
+## Pricing line (paste wherever a form asks for pricing)
+Free tier, no key, no signup — 10 calls/day across all 91 tools. Starter $9/mo ·
+Developer $49/mo · **Pro $99/mo** (2,000 calls/day + `analyze_site`,
+`compare_sites`, `get_grid_intelligence`, `get_fiber_intel`, PDF + CSV export) ·
+Enterprise custom. There is also a $10 one-time 1,000-call pack — no
+subscription. https://dchub.cloud/pricing
+
+> Keep this block in sync with `tier_registry.py` in dchub-backend, which is
+> where the prices are canonical. Pro was $299/mo until 2026-09-05; a listing
+> that still says $299 is the single most expensive stale number here, because
+> it is the one a reader uses to decide.
+
+## ★ OWNER HAND-EDIT — mcp.so (2026-09-16)
+Nothing in this repo can write the mcp.so listing: it is a paid ($39 one-time),
+signed-in submission, so it stays an owner action. Everything it asks for is
+above; paste in this order, and use the TAGGED url or the listing's arrivals are
+unattributable for its whole life:
+
+- **Name:** DC Hub
+- **URL:** `https://dchub.cloud/mcp/mcpso`  ← tagged, NOT the bare `/mcp`
+- **One-liner:** the ≤100-char line above
+- **Description:** the Short description above (91 tools · 21,900+ facilities ·
+  300+ markets · 2,200+ deals · Capacity Source), then the Pricing line
+- **Tags:** the Categories / tags line above
+- **Manifest:** `https://dchub.cloud/.well-known/mcp.json`
+
+Counts in this file are walked with the canon (currently 91 tools / 21,900+
+facilities / 2,200+ deals). Before pasting, re-read
+`https://dchub.cloud/api/v1/canon/phrases` and use what it returns — the numbers
+move every few days and a listing is edited by hand perhaps twice a year.
+
 ## Connection
 - Transport: **Streamable HTTP**
 - URL: `https://dchub.cloud/mcp`
