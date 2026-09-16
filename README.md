@@ -28,6 +28,8 @@ The only MCP server combining facility data, infrastructure, and live grid intel
 "Is behind-the-meter gas power cheaper than the grid in Texas?"
 "What's the grid mix in Atlanta (SOCO) and is power available?"
 "Get fiber routes between Ashburn and Atlanta"
+"Find 5 MW of powered shell I can lease in Texas"
+"Who has 500 kW of colocation capacity anywhere in Europe?"
 ```
 
 Your AI assistant gets real-time, structured answers — not links to PDFs.
@@ -43,6 +45,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
 - **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
+- **Capacity Source** — off-market and available capacity to buy or lease (powered land, powered shells, turnkey, colocation), searchable by size in kW or MW and by location
 
 **91 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
@@ -77,6 +80,37 @@ Beyond the 91 tools, DC Hub ships **14 guided prompts** — they surface as slas
 - `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then a deal registration (the provider's identity, site and contact are released only if the provider accepts)
 
 Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
+
+## Capacity Source — capacity to buy or lease
+
+Everything above answers *where to build*. **[Capacity Source](https://dchub.cloud/listings)** answers *what is available now*: off-market and available data center capacity — powered land, powered shells, turnkey capacity and colocation — including sites that are not publicly marketed, for enterprise and agent-led procurement.
+
+**Searchable by size and by location.** `source_capacity` takes a size — `min_kw` in kW, or `min_mw` in MW — and a location:
+
+- `region` — `north_america`, `latin_america`, `europe`, `asia_pacific`, `middle_east_africa` (the aliases `emea`, `apac`, `latam` and `americas` also resolve)
+- `location` — free text matched against each listing's region, country, state and metro, e.g. `"Germany"` or `"Texas, Phoenix"`
+- `market`, `state`, `delivery_type` (`land` · `powered_shell` · `turnkey` · `colocation`) and `available_by` narrow further; `slug` returns a single listing
+
+So *"500 kW anywhere in Europe"* is `min_kw=500, region=europe`. Any caller — keyless included — gets the listing cards, the filters that were applied, and when each listing was last updated.
+
+**Then a deal registration, not a lead form.** `request_capacity_intro` registers a deal: DC Hub sends the provider your company name and your requirement, and nothing more. The provider accepts or declines. Identities, site detail and contacts are exchanged **only if the provider accepts** — on a decline, nothing is shared. `accept_capacity_terms` records your agreement to the [introduction terms](https://dchub.cloud/listings#terms) once, which is what opens listing detail for you.
+
+The `/dchub:find_capacity` prompt runs the whole path: requirement → listings → deal registration.
+
+## Task-scoped endpoints
+
+`https://dchub.cloud/mcp` serves the full catalog. A client that only needs one job can bind to a narrower surface instead — same server, same key, a much smaller tool list in the context window. Every pack except `/mcp/deepresearch` carries `discover_tools`, `claim_free_key`, `unlock_more_data` and `summarize_for_citation`, so a pack is never a dead end; `/mcp/deepresearch` is deliberately exactly the two tools the Deep Research connector contract expects.
+
+| Endpoint | What it covers |
+|---|---|
+| `https://dchub.cloud/mcp` | everything — all 91 tools |
+| `https://dchub.cloud/mcp/siting` | site selection end to end: find, analyze, score, compare, rank — plus Capacity Source |
+| `https://dchub.cloud/mcp/grid` | power availability: live ISO telemetry, interconnection queue, hosting + retirement headroom, prices |
+| `https://dchub.cloud/mcp/fiber` | routes, metro fiber, subsea cables, peering, lead-in planning, latency clustering |
+| `https://dchub.cloud/mcp/deals` | transactions, pipeline, news, market intelligence — plus Capacity Source |
+| `https://dchub.cloud/mcp/gas` | behind-the-meter and gas-fired economics against grid prices and forward generation |
+| `https://dchub.cloud/mcp/site` | the in-browser agent surface: find a record, read it, quote it, mint a key |
+| `https://dchub.cloud/mcp/deepresearch` | the OpenAI Deep Research connector contract: `search` + `fetch`, nothing else |
 
 ## Why DC Hub vs other directories
 
