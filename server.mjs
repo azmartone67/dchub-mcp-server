@@ -4123,10 +4123,35 @@ export function _capacityPointerQuery(name, args, result) {
 export function _withCapacityPointer(result, name, args, outSchema) {
   try {
     if (!_CAPACITY_POINTER_TOOLS.has(name) || !capacityPointersEnabled()) return result;
-    if (!result || typeof result !== 'object' || result.isError || !Array.isArray(result.content)) return result;
-    // _flagUpstreamError runs AFTER this step and marks upstream failures
-    // isError. Ask the same predicate now, so an error never carries a pointer.
-    if (_flagUpstreamError(result, name).isError) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    // ★ 2026-09-16: isError is not one signal, and reading it as one silently
+    // withheld the pointer from the responses that need it most.
+    //
+    //   Measured: anonymous keyless /mcp, listings live in Dallas-Fort Worth.
+    //   get_market_context / find_sites / site_selection_canvas -> pointer.
+    //   get_market_intel -> ABSENT, 0/9 calls, same seat, same market.
+    //
+    // Nothing about the tool or the market matcher differed. get_market_intel
+    // is in PAID_ONLY_TOOLS, so an ungated seat gets it in full while a free or
+    // anonymous one is served a preview (isError = PREVIEW_ISERROR, r51) or a
+    // paywall wall (isError = _wallIsError(), r-wall-transport). Both DEFAULT
+    // to true, and the blanket isError check above dropped the pointer on both
+    // — so the tools that wall hardest lost it exactly when they walled, and
+    // flipping DCHUB_PREVIEW_ISERROR silently moved the pointer with it.
+    //
+    // A served preview, tease or wall is not a failure — _flagUpstreamError's
+    // own SCOPE note says so ("a served preview is NOT an error"). They are the
+    // single best place for this block: the agent has just been told it cannot
+    // have the data, and `source_capacity` — what the pointer names — is NOT
+    // behind that wall.
+    //
+    // So the test is the payload, not the flag. An allowlist of served-envelope
+    // markers was tried first and was already wrong on arrival: it named
+    // preview_is_partial and for_your_human, and get_market_context's free-tier
+    // envelope carries neither (it stamps `tease`). Asking the failure side
+    // instead needs no such list — a preview, a tease and a wall all lack a
+    // mitigation block, and both failure families always have one.
+    if (_isFailureEnvelope(result)) return result;
     // Lean-output platforms get the data and nothing else, the rule the
     // front-door and cookbook nudges already follow.
     if (_isCleanPlatform()) return result;
@@ -14948,6 +14973,28 @@ export function _stampIdentitySource(result) {
   }
 }
 
+// The POSITIVE test for "this response is a FAILURE, not an answer", extracted
+// so its two consumers — _flagUpstreamError below and _withCapacityPointer —
+// cannot drift apart. Two markers: the mitigation block, or the literal
+// "API <status>" string. Matching a bare truthy `error` would be too loose — a
+// successful payload may carry a nested error field.
+//
+// The mitigation block reaches BOTH failure families, which is why this one
+// predicate is enough: _upstreamError() writes it for a backend 4xx/5xx, and
+// lib/error-envelope.mjs writes it for every local refusal (_isoError,
+// _coordsError, missing_identifier).
+//
+// It reads the PAYLOAD and never result.isError, because isError is NOT one
+// signal: a served preview (DCHUB_PREVIEW_ISERROR) and a paywall wall
+// (_wallIsError) both set it as a TRANSPORT choice on a response that did
+// answer. Neither carries a mitigation block, so neither reads as a failure.
+export function _isFailureEnvelope(result) {
+  const sc = result && result.structuredContent;
+  if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return false;
+  return !!sc._error_mitigation
+    || (typeof sc.error === 'string' && /^API \d{3}$/.test(sc.error));
+}
+
 // ★★★ r-upstream-iserror (2026-08-25): LOCAL argument validation has always
 // stamped isError:true — _isoError and _coordsError both do, literally. An
 // UPSTREAM rejection of the same argument did not. Measured live 2026-08-25:
@@ -14976,14 +15023,7 @@ export function _flagUpstreamError(result, toolName) {
   try {
     // Never override an explicit decision — see SCOPE above.
     if (!result || result.isError !== undefined) return result;
-    const sc = result.structuredContent;
-    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
-    // Two markers, both written by _upstreamError(): the mitigation block, or
-    // the literal "API <status>" string. Matching a bare truthy `error` would
-    // be too loose — a successful payload may carry a nested error field.
-    const upstream = !!sc._error_mitigation
-      || (typeof sc.error === 'string' && /^API \d{3}$/.test(sc.error));
-    if (!upstream) return result;
+    if (!_isFailureEnvelope(result)) return result;
     return { ...result, isError: true };
   } catch {
     // Fail-soft: a flag is never worth failing a response over.

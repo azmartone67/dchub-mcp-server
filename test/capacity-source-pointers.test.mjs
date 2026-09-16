@@ -343,7 +343,14 @@ describe('pointers on tool results', () => {
     // control: the same object DOES get a pointer on a pointer tool
     expect(pointerOf(await S._withCapacityPointer(ok, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE))).toBeTruthy();
     expect(await S._withCapacityPointer(ok, 'search_facilities', { state: 'TX' }, S._OUTPUT_ENVELOPE)).toBe(ok);
-    const err = { ...ok, isError: true };
+    // A FAILURE never carries one. The marker is the payload's mitigation
+    // block, not isError — ★2026-09-16: this case used to be a bare
+    // { ...ok, isError: true }, which is the shape of a SERVED preview or
+    // paywall wall, not of a failure, and asserting it got nothing is what
+    // kept the pointer off every gated response. See the gated-seat block.
+    const err = { ...ok, isError: true,
+      structuredContent: { _entity: 'response', error: 'API 500',
+        _error_mitigation: { error_code: 'upstream_error' } } };
     expect(await S._withCapacityPointer(err, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE)).toBe(err);
     const lean = await S._ctxALS.run({ ...SEAT, platform: 'chatgpt' },
       () => S._withCapacityPointer(ok, 'find_sites', { state: 'TX' }, S._OUTPUT_ENVELOPE));
@@ -401,6 +408,109 @@ describe('pointers on tool results', () => {
 });
 
 // ── outputSchema: a pointer must never kill a tool ────────────────────────────
+// ── 2b. the GATED seats: a served preview, tease or wall keeps its pointer ───
+//
+// ★2026-09-16. Measured live, anonymous keyless https://dchub.cloud/mcp, with
+// /api/v1/listings/summary reporting live_count 2 in Dallas-Fort Worth / TX:
+//
+//   get_market_context {market:"dallas"}                 -> pointer
+//   find_sites         {state:"TX", min_voltage_kv:230}   -> pointer
+//   analyze_site       {lat:32.78, lon:-96.80, state:"TX"}-> pointer
+//   get_market_intel   {market:"dallas"}                  -> ABSENT, 0/9 calls
+//
+// Nothing about the tool, the arguments or the market matcher differed: the
+// handler never renames `market`, and get_market_context reaches the same
+// markets.push(a.market) branch with the same short name. What differed is the
+// SEAT. get_market_intel is in PAID_ONLY_TOOLS, so the pro seat every other
+// case in this file uses gets it in full, while a free or anonymous one is
+// served a preview (isError = PREVIEW_ISERROR, r51) or a paywall wall
+// (isError = _wallIsError(), r-wall-transport). Both DEFAULT to true, and
+// _withCapacityPointer refused any truthy isError — so the tools that wall
+// hardest dropped the pointer exactly when they walled.
+//
+// Every case in MATCHING already covered get_market_intel; all of them ran on
+// SEAT, tier 'pro', so not one of them ever reached a gated branch. This block
+// runs the SAME fixture list on the seats that gate, and asserts it really
+// reached those branches rather than passing on six ungated answers.
+describe('pointers on gated seats', () => {
+  const ANON = { ...SEAT, api_key: null, tier: 'free', session_id: 'sess-capacity-anon' };
+  const FREE = { ...SEAT, api_key: 'dch_live_capacity_free_seat', tier: 'free', session_id: 'sess-capacity-free' };
+
+  for (const [label, seat] of [['anonymous', ANON], ['free keyed', FREE]]) {
+    it(`live, ${label}: every matching call still carries the block and one line`, async () => {
+      await withSummary(LIVE);
+      let gated = 0;
+      for (const [name, args, want] of MATCHING) {
+        const r = await call(name, args, seat);
+        const why = `${name} @ ${label}: ` + JSON.stringify(r.structuredContent).slice(0, 400);
+        const block = pointerOf(r);
+        expect(block, why).toBeTruthy();
+        expect(block.live_listings, why).toBe(want.live_listings);
+        expect(block.mw, why).toBe(want.mw);
+        expect(block.next_step, why).toEqual({ tool: 'source_capacity', args: want.args });
+        expect(pointerLines(r), why).toHaveLength(1);
+        if (r.isError) gated += 1;
+      }
+      // ★ NOT decoration. Without this the whole block passes vacuously the day
+      // the gate stops firing on these seats — six ungated answers carrying a
+      // pointer proves nothing about the branch this guard exists for.
+      expect(gated, `no ${label} call reached a gated isError branch; this guard tested nothing`)
+        .toBeGreaterThan(0);
+    });
+  }
+
+  it('the reported case, by name: anonymous get_market_intel points at Dallas', async () => {
+    await withSummary(LIVE);
+    const r = await call('get_market_intel', { market: 'dallas' }, ANON);
+    const why = JSON.stringify(r.structuredContent).slice(0, 400);
+    // The branch this is about: PAID_ONLY_TOOLS gates an anonymous seat, so the
+    // served envelope carries an explicit isError. Asserted, not assumed — if
+    // this tool ever stops gating here, the case below stops being a regression
+    // test and must be rewritten rather than left passing.
+    expect(r.isError, `expected a gated envelope, got an ungated answer: ${why}`).toBe(true);
+    expect(pointerOf(r), why).toMatchObject({ live_listings: 2, mw: 80 });
+    expect(pointerLines(r), why).toHaveLength(1);
+  });
+
+  // The two paywall walls need backend credit/gate state this harness does not
+  // fake, so they are pinned at the unit level, in the exact shape server.mjs
+  // returns them: prose, isError from _wallIsError(), and an sc with
+  // for_your_human and NO mitigation block.
+  it('a paywall wall is a served answer, not a failure: it keeps the pointer', async () => {
+    await withSummary(LIVE);
+    const wall = {
+      content: [{ type: 'text', text: '🔒 You have used DC Hub free allowance' }],
+      isError: true,
+      structuredContent: { error: 'metered_over_threshold', tool: 'get_market_intel',
+        current_tier: 'free', next_tool: 'unlock_more_data',
+        for_your_human: { url: 'https://dchub.cloud/relay/abc' } },
+    };
+    expect(S._isFailureEnvelope(wall)).toBe(false);
+    const out = await S._withCapacityPointer(wall, 'get_market_intel', { market: 'dallas' }, S._OUTPUT_ENVELOPE);
+    expect(pointerOf(out)).toMatchObject({ live_listings: 2, mw: 80 });
+    expect(pointerLines(out)).toHaveLength(1);
+    // and the wall's own transport is untouched
+    expect(out.isError).toBe(true);
+  });
+
+  it('both failure families still get nothing, on the same gated seat', async () => {
+    await withSummary(LIVE);
+    // upstream 4xx/5xx — _upstreamError's markers
+    const upstream = { content: [{ type: 'text', text: '{}' }], isError: true,
+      structuredContent: { error: 'API 503', _error_mitigation: { error_code: 'upstream_unavailable' } } };
+    expect(S._isFailureEnvelope(upstream)).toBe(true);
+    expect(await S._withCapacityPointer(upstream, 'get_market_intel', { market: 'dallas' }, S._OUTPUT_ENVELOPE))
+      .toBe(upstream);
+    // a LOCAL refusal — lib/error-envelope.mjs writes the same block
+    const local = { content: [{ type: 'text', text: '{}' }], isError: true,
+      structuredContent: { error: 'missing_coordinates',
+        _error_mitigation: { error_code: 'missing_coordinates', severity: 'parameter_adjustment' } } };
+    expect(S._isFailureEnvelope(local)).toBe(true);
+    expect(await S._withCapacityPointer(local, 'analyze_site', { state: 'TX' }, S._OUTPUT_ENVELOPE))
+      .toBe(local);
+  });
+});
+
 describe('outputSchema', () => {
   it('control: the SDK really answers -32602 when structuredContent has a key its schema refuses', async () => {
     const srv = new McpServer({ name: 'probe', version: '0' });
