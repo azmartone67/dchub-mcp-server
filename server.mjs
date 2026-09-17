@@ -4746,8 +4746,14 @@ function _listingNextStepsNote(tool, status, body, steps) {
 // a second copy of it is a second thing to keep in step with the contract.
 // `opens` is the only part that differs ("This listing opens" / "These listings
 // open"), so the single-listing wording is unchanged to the byte.
-function _listingTermsNote(tool, ver, opens) {
-  return opens + ' once your human accepts the introduction terms (access.unlock.terms). Show them the terms;'
+// ★ `at` is the path to the terms IN THE PAYLOAD THIS NOTE SHIPS WITH, and it
+//   differs per surface: a listing carries them at access.unlock.terms, the
+//   catalogue at caller_access.unlock.terms (or access.unlock.terms when the
+//   body used the alias). It was hardcoded to the listing's path, so the browse
+//   note sent agents to a key that surface does not have. A note naming a field
+//   is only as good as the field resolving in the body beside it.
+function _listingTermsNote(tool, ver, opens, at) {
+  return opens + ' once your human accepts the introduction terms (' + at + '). Show them the terms;'
     + ' only after they agree, call accept_capacity_terms with accept_terms=true'
     + (ver ? ' and terms_version="' + ver + '"' : '') + ', then call ' + tool + ' again.';
 }
@@ -4781,6 +4787,7 @@ function _listingTermsNote(tool, ver, opens) {
 const _LISTING_ACCESS_STEPS = { ..._LISTING_401_STEPS, terms_acceptance_required: ['accept_capacity_terms'] };
 
 function _listingBrowseAccess(tool, body) {
+  const key = body && body.caller_access ? 'caller_access' : 'access';
   const block = (body && (body.caller_access || body.access)) || null;
   const access = block && typeof block === 'object' && !Array.isArray(block) ? block : null;
   if (!access || access.granted === true) return null;
@@ -4795,7 +4802,8 @@ function _listingBrowseAccess(tool, body) {
   // The identity reasons here are the same reasons the 401 wall carries, so they
   // reuse that wall's note rather than growing a second identity sentence.
   const next_steps_note = reason === 'terms_acceptance_required'
-    ? _listingTermsNote(tool, terms && typeof terms.version === 'string' ? terms.version : null, 'These listings open')
+    ? _listingTermsNote(tool, terms && typeof terms.version === 'string' ? terms.version : null,
+                        'These listings open', key + '.unlock.terms')
     : _listingNextStepsNote(tool, 401, body, next_steps);
   return { next_steps, next_steps_note };
 }
@@ -4827,7 +4835,7 @@ export function _listingsToolResult(tool, r) {
       const terms = body.access.unlock && body.access.unlock.terms;
       const ver = terms && typeof terms.version === 'string' ? terms.version : null;
       return _listingResult({ ...body, next_steps: ['accept_capacity_terms', tool],
-        next_steps_note: _listingTermsNote(tool, ver, 'This listing opens') }, {}, _listingLines(body));
+        next_steps_note: _listingTermsNote(tool, ver, 'This listing opens', 'access.unlock.terms') }, {}, _listingLines(body));
     }
     // Browse (no slug): the catalogue answers 200 with locked cards, so the
     // caller-level gate rides in the body rather than in the status.

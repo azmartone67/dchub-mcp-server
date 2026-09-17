@@ -1538,6 +1538,30 @@ describe('browse-path access block → next_steps', () => {
     }
   });
 
+  // ★ A note that names a field is only as good as that field RESOLVING in the
+  //   body beside it. The terms note was hardcoded to the single listing's
+  //   `access.unlock.terms` and reused on the catalogue, which publishes
+  //   `caller_access` — so the shipped note sent agents to a key that surface
+  //   does not have. This reads the path back OUT of the note and walks it, so
+  //   any future misdirection fails here rather than in production.
+  const pathNamedIn = (note) => (note.match(/\(([a-z_]+(?:\.[a-z_]+)+)\)/) || [])[1];
+  const resolve = (obj, dotted) => dotted.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+
+  it('the terms note names a path that resolves in the payload it ships with', async () => {
+    for (const [label, key] of [['caller_access', 'caller_access'], ['access alias', 'access']]) {
+      const sc = (await browseResult(browseWith(BROWSE_ACCESS_TERMS, key))).structuredContent;
+      const named = pathNamedIn(sc.next_steps_note);
+      expect(named, label).toBe(key + '.unlock.terms');
+      expect(resolve(sc, named), label + ' resolves').toEqual(TERMS_V15);
+    }
+    // The single listing keeps its own path, and it resolves there too.
+    responder = () => json(200, DETAIL_LOCKED_TERMS);
+    const one = (await call(READ, { slug: TEASER.slug })).structuredContent;
+    const named = pathNamedIn(one.next_steps_note);
+    expect(named).toBe('access.unlock.terms');
+    expect(resolve(one, named)).toEqual(TERMS_BLOCK);
+  });
+
   it('email_binding_required names bind_email only', async () => {
     responder = () => json(200, browseWith({
       ...BROWSE_ACCESS_SIGN_IN, reason: 'email_binding_required',
@@ -1551,7 +1575,7 @@ describe('browse-path access block → next_steps', () => {
     responder = () => json(200, browseWith(BROWSE_ACCESS_TERMS));
     const sc = (await call(READ, {})).structuredContent;
     expect(sc.next_steps).toEqual(['accept_capacity_terms', READ]);
-    expect(sc.next_steps_note).toContain('access.unlock.terms');
+    expect(sc.next_steps_note).toContain('caller_access.unlock.terms');
     expect(sc.next_steps_note).toContain('terms_version="' + TERMS_V15.version + '"');
     expect(sc.next_steps_note).toContain('then call ' + READ + ' again.');
   });
