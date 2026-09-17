@@ -5278,6 +5278,48 @@ const FREE_FULL_TOOLS = new Set([
   'accept_capacity_terms',
 ]);
 
+// ── r-cap-teaser (2026-09-16): an over-cap trim must not re-gate the gate ────
+// FREE_FULL_TOOLS above exempts the Capacity Source trio from the anonymous
+// trim — but ONLY the final-return trim consults it (`!c.api_key && tier ===
+// 'free' && !FREE_FULL_TOOLS.has(name)`). The two OVER-CAP branches call
+// trimForTrial unconditionally, and that is deliberate: it is what stops an
+// over-cap harvester from pulling get_grid_scoreboard or the 278k-record
+// get_hosting_capacity corpus at full depth all day. Keep that.
+//
+// It is the wrong rule for a capacity TEASER. Measured live 2026-09-16, an
+// over-cap anonymous agent got:
+//     count: null, capacity_mw: null, capacity_kw: null,
+//     contiguous_kw: null, min_contract_kw: null
+// while an anonymous BROWSER, same IP, same minute, read count 2 / 1.2 MW /
+// 1200 kW / 500 kW / 100 kW from /api/v1/listings. Why the harvester rule does
+// not transfer here:
+//   • Those rows are served uncapped and keyless at /api/v1/listings, so
+//     trimming them over MCP protects nothing one curl does not already give.
+//   • capacity_mw, capacity_kw, contiguous_kw and min_contract_kw all match
+//     _isMetricKey, so the trim nulls exactly the numbers v2.12.18 instructs
+//     the agent to relay ("relay those two numbers when you explain why a
+//     listing did or did not fit"). The agent cannot obey its own instructions.
+//   • count/pocket_locked_count null out too, so the agent cannot even say how
+//     many listings exist — the channel meant to DRIVE demand is the blind one.
+//   • The teaser is already backend-gated (locked, access_required,
+//     lock_reason); identity, contact and detail stay walled either way.
+//     Trimming an already-gated teaser gates the gate.
+//   • request_capacity_intro answers an anonymous caller with a 401 identity
+//     wall whose next_steps ARE the ask; the trim bolts a second, paid _upgrade
+//     CTA onto it — the exact harm the comment above cites.
+// The _upgrade nudge still rides along on these responses: the cap stays a
+// carrot, it just stops eating the advertisement.
+const CAP_TRIM_EXEMPT = new Set([
+  'source_capacity',
+  'request_capacity_intro',
+  'accept_capacity_terms',
+]);
+// Every over-cap degradation routes through here, so the exemption cannot be
+// applied to one cap branch and forgotten on the other.
+function _capTrim(parsed, name) {
+  return CAP_TRIM_EXEMPT.has(name) ? parsed : trimForTrial(parsed, name);
+}
+
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
 // Diagnosis (live probe, 2026-06-14): a one-call, no-email free key
 // (dch_live_*, tier='free') was returning the FULL get_market_intel report —
@@ -13835,7 +13877,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
             status = 'anon_daily_cap';
-            const trimmed = trimForTrial(parsed, name);
+            const trimmed = _capTrim(parsed, name);
             const _sidc = c.session_id || 'no-session';
             // r-tease-pack (2026-06-20): the over-cap nudge is a CARROT, not a
             // wall (still returns the preview). Lead with the free key (keep
@@ -14051,7 +14093,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try {
             const parsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (parsed && typeof parsed === 'object') {
-              const trimmed = trimForTrial(parsed, name);
+              const trimmed = _capTrim(parsed, name);
               const _sid = c.session_id || 'no-session';
               trimmed._upgrade = {
                 tier: _paidTaste ? String(_gateTier) : 'trial',
@@ -21426,7 +21468,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
+export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
 // `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous
