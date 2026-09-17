@@ -1471,7 +1471,13 @@ const BROWSE_ACCESS_TERMS = {
   unlock: { web_sign_in_url: null, mcp_steps: ['accept_capacity_terms'], pricing_url: null,
             terms: TERMS_V15, accept: { method: 'POST', path: '/api/v1/listings/terms/accept' } },
 };
-const browseWith = (access) => ({ ...listWithItems(2), ...(access ? { access } : {}) });
+// ★ THE KEY IS `caller_access`. The backend names the catalogue's caller-level
+//   block apart from a listing's listing-level `access` on purpose
+//   (routes/exclusive_listings.py::_caller_access, PR #4671), and the draft
+//   contract this was first built to said `access` — so the gate read a key the
+//   browse response never carries and silently did nothing. Every browse test
+//   below therefore rides the REAL key by default; the alias has its own test.
+const browseWith = (access, key = 'caller_access') => ({ ...listWithItems(2), ...(access ? { [key]: access } : {}) });
 
 describe('browse-path access block → next_steps', () => {
   const browseResult = async (body) => { responder = () => json(200, body); return call(READ, {}); };
@@ -1487,7 +1493,11 @@ describe('browse-path access block → next_steps', () => {
   //   regression as "the clock again"). Blank them; everything else is compared
   //   literally.
   const stable = (v) => JSON.stringify(v).replace(/"retrieved_at":"[^"]*"/g, '"retrieved_at":"<stamped>"');
-  const payloadWithoutAccess = (r) => { const p = JSON.parse(r.content[0].text); delete p.access; return stable(p); };
+  const payloadWithoutAccess = (r) => {
+    const p = JSON.parse(r.content[0].text);
+    delete p.caller_access; delete p.access;   // whichever name the fixture carried in
+    return stable(p);
+  };
   const renderedTail = (r) => stable(r.content.slice(1));
 
   it('sign_in_required names claim_free_key and bind_email, then source_capacity again', async () => {
@@ -1502,6 +1512,30 @@ describe('browse-path access block → next_steps', () => {
     expect(sc.next_steps_note).toMatch(/email your human explicitly gives you/);
     const ok = await accepts(READ, sc);
     expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('the block is read from caller_access, the key the backend actually publishes', async () => {
+    // Verbatim _caller_access output for an identified caller who has not
+    // accepted the terms — the live case measured on 2026-09-17.
+    const fromBackend = {
+      required: 'registered', granted: false, reason: 'terms_acceptance_required',
+      unlock: { web_sign_in_url: null, mcp_steps: ['accept_capacity_terms'], pricing_url: null,
+                terms: TERMS_V15, accept: { method: 'POST', path: '/api/v1/listings/terms/accept' } },
+    };
+    const sc = (await browseResult({ ...listWithItems(2), caller_access: fromBackend })).structuredContent;
+    expect(sc.next_steps).toEqual(['accept_capacity_terms', READ]);
+    expect(sc.next_steps_note).toContain('accept_capacity_terms');
+  });
+
+  it('the draft contract\u2019s `access` key is still accepted, so neither deploy order leaves this inert', async () => {
+    const sc = (await browseResult(browseWith(BROWSE_ACCESS_SIGN_IN, 'access'))).structuredContent;
+    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    // Those two names and no others: a gate that fires on whatever block-shaped
+    // key turns up is not reading the contract, it is guessing.
+    for (const wrong of ['listing_access', 'viewer_access', 'accessBlock']) {
+      const off = (await browseResult(browseWith(BROWSE_ACCESS_SIGN_IN, wrong))).structuredContent;
+      expect(off.next_steps, wrong).toBeUndefined();
+    }
   });
 
   it('email_binding_required names bind_email only', async () => {
@@ -1564,7 +1598,7 @@ describe('browse-path access block → next_steps', () => {
   //   stray key to every browse result survived that test.) So the ungated
   //   payload is also pinned ABSOLUTELY, against the fixture that went in.
   it('the ungated browse payload carries the fixture plus the citation stamps, and nothing else', async () => {
-    const fixture = listWithItems(2);
+    const fixture = listWithItems(2);   // no access block of either name
     const payload = JSON.parse((await browseResult(fixture)).content[0].text);
     expect(Object.keys(payload)).toEqual(
       [...Object.keys(fixture), 'citation', 'provenance', '_source', '_cite']);
