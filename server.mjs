@@ -4741,6 +4741,54 @@ function _listingNextStepsNote(tool, status, body, steps) {
   return 'The request was rejected as sent (see fields). Correct those values and call ' + tool + ' again. Do not invent values your human did not give.';
 }
 
+// The terms sentence, built ONCE. The single-listing terms gate and the
+// browse-path access block describe the same acceptance against the same terms;
+// a second copy of it is a second thing to keep in step with the contract.
+// `opens` is the only part that differs ("This listing opens" / "These listings
+// open"), so the single-listing wording is unchanged to the byte.
+function _listingTermsNote(tool, ver, opens) {
+  return opens + ' once your human accepts the introduction terms (access.unlock.terms). Show them the terms;'
+    + ' only after they agree, call accept_capacity_terms with accept_terms=true'
+    + (ver ? ' and terms_version="' + ver + '"' : '') + ', then call ' + tool + ' again.';
+}
+
+// ── the browse path's caller-level access block ──────────────────────────────
+// Opening ONE locked listing has always handed the agent next_steps. BROWSING
+// the catalogue handed it locked cards, prose in program.how_it_works and a
+// viewer.sign_in_url — nothing machine-readable — so an agent that only browses
+// had to INFER that its human should register. The backend answers the browse
+// call with the same caller-level block the single listing carries:
+// {required, granted, reason, unlock}. This turns it into the same next_steps +
+// note. Absent (the block is not deployed everywhere) or granted, the payload is
+// returned untouched.
+//
+// ★ CALLER-level only. A listing that needs a higher PLAN is a different thing
+//   the body reports separately as upgrade_for_pocket; it is not this block and
+//   gets no steps from here.
+// ★ The steps are the BACKEND's (unlock.mcp_steps) or the contract's own
+//   reason -> steps map. An unrecognised reason with no mcp_steps adds NOTHING:
+//   staying silent beats inventing a next step the server never offered.
+const _LISTING_ACCESS_STEPS = { ..._LISTING_401_STEPS, terms_acceptance_required: ['accept_capacity_terms'] };
+
+function _listingBrowseAccess(tool, body) {
+  const access = body && typeof body.access === 'object' && !Array.isArray(body.access) ? body.access : null;
+  if (!access || access.granted === true) return null;
+  const reason = typeof access.reason === 'string' ? access.reason : '';
+  const unlock = access.unlock && typeof access.unlock === 'object' ? access.unlock : null;
+  const fromBackend = unlock && Array.isArray(unlock.mcp_steps)
+    ? unlock.mcp_steps.filter((s) => typeof s === 'string' && /^[a-z_]+$/.test(s)) : [];
+  const base = fromBackend.length ? fromBackend : _LISTING_ACCESS_STEPS[reason];
+  if (!base || !base.length) return null;
+  const next_steps = base.includes(tool) ? [...base] : [...base, tool];
+  const terms = unlock && unlock.terms;
+  // The identity reasons here are the same reasons the 401 wall carries, so they
+  // reuse that wall's note rather than growing a second identity sentence.
+  const next_steps_note = reason === 'terms_acceptance_required'
+    ? _listingTermsNote(tool, terms && typeof terms.version === 'string' ? terms.version : null, 'These listings open')
+    : _listingNextStepsNote(tool, 401, body, next_steps);
+  return { next_steps, next_steps_note };
+}
+
 // Map a {withStatus:true} response onto the tool result. See the block comment
 // at the top of this section for why walls are NOT errors here.
 export function _listingsToolResult(tool, r) {
@@ -4768,8 +4816,13 @@ export function _listingsToolResult(tool, r) {
       const terms = body.access.unlock && body.access.unlock.terms;
       const ver = terms && typeof terms.version === 'string' ? terms.version : null;
       return _listingResult({ ...body, next_steps: ['accept_capacity_terms', tool],
-        next_steps_note: 'This listing opens once your human accepts the introduction terms (access.unlock.terms). Show them the terms; only after they agree, call accept_capacity_terms with accept_terms=true'
-          + (ver ? ' and terms_version="' + ver + '"' : '') + ', then call ' + tool + ' again.' }, {}, _listingLines(body));
+        next_steps_note: _listingTermsNote(tool, ver, 'This listing opens') }, {}, _listingLines(body));
+    }
+    // Browse (no slug): the catalogue answers 200 with locked cards, so the
+    // caller-level gate rides in the body rather than in the status.
+    if (body && Array.isArray(body.items)) {
+      const gate = _listingBrowseAccess(tool, body);
+      if (gate) return _listingResult({ ...body, ...gate }, {}, _listingLines(body));
     }
     return _listingResult(body || { raw: String(r.text || '').slice(0, 2000) }, {}, _listingLines(body));
   }

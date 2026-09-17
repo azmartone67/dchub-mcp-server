@@ -1446,3 +1446,160 @@ describe('the descriptions state the deal registration', () => {
     }
   });
 });
+
+// ── the browse path's caller-level access block ──────────────────────────────
+// THE GAP this closes (measured live on the anonymous MCP surface, 2026-09-16):
+// opening ONE locked listing returns next_steps and a note; BROWSING returned
+// locked cards, prose in program.how_it_works and a viewer.sign_in_url, and no
+// machine-readable move — so an agent that only browses had to INFER that its
+// human should register. The backend's caller-level access block, same shape as
+// the single listing's, is what these pin.
+//
+// ★ These fixtures are the CONTRACT, not the deployed body: GET /api/v1/listings
+//   answered without an `access` key when this shipped. That is exactly why the
+//   absent-block case below is pinned as unchanged — this code has to be inert
+//   until the backend catches up, and stay inert for any caller it grants.
+const BROWSE_ACCESS_SIGN_IN = {
+  required: 'registered', granted: false, reason: 'sign_in_required',
+  unlock: {
+    web_sign_in_url: 'https://dchub.cloud/login?redirect=%2Flistings',
+    mcp_steps: ['claim_free_key', 'bind_email'], pricing_url: null,
+  },
+};
+const BROWSE_ACCESS_TERMS = {
+  required: 'registered', granted: false, reason: 'terms_acceptance_required',
+  unlock: { web_sign_in_url: null, mcp_steps: ['accept_capacity_terms'], pricing_url: null,
+            terms: TERMS_V15, accept: { method: 'POST', path: '/api/v1/listings/terms/accept' } },
+};
+const browseWith = (access) => ({ ...listWithItems(2), ...(access ? { access } : {}) });
+
+describe('browse-path access block → next_steps', () => {
+  const browseResult = async (body) => { responder = () => json(200, body); return call(READ, {}); };
+  // content[0] is the confidential JSON; content[1..] the rendered lines and the
+  // source line. A granted body differs from a plain one by the `access` key it
+  // carried IN, and by nothing this code added — so strip that one key and the
+  // two payloads must be identical, with every other part of the result equal
+  // as a string.
+  // ★ citation.retrieved_at and provenance.retrieved_at are stamped from the
+  //   CLOCK on every call, so two results taken a millisecond apart differ by
+  //   those two fields and nothing else. Comparing them raw makes this a coin
+  //   flip that reports a passing build as broken (and, worse, reports a real
+  //   regression as "the clock again"). Blank them; everything else is compared
+  //   literally.
+  const stable = (v) => JSON.stringify(v).replace(/"retrieved_at":"[^"]*"/g, '"retrieved_at":"<stamped>"');
+  const payloadWithoutAccess = (r) => { const p = JSON.parse(r.content[0].text); delete p.access; return stable(p); };
+  const renderedTail = (r) => stable(r.content.slice(1));
+
+  it('sign_in_required names claim_free_key and bind_email, then source_capacity again', async () => {
+    responder = () => json(200, browseWith(BROWSE_ACCESS_SIGN_IN));
+    const r = await call(READ, {});
+    expect(r.isError).toBeFalsy();
+    const sc = r.structuredContent;
+    expect(sc.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    // The note has to tell the agent what to do with its HUMAN, not just which
+    // tool to call — a bare tool name is the inference this whole block removes.
+    expect(sc.next_steps_note).toContain('claim_free_key, then bind_email, then ' + READ);
+    expect(sc.next_steps_note).toMatch(/email your human explicitly gives you/);
+    const ok = await accepts(READ, sc);
+    expect(ok.ok, ok.issues).toBe(true);
+  });
+
+  it('email_binding_required names bind_email only', async () => {
+    responder = () => json(200, browseWith({
+      ...BROWSE_ACCESS_SIGN_IN, reason: 'email_binding_required',
+      unlock: { ...BROWSE_ACCESS_SIGN_IN.unlock, mcp_steps: ['bind_email'] },
+    }));
+    const sc = (await call(READ, {})).structuredContent;
+    expect(sc.next_steps).toEqual(['bind_email', READ]);
+  });
+
+  it('terms_acceptance_required names accept_capacity_terms and points at the terms', async () => {
+    responder = () => json(200, browseWith(BROWSE_ACCESS_TERMS));
+    const sc = (await call(READ, {})).structuredContent;
+    expect(sc.next_steps).toEqual(['accept_capacity_terms', READ]);
+    expect(sc.next_steps_note).toContain('access.unlock.terms');
+    expect(sc.next_steps_note).toContain('terms_version="' + TERMS_V15.version + '"');
+    expect(sc.next_steps_note).toContain('then call ' + READ + ' again.');
+  });
+
+  it('the steps are the BACKEND’s, never inferred: an unknown reason with no mcp_steps adds nothing', async () => {
+    const access = {
+      required: 'registered', granted: false, reason: 'some_reason_this_build_never_heard_of',
+      unlock: { web_sign_in_url: null, mcp_steps: [], pricing_url: null },
+    };
+    const got = await browseResult(browseWith(access));
+    // "Adds nothing" has to mean the SILENT result, not a broken one: a missing
+    // next_steps key is equally true of a handler that threw, so the whole
+    // payload is compared against the ungated browse answer.
+    expect(got.isError).toBeFalsy();
+    expect(payloadWithoutAccess(got)).toBe(payloadWithoutAccess(await browseResult(listWithItems(2))));
+    expect(got.structuredContent.next_steps).toBeUndefined();
+    expect(got.structuredContent.next_steps_note).toBeUndefined();
+  });
+
+  // ── the unchanged cases ────────────────────────────────────────────────────
+  // Byte-for-byte, not "looks the same": the whole result is compared against
+  // the same call made by the code path this change did not touch.
+  it('a granted block and an absent block are both unchanged, byte for byte', async () => {
+    const plain = await browseResult(listWithItems(2));
+    for (const [label, access] of [
+      ['granted', { required: 'registered', granted: true, reason: null, unlock: null }],
+      ['granted with steps still listed', { ...BROWSE_ACCESS_SIGN_IN, granted: true }],
+    ]) {
+      const got = await browseResult(browseWith(access));
+      expect(payloadWithoutAccess(got), label).toBe(payloadWithoutAccess(plain));
+      expect(renderedTail(got), label).toBe(renderedTail(plain));
+      expect(got.structuredContent.next_steps, label).toBeUndefined();
+      expect(got.structuredContent.next_steps_note, label).toBeUndefined();
+    }
+    // No access key at all: the payload the backend serves TODAY.
+    expect(plain.structuredContent.next_steps).toBeUndefined();
+    expect(plain.structuredContent.next_steps_note).toBeUndefined();
+    expect(plain.structuredContent.upgrade_for_pocket).toBeDefined();   // plan gate, reported separately
+  });
+
+  // ★ The comparison above is an AGREEMENT check: gated and ungated come out
+  //   of the same function, so anything this change stamped on EVERY browse
+  //   payload would sit on both sides and pass. (Measured: a mutant adding a
+  //   stray key to every browse result survived that test.) So the ungated
+  //   payload is also pinned ABSOLUTELY, against the fixture that went in.
+  it('the ungated browse payload carries the fixture plus the citation stamps, and nothing else', async () => {
+    const fixture = listWithItems(2);
+    const payload = JSON.parse((await browseResult(fixture)).content[0].text);
+    expect(Object.keys(payload)).toEqual(
+      [...Object.keys(fixture), 'citation', 'provenance', '_source', '_cite']);
+    for (const [i, item] of payload.items.entries()) {
+      expect(Object.keys(item), 'item ' + i).toEqual(Object.keys(fixture.items[i]));
+    }
+  });
+
+  it('adds no per-item next steps and leaves the teaser citation alone', async () => {
+    const gated = await browseResult(browseWith(BROWSE_ACCESS_SIGN_IN));
+    const plain = await browseResult(listWithItems(2));
+    for (const it of gated.structuredContent.items) {
+      expect(it.next_steps).toBeUndefined();
+      expect(it.next_steps_note).toBeUndefined();
+    }
+    expect(stable(gated.structuredContent.citation)).toBe(stable(plain.structuredContent.citation));
+    expect(stable(gated.structuredContent.provenance)).toBe(stable(plain.structuredContent.provenance));
+    // The teaser's citation stays the PUBLIC one; the gate must not have
+    // promoted it to the confidential licence.
+    expect(gated.structuredContent.citation.license).toBe('CC-BY-4.0');
+    expect(renderedTail(gated)).toBe(renderedTail(plain));   // rendered lines + source line unchanged
+  });
+
+  it('the single-listing wall is untouched', async () => {
+    responder = () => json(200, DETAIL_LOCKED_TERMS);
+    const sc = (await call(READ, { slug: TEASER.slug })).structuredContent;
+    expect(sc.next_steps).toEqual(['accept_capacity_terms', READ]);
+    expect(sc.next_steps_note).toBe(
+      'This listing opens once your human accepts the introduction terms (access.unlock.terms). Show them the terms;'
+      + ' only after they agree, call accept_capacity_terms with accept_terms=true'
+      + ' and terms_version="' + TERMS_BLOCK.version + '", then call ' + READ + ' again.');
+
+    responder = () => json(401, E401_SIGN_IN);
+    const wall = (await call(READ, { slug: TEASER.slug })).structuredContent;
+    expect(wall.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
+    expect(wall.identity_note).toMatch(/OAuth/);
+  });
+});
