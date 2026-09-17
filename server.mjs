@@ -6940,6 +6940,68 @@ const GRID_HEADROOM_TIER = ['1', 'true', 'on', 'yes'].includes(
   String(process.env.DCHUB_GRID_HEADROOM_TIER || '').trim().toLowerCase());
 const _HEADROOM_GATE_KEYS = new Set(['headroom', 'data_center_load']);
 const _HEADROOM_GATE_RE = /(^headroom|_headroom|time_to_power|_months$|operating_margin_mw|operating_reserve_mw|committed_capacity_mw|forward_load_mw|queue_depth_gw)/i;
+// ── r-depth-gate (2026-09-17): the DECISION layer is the product ─────────
+//
+// MEASURED the day this shipped, anonymous, live on https://dchub.cloud/mcp:
+//   analyze_site            composite_score 81.2 · limiting_factor.score 60
+//   get_grid_intelligence   constraint_score 45.4 · excess_power_score 41.2
+//   get_interconnection_queue  projects.top[] carried queue_id "CAISO-1402"
+//                              and project_name "ATLAS COMPLEX", 3 rows
+// against quota_wall {blocked_month: 0, enforce: true} and 66 agents / 479
+// real external calls in 7d. A free screen answered the siting question
+// outright — the number, the constraint and the named queue positions — so
+// there was nothing left to buy. Walls were 0 because nobody needed one.
+//
+// WHAT STAYS FREE, deliberately: the market name, the coarse verdict BAND
+// (BUILD / CAUTION / AVOID), distance bands, and an explicit statement that
+// more detail is gated. That is the hook that wins the citation and the next
+// call. What gates is the number a decision is made ON.
+//
+// _gatesHeadroom (2026-07-08) already does exactly this for the grid headroom
+// and time-to-power fields; this is the same mechanism widened to the two
+// classes it never covered — composite/constraint SCORES, and the queue's
+// project IDENTIFIERS, which are not numbers and so slipped past every
+// numeric mask.
+//
+// ★ REVERTIBLE WITH NO REDEPLOY: DCHUB_DEPTH_GATE=0 restores the previous
+// free surface exactly. Narrowing the free class is a commercial trade with
+// reach risk in both directions, so the way back must not need a build.
+const DEPTH_GATE = !['0', 'false', 'no', 'off'].includes(
+  String(process.env.DCHUB_DEPTH_GATE ?? '').trim().toLowerCase());
+
+// Scores a siting decision is made on. `*_score` catches composite_score,
+// constraint_score, excess_power_score, overall_score and any sibling added
+// later — _isMetricKey's `^score` only ever matched a key named exactly
+// "score", which is why three of them were free.
+const _DEPTH_SCORE_RE = /(^|_)score$|^composite_score|^overall_score/i;
+// The queue's identifiers. A project NAME and a queue ID are the answer to
+// "who is ahead of me and for how much" — the single least substitutable
+// thing here — and they are strings, so no numeric mask could reach them.
+const _DEPTH_ID_KEYS = new Set(['queue_id', 'project_name', 'project_number',
+                                'queue_position', 'interconnection_request_id']);
+// Never gate a field whose job is to SAY something is gated, or the coarse
+// band that replaces the number. `_score_basis` is the methodology sentence.
+const _DEPTH_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_note$|_basis$|_band$|_preview$)/i;
+
+function _gatesDepth(k) {
+  if (!DEPTH_GATE) return false;
+  const lk = String(k).toLowerCase();
+  if (_DEPTH_KEEP_RE.test(lk)) return false;
+  if (_DEPTH_ID_KEYS.has(lk)) return true;
+  return _DEPTH_SCORE_RE.test(lk);
+}
+
+// BUILD / CAUTION / AVOID — the coarse band Grok's brief keeps free. Bands are
+// the DCPI vocabulary already used across the product, so an agent reading one
+// here reads the same word it reads on a market page. Returns null for a
+// non-number so a missing score can never render as AVOID.
+function _scoreBand(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  if (n >= 70) return 'BUILD';
+  if (n >= 45) return 'CAUTION';
+  return 'AVOID';
+}
+
 function _gatesHeadroom(k) {
   if (!GRID_HEADROOM_TIER) return false;
   const lk = String(k).toLowerCase();
@@ -7043,6 +7105,14 @@ function trimForTrial(parsed, toolName) {
     if (_gatesHeadroom(k)) {
       out[k] = null;                          // grid decision-layer field → Pro
       out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
+    } else if (_gatesDepth(k)) {
+      // r-depth-gate: the siting DECISION field → Pro. A gated score leaves
+      // its BAND behind, so the free answer still says BUILD / CAUTION /
+      // AVOID and only the number a decision is made on is withheld.
+      const _band = _scoreBand(v);
+      out[k] = null;
+      out[`_${k}_in_pro`] = true;
+      if (_band) out[`${k}_band`] = _band;
     } else if (Array.isArray(v) && v.length > TRIAL_PREVIEW_ROWS) {
       // clean — no inline _gated promo object. The _total_in_pro sibling stays
       // the load-bearing honesty contract: it is the FULL length, never the
@@ -7455,6 +7525,13 @@ function buildSiteHeadlineTease(parsed) {
       of:     100,
       note:   'Lowest-scoring factor = the primary constraint on this site. The full per-factor breakdown is Pro.',
     };
+    // The WHICH stays free — naming the binding constraint is the hook. The
+    // HOW MUCH gates: that number is what a go/no-go is argued from.
+    if (DEPTH_GATE) {
+      limiting_factor.score = null;
+      limiting_factor._score_in_pro = true;
+      limiting_factor.band = _scoreBand(_lfScore);
+    }
   } else {
     // Named unknown, not a fabricated factor.
     limiting_factor = { factor: null, note: 'Per-factor scores unavailable for this location.' };
@@ -7465,11 +7542,20 @@ function buildSiteHeadlineTease(parsed) {
     ? parsed.citation
     : { source: 'DC Hub', url: 'https://dchub.cloud', license: 'CC-BY-4.0', cite_as: 'DC Hub, dchub.cloud' };
   // The one-line, ready-to-cite sentence (the field an agent echoes to its human).
-  const _headlineStr =
-    Math.round(score) + '/100' +
-    (verdict ? ' (' + verdict + ')' : '') +
-    ' — top limiting factor: ' + (_lfLabel ? _lfLabel + ' (' + _lfScore + '/100)' : 'unavailable for this location') +
-    '. Source: DC Hub, dchub.cloud.';
+  // ★ THE SENTENCE AN AGENT ECHOES. Gating the FIELD and leaving the number
+  // in the prose beside it gates nothing — this string is the single most
+  // relayed thing the tool returns.
+  const _dg = DEPTH_GATE;
+  const _headlineStr = _dg
+    ? (_scoreBand(score) || 'UNSCORED') +
+      (verdict ? ' (' + verdict + ')' : '') +
+      ' — top limiting factor: ' + (_lfLabel || 'unavailable for this location') +
+      '. Exact 0–100 score and the full per-factor breakdown are Pro. ' +
+      'Source: DC Hub, dchub.cloud.'
+    : Math.round(score) + '/100' +
+      (verdict ? ' (' + verdict + ')' : '') +
+      ' — top limiting factor: ' + (_lfLabel ? _lfLabel + ' (' + _lfScore + '/100)' : 'unavailable for this location') +
+      '. Source: DC Hub, dchub.cloud.';
   const out = {
     success: true,
     _entity: 'site',
@@ -7500,8 +7586,13 @@ function buildSiteHeadlineTease(parsed) {
     // NOT cover is envelope. Conditional, so its ABSENCE still means "no
     // resolution happened", exactly like capacity_context.
     ...(parsed.resolved_from ? { resolved_from: parsed.resolved_from } : {}),
-    composite_score: score,        // canonical name (matches the tool description)
-    overall_score:   score,        // parity with the full payload's field name
+    // r-depth-gate (2026-09-17): this envelope is BUILT for the free tier, so
+    // trimForTrial never sees it — the 81.2 measured live on an anonymous call
+    // came from right here. The BAND stays (the hook), the number gates.
+    composite_score: _dg ? null : score,
+    overall_score:   _dg ? null : score,
+    ...(_dg ? { _composite_score_in_pro: true, _overall_score_in_pro: true,
+                composite_score_band: _scoreBand(score) } : {}),
     score_basis: '0–100 DC Hub composite site-suitability index across power, gas, fiber, market & risk',
     verdict,                       // real backend interpretation string (null if the backend gave none)
     limiting_factor,
@@ -13739,6 +13830,20 @@ function trackedTool(srv, name, description, schema, handler) {
                 ...(_siteHeadlineObj
                     ? { site_headline: true, trial_preview: false, preview: 'headline',
                         composite_score: _siteHeadlineObj.composite_score,
+                        // ★ r-depth-gate (2026-09-17): NAMED HERE OR LOST. This
+                        // projection is an allowlist — the comment below already
+                        // records capacity_requested_mw vanishing through it. The
+                        // gate nulls composite_score, so without these two the
+                        // machine client receives a bare `null` with nothing
+                        // saying WHY: indistinguishable from "we could not score
+                        // this site". The marker and the band are what make the
+                        // null mean "gated" instead of "unknown".
+                        ...(_siteHeadlineObj._composite_score_in_pro
+                            ? { _composite_score_in_pro: true,
+                                composite_score_band:
+                                  _siteHeadlineObj.composite_score_band }
+                            : {}),
+                        score_basis:     _siteHeadlineObj.score_basis,
                         verdict:         _siteHeadlineObj.verdict,
                         limiting_factor: _siteHeadlineObj.limiting_factor,
                         locked:          _siteHeadlineObj._locked,
@@ -21571,7 +21676,8 @@ export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE
 // vs durable — is the ONLY input that decides whether the meter may be shown,
 // and it is not reachable any other way from a unit test.
 export { _buildQuotaHint, ctx as _ctxALS };
-export { buildHumanRelay, _unlockRungs, _rungsText, _freeRungLine, siteHeadlineHeader };
+export { buildHumanRelay, _unlockRungs, _rungsText, _freeRungLine, siteHeadlineHeader,
+         _gatesDepth, _scoreBand };
 export { _wallIsError };
 // r-shortlist-rerank (2026-07-16): createServer exported so tests can assert
 // zod-layer optionality of tool params — the analyze_parcel geometry and

@@ -38,6 +38,7 @@ test/copycheck-tolerates-edge-flap.test.mjs
 test/coverage-counts-not-masked.test.mjs
 test/deal-desk-automint.test.mjs
 test/delete-session-third-callsite.test.mjs
+test/depth-gate.test.mjs
 test/deterministic-install.test.mjs
 test/discovery-coverage.test.mjs
 test/doc-stripe-links-are-canonical.test.mjs
