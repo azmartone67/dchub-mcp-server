@@ -4765,13 +4765,24 @@ function _listingTermsNote(tool, ver, opens) {
 // ★ CALLER-level only. A listing that needs a higher PLAN is a different thing
 //   the body reports separately as upgrade_for_pocket; it is not this block and
 //   gets no steps from here.
+// ★ THE KEY IS `caller_access`, not `access`. The single listing's `access` is
+//   LISTING-level; the catalogue's is CALLER-level, and the backend names them
+//   apart on purpose (routes/exclusive_listings.py::_caller_access) so the two
+//   cannot be confused. The draft contract this was first built to said
+//   `access`, so the gate read a key the browse response never carries and,
+//   degrading silently as designed, did exactly nothing. Both names are
+//   accepted now: the two surfaces deploy independently, and neither ordering
+//   should leave this inert again. Reading `access` here is safe because this
+//   runs only on a body with an `items` array — a single listing never reaches
+//   it.
 // ★ The steps are the BACKEND's (unlock.mcp_steps) or the contract's own
 //   reason -> steps map. An unrecognised reason with no mcp_steps adds NOTHING:
 //   staying silent beats inventing a next step the server never offered.
 const _LISTING_ACCESS_STEPS = { ..._LISTING_401_STEPS, terms_acceptance_required: ['accept_capacity_terms'] };
 
 function _listingBrowseAccess(tool, body) {
-  const access = body && typeof body.access === 'object' && !Array.isArray(body.access) ? body.access : null;
+  const block = (body && (body.caller_access || body.access)) || null;
+  const access = block && typeof block === 'object' && !Array.isArray(block) ? block : null;
   if (!access || access.granted === true) return null;
   const reason = typeof access.reason === 'string' ? access.reason : '';
   const unlock = access.unlock && typeof access.unlock === 'object' ? access.unlock : null;
