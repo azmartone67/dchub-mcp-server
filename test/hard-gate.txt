@@ -53,6 +53,7 @@ test/execute-plan-invariants.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/free-key-arbitrage.test.mjs
+test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs
 test/front-door-nudge.test.mjs
 test/front-door-routing-descriptions.test.mjs
