@@ -1474,6 +1474,22 @@ const BROWSE_ACCESS_TERMS = {
 const browseWith = (access) => ({ ...listWithItems(2), ...(access ? { access } : {}) });
 
 describe('browse-path access block → next_steps', () => {
+  const browseResult = async (body) => { responder = () => json(200, body); return call(READ, {}); };
+  // content[0] is the confidential JSON; content[1..] the rendered lines and the
+  // source line. A granted body differs from a plain one by the `access` key it
+  // carried IN, and by nothing this code added — so strip that one key and the
+  // two payloads must be identical, with every other part of the result equal
+  // as a string.
+  // ★ citation.retrieved_at and provenance.retrieved_at are stamped from the
+  //   CLOCK on every call, so two results taken a millisecond apart differ by
+  //   those two fields and nothing else. Comparing them raw makes this a coin
+  //   flip that reports a passing build as broken (and, worse, reports a real
+  //   regression as "the clock again"). Blank them; everything else is compared
+  //   literally.
+  const stable = (v) => JSON.stringify(v).replace(/"retrieved_at":"[^"]*"/g, '"retrieved_at":"<stamped>"');
+  const payloadWithoutAccess = (r) => { const p = JSON.parse(r.content[0].text); delete p.access; return stable(p); };
+  const renderedTail = (r) => stable(r.content.slice(1));
+
   it('sign_in_required names claim_free_key and bind_email, then source_capacity again', async () => {
     responder = () => json(200, browseWith(BROWSE_ACCESS_SIGN_IN));
     const r = await call(READ, {});
@@ -1507,27 +1523,23 @@ describe('browse-path access block → next_steps', () => {
   });
 
   it('the steps are the BACKEND’s, never inferred: an unknown reason with no mcp_steps adds nothing', async () => {
-    responder = () => json(200, browseWith({
+    const access = {
       required: 'registered', granted: false, reason: 'some_reason_this_build_never_heard_of',
       unlock: { web_sign_in_url: null, mcp_steps: [], pricing_url: null },
-    }));
-    const sc = (await call(READ, {})).structuredContent;
-    expect(sc.next_steps).toBeUndefined();
-    expect(sc.next_steps_note).toBeUndefined();
+    };
+    const got = await browseResult(browseWith(access));
+    // "Adds nothing" has to mean the SILENT result, not a broken one: a missing
+    // next_steps key is equally true of a handler that threw, so the whole
+    // payload is compared against the ungated browse answer.
+    expect(got.isError).toBeFalsy();
+    expect(payloadWithoutAccess(got)).toBe(payloadWithoutAccess(await browseResult(listWithItems(2))));
+    expect(got.structuredContent.next_steps).toBeUndefined();
+    expect(got.structuredContent.next_steps_note).toBeUndefined();
   });
 
   // ── the unchanged cases ────────────────────────────────────────────────────
   // Byte-for-byte, not "looks the same": the whole result is compared against
   // the same call made by the code path this change did not touch.
-  const browseResult = async (body) => { responder = () => json(200, body); return call(READ, {}); };
-  // content[0] is the confidential JSON; content[1..] the rendered lines and the
-  // source line. A granted body differs from a plain one by the `access` key it
-  // carried IN, and by nothing this code added — so strip that one key and the
-  // two payloads must be identical, with every other part of the result equal
-  // as a string.
-  const payloadWithoutAccess = (r) => { const p = JSON.parse(r.content[0].text); delete p.access; return JSON.stringify(p); };
-  const renderedTail = (r) => JSON.stringify(r.content.slice(1));
-
   it('a granted block and an absent block are both unchanged, byte for byte', async () => {
     const plain = await browseResult(listWithItems(2));
     for (const [label, access] of [
@@ -1546,6 +1558,21 @@ describe('browse-path access block → next_steps', () => {
     expect(plain.structuredContent.upgrade_for_pocket).toBeDefined();   // plan gate, reported separately
   });
 
+  // ★ The comparison above is an AGREEMENT check: gated and ungated come out
+  //   of the same function, so anything this change stamped on EVERY browse
+  //   payload would sit on both sides and pass. (Measured: a mutant adding a
+  //   stray key to every browse result survived that test.) So the ungated
+  //   payload is also pinned ABSOLUTELY, against the fixture that went in.
+  it('the ungated browse payload carries the fixture plus the citation stamps, and nothing else', async () => {
+    const fixture = listWithItems(2);
+    const payload = JSON.parse((await browseResult(fixture)).content[0].text);
+    expect(Object.keys(payload)).toEqual(
+      [...Object.keys(fixture), 'citation', 'provenance', '_source', '_cite']);
+    for (const [i, item] of payload.items.entries()) {
+      expect(Object.keys(item), 'item ' + i).toEqual(Object.keys(fixture.items[i]));
+    }
+  });
+
   it('adds no per-item next steps and leaves the teaser citation alone', async () => {
     const gated = await browseResult(browseWith(BROWSE_ACCESS_SIGN_IN));
     const plain = await browseResult(listWithItems(2));
@@ -1553,10 +1580,11 @@ describe('browse-path access block → next_steps', () => {
       expect(it.next_steps).toBeUndefined();
       expect(it.next_steps_note).toBeUndefined();
     }
-    expect(JSON.stringify(gated.structuredContent.citation))
-      .toBe(JSON.stringify(plain.structuredContent.citation));
-    expect(JSON.stringify(gated.structuredContent.provenance))
-      .toBe(JSON.stringify(plain.structuredContent.provenance));
+    expect(stable(gated.structuredContent.citation)).toBe(stable(plain.structuredContent.citation));
+    expect(stable(gated.structuredContent.provenance)).toBe(stable(plain.structuredContent.provenance));
+    // The teaser's citation stays the PUBLIC one; the gate must not have
+    // promoted it to the confidential licence.
+    expect(gated.structuredContent.citation.license).toBe('CC-BY-4.0');
     expect(renderedTail(gated)).toBe(renderedTail(plain));   // rendered lines + source line unchanged
   });
 
