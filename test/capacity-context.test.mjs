@@ -119,14 +119,42 @@ describe('capacity_context reaches a real anonymous analyze_site call', () => {
     stubIncludesCapacityContext = true;
   });
 
+  // ★ 2026-09-17 (r-depth-gate). This test's SUBJECT is unchanged: passing
+  // capacity_mw must not disturb the headline envelope. Its WITNESSES moved,
+  // because the two it used — composite_score 81.2 and limiting_factor.score
+  // 70 — are now the gated depth on a free call. Re-pinned on what the free
+  // envelope carries INSTEAD, and deliberately wider than before: the band,
+  // the gate marker, the factor's name, the verdict and the citation. A
+  // capacity_context regression that flattened the envelope would still fail
+  // every one of these.
   it('does not disturb the citable headline fields', async () => {
     stubIncludesCapacityContext = true;
     const sc = await callOverHttp('analyze_site',
       { latitude: 32.7767, longitude: -96.797, capacity_mw: 500 });
-    expect(sc.composite_score).toBe(81.2);
+    // The number is Pro; the BAND is the free, citable headline.
+    expect(sc.composite_score).toBeNull();
+    expect(sc._composite_score_in_pro).toBe(true);
+    expect(sc.composite_score_band).toBe('BUILD');          // 81.2 -> BUILD
     expect(sc.verdict).toBe('Excellent site');
-    expect(sc.limiting_factor?.score).toBe(70);     // lowest sub-score
+    expect(sc.limiting_factor?.factor).toBeTruthy();        // WHICH stays free
+    expect(sc.limiting_factor?.score).toBeNull();           // HOW MUCH is Pro
+    expect(sc.limiting_factor?.band).toBe('BUILD');         // 70 -> BUILD
     expect(sc.citation).toBeTruthy();
+  });
+
+  it('★ gating the number keeps the methodology and the upsell surface', async () => {
+    // A gated score with no basis sentence and no named locked sections is a
+    // dead end: the agent cannot say what the number WOULD have meant, nor
+    // what paying adds. Both ride the same allowlist projection that silently
+    // dropped capacity_requested_mw, so both are pinned here.
+    // (The flag itself is unit-tested in test/depth-gate.test.mjs; this file
+    // only proves what the LIVE envelope carries.)
+    stubIncludesCapacityContext = true;
+    const sc = await callOverHttp('analyze_site',
+      { latitude: 32.7767, longitude: -96.797, capacity_mw: 500 });
+    expect(sc.score_basis).toContain('0–100');              // methodology stays
+    expect(sc.locked).toBeTruthy();                         // upsell surface intact
+    expect(Object.keys(sc.locked).length).toBeGreaterThan(0);
   });
 });
 
