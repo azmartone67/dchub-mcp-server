@@ -5547,13 +5547,31 @@ function _accessTagFor(name) {
     : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
   const q = encodeURIComponent(name || '');
   const gated = (access === 'paid' || access === 'metered');
-  const tag = {
-    access,
-    pricing_url: gated
-      ? `https://dchub.cloud/pricing/upgrade?tool=${q}&ref=mcp-tools-list`
-      : `https://dchub.cloud/pricing?ref=mcp-tools-list&tool=${q}`,
-  };
-  if (gated) {
+  // ★ r-no-bare-wall (2026-09-19): the 09-16 fix above routed the 28 GATED
+  // tools through /pricing/upgrade and left the other 63 on
+  // `/pricing?ref=mcp-tools-list&tool=…`. That is attributed, but it is still
+  // the WALL — point 2 of the comment above, unfixed for two thirds of the
+  // manifest. Measured live 2026-09-19 against dchub.cloud/mcp: 91 tools, 28
+  // on /pricing/upgrade, 63 on the bare wall (22 `free`, 41 `free_preview`).
+  //
+  // A non-gated tool has nothing for this annotation to sell. `free_preview`
+  // is the DEFAULT arm of the ladder above — "not paid, not metered, not
+  // FREE_FULL" — so it holds claim_free_key and bind_email next to
+  // search_facilities. Resolving THOSE to a checkout tier would put the
+  // onboarding tools behind a wall, so the class cannot decide a price and is
+  // not asked to. What every non-gated tool does share is the next useful
+  // step: get the agent wired in and keyed. That is /connect.
+  //
+  // The paid path for a non-gated tool that trims its result still exists, and
+  // it is the one the funnel actually wants: measured on a real MCP session,
+  // search_facilities (free_preview, anonymous) returned four /go/c/<token>
+  // checkout links IN ITS RESULT. Tokenized, session-bound, minted per call —
+  // never frozen into this shared list.
+  const tag = { access };
+  if (!gated) {
+    tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
+  } else {
+    tag.pricing_url = `https://dchub.cloud/pricing/upgrade?tool=${q}&ref=mcp-tools-list`;
     tag.upgrade_relay = 'Call the tool first: a gated result carries a '
       + 'session-bound checkout link (dchub.cloud/go/c/<token>) and a human '
       + 'relay (dchub.cloud/upgrade/h/<token>) minted for THIS session — relay '
