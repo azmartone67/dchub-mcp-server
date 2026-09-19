@@ -282,6 +282,45 @@ describe('r-trial-refused — a mint the backend refuses is neither bound nor ad
       mintMode = 'accepted';
     }
   }, 30000);
+
+  // ★★★ r-refused-budget (2026-09-19). The QA super-user board filed
+  // "Quota meter does NOT move while it still has room to" on ai_capacity_index.
+  // The meter was right; the ENVELOPE was not. Measured live: two consecutive
+  // anonymous calls both returned preview_is_partial:true,
+  // auto_trial_bind_required:true AND remaining_full_today:2 — while the sibling
+  // quota block said full_answers_remaining_today:null with
+  // full_answers_unavailable_reason "NOT YET APPLICABLE at an anonymous seat …
+  // only charged once a durable key is bound". One envelope, two contradictory
+  // meters. An agent reading the top-level number retries for a full answer and
+  // gets another preview, forever.
+  it('a refused trial key advertises no full-answer budget it cannot spend', async () => {
+    mintMode = 'refused';
+    try {
+      const { h } = await session({ 'x-dc-client-ip': '198.51.100.31' });
+      const r = await call(h, ...GRID);
+      const sc = (JSON.parse(r.body).result || {}).structuredContent || {};
+      expect(sc.auto_trial_bind_required,
+        'precondition: this must be the bind-refused path or the assertion below is vacuous').toBe(true);
+      expect(Object.keys(sc),
+        'a refused key cannot spend a full answer, so promising one contradicts the quota block in the same response')
+        .not.toContain('remaining_full_today');
+    } finally {
+      mintMode = 'accepted';
+    }
+  }, 30000);
+
+  // ★ THE CONTROL, and it is the whole point. "remaining_full_today is absent"
+  //   is equally true of a path that never publishes it at all — which would make
+  //   the test above pass while proving nothing. This shows the field DOES appear
+  //   on the accepted path, so its absence above is the refusal, not the route.
+  it('CONTROL: an accepted trial key still publishes the budget', async () => {
+    const { h } = await session({ 'x-dc-client-ip': '198.51.100.32' });
+    const r = await call(h, ...GRID);
+    const sc = (JSON.parse(r.body).result || {}).structuredContent || {};
+    expect(sc.auto_trial_bind_required).toBeUndefined();
+    expect(Object.keys(sc)).toContain('remaining_full_today');
+    expect(typeof sc.remaining_full_today).toBe('number');
+  }, 30000);
 });
 
 describe('hard gate: no network', () => {

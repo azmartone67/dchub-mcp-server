@@ -6843,7 +6843,27 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       : ('Call ' + name + ' again' + (_capKnown ? ' (you have ' + remainingFull + ' more full answer' + _morePlural + ' today on the free trial)' : ' for the full result')
          + '. If it is still gated, your client did not carry the key — add header X-API-Key: ' + mint.api_key
          + ' (session binding is per-connection, so a reconnect can drop it). Save persist_command to keep it across future sessions.'),
-    ...(_capKnown ? { remaining_full_today: remainingFull } : {}),
+    // ★★★ NOT WHILE THE KEY IS REFUSED. `_refused` means this trial key is
+    //   blocked until the human's email is bound, so the caller CANNOT spend a
+    //   full answer no matter how many the per-IP counter says are left. The
+    //   sibling quota block already states this correctly —
+    //   `full_answers_remaining_today: null` with
+    //   `full_answers_unavailable_reason: "NOT YET APPLICABLE at an anonymous
+    //   seat … only charged once a durable key is bound"` — so publishing a
+    //   non-zero count up here made ONE envelope contradict itself.
+    //
+    //   Measured live 2026-09-19 on ai_capacity_index: two consecutive anon
+    //   calls both returned `preview_is_partial: true`,
+    //   `auto_trial_bind_required: true` and `remaining_full_today: 2`. An
+    //   agent reading that number retries for a full answer and gets another
+    //   preview, indefinitely. The prose already gets this right (`_refused`
+    //   selects leadRefused, which omits the "N more full answers" line) —
+    //   only the structured field leaked.
+    //
+    // ★ `remainingFull` itself is deliberately NOT nulled: the caller-side
+    //   prewall offer (mppPrewallOffer) reads it, and suppressing that would
+    //   change conversion behaviour, which is not what this fixes.
+    ...(_capKnown && !_refused ? { remaining_full_today: remainingFull } : {}),
     trial_unlocks_this_tool:   !stillPro && !_refused,
     ...(_refused ? { auto_trial_bind_required: true } : {}),
     unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
