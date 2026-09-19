@@ -463,6 +463,40 @@ function _unlockRungs(toolName, tier, sessionId) {
     pro: PRO_URL ? _subCheckoutUrl(PRO_URL, sessionId) : null,
   };
 }
+// ── r-gated-cta-tokenized (2026-09-18) ───────────────────────────────────
+// THE URL EVERY MACHINE-READABLE `upgrade_url` SHOULD CARRY.
+//
+// Every one of those fields typed a CONSTANT: UPGRADE_URL, i.e.
+// https://dchub.cloud/ai#pricing, on the trial-preview envelope with
+// '?ref=mcp-trial&tool=X' glued on after the '#'. Everything after a fragment
+// marker IS the fragment, so that query string never reaches a server: the
+// link is unattributable AND it is not an unlock — it is a page about pricing,
+// handed to a human whose agent is one click from a checkout we already mint
+// per call. The same constant sat on the paid_only wall, the daily-cap wall,
+// the depth tease and the capped-result notice.
+//
+// This returns the rung the prose is already selling on the same response:
+// the signed /upgrade/h relay page (or /go/c when no relay can be minted),
+// bound to THIS session and, for a keyed caller, to their key. Per CALL, never
+// cached — tools/list is where a frozen token would be served to everybody,
+// which is why _accessTagFor deliberately stays un-tokenized.
+//
+// ★ FAIL-OPEN TO A PAYABLE LINK, NEVER TO THE WALL. With no
+// DCHUB_INTERNAL_KEY there is nothing to sign with and _packCheckoutUrl
+// already degrades to the raw Stripe Payment Link, so r.pack covers that.
+// CREDITS_URL is the last resort for the defensive catch — both members of
+// _unlockRungs swallow their own errors, so it should be unreachable, and an
+// unreachable branch is exactly where the old constant would rot back in.
+// test/gated-unlock-is-tokenized.test.mjs reads this function's own body and
+// fails if a wall URL or UPGRADE_URL appears in it, because no call can reach
+// the catch to prove it behaviourally.
+function _unlockUrl(toolName, sessionId) {
+  try {
+    const r = _unlockRungs(toolName, 'free', sessionId);
+    return r.pack || r.pro || CREDITS_URL;
+  } catch (_) { return CREDITS_URL; }
+}
+
 function _rungsText(toolName, tier, sessionId) {
   const r = _unlockRungs(toolName, tier, sessionId);
   const label = _priceLabel('pro');
@@ -5683,7 +5717,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
     credits_url:   _pack,
     credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to full depth.',
     developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
-    upgrade_url:   UPGRADE_URL,
+    upgrade_url:   _unlockUrl(name, _sid),
     ...(_isKeyed
       ? { next_tool:      'unlock_more_data',
           next_tool_hint: 'Call unlock_more_data for one-click checkout links ($10 pack / Developer). The moment your human pays, your next call returns full data — no reconnect.' }
@@ -7208,7 +7242,13 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
   // session id (that path expects a DCM- pair code, not a session id) — a dead
   // CTA. Now: accurate prices → the working /pricing page, and the honest note
   // that reconnecting auto-mints a free trial key (no email) via the gate.
-  const ref = '?ref=mcp-trial&tool=' + encodeURIComponent(toolName);
+  // r-gated-cta-tokenized (2026-09-18): this line used to build
+  // '?ref=mcp-trial&tool=X' and hang it off a BARE https://dchub.cloud/pricing.
+  // It is the single most-emitted CTA in the product — every free-tier preview
+  // of every tool — and it sent the human to the wall instead of through it,
+  // with an attribution tag no checkout ever sees. The rungs below are the
+  // same ones trialHeader sells, bound to this session.
+  const _ctaSid = (() => { try { return (getCtx() && getCtx().session_id) || ''; } catch (_) { return ''; } })();
   // r68-conv (2026-06-02): if this is a DECISION-layer answer (verdict /
   // ranking / recommendation / score), make the LOCKED STRATEGIC VALUE
   // explicit — naming what's gated converts far better than a silent
@@ -7240,7 +7280,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
                 // (this nudge is the generic free-tool surface at the call site ~L1931; trialHeader only
                 // fires in the mint/upgrade branch). One in-protocol call an agent can actually follow.
                 'Call `claim_free_key` (no email) for the full free tier — it returns an `api_key`; send it as `X-API-Key` and **save it to your MCP config so future sessions reuse it**. ' +
-                '[Paid plans — ' + _paidPlansLine() + '](https://dchub.cloud/pricing' + ref + ')\n' +
+                'Your human unlocks in one click — ' + _rungsText(toolName, 'free', _ctaSid) + '.\n' +
                 _trialGapLine(parsed);
   const body = (typeof trimmed === 'string') ? trimmed : JSON.stringify(trimmed);
   return body.replace(/\s*$/, '') + '\n\n---\n' + nudge;
@@ -7390,11 +7430,10 @@ const TRIAL_HEADER_OVERRIDES = {
            '. The moment your human pays, your next call returns the complete brief. (Free full answers left today: ' + _remaining +
            '; `bind_email` raises your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + '.)\n\n---\n\n';
   },
-  get_market_intel: (sessionId, refUrlDeveloper) => {
+  get_market_intel: (sessionId) => {
     const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
     // Fix E (2026-06-06): bind Stripe URLs to the current MCP session_id.
     const _starter = _subCheckoutUrl(STARTER_URL, sessionId);
-    const _developer = _stripeWithAnon(_stripeWithSession(refUrlDeveloper, sessionId));
     return [
       '## 📊 Your agent just answered using 1 of 300+ markets',
       '',
@@ -7412,14 +7451,15 @@ const TRIAL_HEADER_OVERRIDES = {
   },
 };
 
-function trialHeader(toolName, sessionId, refUrlDeveloper, gapClause) {
+// r-gated-cta-tokenized (2026-09-18): `refUrlDeveloper` is GONE. Its only
+// callers passed _refUrl(UPGRADE_URL) — https://dchub.cloud/ai#pricing with
+// '?ref=mcp-trial&tool=X' glued on after the '#', so the query was part of the
+// fragment and reached no server — and both functions that took it assigned it
+// to a `_developer` const that nothing has read since r-data-first rewrote this
+// copy. A dead parameter carrying a live-looking URL is how that URL comes back.
+function trialHeader(toolName, sessionId, gapClause) {
   const override = TRIAL_HEADER_OVERRIDES[toolName];
-  if (override) return override(sessionId, refUrlDeveloper);
-  const redeem = 'https://dchub.cloud/api/v1/redeem/' + sessionId;
-  // Fix E (2026-06-06): bind Stripe URLs to the current MCP session_id so the
-  // checkout.session.completed webhook can flip THIS session to upgraded.
-  const _starter = _subCheckoutUrl(STARTER_URL, sessionId);
-  const _developer = _stripeWithAnon(_stripeWithSession(refUrlDeveloper, sessionId));
+  if (override) return override(sessionId);
   // r56-conv (2026-05-31): surface the NO-EMAIL claim path on the most-hit
   // paywall surface (content[0].text — what LLM clients render). Previously
   // only the email-redeem link + Stripe were here; the instant claim path
@@ -13526,7 +13566,7 @@ function trackedTool(srv, name, description, schema, handler) {
               // r-data-first: the count rides INSIDE this line now (one trailing
               // CTA, not two), so _gapLine is no longer prepended at the compose
               // site below. The site-headline branch never had a count anyway.
-              : trialHeader(name, _sid, _refUrl(UPGRADE_URL), _gapClause);
+              : trialHeader(name, _sid, _gapClause);
             // r51 (2026-05-26): mark trial_preview as isError=true. The
             // blocked_paid_only branch already does this (r50) but ~95%
             // of paywall hits land HERE — anon + free-tier users get
@@ -13858,7 +13898,7 @@ function trackedTool(srv, name, description, schema, handler) {
                     : { trial_preview: true }),
                 tool: name,
                 signup_url: _refUrl(SIGNUP_URL),
-                upgrade_url: _refUrl(UPGRADE_URL),
+                upgrade_url: _unlockUrl(name, _sid),
                 // r-grid-sell (2026-07-01): the tuned get_grid_intelligence header sells
                 // the $10 pack — point machine consumers at the same single next step.
                 ...(name === 'get_grid_intelligence' ? { next_tool: 'unlock_more_data' } : {}),
@@ -13999,7 +14039,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             error: 'paid_only',
             tool: name,
             current_tier: tier,
-            upgrade_url: UPGRADE_URL,
+            upgrade_url: _unlockUrl(name, _sid2),
             signup_url: _isKeyed ? null : SIGNUP_URL,
             ...promoSC(),
     ..._pwx2,        /* phase39_human_message — hoisted above (r-human-first) */
@@ -14047,7 +14087,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             unlock_tool: 'unlock_more_data',
             credits_url: _packCheckoutUrl(_sidw),
             signup_url: SIGNUP_URL,
-            upgrade_url: UPGRADE_URL,
+            upgrade_url: _unlockUrl(name, _sidw),
           })),
         };
       }
@@ -14120,7 +14160,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           _upgrade_notice: {
             tier,
             message: `Free tier capped results at ${gate.capped}. Upgrade for full access.`,
-            upgrade_url: UPGRADE_URL,
+            upgrade_url: _unlockUrl(name, (c && c.session_id) || ''),
             signup_url: c.api_key ? null : SIGNUP_URL,
           },
         };
@@ -14311,12 +14351,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // works per-call (credit cascade serves PRO_ONLY full for pack holders),
                 // and NO bind_email (binding cannot lift the paid cap).
                 message: _paidTaste
-                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
                   : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Unlock full depth now: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ ${_priceLabel('starter')} Starter = ${_callsPerDay('starter')} calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API calls, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
-                upgrade_url: UPGRADE_URL,
+                upgrade_url: _unlockUrl(name, _sid),
                 // r-starter-go-c: measured like the rungs below, and a keyed caller's Starter link now
                 // binds k-<sha256(key)> as they do (it bound the session). See the anonymous trim above.
                 starter_url: _subCheckoutUrl(STARTER_LINK + promoParam(), _sid),
@@ -14389,7 +14429,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // follow-up for unbound callers.
                 { type: 'text', text: _paidTaste
                   ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
-                    '⚡ **Unlimited full `' + name + '` depth is Pro (' + _priceLabel('pro') + '):** ' + UPGRADE_URL +
+                    '⚡ **Unlimited full `' + name + '` depth is Pro (' + _priceLabel('pro') + '):** ' + (PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)) +
                     ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
                     _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
                   : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
@@ -14503,7 +14543,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               _bteased._upgrade = {
                 tier: _btPaid ? String(_gateTier) : 'trial',
                 message: _btPaid
-                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro (${_priceLabel('pro')}) → ${UPGRADE_URL}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
                   : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock the complete dataset: 💳 $10 one-time = 1,000 API calls (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
@@ -19487,7 +19527,11 @@ function createServer(descOverrides, instructionsTail) {
             // agent can still relay the URL from persist_config once bound.
             connect_url:             _connectUrl(key, _via),
             auto_applied_to_session: _autoBound,
-            upgrade_url:             'https://dchub.cloud/pricing/upgrade',
+            // r-gated-cta-tokenized (2026-09-18): was a bare /pricing/upgrade — the
+            // one field on this response an agent hands its human, and a click on
+            // it was indistinguishable from someone typing the URL. _unlockUrl
+            // resolves the session from AsyncLocalStorage when not passed one.
+            upgrade_url:             _unlockUrl('claim_free_key', ''),
           },
         };
       }
@@ -19571,7 +19615,7 @@ function createServer(descOverrides, instructionsTail) {
         // who explicitly confirmed — routed through the suppression/unsubscribe-
         // compliant marketing choke-point. Pairs with the email-bind above.
         '📬 **Or let us remind you — ONE call.** If your human shares an email and wants a weekly *“what changed in the markets you queried”* digest, call `subscribe_digest` with {email}. We email a one-click confirm link (double opt-in) — they only get the digest after confirming, and every email has one-click unsubscribe. (This is the nudge that pulls your agent back when the data moves.)\n\n' +
-        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market) — Pro → $9/mo Starter, 200/day: https://dchub.cloud/pricing/upgrade';
+        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market) — $9/mo Starter, 200/day: ' + _subCheckoutUrl(STARTER_URL, '');
       return {
         content: [{ type: 'text', text }],
         structuredContent: {
@@ -19623,7 +19667,11 @@ function createServer(descOverrides, instructionsTail) {
             next_tool_hint: 'Ask your human for their email, then call bind_email {email}. This key already works — binding lifts it to ' + FREE_TIER.identified_calls_per_day + ' calls/day AND makes it recoverable next session (the durable-identity default; a header-less web session otherwise starts over anonymous).',
           } : {}),
           retention_tools:         ['get_changes', 'save_site', 'set_site_alert', 'set_market_alert'],
-          upgrade_url:             'https://dchub.cloud/pricing/upgrade',
+          // r-gated-cta-tokenized (2026-09-18): was a bare /pricing/upgrade — the
+          // one field on this response an agent hands its human, and a click on
+          // it was indistinguishable from someone typing the URL. _unlockUrl
+          // resolves the session from AsyncLocalStorage when not passed one.
+          upgrade_url:             _unlockUrl('claim_free_key', ''),
         },
       };
     });
@@ -21733,6 +21781,13 @@ export { _stripeWithAnon, _anonAttribRef, _packCheckoutUrl, _subCheckoutUrl, ANO
 // identity class. It was asserted unconditionally and was false for the entire
 // anonymous cohort (found by driving a real tools/call, 2026-08-26).
 export { trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause };
+// r-gated-cta-tokenized (2026-09-18): the CTA composers, exported so
+// test/gated-unlock-is-tokenized.test.mjs can CALL them. The previous guard on
+// this ground (test/gated-tool-cta.test.mjs) reads tools/list annotations; the
+// URLs a human is actually handed are composed here, per call, and a grep over
+// the source cannot tell a tokenized link from a bare one that a helper
+// happens to mention in a comment.
+export { applyTrialGuardIfFree, _unlockUrl, UPGRADE_URL, SIGNUP_URL };
 
 // r70 follow-up (2026-08-25): the Express app is exported so a guard can bind an
 // EPHEMERAL port under vitest, where the block above deliberately does not

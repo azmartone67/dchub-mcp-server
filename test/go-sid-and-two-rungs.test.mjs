@@ -180,7 +180,7 @@ describe('r-two-rungs — the envelopes an agent actually relays', () => {
 
   it('trialHeader (the gated preview line) names the relay page and the Pro checkout', () => {
     withCtx({ session_id: SID }, () => {
-      const line = trialHeader('rank_markets', SID, 'https://x/', '3 of 10 results shown');
+      const line = trialHeader('rank_markets', SID, '3 of 10 results shown');
       expect(line).toContain(buildHumanRelay('rank_markets', 'free').url);
       const go = line.match(GO_RE);
       expect(go).toHaveLength(1);

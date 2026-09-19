@@ -203,25 +203,25 @@ describe('the same-session-unlock promise is made ONLY where it is true', () => 
 
   it('a session-bearing caller IS promised the same-session unlock', () => {
     const t = withCtx({ session_id: 'e6f1c0de-1234-4aaa-9999-abcdef012345' },
-      () => trialHeader('rank_markets', 'e6f1c0de-1234-4aaa-9999-abcdef012345', 'https://x/'));
+      () => trialHeader('rank_markets', 'e6f1c0de-1234-4aaa-9999-abcdef012345'));
     expect(unlockClause(t)).toMatch(/THIS session unlocks/);
   });
 
   it('a keyed caller IS promised it (credits land on the key hash)', () => {
     const t = withCtx({ api_key: 'dch_live_abc123' },
-      () => trialHeader('rank_markets', '', 'https://x/'));
+      () => trialHeader('rank_markets', ''));
     expect(unlockClause(t)).toMatch(/THIS session unlocks/);
   });
 
   it("the 'no-session' sentinel is NOT promised it, and is told what DOES happen", () => {
-    const t = withCtx({}, () => trialHeader('rank_markets', 'no-session', 'https://x/'));
+    const t = withCtx({}, () => trialHeader('rank_markets', 'no-session'));
     expect(unlockClause(t)).not.toMatch(/THIS session unlocks/);
     expect(t).toMatch(/cannot bind/);
     expect(t).toMatch(/emails the key/);       // the mechanism that DOES exist
   });
 
   it('an empty sessionId is NOT promised it either', () => {
-    const t = withCtx({}, () => trialHeader('rank_markets', '', 'https://x/'));
+    const t = withCtx({}, () => trialHeader('rank_markets', ''));
     expect(unlockClause(t)).not.toMatch(/THIS session unlocks/);
   });
 
@@ -235,7 +235,7 @@ describe('the same-session-unlock promise is made ONLY where it is true', () => 
 
   it('the count and the preview framing are ONE line, not two', () => {
     // They were adjacent lines saying the same thing (~200 chars of duplication).
-    const t = withCtx({}, () => trialHeader('rank_markets', 'no-session', 'https://x/',
+    const t = withCtx({}, () => trialHeader('rank_markets', 'no-session',
                                             _trialGapClause({ results: [1, 2, 3, 4, 5] })));
     expect(t).toContain('3 of 5 results shown');
     expect(t.trimEnd().split('\n')).toHaveLength(1);
