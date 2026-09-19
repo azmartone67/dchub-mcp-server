@@ -27,8 +27,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
-  _ctxALS, _rungsText, _unlockUrl, trialHeader, applyTrialGuardIfFree,
-  buildHumanRelay, _packCheckoutUrl, UPGRADE_URL,
+  _ctxALS, _rungsText, _unlockUrl, _cleanPlatformUnlockUrl, trialHeader, applyTrialGuardIfFree,
+  buildHumanRelay, _packCheckoutUrl, UPGRADE_URL, SIGNUP_URL,
 } from '../server.mjs';
 
 const SECRET = 'test-internal-key-not-a-real-secret';
@@ -216,14 +216,14 @@ describe('the upgrade_url fields inside the tool dispatcher', () => {
       // scan cannot see it — which is how it survived the first pass of this
       // very guard.
       if (/\bUPGRADE_URL\b/.test(l)) return true;
-      // ★ DELIBERATE EXEMPTION, not an oversight: _refUrl(SIGNUP_URL) on the
-      // _isCleanPlatform() branch. OpenAI's App Directory permits
-      // PHYSICAL-goods link-outs only, so for ChatGPT/OpenAI sessions this
-      // server intentionally emits NO checkout — see _scrubCommerce, which
-      // strips Stripe URLs on the same platform for the same reason. Pointing
-      // it at a signed /upgrade/h page instead is an App-Directory compliance
-      // decision and belongs to the owner, not to this guard. Named here so
-      // the next reader finds a decision rather than a gap.
+      // ★ THE EXEMPTION IS GONE (2026-09-19, owner decision). This used to
+      // let _refUrl(SIGNUP_URL) through on the _isCleanPlatform() branch,
+      // because for ChatGPT/OpenAI sessions the server deliberately emitted no
+      // unlock at all. The owner flipped that branch to the signed /upgrade/h
+      // relay, so SIGNUP_URL on an upgrade_url field is now the SAME defect as
+      // the others: a static marketing page that reads neither ?ref nor ?sid.
+      // It stays legal on a signup_url field, which is what it is.
+      if (/\bSIGNUP_URL\b/.test(l)) return true;
       return false;
     });
     expect(bad.map((l) => l.trim().slice(0, 110))).toEqual([]);
@@ -240,12 +240,35 @@ describe('the upgrade_url fields inside the tool dispatcher', () => {
     expect(hit('        upgrade_url: _unlockUrl(name, _sid),')).toBe(false);
   });
 
-  it('the ChatGPT clean-platform branch is a named decision, not a gap', () => {
-    // If this stops matching, the exemption above is protecting nothing and
-    // the comment explaining it has gone stale.
-    const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(SRC).toContain('upgrade_url: _refUrl(SIGNUP_URL)');
-    expect(SRC).toContain('function _isCleanPlatform()');
+  it('the ChatGPT clean-platform branch hands over a signed relay, not /ai', () => {
+    // 2026-09-19, owner decision: this branch used to emit
+    // https://dchub.cloud/ai?ref=mcp-trial&tool=X — the URL ChatGPT flagged.
+    const url = withCtx({ session_id: SID }, () =>
+      _cleanPlatformUnlockUrl('analyze_site', SID));
+    expect(isSigned(url), url).toBe(true);
+    expect(url).toContain('/upgrade/h/');
+    expect(banned([url])).toEqual([]);
+    // it carries THIS caller's session
+    const payload = url.split('/').pop().split('.')[0];
+    expect(Buffer.from(payload, 'base64url').toString()).toContain(SID);
+  });
+
+  it('…and never degrades into a checkout link on that platform', () => {
+    // ★ THE WHOLE REASON THIS IS NOT _unlockUrl. _unlockUrl fails open to
+    // CREDITS_URL — a raw buy.stripe.com Payment Link — and _scrubCommerce
+    // strips exactly those for ChatGPT/OpenAI because a digital-goods checkout
+    // link-out is an App Directory rejection class. With no signing secret
+    // this one must land on the informational page, not on Stripe.
+    delete process.env.DCHUB_INTERNAL_KEY;
+    const url = withCtx({ session_id: SID }, () =>
+      _cleanPlatformUnlockUrl('analyze_site', SID));
+    expect(isStripe(url), 'a Stripe link reached the clean platform').toBe(false);
+    expect(url).not.toContain('/go/c/');
+    expect(url).toBe(SIGNUP_URL);
+    // …whereas the general helper DOES degrade to a payable link, which is
+    // correct for every other platform and wrong for this one.
+    const general = withCtx({ session_id: SID }, () => _unlockUrl('analyze_site', SID));
+    expect(isStripe(general) || isSigned(general)).toBe(true);
   });
 });
 
