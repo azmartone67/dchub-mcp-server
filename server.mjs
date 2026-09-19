@@ -1095,7 +1095,17 @@ const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
 const UPGRADE_URL   = process.env.DCHUB_UPGRADE_URL   || 'https://dchub.cloud/ai#pricing';
-const SIGNUP_URL    = process.env.DCHUB_SIGNUP_URL    || 'https://dchub.cloud/ai';
+// ★ r-signup-default (2026-09-19): this default USED to be
+// 'https://dchub.cloud/ai' — the exact URL
+// test/gated-unlock-is-tokenized.test.mjs bans, embedded as `signup_url` in
+// five gated envelopes. Production was only clean because DCHUB_SIGNUP_URL
+// happens to be set; unsetting that env var silently put the banned wall
+// page back into every gated response, and no test caught it because the
+// guard never checked the constant itself. /ai reads neither ?ref nor ?sid,
+// so a click on it is unattributable. The default is now the same
+// informational, attributable signup page prod already serves — still not a
+// checkout, so _cleanPlatformUnlockUrl can keep failing open to it.
+const SIGNUP_URL    = process.env.DCHUB_SIGNUP_URL    || 'https://dchub.cloud/signup?from=mcp&tier=free&direct=1';
 const KEY_CACHE_TTL = parseInt(process.env.DCHUB_KEY_CACHE_TTL_MS || '300000', 10); // 5 min
 
 // r-agent-friendly-preview (2026-07-05): depth-limited PREVIEWS (the depth-tease
