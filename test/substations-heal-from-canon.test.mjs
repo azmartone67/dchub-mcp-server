@@ -65,9 +65,13 @@ describe('server.mjs keeps its own form', () => {
   // ASSET_QUANTITIES owns the count in server.mjs in the "127k" style it uses
   // throughout. If the canon rule were applied there too, two rules would match
   // one noun and fight on every run.
+  // ★2026-09-19: anchored to the server.mjs filter specifically. COVERAGE_ASSETS
+  // now carries the same `q.label !== 'substation count'` clause for the same
+  // reason, so the bare substring matches in two places and would keep passing
+  // off the OTHER one if this exclusion were deleted.
   it('is excluded from the canon substation rule', () => {
     expect(read('scripts/sync-tools-manifest.mjs'))
-      .toMatch(/q\.label !== 'substation count'/);
+      .toMatch(/'country count'\s*&&\s*q\.label !== 'substation count'/);
   });
 
   it('still states the count in k-form in live code', () => {
