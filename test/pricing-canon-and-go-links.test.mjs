@@ -102,7 +102,14 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
   it('the checkout ladder offers pro and no longer offers founding', () => {
     expect(SRC).toMatch(/\{ id: 'pro', +label: _priceLabel\('pro'\)/);
     expect(SRC).not.toMatch(/id: 'founding'/);
-    expect(SRC).toContain("'[Paid plans — ' + _paidPlansLine() + '](https://dchub.cloud/pricing'");
+    // r-gated-cta-tokenized (2026-09-18): this used to pin the free-tier
+    // nudge's link as a BARE https://dchub.cloud/pricing. That was the single
+    // most-emitted CTA in the product — every free-tier preview of every tool
+    // — and it sent the human to the wall rather than through it. The nudge
+    // now routes through _rungsText, the same session-bound rungs trialHeader
+    // sells, so what is pinned here is that it CANNOT go back.
+    expect(SRC).toContain("'Your human unlocks in one click — ' + _rungsText(toolName, 'free', _ctaSid)");
+    expect(SRC).not.toContain("'](https://dchub.cloud/pricing'");
   });
 });
 
