@@ -490,6 +490,29 @@ function _unlockRungs(toolName, tier, sessionId) {
 // test/gated-unlock-is-tokenized.test.mjs reads this function's own body and
 // fails if a wall URL or UPGRADE_URL appears in it, because no call can reach
 // the catch to prove it behaviourally.
+// ── r-cleanplatform-relay (2026-09-19, owner decision) ───────────────────
+// The clean-platform (ChatGPT/OpenAI) unlock link. Previously
+// _refUrl(SIGNUP_URL) — https://dchub.cloud/ai?ref=mcp-trial&tool=X — the URL
+// ChatGPT flagged: a static marketing page that reads neither ?ref nor ?sid,
+// so no click on it is attributable and no human reaching it is unlocking
+// anything. It is now the signed /upgrade/h relay page, bound to this
+// session: a dchub.cloud page that shows the human what their agent found and
+// what unlocks it.
+//
+// ★ WHY THIS IS NOT _unlockUrl. _unlockUrl fails open to CREDITS_URL, a raw
+// buy.stripe.com Payment Link, and degrades to /go/c — which 302s straight to
+// Stripe. Both are checkout deep-links, and _scrubCommerce strips exactly
+// those on this platform because OpenAI's App Directory treats a digital-goods
+// checkout link-out as a rejection class. So this one fails open to
+// SIGNUP_URL: informational, never a checkout. Reusing _unlockUrl here would
+// quietly put a Stripe link on the platform the scrub exists to keep them off.
+function _cleanPlatformUnlockUrl(toolName, sessionId) {
+  try {
+    const rel = buildHumanRelay(toolName, 'free', sessionId);
+    return (rel && rel.url) || SIGNUP_URL;
+  } catch (_) { return SIGNUP_URL; }
+}
+
 function _unlockUrl(toolName, sessionId) {
   try {
     const r = _unlockRungs(toolName, 'free', sessionId);
@@ -13793,8 +13816,12 @@ function trackedTool(srv, name, description, schema, handler) {
                 structuredContent: {
                   tier: 'free',
                   tool: name,
-                  note: 'Free preview — a sample is shown. For the complete result, sign in to DC Hub or call claim_free_key (free, no email, one call).',
-                  upgrade_url: _refUrl(SIGNUP_URL),
+                  // The copy names what the link IS. It used to say "sign in
+                  // to DC Hub" beside a link to the marketing page; it now
+                  // points at the relay page, which is a page about THIS
+                  // session's result, not a sign-in.
+                  note: 'Free preview — a sample is shown. Call claim_free_key (free, no email, one call) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.',
+                  upgrade_url: _cleanPlatformUnlockUrl(name, ''),
                   // r-cite-toplevel (2026-08-12): was a bare STRING here while
                   // every other surface emitted an OBJECT — the exact "handle
                   // either shape" split we told partner agents to absorb. One
@@ -14196,10 +14223,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             const trimmed = trimForTrial(parsed, name);
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
-              trimmed._note = 'Free preview — a sample is shown. For complete data, call claim_free_key (free, no email) or sign in to DC Hub.';
+              trimmed._note = 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
                        // r-cite-toplevel: object shape, same reason as above.
-                       structuredContent: { tier: 'free', tool: name, upgrade_url: SIGNUP_URL,
+                       structuredContent: { tier: 'free', tool: name,
+                                            upgrade_url: _cleanPlatformUnlockUrl(name, ''),
                                             citation: _normalizeCitation('According to DC Hub (dchub.cloud)') } };
             }
             const _sid = c.session_id || 'no-session';
@@ -21787,7 +21815,7 @@ export { trialHeader, _trialGapClause, _checkoutBinds, _afterPayClause };
 // URLs a human is actually handed are composed here, per call, and a grep over
 // the source cannot tell a tokenized link from a bare one that a helper
 // happens to mention in a comment.
-export { applyTrialGuardIfFree, _unlockUrl, UPGRADE_URL, SIGNUP_URL };
+export { applyTrialGuardIfFree, _unlockUrl, _cleanPlatformUnlockUrl, UPGRADE_URL, SIGNUP_URL };
 
 // r70 follow-up (2026-08-25): the Express app is exported so a guard can bind an
 // EPHEMERAL port under vitest, where the block above deliberately does not
