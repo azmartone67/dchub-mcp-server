@@ -168,6 +168,35 @@ describe('the unlock URL a gated tool composes', () => {
 });
 
 describe('the constants that used to be typed as CTAs', () => {
+  // ── the CONSTANT, not just the composer ────────────────────────────────
+  // Every test above reads a URL a composer RETURNED. That misses a default:
+  // SIGNUP_URL was `https://dchub.cloud/ai` — the URL banned() rejects — and it
+  // is embedded as `signup_url` in five gated envelopes. Production never
+  // showed it because DCHUB_SIGNUP_URL is set there, so the whole guard
+  // depended on an env var no test asserts. These read the constant the module
+  // actually exports, with no env var set.
+  it('SIGNUP_URL is not a banned wall URL, even with no env override', () => {
+    expect(process.env.DCHUB_SIGNUP_URL, 'unset it or this proves nothing')
+      .toBeUndefined();
+    expect(banned([SIGNUP_URL]), SIGNUP_URL).toEqual([]);
+  });
+
+  it('SIGNUP_URL survives the ?ref= append the gated envelope does to it', () => {
+    // server.mjs composes `signup_url: _refUrl(SIGNUP_URL)`. Appending a query
+    // must not turn it into a banned URL — and cannot rescue one either.
+    const refd = SIGNUP_URL + (SIGNUP_URL.includes('?') ? '&' : '?')
+      + 'ref=mcp-trial&tool=analyze_site';
+    expect(banned([refd]), refd).toEqual([]);
+  });
+
+  it('MUST-FAIL CONTROL: banned() does reject the old default', () => {
+    // Without this, the two tests above would pass against any predicate that
+    // rejects nothing at all.
+    expect(banned(['https://dchub.cloud/ai'])).toEqual(['https://dchub.cloud/ai']);
+    expect(banned(['https://dchub.cloud/ai?ref=mcp-trial&tool=analyze_site']))
+      .toHaveLength(1);
+  });
+
   it('UPGRADE_URL is still a fragment link — which is why it is not a CTA', () => {
     // Pinned so the reason stays legible: everything after '#' is the
     // fragment, so ?ref= glued after it never reaches a server. The constant
