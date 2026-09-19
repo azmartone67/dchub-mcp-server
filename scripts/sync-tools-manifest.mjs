@@ -344,6 +344,24 @@ const qtyValue = (s) => {
 };
 const bigEnough = (s) => qtyValue(s) >= 50;
 
+// ★2026-09-19. Render a canon value in the NOTATION the published literal used.
+// The asset snapshot writes "58k"/"33k"; registry prose writes "33,000 gas
+// pipeline segments" beside "127,000+ substations". Those are the SAME claim in
+// two notations, so a string comparison reports five false drifts for every real
+// one — and a guard whose output is mostly noise gets muted, which is how the
+// real one ("64,000 fiber routes" against an owner value of 58k) survived. So:
+// compare asset quantities by VALUE, and when a heal is genuinely needed, keep
+// the sample's comma/k form and its trailing "+" so the diff carries the number
+// that changed and nothing else. The "+" is faithful in either direction —
+// mcp_facts.json states every one of these numbers is a floor that rounds DOWN.
+const renderLike = (canon, sample) => {
+  const v = qtyValue(canon);
+  if (!Number.isFinite(v) || v <= 0) return canon;
+  const plus = /\+$/.test(sample) ? '+' : '';
+  if (/k$/i.test(sample.replace(/\+$/, ''))) return `${v % 1000 === 0 ? v / 1000 : (v / 1000)}k${plus}`;
+  return `${v.toLocaleString('en-US')}${plus}`;
+};
+
 // ---- line-unit exclusions + span-aware matcher ------------------------------
 // ★2026-07-28: some registry-facing files intermix CURRENT paste-ready copy
 // with HISTORICAL narrative ("Since then we've shipped v2.3.2: 47 tools").
@@ -392,22 +410,26 @@ const applyRx = (txt, rx, decide, commentAware) => {
 // returns healed text. Same code path for CHECK and FIX — they cannot diverge.
 const applyQuantities = (file, txt, rules, commentAware) => {
   let out = txt;
-  for (const { noun, canon, label, skip, after } of rules) {
+  for (const { noun, canon, label, skip, after, numeric } of rules) {
+    // `numeric` rules match on VALUE and heal in the sample's own notation; the
+    // default stays byte equality so server.mjs keeps healing to the canon form.
+    const same = (lit) => numeric ? qtyValue(lit) === qtyValue(canon()) : lit === canon();
+    const repl = (lit) => numeric ? renderLike(canon(), lit) : canon();
     out = applyRx(out, quantityRx(noun), (m) => {
-      if (m[1] === canon() || !bigEnough(m[1])) return null;
+      if (same(m[1]) || !bigEnough(m[1])) return null;
       if (skip && skip(m[0])) return null;
       problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
-      return canon() + m[2];
+      return repl(m[1]) + m[2];
     }, commentAware);
     // ★2026-08-05 number-AFTER-noun rules (3 groups: prefix, number, suffix).
     // Same file, same skip, same report — a claim must not become invisible
     // just because the copywriter put the quantity in a trailing parenthesis.
     for (const rx of after || []) {
       out = applyRx(out, rx, (m) => {
-        if (m[2] === canon() || !bigEnough(m[2])) return null;
+        if (same(m[2]) || !bigEnough(m[2])) return null;
         if (skip && skip(m[0])) return null;
         problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
-        return m[1] + canon() + m[3];
+        return m[1] + repl(m[2]) + m[3];
       }, commentAware);
     }
   }
@@ -924,9 +946,29 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     // reads back to a user is as published as a README.
     'integrations/packs/site.json',
   ];
+  // ★2026-09-19. ASSET_QUANTITIES was applied to server.mjs ALONE, so every
+  // registry-INGESTED file published the asset layers hand-typed and unwatched.
+  // Measured on c037f43: smithery.yaml's description carried "64,000 fiber
+  // routes" against an owner value of 58k (canonical/mcp_facts.json, regenerated
+  // that morning) — a ~10% over-claim in the copy Smithery ingests — while this
+  // script printed "✓ all manifest + facts surfaces consistent". The facility,
+  // market, country and deal figures in the SAME SENTENCE healed correctly,
+  // because those four are in QUANTITIES and the asset layers were not. Two of
+  // three claims healed and the third unwatched, reported green: the shape this
+  // repo keeps finding. COVERAGE now scans both rule sets.
+  //
+  // ★ substations is EXCLUDED here — the mirror image of the server.mjs block,
+  //   which excludes the canon_phrases substation rule for the same reason.
+  //   QUANTITIES owns that noun for README-class prose in the "127,000+" form;
+  //   ASSET_QUANTITIES would rewrite it to "127k" and the two would fight on
+  //   every run, each undoing the other.
+  const COVERAGE_ASSETS = ASSET_QUANTITIES
+    .filter((q) => q.label !== 'substation count')
+    .map((q) => ({ ...q, numeric: true }));
   for (const f of COVERAGE) {
     let txt; try { txt = readCur(f); } catch { continue; }
-    const healed = applyQuantities(f, txt, QUANTITIES, false);
+    let healed = applyQuantities(f, txt, QUANTITIES, false);
+    healed = applyQuantities(f, healed, COVERAGE_ASSETS, false);
     if (FIX && healed !== txt) pend(f, healed);
   }
   // ★2026-08-03: the mcp-server.json top-level description USED to be scanned
