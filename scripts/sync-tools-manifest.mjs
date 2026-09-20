@@ -154,8 +154,15 @@ const canonFatal = (msg) => {
 let SNAP = null;
 try { SNAP = readJSON(CANON_FILE); }
 catch (e) { canonFatal(`cannot read the canon snapshot — ${e.message}`); }
+// ★2026-09-20 — the four grid/asset LAYERS join the canon read. They used to
+// come from canonical/mcp_facts.json, which publishes its own copy of the same
+// numbers, so substations / transmission_lines / fiber_routes / assets had TWO
+// sources in one repo. The comment below this block said they "have no
+// /api/v1/canon/phrases home" — that stopped being true when the feed started
+// publishing them, and canon_phrases.json now carries every one.
+const CANON_LAYERS = ['substations', 'transmission_lines', 'fiber_routes', 'assets'];
 const P = {};
-for (const key of ['deals', 'facilities', 'markets', 'countries', 'substations']) {
+for (const key of ['deals', 'facilities', 'markets', 'countries', ...CANON_LAYERS]) {
   if (!isPhraseVal(SNAP[key])) {
     canonFatal(`key "${key}" is ${JSON.stringify(SNAP[key])}, not a floor phrase like "16,500+". ` +
       `Refusing to heal registry surfaces from a malformed snapshot.`);
@@ -224,19 +231,57 @@ catch (e) { factsFatal(`cannot read the facts snapshot — ${e.message}`); }
 // narrow: "assets" alone is ordinary English, so the mapped-asset rule requires
 // the word "mapped"; and "US power plants" must stay distinct from the GEM
 // "global power generating units" sitting in the same sentence beside it.
+// ★ STYLE IS NOT VALUE. The published copy writes the grid layers in k-form
+//   ("127k substations") and the mapped-asset total in comma-form
+//   ("330,000+ mapped assets"). Canon publishes both as floor phrases
+//   ("127,000+"). Rendering here keeps every published string byte-identical
+//   while the NUMBER behind it moves to one source — a collapse that rewrote
+//   the prose would bury the thing being reviewed in a diff of style churn.
+//   Floors round DOWN, so k-form truncates and never rounds up.
+const asK = (phrase) => {
+  const n = Number(String(phrase).replace(/[^\d]/g, ''));
+  if (!Number.isFinite(n) || n < 1000) return null;
+  return `${Math.floor(n / 1000)}k`;
+};
+const fromCanon = (canonKey, style) => () => {
+  const v = P[canonKey];
+  // ★ NO FALLBACK TO FACTS. Falling back is how a key silently returns to
+  //   having two sources; the point of this change is that it has one. canon
+  //   is validated as a floor phrase above, so reaching here with a bad value
+  //   means the snapshot shape changed and a human should look.
+  const out = style === 'k' ? asK(v) : v;
+  if (!isAssetVal(out)) canonFatal(
+    `canon key "${canonKey}" is ${JSON.stringify(v)}, which does not render to a `
+    + `publishable ${style === 'k' ? 'k-form' : 'floor'} quantity. Refusing to heal `
+    + `published surfaces from it — and deliberately NOT falling back to `
+    + `${FACTS_FILE}, which is the duplicate source this read replaced.`);
+  return out;
+};
+
 const ASSET_QUANTITIES = [
   { key: 'infrastructure_assets_total', label: 'mapped-asset total',
+    canonKey: 'assets', style: 'plus',
     noun: String.raw`mapped\s+(?:[A-Za-z&/-]+\s+){0,2}assets\b` },
-  { key: 'substations',        label: 'substation count',        noun: String.raw`substations\b` },
-  { key: 'transmission_lines', label: 'transmission-line count', noun: String.raw`transmission\s+lines\b` },
-  { key: 'fiber_routes',       label: 'fiber-route count',       noun: String.raw`fiber\s+routes\b` },
+  { key: 'substations',        label: 'substation count',        canonKey: 'substations',        style: 'k',
+    noun: String.raw`substations\b` },
+  { key: 'transmission_lines', label: 'transmission-line count', canonKey: 'transmission_lines', style: 'k',
+    noun: String.raw`transmission\s+lines\b` },
+  { key: 'fiber_routes',       label: 'fiber-route count',       canonKey: 'fiber_routes',       style: 'k',
+    noun: String.raw`fiber\s+routes\b` },
   { key: 'gas_pipelines',      label: 'gas-pipeline count',      noun: String.raw`gas\s+pipeline\s+segments\b` },
   { key: 'power_plants_us',    label: 'US power-plant count',    noun: String.raw`US\s+power\s+plants\b` },
   { key: 'submarine_cables',   label: 'subsea-cable count',      noun: String.raw`subsea\s+cables\b` },
   { key: 'cable_landings',     label: 'cable-landing count',     noun: String.raw`cable\s+landings\b` },
   { key: 'generating_units_global', label: 'generating-unit count',
     noun: String.raw`global\s+power\s+generating\s+units\b` },
-].map(({ key, label, noun }) => {
+].map(({ key, label, noun, canonKey, style }) => {
+  // ★ canonKey wins. An entry that names one is served ENTIRELY from
+  //   canon_phrases.json and never reads FACTS — not even as a fallback, or
+  //   the key quietly has two sources again the first time canon hiccups.
+  if (canonKey) return { noun, label, canon: fromCanon(canonKey, style) };
+  // Everything else has no /api/v1/canon/phrases home yet — gas pipelines, US
+  // power plants, subsea cables, cable landings and the GEM unit inventory all
+  // come from /api/v1/infrastructure/stats, which canon does not republish.
   const v = FACTS.numbers?.[key];
   if (!isAssetVal(v)) factsFatal(
     `numbers.${key} is ${JSON.stringify(v)}, not a floor phrase like "330,000+" or "127k". `
