@@ -11,6 +11,7 @@ test/as-of-record-scope.test.mjs
 test/asset-quantities-heal-registry-copy.test.mjs
 test/auth-refused-identity.test.mjs
 test/auth-source.test.mjs
+test/auth-unverified-identity.test.mjs
 test/automint-trial-rungs.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs
 test/cap-signal.test.mjs
