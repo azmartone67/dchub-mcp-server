@@ -260,9 +260,20 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     }
   });
 
-  it('session-bound Pro (Fix E): the walled PAID_ONLY tool is served, and a preview tool is not demoted to a wall', async () => {
+  it('session-bound Pro (Fix E): the gated PAID_ONLY tool is served IN FULL, and a preview tool is not demoted to a wall', async () => {
     const s = await openSession({});
-    expect(walled(await s.call('get_tax_incentives', { state: 'VA' }))).toBe(true);
+    // r-fwe-preview (2026-09-20): get_tax_incentives is in the FREE-with-email
+    // class, which no longer hard-walls — it serves the masked preview on every
+    // call (_alwaysPreview). So the contrast Fix E has to demonstrate is
+    // preview → FULL, not wall → served. `walled` is still asserted, as FALSE:
+    // a wall reappearing here is exactly the regression that change removed.
+    // The mask read is the same one this test already uses on rank_markets, and
+    // the post-lift assertion is now STRONGER than the one it replaces — it
+    // requires the real score, where before "not a wall" also passed on a
+    // masked preview.
+    const before = await s.call('get_tax_incentives', { state: 'VA' });
+    expect(walled(before), before.slice(0, 200)).toBe(false);
+    expect(firstRow(before).score, 'the gated preview no longer masks score — no contrast left').toBeNull();
     const preview = await s.call('rank_markets', { limit: 5 });
     expect(walled(preview), preview.slice(0, 200)).toBe(false);
     expect(firstRow(preview).score, 'the anonymous preview no longer masks score — no contrast left').toBeNull();
@@ -270,11 +281,28 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     fixE.set(s.sid, 'pro');
     const r = await s.call('get_tax_incentives', { state: 'VA' });
     expect(walled(r), r.slice(0, 300)).toBe(false);
+    expect(firstRow(r).score, 'the paid lift did not unmask the gated tool').toBe(ROWS[0].score);
     expect(walled(await s.call('get_tax_incentives', { state: 'VA' })), 'the next call lost the tier').toBe(false);
 
     const full = await s.call('rank_markets', { limit: 5 });
     expect(walled(full), full.slice(0, 300)).toBe(false);
     expect(firstRow(full).score).toBe(ROWS[0].score);
+  });
+
+  // r-fwe-preview (2026-09-20). Measured live the same day, 4 independent
+  // sessions: call #1 served the trimmed preview and call #2 returned
+  // isError:true with `needs a bound email, not a payment` — on the tools that
+  // carry ~93% of blocked signals. The wall was call-ORDINAL: the argument form
+  // walled as call #2 in one session served as call #1 in another. Three calls,
+  // because two is what the old once-per-session rescue already allowed.
+  it('r-fwe-preview: the FREE-with-email class never hard-walls — calls #2 and #3 are previews, not isError', async () => {
+    const s = await openSession({});
+    for (const tool of ['get_tax_incentives', 'get_interconnection_queue', 'compare_isos']) {
+      for (let i = 0; i < 3; i += 1) {
+        const t = await s.call(tool, { state: 'VA' });
+        expect(walled(t), `${tool} call #${i + 1} hard-walled: ${t.slice(0, 200)}`).toBe(false);
+      }
+    }
   });
 
   it('session-bound Pro (Fix E) reaches a preview tool, which never calls trial-check itself', async () => {
