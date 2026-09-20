@@ -51,6 +51,50 @@ export function sourceMarker(source) {
   return String(source || '').match(/\(([a-z][a-z-]*)\)\s*$/)?.[1] || null;
 }
 
+/** The quantity keys of a snapshot — everything that is not metadata.
+ *
+ * Exported because the change-detection below walks it: a guard that wants to
+ * know "would an updated substation count be noticed" should ask this, not
+ * grep the source for a hardcoded key list. */
+export const quantityKeys = (o) => Object.keys(o || {})
+  .filter((k) => !k.startsWith('_') && k !== 'retrieved_at');
+
+const readSnapshot = () => {
+  try { return JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch { return null; }
+};
+
+/** Every floor phrase in a canon body, plus the reasons to refuse.
+ *
+ * Pure: no network, no filesystem. `prev` is the committed snapshot (or null).
+ * Returns {fields, bad} — a non-empty `bad` means keep what is committed.
+ */
+export function selectPhrases(body, prev) {
+  const RESERVED = new Set(['source']);      // label, not a quantity
+  const candidates = Object.entries(body).filter(
+    ([k, v]) => typeof v === 'string' && !k.startsWith('_') && !RESERVED.has(k));
+  const fields = Object.fromEntries(candidates.filter(([, v]) => isPhrase(v)));
+
+  // ★ A SCAN THAT CAN FIND NOTHING NEEDS A FLOOR. Discovery by shape means a
+  //   body that returned {} would yield zero fields, zero complaints and an
+  //   EMPTY snapshot — which sync-tools-manifest treats as fatal, but only
+  //   after this script has already overwritten the good file. These five have
+  //   been published continuously since the feed existed; requiring them turns
+  //   "found nothing" into a refusal instead of a silent erase.
+  const REQUIRED = ['facilities', 'countries', 'deals', 'markets', 'substations'];
+  const bad = REQUIRED.filter((k) => !isPhrase(fields[k]));
+
+  // ★ PROSE IS NOT A QUANTITY, BUT A QUANTITY THAT TURNED INTO PROSE IS A
+  //   CORRUPT SOURCE. dcpi_regions is legitimately a sentence ("North America,
+  //   Europe and Asia-Pacific") and is correctly skipped by shape. A field that
+  //   was a phrase in the COMMITTED snapshot and is not one now is the other
+  //   case entirely, and silently dropping it would republish the old number
+  //   under a green check — refuse instead.
+  for (const [k, v] of candidates) {
+    if (!isPhrase(v) && isPhrase(prev?.[k])) bad.push(`${k} (was ${prev[k]}, now ${JSON.stringify(v)})`);
+  }
+  return { fields, bad };
+}
+
 /** 'heal' | 'keep' | 'fail' — what a body entitles us to do to canon. */
 export function decide(body) {
   const marker = sourceMarker(body?.source);
@@ -107,16 +151,28 @@ async function main() {
     return;
   }
   const tools = Number(body.tools);
-  // ★ substations JOINS THE PHRASE SET 2026-09-09. The endpoint has always
+  // ★ substations JOINED THE PHRASE SET 2026-09-09. The endpoint has always
   //   published it ("127,000+"), but this script copied only four fields, so
   //   every surface quoting a substation count was hand-typed and drifted:
   //   README and integrations/chatgpt/instructions.txt said 126,000+ while
   //   scripts/smithery_description.txt said 127,000+ — three files, two
   //   answers, none of them healable. A field the source publishes and the
   //   snapshot drops is a number nothing owns.
-  const fields = { facilities: body.facilities, countries: body.countries, deals: body.deals,
-                   markets: body.markets, substations: body.substations };
-  const bad = Object.entries(fields).filter(([, v]) => !isPhrase(v)).map(([k]) => k);
+  //
+  // ★2026-09-20 — AND THAT FIX GUARANTEED THE RECURRENCE. Adding the one
+  //   field left SIX still dropped. Measured that morning, the endpoint
+  //   published eleven phrase fields and this snapshot copied five; assets,
+  //   dcpi_countries, fiber_routes, news_sources and transmission_lines were
+  //   all "a number nothing owns" by the same sentence above. The visible
+  //   cost: scripts/smithery_description.txt — the blurb a human pastes into
+  //   the Smithery listing — published "64,000+ fiber routes" against a
+  //   measured 58,183. Not stale, OVER by ~5,800, on a public listing.
+  //
+  // So the set is no longer a LIST OF NAMES. Every string the endpoint
+  // publishes in floor-phrase shape is copied; a field it adds later joins
+  // with no edit here. Names appear below only as a FLOOR (see REQUIRED),
+  // never as the definition of what is eligible.
+  const { fields, bad } = selectPhrases(body, readSnapshot());
   if (!Number.isInteger(tools) || tools < 20 || tools > 500) bad.push('tools');
   if (bad.length) {
     console.log(`canon-phrases refresh: implausible field(s) ${bad.join(', ')} — keeping the committed snapshot`);
@@ -129,21 +185,26 @@ async function main() {
     _warning: 'CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by sync-tools-manifest.mjs (and the smithery-canon-guard test) as the source for every phrase quantity in server.mjs + the registry files.',
     retrieved_at: new Date().toISOString(),
     tools,
-    facilities: fields.facilities,
-    countries: fields.countries,
-    deals: fields.deals,
-    markets: fields.markets,
-    substations: fields.substations,
+    // spread, not enumerated — a third name list here would drift from the two
+    // above the moment the feed gains a field, which is the whole bug.
+    ...Object.fromEntries(Object.keys(fields).sort().map((k) => [k, fields[k]])),
   };
-  const prev = (() => { try { return JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch { return null; } })();
-  const same = prev && ['tools', 'facilities', 'countries', 'deals', 'markets', 'substations'].every((k) => prev[k] === snap[k]);
+  // ★ The comparison walks the SNAPSHOT's own keys, plus the previous file's,
+  //   so a field being REMOVED from the feed counts as a change. Comparing only
+  //   the new keys would call a shrunk snapshot "already matching" and never
+  //   write — freezing a field at its last value with nothing to show for it.
+  const prev = readSnapshot();
+  const compare = new Set([...quantityKeys(snap), ...quantityKeys(prev)]);
+  const same = prev && [...compare].every((k) => prev[k] === snap[k]);
   if (same) {
     console.log('canon-phrases refresh: ✓ snapshot already matches live canon — not rewriting (retrieved_at stays at last change)');
     return;
   }
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(snap, null, 2) + '\n');
-  console.log(`canon-phrases refresh: ✓ wrote ${path.relative(ROOT, OUT)} — tools ${tools} · facilities ${snap.facilities} · countries ${snap.countries} · deals ${snap.deals} · markets ${snap.markets}`);
+  const shown = quantityKeys(snap).filter((k) => k !== 'tools')
+    .map((k) => `${k} ${snap[k]}`).join(' · ');
+  console.log(`canon-phrases refresh: ✓ wrote ${path.relative(ROOT, OUT)} — tools ${tools} · ${shown}`);
 }
 
 // Run only as a CLI. Importing this module (the guard test does) must not fire
