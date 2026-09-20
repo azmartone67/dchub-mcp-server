@@ -27,7 +27,12 @@ const KEY = 'dch_live_hineedssession_key001';
 const sha = (k) => createHash('sha256').update(k).digest('hex');
 // variant 'claude' skips the auto-redeem, so the block builder makes no backend call.
 const CLAIM = { claim_url: 'https://dchub.cloud/claim/tok-x', claim_token: 'tok-x', count: 2, variant: 'claude' };
-const WALLED = /needs full access|is a paid feature/;
+// Imported, not re-derived: this regex lived here AND in
+// test/paid-lift-in-session.test.mjs, and BOTH broke together the day a
+// third wall headline shipped. The question these tests ask is "was this a
+// wall", not how it was worded. `S` is the dynamic import in beforeAll, so
+// the lookup has to stay lazy — inside the function body, not at module load.
+const WALLED = { test: (t) => S.isHardWallText(t) };
 
 let S, PORT, httpServer, stub;
 const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_GO_LINKS'];
