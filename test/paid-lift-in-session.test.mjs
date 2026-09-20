@@ -165,7 +165,9 @@ async function openSession(headers) {
   };
 }
 
-const walled = (text) => /needs full access|is a paid feature/.test(text);
+// Imported, not re-derived — see the note in
+// test/high-intent-needs-a-session.test.mjs. Lazy: `S` is set in beforeAll.
+const walled = (text) => S.isHardWallText(text);
 
 /** The client_reference_id each signed /go/c link in `text` carries (plan|ref|sid). */
 function goRefs(text) {

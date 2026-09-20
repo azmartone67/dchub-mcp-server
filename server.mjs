@@ -5358,6 +5358,32 @@ const PRO_ONLY_TOOLS = new Set([
   'export_dataset',
 ]);
 
+// r-free-with-email (2026-09-20): the load-bearing HALF of PAID_ONLY_TOOLS.
+// That set holds two classes under one name — six PRO-only premium tools, and
+// a "FREE-with-email-key" group its own comments label as such. The wall copy
+// treated them identically and told the second group to pay for something a
+// free `bind_email` unlocks. DERIVED from PRO_ONLY_TOOLS, never a second list,
+// so a tool promoted to Pro cannot keep advertising itself as free.
+// Every headline a HARD WALL can open with. Exported because two test files
+// had each re-derived it as /needs full access|is a paid feature/, and both
+// broke on the same day a third headline appeared — which is what a duplicated
+// predicate always does. `isHardWallText` is the question those tests actually
+// ask ("was this response a wall?"); the wording is not their subject.
+// test/free-with-email-is-not-a-paid-feature.test.mjs pins every entry against
+// the copy itself, so this list cannot drift from what the walls emit.
+export const HARD_WALL_HEADLINES = Object.freeze([
+  'needs full access',                   // keyed, Pro
+  'is a paid feature',                   // anon, Pro
+  'needs a free key, not a payment',     // anon, free-with-email
+  'needs a bound email, not a payment',  // keyed, free-with-email
+]);
+export const isHardWallText = (t) =>
+  HARD_WALL_HEADLINES.some((h) => String(t || '').includes(h));
+
+export function isFreeWithEmailTool(name) {
+  return PAID_ONLY_TOOLS.has(name) && !PRO_ONLY_TOOLS.has(name);
+}
+
 // ── r-continuation item 4 (2026-09-03): the plan says which steps are gated ──
 //
 // Until now an agent discovered a step was paid by RUNNING it and being stopped.
@@ -14183,7 +14209,41 @@ function trackedTool(srv, name, description, schema, handler) {
         // r-durable-key (2026-07-15): durable-key-bound (pk-) when keyed so the
         // credits land on the agent's OWN key, not the ephemeral session.
         const _packUrl = _packCheckoutUrl(c.session_id);
-        const _mdKeyed = `## \u{1F512} \`${name}\` needs full access
+        // ── r-free-with-email (2026-09-20) ────────────────────────────────
+        // PAID_ONLY_TOOLS holds TWO classes under one name. Its own comments
+        // say so: six PRO-only premium tools, and a "FREE-with-email-key"
+        // group (get_interconnection_queue, compare_isos, list_transactions,
+        // hyperscaler_deals, get_facility, get_market_intel, ...). The second
+        // group needs a BOUND EMAIL, not a payment — `unlocked_tools` in this
+        // very envelope lists them.
+        //
+        // The wall did not distinguish them. It opened "`X` is a paid
+        // feature", asked for $10/$99, and then said "full depth still needs
+        // one of the unlocks above" — false for this class — with the one true
+        // recovery (`bind_email`, free, in-band) LAST, beneath two sentences
+        // contradicting it.
+        //
+        // Measured on the live board the day this shipped (be#4939 classified
+        // signals so blocked could be counted on its own): of 169 blocked
+        // signals platform-wide, get_interconnection_queue alone held 135, and
+        // at least 157 (93%) sat on tools THIS FLAG marks free. Every one of
+        // them was told to pay for something a free key unlocks.
+        //
+        // PRO_ONLY_TOOLS already exists to tell exactly this truth — its
+        // r62b-conv comment records 33 trials minted / 2 reconnected (94%
+        // drop) because the wall told agents to retry with a key that could
+        // not unlock the tool. It is consulted in six places. This copy was
+        // not one of them.
+        const _freeWithEmail = isFreeWithEmailTool(name);
+        const _mdKeyed = _freeWithEmail
+          ? `## \u{1F511} \`${name}\` needs a bound email, not a payment
+
+Your key is not email-bound yet, and that — not money — is what is holding \`${name}\`.
+
+\u{1F916} **You can fix this yourself, in this session:** call \`bind_email\` with your human's email (free, no card), then call \`${name}\` again.
+
+\u{1F464} **Tell your human:** only if you want higher limits — ${_rungsText(name, tier || 'free', c.session_id)}. \`${name}\` itself does not require it.`
+          : `## \u{1F512} \`${name}\` needs full access
 
 You're on **free tier** — \`${name}\` returns its full result on a paid plan.
 
@@ -14220,7 +14280,18 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // capture even 2-3% = +3-5 conversions/mo from this cohort alone.
         const _isClaude = (c.platform || '').toLowerCase() === 'claude';
         // Neither branch leads with a Starter link any more: both asks come from _rungsText.
-        const _mdAnon = _isClaude
+        // ★ The free-with-email copy is platform-INDEPENDENT on purpose. The
+        //   r71-claudetune split exists because Claude.ai web cannot paste an
+        //   X-API-Key back into chat, so it needs a browser checkout rather
+        //   than a key flow. `bind_email` is a TOOL CALL — it works identically
+        //   on every client, so there is nothing to branch on here.
+        const _mdAnon = _freeWithEmail
+          ? `## \u{1F511} \`${name}\` needs a free key, not a payment
+
+\u{1F916} **You can fix this yourself — no human, no card:** call \`bind_email\` with your human's email, then call \`${name}\` again. That is the entire unlock for this tool.
+
+\u{1F464} **Tell your human:** only if you want higher limits — ${_rungsText(name, tier || 'free', c.session_id)}. \`${name}\` itself does not require it.`
+          : _isClaude
           ? `## \u{1F512} \`${name}\` is a paid feature
 
 \u{1F464} **Tell your human:** unlock \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. Works in any browser: click, pay, refresh this chat — \`${name}\` unlocks.
