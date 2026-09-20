@@ -3107,6 +3107,13 @@ async function _validateKeyUncached(api_key) {
       // daily monetize cron marked over the grid/fiber threshold. Only ever true while
       // the backend MONETIZE_METERED_ENFORCE switch is on → the metered 402 gate below.
       metered_enforce: data.metered_enforce === true,
+      // r-auth-demoted (2026-09-20): the THIRD outcome for a credential the
+      // backend ACCEPTS. Only the backend can know it — validation is the one
+      // hop that sees users.plan next to the entitlement the account actually
+      // resolves to. Absent on an older backend, and `=== true` keeps this
+      // inert there rather than inventing a demote from a missing field.
+      demoted: data.demoted === true,
+      demote_reason: data.demote_reason || null,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -3252,6 +3259,35 @@ export function _authRefusal(presentedKey, servedKey, validation) {
 export function _authUnverified(presentedKey, validation) {
   if (!presentedKey) return false;
   return !!(validation && validation.indeterminate === true);
+}
+
+// r-auth-demoted (2026-09-20): the outcome the other two cannot reach.
+//
+// A refusal and an unverifiable answer both arrive as valid:false. The third
+// case is a credential the backend ACCEPTS — 200, valid:true — and then serves
+// at a tier BELOW what the account bought, because entitlement resolved to free
+// (a canceled subscription, or dunning past the demote stamp). Nothing in that
+// response distinguished it from a genuinely free keyed caller: key_rejected is
+// false so _authRefusal returns null, indeterminate is false so _authUnverified
+// returns false, and tier:'free' is the same string either way.
+//
+// ★ THIS CANNOT BE DERIVED HERE, AND MUST NOT BE GUESSED AT. The MCP layer sees
+// one tier and has nothing to compare it against — no entitled-tier field, no
+// plan of record. Only the backend holds both sides. So this reads a flag the
+// backend sets and does NOT restate the rule behind it; restating an
+// entitlement rule in a second place is the defect dchub-backend #4877/#4903/
+// #4950 spent three PRs removing.
+//
+// Disjoint from both siblings BY CONSTRUCTION, not by ordering: a demote is
+// valid:true, while a refusal is key_rejected:true and an indeterminate answer
+// is indeterminate:true — and both of those are valid:false.
+//
+// Inert against a backend that does not send the field: `demoted === true`.
+export function _authDemoted(presentedKey, validation) {
+  if (!presentedKey) return null;
+  if (!validation || validation.valid !== true) return null;
+  if (validation.demoted !== true) return null;
+  return validation.demote_reason || 'demoted';
 }
 
 // ── Monthly quota: the GATEWAY CONSUMER of /api/v1/mcp/monthly-usage ──────
@@ -15620,8 +15656,43 @@ export function _identitySource(ctxLike) {
     // neither the field nor prose.
     out.credential_refused = c.auth_refused;
     out.means = _refusedMeans(src, c.auth_refused, !!c.api_key);
+  } else if (c.auth_demoted) {
+    // r-auth-demoted: the key is GOOD and was accepted; the ACCOUNT behind it
+    // currently resolves to free. Reported last because it is the only one of
+    // the three that says nothing is wrong with the credential — the other two
+    // branches are about the key, this one is about the subscription. The
+    // branches are disjoint by construction (see _authDemoted), so this order
+    // is readability, not precedence.
+    out.credential_demoted = c.auth_demoted;
+    out.means = _demotedMeans(src, c.auth_demoted, c.tier || 'free');
   }
   return out;
+}
+
+// r-auth-demoted: prose for a GOOD key on an account that currently resolves to
+// free. The distinction from _refusedMeans is the whole point: nothing here is
+// wrong with the credential, so "send a key DC Hub accepts" would be actively
+// misleading advice — the agent would go hunting for a key problem that does not
+// exist, and the one action that resolves this is not one an agent can take.
+//
+// ★ NAMES THE REASON, NEVER THE PRICE OR THE PLAN. The backend sends a coarse
+// reason; it is not this layer's job to infer from it what the human owes or
+// what they used to be on. An agent that repeats an invented plan name to its
+// human has made the support ticket worse.
+function _demotedMeans(src, reason, tier) {
+  const why = reason === 'canceled'
+    ? 'the subscription behind it is no longer active'
+    : reason === 'dunning_demote'
+      ? 'a recent payment on that account did not go through'
+      : 'that account currently resolves to the free tier';
+  return `The key that arrived via '${src}' is VALID and was accepted \u2014 this is not a `
+    + `credential problem. It was served at ${tier.toUpperCase()} tier because ${why}, `
+    + 'so paid depth this account previously had is not being returned right now. '
+    + 'Sending a different key will not change this and `claim_free_key` will not '
+    + 'help. PAUSE and tell your human, in your own words, that DC Hub is serving '
+    + 'their account at free tier for a billing reason and only they can resolve it '
+    + 'at https://dchub.cloud/account \u2014 do not guess at what they owe or which plan '
+    + 'they were on.';
 }
 
 // r-auth-refused: prose for a credential that arrived and was refused (see
@@ -21592,12 +21663,14 @@ app.post(MCP_PATHS, async (req, res) => {
       // Kill switch: DCHUB_LATE_KEY_DISABLE=1 → pre-fix behavior.
       let _authRefused = null;   // r-auth-refused: set only when this request's key was refused
       let _authUnverifiedFlag = false;   // r-auth-unverified: backend could not be asked
+      let _authDemotedFlag = null;   // r-auth-demoted: accepted, but served below what was bought
       if (apiKey && apiKey !== meta.api_key
           && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_LATE_KEY_DISABLE || ''))) {
         const _v = await validateKey(apiKey);
         const _r = _lateKeyResolve(meta, apiKey, _v);
         _authRefused = _authRefusal(apiKey, (_r ? _r.meta : meta).api_key, _v);
         _authUnverifiedFlag = _authUnverified(apiKey, _v);
+        _authDemotedFlag = _authDemoted(apiKey, _v);
         if (_r) {
           meta = _r.meta;
           if (_r.persist) {
@@ -21614,6 +21687,7 @@ app.post(MCP_PATHS, async (req, res) => {
         auth_source: _authChannel,
         auth_refused: _authRefused,   // r-auth-refused: per request, never carried in meta
         auth_unverified: _authUnverifiedFlag,   // r-auth-unverified: same per-request rule
+        auth_demoted: _authDemotedFlag,   // r-auth-demoted: same per-request rule
         source: _pathSource(req),   // r-source-path: rides EVERY request
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
@@ -21881,6 +21955,7 @@ app.post(MCP_PATHS, async (req, res) => {
         auth_source: _authChannel,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
+        auth_demoted: _authDemoted(_keyPresented, validation),   // r-auth-demoted
         source: _pathSource(req),   // r-source-path: rides EVERY request
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
