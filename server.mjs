@@ -7510,9 +7510,33 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
 // trialHeader. The error-suppression contract is unchanged: a body that looks
 // like a backend 4xx blob is dropped and the CTA is returned alone (there is no
 // data to lead with in that case).
-function phase9L_clean_preview(cta, body) {
+export function phase9L_clean_preview(cta, body) {
   try {
     var s = String(body || '');
+    // ── r-404-is-not-a-sale (2026-09-20) ───────────────────────────────────
+    // A 404 means the CALLER'S IDENTIFIER DID NOT RESOLVE. Suppressing it and
+    // returning the upsell alone is how an agent gets told it succeeded when it
+    // did not. Measured live on get_market_intel {"market":"Dallas, TX"}:
+    //
+    //   structuredContent : error "API 404", code NOT_FOUND, and a `detail`
+    //                       naming exactly how to fix it ("Use a valid market
+    //                       id … call rank_markets for the full list")
+    //   content[0].text   : "## 📊 Your agent just answered using 1 of 300+
+    //                       markets … The number above is real" + claim_free_key
+    //                       + $10 + Pro $99, and isError:false
+    //
+    // Nothing was answered and no number was above. The one field that could
+    // have rescued the call was deleted from the only channel the model reads,
+    // and the rational next step for that agent was to ask its human to pay for
+    // a typo. That is the failure family ONE_OF_REQUIRED already names — "a call
+    // missing its identifier needs 'you need to name one'. Asking for money
+    // first is the defect" — with the worse ending, because this one claims
+    // success first.
+    //
+    // 401/402/403 KEEP the old behaviour on purpose: those ARE entitlement
+    // answers, the caller's arguments were fine, and the CTA is the correct
+    // response to them. Only the caller-error class changes.
+    if (/\bAPI 404\b|\b404 Not Found\b|"code":\s*"NOT_FOUND"/i.test(s)) return s;
     // If the body looks like a backend 4xx error blob, suppress it.
     if (/\bAPI 40[1234]\b|\b40[1234] (Not Found|Forbidden|Unauthorized|Bad Request)\b|"success":\s*false/i.test(s)) {
       return cta;
