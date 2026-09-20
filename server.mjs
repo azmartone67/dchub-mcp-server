@@ -271,6 +271,68 @@ const ONE_OF_REQUIRED = {
   get_facility: ['facility_id', 'id', 'slug', 'name'],
 };
 
+// ── PUBLISHING THE ONE-OF, 2026-09-20 ──────────────────────────────────────
+// The 2026-09-05 note above says a one-of "is a JSON-Schema `anyOf`, which
+// `inputSchema` here does not express". True of the ZOD layer — trackedTool()
+// takes a ZodRawShape and `required` is emitted from non-optional fields, so
+// Zod can say "always" or "never", not "one of these four". It is NOT true of
+// the EMITTED schema: tools/list is already wrapped below to strip the draft-07
+// dialect stamp, and that is the place the contract can finally be stated.
+//
+// Why it matters, measured live 2026-09-19 on a fresh anon session:
+// `get_grid_intelligence {}` is a SCHEMA-VALID call. Its inputSchema declares
+// no `required` array at all, so "(required)" survives only inside a property
+// DESCRIPTION, which a validator ignores. The handler then rejects it — loudly
+// and well — but the model had no machine-readable reason not to try.
+//
+// ★ SUPERSET of ONE_OF_REQUIRED, and spread from it so the shared entries are
+//   one definition. The two tables answer different questions:
+//     ONE_OF_REQUIRED  — who gets the GENERIC runtime check + missing_identifier
+//     ONE_OF_PUBLISHED — whose CONTRACT says an identifier is required
+//   get_grid_intelligence is in the second and deliberately NOT the first: it
+//   already fails loudly with `valid_regions`, both examples and a BA hint, and
+//   the generic payload would replace that with prose pointing at
+//   search_facilities — wrong for an ISO. Publishing the contract must not cost
+//   the better error. test/one-of-published.test.mjs pins the subset relation.
+const ONE_OF_PUBLISHED = {
+  ...ONE_OF_REQUIRED,
+  // region_id + its two pure renames, plus `market`, which is a different
+  // input resolved by VALUE (see ARG_ALIASES' note) — any ONE of them answers
+  // "which grid?", which is what the handler actually checks.
+  get_grid_intelligence: ['region_id', 'iso', 'region', 'market'],
+};
+
+// Kill switch. `anyOf` is standard JSON Schema and an unsupported keyword is
+// ignored, so the worst case for a naive client is TODAY'S behaviour — but this
+// file already records Claude clients rejecting a schema over its dialect stamp,
+// so a flagship tool gets an off switch that needs no deploy to reason about.
+const ONEOF_ANYOF_OFF = String(process.env.DCHUB_ONEOF_ANYOF || '').trim() === '0';
+
+// Publish the one-of as `anyOf: [{required:[k]}, …]` over the args the schema
+// ACTUALLY declares. Filtering on properties is load-bearing: Zod strips an
+// undeclared argument before the handler runs, so a branch requiring one would
+// be a rule no caller could satisfy by obeying it.
+export function applyOneOfAnyOf(schema, toolName) {
+  if (ONEOF_ANYOF_OFF) return schema;
+  const oneOf = ONE_OF_PUBLISHED[toolName];
+  if (!oneOf || !schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+  if (Array.isArray(schema.anyOf)) return schema;      // never clobber an existing one
+  const props = schema.properties;
+  if (!props || typeof props !== 'object') return schema;
+  const declared = oneOf.filter((k) => Object.prototype.hasOwnProperty.call(props, k));
+  if (!declared.length) return schema;
+  // ★ Each branch re-declares the property it requires. Ajv 2020-12 STRICT —
+  // which test/schema-dialect-neutral.test.mjs runs because it is what the
+  // Claude client does — raises `strictRequired` on a bare
+  // {required:['region_id']}: the property must be defined in the SAME
+  // subschema, not merely in its parent. `{}` (the always-true schema) adds
+  // no constraint the parent does not already impose, so this declares the
+  // name without duplicating — or being able to contradict — its real
+  // definition above.
+  return { ...schema,
+           anyOf: declared.map((k) => ({ properties: { [k]: {} }, required: [k] })) };
+}
+
 
 const ARG_ALIASES = {
   get_dchub_recommendation: { intent: 'context', query: 'context',
@@ -20329,7 +20391,7 @@ This is a deal registration: DC Hub sends the provider only your human's company
     srv.server.setRequestHandler(ListToolsRequestSchema, async (req, extra) => {
       const res = await _sdkListTools(req, extra);
       for (const t of (res && Array.isArray(res.tools)) ? res.tools : []) {
-        t.inputSchema = stripSchemaDialect(t.inputSchema);
+        t.inputSchema = applyOneOfAnyOf(stripSchemaDialect(t.inputSchema), t.name);
         if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
       }
       return res;
@@ -21946,7 +22008,7 @@ export { applyTrialGuardIfFree, _unlockUrl, _cleanPlatformUnlockUrl, UPGRADE_URL
 // app. Exporting an existing object changes no runtime behavior.
 // r-argalias (2026-08-29): exported for test only — the alias map's structural
 // invariants are guarded in test/arg-aliases.test.mjs.
-export { ARG_ALIASES, TOOL_ALIASES, ONE_OF_REQUIRED };
+export { ARG_ALIASES, TOOL_ALIASES, ONE_OF_REQUIRED, ONE_OF_PUBLISHED };
 // Exported for test/site-headline-envelope.test.mjs — the tier projection
 // is a pure function of the parsed payload, so the honesty fields it must
 // carry can be pinned directly instead of only through the network.
