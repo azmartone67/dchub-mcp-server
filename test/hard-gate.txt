@@ -191,6 +191,7 @@ test/time-to-power-one-name.test.mjs
 test/tool-aliases-resolve.test.mjs
 test/tool-description-honesty.test.mjs
 test/tool-maturity-annotation.test.mjs
+test/tool-output-has-no-bare-conversion-link.test.mjs
 test/toolspec-is-real.test.mjs
 test/toplevel-attribution.test.mjs
 test/typed-iso-is-scope.test.mjs
