@@ -1,3 +1,4 @@
+test/404-is-not-a-sales-opportunity.test.mjs
 test/agent-beat.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-site-location.test.mjs
