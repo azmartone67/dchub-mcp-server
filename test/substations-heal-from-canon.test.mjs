@@ -62,8 +62,15 @@ describe('canon carries the substation count', () => {
   });
 
   it('the sync refuses a snapshot without it', () => {
+    // ★2026-09-20: substations moved into CANON_LAYERS when the grid layers
+    // collapsed onto canon_phrases.json, so the literal this used to match
+    // ("'countries', 'substations'") no longer exists. The BEHAVIOUR is proved
+    // end-to-end in test/facts-collapsed-onto-canon.test.mjs, which doctors the
+    // snapshot and asserts the CLI refuses; this stays as the cheap structural
+    // check that the key is in the canon read at all.
     const src = read('scripts/sync-tools-manifest.mjs');
-    expect(src).toMatch(/'countries',\s*'substations'/);
+    expect(src).toMatch(/const CANON_LAYERS = \[[^\]]*'substations'/);
+    expect(src).toMatch(/'countries',\s*\.\.\.CANON_LAYERS/);
   });
 });
 
