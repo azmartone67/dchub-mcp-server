@@ -17,6 +17,11 @@
 // carries no entitled-tier field to compare against. Closing that needs the
 // backend to say so; inventing a signal here would be guessing. Scope is the
 // case this process actually knows about.
+//
+// UPDATE 2026-09-20 (r-auth-demoted): the backend now says so, and that third
+// outcome has its own predicate and guard — see auth-demoted-identity.test.mjs.
+// This file's scope is unchanged; the sentence above is kept because it is why
+// _authUnverified does not try to cover it.
 import { describe, it, expect } from 'vitest';
 import { _authUnverified, _authRefusal, _identitySource } from '../server.mjs';
 

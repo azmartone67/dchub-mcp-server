@@ -10,6 +10,7 @@ test/arg-aliases.test.mjs
 test/arg-error-is-not-a-metered-answer.test.mjs
 test/as-of-record-scope.test.mjs
 test/asset-quantities-heal-registry-copy.test.mjs
+test/auth-demoted-identity.test.mjs
 test/auth-refused-identity.test.mjs
 test/auth-source.test.mjs
 test/auth-unverified-identity.test.mjs
