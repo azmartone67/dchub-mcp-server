@@ -829,7 +829,7 @@ function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
 }
 
 
-function buildPaywallExtras(toolName, currentTier, sessionId) {
+export function buildPaywallExtras(toolName, currentTier, sessionId) {
   // phase65_redeem_in_human_message -- redeem URL is the primary CTA in
   // human_message because AI clients render this field verbatim.
   // r-attrib (2026-07-01): no more tool='unknown' — omit the param entirely
