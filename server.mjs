@@ -3225,6 +3225,35 @@ export function _authRefusal(presentedKey, servedKey, validation) {
   return validation.reason || 'rejected';
 }
 
+// r-auth-unverified (2026-09-20): the THIRD outcome, which had no signal at all.
+//
+// _validateKeyUncached returns { valid:false, tier:'free', key_rejected:false,
+// indeterminate:true } when the backend validate call 500s, times out or throws.
+// That is deliberate and correct — a blip must not be cached as a downgrade, and
+// must not be read as "this key is fake" either, so _effectiveCallerKey keeps the
+// key and the caller keeps their identity. But the TIER for that call is free.
+//
+// So a PAYING caller could be served free-tier depth during a backend blip with
+// nothing in the response saying so: key_rejected is false, so _authRefusal
+// returns null and no `credential_refused` is stamped, while `tier:'free'` is
+// indistinguishable from a genuinely free keyed caller. _identitySource's own
+// comment stated the gap outright — "A key that was accepted, OR COULD NOT BE
+// CHECKED, gets neither the field nor prose."
+//
+// Unlike a refusal this says nothing about the key. It reports that DC Hub did
+// not manage to ask, which is why the prose tells the caller to retry rather
+// than to send a different key. Mutually exclusive with _authRefusal by
+// construction: indeterminate implies key_rejected === false.
+//
+// No servedKey comparison, and that is the difference from _authRefusal above.
+// On indeterminate the presented key IS the served key (_effectiveCallerKey
+// fail-soft), so requiring them to differ would make this permanently null —
+// the same shape of mistake as gating a check on a predicate that cannot fire.
+export function _authUnverified(presentedKey, validation) {
+  if (!presentedKey) return false;
+  return !!(validation && validation.indeterminate === true);
+}
+
 // ── Monthly quota: the GATEWAY CONSUMER of /api/v1/mcp/monthly-usage ──────
 //
 // The backend shipped the monthly-quota decision on 2026-08-06 (PR #2289) and
@@ -15479,6 +15508,17 @@ export function _identitySource(ctxLike) {
       + 'or a connector configured without one. Precedence is header > bearer > '
       + 'query > inline_argument; `claim_free_key` returns a `connect_url` that '
       + 'carries the key in the URL for hosts that have a URL box and no header field.';
+  } else if (c.auth_unverified) {
+    // r-auth-unverified: DC Hub could not reach its own validator, so this call
+    // was served at free tier without the key being checked. Reported BEFORE the
+    // refusal branch would be unsafe — a refusal is authoritative and this is
+    // not — but the two cannot both be set, so order here is readability only.
+    out.credential_unverified = true;
+    out.means = `The key that arrived via '${src}' could NOT be checked on this call: `
+      + 'DC Hub\u2019s validator did not answer, so this response was served at FREE tier '
+      + 'without the key being verified. This is not a statement about your key — it may '
+      + 'be perfectly good. Nothing was cached, so simply calling again re-validates; if '
+      + 'the depth you expected is still missing on a retry, then check the key.';
   } else if (c.auth_refused) {
     // r-auth-refused: a credential arrived and the backend refused it, which is
     // just as actionable. A key that was accepted, or could not be checked, gets
@@ -21456,11 +21496,13 @@ app.post(MCP_PATHS, async (req, res) => {
       // follow-up calls, unchanged key re-sent every request) pays nothing.
       // Kill switch: DCHUB_LATE_KEY_DISABLE=1 → pre-fix behavior.
       let _authRefused = null;   // r-auth-refused: set only when this request's key was refused
+      let _authUnverifiedFlag = false;   // r-auth-unverified: backend could not be asked
       if (apiKey && apiKey !== meta.api_key
           && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_LATE_KEY_DISABLE || ''))) {
         const _v = await validateKey(apiKey);
         const _r = _lateKeyResolve(meta, apiKey, _v);
         _authRefused = _authRefusal(apiKey, (_r ? _r.meta : meta).api_key, _v);
+        _authUnverifiedFlag = _authUnverified(apiKey, _v);
         if (_r) {
           meta = _r.meta;
           if (_r.persist) {
@@ -21476,6 +21518,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment,
         auth_source: _authChannel,
         auth_refused: _authRefused,   // r-auth-refused: per request, never carried in meta
+        auth_unverified: _authUnverifiedFlag,   // r-auth-unverified: same per-request rule
         source: _pathSource(req),   // r-source-path: rides EVERY request
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
@@ -21586,6 +21629,13 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier, session_id: null,
         auth_source: _authChannel,
+        // r-auth-unverified is deliberately ABSENT here. An initialize response
+        // is a protocol handshake with no structuredContent, and
+        // _stampIdentitySource only stamps a result that has one — so plumbing
+        // the flag onto this ctx would be unreachable code with a confident
+        // comment on it. It was written that way first and a mutation that
+        // deleted it killed no test, which is what unreachable looks like.
+        // `auth_refused` is absent here for the same structural reason.
         source: _pathSource(req),   // r-source-path: rides EVERY request
         // r46: see sessionMeta.set above for rationale
         referer: req.headers.referer || req.headers.referrer || null,
@@ -21735,6 +21785,7 @@ app.post(MCP_PATHS, async (req, res) => {
         api_key: apiKey, platform, tier,
         auth_source: _authChannel,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
+        auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
         source: _pathSource(req),   // r-source-path: rides EVERY request
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)

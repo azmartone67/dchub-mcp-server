@@ -210,6 +210,18 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
     expect(ANON.identity && ANON.identity.credential_source).toBe('none');
   });
 
+  // r-auth-unverified (2026-09-20): a 503 now also stamps
+  // identity.credential_unverified on the paths that actually RE-VALIDATE on
+  // the asserted call. The two session paths below do not: they hand the key in
+  // at initialize, and a follow-up tools/call carrying the SAME key is served
+  // from session meta without a fresh validate, so there is no indeterminate
+  // answer at that moment to report. Listed by label rather than inferred, so
+  // this asymmetry is stated and not discovered again.
+  const REVALIDATES_ON_THE_ASSERTED_CALL = new Set([
+    'late header: anonymous initialize, X-API-Key on tools/call',
+    'stateless: tools/call with X-API-Key and no session',
+  ]);
+
   describe.each(PATHS)('%s', (_label, channel, call) => {
     it('valid key: served keyed, identity names the channel and nothing else', async () => {
       const got = await call(GOOD);
@@ -233,7 +245,15 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
     it('503 (indeterminate): the key rides and is NOT reported refused', async () => {
       const got = await call(FLAKY);
       expect(got.rows).toBe(ROWS.length);
-      expect(got.identity).toEqual({ credential_source: channel, tier: 'free' });
+      expect(got.identity.credential_refused).toBeUndefined();   // the invariant this test owns
+      expect(got.identity).toEqual(
+        REVALIDATES_ON_THE_ASSERTED_CALL.has(_label)
+          ? {
+              credential_source: channel, tier: 'free',
+              credential_unverified: true,
+              means: expect.stringContaining('could NOT be checked'),
+            }
+          : { credential_source: channel, tier: 'free' });
     });
   });
 
@@ -261,7 +281,14 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
     const sid = await initialize('/mcp', keyHeader(GOOD));
     const got = await search('/mcp', { ...keyHeader(FLAKY), 'mcp-session-id': sid });
     expect(got.rows).toBe(ROWS.length);
-    expect(got.identity).toEqual({ credential_source: 'header', tier: 'free' });
+    expect(got.identity.credential_refused).toBeUndefined();
+    // This path DOES re-validate (the presented key differs from the session's),
+    // so r-auth-unverified reports it.
+    expect(got.identity).toEqual({
+      credential_source: 'header', tier: 'free',
+      credential_unverified: true,
+      means: expect.stringContaining('could NOT be checked'),
+    });
   });
 
   it('kill switch DCHUB_INVALID_KEY_ANON_DISABLE=1: a rejected key that rides is not reported refused', async () => {
