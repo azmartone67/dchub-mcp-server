@@ -38,12 +38,27 @@ describe('canon carries the substation count', () => {
       .toMatch(/^\d[\d,]*\+$/);
   });
 
-  it('the refresh script copies it from the endpoint', () => {
-    const src = read('scripts/refresh-canon-phrases.mjs');
-    expect(src).toMatch(/substations:\s*body\.substations/);
-    // and it must be in the change-detection key list, or an updated value is
+  it('the refresh script copies it from the endpoint', async () => {
+    // ★2026-09-20 REWRITTEN FROM SOURCE-TEXT TO BEHAVIOUR. This asserted
+    // /substations:\s*body\.substations/ and /'markets',\s*'substations'/ — two
+    // literals from an implementation that named its fields one at a time.
+    // That is exactly the implementation the drop-six bug lived in, so the
+    // guard was pinning the shape that caused the problem: eligibility is now
+    // decided by phrase SHAPE and substations qualifies like every other
+    // quantity. Asking the module what it selects survives the next refactor
+    // and is strictly stronger than grepping for a name.
+    const { selectPhrases, quantityKeys } =
+      await import('../scripts/refresh-canon-phrases.mjs');
+    const body = { ok: true, source: 'x (live)', tools: 91,
+      facilities: '22,900+', countries: '170+', deals: '2,200+',
+      markets: '300+', substations: '127,000+' };
+    const { fields, bad } = selectPhrases(body, null);
+    expect(bad).toEqual([]);
+    expect(fields.substations).toBe('127,000+');
+    // and it must be in the change-detection key set, or an updated value is
     // fetched and then discarded as "already matches"
-    expect(src).toMatch(/'markets',\s*'substations'/);
+    expect(quantityKeys({ _meta: 1, retrieved_at: 'z', tools: 91, substations: '127,000+' }))
+      .toContain('substations');
   });
 
   it('the sync refuses a snapshot without it', () => {
