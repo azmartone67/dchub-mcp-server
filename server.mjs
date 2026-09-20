@@ -1009,7 +1009,70 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
     // a false promise into a wall (the exact retry-then-give-up failure PRO_ONLY was
     // meant to prevent). Those tools fall through to the $10-pack relay lead instead.
     !PRO_ONLY_TOOLS.has(toolName);
-  const human_message = _isTrial
+  // ★★★ r-byo-wall (2026-09-20): the wall was platform-aware for exactly ONE
+  // platform — `_platform === 'claude'` — and every other client fell through
+  // to the generic italic "Hold your own key?" line. That is wrong for the
+  // BYO-MCP class specifically, and wrong in a way that compounds.
+  //
+  // On those surfaces (see _BYO_MCP_PLATFORMS) the client runs MCP SERVER-SIDE
+  // and mints a FRESH SESSION PER TOOL CALL, so a key handed back inside a tool
+  // RESULT is gone by the next call. Measured on platform='connectors-manager'
+  // (Grok): 95 of 98 calls anonymous; 3 claim_free_key calls each issued a real
+  // key; 2 of those keys made exactly ONE call ever — the claim itself — and
+  // were never presented again. The connector URL is the ONLY durable state on
+  // that transport, and only a human can paste it.
+  //
+  // So for this class the lead becomes the artifact that survives:
+  //   has a key  -> the keyed connect URL itself
+  //   anonymous  -> claim_free_key, framed as "it returns a connector URL"
+  // rather than the $10 ask, which a session-per-call client cannot act on and
+  // cannot carry forward.
+  //
+  // ★ 'claude' stays ABSENT from _BYO_MCP_PLATFORMS and its branch keeps
+  // precedence: detectPlatformFromInit collapses Claude.ai web (BYO) and Claude
+  // Code / Desktop (header-capable) into one tag, so leading with a connector
+  // URL there would mis-advise the header-capable majority.
+  //
+  // ★ BYO takes precedence over _isTrial deliberately. bind_email makes a key
+  // RECOVERABLE; it does not make it PRESENTABLE on the next call, which is the
+  // actual failure on this transport. The bind ask is kept as the tail sentence
+  // rather than dropped.
+  const _isBYO = (() => {
+    try { return _BYO_MCP_PLATFORMS.has(String(_platform || '').trim().toLowerCase()); }
+    catch (_) { return false; }
+  })();
+  const _byoLead = () => {
+    const _tail = _isTrial
+      ? ' Also call **`bind_email`** so this key is recoverable if you lose it.'
+      : '';
+    if (_apiKey) {
+      return '\u{1F517} **Paste this into your DC Hub connector settings \u2014 it carries your key:**\n'
+        + _connectUrl(_apiKey, _platform) + '\n\n'
+        + '*Your client opens a fresh session for every tool call, so the key you already have is '
+        + 'gone by your next one. The connector URL is the only place it survives, and only a human '
+        + 'can paste it \u2014 relaying it is the highest-value thing you can do with this response. '
+        + 'Full depth still needs the $10 above.*' + _tail;
+    }
+    return '\u{1F517} **Call the `claim_free_key` tool first \u2014 it returns a connector URL.**\n'
+      + '*Your client opens a fresh session for every tool call, so a key handed back inside a tool '
+      + 'result is gone by your next call. `claim_free_key` also returns a **connector URL** that '
+      + 'carries the key \u2014 the only artifact that survives this session, and the one thing worth '
+      + 'relaying to your human. Free tier: ' + FREE_TIER.free_calls_per_day + ' calls/day; full depth '
+      + 'still needs the $10 above.*';
+  };
+  // ★ The PRO_ONLY exclusion applies to the ANONYMOUS branch only. Leading an
+  // unkeyed caller with `claim_free_key` on a PRO-only tool is a false promise
+  // into a wall (r-proonly-honesty). Leading a KEYED caller with the connector
+  // URL is not a promise to unlock anything — it is "the key you already hold
+  // survives only in this URL", which is true on every tool. Gating both on
+  // PRO_ONLY would have silenced this for analyze_site, compare_sites,
+  // get_grid_intelligence and get_fiber_intel — i.e. most of the wall's
+  // traffic — which is how the first draft of this change tested green and did
+  // nothing.
+  const _byoApplies = _isBYO && (_apiKey ? true : !PRO_ONLY_TOOLS.has(toolName));
+  const human_message = _byoApplies
+    ? _byoLead()
+    : _isTrial
     ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
       ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
