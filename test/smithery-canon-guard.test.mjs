@@ -548,7 +548,12 @@ describe('server.mjs asset-class quantity guard', () => {
   it('REFUSES to run when an asset quantity is not a floor phrase', () => {
     withFactsMutation((orig) => {
       const j = JSON.parse(orig);
-      j.numbers.fiber_routes = null;   // the unknown-as-success direction
+      // ★2026-09-20: was fiber_routes, which now comes from canon_phrases.json
+      // — doctoring it here stopped reaching this code path at all, so the test
+      // passed while guarding nothing. gas_pipelines has no canon home and is
+      // still facts-sourced, which is what this control is about. The canon
+      // side of the same contract is in facts-collapsed-onto-canon.test.mjs.
+      j.numbers.gas_pipelines = null;  // the unknown-as-success direction
       return JSON.stringify(j, null, 2);
     }, () => {
       const { ok, out } = check();
@@ -579,12 +584,15 @@ describe('server.mjs asset-class quantity guard', () => {
     // figure enforced comes from the snapshot, not from source.
     withFactsMutation((orig) => {
       const j = JSON.parse(orig);
-      j.numbers.infrastructure_assets_total = '911,000+';
+      // ★2026-09-20: was infrastructure_assets_total, now canon-sourced. Same
+      // reasoning as above — this must move a number mcp_facts still owns, or
+      // it proves nothing about mcp_facts being the snapshot it tracks.
+      j.numbers.gas_pipelines = '911,000+';
       return JSON.stringify(j, null, 2);
     }, () => {
       const { ok, out } = check();
       expect(ok, 'the committed surfaces did not drift against a moved canon').toBe(false);
-      expect(out).toMatch(/stale mapped-asset total \(canonical 911,000\+\)/);
+      expect(out).toMatch(/stale gas-pipeline count \(canonical 911,000\+\)/);
     });
   });
 });
@@ -1459,4 +1467,93 @@ afterAll(() => {
   if (changed.length) {
     throw new Error(`the shared working tree was modified during this run: ${changed.join(', ')}`);
   }
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The grid/asset LAYERS have one source, and it is canonical/canon_phrases.json
+//
+// ★2026-09-20. substations, transmission_lines, fiber_routes and the mapped
+// -asset total were published from canonical/mcp_facts.json while canon
+// published its own copy of the same four numbers. Two files, one quantity —
+// the arrangement measured on 2026-08-30 as initialize.instructions and the
+// dchub://coverage resource answering "127k / 64k fiber" and "126k / 55k fiber"
+// in one session. sync-tools-manifest.mjs justified it ("no /api/v1/canon/
+// phrases home"); the feed has published all four for some time.
+//
+// ★ WHY THESE DOCTOR A FILE AND RUN THE CLI. The two sources AGREE today, so
+//   "the sync is clean" proves nothing about which one it read — a collapse
+//   that changed no code would pass that. Only a DISAGREEMENT shows the source
+//   moved.
+//
+// ★ AND WHY THEY LIVE IN THIS FILE. They mutate canonical/*.json in the shared
+//   working tree. As their own file they ran in PARALLEL with "left the shared
+//   working tree untouched" above, which caught the dirty tree and failed —
+//   correctly. vitest serialises tests within a file, so the harness that
+//   already owns these mutations is where they belong.
+describe('the grid layers are published from canon, not mcp_facts', () => {
+  it('a change in CANON moves the published number', () => {
+    withCanonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.substations = '999,000+';
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok, 'a moved canon substation count did not drift the surfaces').toBe(false);
+      // one canon value, rendered per surface style: k-form where the copy is
+      // k-form, floor phrase where it is not
+      expect(out).toMatch(/stale substation count \(canonical 999k\)/);
+      expect(out).toMatch(/stale substation count \(canonical 999,000\+\)/);
+    });
+  });
+
+  it('a change in mcp_facts is IGNORED for a canon-owned layer', () => {
+    // ★ THE COLLAPSE ITSELF. Before this change the same edit moved every
+    //   published substation count; now it moves nothing, because the key has
+    //   exactly one source.
+    withFactsMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.numbers.substations = '999k';
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      expect(check().ok, 'mcp_facts still drives a canon-owned layer').toBe(true);
+    });
+  });
+
+  it('a layer canon does NOT publish still comes from mcp_facts', () => {
+    // The collapse is scoped, not total: gas pipelines have no canon home, so
+    // that file is still their source and must still be read.
+    withFactsMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.numbers.gas_pipelines = '777k';
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok).toBe(false);
+      expect(out).toMatch(/stale gas-pipeline count \(canonical 777k\)/);
+    });
+  });
+
+  it('refuses rather than falling back when a layer will not render', () => {
+    // ★ A fallback to mcp_facts here would silently restore the two-source
+    //   arrangement the moment canon hiccuped, which is the whole defect.
+    //
+    // ★ IT HAS TO REACH fromCanon TO PROVE THAT. The obvious fixture — DELETE
+    //   the key — is caught by the P-loop's own canonFatal several blocks
+    //   earlier, so the mutation "let fromCanon fall back to FACTS" SURVIVED
+    //   that version of this test: an earlier guard answered for a later one.
+    //   "999+" is a valid floor phrase, so it passes the P loop untouched and
+    //   fails only where this is aiming — asK() cannot render under 1,000.
+    withCanonMutation((orig) => {
+      const j = JSON.parse(orig);
+      j.substations = '999+';
+      return JSON.stringify(j, null, 2);
+    }, () => {
+      const { ok, out } = check();
+      expect(ok).toBe(false);
+      expect(out).toMatch(/FATAL \(canon\)/);
+      expect(out).toMatch(/does not render to a publishable k-form/);
+      expect(out).toMatch(/deliberately NOT falling back/);
+    });
+  });
 });
