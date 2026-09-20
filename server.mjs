@@ -7190,8 +7190,63 @@ const _TYPED_PREVIEW_FIELDS = {
 };
 const _NO_TYPED_PREVIEW = new Set();
 
+// ── r-arg-error (2026-09-20) ────────────────────────────────────────────────
+// An ARGUMENT-VALIDATION envelope is not a product answer. The handler rejected
+// the call before looking anything up: no row was read, no feed was hit, there
+// is nothing to meter and nothing to trim.
+//
+// The gate did not know that, and charged for it three ways. Measured live on a
+// fresh anon session, `get_grid_intelligence {}` (a SCHEMA-VALID call — the
+// tool's inputSchema declares no `required` array, so "(required)" lived only
+// in prose a validator ignores):
+//
+//   call 1  {"error":"region required"}  -> "you have 1 more full answer today"
+//   call 2  {"error":"region required"}  -> "trial answer 2 of 2 · remaining_today: 0"
+//   call 3  {"error":"region required"}  -> walled, and valid_regions TRIMMED
+//                                           from 7 to 3 with _valid_regions_total_in_pro: 7
+//
+// So two malformed calls that returned zero data burned the whole daily trial,
+// and the wall then paywalled the list of valid values the caller needed to fix
+// the call. get_grid_intelligence was the top real-caller leak on
+// /api/v1/admin/funnel/leakage the day this was written (208 signals / 108
+// sessions, ~1.9 per session — the shape of "two tries, then gone").
+//
+// Deliberately keyed on the SHAPE, not on a per-handler marker: every key must
+// be the error itself or advice about how to call it correctly. One data key —
+// `projects`, `rows`, `fuel_mix` — and this is false and the answer meters and
+// trims exactly as before. A server-side failure that returns the same shape is
+// also spared, which is correct for the same reason: we did not serve data.
+const _ARG_ERROR_KEYS = new Set([
+  'error', 'hint', 'example', 'examples', 'example_by_market',
+  'did_you_mean', 'suggestion', 'suggestions', 'usage',
+  'expected', 'got', 'param', 'parameter', 'field', 'required',
+]);
+const _ARG_ERROR_KEY_RE = /^(valid|allowed|accepted|supported)_/;
+
+export function isArgValidationError(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  if (typeof parsed.error !== 'string' || !parsed.error.trim()) return false;
+  return Object.keys(parsed).every((k) =>
+    _ARG_ERROR_KEYS.has(k) || _ARG_ERROR_KEY_RE.test(k) || k.startsWith('_'));
+}
+
+// Same question against a tool RESULT envelope. Parse-guarded: anything that is
+// not one JSON object of advice is treated as a real answer, so the failure
+// direction is "meter it as before", never "serve depth for free".
+export function _resultIsArgError(res) {
+  try {
+    const t = res && res.content && res.content[0] && res.content[0].text;
+    if (typeof t !== 'string') return false;
+    return isArgValidationError(JSON.parse(t));
+  } catch (_) { return false; }
+}
+
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
+  // r-arg-error: `valid_regions` is the contract, not product data. Trimming a
+  // 7-entry recovery list to 3 behind `_valid_regions_total_in_pro` paywalled
+  // the one thing the caller needed to stop hitting this branch.
+  if (isArgValidationError(parsed)) return parsed;
   const _keepTyped = _TYPED_PREVIEW_FIELDS[toolName] || _NO_TYPED_PREVIEW;
   if (Array.isArray(parsed)) {
     if (parsed.length > TRIAL_PREVIEW_ROWS) {
@@ -13673,6 +13728,19 @@ function trackedTool(srv, name, description, schema, handler) {
             // non-taste tool) the pure peek is already honest (this response is a
             // preview, not a full answer). Cap off (ANON_FULL_CAP=0) → null →
             // buildAutoMintBlock keeps the uncapped copy.
+            // ★ r-arg-error (2026-09-20) — KNOWN GAP, deliberately not guarded here.
+            // This block runs BEFORE `const result = await handler(...)`, so the
+            // anon cap is consumed pre-flight: the counter is charged before
+            // anyone knows whether the call produced a row. An argument-validation
+            // envelope is therefore still charged on THIS path, and cannot be
+            // detected from here — `result` is in its temporal dead zone (proved
+            // by test/automint-trial-rungs.test.mjs, which threw
+            // "Cannot access 'result' before initialization" on the attempt).
+            // Re-deriving the handler's own validation from `args` at the gate
+            // would be a second painter of the same rule, so it is not done.
+            // The post-handler taste meter below IS guarded. Closing this one
+            // needs the consume moved after the handler, or a refund path —
+            // /api/v1/mcp/full-cap/consume has no decrement today.
             const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name);
             const _overCap = _capApplies && ANON_FULL_CAP > 0
               // ★ AWAIT: the call is async now. Without it this is a Promise,
@@ -14338,7 +14406,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // upgrade CTA so the heaviest repeat trial users — the addressable pool —
       // hit the conversion nudge. Calls 1..N stay full (tool-call volume / the
       // moat unchanged). Set DCHUB_TRIAL_TOOL_DAILY_FULL=0 to disable.
-      if (gate.trial_taste) {
+      // r-arg-error: skip the whole metered-taste block on an argument-validation
+      // envelope — it both INCREMENTS the daily counter and stamps a
+      // `_metered_trial` receipt, and neither belongs on an answer that
+      // returned no data.
+      if (gate.trial_taste && !_resultIsArgError(result)) {
         // r-bind-ladder (2026-06-27): bound (email-captured) callers get the higher
         // IDENTIFIED cap; unbound free keys stay at the base cap — so binding an
         // email buys a real, visible benefit (more full flagship answers/day).
