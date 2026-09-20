@@ -13790,20 +13790,25 @@ function trackedTool(srv, name, description, schema, handler) {
             // non-taste tool) the pure peek is already honest (this response is a
             // preview, not a full answer). Cap off (ANON_FULL_CAP=0) → null →
             // buildAutoMintBlock keeps the uncapped copy.
-            // ★ r-arg-error (2026-09-20) — KNOWN GAP, deliberately not guarded here.
-            // This block runs BEFORE `const result = await handler(...)`, so the
-            // anon cap is consumed pre-flight: the counter is charged before
-            // anyone knows whether the call produced a row. An argument-validation
-            // envelope is therefore still charged on THIS path, and cannot be
-            // detected from here — `result` is in its temporal dead zone (proved
-            // by test/automint-trial-rungs.test.mjs, which threw
-            // "Cannot access 'result' before initialization" on the attempt).
-            // Re-deriving the handler's own validation from `args` at the gate
-            // would be a second painter of the same rule, so it is not done.
-            // The post-handler taste meter below IS guarded. Closing this one
-            // needs the consume moved after the handler, or a refund path —
-            // /api/v1/mcp/full-cap/consume has no decrement today.
-            const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name);
+            // ★ r-arg-error (2026-09-20). #469 left this site unguarded and called
+            // it structural: "this block runs BEFORE `const result = await
+            // handler(...)`". That was WRONG, and the way it was wrong is the
+            // lesson. The naive guard threw "Cannot access 'result' before
+            // initialization", and `result` IS in its temporal dead zone here —
+            // but `result` belongs to a DIFFERENT, later branch (~L14299). On
+            // THIS path the handler has already run: `const _trialResult = await
+            // _dataP` is ~100 lines above, and the comment below already said so
+            // ("The handler already ran (_trialResult holds full data)"). A
+            // ReferenceError named the wrong variable, not a wrong ordering.
+            //
+            // So the cap is charged with the answer in hand, and an envelope that
+            // served no data can be excluded here exactly as it is post-handler.
+            // r-honest-cap is preserved: on a real answer the increment still
+            // happens before buildAutoMintBlock, so the CTA's remaining count
+            // includes this call; on an arg error nothing is charged, and the
+            // pure peek below is then honest by construction.
+            const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name)
+                                && !_resultIsArgError(_trialResult);
             const _overCap = _capApplies && ANON_FULL_CAP > 0
               // ★ AWAIT: the call is async now. Without it this is a Promise,
               // which is truthy, and EVERY call would gate. See the source

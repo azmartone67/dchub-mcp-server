@@ -106,19 +106,25 @@ describe('the guard is wired into both consume sites', () => {
     expect(body.slice(0, 400)).toContain('if (isArgValidationError(parsed)) return parsed;');
   });
 
-  // The anon pre-flight cap is a KNOWN GAP, not an oversight: that block runs
-  // before `const result = await handler(...)`, so `result` is in its temporal
-  // dead zone there. Pin the gap so it is re-read, not silently re-attempted:
-  // the naive guard throws "Cannot access 'result' before initialization".
-  it('the anon pre-flight cap site stays unguarded, and says why', () => {
+  // ★ #469 left this site unguarded and called it structural. It is not: the
+  // handler HAS run here (`const _trialResult = await _dataP`, ~100 lines
+  // above). The ReferenceError that caused that conclusion named the WRONG
+  // variable — `result` belongs to a different, later branch.
+  it('the anon pre-flight cap skips an arg error', () => {
     const i = code.indexOf('const _capApplies =');
     expect(i).toBeGreaterThan(-1);
     const stmt = code.slice(i, code.indexOf(';', i));
-    expect(stmt).not.toContain('_resultIsArgError');
-    const why = src.slice(Math.max(0, src.indexOf('const _capApplies =') - 1200),
-                          src.indexOf('const _capApplies ='));
-    expect(why).toContain('KNOWN GAP');
-    expect(why).toContain('temporal dead zone');
+    expect(stmt).toContain('!_resultIsArgError(');
+  });
+
+  it('...and reads _trialResult, never the later branch\'s `result`', () => {
+    // Guarding on `result` here throws "Cannot access 'result' before
+    // initialization" at runtime — a TDZ error the type system cannot see and
+    // that only test/automint-trial-rungs.test.mjs catches. Pin the variable.
+    const i = code.indexOf('const _capApplies =');
+    const stmt = code.slice(i, code.indexOf(';', i));
+    expect(stmt).toContain('_resultIsArgError(_trialResult)');
+    expect(stmt).not.toMatch(/_resultIsArgError\(\s*result\s*\)/);
   });
 
   it('the metered trial-taste block is skipped entirely on an arg error', () => {
