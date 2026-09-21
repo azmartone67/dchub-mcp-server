@@ -89,6 +89,44 @@ function searchRows() {
   }));
 }
 
+// list_saved_sites / get_changes: facilities near the CALLER's own saved point.
+// `km` is exact; `km_approx` is the backend's figure measured from the
+// facility's 2dp point. The twins are chosen to DIFFER from a rounding of `km`
+// (5.2 → twin 6), so a gate that rounds the exact figure instead of serving the
+// twin fails here.
+const SAVED_POINT = { lat: 12.301234, lon: -45.712345 };   // the caller's own — stays exact
+const NEARBY = [
+  { name: 'Example Facility A', km: 5.2, km_approx: 6 },
+  { name: 'Example Facility B', km: 0.3, km_approx: 1 },
+  { name: 'Example Facility C', km: 8.0, km_approx: 8 },
+];
+function nearbyRows(twin) {
+  return NEARBY.map(({ name, km, km_approx }) => ({
+    name, state: 'EX', capacity_mw: 20, km, ...(twin ? { km_approx } : {}) }));
+}
+function savedPayload(twin) {
+  return {
+    saved: [{
+      id: 77, name: 'My parcel', latitude: SAVED_POINT.lat, longitude: SAVED_POINT.lon,
+      state: 'EX', market: 'example-market', notes: null, target_mw: 50,
+      dcpi_score_at_save: 61, saved_at: '2026-09-20T00:00:00+00:00',
+      moved: true, new_facilities_nearby: nearbyRows(twin),
+    }],
+    count: 1,
+    portfolio: { saved_sites: 1, alerts_armed: 0, moved_count: 1, since: '2026-09-14T00:00:00+00:00' },
+  };
+}
+function changesPayload(twin) {
+  return {
+    since: '2026-09-14T00:00:00+00:00',
+    counts: { portfolio_sites_moved: 1 },
+    portfolio: {
+      saved_sites: 1, alerts_armed: 0, moved_count: 1,
+      moved: [{ id: 77, name: 'My parcel', market: 'example-market', new_facilities_nearby: nearbyRows(twin) }],
+    },
+  };
+}
+
 // key → tier the stub validates it as
 const KEYS = {
   dch_live_test_free: 'free',
@@ -104,7 +142,7 @@ const KEYS = {
 const CREDITS = { dch_live_test_packholder: 800, dch_live_test_lastcredit: 1 };
 
 let S, PORT, httpServer, stub, prevBase;
-const hits = { facility: 0, facilities: 0, riskDelta: 0, credits: 0 };
+const hits = { facility: 0, facilities: 0, riskDelta: 0, credits: 0, saved: 0, changes: 0 };
 
 beforeAll(async () => {
   await new Promise((resolve) => {
@@ -152,6 +190,15 @@ beforeAll(async () => {
           static_dimensions: { disaster: { tool: 'get_disaster_risk', args: { lat: EXACT.lat, lon: EXACT.lon } } },
           summary: 'Market health improving over the window.',
         });
+      }
+      // since=no-twin models a backend that sends only the exact figure.
+      if (url.pathname === '/api/v1/lp/saved') {
+        hits.saved += 1;
+        return send(200, savedPayload(url.searchParams.get('since') !== 'no-twin'));
+      }
+      if (url.pathname === '/api/v1/changes/since') {
+        hits.changes += 1;
+        return send(200, changesPayload(url.searchParams.get('since') !== 'no-twin'));
       }
       send(404, { error: 'not found', path: url.pathname });
     });
@@ -248,6 +295,36 @@ function expectCoarsened(channel, label) {
   expect(keysMatching(channel, ADDRESS_KEY), `${label}: street address served`).toEqual([]);
   expect(keysMatching(channel, RAW_KEY), `${label}: raw upstream blob served`).toEqual([]);
   expect(JSON.stringify(channel), `${label}: the exact value survives somewhere`).not.toContain(String(EXACT.lat));
+}
+
+// Every row under any new_facilities_nearby, in order.
+function nearbyOf(node, out = []) {
+  if (Array.isArray(node)) { node.forEach((v) => nearbyOf(v, out)); return out; }
+  if (!node || typeof node !== 'object') return out;
+  for (const [k, v] of Object.entries(node)) {
+    if (k === 'new_facilities_nearby' && Array.isArray(v)) out.push(...v);
+    else nearbyOf(v, out);
+  }
+  return out;
+}
+function expectDistancesCoarsened(channel, want, label) {
+  const rows = nearbyOf(channel);
+  expect(rows.map((r) => r.name), `${label}: facility rows missing — the assertion would be vacuous`)
+    .toEqual(NEARBY.map((n) => n.name));
+  expect(rows.map((r) => r.km), `${label}: served distances`).toEqual(want);
+  for (const r of rows) {
+    expect(r.distance_status, `${label}: ${r.name} not marked approximate`).toBe('approximate_1km');
+    expect(Object.keys(r), `${label}: ${r.name} carries the twin beside the key`).not.toContain('km_approx');
+  }
+  const s = JSON.stringify(channel);
+  for (const { km } of NEARBY.filter((n) => !Number.isInteger(n.km))) {
+    expect(s, `${label}: exact figure ${km} survives`).not.toContain(`"km":${km}`);
+  }
+}
+function expectDistancesExact(channel, label) {
+  const rows = nearbyOf(channel);
+  expect(rows.map((r) => r.km), `${label}: exact distances`).toEqual(NEARBY.map((n) => n.km));
+  for (const r of rows) expect(r.distance_status, `${label}: ${r.name} marked approximate`).toBeUndefined();
 }
 
 // ── 1. the helper ───────────────────────────────────────────────────────────
@@ -416,6 +493,58 @@ describe('gateFacilityLocation — the helper', () => {
 });
 
 // ── 2. end to end, through POST /mcp ────────────────────────────────────────
+describe('distances to facilities — the helper', () => {
+  it('non-exact tiers are served the backend twin (not a rounding of the exact km), stamped; the caller\'s own point stays exact', () => {
+    for (const tier of ['anonymous', 'free', 'identified', 'starter', 'trial', 'no-such-tier']) {
+      const out = S.gateFacilityLocation(savedPayload(true), tier, { scope: 'detect' });
+      expectDistancesCoarsened(out, [6, 1, 8], tier);
+      expect(out.saved[0].latitude, `${tier}: the caller's own point was touched`).toBe(SAVED_POINT.lat);
+      expect(out.saved[0].longitude).toBe(SAVED_POINT.lon);
+    }
+  });
+
+  it('no twin: the exact figure is served whole, never below 1 km, and stamped even where rounding did not move it', () => {
+    const out = S.gateFacilityLocation(savedPayload(false), 'free', { scope: 'detect' });
+    expectDistancesCoarsened(out, [5, 1, 8], 'no twin');
+  });
+
+  it('exact-location tiers get the SAME object back, exact km and twin alike', () => {
+    for (const tier of ['developer', 'pro', 'metered', 'enterprise', 'admin']) {
+      const input = savedPayload(true);
+      expect(S.gateFacilityLocation(input, tier, { scope: 'detect' }), tier).toBe(input);
+    }
+  });
+
+  it('units, strings, unparseable values; open-infrastructure rows outside a facility keep their distances', () => {
+    const out = S.gateFacilityLocation({
+      substations: [{ name: 'Example Substation', voltage_kv: 230, distance_km: 2.37 }],
+      new_facilities_nearby: [{
+        name: 'Example Facility A', distance_mi: '3.4', distance_m: 420, dist_km: 'about 3',
+        distanceKm: 12.6, nearest_substation: { name: 'Example Substation', voltage_kv: 230, distance_km: 2.37 },
+      }],
+    }, 'free', { scope: 'detect' });
+    const row = out.new_facilities_nearby[0];
+    expect(row.distance_mi).toBe('3');
+    expect(row.distance_m).toBe(1000);
+    expect('dist_km' in row, 'unparseable distance withheld').toBe(false);
+    expect(row.distanceKm).toBe(13);
+    // a distance inside the facility's subtree is the facility's too
+    expect(row.nearest_substation.distance_km).toBe(2);
+    expect(row.distance_status).toBe('approximate_1km');
+    expect(out.substations[0].distance_km).toBe(2.37);
+    expect(out.substations[0].distance_status).toBeUndefined();
+  });
+
+  it('the fail-closed path strips distances along with coordinates', () => {
+    const hostile = { new_facilities_nearby: [{ name: 'Example Facility A', km: 5.2 }] };
+    Object.defineProperty(hostile.new_facilities_nearby[0], 'capacity_mw', {
+      enumerable: true, get() { throw new Error('hostile getter'); } });
+    const r = coarsenFacilityLocation(hostile, { scope: 'detect', containerKeys: new Set(['new_facilities_nearby']) });
+    expect(r.failed_closed).toBe(true);
+    expect(JSON.stringify(r.value)).not.toContain('5.2');
+  });
+});
+
 describe('end to end — every tier, every channel, through the real handler', () => {
   it('anonymous get_facility: 2dp, no address, approximate_2dp — content AND structuredContent', async () => {
     const before = hits.facility;
@@ -550,6 +679,38 @@ describe('end to end — every tier, every channel, through the real handler', (
     expect(payload.facility.lon).toBe(ROUNDED.lon);
     expectCoarsened(payload, 'risk-delta content');
     expectCoarsened(sc, 'risk-delta structuredContent');
+  });
+
+  it('list_saved_sites: free, identified and starter keys get the twin, whole km, stamped — content AND structuredContent', async () => {
+    for (const key of ['dch_live_test_free', 'dch_live_test_identified', 'dch_live_test_starter']) {
+      const before = hits.saved;
+      const { payload, sc } = await callTool('list_saved_sites', {}, key);
+      expect(hits.saved, `${key}: the backend was never asked`).toBe(before + 1);
+      expectDistancesCoarsened(payload, [6, 1, 8], `${key} content`);
+      expect(payload.saved[0].latitude, `${key}: the caller's own point was touched`).toBe(SAVED_POINT.lat);
+      if (sc && nearbyOf(sc).length) expectDistancesCoarsened(sc, [6, 1, 8], `${key} structuredContent`);
+      else expect(JSON.stringify(sc || {}), `${key} structuredContent`).not.toMatch(/"km":(5\.2|0\.3)\b/);
+    }
+  });
+
+  it('list_saved_sites against a backend that sends no twin: the exact figure rounded whole, floor 1 km', async () => {
+    const { payload } = await callTool('list_saved_sites', { since: 'no-twin' }, 'dch_live_test_free');
+    expectDistancesCoarsened(payload, [5, 1, 8], 'no twin');
+  });
+
+  it('list_saved_sites: developer, pro and a live $10 pack keep the exact distances', async () => {
+    for (const key of ['dch_live_test_developer', 'dch_live_test_pro', 'dch_live_test_packholder']) {
+      const { payload, sc } = await callTool('list_saved_sites', {}, key);
+      expectDistancesExact(payload, `${key} content`);
+      if (sc && nearbyOf(sc).length) expectDistancesExact(sc, `${key} structuredContent`);
+    }
+  });
+
+  it('get_changes portfolio.moved[]: coarsened for a free key, exact for developer', async () => {
+    const free = await callTool('get_changes', { since: '7d' }, 'dch_live_test_free');
+    expectDistancesCoarsened(free.payload, [6, 1, 8], 'get_changes free');
+    const dev = await callTool('get_changes', { since: '7d' }, 'dch_live_test_developer');
+    expectDistancesExact(dev.payload, 'get_changes developer');
   });
 
   it('made no connection off loopback', () => {
