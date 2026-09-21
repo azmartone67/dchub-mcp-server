@@ -58,6 +58,7 @@ test/every-test-file-runs.test.mjs
 test/exec-step-budget.test.mjs
 test/execute-plan-cohort.test.mjs
 test/execute-plan-invariants.test.mjs
+test/facility-location-tier.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/free-key-arbitrage.test.mjs

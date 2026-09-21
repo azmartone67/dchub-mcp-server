@@ -105,6 +105,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
+import { coarsenFacilityLocation, coarsenToolResultLocation, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
          buildContinuation as _buildContinuation,
@@ -7386,6 +7387,8 @@ function _isMetricKey(k) {
 // 21,808-facility dataset free with a no-email key). Project each facility row to
 // the SAME free allowlist the REST /api/v1/search now uses. Discovery (find any
 // facility by name/geo) is preserved; capacity/specs/internal become the upgrade.
+// latitude/longitude stay on the allowlist but NOT at full precision: the
+// location gate below (_gateToolLocation) rounds them to 2dp on the way out.
 const KEYED_FACILITY_MASK = new Set(['search_facilities', 'get_facility']);
 const _FACILITY_FREE_FIELDS = new Set([
   'id', 'name', 'slug', 'profile_url', 'city', 'state', 'country', 'status',
@@ -7410,6 +7413,149 @@ function _maskFacilityFieldsForFree(parsed) {
     return out;
   }
   return parsed;
+}
+
+// ── r-location-tier (2026-09-21, owner-approved): exact facility location is paid-only ──
+//
+// THE DEFECT. callAPI sends X-Internal-Key on every backend call and the backend
+// treats that header as a privileged caller, so it hands this server FULL facility
+// records (exact coordinates, street address, raw source row) whoever the agent
+// is. Every location decision was therefore made HERE, and here nothing rounded:
+// the free field mask above kept latitude/longitude at full precision (it only
+// dropped the address), the anonymous get_facility preview reused that mask, and a
+// free key on search_facilities got exact coordinates on every row.
+//
+// THE RULE. Exact location (precise coordinates + street address) goes to the top
+// paying tiers only. Everyone else gets coordinates rounded to 2dp (~1.1 km), no
+// street address, no raw upstream blob, and coordinates_status "approximate_2dp" on
+// each record whose coordinates were actually coarsened (the backend's own marker).
+// Starter pays but is NOT exact-location (owner, 2026-09-21): it keeps every other
+// field it gets today; only its location is coarsened.
+//
+// WHO IS EXACT is read off the server's existing tier ranking, not a new one:
+//   _tierRank(tier) >= _tierRank('developer') → developer, paid (and the pro-class
+//   plan names _nodeTier folds into it: pro / founding / team / metered — metered is
+//   the $10 pack), enterprise, research_seed. Plus 'admin', the backend's operator
+//   tier, which _TIER_RANK does not rank. Starter / identified / free / anonymous /
+//   trial and any tier string nobody recognises are coarsened: unknown fails closed.
+// Three per-call facts the tier string cannot carry also count:
+//   * the call was served on a PAID rail — pack credits burned (credits_full), an
+//     MPP or x402 settlement — or re-gated at a just-purchased tier (r41). Those
+//     return paths stamp _EXACT_LOCATION_CALL on the result;
+//   * the caller holds a live $10 pack balance. Owner: pack buyers get exact
+//     location on EVERY call, and a pack holder's key can still validate as 'free',
+//     so the balance is read (the same cached, 2s-bounded _getCredits lookup the
+//     credit cascade uses) — and only when the result carries something to coarsen;
+//   * _facilityExactLocationAllowed, the ONE per-facility override.
+//
+// WHERE: once, in _stampEntityCb — the wrapper around trackedTool's WHOLE handler,
+// so every return path of every tool passes through it before anything else sees
+// the result. A mask per branch is how this leaked: the preview, the keyed mask,
+// the keystone re-gate and the credit path each assemble their own payload.
+//
+// WHICH TOOLS, and how (see lib/facility-location.mjs for the two scopes):
+//   record  the payload IS facility data — every coordinate in it is coarsened,
+//           nested peers (`nearby`) and copied follow-up parameters included.
+//   detect  facility rows ride alongside other data — only facility records (by
+//           shape, by container key, or by a facility-named coordinate key) are
+//           coarsened. Open infrastructure (substations, lines, fiber, plants,
+//           GEM units) and the caller's own points keep their precision.
+// A tool NOT in this map is not gated at all. Swept 2026-09-21 against the backend
+// handlers each tool calls: exact facility coordinates reach an agent through
+// get_facility, search_facilities, get_facility_risk_delta and the site report's
+// carrier-hotel latency target. The other entries carry facility rows without
+// coordinates today and are gated so a backend change cannot reopen this silently.
+const _FACILITY_LOCATION_SCOPE = Object.freeze({
+  get_facility: _LOC_RECORD,             // /api/v1/facilities/<id>: latitude/longitude, address, nearby peers
+  search_facilities: _LOC_RECORD,        // /api/v1/facilities rows (keyed callers get the full table row)
+  get_facility_risk_delta: _LOC_RECORD,  // `facility` block carries exact lat/lon
+  search: _LOC_RECORD,                   // builds {id,title,url} from facility rows
+  fetch: _LOC_RECORD,                    // builds a summary from a facility record
+  generate_site_analysis: _LOC_DETECT,   // survey.fiber.latency_target_lat/_lng = nearest carrier hotel
+  find_alternatives: _LOC_DETECT,        // target_facility + alternatives[]
+  score_facility: _LOC_DETECT,           // facility
+  get_market_intel: _LOC_DETECT,         // recent_facilities[]
+  get_changes: _LOC_DETECT,              // facilities_new[], new_facilities_nearby[]
+  list_saved_sites: _LOC_DETECT,         // new_facilities_nearby[] beside YOUR saved points (kept exact)
+  execute_plan: _LOC_DETECT,             // each step is gated on its own loopback call; this is the backstop
+});
+// Keys (snake_case) whose value is facility rows, for the detect scope.
+const _FACILITY_CONTAINER_KEYS = new Set([
+  'facility', 'facilities', 'target_facility', 'alternatives', 'recent_facilities',
+  'facilities_new', 'new_facilities', 'new_facilities_nearby', 'nearby_facilities',
+  'nearest_facilities', 'top_facilities', 'peer_facilities', 'similar_facilities',
+  'data_centers', 'datacenters', 'carrier_hotels', 'latency_target', 'colocation_facilities',
+]);
+export const _FACILITY_LOCATION_TOOLS = Object.freeze(Object.keys(_FACILITY_LOCATION_SCOPE));
+
+// Stamped (as a symbol, so it never serializes) on a result served on a paid rail;
+// the gate reads it off the handler's own return value.
+const _EXACT_LOCATION_CALL = Symbol('dchub.exact_location_call');
+function _markExactLocationCall(result) {
+  try { if (result && typeof result === 'object') result[_EXACT_LOCATION_CALL] = true; } catch (_) { /* never break a paid answer */ }
+  return result;
+}
+
+const _EXACT_LOCATION_UNRANKED_TIERS = new Set(['admin']);
+/** True when this tier sees exact facility location. */
+export function _isExactLocationTier(tier) {
+  const t = String(tier || '').trim().toLowerCase();
+  if (!t) return false;
+  if (_EXACT_LOCATION_UNRANKED_TIERS.has(t)) return true;
+  return _tierRank(t) >= _tierRank('developer');
+}
+
+// ★ THE ONE PER-FACILITY OVERRIDE. Asked for every facility record a non-exact
+// caller is about to receive; true leaves that record — and only that record —
+// exact. Nothing is granted today: the tier decides alone. The planned monthly
+// allowance of exact locations for free and starter callers plugs in HERE: resolve
+// the caller's unlocked facility ids (from the backend endpoint that will own the
+// allowance) and return true for a record whose id / slug is among them.
+// `record` is the facility object; `c` is the caller context (tier, api_key, …).
+export function _facilityExactLocationAllowed(_record, _c) {
+  return false;
+}
+
+function _locationOpts(scope, c) {
+  return {
+    scope,
+    containerKeys: _FACILITY_CONTAINER_KEYS,
+    exactAllowed: (record) => _facilityExactLocationAllowed(record, c),
+  };
+}
+
+/**
+ * THE HELPER: gate facility-shaped data for a caller's tier.
+ * Exact-location tiers get `obj` back untouched. Everyone else gets a copy with
+ * every coordinate rounded to 2dp, street-address fields and raw upstream blobs
+ * removed, and coordinates_status "approximate_2dp" on each coarsened record.
+ * Never throws; on any internal error it fails closed (coordinates stripped).
+ * opts.scope: 'record' (default — obj is facility data) or 'detect'.
+ */
+export function gateFacilityLocation(obj, tier, opts = {}) {
+  if (_isExactLocationTier(tier)) return obj;
+  const scope = opts.scope === _LOC_DETECT ? _LOC_DETECT : _LOC_RECORD;
+  return coarsenFacilityLocation(obj, _locationOpts(scope, opts.ctx || null)).value;
+}
+
+/**
+ * The trackedTool seam (called from _stampEntityCb): gate one tool result —
+ * content[].text JSON AND structuredContent — for the caller in `c`. Returns
+ * the result unchanged for a tool outside _FACILITY_LOCATION_SCOPE, an
+ * exact-location caller, a paid-rail call, or a live pack holder.
+ */
+export async function _gateToolLocation(result, name, c) {
+  const scope = _FACILITY_LOCATION_SCOPE[name];
+  if (!scope || !result || typeof result !== 'object') return result;
+  if (_isExactLocationTier(c && c.tier)) return result;
+  let paidCall = false;
+  try { paidCall = result[_EXACT_LOCATION_CALL] === true; } catch (_) { paidCall = false; }
+  if (paidCall) return result;
+  const gated = coarsenToolResultLocation(result, _locationOpts(scope, c));
+  if (gated === result) return result;            // nothing location-bearing in it
+  let credits = 0;
+  try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
+  return credits > 0 ? result : gated;            // a failed balance read coarsens
 }
 
 // 2026-07-08: grid-headroom premium tier (default OFF, DCHUB_GRID_HEADROOM_TIER).
@@ -8794,7 +8940,15 @@ function _siteHandoff(co) {
 
 function _stampEntityCb(toolName, fn) {
   return async (args, extra) => {
-    const r = await fn(args, extra);
+    // ★ r-location-tier: the location gate runs HERE, on the handler's result,
+    //   before anything below derives from it. This await is where every return
+    //   path of a trackedTool handler lands — the anonymous preview, the keyed
+    //   mask, the keystone re-gate, the credit path — so no branch can hand a
+    //   non-paying caller an exact facility location, and the
+    //   site_evaluation_handoff built below is built from the coarsened payload.
+    //   It reads c.tier after the handler ran, so a paid lift inside the call
+    //   counts. See _gateToolLocation.
+    const r = await _gateToolLocation(await fn(args, extra), toolName, getCtx());
     try {
       if (r && Array.isArray(r.content)) {
         const sc = (r.structuredContent && typeof r.structuredContent === 'object'
@@ -13669,7 +13823,8 @@ function trackedTool(srv, name, description, schema, handler) {
           status = 'credits_full';
           const _cr = await handler(gate.params || args);
           _burnCredits(c, name, _cost);
-          return withCitation(_cr, name);
+          // r-location-tier: a credit-paid call is a pack buyer's call — exact location.
+          return _markExactLocationCall(withCitation(_cr, name));
         }
         // r-reup (2026-06-16): a DEPLETED pack buyer (had_pack, 0 credits) is your
         // highest-ROI re-conversion — they already paid once. Lead the teaser with
@@ -13879,7 +14034,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _cred = await _mintDurableForPaidAgent('mpp_paid');
             if (_cred) _mppFull.structuredContent = { ...(_mppFull.structuredContent || {}), machine_credential: _cred };
           } catch (_) { /* additive only — never blocks the paid response */ }
-          return _mppFull;
+          return _markExactLocationCall(_mppFull);   // r-location-tier: settled call
         } else if (process.env.MPP_HARD_GATE === '1' || mppWantsChallenge(extra, _mppArgs)) {
           // Hard-gate (global) OR the agent opted into a challenge for THIS call
           // (the mpp_pay ARGUMENT, or _meta.mpp_pay from a client that can set it)
@@ -13931,7 +14086,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _cred = await _mintDurableForPaidAgent('x402_paid');
             if (_cred) _xFull.structuredContent = { ...(_xFull.structuredContent || {}), machine_credential: _cred };
           } catch (_) { /* additive only */ }
-          return _xFull;
+          return _markExactLocationCall(_xFull);   // r-location-tier: settled call
         }
         status = 'x402_failed';
         return {
@@ -14064,7 +14219,11 @@ function trackedTool(srv, name, description, schema, handler) {
                 // Re-evaluate the gate at the new tier — should now allow.
                 const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
                 if (_gate2.allowed) {
-                  return withCitation(await handler(args), name);
+                  // r-location-tier: this branch lifts _gateTier but not c.tier, so
+                  // the location gate would read the pre-purchase tier. Carry the
+                  // purchase on the result instead.
+                  const _r2 = withCitation(await handler(args), name);
+                  return _isExactLocationTier(_newTier) ? _markExactLocationCall(_r2) : _r2;
                 }
               }
             }
