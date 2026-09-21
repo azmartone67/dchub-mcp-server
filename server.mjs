@@ -7414,6 +7414,105 @@ function _maskFacilityFieldsForFree(parsed) {
   }
   return parsed;
 }
+// r-bind-midcall-mask (2026-09-21): the keyed-free facility answer, built in ONE
+// place. It had a single call site, AFTER the paywall branch in trackedTool, and
+// the keystone session-bind INSIDE that branch returns before reaching it: an
+// anonymous session whose claimed key was bound mid-call re-gated to
+// {allowed, masked:true} on get_facility and was then served the raw handler
+// result — power_mw, specs and the raw row, byte-identical to a paid caller.
+// Every path that serves a KEYED free/identified caller a KEYED_FACILITY_MASK
+// tool goes through here. Returns null for a non-JSON payload (no record in it to
+// mask); the caller then serves the raw result, as the original block did.
+function _keyedFreeFacilityResult(result, name, c) {
+  let parsed; try { parsed = JSON.parse(result?.content?.[0]?.text || '{}'); } catch { parsed = null; }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const masked = _maskFacilityFieldsForFree(parsed);
+  if (masked && typeof masked === 'object' && !Array.isArray(masked)) {
+    masked._upgrade = {
+      tier: 'free',
+      message: 'Free tier: facility capacity (MW), exact coordinates + deep specs are Developer. You have full discovery — search any of 24,400+ facilities by name/geo. Call unlock_more_data to upgrade.',
+      next_tool: 'unlock_more_data',
+    };
+  }
+  // 2026-06-29: route the masked (search_facilities/get_facility) path
+  // through withBindHint so an unbound trial here is told to bind_email
+  // (was returning raw — the gap the founder flagged).
+  return withBindHint({ content: [{ type: 'text', text: JSON.stringify(masked) }] }, name, c);
+}
+
+// r-find-sites-free-coarsen (2026-09-21): find_sites' description promises "Free
+// tier coarsens coordinates to ~11 km and withholds operator/capacity". The
+// backend endpoint builds that preview itself (routes/find_sites.py), but it
+// decides on the credential it is handed, and this handler reaches it as the
+// MCP server — so it never saw the real caller, and every MCP caller, keyless
+// ones included, was served exact substation coordinates plus operator and
+// capacity. The MCP layer is where the real caller's tier is known, so the free
+// preview is rebuilt here, with the backend's own transform: lat/lon to 0.1°
+// (~11 km), the coordinates inside next_calls likewise, anchor operator and
+// capacity_mva withheld.
+//
+// WHO: the free tiers only — keyless, free and identified. Every paid tier, and
+// any tier this server does not know, keeps the response it got before. A
+// live $10 pack balance is a paid read too; a pack bought against a free key
+// does not change that key's tier, so the balance is read (the same cached,
+// 2s-bounded lookup the credit cascade uses) — and only when there is
+// something to coarsen.
+const _FIND_SITES_FREE_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+const _FIND_SITES_COORD_KEYS = new Set(['lat', 'lon', 'lng', 'latitude', 'longitude']);
+function _findSitesRound1(v) {
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return v;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return v;
+  const r = Math.round(n * 10) / 10;
+  return Object.is(r, -0) ? 0 : r;
+}
+function _findSitesCoarsenCoords(obj) {
+  const out = { ...obj };
+  for (const k of Object.keys(out)) {
+    if (_FIND_SITES_COORD_KEYS.has(k.toLowerCase())) out[k] = _findSitesRound1(out[k]);
+  }
+  return out;
+}
+export function _coarsenFindSites(payload) {
+  const out = { ...payload };
+  out.candidates = payload.candidates.map((cand) => {
+    if (!cand || typeof cand !== 'object' || Array.isArray(cand)) return cand;
+    const c2 = _findSitesCoarsenCoords(cand);
+    c2.coordinate_precision_km = 11.0;
+    if (cand.anchor && typeof cand.anchor === 'object' && !Array.isArray(cand.anchor)) {
+      c2.anchor = { ..._findSitesCoarsenCoords(cand.anchor), operator: null, capacity_mva: null };
+    }
+    if (Array.isArray(cand.next_calls)) {
+      c2.next_calls = cand.next_calls.map((s) => (typeof s === 'string'
+        ? s.replace(/\b(lat|lon|lng|latitude|longitude)=(-?\d+(?:\.\d+)?)/gi,
+            (_m, k, v) => `${k}=${_findSitesRound1(v)}`)
+        : s));
+    }
+    return c2;
+  });
+  out._gated = true;
+  out._upgrade_cta = 'Free preview: candidate coordinates are coarsened to ~11 km and anchor '
+    + 'operator/capacity are withheld. Exact coordinates and anchor detail come with a paid plan '
+    + 'or the $10 pack — call unlock_more_data.';
+  out._upgrade = {
+    tier: 'free',
+    locked: 'exact_coordinates',
+    message: out._upgrade_cta,
+    next_tool: 'unlock_more_data',
+  };
+  return out;
+}
+async function _findSitesForCaller(payload, c) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  if (!Array.isArray(payload.candidates) || payload.candidates.length === 0) return payload;
+  if (payload._gated === true) return payload;          // the backend already served its own preview
+  const t = String((c && c.tier) || '').trim().toLowerCase();
+  if (!_FIND_SITES_FREE_TIERS.has(t)) return payload;
+  let credits = 0;
+  try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
+  if (credits > 0) return payload;
+  return _coarsenFindSites(payload);
+}
 
 // ── r-location-tier (2026-09-21, owner-approved): exact facility location is paid-only ──
 //
@@ -14192,7 +14291,18 @@ function trackedTool(srv, name, description, schema, handler) {
                 console.log(`[MCP] keystone session-bind sid=${String(_sid).slice(0,8)} → ${_m.tier} (durable claim, cross-replica)`);
                 const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
                 if (_gateK.allowed) {
-                  return withCitation(await handler(args), name);
+                  const _resK = await handler(args);
+                  // r-bind-midcall-mask: `masked` is the gate letting a free/identified
+                  // KEY through on the promise that the answer is projected to the free
+                  // facility fields. This return skips the block below that keeps that
+                  // promise, so keep it here, with the same function.
+                  if (_gateK.masked) {
+                    try {
+                      const _maskedK = _keyedFreeFacilityResult(_resK, name, c);
+                      if (_maskedK) return _maskedK;
+                    } catch (_) { /* fall through to raw result on parse failure */ }
+                  }
+                  return withCitation(_resK, name);
                 }
               }
             }
@@ -15040,21 +15150,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // (tier != 'free') and non-discovery tools skip this. Fail-soft to raw.
       if (c.api_key && (tier === 'free' || tier === 'identified') && KEYED_FACILITY_MASK.has(name)) {
         try {
-          let parsed; try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
-          if (parsed && typeof parsed === 'object') {
-            const masked = _maskFacilityFieldsForFree(parsed);
-            if (masked && typeof masked === 'object' && !Array.isArray(masked)) {
-              masked._upgrade = {
-                tier: 'free',
-                message: 'Free tier: facility capacity (MW), exact coordinates + deep specs are Developer. You have full discovery — search any of 24,400+ facilities by name/geo. Call unlock_more_data to upgrade.',
-                next_tool: 'unlock_more_data',
-              };
-            }
-            // 2026-06-29: route the masked (search_facilities/get_facility) path
-            // through withBindHint so an unbound trial here is told to bind_email
-            // (was returning raw — the gap the founder flagged).
-            return withBindHint({ content: [{ type: 'text', text: JSON.stringify(masked) }] }, name, c);
-          }
+          const _masked = _keyedFreeFacilityResult(result, name, c);
+          if (_masked) return _masked;
         } catch (_) { /* fall through to raw result on parse failure */ }
       }
       // 2026-06-11 free-tier dial — r88-conv: now defaults to a BOUNDED cap
@@ -19105,7 +19202,8 @@ function createServer(descOverrides, instructionsTail) {
       limit: LIMIT },
     async (a) => withFreshness(
       { content: [{ type: 'text',
-        text: JSON.stringify(await callAPI('/api/v1/sites/find', _foldCoordArgs(a))) }] },
+        text: JSON.stringify(await _findSitesForCaller(
+          await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx())) }] },
       'find_sites'));
 
   trackedTool(srv, 'analyze_site', 'Use when a user has ONE specific lat/lon (a parcel, a candidate site) and wants the full multi-factor data-center suitability read in one call. Example: "Score this Phoenix parcel for a 100MW build — power, gas, fiber, market & risk." — analyze_site lat=33.45 lon=-112.07 capacity_mw=100 state=AZ. Params: lat (-90 to 90, required unless candidate_id or location), lon (-180 to 180, required unless candidate_id or location), location (a market NAME or metro slug instead of coordinates, e.g. location="ashburn" — resolved to that market\'s PUBLISHED CENTROID through the DCPI market row, with a resolved_from block naming what it resolved to; a MARKET-level read, NOT the parcel you named, and a trailing state is not stripped so "Ashburn, VA" will not resolve), candidate_id (a cand_… from get_refined_queue — resolves coordinates from the frozen mint and ignores lat/lon), capacity_mw (target load in MW, e.g. 50-500 — returns a `capacity_context` block sizing that load against nearby installed generation; it deliberately does NOT move overall_score, and the block names where the load IS applied), state (2-letter US, optional — improves the tax-incentive/context lookup), include_grid/include_risk/include_fiber (booleans, default true). Returns (full, paid): {overall_score (aka composite_score, 0-100 composite — for the integrity-first version that never imputes a missing factor, use get_composite_site_score), interpretation (verdict string, e.g. "Excellent site"), scores{power_infrastructure, gas_pipeline_access, fiber_connectivity, market_conditions, risk_resilience — each 0-100}, nearby{substations_50km, power_plants_80km, gas_pipelines_50km, facilities_100km, fiber_carriers_in_state, generation_capacity_mw, total_capacity_mw}, power_cost{industrial_cents_kwh, commercial_cents_kwh, period, basis}, fiber{connectivity_score, nearest_carrier_km, near_net_bucket, top_carriers[], single_carrier_risk}, location, citation}. FREE tier returns a REAL, citable HEADLINE — composite_score + verdict + the single top limiting factor (the lowest sub-score) + citation; the full per-factor breakdown, nearby infrastructure, power cost, fiber carriers, and the branded Site Analysis PDF (generate_site_analysis) are Pro. For dedicated water / disaster / climate / tax reads use get_water_risk / get_disaster_risk / get_climate_intel / get_tax_incentives. Do NOT use to compare 2+ sites (use compare_sites) or to find sites that match a target (use find_alternatives).',
