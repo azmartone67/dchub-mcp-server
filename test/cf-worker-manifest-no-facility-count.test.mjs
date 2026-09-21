@@ -118,7 +118,7 @@ const MUST_KEEP = [
   ['get_hosting_capacity', '278,799 published records across 18 utilities'],
   ['get_refined_queue', 'the US ISO interconnection queue (~5,300 projects, 7 ISOs, ~1,744 GW)'],
   ['get_gas_index', 'scored ~0 for every state (122 -> 17,571 segments now counted)'],
-  ['unlock_more_data', 'Cheapest start: $10 one-time = 1,000 API calls (no subscription)'],
+  ['unlock_more_data', 'Cheapest start: $10 one-time = 1,000 API credits (no subscription)'],
   ['claim_free_key', '2,586 redemptions from only 169 distinct agents'],
   // A facility noun with no magnitude in front of it is not a count.
   ['the noun alone', 'corpus subset of news_articles,deals,discovered_facilities,market_narratives'],
@@ -240,7 +240,7 @@ describe('the rebuilt worker carries no baked facility count', () => {
   };
   const KEEPER = {
     name: 'zz_keeps_its_numbers',
-    description: 'Covers 2,200+ tracked deals, 330,000+ mapped power/grid/gas/fiber assets and 1,000 API calls.',
+    description: 'Covers 2,200+ tracked deals, 330,000+ mapped power/grid/gas/fiber assets and 1,000 API credits.',
     inputSchema: { type: 'object', properties: {} },
   };
 

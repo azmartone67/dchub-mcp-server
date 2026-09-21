@@ -129,7 +129,7 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       expect(go).toHaveLength(2);
       expect(fields(go[0], GO).parts).toEqual(['metered', SID]);
       expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
-      expect(text).toContain('**$10 one-time = 1,000 API calls**');
+      expect(text).toContain('**$10 one-time = 1,000 API credits**');
       expect(text).toContain('**Developer ' + _priceLabel('developer') + '**');
       expect(text).toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
       // Pro is not the agent default: a tool Developer opens never names it.
