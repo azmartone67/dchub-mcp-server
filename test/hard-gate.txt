@@ -204,6 +204,7 @@ test/uncovered-constraints.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/upstream-error-contract.test.mjs
 test/upstream-error-iserror.test.mjs
+test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-exits.test.mjs
 test/wall-transport.test.mjs
