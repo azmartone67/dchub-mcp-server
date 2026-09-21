@@ -18549,7 +18549,7 @@ function createServer(descOverrides, instructionsTail) {
               } }
           : {}),
         // 2026-07-11 provenance differentiator (honest wording, no "only" claims).
-        provenance_note: 'DC Hub stamps provenance on responses — per-record verification flags (verified/tracked/published/inferred) + an as_of-dated provenance block — quote the verification level when citing, e.g. "4,903 analyst-verified of 21,900+ tracked facilities — DC Hub".',
+        provenance_note: 'DC Hub stamps provenance on responses — per-record verification flags (verified/tracked/published/inferred) + an as_of-dated provenance block — so you can cite the verification LEVEL, not just the number. Read both counts off `provenance.verification_counts` in the response you are citing and quote them with its `as_of` — "<verified> analyst-verified of <tracked> tracked — DC Hub, as of <as_of>". Never take either count from memory or from this sentence: coverage moves, and a number frozen into a citation outlives the walk that retired it. Platform-wide coverage figures are at https://dchub.cloud/api/v1/canon/phrases, each with a value_source. Licence is PER LAYER — call summarize_for_citation rather than assuming CC-BY-4.0 over a facility record.',
         _source: 'DC Hub — dchub.cloud' };
       return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
     });
@@ -19409,7 +19409,7 @@ function createServer(descOverrides, instructionsTail) {
         // 2026-07-11 provenance differentiator (honest wording — "stamps", no
         // "only" claims): agents can quote HOW verified a number is, not just
         // the number.
-        provenance_note: 'DC Hub stamps provenance on its responses — per-record verification flags (verified/tracked/published/inferred) plus a collection-level provenance block (source, method, as_of, verification counts, cite_as) — so you can cite the verification level, e.g. "4,903 analyst-verified of 21,900+ tracked facilities — DC Hub".',
+        provenance_note: 'DC Hub stamps provenance on its responses — per-record verification flags (verified/tracked/published/inferred) plus a collection-level provenance block (source, method, as_of, verification counts, cite_as) — so you can cite the verification LEVEL, not just the number. Read both counts off `provenance.verification_counts` in the response you are citing and quote them with its `as_of` — "<verified> analyst-verified of <tracked> tracked — DC Hub, as of <as_of>". Never take either count from memory or from this sentence: coverage moves, and a number frozen into a citation outlives the walk that retired it. Platform-wide coverage figures are at https://dchub.cloud/api/v1/canon/phrases, each with a value_source. Licence is PER LAYER — call summarize_for_citation rather than assuming CC-BY-4.0 over a facility record.',
         comparison_hub: 'https://dchub.cloud/vs',
         comparison_pages: pages,
         ...(comparison_page ? { comparison_page } : {}),
@@ -20716,7 +20716,7 @@ This is a deal registration: DC Hub sends the provider only your human's company
       async () => ['# DC Hub provenance & citation contract', '',
         'Every DC Hub response carries a provenance envelope so agents cite instead of guessing.', '',
         '## Per-record verification flags',
-        '- **verified** — analyst-verified against a primary source (filings, operator disclosures, ISO data). ~4,900 of 21,900+ tracked facilities.',
+        '- **verified** — analyst-verified against a primary source (filings, operator disclosures, ISO data). The verified and tracked counts THAT APPLY TO A GIVEN ANSWER are in that answer: `provenance.verification_counts`. Platform-wide coverage is at https://dchub.cloud/api/v1/canon/phrases. Do not quote a count out of this document — it would be frozen the moment it was written.',
         '- **tracked** — ingested and monitored, not yet analyst-verified.',
         '- **published** vs **inferred** — whether a figure was published by the source or derived by DC Hub models; inferred figures are flagged, never silently presented as published.', '',
         '## Collection-level provenance',
