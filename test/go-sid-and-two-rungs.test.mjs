@@ -117,42 +117,47 @@ describe('r-relay-key-bind — /upgrade/h carries the key hash for keyed callers
   });
 });
 
-describe('r-two-rungs + r-dev-rung — the relayed ask names the $10 page and the Developer checkout', () => {
+describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, then Developer', () => {
   const GO_RE = /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g;
   const RELAY_RE = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9._-]+/g;
 
-  it('keyless session: $10 → the SAME /upgrade/h token as for_your_human; Developer → /go/c developer on the session', () => {
+  it('keyless session: $10 → /go/c metered on the session, then Developer → /go/c developer; no page in front of the click', () => {
     withCtx({ session_id: SID }, () => {
       const text = _rungsText('rank_markets', 'free');
-      const rel = buildHumanRelay('rank_markets', 'free');
-      expect(text.match(RELAY_RE)).toEqual([rel.url]);
+      expect(text.match(RELAY_RE)).toBeNull();
       const go = text.match(GO_RE);
-      expect(go).toHaveLength(1);
-      expect(fields(go[0], GO).parts).toEqual(['developer', SID]);
+      expect(go).toHaveLength(2);
+      expect(fields(go[0], GO).parts).toEqual(['metered', SID]);
+      expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
       expect(text).toContain('**$10 one-time = 1,000 API calls**');
       expect(text).toContain('**Developer ' + _priceLabel('developer') + '**');
       expect(text).toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
       // Pro is not the agent default: a tool Developer opens never names it.
       expect(text).not.toContain('**Pro ');
-      expect(text.indexOf(rel.url)).toBeLessThan(text.indexOf(go[0]));
+      expect(text.indexOf('$10 one-time')).toBeLessThan(text.indexOf(go[0]));
+      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**Developer '));
     });
   });
 
-  it('keyed: Developer binds k-<sha256(key)> with the session beside it', () => {
+  it('keyed: the pack binds pk-<sha256(key)>, Developer binds k-<sha256(key)>, the session beside each', () => {
     withCtx({ session_id: SID, api_key: KEY }, () => {
       const go = _rungsText('rank_markets', 'free').match(GO_RE);
-      expect(go).toHaveLength(1);
-      expect(fields(go[0], GO).parts).toEqual(['developer', 'k-' + KEY_HASH, SID]);
+      expect(go).toHaveLength(2);
+      expect(fields(go[0], GO).parts).toEqual(['metered', 'pk-' + KEY_HASH, SID]);
+      expect(fields(go[1], GO).parts).toEqual(['developer', 'k-' + KEY_HASH, SID]);
     });
   });
 
-  it('r-trial-sub-bind: a dch_trial_ key in the store gets the session-bound subscription rung, not k-', () => {
-    withCtx({ session_id: SID, api_key: 'dch_trial_testkey_not_real' }, () => {
+  it('r-trial-sub-bind: a dch_trial_ key keeps pk- on the pack, and gets the session-bound subscription rung, not k-', () => {
+    const TRIAL = 'dch_trial_testkey_not_real';
+    const TRIAL_HASH = createHash('sha256').update(TRIAL).digest('hex');
+    withCtx({ session_id: SID, api_key: TRIAL }, () => {
       const go = _rungsText('rank_markets', 'free').match(GO_RE);
-      expect(go).toHaveLength(1);
-      expect(fields(go[0], GO).parts).toEqual(['developer', SID]);
+      expect(go).toHaveLength(2);
+      expect(fields(go[0], GO).parts).toEqual(['metered', 'pk-' + TRIAL_HASH, SID]);
+      expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
       const proGo = _rungsText('get_grid_intelligence', 'free').match(GO_RE);
-      expect(fields(proGo[0], GO).parts).toEqual(['pro', SID]);
+      expect(fields(proGo[1], GO).parts).toEqual(['pro', SID]);
     });
   });
 
@@ -161,10 +166,22 @@ describe('r-two-rungs + r-dev-rung — the relayed ask names the $10 page and th
       withCtx({ session_id: SID }, () => {
         const text = _rungsText(tool, 'free');
         const go = text.match(GO_RE);
-        expect(go, tool).toHaveLength(1);
-        expect(fields(go[0], GO).parts, tool).toEqual(['pro', SID]);
+        expect(go, tool).toHaveLength(2);
+        expect(fields(go[0], GO).parts, tool).toEqual(['metered', SID]);
+        expect(fields(go[1], GO).parts, tool).toEqual(['pro', SID]);
         expect(text, tool).toContain('**Pro ' + _priceLabel('pro') + '**');
         expect(text, tool).not.toContain('Developer');
+      });
+    }
+  });
+
+  it('clean platform (ChatGPT/OpenAI): the $10 rung stays the informational /upgrade/h page', () => {
+    for (const platform of ['chatgpt', 'openai-apps']) {
+      withCtx({ session_id: SID, platform }, () => {
+        const text = _rungsText('rank_markets', 'free');
+        expect(text.match(RELAY_RE), platform).toEqual([buildHumanRelay('rank_markets', 'free').url]);
+        expect(text.indexOf('/upgrade/h/'), platform).toBeLessThan(text.indexOf('/go/c/'));
+        expect(text.match(GO_RE).map((u) => fields(u, GO).parts[0]), platform).toEqual(['developer']);
       });
     }
   });
@@ -173,18 +190,18 @@ describe('r-two-rungs + r-dev-rung — the relayed ask names the $10 page and th
     expect(PRO_URL).toBe('https://buy.stripe.com/dRm28s2gGcfP6yx0PEaZi0p');
   });
 
-  it('composeHumanCta keeps both rungs and adds no third ask', () => {
+  it('composeHumanCta keeps the one ask line whole and adds no second ask', () => {
     withCtx({ session_id: SID }, () => {
       const body = '{"results":[1,2,3]}\n\n---\n\u{1F464} **Tell your human:** unlock `rank_markets` — '
         + _rungsText('rank_markets', 'free') + '\n';
       const out = composeHumanCta(buildHumanRelay('rank_markets', 'free').url, body);
-      expect(out.match(RELAY_RE)).toHaveLength(1);
-      expect(out.match(GO_RE)).toHaveLength(1);
+      expect(out.match(RELAY_RE)).toBeNull();
+      expect(out.match(GO_RE)).toHaveLength(2);
       expect(out).not.toContain('→ **For your human:**');
     });
   });
 
-  it('fail-open: with the relay switched off the $10 rung is still a payable /go/c pack link', () => {
+  it('fail-open: with the relay switched off the rungs are unchanged payable /go/c links', () => {
     process.env.DCHUB_HUMAN_RELAY = '0';
     withCtx({ session_id: SID }, () => {
       const go = _rungsText('rank_markets', 'free').match(GO_RE);
@@ -196,13 +213,13 @@ describe('r-two-rungs + r-dev-rung — the relayed ask names the $10 page and th
 describe('r-two-rungs — the envelopes an agent actually relays', () => {
   const GO_RE = /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g;
 
-  it('trialHeader (the gated preview line) names the relay page and the Developer checkout', () => {
+  it('trialHeader (the gated preview line) names the $10 checkout and the Developer checkout', () => {
     withCtx({ session_id: SID }, () => {
       const line = trialHeader('rank_markets', SID, '3 of 10 results shown');
-      expect(line).toContain(buildHumanRelay('rank_markets', 'free').url);
+      expect(line).not.toContain('/upgrade/h/');
       const go = line.match(GO_RE);
-      expect(go).toHaveLength(1);
-      expect(fields(go[0], GO).parts[0]).toBe('developer');
+      expect(go).toHaveLength(2);
+      expect(go.map((u) => fields(u, GO).parts[0])).toEqual(['metered', 'developer']);
     });
   });
 

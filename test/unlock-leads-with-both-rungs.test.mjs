@@ -53,15 +53,14 @@ function fields(url, prefix) {
 }
 
 describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () => {
-  it('keyless session: line one is the ask, $10 on /upgrade/h then Developer then Pro on /go/c', () => {
+  it('keyless session: line one is the ask — $10, Developer, Pro, each a /go/c checkout on the session', () => {
     const text = unlock({ session_id: SID }).content[0].text;
     const first = text.split('\n')[0];
     expect(first.startsWith(HUMAN_FIRST_MARKER)).toBe(true);
     const links = first.match(LINK_RE);
     expect(links).toHaveLength(3);
-    const relay = fields(links[0], RELAY);
-    expect(relay).toHaveLength(4);
-    expect(relay.slice(0, 3)).toEqual([SID, 'unlock_more_data', 'free']);
+    // r-direct-pack (2026-09-21, owner): no page sits in front of the $10 click.
+    expect(fields(links[0], GO)).toEqual(['metered', SID]);
     expect(fields(links[1], GO)).toEqual(['developer', SID]);
     expect(fields(links[2], GO)).toEqual(['pro', SID]);
     // Agent rungs ($10, $49) are named before the $99 one.
@@ -73,21 +72,20 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(text.search(LINK_RE)).toBe(first.search(LINK_RE));
   });
 
-  it('for_your_human is the same /upgrade/h token the text leads with', () => {
+  it('for_your_human still rides structuredContent, but never in front of the checkout the text leads with', () => {
     const env = unlock({ session_id: SID });
     const fyh = env.structuredContent.for_your_human;
-    expect(fyh && fyh.url).toBeTruthy();
-    expect(env.content[0].text.split('\n')[0].match(LINK_RE)[0]).toBe(fyh.url);
-    expect(env.structuredContent.human_message.split('\n')[0]).toBe(env.content[0].text.split('\n')[0]);
+    expect(fyh && fyh.url && fyh.url.startsWith(RELAY)).toBe(true);
+    const first = env.content[0].text.split('\n')[0];
+    expect(first).not.toContain(fyh.url);
+    expect(first.match(LINK_RE)[0].startsWith(GO)).toBe(true);
+    expect(env.structuredContent.human_message.split('\n')[0]).toBe(first);
   });
 
-  it('keyed: /upgrade/h names the key, Developer and Pro bind k- with the session beside it', () => {
+  it('keyed: the pack binds pk-, Developer and Pro bind k-, each with the session beside it', () => {
     const first = unlock({ session_id: SID, api_key: KEY }).content[0].text.split('\n')[0];
-    const [relayUrl, devUrl, proUrl] = first.match(LINK_RE);
-    const relay = fields(relayUrl, RELAY);
-    expect(relay).toHaveLength(5);
-    expect(relay[0]).toBe(SID);
-    expect(relay[4]).toBe('pk-' + KEY_HASH);
+    const [packUrl, devUrl, proUrl] = first.match(LINK_RE);
+    expect(fields(packUrl, GO)).toEqual(['metered', 'pk-' + KEY_HASH, SID]);
     expect(fields(devUrl, GO)).toEqual(['developer', 'k-' + KEY_HASH, SID]);
     expect(fields(proUrl, GO)).toEqual(['pro', 'k-' + KEY_HASH, SID]);
   });
@@ -97,7 +95,7 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     const links = text.match(LINK_RE);
     expect(new Set(links).size).toBe(links.length);
     expect(links.map((u) => (u.startsWith(GO) ? fields(u, GO)[0] : 'relay')))
-      .toEqual(['relay', 'developer', 'pro']);
+      .toEqual(['metered', 'developer', 'pro']);
     const env = unlock({ session_id: SID });
     expect(env.structuredContent.plans.map((p) => p.id)).toEqual(['credits', 'developer', 'pro']);
     expect(env.structuredContent.recommended_subscription).toBe('developer');

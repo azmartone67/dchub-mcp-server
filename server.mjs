@@ -522,11 +522,21 @@ function buildHumanRelay(toolName, tier, sessionId) {
 // and agents buy $10 or $49; humans screening land + power buy $99. A Pro-only
 // tool keeps Pro, because Developer does not open it and an ask that cannot
 // unlock the tool it was shown on is the r62b-conv false promise again.
+//
+// ★ r-direct-pack (2026-09-21, owner decision — reverses r-two-rungs' $10 target):
+// the $10 rung is the session/key-bound /go/c PACK CHECKOUT itself, not the
+// /upgrade/h page. Below "code minted" every rung already converts (09-19:
+// 5 → 5 → 5 → 3), so a page in front of a $10 impulse buy is a rung the data
+// does not ask for; /upgrade/h moves AFTER payment (identify / opt-in). The
+// click is still measured: /go/c stamps mcp_checkout_clicks with the plan and
+// this session, which is what human_acted reads.
+// Clean platforms (ChatGPT/OpenAI) keep the informational relay page: a
+// checkout link-out is a rejection class there (r-cleanplatform-relay).
 function _unlockRungs(toolName, tier, sessionId) {
   if (!sessionId) {
     try { sessionId = (getCtx() && getCtx().session_id) || ''; } catch (_) { sessionId = ''; }
   }
-  const rel = buildHumanRelay(toolName, tier, sessionId);
+  const rel = _isCleanPlatform() ? buildHumanRelay(toolName, tier, sessionId) : null;
   return {
     pack: (rel && rel.url) || _packCheckoutUrl(sessionId),
     developer: DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, sessionId) : null,
@@ -608,8 +618,9 @@ function _subRungText(plan, url, what) {
 const _PACK_RUNG = '**$10 one-time = 1,000 API calls**, credits don’t expire → ';
 
 // The ask every wall relays: the $10 pack, then Developer — or Pro when the tool
-// is Pro-only (r-dev-rung). Exactly one /go/c URL, so the line survives
-// _dropRepeatCheckoutUrls as the response's single payment ask.
+// is Pro-only (r-dev-rung). Both links ride ONE line, so it survives
+// _dropRepeatCheckoutUrls (first checkout-bearing LINE wins) as the response's
+// single payment ask.
 function _rungsText(toolName, tier, sessionId) {
   const r = _unlockRungs(toolName, tier, sessionId);
   const sub = _proOnlyTool(toolName)
