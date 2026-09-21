@@ -916,13 +916,67 @@ function _dropRepeatCheckoutUrls(text) {
   }).join('\n');
 }
 
+// ── r-relay-cap (2026-09-21, frontend#1534): ONE human line per session ─────
+// The auto-trial block ends a call with an ACK telling the agent to "call it
+// again — N more full answers today" and a 👤 "Tell your human" line carrying the
+// $10 checkout, and the keyed full-data path then re-relays the same link. Measured
+// live 2026-09-21, one anonymous session, 5 calls: call 1 carried the ACK + the 👤
+// line, call 2 re-sent the $10 link as "💡 Full data delivered. To own it
+// long-term", calls 3 and 4 carried it on their walls. Four human-directed payment
+// lines in five calls, and an agent relays every one, so the human sees the same
+// link each turn. Owner decision 2026-09-21: one human line per session after the
+// first unlock. A later result that is STILL gated keeps its wall's single pointer
+// (one per response, _dropRepeatCheckoutUrls); a later result that is not gated
+// carries no payment line at all.
+//
+// Three readers, one record: composeHumanCta (every gated text path assembles
+// there) records that a response carried the line, AFTER assembling it, so each
+// reader sees "an earlier response had it" and a first response is unchanged.
+//   - buildAutoMintBlock drops the repeated unlock ACK;
+//   - composeHumanCta stops appending the relay tail beside a body that already
+//     carries its gate's /go/c pointer (the /upgrade/h re-relay);
+//   - the keyed full-data path stops re-sending "To own it long-term".
+// Per replica, like _FRONT_DOOR_SEEN and bind_prose_shown: a session that hops
+// replicas can see the line again, which is the old behaviour, never a new one.
+// It only removes a repeat; no line is ever added.
+const _HUMAN_LINE_SENT = new Set();
+const _HUMAN_LINE_SENT_MAX = 20000;
+function _humanLineAlreadySent(sid) {
+  return !!sid && _HUMAN_LINE_SENT.has(sid);
+}
+function _markHumanLineSent(sid) {
+  if (!sid || _HUMAN_LINE_SENT.has(sid)) return;
+  if (_HUMAN_LINE_SENT.size >= _HUMAN_LINE_SENT_MAX) {
+    let i = 0; const drop = _HUMAN_LINE_SENT_MAX / 10;
+    for (const k of _HUMAN_LINE_SENT) { _HUMAN_LINE_SENT.delete(k); if (++i >= drop) break; }
+  }
+  _HUMAN_LINE_SENT.add(sid);
+}
+
+function _ctxSessionId() {
+  try { return (getCtx() && getCtx().session_id) || ''; } catch (_) { return ''; }
+}
+
 function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
   const _body = typeof body === 'string' ? body : '';
+  // r-relay-cap: read BEFORE this response is recorded, so it means "an earlier one".
+  const _relaySid = sessionId || _ctxSessionId();
+  const _relayRepeat = _humanLineAlreadySent(_relaySid);
+  const _out = _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, _relayRepeat);
+  try { if (_hasHumanCta(_out)) _markHumanLineSent(_relaySid); } catch (_) {}
+  return _out;
+}
+function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRepeat) {
   try {
     // r-one-human-cta: collapse a repeated checkout URL, then refuse to stack a
     // second human ask in ANY of its phrasings (was: this one marker only).
     const _deduped = _dropRepeatCheckoutUrls(_body);
     if (_hasHumanCta(_deduped)) return _deduped;   // dedupe: never stack
+    // r-relay-cap: the body already carries its gate's /go/c pointer and an earlier
+    // response in this session carried the human line, so the tail would re-send the
+    // human a link they already have. A body with no pointer keeps its tail: every
+    // gated response still has one.
+    if (relayRepeat && /https:\/\/dchub\.cloud\/go\/c\//.test(_deduped)) return _deduped;
     // r-arms (2026-09-03): the quantified line is now the TREATMENT arm of a
     // randomized split, not a consequence of payload shape. continuationArmFor
     // decides the arm and the sentence TOGETHER — half of the responses that
@@ -7053,6 +7107,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // One identity for both links: the caller's, as the request store holds it.
   let _sid = '';
   try { _sid = (getCtx() && getCtx().session_id) || ''; } catch (_) {}
+  // r-relay-cap: an earlier response in this session carried the human line.
+  const _relayRepeat = _humanLineAlreadySent(_sid);
   const upgradeUrl = _subCheckoutUrl(PRO_URL || (DEVELOPER_URL + promoParam()), _sid);
   let _upgradeOnKey = false;
   try { _upgradeOnKey = _subRefLandsOnKey(getCtx().api_key); } catch (_) {}
@@ -7143,6 +7199,11 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     ? ('\n\n---\n' + leadStillPreview)
     : _exhausted
     ? ('\n\n---\n' + leadExhausted)
+    // r-relay-cap: the unlock ACK ("call it again — N more full answers") and its
+    // 👤 line go out once per session. Repeating them is the loop: the agent obeys,
+    // gets the same ACK back, and relays the same link again.
+    : _relayRepeat
+    ? ''
     : ('\n\n---\n' +
        (autoBound ? leadBound : leadManual) +
        (autoBound
@@ -15206,12 +15267,16 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         if ((process.env.DCHUB_GRID_UNDERCAP_ASK ?? '1') !== '0'
             && gate && gate.trial_taste && MAP_TOOLS.has(name)
             && !_isPaidDepthTier(_gateTier) && c && c.api_key
-            && _valued && Array.isArray(_valued.content)) {
+            && _valued && Array.isArray(_valued.content)
+            // r-relay-cap: full data was delivered, nothing is gated. Once this
+            // session has had its human line, re-sending the link is relay spam.
+            && !_humanLineAlreadySent(c.session_id)) {
           const _sid = c.session_id || 'no-session';
           _valued.content.push({ type: 'text', text:
             '\n\n💡 Full `' + name + '` data delivered. To own it long-term — 💳 **$10 one-time = 1,000 API calls** (no subscription) → '
             + _packCheckoutUrl(_sid)
             + ' · call `unlock_more_data` for options. No rush — your current calls stay free.' });
+          _markHumanLineSent(c.session_id);
         }
       } catch (_) { /* additive only — never break the data path */ }
       // r-appstore-clean: strip signpost/meta for ChatGPT so the DATA renders (no-op elsewhere).
