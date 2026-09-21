@@ -146,6 +146,7 @@ test/portfolio-nudge.test.mjs
 test/power-timeline-class.test.mjs
 test/pricing-canon-and-go-links.test.mjs
 test/problem-taxonomy.test.mjs
+test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/recipe-lifecycle.test.mjs
