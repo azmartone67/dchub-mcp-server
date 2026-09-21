@@ -4,6 +4,7 @@ test/analyst-path-selftag.test.mjs
 test/analyze-site-location.test.mjs
 test/anchor-contract.test.mjs
 test/anon-attribution.test.mjs
+test/anon-facility-free-fields.test.mjs
 test/anon-hard-wall.test.mjs
 test/anon-seat-fence.test.mjs
 test/arg-aliases.test.mjs
