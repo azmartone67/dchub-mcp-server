@@ -43,6 +43,7 @@ test/continuation.test.mjs
 test/coord-aliases.test.mjs
 test/copycheck-tolerates-edge-flap.test.mjs
 test/coverage-counts-not-masked.test.mjs
+test/dcpi-iso-aggregates-free.test.mjs
 test/deal-desk-automint.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
@@ -104,6 +105,7 @@ test/invalid-param-hint.test.mjs
 test/late-key.test.mjs
 test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
+test/list-transactions-free-values.test.mjs
 test/listing-paste-single-origin.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs

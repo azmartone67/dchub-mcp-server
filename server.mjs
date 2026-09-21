@@ -7638,6 +7638,19 @@ function _gatesHeadroom(k) {
   return _HEADROOM_GATE_RE.test(lk);
 }
 
+// r-teaser-parity (2026-09-21): DCPI per-ISO aggregates in a free preview.
+// /api/v1/dcpi/iso-comparison nulls every ISO aggregate except the market
+// counts for a caller it does not count as paid (routes/dcpi.py
+// _mask_iso_rows_inplace). It counts this server's X-Internal-Key as paid, so
+// the rows arrive whole and shapeGridIntelligence (compare_isos,
+// get_grid_intelligence) renames them. The scores gate above with their band
+// and the *_pct / *_mw fields are metric keys; these four fell through every
+// rule. Time-to-power and queue wait also match _HEADROOM_GATE_RE, which only
+// runs with DCHUB_GRID_HEADROOM_TIER on — these are the DCPI copies, which the
+// backend withholds from every unpaid caller.
+const _DCPI_ISO_PAID_KEYS = new Set(['avg_time_to_power_months', 'avg_queue_wait_months',
+  'retail_price_cents_kwh', 'grid_emergencies_30d']);
+
 // ★ r-preview-rows (2026-08-26): the free-tier preview was ONE row. "You're
 // seeing 1 of 5" reads to an agent as a broken tool — it cannot rank, compare or
 // sanity-check anything from a single row, so the rational move is to pick a
@@ -7820,6 +7833,9 @@ function trimForTrial(parsed, toolName) {
       out[k] = null;
       out[`_${k}_in_pro`] = true;
       if (_band) out[`${k}_band`] = _band;
+    } else if (_DCPI_ISO_PAID_KEYS.has(k)) {
+      out[k] = null;                          // DCPI aggregate the backend keeps paid
+      out[`_${k}_in_pro`] = true;
     } else if (Array.isArray(v) && v.length > TRIAL_PREVIEW_ROWS) {
       // clean — no inline _gated promo object. The _total_in_pro sibling stays
       // the load-bearing honesty contract: it is the FULL length, never the
@@ -9174,6 +9190,74 @@ export function withFreshness(result, toolName) {
   } catch (_) {
     return result;
   }
+}
+
+// ── r-teaser-parity (2026-09-21): the backend's free teaser, kept at the MCP ──
+//
+// /api/v1/deals and /api/v1/dcpi/iso-comparison build a free teaser for an
+// unpaid caller, and both count this server's X-Internal-Key (sent by callAPI
+// on every call) as paid. So they answer this server in full whoever is
+// asking, and for these two reads the mask has to happen here.
+//
+// Unpaid = a keyless, free, identified or trial caller with no live $10 pack
+// balance. A pack bought against a free key leaves that key's tier unchanged,
+// so the balance is read (the same cached, 2 s-bounded lookup the credit
+// cascade uses; it reports 0 when the read fails, which counts as unpaid).
+// Every other tier keeps the response it got before.
+const _UNPAID_READ_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+export async function _isUnpaidRead(c) {
+  const t = String((c && c.tier) || '').trim().toLowerCase();
+  if (!_UNPAID_READ_TIERS.has(t)) return false;
+  const { credits } = await _getCredits(c || {});
+  return !(Number(credits) > 0);
+}
+
+// list_transactions — /api/v1/deals gives an unpaid caller each deal with
+// value, value_display and mw nulled ("Free: deal $ values + MW are Pro"). The
+// tool is paid-only, so an unpaid caller only ever sees the preview built from
+// this payload. The preview already nulls total_value (a metric key) but kept
+// those three per-deal fields.
+const _DEAL_PAID_FIELDS = ['value', 'value_display', 'mw'];
+export async function _dealsForCaller(d, c) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return d;
+  if (!Array.isArray(d.transactions) && !Array.isArray(d.data)) return d;   // an error body
+  if (!(await _isUnpaidRead(c))) return d;
+  const mask = (row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    const r = { ...row, value_confirmed: false };
+    for (const k of _DEAL_PAID_FIELDS) r[k] = null;
+    return r;
+  };
+  const out = { ...d };
+  for (const k of ['transactions', 'data']) if (Array.isArray(d[k])) out[k] = d[k].map(mask);
+  out.tier = 'free';
+  out._locked_fields = [..._DEAL_PAID_FIELDS];
+  out._upgrade_cta = 'Free preview: deal $ values and MW are withheld. They come with a paid plan '
+    + 'or the $10 pack — call unlock_more_data.';
+  return out;
+}
+
+// get_grid_scoreboard — a free tool that enriches each US grid with DCPI
+// per-ISO intelligence from /api/v1/dcpi/iso-comparison. The backend keeps
+// every aggregate on those rows paid except the market counts, so an unpaid
+// caller keeps build_markets / total_markets / build_rate_pct and loses these.
+// The assembled scoreboard is one cached entry served to every caller, so this
+// runs on the way out of each return, never inside the build.
+const _SCOREBOARD_DCPI_PAID = ['avg_queue_wait_months', 'avg_curtailment_pct', 'grid_emergencies_30d'];
+export async function _scoreboardForCaller(res, c) {
+  const obj = res && res.structuredContent;
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.grids)) return res;
+  if (!(await _isUnpaidRead(c))) return res;
+  const lock = (d) => {
+    const out = { ...d };
+    for (const k of _SCOREBOARD_DCPI_PAID) out[k] = null;
+    out._locked_fields = [..._SCOREBOARD_DCPI_PAID];
+    out.note = 'DCPI per-ISO intelligence, live from the DC Hub Power Index. BUILD-rate is free; queue '
+      + 'wait, curtailment and 30-day grid emergencies come with a paid plan or the $10 pack — call unlock_more_data.';
+    return out;
+  };
+  const out = { ...obj, grids: obj.grids.map((g) => (g && g.dcpi_detail ? { ...g, dcpi_detail: lock(g.dcpi_detail) } : g)) };
+  return { ...res, content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
 }
 
 // ── shapeGridIntelligence: assemble the get_grid_intelligence per-ISO payload ─
@@ -17524,7 +17608,8 @@ function createServer(descOverrides, instructionsTail) {
       // slowest single feed), and the assembled payload is reused for 90s
       // (well inside the EIA-hourly / 5-min-Elexon freshness windows).
       if (_SCOREBOARD_CACHE.out && (Date.now() - _SCOREBOARD_CACHE.at) < 90_000) {
-        return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }], structuredContent: _SCOREBOARD_CACHE.obj || undefined };
+        return _scoreboardForCaller({ content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }],
+          structuredContent: _SCOREBOARD_CACHE.obj || undefined }, getCtx());
       }
       // r-scoreboard-swr (2026-07-03): the full fan-out below is wrapped in
       // _rebuild so a STALE entry can be served instantly while ONE background
@@ -17993,14 +18078,15 @@ function createServer(descOverrides, instructionsTail) {
             .catch((e) => console.error('[scoreboard] background refresh failed:', e?.message || e))
             .finally(() => { _SCOREBOARD_CACHE.refreshing = null; });
         }
-        return { content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }], structuredContent: _SCOREBOARD_CACHE.obj || undefined };
+        return _scoreboardForCaller({ content: [{ type: 'text', text: _SCOREBOARD_CACHE.out }],
+          structuredContent: _SCOREBOARD_CACHE.obj || undefined }, getCtx());
       }
       // Truly cold (first call in a fresh process): build inline, but share the
       // single in-flight build across any concurrent cold callers.
       if (!_SCOREBOARD_CACHE.refreshing) {
         _SCOREBOARD_CACHE.refreshing = _rebuild().finally(() => { _SCOREBOARD_CACHE.refreshing = null; });
       }
-      return await _SCOREBOARD_CACHE.refreshing;
+      return _scoreboardForCaller(await _SCOREBOARD_CACHE.refreshing, getCtx());
     });
 
   // r41-compare-isos (2026-05-25; repointed r-compare-fix 2026-06-19):
@@ -18079,7 +18165,7 @@ function createServer(descOverrides, instructionsTail) {
           && d.data.length === d.transactions.length) {
         delete d.data;
       }
-      return { content: [{ type: 'text', text: JSON.stringify(d) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(await _dealsForCaller(d, getCtx())) }] };
     });
 
   trackedTool(srv, 'get_news', 'FRONT DOOR CHECK — if news is only ONE input to a bigger question (is this market heating up, should we still build here), call `execute_plan(intent="<the user\'s question, unchanged>")` and let it pull news alongside the market and grid reads. If the user actually wants the headlines, get_news IS the right call — one round trip; do not send a plain news request through the planner. Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by category (deals/permits/outages/policy/AI). Answers "what is happening in the data center industry this week", "any news on AI capacity". Try: get_news category=AI limit=10. The parameter is `category`, not `topic`. Industry news only; do NOT use for structured M&A deal data (use list_transactions) or the construction pipeline (use get_pipeline).',
