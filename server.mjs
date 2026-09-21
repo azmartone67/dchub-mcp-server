@@ -7558,6 +7558,22 @@ export async function _gateToolLocation(result, name, c) {
   return credits > 0 ? result : gated;            // a failed balance read coarsens
 }
 
+// r-anon-facility-allowlist (2026-09-21): a keyed free/identified caller's
+// facility rows are projected to _FACILITY_FREE_FIELDS (KEYED_FACILITY_MASK).
+// The keyless trims of the same two tools ran trimForTrial alone, which nulls
+// metric-named numbers and keeps every other field, so an anonymous row kept
+// jv_partners, power_procurement_notes and investment_usd. Each keyless trim of
+// these tools (the anonymous preview, the capped limit, the anonymous daily cap
+// and the depleted-pack teaser) projects here first. A live pack balance is a
+// paying caller, the rule _gateToolLocation reads above, so its rows are left
+// as they were. A failed balance read projects.
+async function _freeFacilityRows(parsed, name, c) {
+  if (!KEYED_FACILITY_MASK.has(name)) return parsed;
+  let credits = 0;
+  try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
+  return credits > 0 ? parsed : _maskFacilityFieldsForFree(parsed);
+}
+
 // 2026-07-08: grid-headroom premium tier (default OFF, DCHUB_GRID_HEADROOM_TIER).
 // When armed, the grid HEADROOM / time-to-power / capacity-margin fields — the
 // siting DECISION layer, our #1-demanded + least-substitutable grid data — gate
@@ -13835,7 +13851,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _full = await handler(gate.params || args);
             let _parsed = null;
             try { _parsed = JSON.parse(_full?.content?.[0]?.text || '{}'); } catch (_) {}
-            const _trim = (_parsed && typeof _parsed === 'object') ? trimForTrial(_parsed, name) : {};
+            const _trim = (_parsed && typeof _parsed === 'object') ? trimForTrial(await _freeFacilityRows(_parsed, name, c), name) : {};
             _trim._upgrade = {
               tier: 'credits_depleted',
               message: "You're out of pack credits. Top up $10 for 1,000 more API calls "
@@ -14919,7 +14935,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
           if (parsed && typeof parsed === 'object') {
             status = 'anon_daily_cap';
-            const trimmed = _capTrim(parsed, name);
+            const trimmed = _capTrim(await _freeFacilityRows(parsed, name, c), name);
             const _sidc = c.session_id || 'no-session';
             // r-tease-pack (2026-06-20): the over-cap nudge is a CARROT, not a
             // wall (still returns the preview). Lead with the free key (keep
@@ -14956,6 +14972,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       if (gate.capped) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
+        if (!c.api_key) parsed = await _freeFacilityRows(parsed, name, c);
         const wrapped = {
           ...(typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { data: parsed }),
           _upgrade_notice: {
@@ -14994,7 +15011,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             if (_t) { status = 'depth_teased'; return withBindHint(_t, name, c); }
           }
           if (parsed && typeof parsed === 'object') {
-            const trimmed = trimForTrial(parsed, name);
+            const trimmed = trimForTrial(await _freeFacilityRows(parsed, name, c), name);
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
               trimmed._note = 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
