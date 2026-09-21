@@ -7460,6 +7460,10 @@ function _maskFacilityFieldsForFree(parsed) {
 //           shape, by container key, or by a facility-named coordinate key) are
 //           coarsened. Open infrastructure (substations, lines, fiber, plants,
 //           GEM units) and the caller's own points keep their precision.
+// In both scopes a DISTANCE inside a coarsened facility record is coarsened too
+// (whole km, distance_status "approximate_1km"): a distance from a point the
+// caller chose says where the facility is. Where the backend sends a `km_approx`
+// twin measured from the facility's 2dp point, that twin is what is served.
 // A tool NOT in this map is not gated at all. Swept 2026-09-21 against the backend
 // handlers each tool calls: exact facility coordinates reach an agent through
 // get_facility, search_facilities, get_facility_risk_delta and the site report's
@@ -7475,8 +7479,8 @@ const _FACILITY_LOCATION_SCOPE = Object.freeze({
   find_alternatives: _LOC_DETECT,        // target_facility + alternatives[]
   score_facility: _LOC_DETECT,           // facility
   get_market_intel: _LOC_DETECT,         // recent_facilities[]
-  get_changes: _LOC_DETECT,              // facilities_new[], new_facilities_nearby[]
-  list_saved_sites: _LOC_DETECT,         // new_facilities_nearby[] beside YOUR saved points (kept exact)
+  get_changes: _LOC_DETECT,              // facilities_new[], portfolio.moved[].new_facilities_nearby[].km
+  list_saved_sites: _LOC_DETECT,         // new_facilities_nearby[].km (served from its km_approx twin); YOUR saved points stay exact
   execute_plan: _LOC_DETECT,             // each step is gated on its own loopback call; this is the backstop
 });
 // Keys (snake_case) whose value is facility rows, for the detect scope.
