@@ -1,27 +1,25 @@
-// starter-links-through-go-c.test.mjs — r-starter-go-c (2026-09-14)
+// no-starter-offer.test.mjs — 2026-09-21 (frontend#1534). Was starter-links-through-go-c.
 //
-// ★THE DEFECT. Two tools/call envelopes handed out the $9 Starter checkout as a DIRECT
-// buy.stripe.com link while the Developer and Pro links beside it went through the signed
-// /go/c tracker, so a human's click on Starter never reached mcp_checkout_clicks
-// (routes/checkout_click_tracker.py stamps the row, then 302s to Stripe):
-//   * the anonymous trim of an allowed free tool (`_upgrade.tier: 'anonymous'`)
-//   * the trial-cap wall (`_upgrade.tier: 'trial'`), where a keyed caller's Starter link
-//     also bound the SESSION while Developer and Pro bound k-<sha256(key)>
-// Both ride content[0].text, which the agent reads and relays, and the structuredContent
-// that _stampEntityCb mirrors from it.
+// ★THE RULE. Owner, 2026-09-21: never offer Starter $9. Agents buy the $10 pack or
+// Developer; Pro is for a human screening sites. Starter is grandfathered for existing
+// subscribers and is absent from /pricing. This server still offered it in seven places:
+// starter_url on the upgrade block and on both trim walls, the key-bound "upgrade THIS
+// key" pitch and message, the credits-depleted message ("go unlimited from $9/mo"), the
+// get_market_intel and monitor-for-you prose, the unlock_more_data description, and the
+// instructions every client receives at initialize.
+//
+// ★WHAT IT REPLACES. r-starter-go-c (2026-09-14) routed the Starter link through the
+// measured /go/c tracker. The link is now gone, so this file proves its absence on the
+// same real-HTTP paths, keeps the Developer/Pro binding pins that test carried, and keeps
+// the source floor: the Starter link id may appear only in the click-attribution map,
+// which still has to name old links in the wild.
 //
 // ★WHY REAL HTTP. The links are built inline in the tools/call handler and no exported
-// function returns them, so a unit test of _subCheckoutUrl passes on the broken build.
-//
-// ★THE PROMO. A /go/c token is plan|ref[|sid] and the tracker 302s to STRIPE_LINKS[plan]
-// plus client_reference_id, so a prefilled_promo_code cannot survive the hop. Both sites
-// still evaluate promoParam() per request, so the fail-open direct link (no
-// DCHUB_INTERNAL_KEY, or DCHUB_GO_LINKS=0) carries it as before. The promo ended
-// 2026-07-01; one test moves the clock back inside the window to prove that.
+// function returns them.
 //
 // Qualifies for the hard gate: the only sockets are a 127.0.0.1 backend stub and the real
 // express app listening on 127.0.0.1.
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -29,13 +27,11 @@ import { readFileSync } from 'node:fs';
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
 const SECRET = 'test-internal-key-not-a-real-secret';
-const STARTER = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';
 const GO = 'https://dchub.cloud/go/c/';
 const K_LIVE = 'dch_live_startergoc_key00001';
 const K_TRIAL = 'dch_trial_startergoc_key0001';
 const FACILITIES = { query: 'Ashburn', limit: 25 };
 const sha = (k) => createHash('sha256').update(k).digest('hex');
-const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const ROWS = Array.from({ length: 6 }, (_, i) => ({
   id: 100 + i, name: `Site ${i}`, slug: `site-${i}`, provider: 'P', city: 'Ashburn',
@@ -125,7 +121,7 @@ async function callStateless(name, args) {
 async function openSession(headers) {
   const init = await post(headers, {
     jsonrpc: '2.0', id: 1, method: 'initialize',
-    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'starter-go-c-test', version: '1.0' } },
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'no-starter-test', version: '1.0' } },
   });
   const sid = init.headers.get('mcp-session-id');
   expect(sid, 'initialize did not mint a session id').toBeTruthy();
@@ -172,30 +168,45 @@ function fields(url, prefix) {
   return { payload, parts: Buffer.from(payload, 'base64url').toString().split('|') };
 }
 
+const STARTER_ID = '8x2dRa5sS0x75uteGuaZi0g';
+
+/** Every way a response could offer Starter. Empty means none. */
+function starterOffers(result) {
+  const text = JSON.stringify(result);
+  const found = [];
+  if (text.includes(STARTER_ID)) found.push('the raw Starter link');
+  if (/"starter_url"|"starter":\s*"http/.test(text)) found.push('a starter link field');
+  if (/\$9\/mo|\bStarter\b\s*(\$|=|·|→)|\bor Starter\b/.test(text)) found.push('Starter priced in prose');
+  for (const m of text.matchAll(/https:\/\/dchub\.cloud\/go\/c\/([A-Za-z0-9_-]+)\.[0-9a-f]{32}/g)) {
+    if (Buffer.from(m[1], 'base64url').toString().split('|')[0] === 'starter') found.push('a /go/c starter token');
+  }
+  return found;
+}
+
 describe('the anonymous trim of an allowed free tool (_upgrade.tier anonymous)', () => {
-  it('stateless: Starter is a signed /go/c starter link on the same a- ref as the pack link', async () => {
-    const up = upgradeOf(await callStateless('search_facilities', FACILITIES));
-    expect(up.tier, JSON.stringify(up).slice(0, 300)).toBe('anonymous');
-    const { parts } = fields(up.starter_url, GO);
-    expect(parts[0]).toBe('starter');
-    expect(parts[1]).toMatch(/^a-[0-9a-f]{32}$/);
-    expect(parts).toHaveLength(2);
-    expect(fields(up.credits_url, GO).parts[1], 'the Starter link carries a different anon id').toBe(parts[1]);
-  });
-
-  it('sessioned: the ref is the session, two fields, the same as the Developer link beside it', async () => {
-    const s = await openSession({});
-    const up = upgradeOf(await s.call('search_facilities', FACILITIES));
-    expect(up.tier, JSON.stringify(up).slice(0, 300)).toBe('anonymous');
-    expect(fields(up.starter_url, GO).parts).toEqual(['starter', s.sid]);
-    expect(fields(up.developer_url, GO).parts).toEqual(['developer', s.sid]);
-  });
-
-  it('structuredContent carries the same link, and the envelope hands out no direct Stripe link', async () => {
+  it('stateless: no Starter; Developer is a signed /go/c link on the same a- ref as the pack link', async () => {
     const r = await callStateless('search_facilities', FACILITIES);
-    const starter = upgradeOf(r).starter_url;
-    expect(fields(starter, GO).parts[0]).toBe('starter');
-    expect(r.structuredContent?._upgrade?.starter_url).toBe(starter);
+    const up = upgradeOf(r);
+    expect(up.tier, JSON.stringify(up).slice(0, 300)).toBe('anonymous');
+    const { parts } = fields(up.developer_url, GO);
+    expect(parts[0]).toBe('developer');
+    expect(parts[1]).toMatch(/^a-[0-9a-f]{32}$/);
+    expect(fields(up.credits_url, GO).parts[1]).toBe(parts[1]);
+    expect(starterOffers(r)).toEqual([]);
+  });
+
+  it('sessioned: no Starter, and the Developer link binds the session', async () => {
+    const s = await openSession({});
+    const r = await s.call('search_facilities', FACILITIES);
+    const up = upgradeOf(r);
+    expect(up.tier, JSON.stringify(up).slice(0, 300)).toBe('anonymous');
+    expect(fields(up.developer_url, GO).parts).toEqual(['developer', s.sid]);
+    expect(starterOffers(r)).toEqual([]);
+  });
+
+  it('structuredContent mirrors the envelope, which hands out no direct Stripe link', async () => {
+    const r = await callStateless('search_facilities', FACILITIES);
+    expect(r.structuredContent?._upgrade?.developer_url).toBe(upgradeOf(r).developer_url);
     expect(JSON.stringify(r).match(/https:\/\/buy\.stripe\.com\/[A-Za-z0-9]+/g)).toBeNull();
   });
 });
@@ -211,67 +222,70 @@ describe('the trial-cap wall (_upgrade.tier trial)', () => {
     throw new Error(`${tool} never reached the trial-cap wall`);
   }
 
-  it('a live key: Starter binds k-<sha256(key)> with the session beside it, like Developer and Pro', async () => {
+  it('a live key: no Starter; Developer and Pro bind k-<sha256(key)> with the session beside it', async () => {
     const s = await openSession({ 'x-api-key': K_LIVE });
     const r = await wall(s, 'rank_markets', { limit: 5 });
     expect(validated.has(K_LIVE), 'the key never reached validation').toBe(true);
     const up = upgradeOf(r);
     const identity = ['k-' + sha(K_LIVE), s.sid];
-    expect(fields(up.starter_url, GO).parts).toEqual(['starter', ...identity]);
     expect(fields(up.developer_url, GO).parts).toEqual(['developer', ...identity]);
     expect(fields(up.pro_url, GO).parts).toEqual(['pro', ...identity]);
-    expect(r.structuredContent?._upgrade?.starter_url).toBe(up.starter_url);
+    expect(starterOffers(r)).toEqual([]);
   });
 
-  it('a trial key: Starter binds the session (a k- ref has no mcp_dev_keys row to land on)', async () => {
+  it('a trial key: no Starter, and Developer binds the session (a k- ref has no row to land on)', async () => {
     const s = await openSession({ 'x-api-key': K_TRIAL });
-    const up = upgradeOf(await wall(s, 'rank_markets', { limit: 5 }));
+    const r = await wall(s, 'rank_markets', { limit: 5 });
     expect(validated.has(K_TRIAL), 'the key never reached validation').toBe(true);
-    expect(fields(up.starter_url, GO).parts).toEqual(['starter', s.sid]);
+    expect(fields(upgradeOf(r).developer_url, GO).parts).toEqual(['developer', s.sid]);
+    expect(starterOffers(r)).toEqual([]);
   });
 });
 
-describe('fail-open, and the promo query the tracker cannot carry', () => {
-  afterEach(() => {
-    delete process.env.DCHUB_GO_LINKS;
-    vi.useRealTimers();
+describe('what every client reads before it calls anything', () => {
+  it('the initialize instructions offer no Starter', async () => {
+    const { json } = await post({}, {
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'no-starter-test', version: '1.0' } },
+    });
+    const instructions = JSON.parse(json).result?.instructions || '';
+    expect(instructions.length, 'initialize returned no instructions to scan').toBeGreaterThan(500);
+    expect(instructions).toContain('unlock_more_data');
+    expect(starterOffers({ instructions })).toEqual([]);
   });
 
-  it('DCHUB_GO_LINKS=0: the direct Starter link keeps its client_reference_id', async () => {
-    process.env.DCHUB_GO_LINKS = '0';
-    const up = upgradeOf(await callStateless('search_facilities', FACILITIES));
-    expect(up.starter_url).toMatch(new RegExp('^' + esc(STARTER) + '\\?client_reference_id=a-[0-9a-f]{32}$'));
-  });
-
-  it('inside a promo window the code rides the direct link, and the /go/c token has no field for it', async () => {
-    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-06-30T12:00:00Z') });
-    const measured = upgradeOf(await callStateless('search_facilities', FACILITIES)).starter_url;
-    const { parts } = fields(measured, GO);
-    expect(parts[0]).toBe('starter');
-    expect(parts.join('|')).not.toContain('promo');
-
-    process.env.DCHUB_GO_LINKS = '0';
-    const direct = upgradeOf(await callStateless('search_facilities', FACILITIES)).starter_url;
-    expect(direct).toMatch(new RegExp('^' + esc(STARTER)
-      + '\\?prefilled_promo_code=DCMCP50_LAUNCH&client_reference_id=a-[0-9a-f]{32}$'));
+  it('the unlock_more_data description offers no Starter', async () => {
+    const s = await openSession({});
+    const { json } = await post({ 'mcp-session-id': s.sid }, { jsonrpc: '2.0', id: 9, method: 'tools/list' });
+    const tool = (JSON.parse(json).result?.tools || []).find((t) => t.name === 'unlock_more_data');
+    expect(tool, 'tools/list has no unlock_more_data').toBeTruthy();
+    expect(tool.description).toContain('Developer');
+    expect(starterOffers(tool)).toEqual([]);
   });
 });
 
-describe('source floor: server.mjs builds no Starter checkout outside the measured helpers', () => {
+describe('fail-open: DCHUB_GO_LINKS=0 hands out direct links', () => {
+  afterEach(() => { delete process.env.DCHUB_GO_LINKS; });
+
+  it('the direct links still include no Starter checkout', async () => {
+    process.env.DCHUB_GO_LINKS = '0';
+    const r = await callStateless('search_facilities', FACILITIES);
+    expect(upgradeOf(r).developer_url).toMatch(/^https:\/\/buy\.stripe\.com\//);
+    expect(starterOffers(r)).toEqual([]);
+  });
+});
+
+describe('source floor: server.mjs builds no Starter offer', () => {
   // Comments are blanked first, so a note that quotes the link can neither satisfy nor trip this.
   const code = SRC.split('\n').map((l) => (/^\s*\/\//.test(l) ? '' : l.replace(/\s\/\/.*$/, '')));
 
-  it('the raw link is spelled only where the two base constants are defined', () => {
-    const raw = code.filter((l) => l.includes('buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g')).map((l) => l.trim());
-    expect(raw).toEqual([
-      "const _STARTER_URL_RAW = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g' + promoParam();",
-      "const STARTER_LINK = 'https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g';",
-    ]);
+  it('the Starter link id is spelled only in the click-attribution map', () => {
+    const raw = code.filter((l) => l.includes(STARTER_ID)).map((l) => l.trim());
+    expect(raw).toEqual(["'8x2dRa5sS0x75uteGuaZi0g': 'starter',"]);
   });
 
-  it('every starter_url a response carries is built by _subCheckoutUrl', () => {
-    const sites = code.filter((l) => /\bstarter_url\s*:/.test(l)).map((l) => l.trim());
-    expect(sites.length, 'the scan found fewer starter_url sites than server.mjs has').toBeGreaterThanOrEqual(4);
-    for (const l of sites) expect(l).toMatch(/\bstarter_url\s*:\s*(_subCheckoutUrl\(|STARTER_URL_LOCAL,)/);
+  it('no response field or prose names a Starter price or link', () => {
+    const hits = code.filter((l) => /\bstarter_url\b|\$9\/mo|_priceLabel\('starter'\)|_keyBoundSubUrl\(STARTER|STARTER_(URL|LINK)\b/.test(l));
+    expect(hits.map((l) => l.trim().slice(0, 120))).toEqual([]);
   });
 });

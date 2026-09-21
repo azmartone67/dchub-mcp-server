@@ -157,9 +157,9 @@ describe('#7 — every key-bound upgrade link pays, and is measured', () => {
     }
     expect(decode(_keyBoundPackUrl(TRIAL)).ref).toBe('pk-' + THASH);
   });
-  it('the tier map is starter/developer/pro — founding is not offered', () => {
+  it('the tier map is developer/pro — neither Starter (owner, 2026-09-21) nor founding is offered', () => {
     const t = _keyBoundTiers(KEY);
-    expect(Object.keys(t)).toEqual(['starter', 'developer', 'pro']);
+    expect(Object.keys(t)).toEqual(['developer', 'pro']);
     for (const [plan, url] of Object.entries(t)) {
       const got = decode(url);
       expect(got.plan).toBe(plan);
