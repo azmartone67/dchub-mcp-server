@@ -6,16 +6,17 @@
 // on an anonymous call the same day: its text opened on the MPP paragraph, the
 // first link sat at character 812 of 1,436, and no /upgrade/h link appeared
 // anywhere in the response. These pin the fixed shape:
-//   1. the FIRST line of content[0].text is the ask, carrying both rungs — $10 on
-//      the signed /upgrade/h page, then Pro on the signed /go/c checkout — and no
-//      link comes before it;
+//   1. the FIRST line of content[0].text is the ask, carrying the whole ladder —
+//      $10 on the signed /upgrade/h page, then Developer, then Pro, each on a
+//      signed /go/c checkout (r-dev-rung, 2026-09-21: agent rungs before the $99
+//      human-screener rung) — and no link comes before it;
 //   2. structuredContent.for_your_human.url is that same /upgrade/h token;
 //   3. both tokens carry the caller's identity: the session, plus the key's hash
 //      for a keyed caller;
 //   4. no checkout link repeats, and the MPP option follows the human ask.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
-import { _unlockMoreDataEnvelope, _ctxALS, HUMAN_FIRST_MARKER } from '../server.mjs';
+import { _unlockMoreDataEnvelope, _ctxALS, HUMAN_FIRST_MARKER, _priceLabel } from '../server.mjs';
 
 const SECRET = 'test-internal-key-not-a-real-secret';
 const SID = '2bb6536d-b1d4-44b4-94a8-e89ba266e782';
@@ -52,17 +53,22 @@ function fields(url, prefix) {
 }
 
 describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () => {
-  it('keyless session: line one is the ask, $10 on /upgrade/h then Pro on /go/c', () => {
+  it('keyless session: line one is the ask, $10 on /upgrade/h then Developer then Pro on /go/c', () => {
     const text = unlock({ session_id: SID }).content[0].text;
     const first = text.split('\n')[0];
     expect(first.startsWith(HUMAN_FIRST_MARKER)).toBe(true);
     const links = first.match(LINK_RE);
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(3);
     const relay = fields(links[0], RELAY);
     expect(relay).toHaveLength(4);
     expect(relay.slice(0, 3)).toEqual([SID, 'unlock_more_data', 'free']);
-    expect(fields(links[1], GO)).toEqual(['pro', SID]);
-    expect(first).toContain('$10 one-time');
+    expect(fields(links[1], GO)).toEqual(['developer', SID]);
+    expect(fields(links[2], GO)).toEqual(['pro', SID]);
+    // Agent rungs ($10, $49) are named before the $99 one.
+    const at = (s) => first.indexOf(s);
+    expect(at('$10 one-time')).toBeGreaterThanOrEqual(0);
+    expect(at('$10 one-time')).toBeLessThan(at('**Developer ' + _priceLabel('developer') + '**'));
+    expect(at('**Developer ' + _priceLabel('developer') + '**')).toBeLessThan(at('**Pro ' + _priceLabel('pro') + '**'));
     // Nothing links out ahead of the ask.
     expect(text.search(LINK_RE)).toBe(first.search(LINK_RE));
   });
@@ -75,22 +81,26 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(env.structuredContent.human_message.split('\n')[0]).toBe(env.content[0].text.split('\n')[0]);
   });
 
-  it('keyed: /upgrade/h names the key, Pro binds k- with the session beside it', () => {
+  it('keyed: /upgrade/h names the key, Developer and Pro bind k- with the session beside it', () => {
     const first = unlock({ session_id: SID, api_key: KEY }).content[0].text.split('\n')[0];
-    const [relayUrl, proUrl] = first.match(LINK_RE);
+    const [relayUrl, devUrl, proUrl] = first.match(LINK_RE);
     const relay = fields(relayUrl, RELAY);
     expect(relay).toHaveLength(5);
     expect(relay[0]).toBe(SID);
     expect(relay[4]).toBe('pk-' + KEY_HASH);
+    expect(fields(devUrl, GO)).toEqual(['developer', 'k-' + KEY_HASH, SID]);
     expect(fields(proUrl, GO)).toEqual(['pro', 'k-' + KEY_HASH, SID]);
   });
 
-  it('no link repeats anywhere in the text, and the ladder below keeps Starter and Developer', () => {
+  it('no link repeats anywhere in the text, and Starter (not on /pricing) is never offered', () => {
     const text = unlock({ session_id: SID }).content[0].text;
     const links = text.match(LINK_RE);
     expect(new Set(links).size).toBe(links.length);
     expect(links.map((u) => (u.startsWith(GO) ? fields(u, GO)[0] : 'relay')))
-      .toEqual(['relay', 'pro', 'starter', 'developer']);
+      .toEqual(['relay', 'developer', 'pro']);
+    const env = unlock({ session_id: SID });
+    expect(env.structuredContent.plans.map((p) => p.id)).toEqual(['credits', 'developer', 'pro']);
+    expect(env.structuredContent.recommended_subscription).toBe('developer');
   });
 
   it('with the MPP rail on, the autonomous option follows the human ask', () => {
@@ -104,11 +114,11 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(env.structuredContent.recommended).toBe('mpp');
   });
 
-  it('relay switched off: line one still carries a payable $10 checkout and Pro', () => {
+  it('relay switched off: line one still carries a payable $10 checkout, Developer and Pro', () => {
     process.env.DCHUB_HUMAN_RELAY = '0';
     const env = unlock({ session_id: SID });
     const links = env.content[0].text.split('\n')[0].match(LINK_RE);
-    expect(links.map((u) => fields(u, GO)[0])).toEqual(['metered', 'pro']);
+    expect(links.map((u) => fields(u, GO)[0])).toEqual(['metered', 'developer', 'pro']);
     expect(env.structuredContent.for_your_human).toBeUndefined();
   });
 
@@ -116,7 +126,7 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     const env = unlock({});
     const lines = env.content[0].text.split('\n');
     expect(lines[0].startsWith(HUMAN_FIRST_MARKER)).toBe(true);
-    expect(lines[0].match(LINK_RE)).toHaveLength(2);
+    expect(lines[0].match(LINK_RE)).toHaveLength(3);
     expect(lines[1]).toContain('DC Hub emails you an API key');
     expect(lines[1]).not.toContain('my very next query');
     expect(env.structuredContent.next_call_full_after_checkout).toBe(false);
@@ -124,7 +134,7 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
 
   it('a reason rides on the unlock sentence without breaking the first line', () => {
     const lines = unlock({ session_id: SID }, { reason: 'PJM queue depth' }).content[0].text.split('\n');
-    expect(lines[0].match(LINK_RE)).toHaveLength(2);
+    expect(lines[0].match(LINK_RE)).toHaveLength(3);
     expect(lines.slice(1, 3).join('\n')).toContain('You asked me for: *PJM queue depth*');
   });
 });
