@@ -7448,8 +7448,8 @@ function _keyedFreeFacilityResult(result, name, c) {
 // ones included, was served exact substation coordinates plus operator and
 // capacity. The MCP layer is where the real caller's tier is known, so the free
 // preview is rebuilt here, with the backend's own transform: lat/lon to 0.1°
-// (~11 km), the coordinates inside next_calls likewise, anchor operator and
-// capacity_mva withheld.
+// (~11 km), the coordinates inside next_calls likewise, site_ref re-derived from
+// the coarsened coordinates, anchor operator and capacity_mva withheld.
 //
 // WHO: the free tiers only — keyless, free and identified. Every paid tier, and
 // any tier this server does not know, keeps the response it got before. A
@@ -7473,12 +7473,34 @@ function _findSitesCoarsenCoords(obj) {
   }
   return out;
 }
+// site_ref: the backend mints it from the anchor name and the coordinates it
+// publishes, so the ref it hands this server (a trusted caller) is derived from
+// the EXACT position. Passed through beside the coarsened lat/lon, it would carry
+// the precision the preview withholds. A free caller gets the ref derived the
+// same way from the coordinates it is SHOWN (routes/find_sites.py site_ref), or
+// null when those coordinates are not numbers — never the backend's ref.
+function _findSitesNum(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
+function _findSitesFreeRef(name, lat, lon) {
+  const la = _findSitesNum(lat);
+  const lo = _findSitesNum(lon);
+  if (la === null || lo === null) return null;
+  const key = `${String(name ?? '').trim().toLowerCase()}|${la.toFixed(4)}|${lo.toFixed(4)}`;
+  return 'site_' + createHash('sha1').update(key, 'utf8').digest('hex').slice(0, 10);
+}
 export function _coarsenFindSites(payload) {
   const out = { ...payload };
   out.candidates = payload.candidates.map((cand) => {
     if (!cand || typeof cand !== 'object' || Array.isArray(cand)) return cand;
     const c2 = _findSitesCoarsenCoords(cand);
     c2.coordinate_precision_km = 11.0;
+    if (Object.prototype.hasOwnProperty.call(cand, 'site_ref')) {
+      const anchorName = cand.anchor && typeof cand.anchor === 'object' ? cand.anchor.name : null;
+      c2.site_ref = _findSitesFreeRef(anchorName, c2.lat ?? c2.latitude, c2.lon ?? c2.lng ?? c2.longitude);
+    }
     if (cand.anchor && typeof cand.anchor === 'object' && !Array.isArray(cand.anchor)) {
       c2.anchor = { ..._findSitesCoarsenCoords(cand.anchor), operator: null, capacity_mva: null };
     }

@@ -34,14 +34,16 @@ const prevEnv = {};
 
 // What the backend returns to a caller it trusts. Two candidates: one west of
 // Greenwich so a sign bug in the rounding shows, one with values that round up.
+// Each site_ref is the one the backend mints for that caller, from the anchor
+// name and the EXACT coordinates (routes/find_sites.py site_ref).
 const CANDIDATES = [
-  { site_ref: 'site_coarsen01', lat: 39.04371, lon: -77.48749, coordinate_precision_km: 0.1,
+  { site_ref: 'site_243ecb877c', lat: 39.04371, lon: -77.48749, coordinate_precision_km: 0.1,
     anchor: { type: 'substation', name: 'Coarsen Sub A', voltage_kv: 500, city: 'Ashburn', state: 'VA',
       status: 'IN SERVICE', operator: 'Coarsen Power Co', capacity_mva: 1200 },
     gas_distance_km: 3.2, fiber_distance_km: 1.1,
     next_calls: ['analyze_site lat=39.04371 lon=-77.48749', 'get_fiber_readiness lat=39.04371 lon=-77.48749',
       'get_permitting_intel state=VA'] },
-  { site_ref: 'site_coarsen02', lat: 38.96512, lon: -77.35988, coordinate_precision_km: 0.1,
+  { site_ref: 'site_37293a1f84', lat: 38.96512, lon: -77.35988, coordinate_precision_km: 0.1,
     anchor: { type: 'substation', name: 'Coarsen Sub B', voltage_kv: 230, city: 'Reston', state: 'VA',
       status: 'IN SERVICE', operator: 'Coarsen Grid LLC', capacity_mva: 845 },
     gas_distance_km: 7.9, fiber_distance_km: 2.4,
@@ -49,10 +51,14 @@ const CANDIDATES = [
       'get_permitting_intel state=VA'] },
 ];
 const EXACT_NEEDLES = ['39.04371', '77.48749', '38.96512', '77.35988', 'Coarsen Power Co', 'Coarsen Grid LLC',
-  '"capacity_mva":1200', '"capacity_mva":845'];
+  '"capacity_mva":1200', '"capacity_mva":845', 'site_243ecb877c', 'site_37293a1f84'];
+// `ref` is what routes/find_sites.py site_ref returns for the same anchor name at
+// the published coordinates — the ref the backend's own free preview carries.
 const COARSE = [
-  { lat: 39, lon: -77.5, next: ['analyze_site lat=39 lon=-77.5', 'get_fiber_readiness lat=39 lon=-77.5'] },
-  { lat: 39, lon: -77.4, next: ['analyze_site lat=39 lon=-77.4', 'get_fiber_readiness lat=39 lon=-77.4'] },
+  { lat: 39, lon: -77.5, ref: 'site_58e9b2345e',
+    next: ['analyze_site lat=39 lon=-77.5', 'get_fiber_readiness lat=39 lon=-77.5'] },
+  { lat: 39, lon: -77.4, ref: 'site_4993a5166e',
+    next: ['analyze_site lat=39 lon=-77.4', 'get_fiber_readiness lat=39 lon=-77.4'] },
 ];
 
 let S, PORT, httpServer, stub;
@@ -165,6 +171,7 @@ function expectFreePreview(out, label) {
       expect(c.lat, `${label} ${where} #${i} lat`).toBe(COARSE[i].lat);
       expect(c.lon, `${label} ${where} #${i} lon`).toBe(COARSE[i].lon);
       expect(c.coordinate_precision_km, `${label} ${where} #${i} precision`).toBe(11);
+      expect(c.site_ref, `${label} ${where} #${i} site_ref`).toBe(COARSE[i].ref);
       expect(c.anchor.operator, `${label} ${where} #${i} operator`).toBeNull();
       expect(c.anchor.capacity_mva, `${label} ${where} #${i} capacity_mva`).toBeNull();
       // The public fields a free caller steers by survive.
@@ -206,6 +213,26 @@ describe('r-find-sites-free-coarsen — find_sites keeps its free-tier promise',
       expect(creditHits.get(key) || 0, `${label}: a paid tier should not need the pack-balance lookup`).toBe(0);
     });
   }
+
+  it('free site_ref is the same anywhere inside the published cell, distinct per anchor, never passed through', () => {
+    const ref = (cand) => S._coarsenFindSites({ candidates: [cand] }).candidates[0].site_ref;
+    const base = CANDIDATES[0];
+    // Four exact positions that all publish as (39, -77.5), each arriving with its
+    // own backend ref: the free ref must not move with the exact position.
+    const inCell = [[39.04371, -77.48749], [38.96122, -77.53911], [39.03881, -77.46021], [38.95127, -77.54012]]
+      .map(([lat, lon], i) => ref({ ...base, lat, lon, site_ref: `site_exact_${i}` }));
+    expect(new Set(inCell), 'free site_ref varies inside one published cell').toEqual(new Set([COARSE[0].ref]));
+    expect(ref({ ...base, anchor: { ...base.anchor, name: 'Another Sub' } }), 'distinct anchors share a ref')
+      .not.toBe(COARSE[0].ref);
+    expect(ref({ ...base, lat: 39.14371 }), 'the next cell over shares a ref').not.toBe(COARSE[0].ref);
+    // Coordinates that are not numbers: no ref at all, never the backend's.
+    for (const bad of [null, undefined, '', 'n/a', true]) {
+      expect(ref({ ...base, lat: bad }), `lat=${String(bad)}`).toBeNull();
+    }
+    // A candidate the backend sent without a site_ref does not gain one.
+    const { site_ref: _drop, ...noRef } = base;
+    expect('site_ref' in S._coarsenFindSites({ candidates: [noRef] }).candidates[0]).toBe(false);
+  });
 
   it('an identified key holding a live $10 pack balance: unchanged (the pack is a paid read)', async () => {
     expectUnchanged(await findSites(K_PACK), 'identified + pack');
