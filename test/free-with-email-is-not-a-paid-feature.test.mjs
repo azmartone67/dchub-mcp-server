@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isFreeWithEmailTool, PAID_ONLY_TOOLS, HARD_WALL_HEADLINES,
-         isHardWallText } from '../server.mjs';
+         isHardWallText, _trialUnlockedTools, _trialUnlockedHint } from '../server.mjs';
 
 describe('isFreeWithEmailTool', () => {
   it('marks the tools a bound email unlocks', () => {
@@ -123,5 +123,41 @@ describe('HARD_WALL_HEADLINES is coupled to the copy', () => {
     expect(isHardWallText('## 🔑 `x` needs a bound email, not a payment')).toBe(true);
     expect(isHardWallText('## 🔒 `x` is a paid feature')).toBe(true);
     expect(isHardWallText('here is your data')).toBe(false);
+  });
+});
+
+// r-unlocked-derived (2026-09-20). The trial envelope's machine-readable
+// `unlocked_tools` — added "so a programmatic agent can act without parsing
+// prose" — was a hand list, and it named three tools applyTierGate DENIES at
+// free AND identified alike. Measured live 2026-09-20: the
+// `needs a bound email, not a payment` wall for get_interconnection_queue
+// shipped structuredContent.unlocked_tools containing its own name. The list is
+// now derived from the gate at the trial's own tier.
+describe('unlocked_tools is derived from the gate, not kept as a second list', () => {
+  // The three the hand list got wrong: PAID_ONLY_TOOLS members in none of the
+  // sets that can pass the free/identified gate, so a trial key never opens them.
+  it.each(['get_pipeline', 'get_interconnection_queue', 'list_transactions'])(
+    'no longer advertises %s, which the gate refuses', (t) => {
+      expect(_trialUnlockedTools()).not.toContain(t);
+      expect(_trialUnlockedHint()).not.toContain(t);
+    });
+
+  // The ones a trial key really does open — via ALWAYS_PARTIAL_PREVIEW's capped
+  // full taste or KEYED_FREE_BONUS. Dropping these would be the opposite bug.
+  it.each(['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel'])(
+    'still advertises %s, which the gate allows', (t) => {
+      expect(_trialUnlockedTools()).toContain(t);
+      expect(_trialUnlockedHint()).toContain(t);
+    });
+
+  it('never advertises a tool outside PAID_ONLY_TOOLS (the hint describes the GATED set)', () => {
+    for (const t of _trialUnlockedTools()) expect(PAID_ONLY_TOOLS.has(t), t).toBe(true);
+  });
+
+  it('annotates only the capped-full-taste tools with the daily cap', () => {
+    const hint = _trialUnlockedHint();
+    expect(hint).toMatch(/get_grid_intelligence \(full, \d+\/day\)/);
+    // get_grid_data passes the gate outright (KEYED_FREE_BONUS), not as a taste.
+    expect(hint).not.toMatch(/get_grid_data \(full, \d+\/day\)/);
   });
 });

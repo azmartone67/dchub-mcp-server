@@ -6795,8 +6795,38 @@ const ANON_INLINE_FULL = _anonInlineFullEnabled(process.env.DCHUB_ANON_INLINE_FU
 //   • structuredContent carries retry_with_header + accurate retry_instructions
 //     + unlocked_tools so a programmatic agent can act without parsing prose.
 // Returns {text, sc}; {'',{}} if no key (caller falls back to prior behavior).
-const _TRIAL_UNLOCKED_HINT =
-  'get_grid_intelligence + get_fiber_intel (full, ' + TRIAL_DAILY_FULL_CAP + '/day), get_grid_data, get_market_intel, get_pipeline, get_interconnection_queue, list_transactions';
+// r-unlocked-derived (2026-09-20): ASK THE GATE — never keep a second list.
+// This hint and `unlocked_tools` are the MACHINE-READABLE half of the trial
+// envelope, added "so a programmatic agent can act without parsing prose". The
+// hand-written list named get_pipeline, get_interconnection_queue and
+// list_transactions — which applyTierGate DENIES at free AND identified alike
+// (they are in PAID_ONLY_TOOLS and in none of the three sets that can pass it).
+// So the envelope told an agent a tool was unlocked inside the same response
+// whose next call refused it, and the refusal STILL shipped the field saying
+// so (measured live 2026-09-20: the `needs a bound email` wall for
+// get_interconnection_queue carried unlocked_tools containing its own name).
+// Derived from the gate at the trial's own tier, so it cannot drift again.
+// LAZY on purpose: applyTierGate reads KEYED_FACILITY_MASK, declared BELOW
+// this line — evaluating at module scope throws on its temporal dead zone.
+let _trialUnlockedCache = null;
+function _trialUnlocked() {
+  if (_trialUnlockedCache) return _trialUnlockedCache;
+  const taste = [], plain = [];
+  for (const t of PAID_ONLY_TOOLS) {
+    const g = applyTierGate(t, {}, 'identified', true, true);
+    // `masked` is a stripped field set (KEYED_FACILITY_MASK), not the full
+    // answer — serving it is not unlocking it.
+    if (!g.allowed || g.masked) continue;
+    (g.trial_taste ? taste : plain).push(t);
+  }
+  _trialUnlockedCache = { tools: Object.freeze([...taste, ...plain]), taste: new Set(taste) };
+  return _trialUnlockedCache;
+}
+export const _trialUnlockedTools = () => _trialUnlocked().tools;
+export const _trialUnlockedHint  = () => {
+  const { tools, taste } = _trialUnlocked();
+  return tools.map((t) => (taste.has(t) ? t + ' (full, ' + TRIAL_DAILY_FULL_CAP + '/day)' : t)).join(', ');
+};
 // r-envelope (2026-07-27, shell #38 lane 2). Removes ONLY `high_intent_*` keys
 // whose exact value already appears under a different key in the same envelope.
 // Conservative on purpose: same-value duplicates carry no information, but a
@@ -6946,6 +6976,16 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // Trial unlocks everything EXCEPT the 3 deep Pro tools (Pro-only AND not in
   // the always-preview/taste set).
   const stillPro = PRO_ONLY_TOOLS.has(name) && !ALWAYS_PARTIAL_PREVIEW.has(name);
+  // r-fwe-preview (2026-09-20): the sibling truth `stillPro` tells, for the
+  // OTHER half of PAID_ONLY_TOOLS. A tool the gate denies at the trial's own
+  // tier never goes full on this key, so the "FULL on this session now — just
+  // call it again" line below is false for it, and so is the exhausted copy's
+  // "today's free full answers are used up" (there were none). Measured live
+  // 2026-09-20 on get_interconnection_queue: call #1 served the preview WITH
+  // that promise, call #2 returned isError:true. Same on compare_isos.
+  // Ask the gate — a hand list is how the unlocked_tools field drifted.
+  const _stillPreview = !stillPro
+    && !applyTierGate(name, {}, 'identified', true, true).allowed;
   // r67-conv (2026-06-02): surface the KEY-BOUND pair-code upgrade path. The
   // /upgrade?key=<this trial key>&tool= endpoint mints a pair-code, 302s the
   // human to /redeem/DCM-XXXX, and on Stripe checkout the webhook flips THIS
@@ -7016,6 +7056,13 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // r-trial-refused: the backend already refuses this key (see _mintRefused), so it was
   // not bound and a retry would come back gated. Say what it needs — the same one-ask
   // ladder as the exhausted copy — instead of "unlocked on THIS session".
+  // r-fwe-preview: preview depth IS the free tier for this tool. Say that,
+  // and keep the one true free action (bind_email) pointed at what it really
+  // buys — a higher daily CALL cap — instead of at a depth it cannot change.
+  const leadStillPreview =
+    '\u{1F512} **`' + name + '` is free at PREVIEW depth — the rows above are the free tier, not a one-off taste.**\n' +
+    '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget for free — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n' +
+    '\n\u{1F464} **Tell your human:** for the complete `' + name + '` — ' + _rungsText(name, mint.tier || 'trial') + ' (' + _afterPayClause('', name) + ').\n';
   const leadRefused =
     '🔒 **This free trial key is not active yet — it needs your human’s email first.**\n' +
     'Free: `bind_email` (your human’s email, no card) activates it and lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day; then call `' + name + '` again.\n' +
@@ -7043,6 +7090,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
        '\n_(Separately: the free identified tier for 18+ other DC Hub tools is one call away — `claim_free_key`.)_\n')
     : _refused
     ? ('\n\n---\n' + leadRefused)
+    : _stillPreview
+    ? ('\n\n---\n' + leadStillPreview)
     : _exhausted
     ? ('\n\n---\n' + leadExhausted)
     : ('\n\n---\n' +
@@ -7071,6 +7120,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     first_call_nudge:          { ..._FRONT_DOOR, ...(_dcpiTeaserSC || {}) },
     retry_instructions: _refused
       ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (free, no card), then call ' + name + ' again.')
+      : _stillPreview
+      ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. Owner unlocks the complete answer ($10 one-time = 1,000 API calls) at ' + _meteredUrl + '.')
       : stillPro
       ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it ($10 one-time = 1,000 API calls) at ' + _meteredUrl + '.')
       : _exhausted
@@ -7108,10 +7159,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     //   prewall offer (mppPrewallOffer) reads it, and suppressing that would
     //   change conversion behaviour, which is not what this fixes.
     ...(_capKnown && !_refused ? { remaining_full_today: remainingFull } : {}),
-    trial_unlocks_this_tool:   !stillPro && !_refused,
+    trial_unlocks_this_tool:   !stillPro && !_refused && !_stillPreview,
     ...(_refused ? { auto_trial_bind_required: true } : {}),
-    unlocked_tools:            ['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel', 'get_pipeline', 'get_interconnection_queue', 'list_transactions'],
-    unlocked_tools_hint:       _TRIAL_UNLOCKED_HINT,
+    unlocked_tools:            _trialUnlockedTools(),
+    unlocked_tools_hint:       _trialUnlockedHint(),
     owner_purchase_url:        _meteredUrl,
     owner_purchase_model:      'one_time_pack_10usd_1000_calls',
     identify_endpoint:         'https://dchub.cloud/api/v1/keys/identify',
@@ -13787,6 +13838,28 @@ function trackedTool(srv, name, description, schema, handler) {
                                   // withholds the paid depth, so serving it every call leaks nothing.
                                   || SITE_HEADLINE_TOOLS.has(name)
                                   || (!c.api_key && ANON_PREVIEW_ONLY.has(name));
+          // r-fwe-preview (2026-09-20): the FREE-with-email class (PAID_ONLY
+          // minus PRO_ONLY) got exactly ONE preview per session and then fell
+          // through to the `blocked_paid_only` hard wall on call #2 — the
+          // precise symptom r42s above was written to kill ("agents got blocked
+          // on call #2 and moved on"), on the tools carrying ~93% of blocked
+          // signals. Measured live 2026-09-20 across 4 independent sessions
+          // (anon / trial-key header / claim_free_key): call #1 served the
+          // trimmed preview, call #2 returned isError:true. CONTROL: the arg
+          // form walled as call #2 in one session SERVED as call #1 in another,
+          // so the wall was call-ordinal, not argument-shape. 7 of this class's
+          // 16 tools were ALREADY always-preview via the sets above; this closes
+          // an accidental half-split. Leaks nothing new — the same trimmed rows
+          // call #1 already served, GW/MW fields still nulled.
+          //
+          // ★ Kept SEPARATE from _alwaysPreview, which short-circuits
+          // checkTrialEligibility entirely. That backend hop is also the channel
+          // the mid-session PAID LIFT arrives on (tier_upgrade / session_api_key,
+          // just below), so folding these tools into _alwaysPreview silently ate
+          // the first post-purchase call: test/paid-lift-in-session.test.mjs went
+          // red with the lifted tool still masked. These consult trial-check and
+          // then force the preview, so the lift is still seen.
+          const _fwePreview = !_alwaysPreview && isFreeWithEmailTool(name);
           // r-mpp-advertise (2026-06-21): soft-advertise the $0.50 MPP pay-per-call
           // option in the deep-tool preview's structuredContent. {} for non-MPP tools
           // or when MPP is off, so humans see no change.
@@ -13800,6 +13873,8 @@ function trackedTool(srv, name, description, schema, handler) {
             : {};
           const _trial = _alwaysPreview
             ? { trial_used: false, _always_preview: true }
+            : _fwePreview
+            ? { ...(await checkTrialEligibility(c.session_id, name)), trial_used: false, _always_preview: true }
             : await checkTrialEligibility(c.session_id, name);
 
           // keystone (audit item 1, 2026-06-30): DURABLE free-identified session
