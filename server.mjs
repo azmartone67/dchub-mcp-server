@@ -7454,6 +7454,30 @@ const TRIAL_PREVIEW_ROWS = (() => {
 // below; `_results_total_in_pro` already carries that total honestly.
 const _TYPED_PREVIEW_FIELDS = {
   rank_markets: new Set(['total_mw', 'facility_count', 'operator_count']),
+  // r-queue-total-coherence (2026-09-20): `projects.total` is the SUM of
+  // `projects.by_iso_count`, and by_iso_count survives this trim INTACT — it is
+  // an OBJECT keyed by ISO name, so the array slice never applies to it and the
+  // keys (PJM, MISO, ISO-NE, …) are not metric keys. So the free tier published
+  // all seven addends and nulled their sum. Measured live 2026-09-20, anon
+  // caller on get_interconnection_queue:
+  //
+  //   projects.total        null
+  //   projects.by_iso_count {CAISO:279, ERCOT:1907, ISO-NE:68, MISO:1136,
+  //                          NYISO:176, PJM:972, SPP:1021}      sum = 5559
+  //   /api/v1/interconnection-queue/snapshot (admin)   total   = 5559
+  //
+  // One addition recovers the masked number exactly, so the mask bought nothing
+  // and cost the honesty: `null` reads as "unknown" when the truth is sitting
+  // in the field beside it. Same incoherence as excluded_total /
+  // markets_in_region — two fields carrying the SAME number, one masked and one
+  // not (see test/coverage-counts-not-masked.test.mjs for that argument).
+  //
+  // ★ Scoped to THIS TOOL, not to the name `total`. A bare `total` is a genuine
+  // paywalled aggregate on other tools ($-totals on the deal surfaces), and
+  // _PROTECTED_KEYS is keyed by bare name with no tool scope — exempting it
+  // there would unmask every one of them. This table is the tool-scoped lever
+  // and is why it exists.
+  get_interconnection_queue: new Set(['total']),
 };
 const _NO_TYPED_PREVIEW = new Set();
 
