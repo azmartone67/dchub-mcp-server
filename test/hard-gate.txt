@@ -15,6 +15,7 @@ test/auth-refused-identity.test.mjs
 test/auth-source.test.mjs
 test/auth-unverified-identity.test.mjs
 test/automint-trial-rungs.test.mjs
+test/bind-midcall-facility-mask.test.mjs
 test/byo-mcp-paywall-lead.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs
 test/canon-snapshot-copies-every-phrase.test.mjs
@@ -61,6 +62,7 @@ test/execute-plan-invariants.test.mjs
 test/facility-location-tier.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
+test/find-sites-free-coarsen.test.mjs
 test/free-key-arbitrage.test.mjs
 test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs
