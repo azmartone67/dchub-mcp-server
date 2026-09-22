@@ -7616,14 +7616,90 @@ export function _isExactLocationTier(tier) {
 
 // ★ THE ONE PER-FACILITY OVERRIDE. Asked for every facility record a non-exact
 // caller is about to receive; true leaves that record — and only that record —
-// exact. Nothing is granted today: the tier decides alone. The planned monthly
-// allowance of exact locations for free and starter callers plugs in HERE: resolve
-// the caller's unlocked facility ids (from the backend endpoint that will own the
-// allowance) and return true for a record whose id / slug is among them.
-// `record` is the facility object; `c` is the caller context (tier, api_key, …).
-export function _facilityExactLocationAllowed(_record, _c) {
+// exact. `record` is the facility object; `c` is the caller context.
+//
+// r-location-allowance (2026-09-22, frontend#1534): the monthly allowance of
+// exact locations for free, identified, trial and starter accounts (10 distinct
+// facilities a UTC month, owner policy 2026-09-21) plugs in here. The backend
+// meter decides it (POST /api/v1/facility/<slug>/location, dchub-backend
+// routes/facility_location_reveal.py, which meters the forwarded X-API-Key and
+// never the internal key); _gateToolLocation asks it for get_facility and hands
+// the answer to this function on a per-call copy of the context, so a reveal
+// never outlives the call it was made for.
+export function _facilityExactLocationAllowed(record, c) {
+  const unlocked = c && c._exactLocationUnlocked;
+  if (!unlocked || !record || typeof record !== 'object') return false;
+  for (const k of [record.slug, record.canonical_slug, record.id]) {
+    if (k !== undefined && k !== null && k !== '' && unlocked.has(String(k))) return true;
+  }
   return false;
 }
+
+// The facility record inside get_facility's answer: {success, data: {...}}.
+function _facilityRecordOf(parsed) {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const rec = (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data))
+    ? parsed.data : parsed;
+  return (rec && (rec.slug || rec.canonical_slug)) ? rec : null;
+}
+
+// Ask the backend meter for this facility. POST reveals: it spends one of the
+// month's exact locations unless this facility is already revealed this month.
+// Returns {unlocked: Set, reveal: body} or null (no record, no slug, an error:
+// the answer then stays approximate, as it was before the allowance existed).
+async function _revealExactLocation(result, c) {
+  // The answer is JSON, often followed by a line for the human (a bind hint, a
+  // credits note): read the leading JSON, as the location gate does.
+  const split = _splitLeadingJson(result?.content?.[0]?.text || '');
+  const rec = split ? _facilityRecordOf(split.json) : null;
+  if (!rec) return null;
+  const slug = String(rec.slug || rec.canonical_slug);
+  let body;
+  try {
+    body = await callAPIWrite(`/api/v1/facility/${encodeURIComponent(slug)}/location`, {});
+  } catch (_) { return null; }
+  if (!body || typeof body !== 'object' || typeof body.status !== 'string') return null;
+  const unlocked = new Set();
+  if (body.status === 'exact') {
+    for (const k of [rec.slug, rec.canonical_slug, rec.id, body.slug]) {
+      if (k !== undefined && k !== null && k !== '') unlocked.add(String(k));
+    }
+  }
+  return { unlocked, reveal: body };
+}
+
+// What the caller is told about the allowance, on the answer itself.
+function _withExactLocationNote(result, reveal) {
+  const split = _splitLeadingJson(result?.content?.[0]?.text || '');
+  const parsed = split && split.json;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return result;
+  const rec = _facilityRecordOf(parsed);
+  const note = { status: reveal.status };
+  if (reveal.allowance) note.allowance = reveal.allowance;
+  if (reveal.status === 'exact') {
+    note.via = reveal.exact_via || 'allowance';
+    if (rec && reveal.address && !rec.address) rec.address = reveal.address;
+    if (note.via === 'allowance') {
+      note.message = 'Exact location revealed from your monthly allowance of exact '
+        + 'locations. Revisiting this facility this month is free.';
+    }
+  } else if (reveal.status === 'limit_reached') {
+    note.message = "This month's exact locations are used up, so coordinates are "
+      + 'approximate (2 decimal places, about 1 km). The Developer plan shows exact '
+      + 'locations everywhere.';
+    if (reveal.upgrade_url) note.upgrade_url = reveal.upgrade_url;
+  } else {
+    return result;
+  }
+  parsed.exact_location = note;
+  const text = split.head + JSON.stringify(parsed) + split.rest;
+  return { ...result, content: [{ ...result.content[0], text }, ...result.content.slice(1)] };
+}
+
+// get_facility only (one facility the caller asked for by name), a keyed caller
+// only: the anonymous tier never gets an exact location.
+export const _LOCATION_ALLOWANCE_TOOLS = Object.freeze(['get_facility']);
+const _ALLOWANCE_TOOLS = new Set(_LOCATION_ALLOWANCE_TOOLS);
 
 function _locationOpts(scope, c) {
   return {
@@ -7660,7 +7736,14 @@ export async function _gateToolLocation(result, name, c) {
   let paidCall = false;
   try { paidCall = result[_EXACT_LOCATION_CALL] === true; } catch (_) { paidCall = false; }
   if (paidCall) return result;
-  const gated = coarsenToolResultLocation(result, _locationOpts(scope, c));
+  // The allowance: a keyed caller only (an anonymous caller never gets an exact
+  // location), on get_facility only. A pack holder's answer is on a paid rail
+  // and returned above; exact tiers, the same.
+  let reveal = null;
+  if (_ALLOWANCE_TOOLS.has(name) && c && c.api_key) reveal = await _revealExactLocation(result, c);
+  const cc = (reveal && reveal.unlocked.size) ? { ...c, _exactLocationUnlocked: reveal.unlocked } : c;
+  let gated = coarsenToolResultLocation(result, _locationOpts(scope, cc));
+  if (reveal) gated = _withExactLocationNote(gated, reveal.reveal);
   if (gated === result) return result;            // nothing location-bearing in it
   let credits = 0;
   try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
