@@ -242,11 +242,14 @@ describe('a keyed pack holder gets the rows it paid for', () => {
 describe('a Developer blocked on a Pro-only tool', () => {
   it('is told it is on Developer and what opens the tool, never "free tier"', async () => {
     const s = await openSession({ 'x-api-key': K_DEV });
-    const t = textOf(await s.call('analyze_site', { lat: 39.04, lng: -77.49 }));
+    // 2026-09-22: analyze_site became Land & Power, which answers Developer with
+    // its own preview (test/lp-pro-only.test.mjs). get_dchub_recommendation is
+    // the same class of tool (Pro-only, heavy) outside Land & Power.
+    const t = textOf(await s.call('get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }));
     expect(t).toContain("You're on **Developer**");
     expect(t).toContain('is one of the Pro-only tools, so it opens on Pro');
     expect(t).not.toContain('free tier');
-    expect(t).toContain('`analyze_site` uses 5 credits per call');
+    expect(t).toContain('`get_dchub_recommendation` uses 5 credits per call');
   });
 
 });

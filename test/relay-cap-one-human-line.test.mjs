@@ -159,7 +159,11 @@ const payLines = (t) => t.split('\n').filter((l) => !/^\s*[[{]/.test(l)
 // the point; fiber returns the stub's rows, so it carries the full-data assertions.
 const GRID = ['get_grid_intelligence', { region_id: 'ERCOT' }];
 const FIBER = ['get_fiber_intel', { region_id: 'ERCOT' }];
-const COMPARE = ['compare_sites', { locations: '32.78,-96.80;39.04,-77.48' }];
+// 2026-09-22: compare_sites became Land & Power, which answers a key below Pro
+// with its own preview (test/lp-pro-only.test.mjs), not the Pro wall these
+// mechanisms ride on. get_dchub_recommendation is the same class of tool
+// (Pro-only, heavy, previewed for anonymous callers) outside Land & Power.
+const COMPARE = ['get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }];
 
 describe('r-relay-cap — production config (inline full on): one human line per session', () => {
   let port;

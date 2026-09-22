@@ -196,7 +196,11 @@ const refsIn = (body) => [
 ];
 
 const GRID = ['get_grid_intelligence', { region_id: 'PJM' }];
-const COMPARE = ['compare_sites', { locations: '33.45,-112.07;39.04,-77.48' }];
+// 2026-09-22: compare_sites became Land & Power, which answers a key below Pro
+// with its own preview (test/lp-pro-only.test.mjs), not the Pro wall these
+// mechanisms ride on. get_dchub_recommendation is the same class of tool
+// (Pro-only, heavy, previewed for anonymous callers) outside Land & Power.
+const COMPARE = ['get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }];
 async function keyedWall(h) {
   trialUsedTools.add(COMPARE[0]);
   try { return await call(h, ...COMPARE); } finally { trialUsedTools.delete(COMPARE[0]); }
