@@ -357,7 +357,11 @@ describe('the rebuilt worker carries no baked facility count', () => {
   it('bakes every other magnitude through untouched', () => {
     const by = new Map(baked(synced.out).map((t) => [t.name, t.description]));
     expect(by.get(KEEPER.name)).toBe(KEEPER.description);
-    expect(by.get('list_transactions')).toContain('2,200+ tracked deals');
+    // The deal floor walks (2,200+ -> 1,600+ on 2026-09-21): read it the way the
+    // heal does instead of typing it, or every walk turns this red.
+    const deals = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)),
+      '..', 'canonical', 'canon_phrases.json'), 'utf8')).deals;
+    expect(by.get('list_transactions')).toContain(`${deals} tracked deals`);
     expect(by.get('why_dchub')).toContain('330,000+ mapped power/grid/gas/fiber assets');
     expect(by.get(HAZARD.name)).toMatch(/facilities in one clause/);
     expect(FENCE.test(by.get(HAZARD.name))).toBe(false);
