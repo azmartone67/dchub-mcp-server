@@ -52,8 +52,16 @@ function sitePayload() {
 beforeAll(async () => {
   await new Promise((resolve) => {
     stub = createServer((req, res) => {
-      stubHits += 1;
       res.setHeader('content-type', 'application/json');
+      const p = new URL(req.url, 'http://_').pathname;
+      // A key the server can resolve, and no pack, so the preview path is the one
+      // under test (2026-09-22: a keyless caller gets the Land & Power wall).
+      if (p === '/api/v1/keys/validate') {
+        res.end(JSON.stringify({ valid: true, tier: 'free', developer_id: 'dev_capctx', email: null }));
+        return;
+      }
+      if (p.startsWith('/api/v1/mcp/')) { res.end(JSON.stringify({ credits: 0, had_pack: false })); return; }
+      stubHits += 1;
       res.end(JSON.stringify(sitePayload()));
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -79,10 +87,12 @@ afterAll(async () => {
   await new Promise((resolve) => (stub ? stub.close(resolve) : resolve()));
 });
 
-async function callOverHttp(name, args) {
+const FREE_KEY = 'dch_live_capacity_context_free';
+async function callOverHttp(name, args, key = FREE_KEY) {
   const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream',
+               ...(key ? { 'x-api-key': key } : {}) },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
   });
   const raw = await res.text();
@@ -94,7 +104,15 @@ async function callOverHttp(name, args) {
   try { return JSON.parse((r.content || []).map((c) => c.text || '').join('')); } catch { return {}; }
 }
 
-describe('capacity_context reaches a real anonymous analyze_site call', () => {
+// ★ 2026-09-22 (owner): analyze_site is Land & Power, and Land & Power details
+// are Pro. A keyless caller now gets the wall and no data at all, so the call
+// under test here is a FREE KEY's, which gets the Land & Power preview: the
+// verdict, names and counts, every score and figure null. The subject is
+// unchanged — capacity_mw must leave a trace in what comes back — and so is
+// the rule this file was written for: the preview keeps the caller's own
+// request (capacity_requested_mw, capacity_context.requested_mw) and the
+// statement that it does not move the score.
+describe('capacity_context reaches a real below-Pro analyze_site call (the preview)', () => {
   it('★ arrives in structuredContent — the allowlist that dropped capacity_requested_mw', async () => {
     stubIncludesCapacityContext = true;
     const before = stubHits;
@@ -105,56 +123,48 @@ describe('capacity_context reaches a real anonymous analyze_site call', () => {
       'the stub backend was never called — DCHUB_API_BASE did not take, so this ' +
       'guard exercised nothing. Do NOT relax this into a pass.').toBeGreaterThan(before);
 
-    expect(sc.site_headline).toBe(true);            // the branch under test actually ran
+    expect(sc._preview_only).toBe(true);            // the branch under test actually ran
+    expect(sc.capacity_requested_mw).toBe(5000);
     expect(sc.capacity_context).toBeTruthy();
     expect(sc.capacity_context.requested_mw).toBe(5000);
     expect(sc.capacity_context.affects_overall_score).toBe(false);
+    // the figures behind it are Land & Power details
+    expect(sc.capacity_context.nearby_generation_mw).toBeNull();
+    expect(sc.capacity_context.requested_pct_of_nearby_generation).toBeNull();
   });
 
   it('is ABSENT when the backend sent none — absence is the no-load signal', async () => {
     stubIncludesCapacityContext = false;
     const sc = await callOverHttp('analyze_site', { latitude: 32.7767, longitude: -96.797 });
-    expect(sc.site_headline).toBe(true);
+    expect(sc._preview_only).toBe(true);
     expect(sc.capacity_context).toBeUndefined();
     stubIncludesCapacityContext = true;
   });
 
-  // ★ 2026-09-17 (r-depth-gate). This test's SUBJECT is unchanged: passing
-  // capacity_mw must not disturb the headline envelope. Its WITNESSES moved,
-  // because the two it used — composite_score 81.2 and limiting_factor.score
-  // 70 — are now the gated depth on a free call. Re-pinned on what the free
-  // envelope carries INSTEAD, and deliberately wider than before: the band,
-  // the gate marker, the factor's name, the verdict and the citation. A
-  // capacity_context regression that flattened the envelope would still fail
-  // every one of these.
-  it('does not disturb the citable headline fields', async () => {
+  it('does not disturb the verdict: the score is null, the verdict stays', async () => {
     stubIncludesCapacityContext = true;
     const sc = await callOverHttp('analyze_site',
       { latitude: 32.7767, longitude: -96.797, capacity_mw: 500 });
-    // The number is Pro; the BAND is the free, citable headline.
-    expect(sc.composite_score).toBeNull();
-    expect(sc._composite_score_in_pro).toBe(true);
-    expect(sc.composite_score_band).toBe('BUILD');          // 81.2 -> BUILD
-    expect(sc.verdict).toBe('Excellent site');
-    expect(sc.limiting_factor?.factor).toBeTruthy();        // WHICH stays free
-    expect(sc.limiting_factor?.score).toBeNull();           // HOW MUCH is Pro
-    expect(sc.limiting_factor?.band).toBe('BUILD');         // 70 -> BUILD
-    expect(sc.citation).toBeTruthy();
+    expect(sc.overall_score).toBeNull();
+    expect(Object.values(sc.scores || {}).every((v) => v === null)).toBe(true);
+    expect(sc.interpretation).toBe('Excellent site');
+    expect(sc.required_plan).toBe('pro');
   });
 
-  it('★ gating the number keeps the methodology and the upsell surface', async () => {
-    // A gated score with no basis sentence and no named locked sections is a
-    // dead end: the agent cannot say what the number WOULD have meant, nor
-    // what paying adds. Both ride the same allowlist projection that silently
-    // dropped capacity_requested_mw, so both are pinned here.
-    // (The flag itself is unit-tested in test/depth-gate.test.mjs; this file
-    // only proves what the LIVE envelope carries.)
+  it('★ gating the number keeps the explanation and the way to Pro', async () => {
     stubIncludesCapacityContext = true;
     const sc = await callOverHttp('analyze_site',
       { latitude: 32.7767, longitude: -96.797, capacity_mw: 500 });
-    expect(sc.score_basis).toContain('0–100');              // methodology stays
-    expect(sc.locked).toBeTruthy();                         // upsell surface intact
-    expect(Object.keys(sc.locked).length).toBeGreaterThan(0);
+    expect(sc._preview_note).toContain('Pro');
+    // The response envelope files upgrade_url under `upgrade` on the wire.
+    expect(sc.upgrade_url || (sc.upgrade && sc.upgrade.upgrade_url)).toMatch(/^https:\/\//);
+  });
+
+  it('a keyless caller gets the wall, and no capacity_context', async () => {
+    const sc = await callOverHttp('analyze_site',
+      { latitude: 32.7767, longitude: -96.797, capacity_mw: 5000 }, null);
+    expect(sc._wall).toBe(true);
+    expect(sc.capacity_context).toBeUndefined();
   });
 });
 

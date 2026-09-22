@@ -36,7 +36,12 @@ const K_AUTO = 'dch_live_paidlift_autobnd01';
 const K_MASK = 'dch_live_paidlift_masked001';
 const K_BLIP = 'dch_live_paidlift_blip00001';
 const LIVE_KEYS = new Set([K_PAY, K_NEW, K_IDLE, K_SPLIT, K_AUTO, K_MASK, K_BLIP]);
-const COMPARE = { locations: '33.45,-112.07;39.04,-77.48' };
+// 2026-09-22: compare_sites became Land & Power, which answers a key below Pro
+// with its own preview (test/lp-pro-only.test.mjs), not the Pro wall these
+// mechanisms ride on. get_dchub_recommendation is the same class of tool
+// (Pro-only, heavy, previewed for anonymous callers) outside Land & Power.
+const PRO_TOOL = 'get_dchub_recommendation';
+const COMPARE = { context: '100 MW AI training campus in Texas' };
 const sha = (k) => createHash('sha256').update(k).digest('hex');
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
@@ -197,7 +202,7 @@ const firstRow = (text) => ((leadingJson(text) || {}).data || [])[0] || {};
 describe('r-paid-lift — a key that pays mid-session is served as paid', () => {
   it('THE REPRO: after a k- purchase the walled tool is served on the next call — same session, same key', async () => {
     const s = await openSession({ 'x-api-key': K_PAY });
-    const before = await s.call('compare_sites', COMPARE);
+    const before = await s.call(PRO_TOOL, COMPARE);
     expect(walled(before), before.slice(0, 300)).toBe(true);
     expect(before).toContain('this key unlocks');
     expect(goRefs(before), 'the wall never handed this key a k- link').toContain(`k-${sha(K_PAY)}`);
@@ -206,19 +211,19 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     paid.add(K_PAY);                                  // the webhook's k- branch
     await sleep(PROBE_MS + 50);
     const d0 = dataHits;
-    const after = await s.call('compare_sites', COMPARE);
+    const after = await s.call(PRO_TOOL, COMPARE);
     expect(walled(after), after.slice(0, 300)).toBe(false);
     expect(dataHits, 'the tool handler never reached the backend').toBeGreaterThan(d0);
     expect(hits(validateHits, K_PAY), 'the lift is confirmed by exactly one validate').toBe(v0 + 1);
 
-    const again = await s.call('compare_sites', COMPARE);
+    const again = await s.call(PRO_TOOL, COMPARE);
     expect(walled(again)).toBe(false);
     expect(hits(validateHits, K_PAY), 'a lifted session kept re-validating').toBe(v0 + 1);
   });
 
   it('a NEW session after the purchase is not held at free by the 5-minute key cache', async () => {
     const s1 = await openSession({ 'x-api-key': K_NEW });
-    expect(walled(await s1.call('compare_sites', COMPARE))).toBe(true);
+    expect(walled(await s1.call(PRO_TOOL, COMPARE))).toBe(true);
     paid.add(K_NEW);
     await sleep(PROBE_MS + 50);
 
@@ -226,7 +231,7 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     const s2 = await openSession({ 'x-api-key': K_NEW });
     expect(hits(validateHits, K_NEW), 'initialize went to the backend — the stale cache was never exercised')
       .toBe(v0);
-    const r = await s2.call('compare_sites', COMPARE);
+    const r = await s2.call(PRO_TOOL, COMPARE);
     expect(walled(r), r.slice(0, 300)).toBe(false);
   });
 
@@ -234,7 +239,7 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     for (const key of [K_IDLE, K_TRIAL, K_SPLIT]) {
       const vStart = hits(validateHits, key);
       const s = await openSession({ 'x-api-key': key });
-      const w = await s.call('compare_sites', COMPARE);
+      const w = await s.call(PRO_TOOL, COMPARE);
       expect(walled(w), `${key}: ${w.slice(0, 200)}`).toBe(true);
       // A trial key is sold a session-bound Pro link (a k- ref has no row to land on), so it
       // is never marked and never re-read. The other two were handed k- links.
@@ -248,7 +253,7 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
       const q0 = hits(quotaHits, key);
       for (let i = 0; i < 3; i += 1) {
         await sleep(PROBE_MS + 30);
-        expect(walled(await s.call('compare_sites', COMPARE))).toBe(true);
+        expect(walled(await s.call(PRO_TOOL, COMPARE))).toBe(true);
       }
       // initialize validates once. K_SPLIT's monthly-usage claims pro while validate says
       // free: exactly one confirming validate, then back-off — never one per probe.
@@ -347,7 +352,7 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     const free = await s.call('search_facilities', { query: 'Ashburn', limit: 25 });
     expect(firstRow(free).power_mw, 'the keyed-free mask no longer strips power_mw — no contrast left')
       .toBeUndefined();
-    expect(walled(await s.call('compare_sites', COMPARE))).toBe(true);   // hands the key its k- link
+    expect(walled(await s.call(PRO_TOOL, COMPARE))).toBe(true);   // hands the key its k- link
     paid.add(K_MASK);
     await sleep(PROBE_MS + 50);
     const lifted = await s.call('search_facilities', { query: 'Ashburn', limit: 25 });
@@ -355,13 +360,13 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
   });
   it('a backend blip on the confirming validate is retried on the next probe, not backed off', async () => {
     const s = await openSession({ 'x-api-key': K_BLIP });
-    expect(walled(await s.call('compare_sites', COMPARE))).toBe(true);
+    expect(walled(await s.call(PRO_TOOL, COMPARE))).toBe(true);
     paid.add(K_BLIP);
     blipOnce.add(K_BLIP);                             // the confirming validate answers 503 once
     await sleep(PROBE_MS + 50);
-    expect(walled(await s.call('compare_sites', COMPARE)), 'served without a confirmed validate').toBe(true);
+    expect(walled(await s.call(PRO_TOOL, COMPARE)), 'served without a confirmed validate').toBe(true);
     await sleep(PROBE_MS + 50);
-    const r = await s.call('compare_sites', COMPARE);
+    const r = await s.call(PRO_TOOL, COMPARE);
     expect(walled(r), r.slice(0, 300)).toBe(false);
   });
 });

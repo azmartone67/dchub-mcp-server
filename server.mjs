@@ -5904,6 +5904,118 @@ const MAP_URL = 'https://dchub.cloud/land-power-map';
 // x402 (2026-06-20): the flagship value-moment tools that advertise the
 // agent-autonomous pay-per-call (USDC) rail. Prices mirror the backend
 // routes/x402_payments.py table; the /quote endpoint is the source of truth.
+// ── Land & Power: the details are Pro (owner, 2026-09-22) ──────────────────
+// These are the MCP twins of the Land & Power map: a site's score and
+// evaluation (analyze_site, over /api/site-score), the side-by-side pick
+// (compare_sites), the site planner's composite (get_composite_site_score) and
+// the site report (generate_site_analysis). Only Pro opens their details:
+//   * no key: the wall. No verdict, band, name or figure; Pro is the only
+//     rung, and claim_free_key is how to get the preview.
+//   * a key below Pro (free, trial, Starter, Developer, a pack bought after
+//     the cutover): the preview. Verdicts, bands, names and counts stay; every
+//     score, MW, distance, price and report link is null; coordinates are held
+//     at two decimals.
+//   * Pro and above, a session that bought Pro, and a pack bought before the
+//     cutover (the backend's lp_grandfathered): the full answer, through the
+//     normal gate below (a grandfathered pack spends its credits as before).
+// The backend's REST twins answer the same way (util/plan_tease.py lp_gate).
+// Decided before applyTierGate, so no credit is burned and no per-call rail
+// (credits, MPP, x402) runs for a caller this gate does not open.
+export const LP_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_composite_site_score',
+                                 'generate_site_analysis']);
+
+export async function _lpAccessFor(c, tier) {
+  const rank = Math.max(_tierRank(tier), _tierRank(c && c.tier));
+  if (rank >= _tierRank('pro')) return 'full';
+  if (c && (c.api_key || c.session_id)) {
+    let cr = { credits: 0, lp_grandfathered: false };
+    try { cr = await _getCredits(c); } catch (_) {}
+    if ((cr.credits || 0) > 0 && cr.lp_grandfathered === true) return 'full';
+  }
+  return (c && c.api_key) ? 'preview' : 'wall';
+}
+
+// What a preview keeps. Counts: a key naming a count, or a radius count such
+// as substations_50km. Strings: kept unless they carry a digit, which is how a
+// figure travels in prose ("near-net (0.41 km)", "83.7/100"); a name, id or
+// identifier is kept whatever it holds. A deliverable link opens the full
+// report, so it goes.
+const _LP_COUNT_KEY = /(^|_)(count|counts|total)$|_count$|^n_|_in_radius$|_\d+km$|carriers_in_state$/;
+const _LP_COORD_KEY = /^(lat|lon|lng|latitude|longitude)$/;
+// (A verdict is NOT on this list: most are a bare band, which carries no digit
+// and stays, but some are prose that quotes the figures behind them.)
+const _LP_KEEP_STR = /^(name|names|carrier|provider|operator|state|state_code|iso|market|market_slug|slug|id|_entity|tool|type|source|license|cite_as|url|period|timestamp|as_of|version|coverage_ratio|deliverable)$/;
+const _LP_DROP_KEY = /pdf|report_url|share_text|share_hint|download|upgrade_url|pricing_url/i;
+// The caller's own request, echoed back: kept, so a preview still shows what
+// was asked (a 5 GW constraint must not vanish without a trace).
+const _LP_ECHO_KEY = /^(capacity_requested_mw|requested_mw)$/;
+
+export function _lpPreviewPayload(v, key = '') {
+  if (Array.isArray(v)) return v.slice(0, 3).map((x) => _lpPreviewPayload(x, key));
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const [k, x] of Object.entries(v)) {
+      if (_LP_DROP_KEY.test(k)) { out[k] = null; continue; }
+      out[k] = _lpPreviewPayload(x, k);
+    }
+    return out;
+  }
+  if (typeof v === 'number') {
+    if (_LP_COORD_KEY.test(key)) return Math.round(v * 100) / 100;
+    return (_LP_COUNT_KEY.test(key) || _LP_ECHO_KEY.test(key)) ? v : null;
+  }
+  if (typeof v === 'string') {
+    if (!/\d/.test(v) || _LP_KEEP_STR.test(key)) return v;
+    return null;
+  }
+  return v;   // boolean, null
+}
+
+function _lpProLink() {
+  let sid = '';
+  try { sid = (getCtx() && getCtx().session_id) || ''; } catch (_) {}
+  return _subCheckoutUrl(PRO_URL + promoParam(), sid);
+}
+
+export function _lpWallResult(name) {
+  const url = _lpProLink();
+  const price = _priceLabel('pro');
+  const payload = {
+    error: 'pro_required', tool: name, _gated: true, _wall: true, required_plan: 'pro',
+    message: `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
+      + 'returns no data: no verdict, score or figure. A free key opens the preview '
+      + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
+    upgrade_url: url, upgrade_price: price, next_tool: 'claim_free_key',
+  };
+  return {
+    content: [{ type: 'text', text: '🔒 **`' + name + '` is Land & Power, which is Pro.** No data without a key. '
+      + 'Get Pro ' + price + ' → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
+      + 'verdicts and bands, no scores or figures.' }],
+    isError: _wallIsError(),
+    structuredContent: payload,
+  };
+}
+
+export function _lpPreviewResult(name, result) {
+  let parsed = null;
+  try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
+  if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
+  const preview = _lpPreviewPayload(parsed);
+  if (name === 'compare_sites') {
+    // The pick is made from the scores, so it is Pro with them.
+    preview.winner = null;
+    preview.decision_rationale = null;
+  }
+  const envelope = {
+    ...preview,
+    _gated: true, _preview_only: true, required_plan: 'pro',
+    _preview_note: 'Land & Power details are Pro: every score, MW, distance, price and '
+      + 'report link is null here. Verdicts, bands, names and counts are the preview.',
+    upgrade_url: _lpProLink(), upgrade_price: _priceLabel('pro'),
+  };
+  return { content: [{ type: 'text', text: JSON.stringify(envelope) }], structuredContent: envelope };
+}
+
 const X402_TOOLS = new Set(['get_grid_intelligence', 'get_fiber_intel',
   'analyze_site', 'compare_sites', 'generate_site_analysis']);
 const X402_PRICE = {
@@ -6146,7 +6258,9 @@ export async function buildDepthTease(name, result, ctx, tier) {
     const _devUrl = _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid);
     teased._upgrade.map_cta = `📍 This \`${name}\` data is live + visual on DC Hub's Land & Power map — every substation, transmission line, gas pipeline, fiber route, power-headroom + air-permitting score for any parcel, on one screen.`;
     teased._upgrade.map_url = mapHref(name);
-    teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Unlock the full map + uncapped \`${name}\` with Developer (${_priceLabel('developer')}) → ${_devUrl} (the full Land & Power map is Pro).`;
+    // 2026-09-22 (owner): the Land & Power map opens at Pro and nothing below
+    // it, so Developer is offered for this tool's own uncapped data only.
+    teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Uncapped \`${name}\` opens with Developer (${_priceLabel('developer')}) → ${_devUrl}. The full Land & Power map is Pro (${_priceLabel('pro')}) → ${_subCheckoutUrl(PRO_URL + promoParam(), _sid)}.`;
   }
   // x402 (2026-06-20): on the flagship tools, ADDITIVELY advertise the
   // agent-autonomous pay-per-call rail — a wallet-funded agent pays USDC for
@@ -8376,11 +8490,11 @@ function _dropCreditCache(c) {
 }
 async function _getCredits(c) {
   const id = _creditIdentity(c);
-  if (!id) return { credits: 0, had_pack: false };
+  if (!id) return { credits: 0, had_pack: false, lp_grandfathered: false };
   const now = Date.now();
   const cached = _creditCache.get(id);
-  if (cached && (now - cached.ts) < (cached.credits > 0 ? _CREDIT_TTL_MS : _CREDIT_ZERO_TTL_MS)) return { credits: cached.credits, had_pack: cached.had_pack };
-  let credits = 0, had_pack = false;
+  if (cached && (now - cached.ts) < (cached.credits > 0 ? _CREDIT_TTL_MS : _CREDIT_ZERO_TTL_MS)) return { credits: cached.credits, had_pack: cached.had_pack, lp_grandfathered: cached.lp_grandfathered === true };
+  let credits = 0, had_pack = false, lp_grandfathered = false;
   try {
     // r-credits-timeout (2026-07-03): this lookup sits on the hot path of every
     // credit-gated tool call and fail-opens (any error → credits:0 → normal
@@ -8391,10 +8505,13 @@ async function _getCredits(c) {
                             { timeout: 2000 });
     credits = (r && typeof r.credits === 'number') ? r.credits : 0;
     had_pack = !!(r && r.had_pack);   // ever bought a pack (even if depleted) → re-up nudge
+    // 2026-09-22: credits from a pack PAID before the Land & Power cutover still
+    // open Land & Power (the backend decides; see LP_TOOLS).
+    lp_grandfathered = !!(r && r.lp_grandfathered === true);
   } catch (_) {}
-  _creditCache.set(id, { credits, had_pack, ts: now });
+  _creditCache.set(id, { credits, had_pack, lp_grandfathered, ts: now });
   if (_creditCache.size > 20000) _creditCache.clear();
-  return { credits, had_pack };
+  return { credits, had_pack, lp_grandfathered };
 }
 function _burnCredits(c, tool, cost) {
   const id = _creditIdentity(c);
@@ -14173,6 +14290,15 @@ function trackedTool(srv, name, description, schema, handler) {
           structuredContent: _payload,
         };
       }
+      // Land & Power (owner, 2026-09-22): only Pro opens the details (LP_TOOLS).
+      if (LP_TOOLS.has(name)) {
+        const _lpAccess = await _lpAccessFor(c, tier);
+        if (_lpAccess === 'wall') { status = 'lp_wall'; return _lpWallResult(name); }
+        if (_lpAccess === 'preview') {
+          status = 'lp_preview';
+          return _lpPreviewResult(name, await handler(args));
+        }
+      }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
@@ -14873,7 +14999,7 @@ function trackedTool(srv, name, description, schema, handler) {
                         ? { next_session: _NEXT_SESSION } : {}),
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
                     tool: name,
-                    ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map — unlock the full map with Developer (${_priceLabel('developer')}).` } : {}),
+                    ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map; the full map is Pro (${_priceLabel('pro')}).` } : {}),
                     ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
                     ..._hiSC,
                   })),
