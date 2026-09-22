@@ -105,7 +105,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
-import { coarsenFacilityLocation, coarsenToolResultLocation, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
+import { coarsenFacilityLocation, coarsenToolResultLocation, splitLeadingJson as _splitLeadingJson, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
          buildContinuation as _buildContinuation,
@@ -7667,6 +7667,119 @@ export async function _gateToolLocation(result, name, c) {
   return credits > 0 ? result : gated;            // a failed balance read coarsens
 }
 
+// ── r-free-numerics (2026-09-22): the figures a free caller still got ────────
+//
+// MEASURED, live, keyless, the day this shipped (the free preview each tool
+// already serves):
+//   get_market_dcpi_rank   avg_kwh_cents "10.309". The backend sends it as a
+//                          STRING and the trim nulls only numbers, so ¢/kWh rode
+//                          through next to the nulled scores.
+//   rank_markets           total_mw 5793 / 1268 / 923 per market, plus the same
+//                          MW inside `value` ("191 fac / 5793 MW / 55 ops").
+//   site_selection_canvas  every score again inside verdict_reasons.
+// And with a free or identified KEY none of the three was trimmed at all:
+// callAPI reaches the backend with X-Internal-Key, the backend answers that
+// header in full, and none of these tools is in DEPTH_TEASE_TOOLS.
+//
+// THE RULE (the REST preview's, dchub-backend util/plan_tease.py): for the free
+// tiers — keyless, free, identified, trial — scores, MW and ¢/kWh are null, with
+// a `_<field>_in_pro` marker. Names, slugs, verdicts, bands, ranks and counts
+// stay. A live $10 pack balance is a paying caller and keeps today's answer, as
+// does a call served on a paid rail; a failed balance read withholds. Every
+// other tier is untouched.
+//
+// WHERE: _stampEntityCb, beside the location gate, so every return path of these
+// three tools passes through it: the anonymous preview, the capped preview, the
+// full taste and the keyed answer.
+const _FREE_NUMERIC_KEY_RE = /(^|_)score$|^composite_score|^overall_score|time_to_power|_months$|kwh|cents|(^|_)mw$|_mw_/i;
+const _FREE_NUMERIC_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_band$|_note$|_basis$|_count$|_count_\d+d$|^rank$)/i;
+function _isFigure(v) {
+  if (typeof v === 'number') return Number.isFinite(v);
+  return typeof v === 'string' && /^\s*-?\d[\d,]*(\.\d+)?\s*$/.test(v);
+}
+// One row or object: every figure under a gated key goes, and nothing else.
+function _nullFreeFigures(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return { value: row, changed: false };
+  let changed = false;
+  const out = { ...row };
+  for (const [k, v] of Object.entries(row)) {
+    if (k === 'verdict_reasons' && Array.isArray(v)) {
+      const next = v.map((r) => _stripReasonNumerics(r, true));
+      if (next.some((r, i) => r !== v[i])) { out[k] = next; changed = true; }
+    } else if (_FREE_NUMERIC_KEY_RE.test(k) && !_FREE_NUMERIC_KEEP_RE.test(k) && _isFigure(v)) {
+      out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
+    } else if (k === 'value' && typeof v === 'string' && /\bMW\b/.test(v)) {
+      // rank_markets' display string: "191 fac / 5793 MW / 55 ops" keeps its counts
+      const next = v.replace(/(\s*\/\s*)?-?\d[\d,.]*\s*MW\b(\s*\/\s*)?/g,
+        (_m, a, b) => ((a && b) ? ' / ' : '')).trim();
+      if (next !== v) { out[k] = next; changed = true; }
+    } else if (v && typeof v === 'object' && !Array.isArray(v) && k === 'forecast') {
+      const inner = _nullFreeFigures(v);
+      if (inner.changed) { out[k] = inner.value; changed = true; }
+    }
+  }
+  return { value: out, changed };
+}
+function _nullFreeRows(payload, keys) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { value: payload, changed: false };
+  let changed = false;
+  const out = { ...payload };
+  for (const key of keys) {
+    const [a, b] = key.split('.');
+    const holder = b ? payload[a] : payload;
+    const rows = holder && holder[b || a];
+    if (!Array.isArray(rows)) continue;
+    const next = rows.map((r) => _nullFreeFigures(r));
+    if (!next.some((n) => n.changed)) continue;
+    changed = true;
+    if (b) out[a] = { ...payload[a], [b]: next.map((n) => n.value) };
+    else out[a] = next.map((n) => n.value);
+  }
+  return { value: out, changed };
+}
+const _FREE_NUMERIC_SHAPES = {
+  site_selection_canvas: (p) => _nullFreeRows(p, ['shortlist', 'empty_result.excluded_top']),
+  rank_markets: (p) => _nullFreeRows(p, ['results', 'markets', 'data']),
+  get_market_dcpi_rank: (p) => _nullFreeFigures(p),
+};
+const _FREE_NUMERIC_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+// Both channels of a tool result, or the SAME object when nothing changed.
+function _rewriteResultJson(result, shape) {
+  let changed = false;
+  let content = result.content;
+  if (Array.isArray(content)) {
+    content = content.map((item) => {
+      if (!item || item.type !== 'text' || typeof item.text !== 'string') return item;
+      const split = _splitLeadingJson(item.text);
+      if (!split || !split.json || typeof split.json !== 'object') return item;
+      const g = shape(split.json);
+      if (!g.changed) return item;
+      changed = true;
+      return { ...item, text: split.head + JSON.stringify(g.value) + split.rest };
+    });
+  }
+  let sc = result.structuredContent;
+  if (sc && typeof sc === 'object' && !Array.isArray(sc)) {
+    const g = shape(sc);
+    if (g.changed) { sc = g.value; changed = true; }
+  }
+  if (!changed) return result;
+  return { ...result, content, structuredContent: sc };
+}
+export async function _gateToolNumerics(result, name, c) {
+  const shape = _FREE_NUMERIC_SHAPES[name];
+  if (!shape || !result || typeof result !== 'object') return result;
+  const t = String((c && c.tier) || '').trim().toLowerCase();
+  if (!_FREE_NUMERIC_TIERS.has(t)) return result;
+  try { if (result[_EXACT_LOCATION_CALL] === true) return result; } catch (_) { /* unreadable marker */ }
+  let gated;
+  try { gated = _rewriteResultJson(result, shape); } catch (_) { return result; }
+  if (gated === result) return result;              // nothing to withhold
+  let credits = 0;
+  try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
+  return credits > 0 ? result : gated;              // a failed balance read withholds
+}
+
 // r-anon-facility-allowlist (2026-09-21): a keyed free/identified caller's
 // facility rows are projected to _FACILITY_FREE_FIELDS (KEYED_FACILITY_MASK).
 // The keyless trims of the same two tools ran trimForTrial alone, which nulls
@@ -7926,6 +8039,48 @@ export function _resultIsArgError(res) {
   } catch (_) { return false; }
 }
 
+// ── r-reasons-strip (2026-09-22): a verdict reason restates the score it explains.
+// verdict_reasons[] rows are {code, component, value, threshold, unit, affects,
+// message}. The trim below nulls excess_power_score / constraint_score /
+// time_to_power_months and keeps their BAND, but each reason carried the same
+// figure twice more, in `value` and in `message` ("Excess-power score 85.7
+// meets the 65.0 floor the BUILD band requires."). Measured live, keyless, on
+// site_selection_canvas: all three figures of every preview row, readable one
+// field away from the nulls.
+// A reason's figure is withheld exactly when the field it explains is withheld
+// in this output (same predicates, so DCHUB_DEPTH_GATE=0 still restores it).
+// The code, the component, the published band threshold and the wording that
+// says WHICH band decided the verdict stay: that is the free explanation.
+function _reasonComponentGated(component) {
+  if (typeof component !== 'string' || !component) return false;
+  return _gatesDepth(component) || _gatesHeadroom(component) || _DCPI_ISO_PAID_KEYS.has(component);
+}
+function _reasonFigureRe(v) {
+  const body = Number.isInteger(v)
+    ? String(v) + '(?:\\.0+)?'
+    : String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // not inside another number; take a trailing unit word with it
+  return new RegExp('\\s*(?<![\\d.])' + body + '(?![\\d])(?:\\s*months?)?');
+}
+export function _stripReasonNumerics(r, force = false) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+  const v = r.value;
+  if (typeof v !== 'number' || !Number.isFinite(v)) return r;
+  if (!force && !_reasonComponentGated(r.component)) return r;
+  const out = { ...r, value: null, _value_in_pro: true };
+  if (typeof r.message === 'string') {
+    // The figure leads every message template, so only its first occurrence
+    // goes; a threshold that happens to equal it later in the sentence stays.
+    let m = r.message.replace(_reasonFigureRe(v), '');
+    // Fail closed: a message that still shows the figure (formatted some other
+    // way) is dropped rather than shipped.
+    const shown = [String(v), v.toFixed(1), v.toFixed(2)];
+    if (v !== r.threshold && shown.some((t) => m.includes(t))) m = null;
+    out.message = m;
+  }
+  return out;
+}
+
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
   // r-arg-error: `valid_regions` is the contract, not product data. Trimming a
@@ -7947,7 +8102,9 @@ function trimForTrial(parsed, toolName) {
   if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
-    if (_gatesHeadroom(k)) {
+    if (k === 'verdict_reasons' && Array.isArray(v)) {
+      out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
+    } else if (_gatesHeadroom(k)) {
       out[k] = null;                          // grid decision-layer field → Pro
       out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
     } else if (_gatesDepth(k)) {
@@ -9089,7 +9246,8 @@ function _stampEntityCb(toolName, fn) {
     //   site_evaluation_handoff built below is built from the coarsened payload.
     //   It reads c.tier after the handler ran, so a paid lift inside the call
     //   counts. See _gateToolLocation.
-    const r = await _gateToolLocation(await fn(args, extra), toolName, getCtx());
+    const r = await _gateToolNumerics(
+      await _gateToolLocation(await fn(args, extra), toolName, getCtx()), toolName, getCtx());
     try {
       if (r && Array.isArray(r.content)) {
         const sc = (r.structuredContent && typeof r.structuredContent === 'object'

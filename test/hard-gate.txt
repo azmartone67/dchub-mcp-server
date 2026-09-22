@@ -66,6 +66,7 @@ test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/free-key-arbitrage.test.mjs
+test/free-numerics-gate.test.mjs
 test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs
 test/free-with-email-is-not-a-paid-feature.test.mjs
@@ -212,6 +213,7 @@ test/uncovered-constraints.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/upstream-error-contract.test.mjs
 test/upstream-error-iserror.test.mjs
+test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-exits.test.mjs
