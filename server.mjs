@@ -7926,6 +7926,47 @@ export function _resultIsArgError(res) {
   } catch (_) { return false; }
 }
 
+// ── r-reasons-strip (2026-09-22): a verdict reason restates the score it explains.
+// verdict_reasons[] rows are {code, component, value, threshold, unit, affects,
+// message}. The trim below nulls excess_power_score / constraint_score /
+// time_to_power_months and keeps their BAND, but each reason carried the same
+// figure twice more, in `value` and in `message` ("Excess-power score 85.7
+// meets the 65.0 floor the BUILD band requires."). Measured live, keyless, on
+// site_selection_canvas: all three figures of every preview row, readable one
+// field away from the nulls.
+// A reason's figure is withheld exactly when the field it explains is withheld
+// in this output (same predicates, so DCHUB_DEPTH_GATE=0 still restores it).
+// The code, the component, the published band threshold and the wording that
+// says WHICH band decided the verdict stay: that is the free explanation.
+function _reasonComponentGated(component) {
+  if (typeof component !== 'string' || !component) return false;
+  return _gatesDepth(component) || _gatesHeadroom(component) || _DCPI_ISO_PAID_KEYS.has(component);
+}
+function _reasonFigureRe(v) {
+  const body = Number.isInteger(v)
+    ? String(v) + '(?:\\.0+)?'
+    : String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // not inside another number; take a trailing unit word with it
+  return new RegExp('\\s*(?<![\\d.])' + body + '(?![\\d])(?:\\s*months?)?');
+}
+export function _stripReasonNumerics(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+  const v = r.value;
+  if (typeof v !== 'number' || !Number.isFinite(v) || !_reasonComponentGated(r.component)) return r;
+  const out = { ...r, value: null, _value_in_pro: true };
+  if (typeof r.message === 'string') {
+    // The figure leads every message template, so only its first occurrence
+    // goes; a threshold that happens to equal it later in the sentence stays.
+    let m = r.message.replace(_reasonFigureRe(v), '');
+    // Fail closed: a message that still shows the figure (formatted some other
+    // way) is dropped rather than shipped.
+    const shown = [String(v), v.toFixed(1), v.toFixed(2)];
+    if (v !== r.threshold && shown.some((t) => m.includes(t))) m = null;
+    out.message = m;
+  }
+  return out;
+}
+
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
   // r-arg-error: `valid_regions` is the contract, not product data. Trimming a
@@ -7947,7 +7988,9 @@ function trimForTrial(parsed, toolName) {
   if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
-    if (_gatesHeadroom(k)) {
+    if (k === 'verdict_reasons' && Array.isArray(v)) {
+      out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
+    } else if (_gatesHeadroom(k)) {
       out[k] = null;                          // grid decision-layer field → Pro
       out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
     } else if (_gatesDepth(k)) {
