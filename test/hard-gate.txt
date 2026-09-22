@@ -66,6 +66,7 @@ test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/free-key-arbitrage.test.mjs
+test/free-numerics-gate.test.mjs
 test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs
 test/free-with-email-is-not-a-paid-feature.test.mjs
