@@ -98,6 +98,10 @@ const SNAP = (() => {
 })();
 const isPhrase = (v) => typeof v === 'string' && /^\d[\d,]*\+$/.test(v);
 const DEALS = (SNAP && isPhrase(SNAP.deals)) ? SNAP.deals : null;
+// A deal count the canon does not hold, derived from it so no walk can make
+// it the canon. Control (c) typed '1,600+', which became a no-op mutation the
+// day the floor walked DOWN to 1,600+ (2026-09-21).
+const STALE_DEALS = DEALS ? (Number(DEALS.replace(/\D/g, '')) - 200).toLocaleString('en-US') + '+' : '1,400+';
 const FACILITIES = (SNAP && isPhrase(SNAP.facilities)) ? SNAP.facilities : null;
 
 /** Temporarily replace the canon snapshot, run fn, always restore. */
@@ -327,10 +331,10 @@ describe('smithery.yaml canonical-quantity guard', () => {
       });
   });
 
-  // (c) the head noun ELIDED — "1,600+ tracked M&A," with no "deals" after it
+  // (c) the head noun ELIDED — "N tracked M&A," with no "deals" after it
   it('FAILS when a deal count elides its head noun ("N tracked M&A,")', () => {
     withFileMutation(LISTINGS,
-      (orig) => orig.replace(`${DEALS} tracked M&A,`, '1,600+ tracked M&A,'),
+      (orig) => orig.replace(`${DEALS} tracked M&A,`, `${STALE_DEALS} tracked M&A,`),
       () => {
         const { ok, out } = check();
         expect(ok, 'guard did NOT catch "N tracked M&A" with the head noun elided').toBe(false);
