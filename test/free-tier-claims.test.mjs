@@ -111,7 +111,9 @@ describe("smithery.yaml pricing block matches the ladder label-by-label", () => 
   it("finds the pricing rows (not a vacuous pass)", () => {
     expect(at).toBeGreaterThan(-1);
     expect(rows.map((r) => r.tier)).toEqual(
-      expect.arrayContaining(["anonymous", "free", "starter", "developer", "pro", "enterprise"]),
+      // ★2026-09-22: no Starter row. The owner rule (2026-09-21, mcp#497) is that
+      // Starter is offered nowhere; the rows left are the rungs /pricing sells.
+      expect.arrayContaining(["anonymous", "free", "developer", "pro", "enterprise"]),
     );
   });
 
@@ -176,4 +178,22 @@ describe("the canon snapshot itself", () => {
       expect(() => JSON.parse(read(f))).not.toThrow();
     }
   });
+});
+
+// ★2026-09-22: the registry-facing manifests offer no Starter. The owner rule
+// (2026-09-21, mcp#497) removed Starter $9 from every surface server.mjs serves
+// (test/no-starter-offer.test.mjs); these hand-authored manifests are what the
+// registries and catalogues copy, and four of them still sold it. The smithery
+// row check above would ACCEPT a Starter row (canon still has the rung for
+// grandfathered subscribers), so absence is asserted here.
+describe("registry manifests offer no Starter plan", () => {
+  const FILES = ["smithery.yaml", "mcp-server.json", "REGISTRY-LISTINGS.md", "llms-install.md",
+                 "README.md", "integrations/chatgpt/openapi.json"];
+  const STARTER = /\bstarter\b[^\n]{0,40}\$\s?9(?![\d.,])|\$\s?9\/mo|\$\s?9 Starter|^\s*starter:/im;
+  for (const f of FILES) {
+    it(`${f} names no Starter offer`, () => {
+      const m = read(f).match(STARTER);
+      expect(m && m[0], `${f} still offers Starter: ${m && m[0]}`).toBeFalsy();
+    });
+  }
 });
