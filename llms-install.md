@@ -118,9 +118,9 @@ claude mcp add dchub --transport http --header "X-API-Key: YOUR_KEY_HERE" https:
 
 | Tier | Price | Calls/day |
 |------|-------|-----------|
-| Anonymous | free | 10 |
-| Free key (email) | free | 50 |
-| Starter | $9/mo | 200 |
+| Anonymous | free | 5 |
+| Free key (`claim_free_key`, no email) | free | 10 |
+| Free key with an email bound (`bind_email`) | free | 50 |
 | Developer | $49/mo | 500 |
 | Pro | $99/mo | 2,000 |
 | Enterprise | custom | 100,000 |

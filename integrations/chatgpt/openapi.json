@@ -662,7 +662,7 @@
       "get": {
         "operationId": "analyzeSite",
         "summary": "Composite site suitability score for a lat/lng (site_analysis, PAID)",
-        "description": "recipe site_analysis. PAID-ONLY. Composite data-center site-suitability score for a specific point (power, grid headroom, water, fiber, hazards) at given coordinates. On the free tier this returns HTTP 402 with an agent_action to claim/upgrade - do NOT fabricate a score; render the response's message and surface the upgrade_url ($10 one-time = 1,000 calls, or $9/mo). Pass ?lat= and ?lng=. Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe site_analysis. PAID-ONLY. Composite data-center site-suitability score for a specific point (power, grid headroom, water, fiber, hazards) at given coordinates. On the free tier this returns HTTP 402 with an agent_action to claim/upgrade - do NOT fabricate a score; render the response's message and surface the upgrade_url ($10 one-time = 1,000 API credits, or Developer $49/mo). Pass ?lat= and ?lng=. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "lat",
@@ -758,7 +758,7 @@
                 },
                 "upgrade_url": {
                   "type": "string",
-                  "description": "One-click checkout: $10 one-time = 1,000 calls, or $9/mo Starter."
+                  "description": "One-click checkout: $10 one-time = 1,000 API credits, or Developer $49/mo."
                 },
                 "enterprise_url": {
                   "type": "string"
