@@ -27,6 +27,13 @@ let S, TOOLS, realFetch;
 let credits = 0, grandfathered = false;
 const burns = [];
 const backendPaths = [];
+// r-tier-collapse-fix (2026-09-23): api_key -> the REAL plan the stubbed backend
+// resolves for /api/v1/keys/validate's tier_detail.users_plan. mcp_dev_keys.tier
+// itself collapses Developer/Pro/Founding to the literal 'paid' (main.py's
+// webhook), so a seat below sets tier:'paid' directly — exactly what a real
+// Developer OR Pro caller's validated tier looks like — and only THIS map says
+// which one they actually bought.
+let planFor = {};
 
 const SITE_SCORE = {
   success: true, location: { lat: 39.0412345, lon: -77.4845678, state: 'VA' },
@@ -94,6 +101,14 @@ beforeAll(async () => {
       burns.push(p);
       return json({ ok: true, remaining: Math.max(0, credits - 5) });
     }
+    if (p === '/api/v1/keys/validate') {
+      let apiKey = ''; try { apiKey = JSON.parse((init && init.body) || '{}').api_key || ''; } catch { /* ignore */ }
+      const plan = Object.prototype.hasOwnProperty.call(planFor, apiKey) ? planFor[apiKey] : null;
+      return json({
+        valid: true, tier: 'paid', developer_id: null, email: 'caller@example.com',
+        tier_detail: { mcp_dev_keys: 'paid', users_plan: plan, api_key_tier: null, effective: 'paid' },
+      });
+    }
     return json({});
   };
   const prev = process.env.DCHUB_API_BASE;
@@ -107,7 +122,7 @@ afterAll(() => {
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY;
   else process.env.DCHUB_INTERNAL_KEY = prevInternal;
 });
-beforeEach(() => { credits = 0; grandfathered = false; burns.length = 0; backendPaths.length = 0; });
+beforeEach(() => { credits = 0; grandfathered = false; burns.length = 0; backendPaths.length = 0; planFor = {}; S.keyCache.clear(); });
 
 let seatN = 0;
 const seat = (tier, key, extra = {}) => ({
@@ -233,4 +248,45 @@ it('a grandfathered pack is read from the backend, never assumed', async () => {
 it('the preview keeps a coordinate at two decimals, not zero decimals', () => {
   const p = S._lpPreviewPayload({ lat: 39.0412345, lon: -77.4845678, n: { substations_50km: 3, mw: 12.5 } });
   expect(p).toEqual({ lat: 39.04, lon: -77.48, n: { substations_50km: 3, mw: null } });
+});
+
+// r-tier-collapse-fix (2026-09-23): the PREVIEW_SEATS.developer case above sets
+// tier:'developer' directly — the CLEAN, unambiguous string. That is NOT what a
+// real Developer subscriber's key resolves to: main.py's checkout webhook
+// collapses Developer, Pro AND Founding alike to the literal mcp_dev_keys.tier
+// 'paid', so a real Developer key's validated tier is 'paid', identical to a
+// real Pro key's. This block seats that ACTUAL collapsed value and lets the
+// backend's tier_detail.users_plan (the caller's real plan) be the only thing
+// that tells the two apart — proving the fix against the shape the bug actually
+// took, not a shape the gate was already handling correctly.
+describe('a real Developer/Pro key both validate as tier:"paid" — only the backend plan tells them apart', () => {
+  it('Developer\'s key (tier "paid", real plan "developer") gets the SAME preview as an unambiguous developer seat', async () => {
+    planFor['dch_live_lp_paid_but_developer'] = 'developer';
+    const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_but_developer'));
+    const p = head(r);
+    expect(p && p._gated).toBe(true);
+    expect(p._preview_only).toBe(true);
+    const text = all(r);
+    for (const f of CASES.analyze_site.figures) expect(text).not.toContain(f);
+    expect(burns).toEqual([]);
+  });
+  it('Pro\'s key (tier "paid", real plan "pro") gets the full answer', async () => {
+    planFor['dch_live_lp_paid_and_pro'] = 'pro';
+    const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_and_pro'));
+    expect(all(r)).toContain(CASES.analyze_site.full);
+    expect(head(r)?._gated).not.toBe(true);
+  });
+  it('Founding\'s key (tier "paid", real plan "founding") also gets the full answer — founding bills $99, grants pro', async () => {
+    planFor['dch_live_lp_paid_and_founding'] = 'founding';
+    const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_and_founding'));
+    expect(all(r)).toContain(CASES.analyze_site.full);
+    expect(head(r)?._gated).not.toBe(true);
+  });
+  it('an unresolvable plan (no users.plan match) fails OPEN — never worse than pre-fix', async () => {
+    // No planFor entry: tier_detail.users_plan comes back null, same as an
+    // account with no users row at all (e.g. a comp key minted outside Stripe).
+    const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_unresolvable'));
+    expect(all(r)).toContain(CASES.analyze_site.full);
+    expect(head(r)?._gated).not.toBe(true);
+  });
 });

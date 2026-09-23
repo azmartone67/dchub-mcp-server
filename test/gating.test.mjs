@@ -148,9 +148,42 @@ describe('_isMetricKey', () => {
 });
 
 describe('applyTierGate — tier access', () => {
-  it('paid + enterprise bypass all gating', () => {
-    expect(applyTierGate('get_grid_intelligence', {}, 'paid', false, false).allowed).toBe(true);
+  it('enterprise bypasses all gating', () => {
     expect(applyTierGate('analyze_site', {}, 'enterprise', false, false).allowed).toBe(true);
+  });
+  it('CONFIRMED paid (the caller\'s real plan resolves Pro-or-above) bypasses Pro-only gating too', () => {
+    expect(applyTierGate('get_grid_intelligence', {}, 'paid', false, false, true).allowed).toBe(true);
+  });
+  // r-tier-collapse-fix (2026-09-23): mcp_dev_keys.tier's 3-value CHECK constraint
+  // forces main.py's checkout webhook to stamp the SAME literal 'paid' for a $49
+  // Developer purchase as for a $99 Pro one, so on a Pro-only tool 'paid' alone
+  // must NOT be trusted as Pro — that was the tier-collapse bug (a Developer key
+  // got full Pro-only access via this exact short-circuit). An UNCONFIRMED 'paid'
+  // on a Pro-only tool now falls through to the SAME handling a literal
+  // 'developer' tier gets a few lines down (the r-paidtaste capped taste with a
+  // key, a hard block without one) — never a blanket bypass.
+  it('UNCONFIRMED paid on a Pro-only tool is treated exactly like a literal developer tier', () => {
+    const paidUnconfirmed = applyTierGate('get_grid_intelligence', {}, 'paid', false, false);
+    const devLiteral = applyTierGate('get_grid_intelligence', {}, 'developer', false, false);
+    expect(paidUnconfirmed).toEqual(devLiteral);
+    expect(paidUnconfirmed.allowed).toBe(false);   // no key: same wall a developer with no key gets
+
+    const paidUnconfirmedKeyed = applyTierGate('get_grid_intelligence', {}, 'paid', true, false);
+    const devLiteralKeyed = applyTierGate('get_grid_intelligence', {}, 'developer', true, false);
+    expect(paidUnconfirmedKeyed).toEqual(devLiteralKeyed);
+    expect(paidUnconfirmedKeyed.allowed).toBe(true);          // capped taste, not a hard wall
+    expect(paidUnconfirmedKeyed.trial_taste).toBe(true);
+    expect(paidUnconfirmedKeyed.paid_taste).toBe(true);
+    // ★ THE BUG, pinned directly: this must NOT be the unconditional full-access
+    // shape a genuinely-confirmed paid/enterprise caller gets.
+    expect(paidUnconfirmedKeyed).not.toEqual({ allowed: true, params: {} });
+  });
+  it('an unconfirmed paid tier is unaffected on tools that are NOT Pro-only', () => {
+    // get_grid_data is PAID_ONLY but not PRO_ONLY (see FREE_FULL_TOOLS block below) —
+    // the fix's guard is scoped to PRO_ONLY_TOOLS.has(toolName), so this tool's
+    // 'paid' handling must be byte-identical to before the fix: an unconditional bypass.
+    expect(PAID_ONLY_TOOLS.has('get_grid_data')).toBe(true);
+    expect(applyTierGate('get_grid_data', {}, 'paid', false, false).allowed).toBe(true);
   });
   it('blocks PAID_ONLY tools for anonymous free callers', () => {
     expect(applyTierGate('get_grid_intelligence', {}, 'free', false, false).allowed).toBe(false);

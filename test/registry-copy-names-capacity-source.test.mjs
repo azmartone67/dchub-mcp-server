@@ -122,7 +122,16 @@ describe('the canonical floors survive in the copy that carries them', () => {
   // The Capacity Source line must not have been paid for by dropping a floor.
   it('the About text still states tools, facilities, markets and deals', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
-    expect(ABOUT).toContain(`${canon.tools} tools`);
+    // ★2026-09-23: the TOOL count is not a canon phrase here. sync-tools-manifest
+    // heals every tool count from the trackedTool() set in server.mjs, while
+    // canon_phrases.tools is a snapshot of the LIVE tools/list — it lags a PR
+    // that adds a tool until that PR deploys and the daily sync runs, so reading
+    // it here failed the very PR that moves the count (get_infra_projects, 91 ->
+    // 92). Assert what the heal writes, from the source the heal reads.
+    const registered = new Set([...read('server.mjs')
+      .matchAll(/trackedTool\(srv,\s*'([a-z_]+)'/g)].map((m) => m[1])).size;
+    expect(registered).toBeGreaterThan(50);
+    expect(ABOUT).toContain(`${registered} tools`);
     expect(ABOUT).toContain(canon.facilities);
     expect(ABOUT).toContain(canon.markets);
     expect(ABOUT).toContain(canon.deals);

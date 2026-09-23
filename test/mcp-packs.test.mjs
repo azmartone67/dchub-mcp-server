@@ -45,13 +45,15 @@ let S, PORT, httpServer, CANON;
 // request_capacity_intro (Capacity Source) — a rename, so both counts hold.
 // ★2026-09-13 siting 20 -> 21 and deals 15 -> 16: accept_capacity_terms joined
 // both packs beside the other two listing tools (the terms gate's one write).
+// ★2026-09-23 grid 16 -> 17 and gas 9 -> 10: get_infra_projects joined both —
+// transmission projects are grid build-out, gas pipeline projects gas delivery.
 const EXPECTED = {
   deepresearch: 2,
   site: 10,
-  grid: 16,
+  grid: 17,
   siting: 21,
   fiber: 11,
-  gas: 9,
+  gas: 10,
   deals: 16,
 };
 

@@ -45,22 +45,38 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(path.join(REPO, p), 'utf8');
 const SCRIPT = 'scripts/sync-tools-manifest.mjs';
 
-// Canon is READ, never restated: a test that hardcodes "58k" becomes a second
-// copy of the number it exists to protect.
-const FACTS = JSON.parse(read('canonical/mcp_facts.json'));
-const FIBER = FACTS.numbers.fiber_routes;      // e.g. "58k"
-const GAS = FACTS.numbers.gas_pipelines;       // e.g. "33k"
 const qty = (s) => {
   const b = String(s).replace(/\+$/, '');
   return Number(b.replace(/,/g, '').replace(/k$/i, '')) * (/k$/i.test(b) ? 1000 : 1);
 };
 const commas = (n) => n.toLocaleString('en-US');
 
+// Canon is READ, never restated: a test that hardcodes "58k" becomes a second
+// copy of the number it exists to protect.
+//
+// ★2026-09-23 — and it is read from the file the script HEALS FROM, not from a
+//   file that merely carries the same key. Since 2026-09-20 substations,
+//   transmission lines, fiber routes and mapped assets are served ONLY from
+//   canon_phrases.json (CANON_LAYERS / canonKey in the script); mcp_facts.json
+//   still has its own copy, which the heal never reads. This fixture kept
+//   reading mcp_facts.json, so it held only while the two snapshots agreed.
+//   The daily sync refreshes canon_phrases.json from live /api/v1/canon/phrases
+//   and does not touch mcp_facts.json: on 2026-09-23 live substations moved
+//   127k -> 133,000+, the "already correct" fixture line still said 127,000+,
+//   --fix rightly rewrote it, and the hard gate refused every sync from 05:24Z
+//   — holding back the 91 -> 92 tool-count heal with it.
+const FACTS = JSON.parse(read('canonical/mcp_facts.json'));
+const PHRASES = JSON.parse(read('canonical/canon_phrases.json'));
+// A canon layer is published in k-form as a floor, as the script's asK() does.
+const FIBER = `${Math.floor(qty(PHRASES.fiber_routes) / 1000)}k`;  // e.g. "58k"
+const SUBSTATIONS = PHRASES.substations;       // e.g. "133,000+"
+const GAS = FACTS.numbers.gas_pipelines;       // e.g. "33k" — no canon home yet
+
 // The line smithery.yaml actually publishes, rebuilt around one substituted
 // quantity. Using the REAL sentence keeps the fixture honest: the facility and
 // deal figures beside it are the ones that always healed.
 const descLine = (fiber, gas = commas(qty(GAS))) =>
-  `description: "Live intelligence. ${commas(qty(FACTS.numbers.substations))}+ substations, ` +
+  `description: "Live intelligence. ${commas(qty(SUBSTATIONS))}+ substations, ` +
   `${gas} gas pipeline segments, ${fiber} fiber routes, and more."\n`;
 
 let box;
@@ -139,21 +155,25 @@ describe('notation is not drift', () => {
 
 describe('substations are ruled once, not twice', () => {
   // QUANTITIES owns the substation noun for README-class prose, from
-  // canon_phrases.json; ASSET_QUANTITIES carries the same noun from
-  // mcp_facts.json. Today both owners publish the same VALUE, so the conflict is
+  // canon_phrases.json; ASSET_QUANTITIES carries the same noun (k-form, and
+  // since 2026-09-20 from canon_phrases.json too — it once read mcp_facts.json).
+  // Today both rules publish the same VALUE, so the conflict is
   // invisible — which is precisely why this test forces them apart. Let both
   // rules loose on one noun with the owners disagreeing and --fix stops being a
   // fixed point: each run rewrites what the previous one wrote, and the file
   // flips on every sync forever.
   it('--fix is a fixed point even when the two owners disagree', () => {
     const snap = JSON.parse(read('canonical/canon_phrases.json'));
-    const bumped = `${commas(qty(FACTS.numbers.substations) + 1000)}+`;
+    const bumped = `${commas(qty(SUBSTATIONS) + 1000)}+`;
     expect(qty(bumped), 'the fixture no longer makes the owners disagree')
-      .not.toBe(qty(FACTS.numbers.substations));
+      .not.toBe(qty(SUBSTATIONS));
     w('canonical/canon_phrases.json',
       `${JSON.stringify({ ...snap, substations: bumped }, null, 2)}\n`);
-    w('smithery.yaml', descLine(commas(qty(FIBER))).replace(
-      `${commas(qty(FACTS.numbers.substations))}+ substations`, `${bumped} substations`));
+    // smithery.yaml keeps the PRE-bump figure, so the canon owner can only be
+    // seen winning if --fix actually rewrites it. Seeded with the bumped value
+    // (as this test once was), "canon won" held with the registry-copy
+    // substation rule deleted outright — mutation-tested 2026-09-23.
+    w('smithery.yaml', descLine(commas(qty(FIBER))));
 
     runScript(['--fix']);
     const once = boxRead('smithery.yaml');

@@ -1320,7 +1320,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
 // still sees it and keeps server.mjs in the cross-manifest consistency check.
 // (That guard lived in regression.test.mjs until #267 moved it onto the hard
 // gate — it had been running in a continue-on-error step and could not fail.)
-const SERVER_VERSION = { version: '2.12.18' }.version;  // 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
+const SERVER_VERSION = { version: '2.12.19' }.version;  // 2.12.18 (2026-09-16): a Capacity Source size search is matched against what a listing can DELIVER, not its headline total. The backend now reads two teaser-level kW facts — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — and matches a requested size inside them: both declared, the size must sit between the smallest contract and the contiguous block; contiguous only, at or under the block; smallest chunk only, at or over the chunk and within the total; neither declared, the old rule of a total at least that big. A colocation with two megawatts available but only a small contiguous block must NOT answer a one-megawatt search, and a large site willing to contract small chunks must. This server carries that truth where an agent reads it: source_capacity's min_kw / min_mw argument descriptions and its own description, the find_capacity prompt, the buy/lease planner step's routing note, the CAPACITY SOURCE instruction sentence and the README section all name both fields, and the listings renderer prints whichever of them a teaser card or an opened listing declares beside that listing's capacity, followed by one note line saying what they mean. The arguments themselves are unchanged (the backend does the matching), no inputSchema property is added or removed, the tool count does not move, and the confidential/public citation split is untouched.  // 2.12.17 (2026-09-15): registry copy for Capacity Source. README.md gains a Capacity Source section — what it is (off-market and available powered land, powered shells, turnkey and colocation), that source_capacity searches it by size in kW or MW and by location, and the deal registration: DC Hub sends the provider the buyer's company and requirement, and identity, site and contact are exchanged only if the provider accepts — plus the task-scoped pack endpoints. server.json's description, capped at 100 chars by the registry schema, spends its headroom on off-market data-center capacity while keeping the required "query and cite". No behaviour change and no tool-logic change; the bump exists so registry-refresh publishes a NEW version to the official registry — the cascade source for PulseMCP + Glama — instead of taking the duplicate-version 400 and reporting success.  // 2.12.16 (2026-09-15): Capacity Source deal registration. source_capacity searches by size (min_kw beside min_mw) and location (region, location), plus delivery_type and available_by, all passed through to GET /api/v1/listings; request_capacity_intro sends capacity_kw, regions and countries in the requirement, comma lists as arrays. The tool descriptions, the find_capacity prompt, the buy/lease planner step, the capacity_source pointer note and the CAPACITY SOURCE instruction sentence now describe the deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identities, site and contact are exchanged only if the provider accepts. Listing results gain rendered lines for the filters applied, capacity_kw per card and the disclosure block, while the confidential JSON payload and its licence are unchanged. Tool count unchanged; two inputSchemas grow.  // 2.12.15 (2026-09-14): Capacity Source distribution layer, dormant until listings exist. A 5-minute cached read of GET /api/v1/listings/summary (non-200 = unknown, never awaited by a tool call) drives a capacity_source pointer on find_sites / site_selection_canvas / rank_markets / get_market_intel / analyze_site / get_market_context and a live clause in the CAPACITY SOURCE instruction sentence, both silent while the summary is unknown or live_count is 0. The planner adds a source_capacity step to buy/lease intents, prompts/list gains find_capacity, and DCHUB_CAPACITY_POINTERS=off turns all of it off. Tool count and every inputSchema unchanged.  // 2.12.14 (2026-09-13): accept_capacity_terms, the 91st tool. The Capacity Source terms gate (owner decision) opens listing details once a human has accepted the introduction terms, recorded per version in the lead register; this is how an agent records that acceptance. source_capacity stays read-only. A new tool moves the manifest content and every published count.  // 2.12.13 (2026-09-13): pocket listings renamed Capacity Source. tools/list advertises source_capacity + request_capacity_intro; get_pocket_listings + request_listing_intro (the 2026-09-11 names) keep resolving through TOOL_ALIASES, and the count stays 90. mcp-server.json, smithery.yaml and the pack manifests name the new tools, so the manifest content moved and the registry needs this bump.  // 2.12.11 (2026-09-09): publish the corrected Pro price. #392 fixed the README's dead Developer Stripe link and the $299 -> $99 Pro price, and registry-refresh DID fire on that merge (README.md is in its paths) — but server.json's version had not moved, so mcp-publisher took the registry's duplicate-version 400, the job still reported SUCCESS, and the official registry — the cascade source for PulseMCP + Glama — kept serving the superseded manifest. The run's own notice said so: "version 2.12.10 is already on the registry (no change). Bump server.json's version to publish a refresh." Measured the same day from outside: mcp.so serves "$299/mo Pro" (7 occurrences), Glama serves "$299/mo", mcpservers.org answers 403 so it is UNKNOWN and not clean. This is the ONLY real re-pull channel — r-nofakepush (2026-07-17) deleted the speculative /refresh + /reindex webhooks after every POST 404'd; registries have no push API. Version only, no behaviour change, across the 14 surfaces that carry it (the 2.12.10 in test/registry-version-bump-write-time.test.mjs and scripts/server-json-baseline.mjs are FIXTURE DATA for nextPatch/choosePublishVersion and must not move).  // 2.12.5 (2026-09-04): point the official-registry listing at /mcp/registry so a registry arrival is DISTINGUISHABLE from direct traffic. r-source-path shipped per-registry paths, but most registries cannot carry one: the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md, they mirror remotes[0].url, and Glama offers no override (its glama.json schema's ONLY property is `maintainers`, and the listing has no edit affordance). This trades per-registry precision - unavailable at any effort - for the distinction that is actually decision-relevant: all four report zero today and nothing separates zero from unmeasured. _meta.canonicalRemote STAYS https://dchub.cloud/mcp, and /mcp keeps serving every existing install unchanged; only the URL new listings hand out is tagged. // 2.12.4 (2026-09-04): spend the manifest TITLE headroom on the search terms `description` structurally cannot carry. The official registry schema caps description at 100 chars and has NO keywords/tags/categories field; ours was 98/100, so there was nowhere left to put them, while title was 41/100. Measured on Glama the same day (scripts/registry_monitor.py --glama): page one on 2 of 10 terms (fiber #7, dchub #1 - our own name) and ABSENT for datacenter, power grid, energy, electricity, site selection, interconnection queue, colocation. Every term that placed was in the manifest text and every absent term was not - 7 for 7. Title now carries data center, site selection, colocation, electricity, power grid, gas and fiber at 85/100. This is a HYPOTHESIS about how the cascade registries index, not a proven lever; --glama gives the before/after. Display metadata only, no behaviour change, and remotes[0].url stays the canonical /mcp because the official registry is the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md. // 2.12.2 (2026-08-31): publish the manifest content that had silently accumulated. server.json's version last moved in 941b8d5; two commits after it changed the manifest without bumping (toolCount 82 -> 83, plus deploymentType / canonicalRemote / gatewayNote), so every publish since took the registry's duplicate-version 400, reported success, and left the official registry — the cascade source for PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md — advertising the superseded tool count and no gateway metadata. scripts/registry_version_bump_guard.py now fails that case instead of letting it pass green. This bump also carries gemini_cli + antigravity in persist_config (#279) out to the registry. No behaviour change.  // 2.12.1 (2026-08-29): publish-surface parity — #262 bumped package.json, server.json, mcp-server.json and smithery.yaml to 2.12.1 so the licence correction could publish, and the official registry now serves 2.12.1 as isLatest. server.mjs was missed, so the RUNNING server identified as 2.12.0 on both surfaces it controls (initialize serverInfo and /.well-known/mcp-server.json) while the registry advertised 2.12.1. The guard that exists to catch exactly this sat in a continue-on-error step and went red without blocking. No behaviour change.  // 2.12.0 (2026-08-12): maturity + coverage limits INLINE on tools/list — every tool's annotations carry maturity (mature/expanding/partial/unknown), the VERBATIM published limits, the canonical entry call (front_door) and a withdrawn flag, all DERIVED at startup from canonical/tool_maturity.json (owners: /api/v1/canon/coverage + /api/v1/reports/canonical-benchmarks, daily fail-closed snapshot); measured capture deferrals can only DEMOTE; the basis rides once at result _meta['cloud.dchub/maturity_basis']. No behaviour change, no new endpoint, no renames.  // 2.11.1 (2026-08-01): why_live ENUM-ized (planner 5.10, ChatGPT round-11) — replay.why_live_code from canonical taxonomy v2 why_live_reasons (8 requires_* codes), phrase resolved from the snapshot so stamped replays aggregate  // 2.11.0 (2026-07-31): canonical problem taxonomy — initialize instructions carry IN SCOPE + NOT IN SCOPE lists composed from canonical/problem_taxonomy.json (owner: dchub-backend routes/problem_taxonomy.py, daily fail-closed snapshot); discover_tools gains not_for; execute_plan description vocabulary = the canonical in_scope list; replay.why_live_data (planner v5.9) states why each answer needed live data (ChatGPT round-10)  // 2.10.0 (2026-07-30): recipe lifecycle first-class — execute_plan emits started/completed events (shared execution id) to /api/v1/mcp/track; completion stops being an inference (Perplexity round-5)  // 2.9.3 (2026-07-27): plan_query carries an operator-prompt upgrade note — the stale path is the notification channel  // 2.9.2 (2026-07-27): C1 accepts the FULL geography set a comparison intent names  // 2.9.1 (2026-07-26): front door rewritten from 7-platform agent review  // 2.9.0 (2026-07-26): front door routes to execute_plan + stale canon out of the instructions  // 2.8.1 (2026-07-26): fiber_power_pairing step 2 is parcel-vs-market aware  // 2.8.0 (2026-07-26): inline-key adoption + fiber_power_pairing planner class (non-RTO aware)  // 2.7.8 (2026-07-26): market-in-fallback slug kinds + RTO-only iso injection  // 2.7.7 (2026-07-26): intent geography as artifact producer — constraint iso/slug resolve unresolved hand-offs  // 2.7.6 (2026-07-26): next_recipe follow-up hints + ai-campus starter pack resource  // 2.7.5 (2026-07-26): intra-wave retry — artifacts produced by wave siblings resolve in one pass  // 2.7.4 (2026-07-26): leading-token placeholder kinds + ISO mint whitelist  // 2.7.3 (2026-07-26): per-tool mint contracts — ai_capacity_index market names slugified into hand-offs  // 2.7.2 (2026-07-26): execution invariants — harvest-before-slim, iso constraint propagation, constraint_check replay, planner-quality telemetry  // 2.7.0 (2026-07-26): execute_plan — the planner executes its own graph  // 2.6.0 (2026-07-26): prompts/list Agent Recipes — 5 tracked workflow prompts
 const API_BASE      = process.env.DCHUB_API_BASE      || 'https://dchub-backend-production.up.railway.app';
 const INTERNAL_KEY  = process.env.DCHUB_INTERNAL_KEY  || '';
 const PORT          = parseInt(process.env.PORT || '3100', 10);
@@ -1720,6 +1720,31 @@ export function _nodeTier(t) {
   return (s === 'pro' || s === 'founding' || s === 'team' || s === 'metered') ? 'paid' : s;
 }
 const _SESSION_UPGRADE_TIERS = new Set(['developer', 'pro', 'founding', 'paid', 'enterprise']);
+
+// r-tier-collapse-fix (2026-09-23): 'paid' is the ONE literal mcp_dev_keys.tier can hold
+// for Developer, Pro AND Founding purchases (main.py's webhook collapses all three at
+// write time — the column's CHECK constraint allows only free/paid/enterprise), so on a
+// Pro-only gate (LP_TOOLS, PRO_ONLY_TOOLS) it cannot be trusted the way 'pro'/'founding'/
+// 'enterprise' can. True unless the string IS the ambiguous literal — callers use this to
+// skip the async disambiguation entirely when a tier already proves Pro-or-above on its own.
+function _isUnambiguousProOrAbove(t) {
+  const s = String(t || '').toLowerCase();
+  return s !== 'paid' && _tierRank(s) >= _tierRank('pro');
+}
+// Resolves the ambiguity above via the ONE source that still carries the real plan name:
+// validate_key's tier_detail.users_plan, threaded through as .plan_tier (see
+// _validateKeyUncached). Re-validates through the existing 5-min keyCache — cheap on the
+// hot path, since this key was just validated to reach a 'paid'-tier call at all. Fails
+// OPEN (grants) when the plan truly cannot be resolved, so an already-paid caller is never
+// left worse off than before this fix; only a POSITIVELY-confirmed sub-Pro plan denies.
+async function _paidKeyIsProOrAbove(apiKey) {
+  if (!apiKey) return false;
+  let v = null;
+  try { v = await validateKey(apiKey); } catch (_) { v = null; }
+  const granular = String((v && v.plan_tier) || '').toLowerCase();
+  if (!granular) return true;
+  return _tierRank(granular) >= _tierRank('pro');
+}
 
 // r-durable-sub-key (2026-07-13): bind a keyed caller's SUBSCRIPTION checkout
 // (Starter/Developer/Pro) to their DURABLE key so the paid tier lands on the agent's
@@ -2404,6 +2429,9 @@ const MCP_PACKS = new Map([
     'get_power_availability_timeline', 'get_power_pipeline',
     'get_retirement_headroom', 'get_energy_prices', 'compare_isos',
     'get_iso_context',
+    // 2026-09-23: forward transmission projects (ERCOT TPIT) — the build-out
+    // side of headroom. The tool also carries gas projects; the gas pack lists it too.
+    'get_infra_projects',
   ] }],
 
   // The Managed Agent pack — a full siting decision from capacity target to
@@ -2437,6 +2465,9 @@ const MCP_PACKS = new Map([
   ['/mcp/gas', { pack: 'gas', spine: true, tools: [
     'get_gas_intelligence', 'get_gas_economics', 'get_gas_index',
     'get_energy_prices', 'get_power_pipeline',
+    // 2026-09-23: forward gas pipeline projects (EIA, US-wide) — capacity,
+    // miles, docket and status of what is being built to deliver gas.
+    'get_infra_projects',
   ] }],
 
   // Transaction and movement research.
@@ -3281,6 +3312,14 @@ async function _validateKeyUncached(api_key) {
       // inert there rather than inventing a demote from a missing field.
       demoted: data.demoted === true,
       demote_reason: data.demote_reason || null,
+      // r-tier-collapse-fix (2026-09-23): tier 'paid' is ambiguous — mcp_dev_keys.tier's
+      // 3-value CHECK constraint forces main.py's checkout webhook to stamp the same
+      // literal 'paid' for Developer ($49), Pro ($99) and Founding purchases alike, so it
+      // cannot on its own prove Pro-or-above for a Pro-only gate. The backend already
+      // resolves the real plan name via users.plan (_tier_cross_check) and has always
+      // returned it as tier_detail.users_plan — just unused here until now. Absent on an
+      // older backend or when no users row cross-checked (null), never a wrong plan name.
+      plan_tier: (data.tier_detail && data.tier_detail.users_plan) || null,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -5675,6 +5714,7 @@ const FREE_FULL_TOOLS = new Set([
   'research_task',
   'register_standing_intent', 'list_standing_intents', 'delete_standing_intent',
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
+  'get_infra_projects',    // public EIA gas pipeline projects (public domain) + ERCOT TPIT transmission projects (terms §5) — same free-citation class as get_power_pipeline (2026-09-23)
   'get_power_availability_timeline',  // composed timing view over the same public EIA-860M/LBNL facts — same free-citation class (shell 2026-07-30)
   'get_global_power',      // public GEM Global Integrated Power (CC-BY facts) — worldwide operating+planned power, same free-citation class
   // r-hosting-capacity (2026-07-28): utility-PUBLISHED feeder hosting capacity —
@@ -5926,7 +5966,17 @@ export const LP_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_composite
 
 export async function _lpAccessFor(c, tier) {
   const rank = Math.max(_tierRank(tier), _tierRank(c && c.tier));
-  if (rank >= _tierRank('pro')) return 'full';
+  if (rank >= _tierRank('pro')) {
+    // r-tier-collapse-fix (2026-09-23): that rank can come ONLY from the ambiguous
+    // literal 'paid' (Developer/Pro/Founding all collapse to it) — a Developer key
+    // ranks the same as a Pro one here. Grant on sight when EITHER source is an
+    // unambiguous Pro-or-above value; otherwise resolve the real plan before opening
+    // Land & Power's details, which the owner scoped to Pro and above only.
+    if (_isUnambiguousProOrAbove(tier) || _isUnambiguousProOrAbove(c && c.tier)
+        || await _paidKeyIsProOrAbove(c && c.api_key)) {
+      return 'full';
+    }
+  }
   if (c && (c.api_key || c.session_id)) {
     let cr = { credits: 0, lp_grandfathered: false };
     try { cr = await _getCredits(c); } catch (_) {}
@@ -6332,7 +6382,19 @@ export async function buildDepthTease(name, result, ctx, tier) {
   };
 }
 
-function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
+function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProOrAbove) {
+  // r-tier-collapse-fix (2026-09-23): 'paid' collapses Developer/Pro/Founding into one
+  // literal (see _paidKeyIsProOrAbove above), so on a PRO_ONLY_TOOLS member it cannot
+  // alone prove Pro-or-above. Treat an UNCONFIRMED 'paid' as 'developer' — the documented
+  // floor of what the literal can mean (main.py's _PLAN_RANK ranks 'paid' with
+  // 'developer', not with 'founding'/'pro') — so it falls through to the SAME
+  // developer/starter handling a few lines down (r-paidtaste, then the PAID_ONLY_TOOLS
+  // refusal) instead of the blanket short-circuit next. confirmedProOrAbove is resolved
+  // once per call at the call site, only when this ambiguity is actually in play — every
+  // other tier/tool combination reaches this line exactly as before.
+  if (tier === 'paid' && PRO_ONLY_TOOLS.has(toolName) && confirmedProOrAbove !== true) {
+    tier = 'developer';
+  }
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
   // after validate_trial_key() confirms a live, unexpired row in
@@ -9299,7 +9361,7 @@ const _ENTITY_MAP = {
   get_renewable_energy: 'energy', get_tax_incentives: 'incentives', get_water_risk: 'risk',
   ai_capacity_index: 'index', get_intelligence_index: 'index', get_agent_registry: 'meta',
   get_changes: 'changes', get_pipeline: 'pipeline', get_power_pipeline: 'pipeline', get_global_power: 'pipeline',
-  get_power_availability_timeline: 'pipeline',
+  get_power_availability_timeline: 'pipeline', get_infra_projects: 'pipeline',
   get_hosting_capacity: 'hosting_capacity_feeders',
   get_infrastructure: 'infrastructure', export_dataset: 'export', get_backup_status: 'meta',
   why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
@@ -11362,7 +11424,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         why: _oStr('What that class of source holds that DC Hub does not, quoting our own published limit'),
       }), 'What this question needs that DC Hub does NOT hold, named by SOURCE CLASS and never by vendor. An EMPTY array is an answer: DC Hub covers this class end to end.'),
       advisory: _oStr('States that this recommends an entry point and asserts nothing about success'),
-    }, 'ADVISORY router: collapses 91 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
+    }, 'ADVISORY router: collapses 92 tools to one starting point, then names what lies outside DC Hub entirely. Deliberately carries no tool list, latency promise, confidence score, execution graph or planner version — those ride `replay` AFTER routing. Four fields specified by ChatGPT in the 2026-08-29 partner round; external_sources_recommended added on its own request in the 2026-08-30 briefing, because a source we do not own is not execution metadata.'),
     best_tool: _oStr('The single best first tool to call for this intent (exact name from tools/list)'),
     confidence: _oNum('Deterministic router confidence, 0-1 — same intent always yields the same score; low values mean the intent was ambiguous (check alternatives). Alias of intent_confidence (v1 back-compat).'),
     intent_confidence: _oNum('How confident the router is that it read the QUESTION right (0-1, deterministic) — driven by keyword score + margin over the runner-up class'),
@@ -11595,9 +11657,9 @@ export const _TOOL_FAMILIES_TABLE = [
   // and reachable by NO navigation surface. It is the only DISTRIBUTION-level
   // entry here; everything else in this family answers at transmission level,
   // hence the added feeder/distribution keywords.
-  { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, energy pricing, whole-ISO briefings, and non-US generation.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit','global','worldwide','plant'],
+  { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, planned transmission and gas pipeline projects, energy pricing, whole-ISO briefings, and non-US generation.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit','global','worldwide','plant','transmission project','pipeline project'],
     front_door_when: 'Use execute_plan when price or headroom is one factor in a siting/comparison question ("cheapest ISO to land 100MW") — the cheapest ISO is frequently the one with no headroom, so a price read alone mis-answers it. Today\'s price for ONE ISO is a single lookup: call get_energy_prices directly.',
-    tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices','get_iso_context','get_global_power'] },
+    tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices','get_iso_context','get_global_power','get_infra_projects'] },
   { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
     tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
   { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+hazard+climate+tax+permitting+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select','find','search','where','candidates','shortlist','hazard','flood','wildfire','seismic','climate','permitting','moratorium','composite','verdict'],
@@ -14382,7 +14444,13 @@ function trackedTool(srv, name, description, schema, handler) {
           return _lpPreviewResult(name, await handler(args));
         }
       }
-      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
+      // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
+      // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
+      // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
+      // short-circuit is untouched).
+      const _confirmedPro = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
+        ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
+      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro);
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
       // free-taste logic, BELOW paid (paid/enterprise already short-circuited in
@@ -14767,7 +14835,12 @@ function trackedTool(srv, name, description, schema, handler) {
                 _gateTier = _m.tier;
                 try { recordSessionUpgrade(c.platform, _m.tier); } catch (_) {}
                 console.log(`[MCP] keystone session-bind sid=${String(_sid).slice(0,8)} → ${_m.tier} (durable claim, cross-replica)`);
-                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
+                // r-tier-collapse-fix (2026-09-23): _m.tier rides straight from
+                // tier_upgrade with no _nodeTier pass, so it CAN be the collapsed 'paid'
+                // — same disambiguation as the primary gate call above.
+                const _confirmedProK = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
+                  ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
+                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedProK);
                 if (_gateK.allowed) {
                   const _resK = await handler(args);
                   // r-bind-midcall-mask: `masked` is the gate letting a free/identified
@@ -14804,8 +14877,13 @@ function trackedTool(srv, name, description, schema, handler) {
                 // r-paid-lift: the gate's vocabulary, not the plan name (see _nodeTier).
                 _gateTier = _nodeTier(_newTier);
                 if (_gateTier === 'developer' && !PRO_ONLY_TOOLS.has(name)) _gateTier = 'paid';
+                // r-tier-collapse-fix (2026-09-23): _newTier is one of the four literal
+                // words checked above, never the ambiguous 'paid' — so when _gateTier
+                // reads 'paid' here it can only be _nodeTier's pro/founding normalization,
+                // already confirmed. Resolve synchronously; no disambiguation hop needed.
+                const _confirmedPro2 = _isUnambiguousProOrAbove(_newTier) ? true : undefined;
                 // Re-evaluate the gate at the new tier — should now allow.
-                const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
+                const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedPro2);
                 if (_gate2.allowed) {
                   // r-location-tier: this branch lifts _gateTier but not c.tier, so
                   // the location gate would read the pre-purchase tier. Carry the
@@ -18892,6 +18970,54 @@ function createServer(descOverrides, instructionsTail) {
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
+  // 2026-09-23: the forward PROJECT lists for gas and transmission (dchub-backend
+  // GET /api/v1/infra-projects, #5315). Every federal gas/transmission ASSET
+  // layer is frozen upstream; new information only appears in project lists —
+  // EIA's natural gas pipeline projects workbook (public domain, US-wide) and
+  // ERCOT's TPIT (terms §5 allow redistribution in compilations; Texas only).
+  // Same tier class as get_power_pipeline: public-source facts, not
+  // $-aggregates, so it sits in FREE_FULL_TOOLS next to it — a citation hook.
+  trackedTool(srv, 'get_infra_projects', 'Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. "which interstate gas pipelines are under construction into Louisiana?", "what 345 kV transmission projects does ERCOT plan by 2028?", "what new projects appeared since last month?". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from ERCOT\'s Transmission Project and Information Tracking list (TPIT) — ERCOT/TEXAS ONLY so far, no other ISO or utility — owner, from/to substation, county, kV, new and rebuilt miles, MVA, projected and actual in-service date, status (Planned, Conceptual, Under Construction, Completed, or dropped from the plan). Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source. Answers "what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).',
+    { type: z.enum(['gas_pipeline', 'transmission', 'all']).optional().describe('Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)'),
+      state: S.describe('US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX'),
+      status: S.describe('Status, case-insensitive; comma list allowed. Gas: Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed. Transmission: Planned, Conceptual, Under Construction, Completed, Cancelled'),
+      min_capacity: N.describe('Gas only: minimum pipeline capacity in million cubic feet per day (MMcf/d), e.g. 1000. With type=all it narrows to gas projects'),
+      min_kv: N.describe('Transmission only: minimum voltage in kilovolts (kV), e.g. 345. With type=all it narrows to transmission projects'),
+      in_service_after: S.describe('Only projects entering service on or after this date (YYYY-MM-DD or YYYY). Gas compares the in-service year; transmission the actual, else projected, in-service date'),
+      in_service_before: S.describe('Only projects entering service on or before this date (YYYY-MM-DD or YYYY)'),
+      new_since: S.describe('Only projects DC Hub first saw on or after this date (YYYY-MM-DD). The initial backfill is never counted as new'),
+      include_delisted: B.describe('Also return projects the latest source release no longer lists (completed, withdrawn or dropped). Default false'),
+      limit: LIMIT },
+    async (a) => {
+      const q = { limit: Math.min((a && a.limit) || 25, 200) };
+      for (const k of ['type', 'state', 'status', 'min_capacity', 'min_kv',
+        'in_service_after', 'in_service_before', 'new_since']) {
+        if (a && a[k] !== undefined && a[k] !== null && a[k] !== '') q[k] = a[k];
+      }
+      if (a && a.include_delisted === true) q.include_delisted = 1;
+      const d = await callAPI('/api/v1/infra-projects', q);
+      if (!d || d.ok !== true) {
+        const err = (d && typeof d === 'object') ? d : { error: 'no response from /api/v1/infra-projects' };
+        return { content: [{ type: 'text', text: JSON.stringify(err, null, 2) }], structuredContent: err };
+      }
+      const out = {
+        summary: d.summary,
+        types_queried: d.types_queried,
+        filters: d.filters,
+        ignored: d.ignored,
+        gas_pipeline_projects: d.gas_pipeline_projects,
+        transmission_projects: d.transmission_projects,
+        sources: d.sources,
+        coverage_note: d.coverage_note,
+        source: 'DC Hub (dchub.cloud) — EIA natural gas pipeline projects (public domain) and ERCOT TPIT transmission projects (ERCOT terms §5); each row carries source_url and license',
+        see_also: {
+          generation_projects: 'get_power_pipeline',
+          existing_assets: 'get_infrastructure, get_grid_intelligence',
+        },
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+    });
+
   // Shell of 2026-07-30 (brain digest, six drafts, every adversary "build it"):
   // power-delivery TIMING — the composed year-by-year view over the same
   // EIA-860M + retirements + LBNL-queue data the neighbours expose raw.
@@ -21425,7 +21551,7 @@ function createServer(descOverrides, instructionsTail) {
      '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
-     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 24,500+ across 170+ countries.\n\n**Infrastructure:** 330,000+ mapped assets — 127k substations, 94k transmission lines, 58k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
+     '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** 24,500+ across 170+ countries.\n\n**Infrastructure:** 330,000+ mapped assets — 133k substations, 94k transmission lines, 58k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');
 
   // ── r-promres (2026-07-18): recipe PROMPTS + reference RESOURCES ──────────
   // The two MCP capabilities registry scorecards (LobeHub et al.) still mark
@@ -21541,7 +21667,7 @@ This is a deal registration: DC Hub sends the provider only your human's company
       'text/plain',
       () => _resFetchText('https://dchub.cloud/llms.txt', 'text/plain, text/markdown',
         (err) => 'DC Hub — live data-center / grid / fiber / M&A intelligence for AI agents.\n'
-          + 'MCP endpoint: https://dchub.cloud/mcp — 91 tools; start with get_grid_scoreboard (free, no key).\n'
+          + 'MCP endpoint: https://dchub.cloud/mcp — 92 tools; start with get_grid_scoreboard (free, no key).\n'
           + `(live fetch of https://dchub.cloud/llms.txt failed: ${err} — retry later or open the URL directly)`));
   _RD('canonical-workflows', 'dchub://canonical-workflows', 'DC Hub canonical workflows',
       'The canonical copy-paste workflows behind the 6-recipe pack (market_selection, grid_and_queue, water_risk, whats_changed, site_analysis, hyperscaler_activity).',
@@ -23173,7 +23299,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
+export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim, _paidKeyIsProOrAbove, _isUnambiguousProOrAbove, PRO_ONLY_TOOLS, validateKey, keyCache };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
 // `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous

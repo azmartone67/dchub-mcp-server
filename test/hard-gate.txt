@@ -98,6 +98,7 @@ test/human-line-first.test.mjs
 test/human-relay-artifact.test.mjs
 test/hyperscaler-deals-schema.test.mjs
 test/incentives-class.test.mjs
+test/infra-projects-tool.test.mjs
 test/init-clientinfo-version-error.test.mjs
 test/instructions-canon-parity.test.mjs
 test/instructions-compose.test.mjs
@@ -203,6 +204,7 @@ test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs
 test/substations-heal-from-canon.test.mjs
 test/summarize-citation.test.mjs
+test/tier-collapse-fix.test.mjs
 test/time-to-power-one-name.test.mjs
 test/tool-aliases-resolve.test.mjs
 test/tool-description-honesty.test.mjs
