@@ -1721,6 +1721,31 @@ export function _nodeTier(t) {
 }
 const _SESSION_UPGRADE_TIERS = new Set(['developer', 'pro', 'founding', 'paid', 'enterprise']);
 
+// r-tier-collapse-fix (2026-09-23): 'paid' is the ONE literal mcp_dev_keys.tier can hold
+// for Developer, Pro AND Founding purchases (main.py's webhook collapses all three at
+// write time — the column's CHECK constraint allows only free/paid/enterprise), so on a
+// Pro-only gate (LP_TOOLS, PRO_ONLY_TOOLS) it cannot be trusted the way 'pro'/'founding'/
+// 'enterprise' can. True unless the string IS the ambiguous literal — callers use this to
+// skip the async disambiguation entirely when a tier already proves Pro-or-above on its own.
+function _isUnambiguousProOrAbove(t) {
+  const s = String(t || '').toLowerCase();
+  return s !== 'paid' && _tierRank(s) >= _tierRank('pro');
+}
+// Resolves the ambiguity above via the ONE source that still carries the real plan name:
+// validate_key's tier_detail.users_plan, threaded through as .plan_tier (see
+// _validateKeyUncached). Re-validates through the existing 5-min keyCache — cheap on the
+// hot path, since this key was just validated to reach a 'paid'-tier call at all. Fails
+// OPEN (grants) when the plan truly cannot be resolved, so an already-paid caller is never
+// left worse off than before this fix; only a POSITIVELY-confirmed sub-Pro plan denies.
+async function _paidKeyIsProOrAbove(apiKey) {
+  if (!apiKey) return false;
+  let v = null;
+  try { v = await validateKey(apiKey); } catch (_) { v = null; }
+  const granular = String((v && v.plan_tier) || '').toLowerCase();
+  if (!granular) return true;
+  return _tierRank(granular) >= _tierRank('pro');
+}
+
 // r-durable-sub-key (2026-07-13): bind a keyed caller's SUBSCRIPTION checkout
 // (Starter/Developer/Pro) to their DURABLE key so the paid tier lands on the agent's
 // OWN key (survives session rotation) — the post-payment leak, same class the pk- pack
@@ -3281,6 +3306,14 @@ async function _validateKeyUncached(api_key) {
       // inert there rather than inventing a demote from a missing field.
       demoted: data.demoted === true,
       demote_reason: data.demote_reason || null,
+      // r-tier-collapse-fix (2026-09-23): tier 'paid' is ambiguous — mcp_dev_keys.tier's
+      // 3-value CHECK constraint forces main.py's checkout webhook to stamp the same
+      // literal 'paid' for Developer ($49), Pro ($99) and Founding purchases alike, so it
+      // cannot on its own prove Pro-or-above for a Pro-only gate. The backend already
+      // resolves the real plan name via users.plan (_tier_cross_check) and has always
+      // returned it as tier_detail.users_plan — just unused here until now. Absent on an
+      // older backend or when no users row cross-checked (null), never a wrong plan name.
+      plan_tier: (data.tier_detail && data.tier_detail.users_plan) || null,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -5926,7 +5959,17 @@ export const LP_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_composite
 
 export async function _lpAccessFor(c, tier) {
   const rank = Math.max(_tierRank(tier), _tierRank(c && c.tier));
-  if (rank >= _tierRank('pro')) return 'full';
+  if (rank >= _tierRank('pro')) {
+    // r-tier-collapse-fix (2026-09-23): that rank can come ONLY from the ambiguous
+    // literal 'paid' (Developer/Pro/Founding all collapse to it) — a Developer key
+    // ranks the same as a Pro one here. Grant on sight when EITHER source is an
+    // unambiguous Pro-or-above value; otherwise resolve the real plan before opening
+    // Land & Power's details, which the owner scoped to Pro and above only.
+    if (_isUnambiguousProOrAbove(tier) || _isUnambiguousProOrAbove(c && c.tier)
+        || await _paidKeyIsProOrAbove(c && c.api_key)) {
+      return 'full';
+    }
+  }
   if (c && (c.api_key || c.session_id)) {
     let cr = { credits: 0, lp_grandfathered: false };
     try { cr = await _getCredits(c); } catch (_) {}
@@ -6332,7 +6375,19 @@ export async function buildDepthTease(name, result, ctx, tier) {
   };
 }
 
-function applyTierGate(toolName, params, tier, hasApiKey, isTrial) {
+function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProOrAbove) {
+  // r-tier-collapse-fix (2026-09-23): 'paid' collapses Developer/Pro/Founding into one
+  // literal (see _paidKeyIsProOrAbove above), so on a PRO_ONLY_TOOLS member it cannot
+  // alone prove Pro-or-above. Treat an UNCONFIRMED 'paid' as 'developer' — the documented
+  // floor of what the literal can mean (main.py's _PLAN_RANK ranks 'paid' with
+  // 'developer', not with 'founding'/'pro') — so it falls through to the SAME
+  // developer/starter handling a few lines down (r-paidtaste, then the PAID_ONLY_TOOLS
+  // refusal) instead of the blanket short-circuit next. confirmedProOrAbove is resolved
+  // once per call at the call site, only when this ambiguity is actually in play — every
+  // other tier/tool combination reaches this line exactly as before.
+  if (tier === 'paid' && PRO_ONLY_TOOLS.has(toolName) && confirmedProOrAbove !== true) {
+    tier = 'developer';
+  }
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
   // after validate_trial_key() confirms a live, unexpired row in
@@ -14382,7 +14437,13 @@ function trackedTool(srv, name, description, schema, handler) {
           return _lpPreviewResult(name, await handler(args));
         }
       }
-      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true);
+      // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
+      // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
+      // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
+      // short-circuit is untouched).
+      const _confirmedPro = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
+        ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
+      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro);
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
       // free-taste logic, BELOW paid (paid/enterprise already short-circuited in
@@ -14767,7 +14828,12 @@ function trackedTool(srv, name, description, schema, handler) {
                 _gateTier = _m.tier;
                 try { recordSessionUpgrade(c.platform, _m.tier); } catch (_) {}
                 console.log(`[MCP] keystone session-bind sid=${String(_sid).slice(0,8)} → ${_m.tier} (durable claim, cross-replica)`);
-                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
+                // r-tier-collapse-fix (2026-09-23): _m.tier rides straight from
+                // tier_upgrade with no _nodeTier pass, so it CAN be the collapsed 'paid'
+                // — same disambiguation as the primary gate call above.
+                const _confirmedProK = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
+                  ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
+                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedProK);
                 if (_gateK.allowed) {
                   const _resK = await handler(args);
                   // r-bind-midcall-mask: `masked` is the gate letting a free/identified
@@ -14804,8 +14870,13 @@ function trackedTool(srv, name, description, schema, handler) {
                 // r-paid-lift: the gate's vocabulary, not the plan name (see _nodeTier).
                 _gateTier = _nodeTier(_newTier);
                 if (_gateTier === 'developer' && !PRO_ONLY_TOOLS.has(name)) _gateTier = 'paid';
+                // r-tier-collapse-fix (2026-09-23): _newTier is one of the four literal
+                // words checked above, never the ambiguous 'paid' — so when _gateTier
+                // reads 'paid' here it can only be _nodeTier's pro/founding normalization,
+                // already confirmed. Resolve synchronously; no disambiguation hop needed.
+                const _confirmedPro2 = _isUnambiguousProOrAbove(_newTier) ? true : undefined;
                 // Re-evaluate the gate at the new tier — should now allow.
-                const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true);
+                const _gate2 = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedPro2);
                 if (_gate2.allowed) {
                   // r-location-tier: this branch lifts _gateTier but not c.tier, so
                   // the location gate would read the pre-purchase tier. Carry the
@@ -23173,7 +23244,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim };
+export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim, _paidKeyIsProOrAbove, _isUnambiguousProOrAbove, PRO_ONLY_TOOLS, validateKey, keyCache };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
 // `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous
