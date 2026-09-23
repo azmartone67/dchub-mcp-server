@@ -2429,6 +2429,9 @@ const MCP_PACKS = new Map([
     'get_power_availability_timeline', 'get_power_pipeline',
     'get_retirement_headroom', 'get_energy_prices', 'compare_isos',
     'get_iso_context',
+    // 2026-09-23: forward transmission projects (ERCOT TPIT) — the build-out
+    // side of headroom. The tool also carries gas projects; the gas pack lists it too.
+    'get_infra_projects',
   ] }],
 
   // The Managed Agent pack — a full siting decision from capacity target to
@@ -2462,6 +2465,9 @@ const MCP_PACKS = new Map([
   ['/mcp/gas', { pack: 'gas', spine: true, tools: [
     'get_gas_intelligence', 'get_gas_economics', 'get_gas_index',
     'get_energy_prices', 'get_power_pipeline',
+    // 2026-09-23: forward gas pipeline projects (EIA, US-wide) — capacity,
+    // miles, docket and status of what is being built to deliver gas.
+    'get_infra_projects',
   ] }],
 
   // Transaction and movement research.
@@ -5708,6 +5714,7 @@ const FREE_FULL_TOOLS = new Set([
   'research_task',
   'register_standing_intent', 'list_standing_intents', 'delete_standing_intent',
   'get_power_pipeline',    // public EIA-860M planned generation (facts, not $-aggregates) — free citation hook, same class as get_energy_prices/get_renewable_energy
+  'get_infra_projects',    // public EIA gas pipeline projects (public domain) + ERCOT TPIT transmission projects (terms §5) — same free-citation class as get_power_pipeline (2026-09-23)
   'get_power_availability_timeline',  // composed timing view over the same public EIA-860M/LBNL facts — same free-citation class (shell 2026-07-30)
   'get_global_power',      // public GEM Global Integrated Power (CC-BY facts) — worldwide operating+planned power, same free-citation class
   // r-hosting-capacity (2026-07-28): utility-PUBLISHED feeder hosting capacity —
@@ -9354,7 +9361,7 @@ const _ENTITY_MAP = {
   get_renewable_energy: 'energy', get_tax_incentives: 'incentives', get_water_risk: 'risk',
   ai_capacity_index: 'index', get_intelligence_index: 'index', get_agent_registry: 'meta',
   get_changes: 'changes', get_pipeline: 'pipeline', get_power_pipeline: 'pipeline', get_global_power: 'pipeline',
-  get_power_availability_timeline: 'pipeline',
+  get_power_availability_timeline: 'pipeline', get_infra_projects: 'pipeline',
   get_hosting_capacity: 'hosting_capacity_feeders',
   get_infrastructure: 'infrastructure', export_dataset: 'export', get_backup_status: 'meta',
   why_dchub: 'meta', unlock_more_data: 'meta', claim_free_key: 'meta', bind_email: 'meta',
@@ -11652,9 +11659,9 @@ export const _TOOL_FAMILIES_TABLE = [
   // hence the added feeder/distribution keywords.
   { family: 'grid_power', when: 'Grid headroom, interconnection queue, utility-published feeder hosting capacity, power generation pipeline, energy pricing, whole-ISO briefings, and non-US generation.', keywords: ['grid','power','iso','headroom','interconnection','queue','ttp','energy','lmp','feeder','hosting capacity','distribution','circuit','global','worldwide','plant'],
     front_door_when: 'Use execute_plan when price or headroom is one factor in a siting/comparison question ("cheapest ISO to land 100MW") — the cheapest ISO is frequently the one with no headroom, so a price read alone mis-answers it. Today\'s price for ONE ISO is a single lookup: call get_energy_prices directly.',
-    tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices','get_iso_context','get_global_power'] },
+    tools: ['get_grid_scoreboard','get_grid_intelligence','get_grid_data','compare_isos','get_interconnection_queue','get_refined_queue','get_retirement_headroom','get_hosting_capacity','get_power_pipeline','get_power_availability_timeline','grid_transition_radar','get_energy_prices','get_iso_context','get_global_power','get_infra_projects'] },
   { family: 'gas_btm', when: 'Behind-the-meter / gas-fired power economics for a market.', keywords: ['gas','btm','behind-the-meter','pipeline','dcgi','baseload'],
-    tools: ['get_gas_index','get_gas_economics','get_gas_intelligence'] },
+    tools: ['get_gas_index','get_gas_economics','get_gas_intelligence','get_infra_projects'] },
   { family: 'site_geometry', when: 'Score, compare, or optimize specific SITES or parcels (grid+fiber+water+hazard+climate+tax+permitting+verdict).', keywords: ['site','parcel','geometry','water','risk','tax','acreage','optimize','rank','select','find','search','where','candidates','shortlist','hazard','flood','wildfire','seismic','climate','permitting','moratorium','composite','verdict'],
     front_door_when: 'Use execute_plan for a site VERDICT spanning grid + fiber + water + tax + climate instead of hand-chaining these tools. One factor on its own (water risk, renewables, tax) is a single lookup — call that tool directly.',
     tools: ['find_sites','analyze_site','analyze_parcel','rank_sites','compare_sites','get_water_risk','get_tax_incentives','get_dchub_recommendation','site_selection_canvas','generate_site_analysis','get_infrastructure','get_renewable_energy','get_composite_site_score','get_disaster_risk','get_climate_intel','get_permitting_intel'] },
@@ -18959,6 +18966,54 @@ function createServer(descOverrides, instructionsTail) {
         as_of: d && d.as_of,
         source: 'DC Hub — EIA-860M planned generators (dchub.cloud)',
         largest_projects: top,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+    });
+
+  // 2026-09-23: the forward PROJECT lists for gas and transmission (dchub-backend
+  // GET /api/v1/infra-projects, #5315). Every federal gas/transmission ASSET
+  // layer is frozen upstream; new information only appears in project lists —
+  // EIA's natural gas pipeline projects workbook (public domain, US-wide) and
+  // ERCOT's TPIT (terms §5 allow redistribution in compilations; Texas only).
+  // Same tier class as get_power_pipeline: public-source facts, not
+  // $-aggregates, so it sits in FREE_FULL_TOOLS next to it — a citation hook.
+  trackedTool(srv, 'get_infra_projects', 'Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. "which interstate gas pipelines are under construction into Louisiana?", "what 345 kV transmission projects does ERCOT plan by 2028?", "what new projects appeared since last month?". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from ERCOT\'s Transmission Project and Information Tracking list (TPIT) — ERCOT/TEXAS ONLY so far, no other ISO or utility — owner, from/to substation, county, kV, new and rebuilt miles, MVA, projected and actual in-service date, status (Planned, Conceptual, Under Construction, Completed, Cancelled). Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source. Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).',
+    { type: z.enum(['gas_pipeline', 'transmission', 'all']).optional().describe('Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)'),
+      state: S.describe('US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX'),
+      status: S.describe('Status, case-insensitive; comma list allowed. Gas: Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed. Transmission: Planned, Conceptual, Under Construction, Completed, Cancelled'),
+      min_capacity: N.describe('Gas only: minimum pipeline capacity in million cubic feet per day (MMcf/d), e.g. 1000. With type=all it narrows to gas projects'),
+      min_kv: N.describe('Transmission only: minimum voltage in kilovolts (kV), e.g. 345. With type=all it narrows to transmission projects'),
+      in_service_after: S.describe('Only projects entering service on or after this date (YYYY-MM-DD or YYYY). Gas compares the in-service year; transmission the actual, else projected, in-service date'),
+      in_service_before: S.describe('Only projects entering service on or before this date (YYYY-MM-DD or YYYY)'),
+      new_since: S.describe('Only projects DC Hub first saw on or after this date (YYYY-MM-DD). The initial backfill is never counted as new'),
+      include_delisted: B.describe('Also return projects the latest source release no longer lists (completed, withdrawn or dropped). Default false'),
+      limit: LIMIT },
+    async (a) => {
+      const q = { limit: Math.min((a && a.limit) || 25, 200) };
+      for (const k of ['type', 'state', 'status', 'min_capacity', 'min_kv',
+        'in_service_after', 'in_service_before', 'new_since']) {
+        if (a && a[k] !== undefined && a[k] !== null && a[k] !== '') q[k] = a[k];
+      }
+      if (a && a.include_delisted === true) q.include_delisted = 1;
+      const d = await callAPI('/api/v1/infra-projects', q);
+      if (!d || d.ok !== true) {
+        const err = (d && typeof d === 'object') ? d : { error: 'no response from /api/v1/infra-projects' };
+        return { content: [{ type: 'text', text: JSON.stringify(err, null, 2) }], structuredContent: err };
+      }
+      const out = {
+        summary: d.summary,
+        types_queried: d.types_queried,
+        filters: d.filters,
+        ignored: d.ignored,
+        gas_pipeline_projects: d.gas_pipeline_projects,
+        transmission_projects: d.transmission_projects,
+        sources: d.sources,
+        coverage_note: d.coverage_note,
+        source: 'DC Hub (dchub.cloud) — EIA natural gas pipeline projects (public domain) and ERCOT TPIT transmission projects (ERCOT terms §5); each row carries source_url and license',
+        see_also: {
+          generation_projects: 'get_power_pipeline',
+          existing_assets: 'get_infrastructure, get_grid_intelligence',
+        },
       };
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
