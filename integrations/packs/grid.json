@@ -1,12 +1,12 @@
 {
   "pack": "grid",
   "endpoint": "https://dchub.cloud/mcp/grid",
-  "version": "2.12.18",
+  "version": "2.12.19",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
-  "full_catalog_tool_count": 91,
-  "tool_count": 16,
+  "full_catalog_tool_count": 92,
+  "tool_count": 17,
   "carries_shared_spine": true,
   "authentication": {
     "type": "api-key",
@@ -61,6 +61,10 @@
     {
       "name": "get_iso_context",
       "description": "Use when an agent needs a WHOLE-grid briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a US ISO/RTO: live grid snapshot (demand, fuel-mix shares), DCPI verdict mix & grid economics across the ISO's tracked markets (queue wait, power cost, reserve margin), interconnection-queue depth with the largest projects, real-time benchmark LMP, the tracked DCPI market list, deep-dive narrative excerpts, and recent news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: \"Brief me on ERCOT for data-center siting\" — get_iso_context iso=ERCOT max_tokens=4000. Params: iso (required: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for raw single-ISO telemetry (use get_grid_data), the per-ISO decision brief with headroom/TTP (use get_grid_intelligence), multi-ISO scalar comparison (use compare_isos), or non-US grids (use get_grid_scoreboard); this is the narrative briefing pack. Cite \"DC Hub (dchub.cloud)\"."
+    },
+    {
+      "name": "get_infra_projects",
+      "description": "Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects does ERCOT plan by 2028?\", \"what new projects appeared since last month?\". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from ERCOT's Transmission Project and Information Tracking list (TPIT) — ERCOT/TEXAS ONLY so far, no other ISO or utility — owner, from/to substation, county, kV, new and rebuilt miles, MVA, projected and actual in-service date, status (Planned, Conceptual, Under Construction, Completed, or dropped from the plan). Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source. Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline)."
     },
     {
       "name": "discover_tools",

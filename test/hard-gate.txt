@@ -98,6 +98,7 @@ test/human-line-first.test.mjs
 test/human-relay-artifact.test.mjs
 test/hyperscaler-deals-schema.test.mjs
 test/incentives-class.test.mjs
+test/infra-projects-tool.test.mjs
 test/init-clientinfo-version-error.test.mjs
 test/instructions-canon-parity.test.mjs
 test/instructions-compose.test.mjs
