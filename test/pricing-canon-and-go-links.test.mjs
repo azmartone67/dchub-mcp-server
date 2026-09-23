@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   PLAN_PRICE, FOUNDING_URL, PRO_URL, _priceLabel, _paidPlansLine, _keyBoundSubUrl,
-  _keyBoundPackUrl, _keyBoundUpgradeUrl, _keyBoundTiers, _goUrl,
+  _keyBoundPackUrl, _keyBoundUpgradeUrl, _keyBoundTiers, _goUrl, _ctxALS,
 } from '../server.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -188,5 +188,44 @@ describe('#7 — every key-bound upgrade link pays, and is measured', () => {
   });
   it('_goUrl still knows the founding link (legacy subs keep attributing)', () => {
     expect(decode(_goUrl(FOUNDING_URL + '?client_reference_id=k-x')).plan).toBe('founding');
+  });
+});
+
+// r-go-c-key-bound-sid (2026-09-23). decode() above reads only [plan, ref] —
+// `Buffer…split('|')` silently drops a third field, so every test in #7 would
+// pass identically whether or not these four builders carry the caller's
+// session. None of them took a sessionId argument or ran inside ctx.run(), so
+// nothing here had ever actually exercised _goUrl's ctx.getStore() fallback
+// for the key-bound family (unlike _subCheckoutUrl/_packCheckoutUrl, covered
+// in test/go-sid-and-two-rungs.test.mjs). Probed directly 2026-09-23: it
+// already works — this pins that behaviour so it can't regress silently.
+describe('#7b — key-bound builders also carry the session (ref_kind=session, v7)', () => {
+  const SID = '1aa6536d-b1d4-24b4-74a8-e89ba266e781';
+  const withCtx = (store, fn) => _ctxALS.run({ ...store }, fn);
+  function decodeAll(url) {
+    const token = url.replace('https://dchub.cloud/go/c/', '');
+    const payload = token.slice(0, token.lastIndexOf('.'));
+    return Buffer.from(payload, 'base64url').toString().split('|');
+  }
+  it('_keyBoundSubUrl: k-<hash> gains the session as a third field', () => {
+    const url = withCtx({ session_id: SID, api_key: KEY }, () => _keyBoundSubUrl(PRO_URL, KEY));
+    expect(decodeAll(url)).toEqual(['pro', 'k-' + KHASH, SID]);
+  });
+  it('_keyBoundPackUrl: pk-<hash> gains the session as a third field', () => {
+    const url = withCtx({ session_id: SID, api_key: KEY }, () => _keyBoundPackUrl(KEY));
+    expect(decodeAll(url)).toEqual(['metered', 'pk-' + KHASH, SID]);
+  });
+  it('_keyBoundUpgradeUrl (the redeemed-claim rung): same session binding', () => {
+    const url = withCtx({ session_id: SID, api_key: KEY }, () => _keyBoundUpgradeUrl(KEY));
+    expect(decodeAll(url)).toEqual(['pro', 'k-' + KHASH, SID]);
+  });
+  it('_keyBoundTiers: every rung (starter/developer/pro) carries the session', () => {
+    const t = withCtx({ session_id: SID, api_key: KEY }, () => _keyBoundTiers(KEY));
+    for (const [plan, url] of Object.entries(t)) {
+      expect(decodeAll(url)).toEqual([plan, 'k-' + KHASH, SID]);
+    }
+  });
+  it('off-request (no ctx.run): degrades to the two-field token, never throws', () => {
+    expect(decodeAll(_keyBoundSubUrl(PRO_URL, KEY))).toEqual(['pro', 'k-' + KHASH]);
   });
 });
