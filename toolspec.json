@@ -1121,6 +1121,62 @@
     }
   },
   {
+    "name": "get_infra_projects",
+    "description": "Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects does ERCOT plan by 2028?\", \"what new projects appeared since last month?\". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from ERCOT's Transmission Project and Information Tracking list (TPIT) — ERCOT/TEXAS ONLY so far, no other ISO or utility — owner, from/to substation, county, kV, new and rebuilt miles, MVA, projected and actual in-service date, status (Planned, Conceptual, Under Construction, Completed, or dropped from the plan). Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source. Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)",
+          "type": "string",
+          "enum": [
+            "gas_pipeline",
+            "transmission",
+            "all"
+          ]
+        },
+        "state": {
+          "description": "US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status, case-insensitive; comma list allowed. Gas: Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed. Transmission: Planned, Conceptual, Under Construction, Completed, Cancelled",
+          "type": "string"
+        },
+        "min_capacity": {
+          "description": "Gas only: minimum pipeline capacity in million cubic feet per day (MMcf/d), e.g. 1000. With type=all it narrows to gas projects",
+          "type": "number"
+        },
+        "min_kv": {
+          "description": "Transmission only: minimum voltage in kilovolts (kV), e.g. 345. With type=all it narrows to transmission projects",
+          "type": "number"
+        },
+        "in_service_after": {
+          "description": "Only projects entering service on or after this date (YYYY-MM-DD or YYYY). Gas compares the in-service year; transmission the actual, else projected, in-service date",
+          "type": "string"
+        },
+        "in_service_before": {
+          "description": "Only projects entering service on or before this date (YYYY-MM-DD or YYYY)",
+          "type": "string"
+        },
+        "new_since": {
+          "description": "Only projects DC Hub first saw on or after this date (YYYY-MM-DD). The initial backfill is never counted as new",
+          "type": "string"
+        },
+        "include_delisted": {
+          "description": "Also return projects the latest source release no longer lists (completed, withdrawn or dropped). Default false",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "Max results to return (1-500; default varies by tool)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        }
+      }
+    }
+  },
+  {
     "name": "get_infrastructure",
     "description": "Nearby infrastructure for a location — substations (count + max voltage_kv within radius), transmission lines (>69 kV path overlay), interstate + lateral gas pipelines, and power plants (operating + planned, by fuel) within configurable radius_km. Returns distance + capacity for each, joined to HIFLD/EIA. Answers \"what is near this parcel\", \"how far is the nearest substation and what voltage is it\". Try: get_infrastructure lat=33.45 lon=-112.07 radius_km=25. Returns raw nearby assets; do NOT use for a single scored site-suitability verdict (use analyze_site).",
     "inputSchema": {

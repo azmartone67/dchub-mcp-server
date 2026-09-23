@@ -58,6 +58,10 @@
         "enabled": true
       },
       {
+        "name": "get_infra_projects",
+        "enabled": true
+      },
+      {
         "name": "discover_tools",
         "enabled": true
       },
