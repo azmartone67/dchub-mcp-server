@@ -2,8 +2,8 @@
   "_generated_by": "scripts/refresh-canon-phrases.mjs",
   "_source": "https://dchub.cloud/api/v1/canon/phrases",
   "_warning": "CANONICAL SNAPSHOT — DO NOT HAND-EDIT. Refreshed by daily-manifest-sync; consumed by sync-tools-manifest.mjs (and the smithery-canon-guard test) as the source for every phrase quantity in server.mjs + the registry files.",
-  "retrieved_at": "2026-09-22T00:37:10.294Z",
-  "tools": 91,
+  "retrieved_at": "2026-09-23T20:28:06.946Z",
+  "tools": 92,
   "assets": "330,000+",
   "countries": "170+",
   "dcpi_countries": "30+",
@@ -12,6 +12,6 @@
   "fiber_routes": "58,000+",
   "markets": "300+",
   "news_sources": "2,000+",
-  "substations": "127,000+",
+  "substations": "133,000+",
   "transmission_lines": "94,000+"
 }
