@@ -125,4 +125,46 @@ describe('SMITHERY-LISTING-PASTE.md — one origin for the description', () => {
     // and it must be the keyless promise, not a bare link
     expect(SRC).toMatch(/keyless/i);
   });
+
+  // R5 (2026-09-22). R1-R4 police the FENCED blocks — the pasteable copy. The
+  // doc's own PROSE was unpoliced, and it rotted exactly as predicted above:
+  // "/mcp/smithery serves the identical 83 tools" sat there while canon moved
+  // to 91. Nothing heals this file, so a live quantity in it is always a second
+  // source of truth. A DATED sentence is fine: "on 2026-09-05 it said 82 tools"
+  // is a record of the past, which is the form the drift note at the top uses.
+  const proseSentences = (doc = DOC) => {
+    const outside = doc.split(/^```[\s\S]*?^```/gm).join('\n');   // drop fenced blocks
+    return outside
+      .split(/\n\s*\n/)                                          // paragraphs
+      .map((para) => para.replace(/\s+/g, ' '))
+      .flatMap((para) => para.split(/(?<=[.!?])\s+/));             // sentences
+  };
+  const QUANTITY = /\d[\d,]*\+?\s*(?:MCP\s+)?(?:tools|facilities|deals|markets)\b/i;
+  const DATED = /\d{4}-\d{2}-\d{2}/;
+  const undatedQuantities = (sentences) =>
+    sentences.filter((x) => QUANTITY.test(x) && !DATED.test(x));
+
+  it('R5 MUST-FAIL CONTROL: the rule flags a live quantity and spares a dated one', () => {
+    expect(proseSentences().length, 'no prose parsed — R5 would be vacuous').toBeGreaterThan(20);
+    expect(undatedQuantities(['/mcp/smithery serves the identical 83 tools and logs it.']))
+      .toHaveLength(1);
+    expect(undatedQuantities(['measured 2026-09-05 this block still said 82 tools (canon 83).']))
+      .toHaveLength(0);
+    // and a FENCED block is out of scope here: R1 lets the doc carry a byte-identical
+    // copy of scripts/smithery_description.txt, which legitimately states live
+    // quantities because sync-tools-manifest.mjs heals THAT file.
+    const fenced = 'Intro line.\n\n```\nDC Hub serves 83 tools today.\n```\n\nOutro line.';
+    expect(undatedQuantities(proseSentences(fenced))).toHaveLength(0);
+    expect(undatedQuantities(proseSentences(fenced.replace(/```/g, '')))).toHaveLength(1);
+  });
+
+  it('R5 the doc prose states no live quantity — nothing heals this file', () => {
+    const stale = undatedQuantities(proseSentences());
+    expect(
+      stale,
+      `docs/SMITHERY-LISTING-PASTE.md prose states a quantity nothing heals, so it WILL ` +
+      `go stale (measured 2026-09-22: it said "83 tools" against a canon of 91):\n  ` +
+      `${stale.join('\n  ')}\nDrop the number, or write it as a dated record.`,
+    ).toEqual([]);
+  });
 });
