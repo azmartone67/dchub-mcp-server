@@ -65,7 +65,7 @@ structurally absent on MCP, so the path is the only arrival tag we own
 (r-source-path). Smithery's gateway proxies to **bare** `/mcp` — so a listing
 handing out bare `/mcp` produces arrivals indistinguishable from gateway traffic,
 and "did the listing URL send anyone" becomes unanswerable. `/mcp/smithery`
-serves the identical 83 tools and logs `[source] registry=smithery`, which is how
+serves the identical tool set and logs `[source] registry=smithery`, which is how
 the two routes are told apart. This copy shipped untagged for about an hour on
 2026-09-05; `test/listing-paste-single-origin.test.mjs` R4 now rejects the bare
 form. Their own pricing FAQ: *"RPC usage is billed to the account
