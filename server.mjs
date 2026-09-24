@@ -964,13 +964,21 @@ function _dropRepeatCheckoutUrls(text) {
 // Per replica, like _FRONT_DOOR_SEEN and bind_prose_shown: a session that hops
 // replicas can see the line again, which is the old behaviour, never a new one.
 // It only removes a repeat; no line is ever added.
+//
+// r-relay-cap-anon (2026-09-24): the cap is keyed on a REAL session only. The
+// gated paths pass the literal 'no-session' for a sessionless caller, and
+// `!!sid` counted it, so the first sessionless call on a replica marked
+// 'no-session' and every later sessionless caller, every one a different agent,
+// lost the relay line from the text. Measured live 2026-09-24: 0 of 4
+// sessionless gated calls carried HUMAN_FIRST_MARKER; the same call with an MCP
+// session did. _isRealSession is the check trackPaidHit already uses.
 const _HUMAN_LINE_SENT = new Set();
 const _HUMAN_LINE_SENT_MAX = 20000;
 function _humanLineAlreadySent(sid) {
-  return !!sid && _HUMAN_LINE_SENT.has(sid);
+  return _isRealSession(sid) && _HUMAN_LINE_SENT.has(sid);
 }
 function _markHumanLineSent(sid) {
-  if (!sid || _HUMAN_LINE_SENT.has(sid)) return;
+  if (!_isRealSession(sid) || _HUMAN_LINE_SENT.has(sid)) return;
   if (_HUMAN_LINE_SENT.size >= _HUMAN_LINE_SENT_MAX) {
     let i = 0; const drop = _HUMAN_LINE_SENT_MAX / 10;
     for (const k of _HUMAN_LINE_SENT) { _HUMAN_LINE_SENT.delete(k); if (++i >= drop) break; }
