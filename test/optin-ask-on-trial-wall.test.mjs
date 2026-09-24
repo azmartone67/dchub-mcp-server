@@ -242,6 +242,9 @@ describe('_fetchKeyedOptinCard', () => {
 describe('wiring', () => {
   it('runs at the tool-dispatch chokepoint every return path merges into', async () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(src).toMatch(/_scrubCommerce\(await _withOptinAsk\(_honestCallerTier\(_ensureStructured\(await _stamped\(args, extra\)\), getCtx\(\)\), name, getCtx\(\)\)\)/);
+    // r-relay-teaser (2026-09-24) wraps this in _postRelayTeaser(…, getCtx()), a
+    // side-effect-only pass; the opt-in step itself must still sit here, on the
+    // result every return path has merged into.
+    expect(src).toMatch(/_scrubCommerce\(_postRelayTeaser\(await _withOptinAsk\(_honestCallerTier\(_ensureStructured\(await _stamped\(args, extra\)\), getCtx\(\)\), name, getCtx\(\)\), getCtx\(\)\)\)/);
   });
 });
