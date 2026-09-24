@@ -290,3 +290,36 @@ describe('every preview-trim site records the first withheld figure', () => {
     expect(() => S.trimForTrial({ grid_emergencies_30d: 3 }, 'compare_isos')).not.toThrow();
   });
 });
+
+// ★ r-teaser-only-if-withheld (2026-09-24). Measured live after mcp#529: an
+// anonymous get_grid_intelligence trimmed structuredContent (recording
+// constraint_score 46.5) while its TEXT block carried the full
+// "constraint_score":46.5 — and the relay page told the human the preview had
+// "held back" a number the agent already had. A value visible in any channel is
+// not withheld, so nothing is posted.
+describe('only a value the agent did NOT get is posted', () => {
+  const URL_H = 'https://dchub.cloud/upgrade/h/abc.0123456789abcdef0123456789abcdef';
+  const ctx = { withheld_teaser: { key: 'constraint_score', value: 46.5 } };
+  it('the live case: full value in the text block → no payload', () => {
+    const r = { content: [{ type: 'text', text: JSON.stringify({ constraint_score: 46.5 }) }],
+                structuredContent: { constraint_score: null, for_your_human: { url: URL_H } } };
+    expect(S._relayTeaserPayload(r, ctx)).toBeNull();
+  });
+  it('full value in structuredContent → no payload', () => {
+    const r = { content: [{ type: 'text', text: 'prose' }],
+                structuredContent: { constraint_score: 46.5, for_your_human: { url: URL_H } } };
+    expect(S._relayTeaserPayload(r, ctx)).toBeNull();
+  });
+  it('withheld in every channel → posted', () => {
+    const r = { content: [{ type: 'text', text: JSON.stringify({ constraint_score: null, _constraint_score_in_pro: true }) }],
+                structuredContent: { constraint_score: null, for_your_human: { url: URL_H } } };
+    expect(S._relayTeaserPayload(r, ctx)).toEqual({ token: 'abc.0123456789abcdef0123456789abcdef',
+                                                    label: 'constraint score', value: '46.5' });
+  });
+  it('the match is exact: a different field or a longer number does not count as visible', () => {
+    const f = S._valueVisibleInResult;
+    expect(f({ structuredContent: { excess_power_score: 46.5 } }, 'constraint_score', 46.5)).toBe(false);
+    expect(f({ structuredContent: { constraint_score: 46.55 } }, 'constraint_score', 46.5)).toBe(false);
+    expect(f({ structuredContent: { mw: 1234 } }, 'mw', '1,234')).toBe(true);
+  });
+});
