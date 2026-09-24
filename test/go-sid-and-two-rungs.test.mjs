@@ -16,7 +16,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   _goUrl, _ctxALS, PRO_URL, _priceLabel, _callsPerDay, composeHumanCta,
-  buildHumanRelay, _rungsText, trialHeader,
+  buildHumanRelay, _rungsText, trialHeader, buildDepthTease,
 } from '../server.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
@@ -173,6 +173,35 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
         expect(text, tool).not.toContain('Developer');
       });
     }
+  });
+
+  // r-pro-only-sku (2026-09-24): the depth tease named "or Developer" for every tool,
+  // including the Pro-only pair it teases (get_grid_intelligence, get_fiber_intel).
+  it('r-pro-only-sku: the depth tease names Pro on a Pro-only tool, Developer otherwise', async () => {
+    const res = () => ({ content: [{ type: 'text', text: JSON.stringify({
+      ok: true, iso: 'ERCOT', overall_score: 71,
+      substations: Array.from({ length: 14 }, (_, i) => ({ id: i, name: 'S' + i })),
+      _substations_total_in_developer: 14,
+    }) }] });
+    const upgrade = async (tool) => {
+      const out = await withCtx({ session_id: SID }, () => buildDepthTease(tool, res(), { session_id: SID }, 'free'));
+      return JSON.parse(out.content[0].text)._upgrade;
+    };
+    for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
+      const u = await upgrade(tool);
+      expect(u.message, tool).toContain('or Pro ' + _priceLabel('pro') + '.');
+      expect(u.message, tool).not.toContain('Developer');
+      expect(u.pro_url, tool).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
+    }
+    // Control: a tool Developer opens still names Developer, and gets no pro_url.
+    const u = await upgrade('get_pipeline');
+    expect(u.message).toContain('or Developer ' + _priceLabel('developer') + '.');
+    expect(u.pro_url).toBeUndefined();
+  });
+
+  it('r-pro-only-sku: the free over-cap wall names Pro on a Pro-only tool', () => {
+    // The over-cap wall is built inline in the tools/call handler; pin the branch.
+    expect(SRC).toContain("(also ⚡ ${_proOnlyTool(name) ? 'Pro ' + _priceLabel('pro') + ', which opens \\`' + name + '\\`'");
   });
 
   it('clean platform (ChatGPT/OpenAI): the $10 rung stays the informational /upgrade/h page', () => {
