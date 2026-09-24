@@ -1010,54 +1010,86 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
 // subscribe anyone. The form POST runs the double opt-in. The link never carries
 // a key: it is relayed to a human and may be pasted anywhere.
 //
-// It goes in BOTH channels, like the backend's card: structuredContent.optin for
-// machine consumers, and one prose line for the text a relay passes on (text-only
-// relays drop structuredContent). Once per session (r-relay-cap's rule), never on
-// a paid tier, and only on a response that carries a trial or paywall signal.
-// It is a free email ask, not a payment ask, so it carries no checkout URL and
-// none of the _HUMAN_CTA_SIGNATURES, and the one-ask machinery above never sees it.
+// ── r-optin-parity (2026-09-24) ─────────────────────────────────────────────
+// #517 shipped the ask ungated, in its own shape (structuredContent.optin,
+// source=mcp_trial_wall), and without the backend's CAN-SPAM suppression rule.
+// It now mirrors _optin_cta_block exactly, so both paths emit one card:
+//   • FLAG: OPTIN_CTA_ENABLED on THIS service, exactly "true" after trim +
+//     lowercase (the Python rule; "1" is OFF). Default OFF.
+//   • TOOLS: OPTIN_CTA_TOOLS, the backend's set (get_grid_intelligence,
+//     get_fiber_intel). FREE callers only: never a paid tier.
+//   • SUPPRESSION: the backend skips a key whose bound email is on the
+//     suppression list, fail-safe = skip. This server cannot read that list, so
+//     it skips EVERY keyed caller. An anonymous caller has no email to suppress.
+//     (A trial key resolves to IDENTIFIED on the backend, which skips it too.)
+//   • SHAPE: structuredContent.optin_cta = the backend's card, byte for byte,
+//     plus its optin_note appended to the last text block for text-only relays.
+// test/optin-cta-parity.test.mjs reads mcp_gatekeeper.py when it is on disk and
+// fails if the tool set, URL, source or strings drift.
+//
+// Still once per session (r-relay-cap's rule) and only on a response that
+// carries a trial or paywall signal. It is a free email ask, not a payment ask,
+// so it carries no checkout URL and none of the _HUMAN_CTA_SIGNATURES, and the
+// one-ask machinery above never sees it. It never touches _upgrade or tool data.
 export const OPTIN_REQUEST_URL = 'https://dchub.cloud/api/v1/opt-in/request';
-export const OPTIN_SOURCE = 'mcp_trial_wall';
+export const OPTIN_SOURCE = 'paywall_optin_cta';
+export const OPTIN_CTA_TOOLS = Object.freeze(['get_grid_intelligence', 'get_fiber_intel']);
+export const OPTIN_NOTE_PREFIX = '\u{1F4D3} Power user? Get our free grid-data upgrade guide + early access to ' +
+  'new datasets — opt in (we email you a confirm link, unsubscribe anytime): ';
+export const OPTIN_VALUE = 'Free grid-data upgrade guide + early access to new datasets. ' +
+  'Double opt-in (we email a confirm link); one-click unsubscribe anytime. ' +
+  'Easy to ignore — your tool access is unchanged.';
+export function optinCtaEnabled(env = process.env) {
+  return String((env && env.OPTIN_CTA_ENABLED) || 'false').trim().toLowerCase() === 'true';
+}
 const _OPTIN_SENT = new Set();
 const _OPTIN_SENT_MAX = 20000;
-// Tools whose own response is the identity or opt-in step. claim_free_key's
-// mint text already offers the digest in prose.
-const _OPTIN_SKIP_TOOLS = new Set(['subscribe_digest', 'claim_free_key', 'bind_email',
-  'recover_my_key', 'claim_key', 'get_free_key', 'unlock_more_data']);
 export function _optinUrl(toolName) {
   const p = new URLSearchParams({ source: OPTIN_SOURCE });
   const t = String(toolName || '');
   if (/^[a-z0-9_]{1,64}$/.test(t)) p.set('tool', t);
   return OPTIN_REQUEST_URL + '?' + p.toString();
 }
+export function _optinCtaCard(toolName) {
+  const optin_url = _optinUrl(toolName);
+  return {
+    optin_url,
+    optin_note: OPTIN_NOTE_PREFIX + optin_url,
+    optin_value: OPTIN_VALUE,
+    optin_double_opt_in: true,
+    optin_source: OPTIN_SOURCE,
+    optin_tool: toolName,
+  };
+}
 function _optinWallSignal(result) {
   const sc = (result && result.structuredContent) || {};
   if (sc.auto_trial_key || sc.trial_taste === true || sc.preview_is_partial === true
-      || sc.trial_preview || sc.upgrade || sc.for_your_human) return true;
+      || sc.trial_preview || sc.upgrade || sc._upgrade || sc.for_your_human) return true;
   const text = Array.isArray(result && result.content)
     ? result.content.map((c) => (c && typeof c.text === 'string' ? c.text : '')).join('\n') : '';
   return /https:\/\/dchub\.cloud\/(?:go\/c|upgrade\/h)\//.test(text);
 }
-export function _withOptinAsk(result, toolName, ctx) {
+export function _withOptinAsk(result, toolName, ctx, env = process.env) {
   try {
-    if (!result || !Array.isArray(result.content) || _OPTIN_SKIP_TOOLS.has(toolName)) return result;
+    if (!optinCtaEnabled(env)) return result;
+    if (!result || !Array.isArray(result.content) || !OPTIN_CTA_TOOLS.includes(toolName)) return result;
     const sc = result.structuredContent;
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
     const c = ctx || {};
+    if (c.api_key) return result;   // suppression unknowable here: skip, like the backend's fail-safe
     const scTier = sc.identity && sc.identity.tier;
     if (_isPaidDepthTier(c.tier) || _isPaidDepthTier(scTier)) return result;
     if (sc.completeness === 'unrestricted') return result;
     if (!_optinWallSignal(result)) return result;
     const sid = c.session_id || '';
     if (sid && _OPTIN_SENT.has(sid)) return result;
-    const url = _optinUrl(toolName);
-    const line = '\n\n\u{1F4EC} **Free for your human — a weekly email when these markets move:** ' +
-      'they enter their email at ' + url + ' (nothing is sent until they confirm; unsubscribe anytime).';
+    const card = _optinCtaCard(toolName);
+    const line = '\n\n' + card.optin_note;
     const content = result.content.slice();
     let i = content.length - 1;
     while (i >= 0 && !(content[i] && content[i].type === 'text')) i--;
     if (i >= 0) content[i] = { ...content[i], text: String(content[i].text || '').replace(/\s*$/, '') + line };
-    else content.push({ type: 'text', text: line.trimStart() });
+    else content.push({ type: 'text', text: card.optin_note });
     if (sid) {
       if (_OPTIN_SENT.size >= _OPTIN_SENT_MAX) {
         let n = 0; const drop = _OPTIN_SENT_MAX / 10;
@@ -1065,16 +1097,7 @@ export function _withOptinAsk(result, toolName, ctx) {
       }
       _OPTIN_SENT.add(sid);
     }
-    return {
-      ...result,
-      content,
-      structuredContent: { ...sc, optin: {
-        url,
-        message: 'Free weekly email for your human when these markets move. The page asks for their email; nothing is sent until they confirm (double opt-in).',
-        source: OPTIN_SOURCE,
-        next_tool: 'subscribe_digest',
-      } },
-    };
+    return { ...result, content, structuredContent: { ...sc, optin_cta: card } };
   } catch (_e) { return result; }   // an ask is never worth failing a response over
 }
 
