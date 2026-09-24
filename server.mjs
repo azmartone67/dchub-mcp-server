@@ -9739,11 +9739,19 @@ function _buildQuotaHint(toolName) {
   try {
     const c = getCtx();
     // r-quota-charged (2026-08-18): a DURABLE identity is what makes this meter
-    // spendable. The auto-mint path binds a trial into `sessionMeta` and its own
-    // log line says "full taste on NEXT call" — so from the call after the bind
-    // onward ctx carries `api_key`, and before it there is none. That is exactly
-    // the boundary the counter is charged across, so key the whole block on it.
-    const _durable = !!(c && c.api_key);
+    // spendable. The auto-mint path binds a trial into `sessionMeta` — but only
+    // there, not onto THIS call's ctx (_autoBindTrialToSession updates sessionMeta
+    // for future calls and never reflects api_key back into the in-flight ctx).
+    // r-quota-mint-call (2026-09-24): checking ctx.api_key alone therefore missed
+    // the mint call itself — the SAME response's top-level `remaining_full_today`
+    // (buildAutoMintBlock, computed from the mint result directly) already
+    // published a real number on that call, while this block read ctx, saw no
+    // key yet, and disclaimed "NOT YET APPLICABLE" — one envelope promising a
+    // budget it also denied applies. Read the durable store sessionMeta was just
+    // written to, not only the ctx snapshot taken before the handler ran.
+    const _sid = c && c.session_id;
+    const _sessionBound = !!(_sid && sessionMeta.has(_sid) && sessionMeta.get(_sid).api_key);
+    const _durable = !!(c && (c.api_key || _sessionBound));
     const q = {
       // `(c && c.tier) || 'free'` labelled an UNBOUND ANONYMOUS caller 'free'
       // while _upgrade.tier in the SAME envelope said 'anonymous'. Two tiers,
