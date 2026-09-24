@@ -3034,11 +3034,22 @@ function claimVariantFromCtx(c) {
 // identifiable agents. Unknown/empty client => ALLOWED (never suppress a
 // potentially-real anonymous agent); only KNOWN bot/probe markers are skipped.
 const _CLAIM_BOT_RE = /(loop|dchub|deadlink|self-?heal|brainradar|brainuniformity|redircheck|schema-audit|heartbeat|probe|scanner|scraper|inspector|validator|smoke|canary|qa-?test|postman|no-?auth|researchclient|agentdiscoveryindex|test-client|fastmcpclient|uptimerobot|statuscake|pingdom|python-requests|go-http-client|curl\/|wget|httpie|monitoring|health-?check)/i;
+// r-hi-crawler-ua (2026-09-24): a self-declared crawler has no human to open a claim
+// either. BrickBlueBot/0.1 (+https://brick.blue/bot; agentic-web registry) wrote 19
+// mcp_high_intent_sessions rows over 17 tools, 09-17..09-21, 0 opens: the list above
+// has 'scanner'/'scraper' but no crawler token, so it sailed through into the
+// handoff funnel's relay_minted. Robots convention: a product token ending in
+// bot/crawler/spider followed by a version. The token shape is deliberate — a bare
+// 'bot' would also drop ChatGPT-User, whose UA ends '+https://openai.com/bot' and is
+// a human's request. Same text as dchub-backend routes/mcp_high_intent_claim.py
+// _CRAWLER_UA_PATTERN, which refuses it again server-side.
+const _CLAIM_CRAWLER_UA_RE = /[a-z0-9](bot|crawler|spider)(-[a-z]+)?\/[0-9]/i;
 function isBotOrInternalCtx(c) {
   const s = ((c?.platform || '') + ' ' + (c?.client_ua || '') + ' ' + (c?.user_agent || '')).toLowerCase();
   if (!s.trim()) return false;
-  return _CLAIM_BOT_RE.test(s);
+  return _CLAIM_BOT_RE.test(s) || _CLAIM_CRAWLER_UA_RE.test(s);
 }
+export { isBotOrInternalCtx };
 
 // r-hi-needs-session (2026-09-14): a high-intent count belongs to ONE MCP session. The
 // paywall branches fall back to the literal 'no-session' when a call carries no
