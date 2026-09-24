@@ -30,6 +30,7 @@ test/cf-worker-manifest-sync.test.mjs
 test/challenge-after-n.test.mjs
 test/challenge-bound-and-widen.test.mjs
 test/challenge-budget-key.test.mjs
+test/challenge-carries-human-line.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs

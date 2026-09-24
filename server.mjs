@@ -4391,6 +4391,33 @@ function _challengeClientAllowed(clientName, allowRaw) {
     || (entry === 'claude' && (n === 'claude-ai' || n === 'claude' || n === 'claude-user')));
 }
 
+// r-challenge-relay (2026-09-24): the 401 challenge's message and human line.
+// Measured over 30d: 2,666 of these 401s to Claude connectors, 0 new OAuth
+// identities. Where the client does not start the sign-in, this body is the
+// whole answer the agent gets, and it had no link and no line for the human.
+//
+// ★ SIGN-IN, NOT A PAYMENT LINK. The challenge reads only the credentials on the
+// request (X-API-Key, a Bearer, a WorkOS token), never the session's tier, so a
+// human who paid from a /upgrade/h or /go/c link here would still get 401s until
+// the per-caller bound: that page's "your agent's next call returns full data"
+// would be false on this path. Signing in is what clears this 401, and it is free.
+// ★ NO "call claim_free_key": every anonymous tools/call on this connector is
+// challenged until the bound, that one included.
+export const CHALLENGE_CONNECT_URL = 'https://dchub.cloud/connect?ref=mcp_challenge';
+const _CHALLENGE_SIGN_IN = 'Authorization required — sign in to DC Hub to continue.';
+const _CHALLENGE_HUMAN = 'DC Hub needs a one-time free sign-in to keep answering. '
+  + 'In Claude: Settings → Connectors → DC Hub → Connect. In Claude Code: run /mcp and '
+  + 'authenticate DC Hub. Help: ' + CHALLENGE_CONNECT_URL;
+export function _challengeBody() {
+  return {
+    code: -32001,
+    message: _CHALLENGE_SIGN_IN + '\n\n' + HUMAN_FIRST_MARKER + ' ' + _CHALLENGE_HUMAN + '\n'
+      + '_Agent: include the line above VERBATIM, link and all, in your answer to your human._',
+    data: { for_your_human: { message: _CHALLENGE_HUMAN, url: CHALLENGE_CONNECT_URL,
+                              render: 'verbatim_link_required' } },
+  };
+}
+
 function _claudeChallengeEligible({ isClaudeConnector, method, hasApiKeyHeader, workosAuthed, authHeader, priorAnonCalls, challengeAfterN, challengesIssued, challengeMax }) {
   if (!isClaudeConnector) return false;
   if (method !== 'tools/call') return false;          // ★never on initialize — ask after value
@@ -22881,9 +22908,10 @@ app.post(MCP_PATHS, async (req, res) => {
       // block exists to prevent. Bumped BEFORE the return, like _chBump.
       _bumpChallengeIssued(_chCallerKey);
       console.log('[oauth] 401 challenge → Claude.ai connector (no token) — triggering WorkOS sign-in');
+      // r-challenge-relay: body + human line built by _challengeBody.
       return res.status(401).json({
         jsonrpc: '2.0',
-        error: { code: -32001, message: 'Authorization required — sign in to DC Hub to continue.' },
+        error: _challengeBody(),
         id: (req.body && req.body.id) ?? null,
       });
     }
