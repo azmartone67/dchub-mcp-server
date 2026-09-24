@@ -10171,7 +10171,7 @@ export function _gridRegionUnresolved(out) {
     && Object.keys(out.generation_mix_mw || {}).length === 0;
 }
 
-export function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
+function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); // "ISO-NE" -> "ISONE"
   const _n = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
   const DCPI_CODE = { ISONE: 'ISONE', HYDROQUEBEC: 'HQ', HQ: 'HQ' };
