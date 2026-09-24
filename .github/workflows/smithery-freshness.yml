@@ -43,9 +43,22 @@ on:
     # Insurance does not need 7 runs a week to do that, so this drops 6 of 7.
     - cron: '23 14 * * 1'   # WEEKLY Monday 14:23 UTC (was DAILY). INSURANCE re-publish (keeps verified/deploy/tool-catalog fresh); recency ≈ 0 for rank, so this does NOT hold #1 — relevance does. Local daily LaunchAgent is the redundant backup.
   workflow_dispatch:
+    inputs:
+      force_overwrite:
+        # ★ 2026-09-24: the ONLY way past the drift guard below. Use it to REVERT a
+        # live edit on purpose; to KEEP the live edit, mirror it into
+        # scripts/smithery_description.txt by PR instead.
+        description: 'Overwrite the live Smithery description even if it was edited outside the repo'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  # ★ 2026-09-24 drift guard: `actions: read` lists/downloads the previous run's
+  # last-written record (a workflow artifact); `issues: write` opens/updates the
+  # "Smithery listing edited outside the repo" issue. Nothing here pushes.
+  actions: read
+  issues: write
 
 concurrency:
   group: smithery-freshness
@@ -110,6 +123,77 @@ jobs:
           fi
           exit "$rc"
 
+      # ★ 2026-09-24 — DRIFT GUARD: the writer only overwrites text it wrote.
+      # On 2026-09-24 a new description was pasted live on Smithery by hand, with
+      # no repo change. The white-glove step below would have overwritten it with
+      # the stale repo file on its next run, and nothing would have said so (PR
+      # #537 mirrored it by hand). So before any PATCH, scripts/smithery_drift_guard.py
+      # reads the LIVE text on api.smithery.ai and compares it with the repo file
+      # AND with the sha256 of what this writer last wrote:
+      #   live == repo              -> in_sync       (no write; closes the issue)
+      #   live == last written      -> write         (only the repo changed)
+      #   neither / no record yet   -> foreign_edit  (NO write, ::warning::, issue)
+      #   unreadable                -> unreadable    (NO write, warning)
+      # A foreign edit is a HUMAN DECISION, not a broken lane: nothing here goes
+      # red for it. `force_overwrite` (dispatch input) is the only bypass.
+      #
+      # WHERE THE RECORD LIVES: a workflow artifact, carried run to run. Not a
+      # committed file: main requires status checks (check/dchub-checks/smoke)
+      # with enforce_admins, so a GITHUB_TOKEN push to main is refused, and a
+      # PR-per-write would leave the record unmerged exactly when the next run
+      # needs it. Not a repo variable: GITHUB_TOKEN cannot write Actions
+      # variables (that needs a PAT). Not actions/cache: entries unread for 7
+      # days are evicted, and this cron is exactly weekly. An artifact keeps 90
+      # days and is re-uploaded on every run that knows the state (confirmed
+      # write, in sync, or carried forward on a foreign edit), so it never ages
+      # out while the lane runs. Only records from default-branch runs count.
+      - name: Drift guard — never overwrite a live edit this writer did not make
+        id: driftguard
+        if: always()
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          FORCE_OVERWRITE: ${{ inputs.force_overwrite || 'false' }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ISSUE_TITLE: Smithery listing edited outside the repo
+        run: |
+          mkdir -p .smithery-state
+          # 1. restore the last-written record from the newest default-branch run
+          ART_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=smithery-description-last-written&per_page=50" \
+            --jq "[.artifacts[] | select(.expired == false and .workflow_run.head_branch == \"${DEFAULT_BRANCH:-main}\")] | sort_by(.created_at) | last | .id // empty" 2>/dev/null) || ART_ID=""
+          if [ -n "$ART_ID" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ART_ID/zip" > .smithery-state/prev.zip \
+             && unzip -o -q .smithery-state/prev.zip -d .smithery-state; then
+            echo "restored last-written record from artifact $ART_ID: $(cat .smithery-state/last_written.sha256 2>/dev/null)"
+          else
+            echo "::notice::no last-written record found — the guard fails safe (no write unless live == repo)"
+          fi
+          # 2. decide. Exit 0 for every verdict; non-zero only if the guard itself could not run.
+          set +e
+          python3 scripts/smithery_drift_guard.py \
+            --record .smithery-state/last_written.sha256 \
+            --issue-body-out .smithery-state/issue.md \
+            --force "$FORCE_OVERWRITE" | tee .smithery-state/guard.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          [ "$rc" -eq 0 ] || { echo "::error::drift guard could not run (exit $rc) — the white-glove step will not write"; exit "$rc"; }
+          VERDICT=$(sed -n 's/^verdict=//p' .smithery-state/guard.log | tail -1)
+          # 3. the human-decision issue, deduped by its fixed title. A GitHub API
+          # hiccup here warns; it never turns the lane red.
+          OPEN=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$ISSUE_TITLE\" in:title" \
+                   --json number,title --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty" 2>/dev/null) || OPEN=""
+          if [ "$VERDICT" = "foreign_edit" ]; then
+            if [ -n "$OPEN" ]; then
+              gh issue edit "$OPEN" --repo "$GITHUB_REPOSITORY" --body-file .smithery-state/issue.md \
+                && echo "updated issue #$OPEN" || echo "::warning::could not update issue #$OPEN"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body-file .smithery-state/issue.md \
+                || echo "::warning::could not open the '$ISSUE_TITLE' issue — the warning above stands"
+            fi
+          elif [ "$VERDICT" = "in_sync" ] && [ -n "$OPEN" ]; then
+            gh issue close "$OPEN" --repo "$GITHUB_REPOSITORY" --comment "Live Smithery description now matches scripts/smithery_description.txt (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). Closing." \
+              || echo "::warning::could not close issue #$OPEN"
+          fi
+
       # ★ 2026-08-22 — the listing COPY is owner-pasted and nothing compared it.
       # `smithery mcp publish` refreshes tools/verification; the `description`
       # Smithery serves is whatever was last pasted into the owner UI. On
@@ -143,6 +227,7 @@ jobs:
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
           WHITE_GLOVE_SMITHERY_AUTOWRITE: ${{ vars.WHITE_GLOVE_SMITHERY_AUTOWRITE }}
+          DRIFT_VERDICT: ${{ steps.driftguard.outputs.verdict }}
         run: |
           if [ "${WHITE_GLOVE_SMITHERY_AUTOWRITE:-1}" = "0" ]; then
             echo "::notice::white-glove Smithery auto-write disabled by var"; exit 0
@@ -150,6 +235,14 @@ jobs:
           if [ -z "${SMITHERY_API_KEY:-}" ]; then
             echo "::warning::no SMITHERY_API_KEY — cannot auto-write; the copy-check below names the owner-paste fallback"; exit 0
           fi
+          # ★ 2026-09-24: write ONLY on the drift guard's `write` verdict. Anything
+          # else — including no verdict at all (the guard crashed) — is no write.
+          case "$DRIFT_VERDICT" in
+            write) ;;
+            in_sync) echo "::notice::drift guard: live already matches the repo file — no write"; exit 0 ;;
+            foreign_edit) echo "::warning::drift guard: the live description was edited outside the repo — NOT overwriting (see the issue; re-run with force_overwrite to revert)"; exit 0 ;;
+            *) echo "::warning::drift guard gave no write verdict ('${DRIFT_VERDICT}') — not writing"; exit 0 ;;
+          esac
           python3 - <<'PY_WG'
           import json, os, re, sys, time, urllib.request, urllib.error
           KEY = os.environ["SMITHERY_API_KEY"]
@@ -226,13 +319,24 @@ jobs:
           else:
               print("::warning::public registry.smithery.ai projection has not yet reflected the write (it lags api.smithery.ai) — the authoritative store is correct; the listing page will catch up")
           PY_WG
+          # Reached only on exit 0: a CONFIRMED write, or the store already matched.
+          # Either way api.smithery.ai holds the repo text — record it as ours.
+          python3 scripts/smithery_drift_guard.py --record .smithery-state/last_written.sha256 --mark-written
 
       - name: Listing copy equals scripts/smithery_description.txt (owner-pasted)
         id: copycheck
         if: always()
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
+          DRIFT_VERDICT: ${{ steps.driftguard.outputs.verdict }}
         run: |
+          # ★ 2026-09-24: a foreign edit is held for a human by the drift guard; the
+          # copy differing from the repo file is then EXPECTED, and must not paint
+          # the lane red while the issue waits for a decision.
+          if [ "${DRIFT_VERDICT:-}" = "foreign_edit" ]; then
+            echo "::warning::listing copy differs from scripts/smithery_description.txt because it was edited outside the repo — held for a human (issue: 'Smithery listing edited outside the repo'), not drift"
+            exit 0
+          fi
           python3 - <<'PY'
           import json, os, re, sys, time, urllib.request
           # ★2026-08-22: read api.smithery.ai (authed) — the AUTHORITATIVE store the
@@ -320,6 +424,19 @@ jobs:
           sys.exit(1)
           PY
 
+      # ★ 2026-09-24: carry the drift guard's record to the next run. The file
+      # exists after a confirmed write, an in-sync read, or (restored, unchanged)
+      # on a foreign edit — re-uploading it every run keeps it inside retention.
+      - name: Carry the last-written record to the next run
+        # no hashFiles() gate: if-no-files-found: ignore already handles a run with no record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smithery-description-last-written
+          path: .smithery-state/last_written.sha256
+          retention-days: 90
+          if-no-files-found: ignore
+
       # ★ BEAT THE DEAD-MAN LEDGER — LAST, ALWAYS, WITH THE LANE'S REAL STATUS.
       #
       # This beat used to run `if: success()` and sit BEFORE the white-glove
@@ -348,6 +465,8 @@ jobs:
           DCHUB_ADMIN_KEY: ${{ secrets.DCHUB_ADMIN_KEY }}
           OUTCOME_PUBLISH: ${{ steps.publish.outcome }}
           OUTCOME_CONVERGE: ${{ steps.converge.outcome }}
+          OUTCOME_DRIFTGUARD: ${{ steps.driftguard.outcome }}
+          DRIFT_VERDICT: ${{ steps.driftguard.outputs.verdict }}
           OUTCOME_WHITEGLOVE: ${{ steps.whiteglove.outcome }}
           OUTCOME_COPYCHECK: ${{ steps.copycheck.outcome }}
           KEY_SCOPE_MISSING: ${{ steps.whiteglove.outputs.key_scope_missing }}
@@ -359,11 +478,15 @@ jobs:
           STATUS=success
           NOTE="daily Smithery re-publish + listing convergence verified + description in sync"
           FAILED=""
-          for pair in "publish:$OUTCOME_PUBLISH" "converge:$OUTCOME_CONVERGE" "whiteglove:$OUTCOME_WHITEGLOVE" "copycheck:$OUTCOME_COPYCHECK"; do
+          for pair in "publish:$OUTCOME_PUBLISH" "converge:$OUTCOME_CONVERGE" "driftguard:$OUTCOME_DRIFTGUARD" "whiteglove:$OUTCOME_WHITEGLOVE" "copycheck:$OUTCOME_COPYCHECK"; do
             case "${pair#*:}" in
               failure|cancelled) FAILED="$FAILED ${pair%%:*}" ;;
             esac
           done
+          if [ -z "$FAILED" ] && [ "$DRIFT_VERDICT" = "foreign_edit" ]; then
+            # a human-decision state, not a fault: the beat stays OK, the issue is the alarm
+            NOTE="Smithery re-publish verified; description edited OUTSIDE the repo — auto-write held for a human (issue: Smithery listing edited outside the repo)"
+          fi
           if [ -n "$FAILED" ]; then
             STATUS=error
             NOTE="lane FAILED at:${FAILED}"
