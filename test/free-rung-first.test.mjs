@@ -80,15 +80,15 @@ describe('siteHeadlineHeader — the order an agent reads', () => {
     expect(h).toContain('Tell your human');
   });
 
-  it('keeps the whole ladder — free, then $10, then Pro — in that order', () => {
+  it('keeps the whole ladder — free, then Pro, then the $10 pack as capacity — in that order (r-pack-is-capacity)', () => {
     const h = withCtx({ session_id: SID }, () => siteHeadlineHeader('analyze_site', SID));
     const free = h.indexOf('claim_free_key');
     const pack = h.indexOf('$10 one-time');
     const pro = h.indexOf('**Pro ' + _priceLabel('pro') + '**');
     expect(pack, 'the $10 rung vanished').toBeGreaterThan(-1);
     expect(pro, 'the Pro rung vanished').toBeGreaterThan(-1);
-    expect(free).toBeLessThan(pack);
-    expect(pack).toBeLessThan(pro);
+    expect(free).toBeLessThan(pro);
+    expect(pro).toBeLessThan(pack);
   });
 
   it('still names exactly one human ask', () => {

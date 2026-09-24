@@ -117,25 +117,26 @@ describe('r-relay-key-bind — /upgrade/h carries the key hash for keyed callers
   });
 });
 
-describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, then Developer', () => {
+describe('r-direct-pack + r-dev-rung + r-pack-is-capacity — the relayed ask is Developer (or Pro), then the $10 pack as capacity', () => {
   const GO_RE = /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g;
   const RELAY_RE = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9._-]+/g;
 
-  it('keyless session: $10 → /go/c metered on the session, then Developer → /go/c developer; no page in front of the click', () => {
+  it('keyless session: Developer → /go/c developer, then $10 → /go/c metered, both on the session; no page in front of the click', () => {
     withCtx({ session_id: SID }, () => {
       const text = _rungsText('rank_markets', 'free');
       expect(text.match(RELAY_RE)).toBeNull();
       const go = text.match(GO_RE);
       expect(go).toHaveLength(2);
-      expect(fields(go[0], GO).parts).toEqual(['metered', SID]);
-      expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
-      expect(text).toContain('**$10 one-time = 1,000 API credits**');
+      expect(fields(go[0], GO).parts).toEqual(['developer', SID]);
+      expect(fields(go[1], GO).parts).toEqual(['metered', SID]);
+      expect(text).toContain('more API capacity: **$10 one-time = 1,000 API credits**');
       expect(text).toContain('**Developer ' + _priceLabel('developer') + '**');
       expect(text).toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
       // Pro is not the agent default: a tool Developer opens never names it.
       expect(text).not.toContain('**Pro ');
-      expect(text.indexOf('$10 one-time')).toBeLessThan(text.indexOf(go[0]));
-      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**Developer '));
+      expect(text.indexOf('**Developer ')).toBeLessThan(text.indexOf(go[0]));
+      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('$10 one-time'));
+      expect(text.indexOf('$10 one-time')).toBeLessThan(text.indexOf(go[1]));
     });
   });
 
@@ -143,8 +144,8 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
     withCtx({ session_id: SID, api_key: KEY }, () => {
       const go = _rungsText('rank_markets', 'free').match(GO_RE);
       expect(go).toHaveLength(2);
-      expect(fields(go[0], GO).parts).toEqual(['metered', 'pk-' + KEY_HASH, SID]);
-      expect(fields(go[1], GO).parts).toEqual(['developer', 'k-' + KEY_HASH, SID]);
+      expect(fields(go[0], GO).parts).toEqual(['developer', 'k-' + KEY_HASH, SID]);
+      expect(fields(go[1], GO).parts).toEqual(['metered', 'pk-' + KEY_HASH, SID]);
     });
   });
 
@@ -154,10 +155,10 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
     withCtx({ session_id: SID, api_key: TRIAL }, () => {
       const go = _rungsText('rank_markets', 'free').match(GO_RE);
       expect(go).toHaveLength(2);
-      expect(fields(go[0], GO).parts).toEqual(['metered', 'pk-' + TRIAL_HASH, SID]);
-      expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
+      expect(fields(go[0], GO).parts).toEqual(['developer', SID]);
+      expect(fields(go[1], GO).parts).toEqual(['metered', 'pk-' + TRIAL_HASH, SID]);
       const proGo = _rungsText('get_grid_intelligence', 'free').match(GO_RE);
-      expect(fields(proGo[1], GO).parts).toEqual(['pro', SID]);
+      expect(fields(proGo[0], GO).parts).toEqual(['pro', SID]);
     });
   });
 
@@ -167,8 +168,8 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
         const text = _rungsText(tool, 'free');
         const go = text.match(GO_RE);
         expect(go, tool).toHaveLength(2);
-        expect(fields(go[0], GO).parts, tool).toEqual(['metered', SID]);
-        expect(fields(go[1], GO).parts, tool).toEqual(['pro', SID]);
+        expect(fields(go[0], GO).parts, tool).toEqual(['pro', SID]);
+        expect(fields(go[1], GO).parts, tool).toEqual(['metered', SID]);
         expect(text, tool).toContain('**Pro ' + _priceLabel('pro') + '**');
         expect(text, tool).not.toContain('Developer');
       });
@@ -180,7 +181,7 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       withCtx({ session_id: SID, platform }, () => {
         const text = _rungsText('rank_markets', 'free');
         expect(text.match(RELAY_RE), platform).toEqual([buildHumanRelay('rank_markets', 'free').url]);
-        expect(text.indexOf('/upgrade/h/'), platform).toBeLessThan(text.indexOf('/go/c/'));
+        expect(text.indexOf('/go/c/'), platform).toBeLessThan(text.indexOf('/upgrade/h/'));
         expect(text.match(GO_RE).map((u) => fields(u, GO).parts[0]), platform).toEqual(['developer']);
       });
     }
@@ -205,7 +206,7 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
     process.env.DCHUB_HUMAN_RELAY = '0';
     withCtx({ session_id: SID }, () => {
       const go = _rungsText('rank_markets', 'free').match(GO_RE);
-      expect(go.map((u) => fields(u, GO).parts[0])).toEqual(['metered', 'developer']);
+      expect(go.map((u) => fields(u, GO).parts[0])).toEqual(['developer', 'metered']);
     });
   });
 });
@@ -213,13 +214,13 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
 describe('r-two-rungs — the envelopes an agent actually relays', () => {
   const GO_RE = /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g;
 
-  it('trialHeader (the gated preview line) names the $10 checkout and the Developer checkout', () => {
+  it('trialHeader (the gated preview line) names the Developer checkout, then the $10 checkout', () => {
     withCtx({ session_id: SID }, () => {
       const line = trialHeader('rank_markets', SID, '3 of 10 results shown');
       expect(line).not.toContain('/upgrade/h/');
       const go = line.match(GO_RE);
       expect(go).toHaveLength(2);
-      expect(go.map((u) => fields(u, GO).parts[0])).toEqual(['metered', 'developer']);
+      expect(go.map((u) => fields(u, GO).parts[0])).toEqual(['developer', 'metered']);
     });
   });
 

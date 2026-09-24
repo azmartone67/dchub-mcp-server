@@ -53,21 +53,22 @@ function fields(url, prefix) {
 }
 
 describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () => {
-  it('keyless session: line one is the ask — $10, Developer, Pro, each a /go/c checkout on the session', () => {
+  it('keyless session: line one is the ask — Developer, Pro, then the $10 pack as capacity, each a /go/c checkout on the session', () => {
     const text = unlock({ session_id: SID }).content[0].text;
     const first = text.split('\n')[0];
     expect(first.startsWith(HUMAN_FIRST_MARKER)).toBe(true);
     const links = first.match(LINK_RE);
     expect(links).toHaveLength(3);
     // r-direct-pack (2026-09-21, owner): no page sits in front of the $10 click.
-    expect(fields(links[0], GO)).toEqual(['metered', SID]);
-    expect(fields(links[1], GO)).toEqual(['developer', SID]);
-    expect(fields(links[2], GO)).toEqual(['pro', SID]);
-    // Agent rungs ($10, $49) are named before the $99 one.
+    expect(fields(links[0], GO)).toEqual(['developer', SID]);
+    expect(fields(links[1], GO)).toEqual(['pro', SID]);
+    expect(fields(links[2], GO)).toEqual(['metered', SID]);
+    // r-pack-is-capacity (2026-09-24): the plans that open tools lead ($49, then
+    // $99); the $10 pack closes the line, labelled as capacity.
     const at = (s) => first.indexOf(s);
     expect(at('$10 one-time')).toBeGreaterThanOrEqual(0);
-    expect(at('$10 one-time')).toBeLessThan(at('**Developer ' + _priceLabel('developer') + '**'));
     expect(at('**Developer ' + _priceLabel('developer') + '**')).toBeLessThan(at('**Pro ' + _priceLabel('pro') + '**'));
+    expect(at('**Pro ' + _priceLabel('pro') + '**')).toBeLessThan(at('more API capacity: **$10 one-time'));
     // Nothing links out ahead of the ask.
     expect(text.search(LINK_RE)).toBe(first.search(LINK_RE));
   });
@@ -84,7 +85,7 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
 
   it('keyed: the pack binds pk-, Developer and Pro bind k-, each with the session beside it', () => {
     const first = unlock({ session_id: SID, api_key: KEY }).content[0].text.split('\n')[0];
-    const [packUrl, devUrl, proUrl] = first.match(LINK_RE);
+    const [devUrl, proUrl, packUrl] = first.match(LINK_RE);
     expect(fields(packUrl, GO)).toEqual(['metered', 'pk-' + KEY_HASH, SID]);
     expect(fields(devUrl, GO)).toEqual(['developer', 'k-' + KEY_HASH, SID]);
     expect(fields(proUrl, GO)).toEqual(['pro', 'k-' + KEY_HASH, SID]);
@@ -95,7 +96,7 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     const links = text.match(LINK_RE);
     expect(new Set(links).size).toBe(links.length);
     expect(links.map((u) => (u.startsWith(GO) ? fields(u, GO)[0] : 'relay')))
-      .toEqual(['metered', 'developer', 'pro']);
+      .toEqual(['developer', 'pro', 'metered']);
     const env = unlock({ session_id: SID });
     expect(env.structuredContent.plans.map((p) => p.id)).toEqual(['credits', 'developer', 'pro']);
     expect(env.structuredContent.recommended_subscription).toBe('developer');
@@ -112,11 +113,11 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(env.structuredContent.recommended).toBe('mpp');
   });
 
-  it('relay switched off: line one still carries a payable $10 checkout, Developer and Pro', () => {
+  it('relay switched off: line one still carries payable Developer, Pro and $10 checkouts', () => {
     process.env.DCHUB_HUMAN_RELAY = '0';
     const env = unlock({ session_id: SID });
     const links = env.content[0].text.split('\n')[0].match(LINK_RE);
-    expect(links.map((u) => fields(u, GO)[0])).toEqual(['metered', 'developer', 'pro']);
+    expect(links.map((u) => fields(u, GO)[0])).toEqual(['developer', 'pro', 'metered']);
     expect(env.structuredContent.for_your_human).toBeUndefined();
   });
 

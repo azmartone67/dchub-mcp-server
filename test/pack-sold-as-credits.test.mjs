@@ -253,3 +253,32 @@ describe('a Developer blocked on a Pro-only tool', () => {
   });
 
 });
+
+// ★ r-pack-is-capacity (2026-09-24, owner wording rule of 2026-09-22): the $10 pack is
+// API CAPACITY. What opens a tool is Developer, or Pro when the tool is Pro-only, and
+// that plan leads the ask; the pack follows, labelled as capacity. The live anonymous
+// get_grid_intelligence / get_fiber_intel walls said "your human unlocks in one click —
+// $10 one-time" with Pro second, while the backend walls had already applied the rule.
+describe('the $10 pack is sold as capacity, never as the unlock', () => {
+  it('the relayed ask leads with the plan that opens the tool, then the pack as capacity', () => {
+    for (const [tool, plan] of [['get_grid_intelligence', 'Pro'], ['get_fiber_intel', 'Pro'], ['rank_markets', 'Developer']]) {
+      const t = S._rungsText(tool, 'free', 'sid-t');
+      expect(t.startsWith('**' + plan + ' '), tool + ': ' + t.slice(0, 80)).toBe(true);
+      expect(t, tool).toContain('more API capacity: **$10 one-time = 1,000 API credits**');
+      expect(t.indexOf('**' + plan + ' '), tool).toBeLessThan(t.indexOf('$10 one-time'));
+    }
+  });
+
+  it('no string in server.mjs pairs the $10 pack with an unlock, full depth or "cheapest"', () => {
+    // Comment lines are skipped: they record the history of this very rule. A code
+    // line is scanned whole, so a literal cannot hide beside a comment.
+    const RE = /\$10\b[^\n]{0,120}?(\bunlock(?!_more_data|s? `|ed["'])|full depth(?! is)|cheapest|complete (answer|result|dataset))|(\bunlock(?!_more_data)|full depth|cheapest)[^\n]{0,40}?\$10\b/i;
+    const hits = SRC.split('\n')
+      .map((l, i) => (i + 1) + ': ' + l.trim())
+      .filter((l) => !/^\d+: (\/\/|\*)/.test(l) && RE.test(l));
+    expect(hits.map((h) => h.slice(0, 160))).toEqual([]);
+    // The scan can find what it bans (a scan that can find nothing is not a guard).
+    expect(RE.test("'Unlock full depth now: 💳 $10 one-time'")).toBe(true);
+    expect(RE.test("'$10 one-time = 1,000 API credits — the cheapest unlock.'")).toBe(true);
+  });
+});

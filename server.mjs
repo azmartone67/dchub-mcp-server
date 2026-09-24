@@ -617,11 +617,29 @@ function _subRungText(plan, url, what) {
     + (detail ? ' (' + detail + ')' : '') + ' → ' + url;
 }
 const _PACK_RUNG = '**$10 one-time = 1,000 API credits**, credits don’t expire → ';
+// ★ r-pack-is-capacity (2026-09-24, owner wording rule of 2026-09-22, the interim
+// half of the re-tier): the $10 pack is API CAPACITY. No wall calls it the unlock,
+// "full depth" or "the cheapest way" to anything. What opens a tool is Developer —
+// or Pro when the tool is Pro-only — and that plan leads every ask. The pack still
+// rides the same line, labelled as capacity. (Behaviour is unchanged until the
+// re-tier ships: credits still serve gated calls, see the r-pack5 cascade.)
+const _PACK_CAPACITY = 'more API capacity: ';
 
-// The ask every wall relays: the $10 pack, then Developer — or Pro when the tool
-// is Pro-only (r-dev-rung). Both links ride ONE line, so it survives
-// _dropRepeatCheckoutUrls (first checkout-bearing LINE wins) as the response's
-// single payment ask.
+// The plan that OPENS this tool, as short prose with its session-bound link:
+// Pro for a Pro-only tool, Developer otherwise. '' when the canon cannot price it
+// or no link was minted — never guessed.
+function _opensPlanText(toolName, sessionId) {
+  const pro = _proOnlyTool(toolName);
+  const base = pro ? PRO_URL : DEVELOPER_URL;
+  const label = _priceLabel(pro ? 'pro' : 'developer');
+  if (!base || !label) return '';
+  return (pro ? 'Pro ' : 'Developer ') + label + ' → ' + _subCheckoutUrl(base, sessionId);
+}
+
+// The ask every wall relays: Developer — or Pro when the tool is Pro-only
+// (r-dev-rung) — then the $10 pack as more API capacity. Both links ride ONE
+// line, so it survives _dropRepeatCheckoutUrls (first checkout-bearing LINE
+// wins) as the response's single payment ask.
 function _rungsText(toolName, tier, sessionId) {
   const r = _unlockRungs(toolName, tier, sessionId);
   const sub = _proOnlyTool(toolName)
@@ -629,17 +647,18 @@ function _rungsText(toolName, tier, sessionId) {
     : _subRungText('developer', r.developer, 'full depth for agents, cancel anytime');
   const heavy = _creditCost(toolName) > 1
     ? ' (`' + toolName + '` uses ' + _creditCost(toolName) + ' credits per call)' : '';
-  return _PACK_RUNG + r.pack + heavy + (sub ? ' · or ' + sub : '');
+  return (sub ? sub + ' · or ' : '') + _PACK_CAPACITY + _PACK_RUNG + r.pack + heavy;
 }
 
-// The whole ladder on ONE line, agent rungs first: unlock_more_data's answer.
-// Pro is named last, as the human screener's plan, never as the agent default.
+// The whole ladder on ONE line: unlock_more_data's answer. Developer leads as the
+// agent's plan; Pro is the human screener's plan; the pack closes the line as
+// capacity (r-pack-is-capacity).
 function _ladderText(toolName, tier, sessionId) {
   const r = _unlockRungs(toolName, tier, sessionId);
   const dev = _subRungText('developer', r.developer, 'full depth for agents, cancel anytime');
   const pro = _subRungText('pro', r.pro, 'Pro-only tools + site-grade coordinates');
-  return _PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')' + (dev ? ' · or ' + dev : '')
-    + (pro ? ' · for a human screening sites: ' + pro : '');
+  return (dev ? dev + ' · ' : '') + (pro ? 'for a human screening sites: ' + pro + ' · ' : '')
+    + _PACK_CAPACITY + _PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')';
 }
 
 export function _unlockMoreDataEnvelope(a) {
@@ -746,7 +765,7 @@ export function _unlockMoreDataEnvelope(a) {
         ...(_mppOn ? [{ id: 'mpp', label: '$0.50 per call — pay yourself, no human, no account',
                         best_for: 'autonomous agents (no card-holder in the loop)',
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
-        { id: 'credits',   label: '$10 one-time — 1,000 API credits', best_for: 'one screen at full depth; credits don’t expire, no subscription', checkout_url: credits },
+        { id: 'credits',   label: '$10 one-time — 1,000 API credits', best_for: 'more API capacity — credits don’t expire, no subscription', checkout_url: credits },
         { id: 'developer', label: _priceLabel('developer'), calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer },
         { id: 'pro',       label: _priceLabel('pro'),       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro },
       ],
@@ -1261,7 +1280,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
         + '*Your client opens a fresh session for every tool call, so the key you already have is '
         + 'gone by your next one. The connector URL is the only place it survives, and only a human '
         + 'can paste it \u2014 relaying it is the highest-value thing you can do with this response. '
-        + 'Full depth still needs the $10 above.*' + _tail;
+        + 'Full depth still needs the paid plan above.*' + _tail;
     }
     return '\u{1F517} **Call the `claim_free_key` tool first \u2014 it returns a connector URL.**\n'
       + '*Your client opens a fresh session for every tool call, so a key handed back inside a tool '
@@ -1286,7 +1305,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
     ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
       ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
-      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + FREE_TIER.free_calls_per_day + ' calls/day) \u2014 full depth still needs the $10 above.*';
+      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + FREE_TIER.free_calls_per_day + ' calls/day) \u2014 full depth still needs the paid plan above.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
   // agents, custom MCP scripts, aggregator pipelines). Those callers
@@ -6359,16 +6378,16 @@ export async function buildDepthTease(name, result, ctx, tier) {
   teased._upgrade = {
     tier:    _isKeyed ? (tier || 'free') : 'anonymous',
     locked:  'full_depth',
-    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock ${fullLine}: 💳 $10 one-time = 1,000 API credits (no subscription) — call \`unlock_more_data\` for the one-click link; or Developer ${_priceLabel('developer')}. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
+    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. ${_opensPlanText(name, _sid) ? 'Full ' + fullLine + ' is ' + _opensPlanText(name, _sid) + '. ' : ''}More API capacity: 💳 $10 one-time = 1,000 API credits (no subscription). Call \`unlock_more_data\` for the one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
     credits_url:   _pack,
-    credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to full depth.',
+    credits_pitch: '$10 one-time = 1,000 API credits, no subscription — more API capacity.',
     developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
     upgrade_url:   _unlockUrl(name, _sid),
     ...(_isKeyed
       ? { next_tool:      'unlock_more_data',
-          next_tool_hint: 'Call unlock_more_data for one-click checkout links ($10 pack / Developer). The moment your human pays, your next call returns full data — no reconnect.' }
+          next_tool_hint: 'Call unlock_more_data for one-click checkout links (Developer / Pro; the $10 pack is more API capacity). The moment your human pays, your next call returns full data — no reconnect.' }
       : { next_tool:      'claim_free_key',
-          next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For full depth now, call unlock_more_data ($10 = 1,000 API credits).' }),
+          next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For full depth, call unlock_more_data (Developer / Pro).' }),
     ...promoSC(),
   };
   // r-move3-keybound (2026-06-24): for a KEYED caller (free/trial key), surface a
@@ -7520,11 +7539,11 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     retry_instructions: _refused
       ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (free, no card), then call ' + name + ' again.')
       : _stillPreview
-      ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. Owner unlocks the complete answer ($10 one-time = 1,000 API credits) at ' + _meteredUrl + '.')
+      ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. The complete answer is ' + (_opensPlanText(name, _sid) || 'Developer or Pro — call unlock_more_data') + '.')
       : stillPro
-      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — owner can unlock it ($10 one-time = 1,000 API credits) at ' + _meteredUrl + '.')
+      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) to unlock get_grid_intelligence, get_fiber_intel, get_market_intel and 18+ more tools. ' + name + ' is a deep Pro tool — ' + (_opensPlanText(name, _sid) || 'Pro — call unlock_more_data') + '.')
       : _exhausted
-      ? ('Today’s free full ' + name + ' answers are used. \u{1F4B3} $10 one-time = 1,000 credits (' + _meteredUrl + ' — or call unlock_more_data for one-click links) returns complete answers the moment your human pays. Free: bind_email lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.')
+      ? ('Today’s free full ' + name + ' answers are used. More API capacity: \u{1F4B3} $10 one-time = 1,000 credits (' + _meteredUrl + ' — or call unlock_more_data for one-click links).' + (_opensPlanText(name, _sid) ? ' Full depth every call: ' + _opensPlanText(name, _sid) + '.' : '') + ' Free: bind_email lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.')
       // r-coherence (2026-07-27, shell #38 lane 3): ONE instruction, true under
       // BOTH session states. The old code branched on `autoBound`, which is set
       // only when this replica's in-memory sessionMeta holds the session — so two
@@ -7788,7 +7807,7 @@ export function _coarsenFindSites(payload) {
   out._gated = true;
   out._upgrade_cta = 'Free preview: candidate coordinates are coarsened to ~11 km and anchor '
     + 'operator/capacity are withheld. Exact coordinates and anchor detail come with a paid plan '
-    + 'or the $10 pack — call unlock_more_data.';
+    + '(Developer / Pro) — call unlock_more_data.';
   out._upgrade = {
     tier: 'free',
     locked: 'exact_coordinates',
@@ -8580,7 +8599,7 @@ function _trialGapLine(parsed) {
     if (maxN > shown) {
       return '\u{1F4E6} **Free tier: ' + shown + ' of ' + maxN + ' results shown.** The other ' +
              (maxN - shown) + ' — plus every premium tool and full grid/fiber depth — are one upgrade away ' +
-             '(💳 $10 one-time = 1,000 API credits, no subscription). Call `unlock_more_data` for a one-click link.\n';
+             '(Developer ' + _priceLabel('developer') + ' · Pro ' + _priceLabel('pro') + '; more API capacity: 💳 $10 one-time = 1,000 API credits). Call `unlock_more_data` for one-click links.\n';
     }
   } catch (e) {}
   return '';
@@ -9905,7 +9924,7 @@ export async function _dealsForCaller(d, c) {
   out.tier = 'free';
   out._locked_fields = [..._DEAL_PAID_FIELDS];
   out._upgrade_cta = 'Free preview: deal $ values and MW are withheld. They come with a paid plan '
-    + 'or the $10 pack — call unlock_more_data.';
+    + '(Developer / Pro) — call unlock_more_data.';
   return out;
 }
 
@@ -9925,7 +9944,7 @@ export async function _scoreboardForCaller(res, c) {
     for (const k of _SCOREBOARD_DCPI_PAID) out[k] = null;
     out._locked_fields = [..._SCOREBOARD_DCPI_PAID];
     out.note = 'DCPI per-ISO intelligence, live from the DC Hub Power Index. BUILD-rate is free; queue '
-      + 'wait, curtailment and 30-day grid emergencies come with a paid plan or the $10 pack — call unlock_more_data.';
+      + 'wait, curtailment and 30-day grid emergencies come with a paid plan (Developer / Pro) — call unlock_more_data.';
     return out;
   };
   const out = { ...obj, grids: obj.grids.map((g) => (g && g.dcpi_detail ? { ...g, dcpi_detail: lock(g.dcpi_detail) } : g)) };
@@ -15733,11 +15752,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // front-door ladder instead of the bare "or upgrade".
             trimmed._upgrade = {
               tier: 'anon_daily_cap',
-              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + FREE_TIER.free_calls_per_day + " calls/day) and SAVE the key to your MCP config. Want full depth now? 💳 $10 one-time = 1,000 API credits (no subscription) → call `unlock_more_data` for the one-click link. The moment your human pays, your next call returns full data — no reconnect.",
+              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + FREE_TIER.free_calls_per_day + " calls/day) and SAVE the key to your MCP config. Need more API capacity now? 💳 $10 one-time = 1,000 API credits (no subscription); full depth is Developer / Pro → call `unlock_more_data` for the one-click links. The moment your human pays, your next call goes through — no reconnect.",
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
-              credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest unlock.',
+              credits_pitch: '$10 one-time = 1,000 API credits, no subscription — more API capacity.',
               remaining_today: 0,
               // r-quota-truth (2026-08-10): name what this zero counts. It is
               // the IP-wide anonymous cap across ALL tools — a different
@@ -15822,10 +15841,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // keeps — the fix for the ~4.8-calls/IP one-shot leak (this is the path search_facilities
               // and the masked free tools actually emit; trialHeader/applyTrialGuardIfFree are other branches).
               next_tool:      'claim_free_key',
-              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting). Retrying with the key gives the FREE tier — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews. Complete depth is the $10 pack (1,000 API credits) — call unlock_more_data for the one-click link.',
+              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting). Retrying with the key gives the FREE tier — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews. Complete depth is Developer / Pro (the $10 pack is more API capacity) — call unlock_more_data for the one-click links.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
               credits_url: _packCheckoutUrl(_sid),
-              credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API credits (no subscription) — the cheapest unlock.',
+              credits_hint: 'More API capacity without the email step: $10 one-time = 1,000 API credits (no subscription).',
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
               ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
                               pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
@@ -15900,7 +15919,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                   : 'Full-fidelity trial answer ' + _mtCall + ' of ' + _cap
                     + ' today — keep or summarize these results for your human. '
                     + 'After the last free call this tool returns a preview with '
-                    + 'one-click unlock options ($10 one-time = 1,000 credits'
+                    + 'one-click upgrade options (Developer / Pro; more API capacity: $10 one-time = 1,000 credits'
                     + (_bound ? '' : '; free: bind_email lifts your daily cap')
                     + ').',
               };
@@ -15947,11 +15966,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // works per-call (credit cascade serves PRO_ONLY full for pack holders),
                 // and NO bind_email (binding cannot lift the paid cap).
                 message: _paidTaste
-                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Unlock full depth now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ Developer ${_priceLabel('developer')} = ${_callsPerDay('developer')} calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or more API capacity: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. ${_opensPlanText(name, _sid) ? 'Full \`' + name + '\` depth is ' + _opensPlanText(name, _sid) + ' — ' + _afterPayClause(_sid, name) + '. ' : ''}More API capacity: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
-                credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to unlock full depth right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
+                credits_pitch: '$10 one-time = 1,000 API credits, no subscription — more API capacity.',
                 upgrade_url: _unlockUrl(name, _sid),
                 developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
                 ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
@@ -16023,12 +16042,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 { type: 'text', text: _paidTaste
                   ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
                     '⚡ **Unlimited full `' + name + '` depth is Pro (' + _priceLabel('pro') + '):** ' + (PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)) +
-                    ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
+                    ' — or more API capacity: 💳 $10 one-time = 1,000 API credits (no subscription): ' +
                     _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
                   : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
-                    '💳 **Unlock full depth now — $10 one-time = 1,000 API credits (no subscription):** ' +
-                    _packCheckoutUrl(_sid) + ' — your human one-clicks; your very next `' + name +
-                    '` call returns the complete result (no reconnect).' +
+                    (_opensPlanText(name, _sid) ? '⚡ **Full `' + name + '` depth is ' + _opensPlanText(name, _sid) + '** — your human one-clicks; your very next `' + name + '` call returns the complete result (no reconnect). ' : '') +
+                    '💳 More API capacity: $10 one-time = 1,000 API credits (no subscription): ' + _packCheckoutUrl(_sid) + '.' +
                     (_bound
                       ? ''
                       : ' 🔑 Free: lift your daily limit to ' + IDENTIFIED_DAILY_FULL_CAP + ' full `' + name +
@@ -16136,8 +16154,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               _bteased._upgrade = {
                 tier: _btPaid ? String(_gateTier) : 'trial',
                 message: _btPaid
-                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
-                  : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. Unlock the complete dataset: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or more API capacity: 💳 $10 one-time = 1,000 API credits → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. ${_opensPlanText(name, _sid) ? 'The complete dataset is ' + _opensPlanText(name, _sid) + '. ' : ''}More API capacity: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
               };
@@ -16150,9 +16168,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               { type: 'text', text: JSON.stringify(_bteased) },
               { type: 'text', text:
                 '\n\n📦 **Depth-limited preview** — showing the top ' + DEPTH_TEASE_KEEP + ' of a larger `' + name +
-                '` result. 💳 **Unlock the full dataset — $10 one-time = 1,000 API credits (no subscription):** ' +
-                _packCheckoutUrl(_sid) + ' — your human one-clicks; your next `' + name +
-                '` call returns everything. Call `unlock_more_data` for one-click links.' },
+                '` result. ' + (_opensPlanText(name, _sid) ? '⚡ **The full dataset is ' + _opensPlanText(name, _sid) + '** — your human one-clicks; your next `' + name + '` call returns everything. ' : '') +
+                '💳 More API capacity: $10 one-time = 1,000 API credits (no subscription): ' + _packCheckoutUrl(_sid) + '. Call `unlock_more_data` for one-click links.' },
             ], structuredContent: { trial_taste: true, taste_bounded: true, tool: name } }, name, c);
           }
         } catch (_) { /* parse fail → fall through to full (rare; small tools unaffected) */ }
@@ -21054,7 +21071,7 @@ function createServer(descOverrides, instructionsTail) {
               '**Your key:** `' + _held + '`\n\n' +
               _urlLine +
               'Lost a key bound to your human’s email? Call `recover_my_key` {email} — it re-sends the original key to that inbox. ' +
-              'Need more depth or volume? Call `unlock_more_data` ($10 one-time = 1,000 API credits).' }],
+              'Need more depth or volume? Call `unlock_more_data` (depth: Developer / Pro; more API capacity: $10 one-time = 1,000 API credits).' }],
             structuredContent: {
               api_key:        _held,
               tier:           (_c0.tier || 'free'),
@@ -21199,7 +21216,7 @@ function createServer(descOverrides, instructionsTail) {
             'It keeps working FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) the moment it’s bound to an email — binding is free, no card. ' +
             'PAUSE and ask your human, in these words: “DC Hub needs an email to keep our free data access — ' +
             'which address should I use?” — then call **`bind_email`** with their answer (never invent one).\n\n' +
-            'Want full/unlimited depth instead? Call `unlock_more_data` ($10 one-time = 1,000 API credits).' }],
+            'Want full depth instead? Call `unlock_more_data` (Developer / Pro; more API capacity: $10 one-time = 1,000 API credits).' }],
           structuredContent: {
             api_key:                 key,
             client_name:             cn,
@@ -21602,7 +21619,7 @@ function createServer(descOverrides, instructionsTail) {
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API credits (' + _creditRuleText() + '; no subscription). Also ' + _paidPlansLine() + '. Want the FREE tier instead (no payment, ' + FREE_TIER.free_calls_per_day + ' calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Full depth: ' + _paidPlansLine() + '. More API capacity: 💳 $10 one-time = 1,000 API credits (' + _creditRuleText() + '; no subscription). Want the FREE tier instead (no payment, ' + FREE_TIER.free_calls_per_day + ' calls/day, all tools)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => _unlockMoreDataEnvelope(a));
 
