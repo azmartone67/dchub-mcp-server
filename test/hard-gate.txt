@@ -15,6 +15,7 @@ test/auth-demoted-identity.test.mjs
 test/auth-refused-identity.test.mjs
 test/auth-source.test.mjs
 test/auth-unverified-identity.test.mjs
+test/auto-bind-quota-contradiction.test.mjs
 test/automint-trial-rungs.test.mjs
 test/bind-midcall-facility-mask.test.mjs
 test/byo-mcp-paywall-lead.test.mjs

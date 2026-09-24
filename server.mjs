@@ -4041,6 +4041,19 @@ function _autoBindTrialToSession(mint) {
     _m.is_trial   = true;                         // r62c trial-taste gate → full grid/fiber next call
     _m.auto_bound = true;
     sessionMeta.set(_sid, _m);
+    // r-quota-contradiction (2026-09-24): sessionMeta is a SEPARATE object from the
+    // in-flight request's AsyncLocalStorage store, so binding it here does not, by
+    // itself, change what THIS call's getCtx() reports — only the NEXT request reads
+    // the updated sessionMeta. Meanwhile buildAutoMintBlock's top-level
+    // `remaining_full_today` (computed from this same successful mint, gated only on
+    // `!_mintRefused`) ships on THIS call. Without this line, `_buildQuotaHint`'s
+    // `_durable` check reads the stale pre-bind ctx, so the SAME response carries a
+    // non-zero `remaining_full_today` at top level next to
+    // `quota.full_answers_remaining_today: null` / `NOT YET APPLICABLE at an anonymous
+    // seat`. Mirror the bind onto the live ctx object so both fields agree this call.
+    _ctx.api_key  = _m.api_key;
+    _ctx.tier     = _m.tier;
+    _ctx.is_trial = _m.is_trial;
     try { recordSessionUpgrade(_m.platform, _m.tier); } catch (_) {}
     console.log(`[auto_mint] trial auto-bound to session ${String(_sid).slice(0,8)} — full taste on next call, no reconnect`);
     return true;
@@ -23685,6 +23698,10 @@ export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE
 // vs durable — is the ONLY input that decides whether the meter may be shown,
 // and it is not reachable any other way from a unit test.
 export { _buildQuotaHint, ctx as _ctxALS };
+// r-quota-contradiction (2026-09-24): exported for test/auto-bind-quota-contradiction.test.mjs
+// — the bind path is the other half of the seat state _buildQuotaHint reads, and
+// sessionMeta is not reachable any other way from a unit test.
+export { _autoBindTrialToSession, sessionMeta };
 export { buildHumanRelay, _unlockRungs, _rungsText, _freeRungLine, siteHeadlineHeader,
          _gatesDepth, _scoreBand };
 export { _wallIsError };
