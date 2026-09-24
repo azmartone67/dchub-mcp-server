@@ -21,6 +21,10 @@ export const PROBE_PATTERNS = {
   'checkout': /buy\.stripe\.com|\bcheckout\b/i,
   'claim token': /claim_free_key|auto_trial_key|persist_config|"claim_token"/i,
   'upgrade/unlock wording': /\bunlock|\bupgrade (to|now|your)\b|upgrade_required/i,
+  // The /mcp anti-scraper block (server.mjs r-scraper-block) must never fire on
+  // the profile: it refuses the call and its copy offers keys. The response
+  // filter strips part of that copy, so match the sentences that survive it.
+  'scraper block': /scraper_pattern_blocked|Automated usage detected|5-tool sweep|Anonymous sweep blocked|\b(enterprise|benchmark|dev) key\b/i,
 };
 
 export function probeHits(text) {
@@ -59,7 +63,9 @@ export const GUESS_ARGS = {
 // those calls count as ChatGPT connector traffic.
 export const SELF_TAG = 'dchub-directory-probe';
 export const CHATGPT_HEADERS = { 'user-agent': 'openai-mcp/1.0.0', 'x-mcp-platform': 'chatgpt' };
-export const CHATGPT_META = { 'openai/session': 'v1/probe-session-0123456789abcdef' };
+// A fresh session per run: a fixed id made every run inside the hour share one
+// server-side session, so one run's calls counted against the next.
+export const CHATGPT_META = { 'openai/session': `v1/probe-${randomUUID()}` };
 const AS_CHATGPT = process.argv.includes('--as-chatgpt');
 const MIN_DATA_ANSWERS = 20;
 
@@ -115,7 +121,7 @@ async function main() {
       if (!r.msg) failures.push(`${tag}: non-JSON response HTTP ${r.status}`);
       // A run whose calls were all refused proves nothing about the answers,
       // so count what actually came back instead of reading silence as clean.
-      if (/API 429|rate_limit_exceeded/.test(r.raw)) rateLimited += 1;
+      if (/API 429|rate_limit_exceeded|scraper_pattern_blocked|Automated usage detected|Anonymous sweep blocked/.test(r.raw)) rateLimited += 1;
       else if (r.msg && r.msg.result && !r.msg.result.isError && !/\\"error\\":/.test(r.raw)) dataAnswers += 1;
       if (r.raw.includes('dchub.cloud/plans')) {
         gated += 1;
@@ -142,6 +148,7 @@ async function main() {
 }
 
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch((e) => { console.error(e); process.exit(2); });
 }

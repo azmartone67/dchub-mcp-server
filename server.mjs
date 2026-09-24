@@ -14672,7 +14672,12 @@ function trackedTool(srv, name, description, schema, handler) {
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
     // Returns isError=true with a friendly identification CTA. Counts the
     // call for telemetry but skips the tool handler entirely.
-    if (_isScraperSession(c.session_id, name, !!c.api_key)) {
+    // r-chatgpt-directory-noblock (2026-09-24): not on /mcp/chatgpt. A directory
+    // reviewer working down the tool list in one conversation calls all five
+    // signature tools, and every later call came back as this block — whose
+    // key-offer copy is itself the commerce the profile exists to remove.
+    // The anonymous per-IP rate limit still applies there.
+    if (c.profile !== DIRECTORY_PROFILE && _isScraperSession(c.session_id, name, !!c.api_key)) {
       status = 'blocked_scraper';
       console.log(`[scraper-block] sid=${(c.session_id||'').slice(0,8)} tool=${name} platform=${c.platform||'?'} — pattern matched 5-tool sweep`);
       // fire-and-forget telemetry, then return.

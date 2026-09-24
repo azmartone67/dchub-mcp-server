@@ -242,16 +242,36 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
   it('ChatGPT-shaped calls (openai/session _meta) carry nothing either', async () => {
     const before = mintHits;
     const offenders = [];
+    let answered = 0;
     for (const name of Object.keys(DIRECTORY_TOOLS)) {
       if (name === 'subscribe_digest') continue;
       const r = await post(DIR, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call',
         params: { name, arguments: { ...GUESS_ARGS }, _meta: { ...CHATGPT_META } } }, CHATGPT_HEADERS);
       const hits = probeHits(r.raw);
       if (hits.length) offenders.push(`${name}: ${hits.join(', ')}`);
+      if (/"isError":true/.test(r.raw) === false) answered += 1;
     }
     expect(offenders).toEqual([]);
     expect(mintHits - before, 'the profile minted a key').toBe(0);
+    // One openai/session calling every tool is what a directory reviewer does,
+    // and it crosses the /mcp scraper signature. A blocked call reached the client
+    // without isError (measured), so it still counts as answered here; the 'scraper block'
+    // probe pattern is what catches the block. This floor only proves the
+    // calls reached answers at all.
+    expect(answered).toBeGreaterThan(50);
   }, 240_000);
+
+  it('CONTROL: the same one-session sweep on /mcp trips the scraper block', async () => {
+    const meta = { 'openai/session': 'v1/control-sweep-session' };
+    const sig = ['get_agent_registry', 'get_energy_prices', 'get_facility', 'get_fiber_intel', 'get_grid_data'];
+    let last = null;
+    for (const name of [...sig, 'get_news']) {
+      last = await post('/mcp', { jsonrpc: '2.0', id: rpcId++, method: 'tools/call',
+        params: { name, arguments: { ...GUESS_ARGS }, _meta: meta } }, CHATGPT_HEADERS);
+    }
+    expect(last.raw).toContain('scraper_pattern_blocked');
+    expect(probeHits(last.raw)).toContain('scraper block');
+  }, 60_000);
 
   it('CONTROL: the ChatGPT-shaped call on /mcp does surface commerce', async () => {
     const r = await post('/mcp', { jsonrpc: '2.0', id: rpcId++, method: 'tools/call',
