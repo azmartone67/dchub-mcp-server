@@ -10293,6 +10293,12 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   } else {
     if (!haveGrid) out._warning_grid = `Live EIA fuel-mix/demand feed unavailable for ${ISO} right now (Power Index scores still shown).`;
     if (!row)      out._warning_dcpi = `No DC Hub Power Index row for ${ISO}.`;
+    // r-ba-coverage-note (2026-09-24): a Grok run read DUK's null scores as "DUK is
+    // not covered" and asked us to point agents at get_interconnection_queue for
+    // SERC. That tool refuses iso=SERC (7 ISOs only), so that hint would have been a
+    // dead end. Say what IS covered for a non-ISO balancing authority, what is not,
+    // and one tool that does work there.
+    if (!row && haveGrid && !_SEVEN_ISOS.has(ISO)) out.coverage_note = _baCoverageNote(ISO);
   }
   // r-rag-tooldata (2026-07-04): pass through the RAG-grounded passages the backend
   // attaches when get_grid_intelligence sends ?rag=1 — the shaper otherwise cherry-
@@ -10301,6 +10307,14 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     out.related_intel = gi.related_intel;
   }
   return out;
+}
+
+const _SEVEN_ISOS = new Set(['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISONE', 'ISO-NE']);
+export function _baCoverageNote(ISO) {
+  return `${ISO} is a balancing authority outside the 7 ISOs. Covered here: live EIA-930 demand `
+    + `and fuel mix. Not published for ${ISO}: DC Hub Power Index scores and interconnection-queue `
+    + `depth (get_interconnection_queue covers ERCOT, PJM, MISO, CAISO, SPP, NYISO and ISONE only). `
+    + `For power at a specific site in this footprint, call analyze_site with its coordinates.`;
 }
 
 // ── shapeScoreboardUsRow: one US row of get_grid_scoreboard ──────────────────
@@ -16954,6 +16968,37 @@ export function _rawArgKeysFromBody(body) {
   return out;
 }
 
+// ── r-oai-session-sid (2026-09-24) ─────────────────────────────────────────
+// ChatGPT calls tools/call statelessly: no initialize handshake, no
+// Mcp-Session-Id. So the stateless branch ran with session_id '' and every
+// session-bound artifact went out empty. Measured the same day in a ChatGPT
+// run: the /upgrade/h token decoded to "|unlock_more_data|paid|…" (leading
+// pipe = empty sid) and the /go/c tokens carried no session either. That left
+// paid_attributed with no way to join a ChatGPT sale back to its conversation.
+//
+// ChatGPT does send params._meta["openai/session"] on every tool call, which the
+// Apps SDK reference describes as an "anonymized conversation id". It is stable
+// for one conversation, which is exactly the lifetime of an Mcp-Session-Id. Hash it so the raw
+// id never lands in a URL, a Stripe client_reference_id or a log line. The
+// `oai-` prefix keeps it inside checkout_click_tracker._REF_OK
+// ([A-Za-z0-9_.:-]) and tells a reader where it came from.
+//
+// Used ONLY when the request carried no Mcp-Session-Id of its own. A real
+// session always wins. Absent, empty or non-string → '' (today's behaviour).
+export function _openaiSessionSid(body) {
+  try {
+    const msgs = Array.isArray(body) ? body : [body];
+    for (const m of msgs) {
+      const meta = m && m.params && m.params._meta;
+      const v = meta && typeof meta === 'object' ? meta['openai/session'] : null;
+      if (typeof v === 'string' && v.trim()) {
+        return 'oai-' + createHash('sha256').update(v.trim()).digest('hex').slice(0, 32);
+      }
+    }
+  } catch (_) { /* additive only */ }
+  return '';
+}
+
 // Reads the capture for ONE tool out of the active request ctx. null => silent.
 const _ctxRawArgKeys = (name) => {
   const m = (getCtx() || {}).raw_arg_keys;
@@ -23440,7 +23485,8 @@ app.post(MCP_PATHS, async (req, res) => {
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
         developer_id: validation.developer_id || null,
         email: validation.email || null,
-        session_id: sessionId || null,               // stale id → still the backend funnel key
+        // stale id → still the backend funnel key; none → ChatGPT's conversation id (r-oai-session-sid)
+        session_id: sessionId || _openaiSessionSid(body) || null,
         // ★ Recovered raw clientInfo.name — without this the telemetry row's
         // client_name falls back to the generic platform and the identity view
         // classifies the call as 'mcp'.

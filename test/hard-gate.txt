@@ -31,6 +31,7 @@ test/challenge-after-n.test.mjs
 test/challenge-bound-and-widen.test.mjs
 test/challenge-budget-key.test.mjs
 test/challenge-carries-human-line.test.mjs
+test/chatgpt-openai-session-sid.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
@@ -90,6 +91,7 @@ test/glama-build-provenance.test.mjs
 test/glama-placement-probe.test.mjs
 test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
+test/grid-ba-coverage-note.test.mjs
 test/grid-region-unresolved.test.mjs
 test/grok-relay-label.test.mjs
 test/handler-args-declared.test.mjs
