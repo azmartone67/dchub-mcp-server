@@ -128,6 +128,8 @@ describe('the registry path tags the ARRIVAL SOURCE', () => {
     expect(_pathSource({ path: '/mcp/glama' })).toBe('glama');
     expect(_pathSource({ path: '/mcp/smithery' })).toBe('smithery');
     expect(_pathSource({ path: '/mcp/pulsemcp' })).toBe('pulsemcp');
+    // the README's own tag — a document, not a registry (see server.mjs)
+    expect(_pathSource({ path: '/mcp/github' })).toBe('github-readme');
   });
 
   it('is EMPTY on the canonical path and on anything undeclared', () => {
@@ -237,5 +239,35 @@ describe('REGISTRY-LISTINGS.md cannot drift from the declared source paths', () 
     const sj = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
     const pp = sj._meta['io.modelcontextprotocol.registry/publisher-provided'];
     expect(pp.canonicalRemote).toBe('https://dchub.cloud/mcp');
+  });
+});
+
+// ── r-readme-path (2026-09-24) ──────────────────────────────────────────────
+// The README is copied by humans AND rendered by Glama's server page and
+// LobeHub, and both of those handed out a BARE https://dchub.cloud/mcp —
+// measured 2026-09-24 — so README-driven arrivals were indistinguishable from
+// direct traffic. Every URL a reader can paste into a client (a JSON config
+// value or an `mcp add` command) must carry the README's own tag. A snippet
+// quietly reverted to bare /mcp would make the channel invisible again with
+// every test still green, which is what this pins.
+describe('README install snippets carry the github-readme tag', () => {
+  const README = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const PASTE = [
+    ...README.matchAll(/"(?:url|httpUrl|serverUrl)":\s*"(https:\/\/dchub\.cloud\/mcp[^"]*)"/g),
+    ...README.matchAll(/mcp add [^`\n]*?(https:\/\/dchub\.cloud\/mcp\S*?)`/g),
+  ].map((m) => m[1]);
+
+  it('finds the snippets at all (non-vacuity)', () => {
+    expect(PASTE.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('every pasteable URL resolves to github-readme', () => {
+    for (const url of PASTE) {
+      expect(_pathSource({ path: new URL(url).pathname }), url).toBe('github-readme');
+    }
+  });
+
+  it('the headline MCP link is tagged too', () => {
+    expect(README).toContain('MCP at [`https://dchub.cloud/mcp/github`](https://dchub.cloud/mcp/github)');
   });
 });

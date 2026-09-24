@@ -59,7 +59,7 @@ Deeper: [`/llms.txt`](https://dchub.cloud/llms.txt) ·
 [`/llms-full.txt`](https://dchub.cloud/llms-full.txt) ·
 [`/ai-agents`](https://dchub.cloud/ai-agents) ·
 [`/AGENTS.md`](https://dchub.cloud/AGENTS.md) ·
-MCP at [`https://dchub.cloud/mcp`](https://dchub.cloud/mcp)
+MCP at [`https://dchub.cloud/mcp/github`](https://dchub.cloud/mcp/github)
 
 ---
 
@@ -151,7 +151,7 @@ The `/dchub:find_capacity` prompt runs the whole path: requirement → listings 
 
 | Endpoint | What it covers |
 |---|---|
-| `https://dchub.cloud/mcp` | everything — all 92 tools |
+| `https://dchub.cloud/mcp/github` | everything — all 92 tools |
 | `https://dchub.cloud/mcp/siting` | site selection end to end: find, analyze, score, compare, rank — plus Capacity Source |
 | `https://dchub.cloud/mcp/grid` | power availability: live ISO telemetry, interconnection queue, hosting + retirement headroom, prices |
 | `https://dchub.cloud/mcp/fiber` | routes, metro fiber, subsea cables, peering, lead-in planning, latency clustering |
@@ -183,7 +183,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp",
+      "url": "https://dchub.cloud/mcp/github",
       "transport": "http"
     }
   }
@@ -199,7 +199,7 @@ Search for "DC Hub" in [Cursor MCP marketplace](https://cursor.directory/plugins
 ```json
 {
   "name": "dchub",
-  "url": "https://dchub.cloud/mcp",
+  "url": "https://dchub.cloud/mcp/github",
   "transport": "http"
 }
 ```
@@ -212,13 +212,13 @@ Search for "DC Hub" in [Cursor MCP marketplace](https://cursor.directory/plugins
 {
   "mcpServers": {
     "dchub": {
-      "httpUrl": "https://dchub.cloud/mcp"
+      "httpUrl": "https://dchub.cloud/mcp/github"
     }
   }
 }
 ```
 
-Or one command: `gemini mcp add --transport http dchub https://dchub.cloud/mcp`
+Or one command: `gemini mcp add --transport http dchub https://dchub.cloud/mcp/github`
 
 > **`httpUrl`, not `url`.** In Gemini CLI `url` is the SSE form and `command` is stdio — put a Streamable-HTTP server under either and it is dialled with the wrong transport and never connects. This is the free Gemini CLI: no OAuth, no admin console, no enterprise account. Add a `headers` object with `X-API-Key` for full data.
 
@@ -230,7 +230,7 @@ Or one command: `gemini mcp add --transport http dchub https://dchub.cloud/mcp`
 {
   "mcpServers": {
     "dchub": {
-      "serverUrl": "https://dchub.cloud/mcp"
+      "serverUrl": "https://dchub.cloud/mcp/github"
     }
   }
 }
