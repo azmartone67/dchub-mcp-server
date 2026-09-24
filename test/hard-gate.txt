@@ -208,6 +208,7 @@ test/session-release-covers-every-map.test.mjs
 test/site-headline-envelope.test.mjs
 test/smithery-canon-guard.test.mjs
 test/smithery-credential-fallback.test.mjs
+test/smithery-drift-guard.test.mjs
 test/smithery-first-touch.test.mjs
 test/smithery-freshness-honest.test.mjs
 test/smithery-freshness-ledger.test.mjs
