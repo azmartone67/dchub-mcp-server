@@ -996,6 +996,87 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
   } catch (_e) { return _body; }   // prose-only helper — never break a response
 }
 
+// ── r-optin-ask (2026-09-24): the email opt-in ask on the live agent path ────
+// Zero people had ever confirmed a marketing opt-in, so the consent-gated
+// warm-keys export was empty. The backend's paywall CTA
+// (mcp_gatekeeper._optin_cta_block) lives only in the Python :8888 server, which
+// has no public route, so no agent ever saw it: an anonymous get_grid_intelligence
+// on dchub.cloud/mcp, measured 2026-09-24, returned auto_trial_key and
+// for_your_human and no opt-in link in either channel, and a trial-key
+// get_fiber_intel preview did the same.
+//
+// The link is the backend's own page, the same route subscribe_digest POSTs to.
+// A GET renders an email form and sends nothing, so a link-preview fetch cannot
+// subscribe anyone. The form POST runs the double opt-in. The link never carries
+// a key: it is relayed to a human and may be pasted anywhere.
+//
+// It goes in BOTH channels, like the backend's card: structuredContent.optin for
+// machine consumers, and one prose line for the text a relay passes on (text-only
+// relays drop structuredContent). Once per session (r-relay-cap's rule), never on
+// a paid tier, and only on a response that carries a trial or paywall signal.
+// It is a free email ask, not a payment ask, so it carries no checkout URL and
+// none of the _HUMAN_CTA_SIGNATURES, and the one-ask machinery above never sees it.
+export const OPTIN_REQUEST_URL = 'https://dchub.cloud/api/v1/opt-in/request';
+export const OPTIN_SOURCE = 'mcp_trial_wall';
+const _OPTIN_SENT = new Set();
+const _OPTIN_SENT_MAX = 20000;
+// Tools whose own response is the identity or opt-in step. claim_free_key's
+// mint text already offers the digest in prose.
+const _OPTIN_SKIP_TOOLS = new Set(['subscribe_digest', 'claim_free_key', 'bind_email',
+  'recover_my_key', 'claim_key', 'get_free_key', 'unlock_more_data']);
+export function _optinUrl(toolName) {
+  const p = new URLSearchParams({ source: OPTIN_SOURCE });
+  const t = String(toolName || '');
+  if (/^[a-z0-9_]{1,64}$/.test(t)) p.set('tool', t);
+  return OPTIN_REQUEST_URL + '?' + p.toString();
+}
+function _optinWallSignal(result) {
+  const sc = (result && result.structuredContent) || {};
+  if (sc.auto_trial_key || sc.trial_taste === true || sc.preview_is_partial === true
+      || sc.trial_preview || sc.upgrade || sc.for_your_human) return true;
+  const text = Array.isArray(result && result.content)
+    ? result.content.map((c) => (c && typeof c.text === 'string' ? c.text : '')).join('\n') : '';
+  return /https:\/\/dchub\.cloud\/(?:go\/c|upgrade\/h)\//.test(text);
+}
+export function _withOptinAsk(result, toolName, ctx) {
+  try {
+    if (!result || !Array.isArray(result.content) || _OPTIN_SKIP_TOOLS.has(toolName)) return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    const c = ctx || {};
+    const scTier = sc.identity && sc.identity.tier;
+    if (_isPaidDepthTier(c.tier) || _isPaidDepthTier(scTier)) return result;
+    if (sc.completeness === 'unrestricted') return result;
+    if (!_optinWallSignal(result)) return result;
+    const sid = c.session_id || '';
+    if (sid && _OPTIN_SENT.has(sid)) return result;
+    const url = _optinUrl(toolName);
+    const line = '\n\n\u{1F4EC} **Free for your human — a weekly email when these markets move:** ' +
+      'they enter their email at ' + url + ' (nothing is sent until they confirm; unsubscribe anytime).';
+    const content = result.content.slice();
+    let i = content.length - 1;
+    while (i >= 0 && !(content[i] && content[i].type === 'text')) i--;
+    if (i >= 0) content[i] = { ...content[i], text: String(content[i].text || '').replace(/\s*$/, '') + line };
+    else content.push({ type: 'text', text: line.trimStart() });
+    if (sid) {
+      if (_OPTIN_SENT.size >= _OPTIN_SENT_MAX) {
+        let n = 0; const drop = _OPTIN_SENT_MAX / 10;
+        for (const k of _OPTIN_SENT) { _OPTIN_SENT.delete(k); if (++n >= drop) break; }
+      }
+      _OPTIN_SENT.add(sid);
+    }
+    return {
+      ...result,
+      content,
+      structuredContent: { ...sc, optin: {
+        url,
+        message: 'Free weekly email for your human when these markets move. The page asks for their email; nothing is sent until they confirm (double opt-in).',
+        source: OPTIN_SOURCE,
+        next_tool: 'subscribe_digest',
+      } },
+    };
+  } catch (_e) { return result; }   // an ask is never worth failing a response over
+}
 
 export function buildPaywallExtras(toolName, currentTier, sessionId) {
   // phase65_redeem_in_human_message -- redeem URL is the primary CTA in
@@ -16211,7 +16292,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   network.
   }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
-         _scrubCommerce(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx())),
+         _scrubCommerce(_withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))),
        name, args, _outSchema), name));
