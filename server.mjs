@@ -8210,6 +8210,17 @@ export function _teaserValue(v) {
   return r.toLocaleString('en-US').slice(0, 24);
 }
 const _TEASER_POSTED = new Set();
+export function _valueVisibleInResult(result, key, value) {
+  try {
+    const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+    if (!Number.isFinite(n)) return true;           // cannot prove withheld → treat as visible
+    const k = String(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const v = String(n).replace('.', '\\.');
+    // "key":46.5 in structuredContent, or \"key\":46.5 inside a JSON text block
+    const re = new RegExp('\\\\?"' + k + '\\\\?"\\s*:\\s*"?' + v + '(?![0-9])');
+    return re.test(JSON.stringify(result));
+  } catch (_) { return true; }
+}
 export function _relayTeaserPayload(result, ctx) {
   try {
     const t = ctx && ctx.withheld_teaser;
@@ -8221,6 +8232,14 @@ export function _relayTeaserPayload(result, ctx) {
     const label = _teaserLabel(t.key);
     const value = _teaserValue(t.value);
     if (!label || !value) return null;
+    // ★ r-teaser-only-if-withheld (2026-09-24): the page says "your agent's
+    // preview held back", so the value must be absent from EVERY channel of the
+    // response the agent got. Measured live: an anonymous get_grid_intelligence
+    // trimmed structuredContent (recording constraint_score 46.5) while its text
+    // block carried the full "constraint_score":46.5, and the page claimed a
+    // number the agent already had. Any `"key": <that value>` anywhere in the
+    // serialized result, text included (escaped or not), means not withheld.
+    if (_valueVisibleInResult(result, t.key, t.value)) return null;
     return { token: m[1], label, value };
   } catch (_) { return null; }
 }
