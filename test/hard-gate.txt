@@ -145,6 +145,7 @@ test/no-live-dcgi-claims.test.mjs
 test/no-push-to-protected-main.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs
 test/no-starter-offer.test.mjs
+test/nodata-trial-side-effects.test.mjs
 test/oauth-first-copy.test.mjs
 test/oauth-funnel-stages.test.mjs
 test/oauth.test.mjs
