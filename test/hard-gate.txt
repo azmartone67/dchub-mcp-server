@@ -144,6 +144,7 @@ test/one-of-required.test.mjs
 test/optin-ask-on-trial-wall.test.mjs
 test/optin-cta-parity.test.mjs
 test/origin-edge-key.test.mjs
+test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
 test/payload-diet.test.mjs

@@ -101,7 +101,7 @@ describe('the wall copy branches on it', () => {
   it('the PRO branch is untouched', () => {
     const pro = block.slice(block.indexOf(': _isClaude'));
     expect(pro).toContain('is a paid feature');
-    expect(pro).toContain('full depth still needs one of the unlocks above');
+    expect(pro).toContain('full depth still needs one of the options above');
   });
 });
 

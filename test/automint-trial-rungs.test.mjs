@@ -246,8 +246,8 @@ describe('r-trial-sub-bind — no subscription link binds to a trial key', () =>
     const { sid, h } = await session({ 'x-dc-client-ip': '198.51.100.13', 'x-api-key': TRIAL });
     const r = await call(h, ...COMPARE);
     const wall = await keyedWall(h);
-    expect(wall.text).toContain('this session unlocks');
-    expect(wall.text).not.toContain('this key unlocks');
+    expect(wall.text).toContain('this session is served in full');
+    expect(wall.text).not.toContain('this key is served in full');
     expect(refsIn(wall.body)).not.toContain('k-' + sha(TRIAL));
     expect(refsIn(r.body)).not.toContain('k-' + sha(TRIAL));
     const pro = goTokens(r.body).filter((t) => t.plan === 'pro');
@@ -260,7 +260,7 @@ describe('r-trial-sub-bind — no subscription link binds to a trial key', () =>
     const r = await call(h, ...COMPARE);
     expect(goTokens(r.body)).toContainEqual({ plan: 'pro', ref: 'k-' + sha(LIVE), sid });
     const wall = await keyedWall(h);
-    expect(wall.text).toContain('this key unlocks');
+    expect(wall.text).toContain('this key is served in full');
     expect(goTokens(wall.body)).toContainEqual({ plan: 'pro', ref: 'k-' + sha(LIVE), sid });
   }, 30000);
 });
