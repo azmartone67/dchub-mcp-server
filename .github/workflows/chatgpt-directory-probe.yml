@@ -1,0 +1,45 @@
+name: ChatGPT directory profile — live no-key probe
+
+# WHY: https://dchub.cloud/mcp/chatgpt is the profile submitted to the ChatGPT
+# app directory (r-chatgpt-directory, 2026-09-24). Its guarantee — no checkout
+# links, relay links, prices, keys or session ids in any anonymous response,
+# and only the five standard annotation keys — is pinned in CI by
+# test/chatgpt-directory-probe.test.mjs against a fake backend. This job checks
+# the SAME patterns against the deployed profile and real data, daily and on
+# demand after a deploy. Railway deploys outside GitHub, so there is no deploy
+# event to hang it on.
+#
+# Exit codes of the probe: 0 clean, 1 a leak or an annotation violation (the
+# job fails), 3 inconclusive — too few calls returned data (the anonymous
+# backend rate limit refused them), which is reported as a warning, not a pass
+# and not a failure.
+#
+# The probe self-tags (x-mcp-platform: dchub-directory-probe) so these calls
+# are not published as external demand (r-ci-selftag).
+
+on:
+  schedule:
+    - cron: '17 16 * * *'   # daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '22' }
+      - name: Probe https://dchub.cloud/mcp/chatgpt with no key
+        run: |
+          set +e
+          node scripts/probe-chatgpt-directory.mjs https://dchub.cloud/mcp/chatgpt | tee probe.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" = "3" ]; then
+            echo "::warning::Directory probe inconclusive: too few calls returned data (rate-limited). $(head -1 probe.log)"
+            exit 0
+          fi
+          exit "$rc"
