@@ -2424,6 +2424,15 @@ const MCP_SOURCE_PATHS = new Map([
   //   from direct traffic. Tagging it is the only way to find out whether the
   //   listing has ever sent anyone.
   ['/mcp/cursordirectory', 'cursor-directory'],
+  // ★ 2026-09-24 — the README's install snippets. Not a registry: the tag says
+  //   "copied the URL out of our README". That README is ALSO what Glama's
+  //   /mcp/servers/azmartone67/dchub-mcp-server page and LobeHub render, so the
+  //   tag is `github-readme` (the document), not `github` (the site) — a Glama
+  //   or LobeHub reader who copies from the rendered README lands here too, and
+  //   no effort can separate them. Measured before this change: both pages
+  //   handed out a BARE https://dchub.cloud/mcp, indistinguishable from direct.
+  //   Glama's CONNECTOR page is a different URL (/mcp/registry, cascade-fed).
+  ['/mcp/github', 'github-readme'],
 ]);
 
 function _normPath(req) {

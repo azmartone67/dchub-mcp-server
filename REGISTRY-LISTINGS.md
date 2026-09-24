@@ -39,6 +39,7 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **Docker MCP Catalog** — ships in Docker Desktop's MCP Toolkit (one-click install into Claude Desktop / Cursor / VS Code). ⚠️ we are NOT listed — measured 404 on `servers/dchub/server.yaml` | `https://dchub.cloud/mcp/docker` | ✅ PR to `docker/mcp-registry` (remote-server entry: server.yaml + tools.json + readme.md) |
 | **Anthropic Connectors Directory** — in-app, submitted from claude.ai org settings. ⚠️ needs a **Team/Enterprise org** + Owner role; ends in 7 policy acknowledgments the owner must make. | `https://dchub.cloud/mcp/anthropic` | ⚠️ portal only — not submittable from this repo |
 | **cursor.directory** (community; cursor.com has no public MCP directory) | `https://dchub.cloud/mcp/cursordirectory` | ❌ owner-typed listing |
+| **This repo's README** — not a registry; also rendered by Glama's `/mcp/servers/azmartone67/dchub-mcp-server` page and LobeHub, which is why the tag is `github-readme`, not `github` | `https://dchub.cloud/mcp/github` | ✅ commit to `README.md` — CURRENT (2026-09-24) |
 | **Official MCP registry** — live listing `cloud.dchub/mcp-server` (cascade → PulseMCP + Glama (verified) — see REGISTRY-LISTINGS.md) | `https://dchub.cloud/mcp/registry` | ✅ `server.json` — CURRENT |
 | ~~Official MCP registry~~ — orphaned listing `cloud.dchub/datacenter-power-grid-fiber` | `https://dchub.cloud/mcp/officialregistry` | ⛔ `deprecated`, frozen at 2.12.9 — see below |
 
@@ -191,8 +192,13 @@ report zero today, and nothing separated *zero* from *unmeasured*.
 
 ★ `_meta.canonicalRemote` stays `https://dchub.cloud/mcp`, and `/mcp` keeps
 serving every existing install unchanged. Only the URL new listings hand out is
-tagged. The README and install snippets stay on `/mcp` — a human copying from
-GitHub is not a registry arrival.
+tagged. A human copying from GitHub is not a *registry* arrival — so the
+README does not carry a registry path either. ~~The README and install snippets
+stay on `/mcp`~~ (reversed 2026-09-24): its install snippets now hand out
+`/mcp/github`, tag `github-readme` — its OWN source value, never a registry
+name, so it cannot inflate any registry's count. Measured before the switch,
+Glama's server page and LobeHub both render this README and so handed out a
+bare `/mcp`: README-driven arrivals were invisible, not absent.
 
 ### How to switch each one
 
