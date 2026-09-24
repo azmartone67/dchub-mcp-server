@@ -8174,6 +8174,58 @@ export async function _gateToolLocation(result, name, c) {
 // WHERE: _stampEntityCb, beside the location gate, so every return path of these
 // three tools passes through it: the anonymous preview, the capped preview, the
 // full taste and the keyed answer.
+// ── r-relay-teaser (2026-09-24): one withheld number, shown free to the human ──
+// The owner chose to show ONE value the preview held back on the relay page
+// (/upgrade/h). The token is signed, not encrypted, and the agent holds it, so
+// the value never goes into the token or the response: _noteWithheld records the
+// FIRST numeric value the gate nulls in this request, and _postRelayTeaser sends
+// it to the backend (POST /api/v1/relay/teaser, internal key) against the relay
+// token this response carries. The page looks it up by that token. Fire and
+// forget: a failed post means the page renders without the number, as before.
+function _noteWithheld(key, value) {
+  try {
+    const c = getCtx();
+    if (!c || c.withheld_teaser || !_isFigure(value)) return;
+    c.withheld_teaser = { key: String(key), value };
+  } catch (_) { /* never break a gate */ }
+}
+export function _teaserLabel(key) {
+  const t = String(key || '').replace(/^_+|_+$/g, '').replace(/_in_pro$/, '')
+    .replace(/_/g, ' ').trim().toLowerCase();
+  const out = t.replace(/[^a-z0-9 ,./()%$&+-]/g, '').slice(0, 60).trim();
+  return /^[a-z0-9]/.test(out) ? out : '';
+}
+export function _teaserValue(v) {
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return '';
+  const r = Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+  return r.toLocaleString('en-US').slice(0, 24);
+}
+const _TEASER_POSTED = new Set();
+export function _relayTeaserPayload(result, ctx) {
+  try {
+    const t = ctx && ctx.withheld_teaser;
+    const sc = result && result.structuredContent;
+    const url = sc && sc.for_your_human && sc.for_your_human.url;
+    const m = typeof url === 'string'
+      && url.match(/^https:\/\/dchub\.cloud\/upgrade\/h\/([A-Za-z0-9_-]+\.[0-9a-f]{32})$/);
+    if (!t || !m) return null;
+    const label = _teaserLabel(t.key);
+    const value = _teaserValue(t.value);
+    if (!label || !value) return null;
+    return { token: m[1], label, value };
+  } catch (_) { return null; }
+}
+export function _postRelayTeaser(result, ctx, post = callAPIWrite) {
+  const p = _relayTeaserPayload(result, ctx);
+  if (p && !_TEASER_POSTED.has(p.token)) {
+    if (_TEASER_POSTED.size >= 20000) _TEASER_POSTED.clear();
+    _TEASER_POSTED.add(p.token);
+    try { Promise.resolve(post('/api/v1/relay/teaser', p)).catch(() => {}); } catch (_) {}
+  }
+  return result;
+}
+
 const _FREE_NUMERIC_KEY_RE = /(^|_)score$|^composite_score|^overall_score|time_to_power|_months$|kwh|cents|(^|_)mw$|_mw_/i;
 const _FREE_NUMERIC_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_band$|_note$|_basis$|_count$|_count_\d+d$|^rank$)/i;
 function _isFigure(v) {
@@ -8602,6 +8654,7 @@ function trimForTrial(parsed, toolName) {
     if (k === 'verdict_reasons' && Array.isArray(v)) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
     } else if (_gatesHeadroom(k)) {
+      _noteWithheld(k, v);
       out[k] = null;                          // grid decision-layer field → Pro
       out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
     } else if (_gatesDepth(k)) {
@@ -8609,10 +8662,12 @@ function trimForTrial(parsed, toolName) {
       // its BAND behind, so the free answer still says BUILD / CAUTION /
       // AVOID and only the number a decision is made on is withheld.
       const _band = _scoreBand(v);
+      _noteWithheld(k, v);
       out[k] = null;
       out[`_${k}_in_pro`] = true;
       if (_band) out[`${k}_band`] = _band;
     } else if (_DCPI_ISO_PAID_KEYS.has(k)) {
+      _noteWithheld(k, v);
       out[k] = null;                          // DCPI aggregate the backend keeps paid
       out[`_${k}_in_pro`] = true;
     } else if (Array.isArray(v) && v.length > TRIAL_PREVIEW_ROWS) {
@@ -16449,7 +16504,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   network.
   }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
-         _scrubCommerce(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx())),
+         _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))),
        name, args, _outSchema), name));

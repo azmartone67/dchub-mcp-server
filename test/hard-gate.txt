@@ -184,6 +184,7 @@ test/registry-schema-limits.test.mjs
 test/registry-verify-listed.test.mjs
 test/registry-version-bump-write-time.test.mjs
 test/relay-cap-one-human-line.test.mjs
+test/relay-teaser-post.test.mjs
 test/request-interpretation.test.mjs
 test/required-args.test.mjs
 test/resolution-gap.test.mjs
