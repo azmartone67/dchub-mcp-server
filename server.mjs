@@ -10192,6 +10192,28 @@ export function _gridRegionUnresolved(out) {
     && Object.keys(out.generation_mix_mw || {}).length === 0;
 }
 
+// r-region-transient (2026-09-24): WHY nothing resolved. _gridRegionUnresolved
+// says only that all five signals are absent, and a covered EIA balancing
+// authority has no DCPI row and no queue row — so when its one feed (EIA)
+// fails, it looks exactly like a region nobody covers. Measured live 2026-09-24
+// ~16:50Z: region_id=DUK, 3 anonymous calls — call 1 "region not covered …
+// retrying will not help", calls 2 and 3 live data. A transient feed failure
+// was reported as a permanent coverage boundary and the agent told not to retry.
+//
+// The backend is the authority on which regions exist: /api/v1/grid/
+// intelligence/<region> answers 400 {error:'unknown region', supported:[…]}
+// for a code outside its EIA map (main.py phase19b_grid_intelligence), which
+// callAPI returns as {error:'API 400'}. So:
+//   gi.error "API 400" / "API 404" / "API 422"  -> 'not_covered'  (Karaburun)
+//   any other gi.error (5xx, timeout, network)  -> 'transient'
+//   gi answered but carried nothing             -> 'transient' (region is known;
+//                                                  its telemetry is not in yet)
+export function _gridRegionFailureKind(gi) {
+  const e = gi && typeof gi === 'object' ? gi.error : undefined;
+  if (typeof e === 'string' && /^API (400|404|422)$/.test(e)) return 'not_covered';
+  return 'transient';
+}
+
 function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); // "ISO-NE" -> "ISONE"
   const _n = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
@@ -14808,7 +14830,7 @@ function trackedTool(srv, name, description, schema, handler) {
         if (_lpAccess === 'wall') { status = 'lp_wall'; return _lpWallResult(name); }
         if (_lpAccess === 'preview') {
           status = 'lp_preview';
-          return _lpPreviewResult(name, await handler(args));
+          return _lpPreviewResult(name, _noDataGuard(await handler(args)));
         }
       }
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
@@ -15276,7 +15298,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _dataP    = handler(args);
             const _mintP    = mintAutoTrial(name);
             const _hiClaimP = shouldMintClaim(_sid, name);
-            const _trialResult = await _dataP;
+            const _trialResult = _noDataGuard(await _dataP);
             let _trialText = _trialResult?.content?.[0]?.text || '';
             // Phase 7: trim arrays in the JSON payload so the LLM sees that
             // there IS more, but not the actual data.
@@ -15938,7 +15960,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           })),
         };
       }
-      const result = await handler(gate.params || args);
+      const result = _noDataGuard(await handler(gate.params || args));
       // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
       // (operator-approved 2026-06-18, "build but leave OFF"). Injected HERE — at
       // the single chokepoint every ALLOWED tool call passes through right after
@@ -16486,6 +16508,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // this is the resilience boundary for it. UrlElicitationRequired
       // (-32042) is the one SDK contract that must keep propagating.
       if (err && err.code === -32042) throw err;
+      // r-nodata-no-sell: the handler answered with no data — return that
+      // answer exactly as written, with none of the trial / pack / relay copy.
+      if (err instanceof _NoDataAnswer) {
+        const _r = err.result;
+        return (_r && _r.isError === undefined) ? { ..._r, isError: true } : _r;
+      }
       console.error(`[tool-error] ${name}:`, (err && err.stack) || err);
       const _detail = String((err && err.message) || err || 'internal error').slice(0, 300);
       const _payload = {
@@ -17240,6 +17268,56 @@ export function _isFailureEnvelope(result) {
   if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return false;
   return !!sc._error_mitigation
     || (typeof sc.error === 'string' && /^API \d{3}$/.test(sc.error));
+}
+
+// r-nodata-no-sell (2026-09-24): a handler answer that carries NO data must
+// not be dressed as a paywall. Measured live 2026-09-24: get_grid_intelligence
+// region_id="ZZQX" answered "region not covered … retrying will not help" and
+// the free-tier trial path wrapped it in "Free trial unlocked — call it again",
+// a $10 pack link, a Pro link and for_your_human "hit DC Hub's paid data
+// boundary". The same envelope went out on PJM-DOM's source_unavailable
+// marker. Both sell an unlock for data that does not exist, and the first one
+// tells the agent to retry a call its own error says retrying cannot fix.
+//
+// True for exactly three shapes of a HANDLER result:
+//   • _isFailureEnvelope (structuredContent carries the mitigation block or
+//     "API <status>");
+//   • no structuredContent, and content[0].text is a JSON object carrying the
+//     same markers (handlers that return text only, e.g. the region refusals);
+//   • top-level source_unavailable === true — the backend's fail-closed marker
+//     for a whole answer with no reading (pjm_dataminer, global_power_apis).
+//     Top level only: a nested per-source marker sits beside real data.
+export function _isNoDataAnswer(result) {
+  try {
+    if (!result || typeof result !== 'object') return false;
+    if (_isFailureEnvelope(result)) return true;
+    const sc = result.structuredContent;
+    let p = (sc && typeof sc === 'object' && !Array.isArray(sc)) ? sc : null;
+    if (!p) {
+      const t = result.content && result.content[0] && result.content[0].text;
+      if (typeof t !== 'string' || t.trimStart()[0] !== '{') return false;
+      p = JSON.parse(t);
+    }
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
+    return !!p._error_mitigation
+      || (typeof p.error === 'string' && /^API \d{3}$/.test(p.error))
+      || p.source_unavailable === true;
+  } catch {
+    return false;
+  }
+}
+
+// Thrown by _noDataGuard on the FREE / preview / trial paths of trackedTool and
+// caught by its outer catch, which returns the handler's own answer untouched —
+// one exit for every upsell branch, instead of a check in each. The paid paths
+// (credits, MPP, x402) are deliberately NOT guarded: payment already ran there
+// and their receipts are stamped after the handler returns.
+class _NoDataAnswer extends Error {
+  constructor(result) { super('no-data answer'); this.result = result; }
+}
+export function _noDataGuard(result) {
+  if (_isNoDataAnswer(result)) throw new _NoDataAnswer(result);
+  return result;
 }
 
 // ★★★ r-upstream-iserror (2026-08-25): LOCAL argument validation has always
@@ -20637,6 +20715,20 @@ function createServer(descOverrides, instructionsTail) {
       // even when it has no DCPI row and no queue row (AZPS -> demand_mw 8005,
       // 10 fuel keys, iso_name null, constraint_score null, queue_depth_gw
       // null). Only a region where ALL FIVE signals are absent is unresolvable.
+      if (_gridRegionUnresolved(out) && _gridRegionFailureKind(gi) === 'transient') {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'region temporarily unavailable',
+          detail: `"${raw}" is a region DC Hub covers, but its live grid telemetry could not be read just now${gi && gi.error ? ` (${String(gi.error).slice(0, 80)})` : ''}. This is a transient feed failure, not a coverage limit.`,
+          requested: raw,
+          temporary: true,
+          hint: 'Retry the same call once after a short wait. Meanwhile, the parent ISO (e.g. region_id="PJM") or analyze_site at a coordinate can answer from other feeds.',
+          _error_mitigation: {
+            error_code: 'region_temporarily_unavailable',
+            severity: 'transient_backoff',
+            deterministic_hint: 'Retry the same region_id once after a short wait — this is a transient feed failure, not a coverage boundary.',
+          },
+        }) }] };
+      }
       if (_gridRegionUnresolved(out)) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'region not covered',

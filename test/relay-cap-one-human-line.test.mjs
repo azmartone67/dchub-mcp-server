@@ -97,7 +97,12 @@ beforeAll(async () => {
       }
       if (url.pathname === '/api/v1/mcp/trial-check') { res.end(JSON.stringify({ trial_used: false, prior_calls: 0 })); return; }
       if (url.pathname === '/api/v1/mcp/session-key') { res.statusCode = 404; res.end('{"error":"not found"}'); return; }
-      res.end(JSON.stringify({ success: true, count: ROWS.length, data: ROWS, results: ROWS }));
+      // demand_mw + generation_mix: get_grid_intelligence needs real telemetry to be
+      // an ANSWER. Without them every grid call here was a "region not covered"
+      // error — and these assertions were reading the upsell riding that error,
+      // which r-nodata-no-sell (2026-09-24) removes. Other tools ignore the keys.
+      res.end(JSON.stringify({ success: true, count: ROWS.length, data: ROWS, results: ROWS,
+                               demand_mw: 18000, generation_mix: { NG: { mw: 9000 } } }));
     });
     stub.listen(0, '127.0.0.1', resolve);
   });
