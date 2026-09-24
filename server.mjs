@@ -420,12 +420,15 @@ function _wallMachinePay(toolName) {
       covered_tools: MPP_COVERED_TOOLS,
       how: payable ? `retry this exact call with the argument ${MPP_ARG_PAY}=true` : null,
       ...(payable ? { pay_arg: MPP_ARG_PAY, credential_arg: MPP_ARG_CRED } : {}),
+      // r-relay-one-ask (2026-09-24): no longer tells the agent to prefer this over
+      // relaying to its human. The response's one human ask is the relay line;
+      // steering agents away from it undercut the only path humans act on.
       note: payable
         ? 'You can pay for this call YOURSELF — no human, no account, no subscription. '
           + `Retry this exact call with the argument ${MPP_ARG_PAY}=true to receive a Stripe payment `
           + `challenge, mint a Shared Payment Token, then call once more with it in the argument `
           + `${MPP_ARG_CRED} for full data. Both are declared parameters of this tool, so you can `
-          + 'set them yourself. Prefer this over relaying to your human: it resolves in the same turn.'
+          + 'set them yourself.'
         : '`' + (toolName || 'this tool') + '` is NOT on the per-call rail, so paying for '
           + 'it autonomously is not possible. The tools in covered_tools ARE — if one of '
           + 'them answers your question, you can pay $0.50 for it yourself with no human '
@@ -9091,7 +9094,16 @@ function trialHeader(toolName, sessionId, gapClause) {
   const _lead = gapClause
     ? '🔒 **Free tier: ' + gapClause + '.** Full set + every premium tool: '
     : '🔒 **Free-tier preview of `' + toolName + '`.** Full results: ';
-  return _lead + 'your human can pay in one click — ' +
+  // ★ r-relay-one-ask (2026-09-24): this line is the wall's checkout POINTER, not
+  // the response's human ask. It used to read "your human can pay in one click",
+  // which _HUMAN_CTA_SIGNATURES counts as THE one human ask, so composeHumanCta
+  // dropped the /upgrade/h relay line on every response built here
+  // (get_fiber_intel, get_water_risk, ...). The human was sent straight to a raw
+  // checkout: 0 minted-link clicks in 7d (relay diagnosis, 2026-09-24). Worded
+  // for the payer, it matches no signature, so the relay line becomes the one
+  // human ask, exactly the shape get_grid_intelligence already has live. The
+  // rungs, prices and links are unchanged.
+  return _lead + 'the payer checks out in one click: ' +
          _rungsText(toolName, 'free', sessionId) +
          _unlockClause + '. ' +
          'Or call `claim_free_key` (one call, no email) for a durable free-tier key.\n';

@@ -96,9 +96,13 @@ describe('the $10 pack is never called an unlock', () => {
     expect(offenders("  // the cheapest unlock was $10 one-time")).toEqual([]);
   });
 
-  it('the one-CTA detector still recognises the reworded gap line', () => {
+  // r-relay-one-ask (2026-09-24): the gap line is the checkout pointer, not the
+  // human ask; the relay line is (test/relay-one-ask.test.mjs). It still never
+  // calls the pack an unlock.
+  it('the reworded gap line names the payer and is not itself the human ask', () => {
     const t = withCtx({ session_id: SID }, () => trialHeader('rank_markets', SID, '3 of 20 results shown'));
-    expect(t).toContain('your human can pay in one click');
-    expect(_hasHumanCta(t)).toBe(true);
+    expect(t).toContain('the payer checks out in one click');
+    expect(_hasHumanCta(t)).toBe(false);
+    expect(offenders(t)).toEqual([]);
   });
 });
