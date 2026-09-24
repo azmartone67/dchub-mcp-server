@@ -108,7 +108,7 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
     // — and it sent the human to the wall rather than through it. The nudge
     // now routes through _rungsText, the same session-bound rungs trialHeader
     // sells, so what is pinned here is that it CANNOT go back.
-    expect(SRC).toContain("'Your human unlocks in one click — ' + _rungsText(toolName, 'free', _ctaSid)");
+    expect(SRC).toContain("'Your human can pay in one click — ' + _rungsText(toolName, 'free', _ctaSid)");
     expect(SRC).not.toContain("'](https://dchub.cloud/pricing'");
   });
 });

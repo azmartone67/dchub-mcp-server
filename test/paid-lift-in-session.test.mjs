@@ -204,7 +204,7 @@ describe('r-paid-lift — a key that pays mid-session is served as paid', () => 
     const s = await openSession({ 'x-api-key': K_PAY });
     const before = await s.call(PRO_TOOL, COMPARE);
     expect(walled(before), before.slice(0, 300)).toBe(true);
-    expect(before).toContain('this key unlocks');
+    expect(before).toContain('this key is served in full');
     expect(goRefs(before), 'the wall never handed this key a k- link').toContain(`k-${sha(K_PAY)}`);
 
     const v0 = hits(validateHits, K_PAY);

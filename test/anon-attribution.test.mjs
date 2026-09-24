@@ -204,25 +204,25 @@ describe('the same-session-unlock promise is made ONLY where it is true', () => 
   it('a session-bearing caller IS promised the same-session unlock', () => {
     const t = withCtx({ session_id: 'e6f1c0de-1234-4aaa-9999-abcdef012345' },
       () => trialHeader('rank_markets', 'e6f1c0de-1234-4aaa-9999-abcdef012345'));
-    expect(unlockClause(t)).toMatch(/THIS session unlocks/);
+    expect(unlockClause(t)).toMatch(/THIS session is served in full/);
   });
 
   it('a keyed caller IS promised it (credits land on the key hash)', () => {
     const t = withCtx({ api_key: 'dch_live_abc123' },
       () => trialHeader('rank_markets', ''));
-    expect(unlockClause(t)).toMatch(/THIS session unlocks/);
+    expect(unlockClause(t)).toMatch(/THIS session is served in full/);
   });
 
   it("the 'no-session' sentinel is NOT promised it, and is told what DOES happen", () => {
     const t = withCtx({}, () => trialHeader('rank_markets', 'no-session'));
-    expect(unlockClause(t)).not.toMatch(/THIS session unlocks/);
+    expect(unlockClause(t)).not.toMatch(/THIS session is served in full/);
     expect(t).toMatch(/cannot bind/);
     expect(t).toMatch(/emails the key/);       // the mechanism that DOES exist
   });
 
   it('an empty sessionId is NOT promised it either', () => {
     const t = withCtx({}, () => trialHeader('rank_markets', ''));
-    expect(unlockClause(t)).not.toMatch(/THIS session unlocks/);
+    expect(unlockClause(t)).not.toMatch(/THIS session is served in full/);
   });
 
   it('unlock_more_data derives the promise instead of hardcoding it', () => {
@@ -259,9 +259,9 @@ describe('the bind promise has ONE source of truth', () => {
 
   it('the clause promises a same-session unlock only when it binds', () => {
     expect(withCtx({ session_id: 'e6f1c0de-1' }, () => _afterPayClause('', 'rank_markets')))
-      .toMatch(/THIS session unlocks/);
+      .toMatch(/THIS session is served in full/);
     const anon = withCtx({}, () => _afterPayClause('no-session', 'rank_markets'));
-    expect(anon).not.toMatch(/THIS session unlocks/);
+    expect(anon).not.toMatch(/THIS session is served in full/);
     expect(anon).toMatch(/cannot bind/);
     expect(anon).toMatch(/emails the key/);
   });

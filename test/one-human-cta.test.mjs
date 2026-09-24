@@ -23,7 +23,7 @@ describe('_hasHumanCta — every phrasing, not just the marker', () => {
     expect(_hasHumanCta('\u{1F464} **Tell your human:** to keep `rank_markets` — $10')).toBe(true);
   });
   it('recognises the paywall gap line', () => {
-    expect(_hasHumanCta('🔒 Free tier: 3 of 10 shown. your human unlocks in one click')).toBe(true);
+    expect(_hasHumanCta('🔒 Free tier: 3 of 10 shown. your human can pay in one click')).toBe(true);
   });
   it('says no on data-only prose, and on junk input', () => {
     expect(_hasHumanCta('{"market":"ashburn-va","total_mw":5793}')).toBe(false);
@@ -34,7 +34,7 @@ describe('_hasHumanCta — every phrasing, not just the marker', () => {
 describe('_dropRepeatCheckoutUrls — exactly ONE payment ask survives', () => {
   it('drops the SECOND line carrying the same URL', () => {
     const out = _dropRepeatCheckoutUrls(
-      `🔒 Free tier: 3 of 10 shown — your human unlocks → ${URL_A}\n` +
+      `🔒 Free tier: 3 of 10 shown — your human can pay → ${URL_A}\n` +
       `data line\n` +
       `\u{1F464} **Tell your human:** $10 = 1,000 calls → ${URL_A}\n`);
     expect(out.split('\n').filter((l) => l.includes(URL_A)).length).toBe(1);
@@ -90,7 +90,7 @@ describe('_dropRepeatCheckoutUrls — exactly ONE payment ask survives', () => {
 
   // The live shape that motivated the fix, reproduced end to end.
   it('THE LIVE CASE: two stacked asks collapse to one', () => {
-    const live = `{"results":[…]}\n\n---\n\n🔒 Free tier: 3 of 5 shown … your human unlocks → ${URL_A}\n`
+    const live = `{"results":[…]}\n\n---\n\n🔒 Free tier: 3 of 5 shown … your human can pay → ${URL_A}\n`
                + `\n---\n🔒 Today’s free full answers are used up.\n`
                + `💡 Self-serve upgrade ($49/mo): ${URL_B}\n🧭 Next: execute_plan …\n`;
     const out = _dropRepeatCheckoutUrls(live);
@@ -105,7 +105,7 @@ describe('_dropRepeatCheckoutUrls — exactly ONE payment ask survives', () => {
 
 describe('composeHumanCta — the invariant end to end', () => {
   const live = `{"market":"ashburn-va","total_mw":5793}\n\n---\n` +
-    `🔒 **Free tier: 3 of 10 results shown.** your human unlocks in one click → ${URL_A}\n\n` +
+    `🔒 **Free tier: 3 of 10 results shown.** your human can pay in one click → ${URL_A}\n\n` +
     `✅ **Free trial key — works instantly**\n\n` +
     `\u{1F464} **Tell your human:** to keep it past the trial — $10 → ${URL_A}\n`;
 
