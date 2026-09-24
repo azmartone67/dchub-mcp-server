@@ -105,6 +105,8 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
+import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
+         installDirectoryResponseFilter as _installDirectoryFilter } from './lib/chatgpt-directory.mjs';
 import { coarsenFacilityLocation, coarsenToolResultLocation, splitLeadingJson as _splitLeadingJson, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
@@ -2517,6 +2519,13 @@ function _normPath(req) {
   return (req?.path || '').replace(/\/+$/, '') || '/mcp';
 }
 
+// The response profile for this request: DIRECTORY_PROFILE on /mcp/chatgpt,
+// null everywhere else. Rides ctx as `profile` so code that mints or hands out
+// something (mintAutoTrial) can refuse on the directory surface.
+export function _pathProfile(req) {
+  return _normPath(req) === DIRECTORY_PATH ? DIRECTORY_PROFILE : null;
+}
+
 export function _pathSelfTag(req) {
   return MCP_SELF_PATHS.get(_normPath(req)) || '';
 }
@@ -2739,6 +2748,11 @@ export function _INSTR_TAIL_PACK(def) {
 // module, so the move is invisible to them.
 export const MCP_PATHS = [
   '/mcp',
+  // r-chatgpt-directory (2026-09-24): the ChatGPT app-directory profile. Same
+  // tools and data as /mcp, served through lib/chatgpt-directory.mjs — an
+  // allowlisted catalog and an outermost scrub of every response. See
+  // _pathProfile and the directory prelude in app.post(MCP_PATHS).
+  DIRECTORY_PATH,
   ...MCP_SELF_PATHS.keys(),
   ...MCP_SOURCE_PATHS.keys(),
   ...MCP_PACKS.keys(),
@@ -3858,6 +3872,11 @@ async function checkTrialEligibility(session_id, tool_name) {
 export async function mintAutoTrial(tool_name) {
   try {
     const c = getCtx();
+    // r-chatgpt-directory: the directory profile hands out no keys, so it mints
+    // none. null is this function's documented "fall back to the exact existing
+    // preview" answer, which is the owner's decision for that surface
+    // (dec-chatgpt-keyless-tier: trimmed anonymous previews, no full keyless tier).
+    if (c && c.profile === DIRECTORY_PROFILE) return null;
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
     if (tool_name) url.searchParams.set('tool', tool_name);
     const headers = {
@@ -22889,6 +22908,15 @@ app.post(MCP_PATHS, async (req, res) => {
     // These responses are JSON/SSE (never rendered HTML), so the strictest
     // policy is free — inert for every existing client.
     res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    // r-chatgpt-directory (2026-09-24): on /mcp/chatgpt every response body is
+    // rewritten by lib/chatgpt-directory.mjs before it leaves, so this must be
+    // installed before anything below can write. The profile is stateless: it
+    // mints no session, and a session id sent to it is ignored.
+    const _dirProfile = _pathProfile(req);
+    if (_dirProfile) {
+      _installDirectoryFilter(req, res);
+      delete req.headers['mcp-session-id'];
+    }
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
     // r-platform-header (2026-07-20): explicit platform attribution header —
@@ -22953,6 +22981,34 @@ app.post(MCP_PATHS, async (req, res) => {
         }
       }
     } catch (_) {}
+    // r-chatgpt-directory: what the directory profile answers before any
+    // credential or session logic runs. After the alias pass on purpose, so a
+    // guessed name that aliases onto an allowlisted tool still resolves.
+    if (_dirProfile) {
+      const _b = req.body;
+      if (!_b || typeof _b !== 'object' || Array.isArray(_b) || typeof _b.method !== 'string') {
+        return _writeRpcError(res, null, { code: -32600, message: 'Invalid Request: send one JSON-RPC request per POST.' });
+      }
+      if (_b.id === undefined) return res.status(202).end();   // notifications
+      if (_b.method === 'tools/call') {
+        const _n = _b.params && _b.params.name;
+        if (!_isDirectoryTool(_n)) {
+          return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
+        }
+        const _a = _b.params.arguments;
+        if (_a && typeof _a === 'object') {
+          for (const k of Object.keys(_a)) {
+            if (/^(mpp_|x402|payment|credential)/i.test(k)) delete _a[k];
+          }
+        }
+      }
+      if (_b.method === 'prompts/list') return _writeRpcResult(req, res, _b.id, { prompts: [] });
+      if (_b.method === 'resources/list') return _writeRpcResult(req, res, _b.id, { resources: [] });
+      if (_b.method === 'resources/templates/list') return _writeRpcResult(req, res, _b.id, { resourceTemplates: [] });
+      if (/^(prompts|resources|completion)\//.test(_b.method)) {
+        return _writeRpcError(res, _b.id, { code: -32601, message: `Method not found: ${_b.method}` }, 200);
+      }
+    }
     // r-smithery-config (2026-07-16): Smithery's remote-server gateway forwards
     // a user's configSchema value (the optional apiKey) as a QUERY PARAM on the
     // /mcp URL ("passes through all query params/headers as-is"), not always as
@@ -23395,6 +23451,26 @@ app.post(MCP_PATHS, async (req, res) => {
     }
 
     const body = req.body;
+    // r-chatgpt-directory: a STATELESS initialize. The profile never mints a
+    // session (no Mcp-Session-Id to minimise away), gets no held-key or pack
+    // instructions tail, and the filter swaps the instructions for the plain
+    // directory text and narrows capabilities to tools.
+    if (_dirProfile && body?.method === 'initialize') {
+      const _initErr = _initRequestError(body);
+      if (_initErr) return _writeRpcError(res, body.id, { code: _initErr.code, message: _initErr.message, data: _initErr.data });
+      const platform = detectPlatformFromInit(body, userAgent, platformHeader);
+      const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const ephServer = createServer(null, '');
+      await ephServer.connect(ephTransport);
+      return ctx.run({
+        api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
+        auth_source: _authChannel, source: _pathSource(req),
+        referer: req.headers.referer || req.headers.referrer || null,
+        user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+      }, async () => {
+        await ephTransport.handleRequest(req, res, body);
+      });
+    }
     if (body?.method === 'initialize') {
       // r-init-precise-error: reject a malformed initialize HERE, naming the
       // field, instead of letting it fall through to the transport's
@@ -23596,7 +23672,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // with and without a junk key returned byte-identical 388,199-char bodies.
       // If anything here ever becomes key-dependent, this exemption must go.
       return ctx.run({
-        api_key: apiKey, platform, tier: 'free', session_id: null,
+        api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
         auth_source: _authChannel,
         source: _pathSource(req),   // r-source-path: rides EVERY request
         referer: req.headers.referer || req.headers.referrer || null,
@@ -23650,7 +23726,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
-        api_key: apiKey, platform, tier,
+        api_key: apiKey, platform, tier, profile: _dirProfile,
         auth_source: _authChannel,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
