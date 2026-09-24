@@ -175,6 +175,7 @@ test/public-doors-banned-floors.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
+test/rank-markets-count-sort-score.test.mjs
 test/recipe-lifecycle.test.mjs
 test/recommendation-returns-contract.test.mjs
 test/recommendation-returns-truth.test.mjs

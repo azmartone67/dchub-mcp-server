@@ -8322,7 +8322,10 @@ function _nullFreeRows(payload, keys) {
 }
 const _FREE_NUMERIC_SHAPES = {
   site_selection_canvas: (p) => _nullFreeRows(p, ['shortlist', 'empty_result.excluded_top']),
-  rank_markets: (p) => _nullFreeRows(p, ['results', 'markets', 'data']),
+  rank_markets: (p) => {
+    const g = _nullFreeRows(p, _RANK_ROW_KEYS);
+    return g.changed ? { value: _publishCountSortScores(p, g.value), changed: true } : g;
+  },
   get_market_dcpi_rank: (p) => _nullFreeFigures(p),
 };
 const _FREE_NUMERIC_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
@@ -8548,6 +8551,8 @@ const TRIAL_PREVIEW_ROWS = (() => {
 // `score_basis` is a string and passes through untouched.
 // Un-nulling `score` for free callers needs that MW decision reversed first.
 // Adding it to this Set is not enough.
+// Exception, most_operators + fastest_growing: `score` there is a free count,
+// see r-score-count-sorts below.
 //
 // ★ TRAP for the next person: a formula that reproduces the RANK ORDER does not
 // prove it produced the SCORE. Check the VALUE, and sweep any argument that
@@ -8584,6 +8589,52 @@ const _TYPED_PREVIEW_FIELDS = {
   get_interconnection_queue: new Set(['total']),
 };
 const _NO_TYPED_PREVIEW = new Set();
+
+// ── r-score-count-sorts (2026-09-24): `score` IS free on the two count sorts ──
+// r-score-is-mw keeps `score` null on the free tiers because on most sorts it
+// is MW or the DCPI composite. On two sorts it is neither. Measured live on
+// POST /api/v1/mcp/tools/rank_markets after dchub-backend#5408:
+//
+//     most_operators   ashburn score 55.0  = operator_count 55
+//     fastest_growing  ashburn score 191.0 = facility_count 191
+//
+// Both counts ship un-nulled in the same row. Here `score` restates a free
+// field, and `null` would say "unknown" about a number that is already on the
+// wire. So on these two sorts ONLY, a row's `score` is published when it EQUALS
+// the count it restates. A row whose score has drifted from its count stays
+// null (a backend change in what `score` means must not become a leak). So
+// does a row whose count was projected away.
+// Every other sort stays gated: best_overall / most_capacity / cheapest_power
+// are MW, and ai_ready is the DCPI composite that get_market_dcpi_rank and the
+// backend's own /api/v1/dcpi/scores withhold from free callers (owner decision,
+// 2026-09-24).
+const _RANK_SCORE_FREE_COUNT = { most_operators: 'operator_count', fastest_growing: 'facility_count' };
+const _RANK_ROW_KEYS = ['results', 'markets', 'data'];
+// `orig` is the payload before a free trim and `out` the trimmed copy; returns
+// `out` with the count-restating scores put back (rows align by index: every
+// trim here keeps a PREFIX of the rows).
+function _publishCountSortScores(orig, out) {
+  if (!orig || !out || typeof orig !== 'object' || typeof out !== 'object') return out;
+  const countKey = _RANK_SCORE_FREE_COUNT[String(orig.criteria || '').trim().toLowerCase()];
+  if (!countKey) return out;
+  let res = out;
+  for (const key of _RANK_ROW_KEYS) {
+    const src = orig[key]; const dst = out[key];
+    if (!Array.isArray(src) || !Array.isArray(dst)) continue;
+    const next = dst.map((row, i) => {
+      const o = src[i];
+      if (!row || !o || typeof row !== 'object' || typeof o !== 'object') return row;
+      const sc = o.score; const n = o[countKey];
+      if (typeof sc !== 'number' || !Number.isFinite(sc) || typeof n !== 'number' || sc !== n) return row;
+      if (row.score === sc) return row;
+      const r = { ...row, score: sc };
+      delete r._score_in_pro; delete r.score_band;
+      return r;
+    });
+    if (next.some((r, i) => r !== dst[i])) { if (res === out) res = { ...out }; res[key] = next; }
+  }
+  return res;
+}
 
 // ── r-arg-error (2026-09-20) ────────────────────────────────────────────────
 // An ARGUMENT-VALIDATION envelope is not a product answer. The handler rejected
@@ -8746,6 +8797,12 @@ function trimForTrial(parsed, toolName) {
   // "showing 1 of 1" note (nothing trimmed) is left untouched. The
   // _<key>_total_in_pro side fields + the _upgrade block already state the
   // real gap honestly, so drop the stale count claim rather than reprint it.
+  // r-score-count-sorts: only the top-level call carries `criteria`; a
+  // recursive call on one row is a no-op here.
+  if (toolName === 'rank_markets') {
+    const pub = _publishCountSortScores(parsed, out);
+    if (pub !== out) Object.assign(out, pub);
+  }
   if (typeof out.note === 'string'
       && /showing\s+\d+\s+of\s+\d+/i.test(out.note)
       && Object.keys(out).some((k) => k.endsWith('_total_in_pro'))) {
