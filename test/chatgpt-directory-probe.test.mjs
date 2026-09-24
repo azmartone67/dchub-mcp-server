@@ -254,11 +254,11 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
     expect(offenders).toEqual([]);
     expect(mintHits - before, 'the profile minted a key').toBe(0);
     // One openai/session calling every tool is what a directory reviewer does,
-    // and it crosses the /mcp scraper signature. A blocked call reached the client
-    // without isError (measured), so it still counts as answered here; the 'scraper block'
-    // probe pattern is what catches the block. This floor only proves the
-    // calls reached answers at all.
-    expect(answered).toBeGreaterThan(50);
+    // and it crosses the /mcp scraper signature. A blocked call keeps
+    // isError:true through the filter, so it does not count as answered: 67 of
+    // 72 answer with the profile exempt, 49 when the block fires (measured
+    // 2026-09-24). The 'scraper block' probe pattern catches the block too.
+    expect(answered).toBeGreaterThanOrEqual(60);
   }, 240_000);
 
   it('CONTROL: the same one-session sweep on /mcp trips the scraper block', async () => {
