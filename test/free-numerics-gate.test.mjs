@@ -104,6 +104,14 @@ function channels(r) {
   if (!head) { try { head = JSON.parse(text); } catch { head = null; } }
   return { text, head, sc: r.structuredContent || {} };
 }
+// Does `hay` carry the figure `f` as a NUMBER? A bare substring test is not
+// enough: on 2026-09-24 (CI run 36060027978) the canvas answer's retrieved_at
+// "2026-09-24T21:13:39.699Z" carried "9.6" inside "39.699" and failed a gate
+// that had withheld the figure correctly. So ISO timestamps are scrubbed first,
+// and the figure must stand alone: no digit or '.' before it, no digit after.
+const ISO_TS = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/g;
+const figureRe = (f) => new RegExp(`(?<![\\d.])${f.replace(/[.]/g, '\\.')}(?!\\d)`);
+const carries = (hay, f) => figureRe(f).test(String(hay).replace(ISO_TS, '<ts>'));
 
 const CASES = {
   site_selection_canvas: {
@@ -151,8 +159,8 @@ describe.each(Object.keys(CASES))('%s — free tiers get names, verdicts and cou
         `${tool}: no rows came back at all — ${text.slice(0, 160)}`).toBe(true);
       const scText = JSON.stringify(sc);
       for (const f of K.figures) {
-        expect(text, `${tool} content still carries ${f}`).not.toContain(f);
-        expect(scText, `${tool} structuredContent still carries ${f}`).not.toContain(f);
+        expect(carries(text, f), `${tool} content still carries ${f}`).toBe(false);
+        expect(carries(scText, f), `${tool} structuredContent still carries ${f}`).toBe(false);
       }
     });
 
@@ -173,13 +181,13 @@ describe.each(Object.keys(CASES))('%s — free tiers get names, verdicts and cou
     credits = 500;
     const r = await call(tool, K.args, seat('free', 'dch_live_pack_holder_numerics'));
     const { text } = channels(r);
-    expect(K.figures.some((f) => text.includes(f)), `${tool}: the pack holder lost the figures`).toBe(true);
+    expect(K.figures.some((f) => carries(text, f)), `${tool}: the pack holder lost the figures`).toBe(true);
   });
 
   it.each([['developer'], ['paid']])('a %s key keeps today\'s full answer', async (tier) => {
     const r = await call(tool, K.args, seat(tier, 'dch_live_' + tier + '_numerics'));
     const { text } = channels(r);
-    expect(K.figures.some((f) => text.includes(f)), `${tool}: ${tier} lost the figures`).toBe(true);
+    expect(K.figures.some((f) => carries(text, f)), `${tool}: ${tier} lost the figures`).toBe(true);
   });
 });
 
@@ -194,5 +202,19 @@ describe('the rank_markets display string keeps its counts', () => {
       expect(p.results[0].total_mw).toBeNull();
       expect(p.results[0]._total_mw_in_pro).toBe(true);
     }
+  });
+});
+
+describe('the figure matcher itself', () => {
+  it('does not see a figure inside a timestamp, and still sees a real one', () => {
+    // the exact CI 36060027978 collision
+    expect(carries('{"retrieved_at":"2026-09-24T21:13:39.699Z"}', '9.6')).toBe(false);
+    expect(carries('generated 2026-09-24T09:06:09.6+00:00', '9.6')).toBe(false);
+    expect(carries('"-96.81941"', '9.6')).toBe(false);
+    expect(carries('"10.3090"', '10.309')).toBe(false);
+    expect(carries('{"time_to_power_months":9.6}', '9.6')).toBe(true);
+    expect(carries('Time-to-power 9.6 months.', '9.6')).toBe(true);
+    expect(carries('"retrieved_at":"2026-09-24T21:13:39.699Z","v":9.6', '9.6')).toBe(true);
+    expect(carries('191 fac / 5793 MW', '5793')).toBe(true);
   });
 });
