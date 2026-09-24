@@ -93,6 +93,7 @@ test/glama-placement-probe.test.mjs
 test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
+test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
 test/grok-relay-label.test.mjs
 test/handler-args-declared.test.mjs
