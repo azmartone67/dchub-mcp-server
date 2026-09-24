@@ -3855,7 +3855,7 @@ async function checkTrialEligibility(session_id, tool_name) {
 // exact existing preview/paywall behavior. Never throws, never blocks the
 // tool call. Short timeout (1500ms, same as trial-check) keeps it off the
 // critical-path latency budget.
-async function mintAutoTrial(tool_name) {
+export async function mintAutoTrial(tool_name) {
   try {
     const c = getCtx();
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
@@ -3869,6 +3869,11 @@ async function mintAutoTrial(tool_name) {
     if (c.user_agent) headers['User-Agent'] = c.user_agent;
     if (c.session_id) headers['X-MCP-Session'] = c.session_id;
     if (c.platform)   headers['X-MCP-Platform'] = c.platform;
+    // r-mint-gateway-id (2026-09-24): the caller's own IP. We call the backend
+    // from our egress, so without this every MCP mint looked like one caller
+    // (17 ip hashes for 546 mints in 24h). The backend honours this header only
+    // with our internal key (routes/mint_guard.gateway_caller_ip).
+    if (c.client_ip)  headers['X-DCHub-Client-IP'] = String(c.client_ip);
     const resp = await fetch(url.toString(), {
       method: 'POST',
       headers,

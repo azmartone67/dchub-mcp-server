@@ -125,6 +125,7 @@ test/liveness-claim.test.mjs
 test/lp-pro-only.test.mjs
 test/manifest-description-heals.test.mjs
 test/mcp-packs.test.mjs
+test/mint-forwards-caller-ip.test.mjs
 test/monthly-quota-gateway.test.mjs
 test/mpp-arg-channel.test.mjs
 test/mpp-consent.test.mjs
