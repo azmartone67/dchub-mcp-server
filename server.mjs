@@ -8286,11 +8286,25 @@ const TRIAL_PREVIEW_ROWS = (() => {
 // limit-dependent `98` is misleading in a tool agents use to make siting
 // decisions. Withhold it until it means something.
 //
-// ★ THE REAL DEFECT IS UPSTREAM, and this is not the place to fix it:
-// `methodology` promises a composite while `score` ships a position ladder.
-// That mismatch lives in the backend (routes/mcp_tier1_tools.py). When `score`
-// becomes the composite it claims to be, add it back here — the argument for
-// publishing a genuinely derivable market metric was sound.
+// ── r-score-is-mw (2026-09-24): the upstream fix LANDED, `score` STILL stays out
+// dchub-backend#5408 made `score` the real sort value, with a `score_basis`
+// sentence. The rescaled rank is gone. Measured live the same day against
+// POST /api/v1/mcp/tools/rank_markets:
+//
+//     best_overall   limit=3 and limit=10   ashburn 8887.2  dallas 5097.2
+//                    = 0.4×5793 + 50×55 + 20×191  (limit-independent)
+//     most_capacity  ashburn 5793.0 = total_mw 5793.0
+//
+// The rescaled-rank reason for withholding it is gone. It stays out anyway,
+// because the value is now MW: r-free-numerics (#502, below at
+// _gateToolNumerics) nulls total_mw for the free tiers. most_capacity and
+// cheapest_power publish total_mw verbatim as `score`. best_overall gives
+// total_mw = (score − 50×ops − 20×fac) / 0.4 from the facility_count and
+// operator_count this table keeps free. Publishing `score` would reopen the
+// MW gate #502 closed. The owner decided (2026-09-24) to keep it gated.
+// `score_basis` is a string and passes through untouched.
+// Un-nulling `score` for free callers needs that MW decision reversed first.
+// Adding it to this Set is not enough.
 //
 // ★ TRAP for the next person: a formula that reproduces the RANK ORDER does not
 // prove it produced the SCORE. Check the VALUE, and sweep any argument that

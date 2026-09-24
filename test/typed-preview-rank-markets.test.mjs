@@ -8,24 +8,25 @@
 import { describe, it, expect } from 'vitest';
 import { trimForTrial, TRIAL_PREVIEW_ROWS } from '../server.mjs';
 
-// Shaped exactly like the live backend payload (routes/mcp_tier1_tools.py).
-// What the backend ACTUALLY puts in `score` — measured live 2026-09-04 by
-// sweeping `limit`: a within-result-set position ladder, NOT the composite the
-// `methodology` string names. N is the caller's limit, so the same market scores
-// differently depending only on how many rows were requested.
-//     score = 100 × (N − rank + 1) / N
-const N_ROWS = 6;
-const ladder = (rank, n = N_ROWS) => Math.round((100 * (n - rank + 1) / n) * 10) / 10;
+// Shaped exactly like the live backend payload (routes/mcp_tier1_tools.py)
+// AFTER dchub-backend#5408. `score` is now the real best_overall sort value, the
+// composite 0.4×total_mw + 50×operators + 20×facilities, and it does not change
+// with `limit`. Measured live 2026-09-24: ashburn 8887.2, dallas 5097.2,
+// chicago 4489.2 at both limit=3 and limit=10. (Before #5408 it was the rescaled
+// rank 100×(N−rank+1)/N.)
+const composite = (mw, ops, fac) => Math.round((0.4 * mw + 50 * ops + 20 * fac) * 10) / 10;
+const SCORE_BASIS = 'score is the value the results are sorted by, as described in methodology '
+  + '(not a 0-100 scale, not rank-derived); it does not change with limit.';
 const row = (rank, market, fac, mw, ops) => ({
   rank, market, metro_slug: market.replace(/-[a-z]{2}$/, ''),
   city: market, state: 'VA', country: 'US',
-  score: ladder(rank),
+  score: composite(mw, ops, fac),
   value: `${fac} fac / ${mw} MW / ${ops} ops`,
   facility_count: fac, total_mw: mw, operator_count: ops,
   url: `https://dchub.cloud/markets/${market}`,
 });
 const payload = () => ({
-  criteria: 'best_overall', region: 'us', result_count: 10,
+  criteria: 'best_overall', region: 'us', result_count: 10, score_basis: SCORE_BASIS,
   results: [
     row(1, 'ashburn-va', 191, 5793, 55),
     row(2, 'dallas-tx', 102, 1268, 51),
@@ -58,32 +59,35 @@ describe('rank_markets typed preview', () => {
     }
   });
 
-  // ── r-score-not-a-composite (2026-09-04): the reversal is REVERSED ───────
-  // r-score-derivable briefly published `score`, on the finding that it was the
-  // composite named in `methodology` and so recomputable by any caller. The
-  // evidence was that the composite reproduced the published RANK ORDER — which
-  // it does, and which proves nothing, because rank order survives every
-  // monotonic transform. Measured live by sweeping `limit`, `score` is
-  // 100×(N−rank+1)/N: a position ladder that moves with the caller's own limit
-  // (Dallas is 66.7 at limit=3 and 98 at limit=50). It restates `rank`, which is
-  // published un-nulled anyway, and describes no property of the market.
-  //
-  // Gating it was vacuous; publishing it was worse. `null` is uninformative, a
-  // limit-dependent `98` is misleading. It stays out until it means something —
-  // the upstream fix belongs in the backend, where `methodology` promises a
-  // composite that `score` does not deliver.
-  it('score STAYS nulled — it is a limit-dependent ladder, not a metric', () => {
+  // ── r-score-is-mw (2026-09-24): the backend fix landed, score stays gated ──
+  // History: r-score-derivable published `score`. r-score-not-a-composite put
+  // the null back because `score` was a rank ladder that moved with `limit`.
+  // dchub-backend#5408 then made it the real sort value, which was the stated
+  // condition for publishing it. That value is MW, though. For best_overall,
+  // total_mw = (score − 50×ops − 20×fac)/0.4 using counts this preview keeps free.
+  // For most_capacity and cheapest_power, score IS total_mw. r-free-numerics
+  // (#502) withholds MW from the free tiers, so `score` stays null (owner
+  // decision, 2026-09-24).
+  it('score STAYS nulled — the real composite recovers the free-gated MW', () => {
     const out = trimForTrial(payload(), 'rank_markets');
-    expect(out.results[0].score).toBeNull();
     for (const r of out.results) expect(r.score).toBeNull();
   });
 
-  // Non-vacuity: the fixture must actually CARRY a score, or the assertion above
-  // passes against a payload that never had one and guards nothing.
-  it('the fixture really does ship a score for the trim to remove', () => {
-    expect(typeof payload().results[0].score).toBe('number');
-    expect(payload().results[0].score).toBe(100);      // rank 1 of 6
-    expect(payload().results[1].score).toBe(83.3);     // rank 2 of 6 — moves with N
+  // Non-vacuity: the fixture must actually CARRY the real composite, and the
+  // composite must really recover MW, or the assertion above guards nothing.
+  it('the fixture ships the real composite, and it recovers MW exactly', () => {
+    const rows = payload().results;
+    expect(rows[0].score).toBe(8887.2);                // measured live, ashburn
+    expect(rows[1].score).toBe(5097.2);                // measured live, dallas
+    for (const r of rows) {
+      const mw = (r.score - 50 * r.operator_count - 20 * r.facility_count) / 0.4;
+      expect(Math.round(mw)).toBe(r.total_mw);
+    }
+  });
+
+  it('score_basis passes through the free trim untouched', () => {
+    const out = trimForTrial(payload(), 'rank_markets');
+    expect(out.score_basis).toBe(SCORE_BASIS);
   });
 
   it('the ROW COUNT and result_count gates are untouched by this change', () => {
