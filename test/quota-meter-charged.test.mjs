@@ -25,7 +25,7 @@
 // Never publish a counter on a seat that cannot charge it. Show a number that
 // moves, or say plainly why there is no number yet — never a frozen number.
 import { describe, it, expect } from 'vitest';
-import { _buildQuotaHint, _ctxALS } from '../server.mjs';
+import { _buildQuotaHint, _ctxALS, _sessionMaps } from '../server.mjs';
 
 // get_gas_intelligence is a cap-governed ALWAYS_PARTIAL_PREVIEW tool — the exact
 // tool the live reproduction used.
@@ -73,5 +73,35 @@ describe('quota meter is published only where it is charged', () => {
     // is how the 2026-08-10 "both numbers correct, together unreadable" bug read.
     const q = asSeat(ANON);
     expect(q.full_answers_basis).toBeUndefined();
+  });
+});
+
+// dchub://qa-superuser/mcp::anon::quota-contradiction::get_fiber_intel#a8a568
+// (2026-09-24). _autoBindTrialToSession binds a just-minted trial into
+// `sessionMeta` but never reflects `api_key` onto THIS in-flight call's ctx —
+// only future calls see it there. `_buildQuotaHint` used to key `_durable`
+// purely off ctx.api_key, so on the SAME call that minted the trial it read
+// `_durable: false` and disclaimed the budget as "NOT YET APPLICABLE ...
+// only charged once a durable key is bound" — while the top-level
+// `remaining_full_today` field (buildAutoMintBlock, built from the mint
+// result directly, not from ctx) already published a real number in the
+// very same envelope. One response, one budget promised and denied at once.
+describe('quota meter recognizes a trial bound to the session on THIS call', () => {
+  const SID = 'sess-quota-samecall-a8a568';
+
+  it('a same-call auto-mint bind counts as durable, matching the top-level budget', () => {
+    _sessionMaps().sessionMeta.set(SID, {
+      api_key: 'dch_trial_samecall', tier: 'free', auto_bound: true, is_trial: true,
+    });
+    try {
+      const q = _ctxALS.run({ client_ip: '203.0.113.9', session_id: SID },
+        () => _buildQuotaHint(TOOL));
+      expect(typeof q.full_answers_remaining_today).toBe('number');
+      expect(typeof q.full_answers_cap_today).toBe('number');
+      expect(q.full_answers_unavailable_reason).toBeUndefined();
+      expect(q.tier).toBe('free');
+    } finally {
+      _sessionMaps().sessionMeta.delete(SID);
+    }
   });
 });
