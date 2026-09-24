@@ -6356,17 +6356,23 @@ export async function buildDepthTease(name, result, ctx, tier) {
   // pack/credits_url — yet this is the dominant repeat-call surface for the
   // addressable free pool, so the cheapest on-ramp belongs first.
   const _pack = _packCheckoutUrl(_sid);
+  // r-pro-only-sku (2026-09-24): the subscription named here is the one that OPENS
+  // this tool — Pro for a Pro-only tool (get_grid_intelligence, get_fiber_intel sit
+  // in DEPTH_TEASE_TOOLS), Developer otherwise. This wall offered Developer on both.
+  const _proOnly = _proOnlyTool(name);
+  const _subName = _proOnly ? 'Pro ' + _priceLabel('pro') : 'Developer ' + _priceLabel('developer');
   teased._upgrade = {
     tier:    _isKeyed ? (tier || 'free') : 'anonymous',
     locked:  'full_depth',
-    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. ${fullLine} is paid per call: 💳 $10 one-time = 1,000 API credits (no subscription) — call \`unlock_more_data\` for the one-click link; or Developer ${_priceLabel('developer')}. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
+    message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. ${fullLine} is paid per call: 💳 $10 one-time = 1,000 API credits (no subscription) — call \`unlock_more_data\` for the one-click link; or ${_subName}. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
     credits_url:   _pack,
     credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to full depth.',
     developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
+    ...(_proOnly && PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid) } : {}),
     upgrade_url:   _unlockUrl(name, _sid),
     ...(_isKeyed
       ? { next_tool:      'unlock_more_data',
-          next_tool_hint: 'Call unlock_more_data for one-click checkout links ($10 pack / Developer). The moment your human pays, your next call returns full data — no reconnect.' }
+          next_tool_hint: 'Call unlock_more_data for one-click checkout links ($10 pack / ' + (_proOnly ? 'Pro' : 'Developer') + '). The moment your human pays, your next call returns full data — no reconnect.' }
       : { next_tool:      'claim_free_key',
           next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For full depth now, call unlock_more_data ($10 = 1,000 API credits).' }),
     ...promoSC(),
@@ -15948,7 +15954,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // and NO bind_email (binding cannot lift the paid cap).
                 message: _paidTaste
                   ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Full depth per call now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ Developer ${_priceLabel('developer')} = ${_callsPerDay('developer')} calls/day).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Full depth per call now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ ${_proOnlyTool(name) ? 'Pro ' + _priceLabel('pro') + ', which opens \`' + name + '\`' : 'Developer ' + _priceLabel('developer') + ' = ' + _callsPerDay('developer') + ' calls/day'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to pay for full depth per call right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
