@@ -15374,12 +15374,18 @@ function trackedTool(srv, name, description, schema, handler) {
             // tools measured ~5s vs ~1s for served tools). trackPaidHit keeps
             // its prior fire-and-forget increment; shouldMintClaim's count
             // tolerance is unchanged from its already-racy fire-and-forget shape.
+            // r-nodata-side-effects (2026-09-24): the three side-effecting hops
+            // (paid-hit count, trial mint, claim counter) now start only AFTER
+            // _noDataGuard passes. Started alongside the handler, a no-data answer
+            // still counted a paid hit, bumped the claim counter and minted a
+            // dch_trial_ key the caller never saw — inflating all three metrics.
+            // The mint and claim hops still overlap each other; they just no
+            // longer overlap the data fetch (one extra hop on a served preview).
             const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
+            const _trialResult = _noDataGuard(await handler(args));
             trackPaidHit(_sid, name);
-            const _dataP    = handler(args);
             const _mintP    = mintAutoTrial(name);
             const _hiClaimP = shouldMintClaim(_sid, name);
-            const _trialResult = _noDataGuard(await _dataP);
             let _trialText = _trialResult?.content?.[0]?.text || '';
             // Phase 7: trim arrays in the JSON payload so the LLM sees that
             // there IS more, but not the actual data.
