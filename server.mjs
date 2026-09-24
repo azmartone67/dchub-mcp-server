@@ -1019,9 +1019,14 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
 //   • TOOLS: OPTIN_CTA_TOOLS, the backend's set (get_grid_intelligence,
 //     get_fiber_intel). FREE callers only: never a paid tier.
 //   • SUPPRESSION: the backend skips a key whose bound email is on the
-//     suppression list, fail-safe = skip. This server cannot read that list, so
-//     it skips EVERY keyed caller. An anonymous caller has no email to suppress.
-//     (A trial key resolves to IDENTIFIED on the backend, which skips it too.)
+//     suppression list, fail-safe = skip. This server cannot read that list or
+//     resolve a key's tier, so for a KEYED caller it asks the backend
+//     (r-optin-keyed, GET /api/v1/opt-in/cta, dchub-backend#5433), which answers
+//     with _optin_cta_block's own card or null, and relays that card verbatim.
+//     Any failure (timeout, non-200, a 404 before that route deploys, a card
+//     that is not the opt-in page) means no card. An anonymous caller has no
+//     email to suppress. A valid trial key resolves to IDENTIFIED on the
+//     backend, so it gets null there, as on the backend's own gate.
 //   • SHAPE: structuredContent.optin_cta = the backend's card, byte for byte,
 //     plus its optin_note appended to the last text block for text-only relays.
 // test/optin-cta-parity.test.mjs reads mcp_gatekeeper.py when it is on disk and
@@ -1069,21 +1074,61 @@ function _optinWallSignal(result) {
     ? result.content.map((c) => (c && typeof c.text === 'string' ? c.text : '')).join('\n') : '';
   return /https:\/\/dchub\.cloud\/(?:go\/c|upgrade\/h)\//.test(text);
 }
-export function _withOptinAsk(result, toolName, ctx, env = process.env) {
+// The backend's answer for one key, cached per (key, tool) so a keyed caller
+// costs at most one lookup per TTL. The raw key is sent in a header to our own
+// origin and never kept here: the cache is keyed on its sha256.
+const _OPTIN_KEYED_CACHE = new Map();   // sha256(key)|tool -> { card, exp }
+const _OPTIN_KEYED_TTL_MS = 10 * 60 * 1000;
+const _OPTIN_KEYED_MAX = 5000;
+const _OPTIN_KEYED_TIMEOUT_MS = 1200;
+function _isOptinCard(card, toolName) {
+  return !!card && typeof card === 'object' && card.optin_tool === toolName
+    && card.optin_source === OPTIN_SOURCE && card.optin_double_opt_in === true
+    && typeof card.optin_url === 'string' && card.optin_url === _optinUrl(toolName)
+    && typeof card.optin_note === 'string' && card.optin_note.endsWith(card.optin_url)
+    && typeof card.optin_value === 'string';
+}
+export async function _fetchKeyedOptinCard(apiKey, toolName, fetchImpl = fetch) {
+  const ck = createHash('sha256').update(String(apiKey)).digest('hex') + '|' + toolName;
+  const hit = _OPTIN_KEYED_CACHE.get(ck);
+  if (hit && Date.now() < hit.exp) return hit.card;
+  let card = null;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), _OPTIN_KEYED_TIMEOUT_MS);
+  try {
+    const r = await fetchImpl(API_BASE + '/api/v1/opt-in/cta?tool=' + encodeURIComponent(toolName), {
+      headers: { 'X-Internal-Key': INTERNAL_KEY, 'X-API-Key': String(apiKey), 'Accept': 'application/json' },
+      signal: ctl.signal,
+    });
+    if (r && r.ok) {
+      const j = await r.json();
+      const b = j && j.ok === true ? j.optin_cta : null;
+      if (_isOptinCard(b, toolName)) {
+        card = { optin_url: b.optin_url, optin_note: b.optin_note, optin_value: b.optin_value,
+          optin_double_opt_in: true, optin_source: b.optin_source, optin_tool: b.optin_tool };
+      }
+    }
+  } catch (_e) { card = null; } finally { clearTimeout(t); }
+  if (_OPTIN_KEYED_CACHE.size >= _OPTIN_KEYED_MAX) _OPTIN_KEYED_CACHE.clear();
+  _OPTIN_KEYED_CACHE.set(ck, { card, exp: Date.now() + _OPTIN_KEYED_TTL_MS });
+  return card;
+}
+export async function _withOptinAsk(result, toolName, ctx, env = process.env, fetchCard = _fetchKeyedOptinCard) {
   try {
     if (!optinCtaEnabled(env)) return result;
     if (!result || !Array.isArray(result.content) || !OPTIN_CTA_TOOLS.includes(toolName)) return result;
     const sc = result.structuredContent;
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
     const c = ctx || {};
-    if (c.api_key) return result;   // suppression unknowable here: skip, like the backend's fail-safe
     const scTier = sc.identity && sc.identity.tier;
     if (_isPaidDepthTier(c.tier) || _isPaidDepthTier(scTier)) return result;
     if (sc.completeness === 'unrestricted') return result;
     if (!_optinWallSignal(result)) return result;
     const sid = c.session_id || '';
     if (sid && _OPTIN_SENT.has(sid)) return result;
-    const card = _optinCtaCard(toolName);
+    // A keyed caller's card comes from the backend (tier + suppression); null = none.
+    const card = c.api_key ? await fetchCard(c.api_key, toolName) : _optinCtaCard(toolName);
+    if (!card) return result;
     const line = '\n\n' + card.optin_note;
     const content = result.content.slice();
     let i = content.length - 1;
@@ -16338,7 +16383,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   network.
   }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
-         _scrubCommerce(_withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx())),
+         _scrubCommerce(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))),
        name, args, _outSchema), name));

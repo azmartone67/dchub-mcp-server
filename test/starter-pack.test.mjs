@@ -119,8 +119,9 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
     //   moved into this chain) — same re-anchor rationale as the clean-path
     //   guard below: the assertion is that withStarterPack sits at the
     //   callback wrapping the processed _stamped result, not that no other
-    //   wrapper may ever join the chain.
-    expect(SRC).toMatch(/withStarterPack\(\s*_scrubCommerce\((?:\w+\()*_ensureStructured\(await _stamped/);
+    //   wrapper may ever join the chain. An awaited wrapper counts too
+    //   (2026-09-24: _withOptinAsk became async for the backend opt-in lookup).
+    expect(SRC).toMatch(/withStarterPack\(\s*_scrubCommerce\((?:(?:await )?\w+\()*_ensureStructured\(await _stamped/);
   });
 
   it('is NOT attached beside withFrontDoorNudge on the clean-only path', () => {
