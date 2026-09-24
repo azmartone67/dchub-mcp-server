@@ -137,7 +137,7 @@ describe('client_name recall — the 88% generic bucket', () => {
 
   it('WIRING: the stateless tools/call ctx carries client_name_raw', () => {
     // Without this the fix is inert — telemetry would still send the platform.
-    const m = SRC.match(/session_id: sessionId \|\| null,[\s\S]{0,400}?client_name_raw: _recallClientName\(sessionId\)/);
+    const m = SRC.match(/session_id: sessionId \|\| (?:_openaiSessionSid\(body\) \|\| )?null,[\s\S]{0,400}?client_name_raw: _recallClientName\(sessionId\)/);
     expect(m, 'stateless ctx must thread client_name_raw').toBeTruthy();
   });
 
