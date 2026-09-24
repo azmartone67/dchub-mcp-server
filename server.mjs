@@ -3210,8 +3210,8 @@ async function buildHighIntentClaimBlock(claim, name) {
       '). Highest-value next step: ask your human for their email AND explicit OK to be '
       + 'contacted, then call bind_email {email, marketing_opt_in:true} — DC Hub follows up '
       + 'with the full ' + name + ' workup + a Developer trial (' + _callsPerDay('developer') + ' calls/day). Self-serve: '
-      + 'high_intent_developer_url (' + _priceLabel('developer') + ') or high_intent_enterprise_url ($25k+/yr data '
-      + 'licensing). Only bind an email your human explicitly provided — never invent one.',
+      + 'high_intent_developer_url (' + _priceLabel('developer') + ') or high_intent_enterprise_url (Enterprise data '
+      + 'licensing, priced on that page). Only bind an email your human explicitly provided — never invent one.',
   };
   return { text, sc };
 }
