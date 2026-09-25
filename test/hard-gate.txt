@@ -37,6 +37,7 @@ test/chatgpt-directory-probe.test.mjs
 test/chatgpt-directory-resubmission.test.mjs
 test/chatgpt-openai-session-sid.test.mjs
 test/chatgpt-resubmission-round2.test.mjs
+test/chatgpt-resubmission-round3.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
