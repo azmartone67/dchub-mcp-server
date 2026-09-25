@@ -39,11 +39,12 @@
 //             behind server.json), smithery-freshness (Smithery behind live).
 //             It is not a third publisher. Cooldowns come from the Actions
 //             API, and a run that cannot read that API dispatches nothing.
-//   escalate  listings a person can edit but no API reaches — mcp.so, LobeHub,
+//   escalate  listings a person can edit but no API reaches — LobeHub,
 //             MCP Hive, our open PRs on curated GitHub lists — into ONE issue
 //             for prospecting.
 //   watch     listings with no lever at all — PulseMCP, the mcpservers.org
-//             card, the Glama server listing, the deprecated Glama duplicate —
+//             card, the Glama server listing, the deprecated Glama duplicate,
+//             both mcp.so listings (edit form refuses published listings) —
 //             are VERIFIED every full sweep and reported, never escalated.
 //             Nobody is asked to email a directory (prospecting brief,
 //             2026-09-15).
@@ -92,6 +93,15 @@ export const PULL_GRACE_H = Number(process.env.ECOSYSTEM_PULL_GRACE_HOURS || 36)
 // the whole catalogue, and flagging them would make this lane cry wolf daily.
 export const STALE_TOTAL_BELOW = 30;
 export const STALE_TOTAL_ABOVE = 10;
+// A facility FLOOR ("24,500+") on a surface someone else hosts is still TRUE
+// when canon has since risen past it. 2026-09-25 canon went 24,500+ -> 24,600+
+// and seven listings refreshed the day before went "stuck" again. Chasing each
+// +100 is a weekly public re-edit of third-party PRs that re-notifies their
+// maintainers. Within this fraction of canon (and never above it) a hosted
+// floor is reported as a conservative floor, not drift. Our own surfaces and
+// the ones we publish to are generated from canon, so they stay exact.
+export const FLOOR_TOLERANCE = 0.95;
+const EXACT_FLOOR_KINDS = new Set(['ours', 'push']);
 const CONFIRM_DELAY_MS = Number(process.env.ECOSYSTEM_CONFIRM_DELAY_MS || 40000);
 
 // kind: push   — an API we drive; the dispatched lane fixes it
@@ -151,12 +161,12 @@ export const SINKS = {
   mcphive: { label: 'MCP Hive', kind: 'manual', scope: 'full',
     url: 'https://mcp-hive.com/explore?provider=0f32e358-d410-4e19-9e77-e6dd91150386',
     fix: 'provider-authored description. Edit it in the mcp-hive.com provider dashboard' },
-  mcp_so: { label: 'mcp.so', kind: 'manual', scope: 'full',
+  mcp_so: { label: 'mcp.so', kind: 'watch', scope: 'full',
     url: 'https://mcp.so/servers/dchub-mcp-server',
-    fix: 'login-gated edit on mcp.so, whose edit form is broken. Needs a person' },
-  mcp_so_secondary: { label: 'mcp.so (second listing)', kind: 'manual', scope: 'full',
+    fix: 'verify-only. mcp.so\'s edit form refuses published listings (owner, 2026-09-24), its GitHub repo has been unmaintained since 2025-03, and mcp.so support was asked to fix it on 2026-09-25' },
+  mcp_so_secondary: { label: 'mcp.so (second listing)', kind: 'watch', scope: 'full',
     url: 'https://mcp.so/servers/dchub-backend',
-    fix: 'same form. Ask mcp.so to merge it into the primary listing rather than keep two' },
+    fix: 'verify-only. Same form. mcp.so support was asked on 2026-09-25 to merge it into the primary listing' },
 };
 
 const IDENTITY_RE = /dc ?hub|dchub/i;
@@ -404,10 +414,13 @@ export function repoDrift({ snapshot, canon, serverJson, liveTools }) {
   return out;
 }
 
-/** in_sync / drift / unreadable for one observation against the single source. */
-export function judge(obs, ssot) {
+/** in_sync / drift / unreadable for one observation against the single source.
+ *  `kind` is the sink's kind. Without it every floor must match exactly. A
+ *  conservative floor on a hosted surface is returned in `notes`, never dropped. */
+export function judge(obs, ssot, { kind } = {}) {
   if (!obs || obs.read !== true) return { state: 'unreadable', reasons: [obs?.error || 'not read'] };
   const reasons = [];
+  const notes = [];
   const liveTools = Number.isInteger(ssot?.tools) ? ssot.tools : null;
   if (liveTools != null) {
     if (Number.isInteger(obs.tools) && obs.tools !== liveTools) {
@@ -419,8 +432,12 @@ export function judge(obs, ssot) {
   const canonFloor = ssot?.facilities ? parseFloor(ssot.facilities) : null;
   if (canonFloor != null) {
     const floors = [...new Set(obs.floors || [])];
-    const off = floors.filter((f) => parseFloor(f) !== canonFloor);
+    const exact = kind == null || EXACT_FLOOR_KINDS.has(kind);
+    const conservative = (n) => !exact && n != null && n < canonFloor && n >= canonFloor * FLOOR_TOLERANCE;
+    const off = floors.filter((f) => parseFloor(f) !== canonFloor && !conservative(parseFloor(f)));
+    const low = floors.filter((f) => conservative(parseFloor(f)));
     if (off.length) reasons.push(`says ${off.join(' / ')} facilities (canon ${ssot.facilities})`);
+    if (low.length) notes.push(`conservative floor ${low.join(' / ')}, still true against canon ${ssot.facilities}`);
     if (new Set(floors.map(parseFloor)).size > 1) reasons.push(`dual floor on one surface: ${floors.join(' + ')}`);
   }
   if (obs.version && ssot?.version && semverCmp(obs.version, ssot.version) < 0) {
@@ -428,7 +445,9 @@ export function judge(obs, ssot) {
   }
   if (obs.banned?.length) reasons.push(`banned pricing copy: ${obs.banned.join(', ')}`);
   for (const r of obs.extra || []) reasons.push(r);
-  return { state: reasons.length ? 'drift' : 'in_sync', reasons };
+  const verdict = { state: reasons.length ? 'drift' : 'in_sync', reasons };
+  if (notes.length) verdict.notes = notes;
+  return verdict;
 }
 
 const ageMin = (run, now) => (run?.created_at ? (now - Date.parse(run.created_at)) / 60000 : Infinity);
@@ -938,7 +957,8 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
     out.push('', '### Could not read this sweep (not counted as drift, not counted as clean)');
     for (const r of unread) out.push(`- ${esc(r.label)}: ${esc(r.verdict.reasons.join('; '))}`);
   }
-  const ok = results.filter((r) => r.verdict.state === 'in_sync').map((r) => r.label);
+  const ok = results.filter((r) => r.verdict.state === 'in_sync')
+    .map((r) => (r.verdict.notes?.length ? `${r.label} (${esc(r.verdict.notes.join('; '))})` : r.label));
   if (ok.length) out.push('', `### In sync\n${ok.join(' · ')}`);
   out.push('', '### Lanes this cycle');
   for (const [lane, p] of Object.entries(plan)) {
@@ -1054,7 +1074,7 @@ async function main() {
     return {
       key: k, label: SINKS[k].label, kind: SINKS[k].kind, fix: SINKS[k].fix,
       url: SINKS[k].page || SINKS[k].url || (SINKS[k].path ? `${ORIGIN}${SINKS[k].path}` : null),
-      obs, verdict: judge(obs, ssot),
+      obs, verdict: judge(obs, ssot, { kind: SINKS[k].kind }),
     };
   };
   let results = await Promise.all(keys.map(observe));
@@ -1076,7 +1096,7 @@ async function main() {
         results.push({
           key: p.key, label: p.label, kind: 'manual', url: p.url,
           fix: 'our open PR on a curated list. Refresh it in place with the paste-ready line',
-          obs: p.obs, verdict: judge(p.obs, ssot),
+          obs: p.obs, verdict: judge(p.obs, ssot, { kind: 'manual' }),
         });
       }
     } else {
