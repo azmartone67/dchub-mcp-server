@@ -18,7 +18,7 @@ import {
   hiveItem, packCodes, usableCanon, repoDrift, judge, gate, planActions, stuckKeys,
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
-  COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS,
+  COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
 
@@ -354,7 +354,7 @@ describe('verify-only listings: watched every full sweep, never a request to any
     for (const [key, s] of Object.entries(SINKS)) {
       expect(s.fix, key).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}|\be-?mail\b/i);
     }
-    for (const key of ['pulsemcp', 'mcpservers_org', 'glama_server', 'glama_duplicate']) {
+    for (const key of ['pulsemcp', 'mcpservers_org', 'glama_server', 'glama_duplicate', 'mcp_so', 'mcp_so_secondary']) {
       expect(SINKS[key].kind, key).toBe('watch');
       expect(SINKS[key].fix, key).toMatch(/^verify-only\. /);
     }
@@ -442,5 +442,78 @@ describe('the workflow dispatches exactly the lanes the planner names', () => {
     const full = wf.match(/github\.event\.schedule == '([^']+)'/)?.[1];
     expect(full).toBeTruthy();
     expect(wf).toContain(`- cron: '${full}'`);
+  });
+});
+
+describe('a true floor on a hosted listing is not drift (2026-09-25: 24,500+ vs canon 24,600+)', () => {
+  const CANON = { ...SSOT, facilities: '24,600+' };
+  const hosted = (floors) => judge({ read: true, floors }, CANON, { kind: 'manual' });
+
+  it('passes a floor below canon but within tolerance, and says so in notes', () => {
+    const v = hosted(['24,500+']);
+    expect(v.state).toBe('in_sync');
+    expect(v.reasons).toEqual([]);
+    expect(v.notes.join(' ')).toMatch(/conservative floor 24,500\+, still true against canon 24,600\+/);
+  });
+
+  it('holds at the tolerance edge and fails one facility under it', () => {
+    const edge = Math.ceil(24600 * FLOOR_TOLERANCE);
+    expect(hosted([`${edge.toLocaleString('en-US')}+`]).state).toBe('in_sync');
+    expect(hosted([`${(edge - 1).toLocaleString('en-US')}+`]).state).toBe('drift');
+  });
+
+  it('still flags a floor far below canon', () => {
+    const v = hosted(['21,800+']);
+    expect(v.state).toBe('drift');
+    expect(v.reasons.join(' ')).toMatch(/says 21,800\+ facilities \(canon 24,600\+\)/);
+  });
+
+  it('still flags a floor ABOVE canon: that one is false', () => {
+    expect(hosted(['24,700+']).state).toBe('drift');
+  });
+
+  it('still flags two floors on one listing, even when both are within tolerance', () => {
+    const v = hosted(['24,500+', '24,600+']);
+    expect(v.state).toBe('drift');
+    expect(v.reasons.join(' ')).toMatch(/dual floor/);
+  });
+
+  it('keeps our own surfaces, the ones we publish to, and an unstated kind exact', () => {
+    for (const opts of [{ kind: 'ours' }, { kind: 'push' }, {}]) {
+      expect(judge({ read: true, floors: ['24,500+'] }, CANON, opts).state).toBe('drift');
+    }
+    expect(judge({ read: true, floors: ['24,500+'] }, CANON).state).toBe('drift');
+  });
+
+  it('applies to every hosted kind: pull, watch and manual', () => {
+    for (const kind of ['pull', 'watch', 'manual']) {
+      expect(judge({ read: true, floors: ['24,500+'] }, CANON, { kind }).state).toBe('in_sync');
+    }
+  });
+
+  it('prints the conservative floor next to the label in the In sync list', () => {
+    const results = [{ key: 'mcphive', kind: 'manual', label: 'MCP Hive', fix: 'f', verdict: hosted(['24,500+']) }];
+    const body = renderIssue({ ssot: CANON, results, stuck: [], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    expect(body).toMatch(/### In sync\nMCP Hive \(conservative floor 24,500\+, still true against canon 24,600\+\)/);
+  });
+});
+
+describe('mcp.so is verify-only: its edit form refuses published listings (owner, 2026-09-24)', () => {
+  it('both mcp.so listings are watch; LobeHub and MCP Hive stay a person\'s job', () => {
+    expect(SINKS.mcp_so.kind).toBe('watch');
+    expect(SINKS.mcp_so_secondary.kind).toBe('watch');
+    expect(SINKS.lobehub.kind).toBe('manual');
+    expect(SINKS.mcphive.kind).toBe('manual');
+  });
+
+  it('the banned $299 still prints on the verify-only row, and mcp.so is never stuck', () => {
+    const verdict = judge({ read: true, tools: null, toolClaims: [79], floors: ['12,650+'], banned: ['$299'] }, SSOT, { kind: SINKS.mcp_so.kind });
+    const results = [{ key: 'mcp_so', kind: SINKS.mcp_so.kind, label: SINKS.mcp_so.label, fix: SINKS.mcp_so.fix, url: SINKS.mcp_so.url, verdict }];
+    expect(verdict.state).toBe('drift');
+    expect(stuckKeys(results, { hoursSinceChange: null })).toEqual([]);
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    const rest = body.split('### Verify-only')[1] || '';
+    expect(rest).toMatch(/\[mcp\.so\]\(https:\/\/mcp\.so\/servers\/dchub-mcp-server\): [^\n]*banned pricing copy: \$299/);
+    expect(stuckMarker(body)).toEqual([]);
   });
 });
