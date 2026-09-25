@@ -162,3 +162,17 @@ describe('trimForTrial (the keyless preview trims)', () => {
     for (const r of out.results) expect(r.score).toBeNull();
   });
 });
+
+// The tool description tells an agent what `score` is before it calls, so a
+// null or a 8887.2 is not read as a 0-100 grade.
+describe('rank_markets description names score_basis', () => {
+  it('names score_basis in the Returns shape and says what score is per criteria', () => {
+    const d = TOOLS.rank_markets.description;
+    expect(d).toMatch(/methodology, score_basis\}/);
+    expect(d).toContain('0.4×total_mw + 50×operator_count + 20×facility_count');
+    expect(d).toContain('most_operators = operator_count');
+    expect(d).toContain('fastest_growing = facility_count');
+    expect(d).toContain('ai_ready = the DCPI composite');
+    expect(d).toMatch(/NOT a 0-100 scale/);
+  });
+});
