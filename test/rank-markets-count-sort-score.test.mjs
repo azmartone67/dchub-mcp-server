@@ -173,6 +173,9 @@ describe('rank_markets description names score_basis', () => {
     expect(d).toContain('most_operators = operator_count');
     expect(d).toContain('fastest_growing = facility_count');
     expect(d).toContain('ai_ready = the DCPI composite');
+    // ai_ready's live response carries no score_basis (measured 2026-09-24); the
+    // description must not promise one there
+    expect(d).toMatch(/ai_ready omits it and explains its composite in `methodology`/);
     expect(d).toMatch(/NOT a 0-100 scale/);
   });
 });
