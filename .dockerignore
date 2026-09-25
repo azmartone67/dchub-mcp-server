@@ -5,3 +5,6 @@ node_modules
 *.md
 !README.md
 .DS_Store
+
+# Railway IaC authoring (CLI-only, not part of the image)
+.railway
