@@ -8802,8 +8802,19 @@ export function _stripReasonNumerics(r, force = false) {
   return out;
 }
 
+// Never-cut fields (owner guard, 2026-09-25): pay, retry, persist and relay
+// fields pass through the free preview byte-identical. Live verify after
+// mcp#562: keyless execute_plan cut machine_pay.covered_tools 13 -> 3 and
+// unlocked_tools 9 -> 3, because this trim ran over the whole envelope after
+// step slimming had protected them. _STEP_PROTECTED_KEY_RE is this regex.
+const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retry_|persist_command|auto_trial_key/i;
+
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
+  // execute_plan: every step already ran as a real tools/call at the caller's
+  // tier, so its own preview is in place. Trimming the envelope again cut
+  // executed[] 4 -> 3 (Loudoun-PW 200 MW lost its get_grid_intelligence step).
+  if (toolName === 'execute_plan') return parsed;
   // r-arg-error: `valid_regions` is the contract, not product data. Trimming a
   // 7-entry recovery list to 3 behind `_valid_regions_total_in_pro` paywalled
   // the one thing the caller needed to stop hitting this branch.
@@ -8823,7 +8834,9 @@ function trimForTrial(parsed, toolName) {
   if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
-    if (k === 'verdict_reasons' && Array.isArray(v)) {
+    if (_NEVER_CUT_KEY_RE.test(k)) {
+      out[k] = v;                             // never-cut: byte-identical
+    } else if (k === 'verdict_reasons' && Array.isArray(v)) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
     } else if (_gatesHeadroom(k)) {
       _noteWithheld(k, v);
@@ -13565,23 +13578,26 @@ export function _facilityFetchRecord(id, d, url) {
   const loc = [d.city, d.state, d.country].filter(Boolean).join(', ');
   const city = String(d.city || '').trim().toLowerCase();
   const market = d.market_slug || d.market || (_CITY_ISO_META[city] && _CITY_ISO_META[city].slug) || null;
-  const lat = Number(d.latitude ?? d.lat), lon = Number(d.longitude ?? d.lon ?? d.lng);
-  const hasPt = Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
-  const approx = /approx|2dp/i.test(String(d.coordinates_status || ''));
+  // Always 2 dp and labelled approximate: fetch is keyless, and live it printed
+  // 6-decimal coordinates beside metadata that said approximate_2dp.
+  const _r2 = (x) => Math.round(Number(x) * 100) / 100;
+  const lat = _r2(d.latitude ?? d.lat), lon = _r2(d.longitude ?? d.lon ?? d.lng);
+  const hasPt = (d.latitude ?? d.lat) != null && (d.longitude ?? d.lon ?? d.lng) != null
+    && Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
   const operator = d.operator || d.provider || null;
   const cap = Number(d.capacity_mw ?? d.power_mw);
   const parts = [String(name) + (loc ? (' — ' + loc) : '') + '.'];
   if (operator) parts.push('Operator: ' + operator + '.');
   if (d.status) parts.push('Status: ' + d.status + '.');
   if (market) parts.push('Market: ' + market + '.');
-  if (hasPt) parts.push((approx ? 'Approximate location: ' : 'Location: ') + lat + ', ' + lon + '.');
+  if (hasPt) parts.push('Approximate location: ' + lat + ', ' + lon + '.');
   if (Number.isFinite(cap) && cap > 0) parts.push('Power capacity: ' + cap + ' MW.');
   if (d.connectivity_note) parts.push('Connectivity: ' + d.connectivity_note + '.');
   if (d.v === 'verified' || d.verified === true) parts.push('Record verified.');
   parts.push('Source: DC Hub (dchub.cloud), ' + url + '.');
   const metadata = { source: 'DC Hub (dchub.cloud)', market, country: d.country || null,
     city: d.city || null, state: d.state || null, status: d.status || null,
-    ...(hasPt ? { lat, lon, coordinates: approx ? 'approximate' : 'exact' } : {}) };
+    ...(hasPt ? { lat, lon, coordinates: 'approximate' } : {}) };
   return { id, title: String(name), text: parts.join(' '), url, metadata };
 }
 
@@ -17273,7 +17289,7 @@ const _HEADLINE_MAX = 600;
 // v5.13 (live verify): machine_pay (price_usd, covered_tools), retry_*,
 // persist_command and auto_trial_key are on the rule too — the fallback path
 // dropped them and structured slimming cut machine_pay.covered_tools 13 -> 5.
-export const _STEP_PROTECTED_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retry_|persist_command|auto_trial_key/i;
+export const _STEP_PROTECTED_KEY_RE = _NEVER_CUT_KEY_RE;
 const _PROTECTED_TEXT_RE = /\/go\/c\/|\/upgrade|for your human|unlock|verbatim/i;
 
 function _carriesProtected(v, depth = 0) {
@@ -18394,8 +18410,12 @@ function createServer(descOverrides, instructionsTail) {
       const rows = Array.isArray(out && out.data) ? out.data
         : (Array.isArray(out && out.facilities) ? out.facilities
         : (Array.isArray(out) ? out : []));
+      // Live verify 2026-09-25: the list's slug (lumen-technologies-level-3-
+      // ashburn-23a0d3a2) answers 404 on /api/v1/facility/<slug> and on the
+      // facility page, while the numeric id (8484) answers both. Hand out the
+      // id that fetch and the page resolve.
       const results = rows.map((r) => {
-        const id = String((r && (r.slug || r.id || r.facility_id)) || '').trim();
+        const id = String((r && (r.id ?? r.facility_id ?? r.slug)) ?? '').trim();
         if (!id) return null;
         if (_isNonDcName(r && (r.name || r.facility_name))) return null;
         const name = (r && (r.name || r.facility_name)) || id;
@@ -18412,7 +18432,10 @@ function createServer(descOverrides, instructionsTail) {
       if (!id) return { content: [{ type: 'text', text: JSON.stringify({ error: 'id is required (use an id from the search tool)' }) }], isError: true };
       const out = await callAPI('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
       const d = (out && (out.data || out)) || {};
-      if (out && out.success === false && !d.name) {
+      // No record = an error, however the miss arrived (success:false, a 404
+      // envelope, an empty body). Live: "no-such-facility-zzz-000" answered an
+      // empty record with no isError.
+      if (!(d && (d.name || d.facility_name))) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'No DC Hub facility has that id. Use an id returned by the search tool.' }) }], isError: true };
       }
       const rec = _facilityFetchRecord(id, d, _facUrl(id));
