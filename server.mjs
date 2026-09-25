@@ -13573,6 +13573,31 @@ export function _isNonDcName(name) {
   return _NON_DC_NAME_RE.test(n) && !_DC_NAME_RE.test(n);
 }
 
+// The fetch tool's body, exported so a test can drive it with a stub API.
+export async function _facilityFetch(id, api) {
+  id = String(id || '').trim();
+  if (!id) return { content: [{ type: 'text', text: JSON.stringify({ error: 'id is required (use an id from the search tool)' }) }], isError: true };
+  const out = await api('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
+  const d = (out && (out.data || out)) || {};
+  // The numeric record carries no connectivity_note (the slug record did):
+  // live, 1109 lost "517 on-site fiber carrier(s)". Read the carrier count.
+  if (d && d.name && !d.connectivity_note && /^\d+$/.test(id)) {
+    try {
+      const cr = await api('/api/v1/facility/' + id + '/carriers', {}, { internal: true });
+      const n = Number(cr && cr.carrier_count);
+      if (Number.isFinite(n) && n > 0) d.connectivity_note = n + ' on-site fiber carrier(s)';
+    } catch (_) { /* the line is optional */ }
+  }
+  // No record = an error, however the miss arrived (success:false, a 404
+  // envelope, an empty body). Live: "no-such-facility-zzz-000" answered an
+  // empty record with no isError.
+  if (!(d && (d.name || d.facility_name))) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: 'No DC Hub facility has that id. Use an id returned by the search tool.' }) }], isError: true };
+  }
+  const rec = _facilityFetchRecord(id, d, 'https://dchub.cloud/facility/' + encodeURIComponent(id));
+  return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
+}
+
 export function _facilityFetchRecord(id, d, url) {
   const name = d.name || d.facility_name || id;
   const loc = [d.city, d.state, d.country].filter(Boolean).join(', ');
@@ -15722,6 +15747,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // longer overlap the data fetch (one extra hop on a served preview).
             const _sid = (c && c.session_id) || (typeof sessionId !== 'undefined' && sessionId) || 'no-session';
             const _trialResult = _noDataGuard(await handler(args));
+            if (_trialResult && _trialResult.isError === true) return _trialResult;   // an error is not a preview
             trackPaidHit(_sid, name);
             const _mintP    = mintAutoTrial(name);
             const _hiClaimP = shouldMintClaim(_sid, name);
@@ -16344,6 +16370,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         };
       }
       const result = _noDataGuard(await handler(gate.params || args));
+      // An error answer is returned as the tool built it. The over-cap and
+      // capped rewrites below rebuild the result and dropped isError: live,
+      // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
+      // with no isError (2026-09-25, 23:18Z, a caller past the anonymous cap).
+      if (result && result.isError === true) return result;
       // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
       // (operator-approved 2026-06-18, "build but leave OFF"). Injected HERE — at
       // the single chokepoint every ALLOWED tool call passes through right after
@@ -18427,20 +18458,7 @@ function createServer(descOverrides, instructionsTail) {
   trackedTool(srv, 'fetch',
     'Fetch a DC Hub record for an id returned by the `search` tool (OpenAI Deep Research / ChatGPT connector format). Returns {id, title, text, url, metadata} — a citable public summary of one data-center facility (name, operator, location, status, market). For full structured specs (capacity MW, coordinates) use get_facility or open the url.',
     { id: z.string().describe('A facility id/slug from a prior `search` result, e.g. equinix-dc1-ashburn') },
-    async (a) => {
-      const id = String((a && a.id) || '').trim();
-      if (!id) return { content: [{ type: 'text', text: JSON.stringify({ error: 'id is required (use an id from the search tool)' }) }], isError: true };
-      const out = await callAPI('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
-      const d = (out && (out.data || out)) || {};
-      // No record = an error, however the miss arrived (success:false, a 404
-      // envelope, an empty body). Live: "no-such-facility-zzz-000" answered an
-      // empty record with no isError.
-      if (!(d && (d.name || d.facility_name))) {
-        return { content: [{ type: 'text', text: JSON.stringify({ error: 'No DC Hub facility has that id. Use an id returned by the search tool.' }) }], isError: true };
-      }
-      const rec = _facilityFetchRecord(id, d, _facUrl(id));
-      return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
-    });
+    async (a) => _facilityFetch(a && a.id, callAPI));
 
   // r-list-order (2026-08-02): execute_plan registers THIRD — right after the
   // ChatGPT-connector search/fetch pair — so tools/list (and every registry
