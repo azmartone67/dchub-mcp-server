@@ -125,7 +125,7 @@ Beyond the 92 tools, DC Hub ships **14 guided prompts** — they surface as slas
 - `/dchub:fiber_power_pairing` — where fiber density and available power overlap in a market
 - `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then a deal registration (the provider's identity, site and contact are released only if the provider accepts)
 
-Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`.
+Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`, and `dchub://testimonials` — named customers (people, not AI assistants) who approved public use of their words, read live from [dchub.cloud/testimonials.json](https://dchub.cloud/testimonials.json).
 
 ## Capacity Source — capacity to buy or lease
 

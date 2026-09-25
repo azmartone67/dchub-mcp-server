@@ -225,6 +225,7 @@ test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs
 test/substations-heal-from-canon.test.mjs
 test/summarize-citation.test.mjs
+test/testimonials-resource.test.mjs
 test/tier-collapse-fix.test.mjs
 test/time-to-power-one-name.test.mjs
 test/tool-aliases-resolve.test.mjs
