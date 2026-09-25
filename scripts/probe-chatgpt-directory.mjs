@@ -32,6 +32,20 @@ export function probeHits(text) {
   return Object.entries(PROBE_PATTERNS).filter(([, re]) => re.test(s)).map(([k]) => k);
 }
 
+// Refusals that say nothing about what the profile answers: the per-IP 429,
+// the per-IP daily hard wall (anon_hard_wall, "Anonymous access is paused for
+// this IP until UTC midnight"), and the /mcp scraper block. A run made of
+// these is inconclusive, never clean.
+export const REFUSED = /API 429|rate_limit_exceeded|anon_hard_wall|Anonymous access is paused|scraper_pattern_blocked|Automated usage detected|Anonymous sweep blocked/;
+
+// 'refused' | 'data' | 'other' for one tools/call response.
+export function classifyResponse(raw, msg) {
+  const s = String(raw || '');
+  if (REFUSED.test(s)) return 'refused';
+  if (msg && msg.result && !msg.result.isError && !/\\"error\\":/.test(s)) return 'data';
+  return 'other';
+}
+
 const STANDARD = new Set(['title', 'readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']);
 
 export function annotationViolations(tools) {
@@ -121,8 +135,9 @@ async function main() {
       if (!r.msg) failures.push(`${tag}: non-JSON response HTTP ${r.status}`);
       // A run whose calls were all refused proves nothing about the answers,
       // so count what actually came back instead of reading silence as clean.
-      if (/API 429|rate_limit_exceeded|scraper_pattern_blocked|Automated usage detected|Anonymous sweep blocked/.test(r.raw)) rateLimited += 1;
-      else if (r.msg && r.msg.result && !r.msg.result.isError && !/\\"error\\":/.test(r.raw)) dataAnswers += 1;
+      const kind = classifyResponse(r.raw, r.msg);
+      if (kind === 'refused') rateLimited += 1;
+      else if (kind === 'data') dataAnswers += 1;
       if (r.raw.includes('dchub.cloud/plans')) {
         gated += 1;
         if (!sample || (args === GUESS_ARGS && r.raw.length < 4000 && r.raw.length > sample.raw.length)) sample = { tag, raw: r.raw };
