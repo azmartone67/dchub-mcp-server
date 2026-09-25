@@ -126,6 +126,7 @@ test/list-transactions-free-values.test.mjs
 test/listing-paste-single-origin.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs
+test/lp-preview-labels-and-layer-cite.test.mjs
 test/lp-pro-only.test.mjs
 test/manifest-description-heals.test.mjs
 test/mcp-packs.test.mjs
