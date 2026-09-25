@@ -67,17 +67,22 @@ describe('_slimStepResult', () => {
     expect(s.constraint_coverage.capacity_mw.applied).toBe(false);
   });
 
-  it('still actually slims — the bulk goes to the preview', () => {
+  // v5.12 (2026-09-25): the REST is kept STRUCTURED (arrays cut to their first
+  // rows, long strings cut) instead of a 1,200-character JSON-prefix string.
+  it('still actually slims — the bulk is cut, structured', () => {
     const s = _slimStepResult(FAT, 'site_selection_canvas');
     expect(JSON.stringify(s).length).toBeLessThan(JSON.stringify(FAT).length);
-    expect(typeof s.preview).toBe('string');
+    expect(s.truncation.basis).toBe('structured');
+    expect(s.synthesis.locked).toBe(true);                     // the key is still where it was
+    expect(s.synthesis.message.length).toBeLessThan(FAT.synthesis.message.length);
   });
 
-  it('the preview carries the REST, never a copy of what was already kept', () => {
+  it('the kept blocks are not duplicated into the rest', () => {
     const s = _slimStepResult(FAT, 'site_selection_canvas');
-    expect(s.preview).not.toContain('no_market_met_the_verdict_filter');
-    expect(s.preview).toContain('synthesis');
+    expect(s.preview).toBeUndefined();
+    expect(JSON.stringify(s).split('no_market_met_the_verdict_filter').length - 1).toBe(1);
   });
+
 
   it('rows are the recoverable part, so they are trimmed before the block is', () => {
     // 60 rows makes the kept block itself oversized; excluded_top gives way,
@@ -158,13 +163,15 @@ describe('_slimStepResult keeps the answer', () => {
     expect(s.score.verdict).toBe('GAS-ADVANTAGED');
   });
 
-  it('a headline too large to be a verdict stays in the preview, and slimming still works', () => {
-    // A "score" that is really a dataset must not defeat the point of slimming.
+  it('a headline too large to be a verdict is cut like any other rows, and slimming still works', () => {
+    // A "score" that is really a dataset must not defeat the point of slimming:
+    // it is not kept whole, it keeps its first rows and says how many there were.
     const fat = { score: Array.from({ length: 200 }, (_, i) => ({ m: 'market' + i, v: i })),
                   ok: true, bulk: 'z'.repeat(7000) };
     const s = _slimStepResult(fat, 'rank_markets');
     expect(s.truncated).toBe(true);
-    expect(s.score, 'an oversized headline was kept and defeated the slimming').toBeUndefined();
+    expect(s.score.length, 'an oversized headline was kept whole').toBeLessThanOrEqual(5);
+    expect(s.truncation.rows_total.score).toBe(200);
     expect(JSON.stringify(s).length).toBeLessThan(JSON.stringify(fat).length);
   });
 
@@ -176,9 +183,9 @@ describe('_slimStepResult keeps the answer', () => {
     expect('composite_score' in s).toBe(false);
   });
 
-  it('the preview still carries only the REST, never a copy of the kept verdict', () => {
+  it('the rest keeps its keys and never copies the kept verdict', () => {
     const s = _slimStepResult(DCPI_STEP, 'get_market_dcpi_rank');
-    expect(s.preview).not.toContain('CAUTION');
-    expect(s.preview).toContain('forecast');
+    expect(JSON.stringify(s).split('CAUTION').length - 1).toBe(1);
+    expect(s.forecast.disclaimer.length).toBeLessThan(DCPI_STEP.forecast.disclaimer.length);
   });
 });
