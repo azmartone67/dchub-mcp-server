@@ -85,6 +85,7 @@ of it.
 - https://dchub.cloud/.well-known/mcp/server-card.json — MCP server card
 - https://dchub.cloud/AGENTS.md — agent discovery
 - https://dchub.cloud/playground — run live queries in a browser, no signup
+- https://dchub.cloud/testimonials.json — named customer testimonials (people, not AI assistants), approved for public use; human page https://dchub.cloud/testimonials; also the `dchub://testimonials` MCP resource. Quote them verbatim with name, title and company
 
 ## What is in this repository
 
