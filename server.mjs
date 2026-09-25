@@ -7296,6 +7296,18 @@ export async function _anonUsageCount(ip) {
   }
 }
 
+// A keyless call that is PAYING is not anonymous abuse, so the hard wall lets
+// it through: session-bound pack credits (the wall's own copy tells the caller
+// to buy a pack), or an MPP / x402 credential presented on this call. Read only
+// once the IP is already walled, so an ordinary call pays no extra lookup.
+// FAIL-CLOSED on the credit read (unreadable => 0 => walled): by this point the
+// count has already been read and is past the wall.
+export async function _anonWallPaidCall(c, extra, _mppArgs) {
+  if (c && c.x_payment) return true;
+  if (mppCredential(extra, _mppArgs)) return true;
+  try { return ((await _getCredits(c)).credits || 0) > 0; } catch (_) { return false; }
+}
+
 export async function _anonOverCap(ip) {
   // INERT-when-off — the critical guard: cap disabled OR no usable IP => no fetch
   // at all, no latency, returns false (never throttle). This is what makes the
@@ -14910,6 +14922,60 @@ function trackedTool(srv, name, description, schema, handler) {
           structuredContent: _payload,
         };
       }
+      // ── Anonymous per-IP HARD wall (DCHUB_ANON_HARD_WALL_MULT x the cap) ────
+      // Deliberately ABOVE the handler, unlike the soft cap. The soft cap runs the
+      // full query and then trims the result, so an over-cap caller costs exactly
+      // as much to serve as a paying one -- measured 2026-09-01: capped calls
+      // averaged 1,003ms against 1,187ms uncapped, ~23 minutes of continuous query
+      // time spent on 1,410 answers we had already decided to trim. Past the hard
+      // wall there is nothing left to trim a preview FROM, so the query is
+      // skipped outright and that cost goes to zero.
+      //
+      // r-hard-wall-covers-gated (2026-09-25): ABOVE the tier gate too. #302 put
+      // it just before the allowed-call handler, so every gated tool (the Land &
+      // Power preview, and the always-preview branch under `!gate.allowed`) ran
+      // its handler and returned a preview before this line was reached. Measured
+      // with the count at 999: 41 of the 72 /mcp/chatgpt tools answered, on /mcp
+      // exactly the same, `search` included -- the tool chain-hire's 1,345-call
+      // day was spent on. test/chatgpt-directory-probe-hard-wall.test.mjs pins it.
+      //
+      // Same !c.api_key guard as the soft cap: keyed/trial/paid callers never
+      // reach this line, so claiming a key remains the escape hatch and the
+      // wall is escapable in one step by anyone able to read the message. A
+      // keyless caller who is PAYING (session-bound pack credits, an MPP or x402
+      // credential on this call) is not walled either -- _anonWallPaidCall, which
+      // only runs once the IP is already past the wall.
+      if (!c.api_key && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
+        status = 'anon_hard_wall';
+        const _sidw = c.session_id || 'no-session';
+        const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
+          + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
+          + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
+          + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
+          + "identified callers are not subject to this wall. For full depth now, call `unlock_more_data` "
+          + "($10 one-time = 1,000 API credits, no subscription).";
+        return {
+          content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
+          isError: _wallIsError(),
+          structuredContent: _collapseEnvelope(_dedupeAliasKeys({
+            error: 'anon_hard_wall',
+            tool: name,
+            current_tier: tier || 'free',
+            // Named so a caller can tell WHICH limit stopped it: this is the
+            // IP-wide anonymous counter, not any per-tool budget. Same
+            // r-quota-truth reasoning as the soft cap's remaining_today_basis.
+            binding_limit: 'anon_ip_daily_hard',
+            limit: ANON_HARD_WALL_AT,
+            soft_cap: ANON_DAILY_CAP,
+            retry_after: 'UTC midnight',
+            next_tool: 'claim_free_key',
+            unlock_tool: 'unlock_more_data',
+            credits_url: _packCheckoutUrl(_sidw),
+            signup_url: SIGNUP_URL,
+            upgrade_url: _unlockUrl(name, _sidw),
+          })),
+        };
+      }
       // Land & Power (owner, 2026-09-22): only Pro opens the details (LP_TOOLS).
       if (LP_TOOLS.has(name)) {
         const _lpAccess = await _lpAccessFor(c, tier);
@@ -16006,49 +16072,6 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     ..._pwx2,        /* phase39_human_message — hoisted above (r-human-first) */
     ..._autoMintSC2, /* r61-conv: present only when mint succeeded */
     ..._hiSC2,       /* 2026-06-07: present only when count>=3 high-intent */
-          })),
-        };
-      }
-      // ── Anonymous per-IP HARD wall (DCHUB_ANON_HARD_WALL_MULT x the cap) ────
-      // Deliberately ABOVE the handler, unlike the soft cap below it. The soft
-      // cap runs the full query and then trims the result, so an over-cap caller
-      // costs exactly as much to serve as a paying one -- measured 2026-09-01:
-      // capped calls averaged 1,003ms against 1,187ms uncapped, ~23 minutes of
-      // continuous query time spent on 1,410 answers we had already decided to
-      // trim. Past the hard wall there is nothing left to trim a preview FROM,
-      // so the query is skipped outright and that cost goes to zero.
-      //
-      // Same !c.api_key guard as the soft cap: keyed/trial/paid callers never
-      // reach this line, so claiming a key remains the escape hatch and the
-      // wall is escapable in one step by anyone able to read the message.
-      if (!c.api_key && await _anonHardWalled(c.client_ip)) {
-        status = 'anon_hard_wall';
-        const _sidw = c.session_id || 'no-session';
-        const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
-          + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
-          + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
-          + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
-          + "identified callers are not subject to this wall. For full depth now, call `unlock_more_data` "
-          + "($10 one-time = 1,000 API credits, no subscription).";
-        return {
-          content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
-          isError: _wallIsError(),
-          structuredContent: _collapseEnvelope(_dedupeAliasKeys({
-            error: 'anon_hard_wall',
-            tool: name,
-            current_tier: tier || 'free',
-            // Named so a caller can tell WHICH limit stopped it: this is the
-            // IP-wide anonymous counter, not any per-tool budget. Same
-            // r-quota-truth reasoning as the soft cap's remaining_today_basis.
-            binding_limit: 'anon_ip_daily_hard',
-            limit: ANON_HARD_WALL_AT,
-            soft_cap: ANON_DAILY_CAP,
-            retry_after: 'UTC midnight',
-            next_tool: 'claim_free_key',
-            unlock_tool: 'unlock_more_data',
-            credits_url: _packCheckoutUrl(_sidw),
-            signup_url: SIGNUP_URL,
-            upgrade_url: _unlockUrl(name, _sidw),
           })),
         };
       }
