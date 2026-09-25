@@ -90,7 +90,7 @@ describe('plan_query router (pure)', () => {
     // 5.11: state-scoped market_ranking routes to site_selection_canvas.
     // Routing changed → planner_version moves; the replay SHAPE did not, so
     // schema_version stays 1. Exactly the split this assertion exists to prove.
-    expect(r.planner_version).toBe('5.11');       // planner behavior rev...
+    expect(r.planner_version).toBe('5.12');       // planner behavior rev...
     expect(r.schema_version).toBe(1);            // ...leaves the shape version at 1
     expect(r.intent).toBe(p.intent);             // self-contained: intent duplicated
     expect(r.intent_class).toBe(p.intent_class); // self-contained: intent_class duplicated

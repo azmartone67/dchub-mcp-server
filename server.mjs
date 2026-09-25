@@ -11938,7 +11938,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -12340,7 +12340,7 @@ export const _PLAN_CLASSES = [
         step: 4, tool: 'get_hosting_capacity', depends_on: [], estimated_calls: 1,
         why: `The DISTRIBUTION layer, which steps 1-3 cannot see: ${d.hc.utility} PUBLISHES its ${d.hc.capacity_type === 'load' ? 'LOAD-serving feeder headroom — what a new load can actually DRAW' : 'transmission-BUS headroom in MW'}, filed by the utility itself rather than inferred from proximity. Read it BEFORE quoting a siting number. Note the scale: published feeder ceilings run single-digit to ~27 MW, so a${d.mw ? ' ' + Math.round(d.mw) + ' MW' : ' data-center-scale'} load is a multi-feeder or transmission question — deliberately NOT filtered by min_mw here, because filtering a ${d.mw ? Math.round(d.mw) + ' MW' : 'large'} floor against a feeder table returns empty and empty reads as "no capacity". Independent of steps 1-3 — same wave.`,
         args_hint: d.coords
-          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: 25, capacity_type: d.hc.capacity_type, limit: 10 }
+          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: d.radiusKm || 25, capacity_type: d.hc.capacity_type, limit: 10 }
           : { utility: d.hc.utility, capacity_type: d.hc.capacity_type, limit: 10 },
       }] : []),
     ],
@@ -12513,7 +12513,7 @@ export const _PLAN_CLASSES = [
           ? `Utility-FILED feeder hosting capacity for ${d.hc.utility} — the MW a named distribution feeder can take, from the utility's own GIS, not a proximity proxy. capacity_type="${d.hc.capacity_type}"${d.hc.capacity_type === 'gen' ? ' — DER/generation EXPORT headroom: what the feeder can ACCEPT from solar/storage. This is NOT available load and must never be relayed as "you can site N MW here".' : d.hc.capacity_type === 'load' ? ' — LOAD-serving headroom, what a new data-center load can actually DRAW. This is the type that answers siting.' : ' — transmission BUS headroom in MW, a substation-bus number rather than a distribution-feeder one.'} Rows are GIS vertices: quote distinct_feeders, never geometry_rows_scanned, and check sample_complete before treating the set as exhaustive.`
           : 'Called with no location it returns the COVERAGE list — every utility that publishes a machine-readable hosting-capacity GIS (18 of them, Northeast / Mid-Atlantic / Midwest). Pick one and call again with utility=, or with lat+lon for a point. A utility missing from that list has not published; that is never a statement about its available capacity.'),
         args_hint: d.coords
-          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: 25, ...(d.hc ? { capacity_type: d.hc.capacity_type } : {}), limit: 10 }
+          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: d.radiusKm || 25, ...(d.hc ? { capacity_type: d.hc.capacity_type } : {}), limit: 10 }
           : (d.hc ? { utility: d.hc.utility, capacity_type: d.hc.capacity_type, limit: 10 } : {}) },
       { step: 2, tool: 'get_grid_intelligence', depends_on: [], estimated_calls: 1,
         why: 'The layer ABOVE the feeder: ISO headroom, constraints and time-to-power. A published feeder tops out around 5-27 MW, so any data-center-scale load is a transmission question the feeder table cannot answer — carrying both stops a distribution number from being quoted as a siting verdict. Independent of step 1 — same wave.',
@@ -12601,7 +12601,7 @@ export const _PLAN_CLASSES = [
         step: 5, tool: 'get_hosting_capacity',
         why: `This parcel sits inside ${d.hc.utility}, which PUBLISHES its ${d.hc.capacity_type === 'load' ? 'LOAD-serving feeder headroom — the MW a new load can actually DRAW' : 'transmission-BUS headroom in MW'}. That is filed distribution-level truth, not the substation-proximity proxy that carries analyze_site's power sub-score — where it exists it is the number that answers "what can I actually get here". Independent of steps 1-4 — same wave. Read distinct_feeders (rows are GIS vertices) and treat single-digit feeder ceilings as a multi-feeder / transmission conversation, not a no.`,
         args_hint: d.coords
-          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: 25, capacity_type: d.hc.capacity_type, limit: 10 }
+          ? { lat: d.coords.lat, lon: d.coords.lon, radius_km: d.radiusKm || 25, capacity_type: d.hc.capacity_type, limit: 10 }
           : { utility: d.hc.utility, capacity_type: d.hc.capacity_type, limit: 10 },
       }] : []),
     ],
@@ -13372,6 +13372,65 @@ const _PLAN_STATE_NAMES = {
 };
 const _PLAN_STATE_CODES = new Set(Object.values(_PLAN_STATE_NAMES));
 
+// ★ r-planner-v5.12 (2026-09-25 live screen, NoVA + north NJ): named DC
+// CORRIDORS bind a point, not a state. "Loudoun–Prince William" and
+// "Secaucus–Piscataway" planned PJM-wide / Virginia-wide: _CITY_ISO_META holds
+// {iso, slug} only (no coordinates) and has no entry for most corridor places,
+// so every coordinate-taking step got a state fallback or a '<site lat>'
+// placeholder. Each entry: a centroid, a radius that covers the place, and its
+// state. Several named places scope to their midpoint with a radius that
+// covers all of them. Word-boundary, longest-key-first, like isoFromPlace.
+export const _PLAN_CORRIDOR_META = {
+  'loudoun county':        { label: 'Loudoun County, VA',        state: 'VA', lat: 39.0900, lon: -77.6400, radius_km: 30 },
+  'loudoun':               { label: 'Loudoun County, VA',        state: 'VA', lat: 39.0900, lon: -77.6400, radius_km: 30 },
+  'ashburn':               { label: 'Ashburn, VA',               state: 'VA', lat: 39.0438, lon: -77.4874, radius_km: 10 },
+  'sterling':              { label: 'Sterling, VA',              state: 'VA', lat: 39.0062, lon: -77.4286, radius_km: 10 },
+  'leesburg':              { label: 'Leesburg, VA',              state: 'VA', lat: 39.1157, lon: -77.5636, radius_km: 10 },
+  'prince william county': { label: 'Prince William County, VA', state: 'VA', lat: 38.7000, lon: -77.4800, radius_km: 30 },
+  'prince william':        { label: 'Prince William County, VA', state: 'VA', lat: 38.7000, lon: -77.4800, radius_km: 30 },
+  'manassas':              { label: 'Manassas, VA',              state: 'VA', lat: 38.7509, lon: -77.4753, radius_km: 10 },
+  'gainesville':           { label: 'Gainesville, VA',           state: 'VA', lat: 38.7957, lon: -77.6139, radius_km: 10 },
+  'secaucus':              { label: 'Secaucus, NJ',              state: 'NJ', lat: 40.7895, lon: -74.0565, radius_km: 10 },
+  'meadowlands':           { label: 'Meadowlands, NJ',           state: 'NJ', lat: 40.8135, lon: -74.0745, radius_km: 10 },
+  'piscataway':            { label: 'Piscataway, NJ',            state: 'NJ', lat: 40.5493, lon: -74.4574, radius_km: 10 },
+  'carteret':              { label: 'Carteret, NJ',              state: 'NJ', lat: 40.5773, lon: -74.2282, radius_km: 10 },
+  'edison':                { label: 'Edison, NJ',                state: 'NJ', lat: 40.5187, lon: -74.4121, radius_km: 10 },
+  'newark':                { label: 'Newark, NJ',                state: 'NJ', lat: 40.7357, lon: -74.1724, radius_km: 12 },
+};
+
+function _kmBetween(a, b) {
+  const r = (x) => x * Math.PI / 180;
+  const dLat = r(b.lat - a.lat), dLon = r(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+// The corridor places a text names: {places:[...], lat, lon, radius_km, state}
+// or null. A place matched by a longer key is not matched again by a shorter
+// one ("prince william county" does not also count as "prince william").
+export function _planCorridor(text) {
+  try {
+    let rest = String(text || '');
+    const hits = [];
+    const keys = Object.keys(_PLAN_CORRIDOR_META).sort((a, b) => b.length - a.length);
+    for (const k of keys) {
+      const re = new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'ig');
+      if (!re.test(rest)) continue;
+      const m = _PLAN_CORRIDOR_META[k];
+      if (!hits.some((h) => h.label === m.label)) hits.push(m);
+      rest = rest.replace(re, ' ');
+    }
+    if (!hits.length) return null;
+    const lat = hits.reduce((t, h) => t + h.lat, 0) / hits.length;
+    const lon = hits.reduce((t, h) => t + h.lon, 0) / hits.length;
+    const c = { lat: Math.round(lat * 1e4) / 1e4, lon: Math.round(lon * 1e4) / 1e4 };
+    const radius = Math.max(...hits.map((h) => _kmBetween(c, h) + h.radius_km));
+    const states = [...new Set(hits.map((h) => h.state))];
+    return { places: hits.map((h) => h.label), lat: c.lat, lon: c.lon,
+      radius_km: Math.min(100, Math.round(radius)), state: states.length === 1 ? states[0] : null };
+  } catch (_e) { return null; }
+}
+
 export function _planSignals(intent, context) {
   const text = String(intent || '');
   const c = (context && typeof context === 'object' && !Array.isArray(context)) ? context : {};
@@ -13428,6 +13487,9 @@ export function _planSignals(intent, context) {
     const n = Number(m[1]);
     return Number.isFinite(n) ? (/^g/i.test(m[2]) ? n * 1000 : n) : null;
   })();
+  // r-planner-v5.12: a named corridor place binds a point (see _PLAN_CORRIDOR_META).
+  const corridor = _planCorridor(text);
+  let coordsFromCorridor = false;
   const coords = (() => {
     const lat = Number(c.lat ?? c.latitude), lon = Number(c.lon ?? c.lng ?? c.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
@@ -13436,6 +13498,7 @@ export function _planSignals(intent, context) {
       const a = Number(m[1]), b = Number(m[2]);
       if (Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lon: b };
     }
+    if (corridor) { coordsFromCorridor = true; return { lat: corridor.lat, lon: corridor.lon }; }
     return null;
   })();
   const state = (c.state && /^[A-Za-z]{2}$/.test(String(c.state).trim())) ? String(c.state).trim().toUpperCase() : null;
@@ -13456,7 +13519,7 @@ export function _planSignals(intent, context) {
     for (const m of text.matchAll(/\b(?:in|for)\s+([A-Z]{2})(?![A-Za-z])/g)) {
       if (_PLAN_STATE_CODES.has(m[1])) code = m[1];
     }
-    return code;
+    return code || (corridor && corridor.state) || null;
   })();
   const candidateId = (typeof c.candidate_id === 'string' && c.candidate_id.trim())
     ? c.candidate_id.trim()
@@ -13501,7 +13564,34 @@ export function _planSignals(intent, context) {
   // Underscore-prefixed: an internal routing signal, not part of the published
   // signals contract.
   const __citySlug = _execConstraintSlug(text);
-  return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug };
+  // r-planner-v5.12: what the plan's geography rests on, as plain fields.
+  // placeScope: a corridor bound a point. scopeWidened: the text named a
+  // county or a tracked metro that has no coordinates here, and the plan could
+  // only scope it to a state or an ISO — say so, rather than answering
+  // state-wide as if that were what was asked.
+  const radiusKm = coordsFromCorridor ? corridor.radius_km : null;
+  const placeScope = coordsFromCorridor
+    ? { places: corridor.places, lat: corridor.lat, lon: corridor.lon,
+        radius_km: corridor.radius_km, basis: 'corridor_table' }
+    : null;
+  const scopeWidened = (() => {
+    if (coords) return null;
+    const to = state || stateFromPlace || iso || isoFromPlace;
+    if (!to) return null;
+    const county = text.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+County\b/);
+    if (county) return { widened_from: county[1] + ' County', to };
+    if (isoFromPlace) {
+      let best = null;
+      for (const city of Object.keys(_CITY_ISO_META)) {
+        if (best && city.length <= best.length) continue;
+        if (new RegExp('\\b' + city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(text)) best = city;
+      }
+      if (best) return { widened_from: best.replace(/\b\w/g, (ch) => ch.toUpperCase()), to };
+    }
+    return null;
+  })();
+  return { iso, isoFromText, isoFromPlace, mw, coords, state, stateFromPlace, candidateId, market, since, ai, comparePair, hc, __citySlug,
+    radiusKm, placeScope, scopeWidened };
 }
 // r-planner-v2: derive execution waves from per-step depends_on (topological
 // layering — wave k holds every step whose dependencies all sit in waves <k).
@@ -13660,7 +13750,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         requires_* code from the canonical taxonomy (why_live_reasons);
 //         replay adds why_live_code, why_live_data becomes the code's canon
 //         phrase. OUTPUT-only rev: routing unchanged, schema stays 1.
-export const PLANNER_VERSION = '5.11';
+export const PLANNER_VERSION = '5.12';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -14092,7 +14182,9 @@ export function _dealDeskHumanLine(dd) {
 const _CONSTRAINT_NOUNS = [
   { key: 'fiber',        re: /\b(fiber|fibre|dark fiber|latency|connectivity)\b/i,
     tools: ['get_fiber_intel', 'get_metro_fiber', 'get_fiber_readiness', 'plan_fiber_leadin', 'cluster_sites_by_latency'],
-    lead: (d) => (d.coords
+    // v5.12: a corridor centroid (placeScope) is an AREA, not a parcel — the
+    // parcel read needs a point the caller gave.
+    lead: (d) => (d.coords && !d.placeScope
       ? { tool: 'get_fiber_readiness', args_hint: { lat: d.coords.lat, lon: d.coords.lon } }
       : { tool: 'get_fiber_intel', args_hint: { market: d.market || '<metro slug named in the intent>' } }) },
   { key: 'water',        re: /\b(water|drought|aquifer|cooling water)\b/i,
@@ -14319,6 +14411,9 @@ export function _planReplay(sc, signals) {
       waves: Array.isArray(sc.execution_waves) ? sc.execution_waves : [],
       parallel_groups: (sc.execution_strategy && sc.execution_strategy.parallel_groups) || [] },
     ...(_gap ? { resolution_gap: _gap } : {}),
+    // r-planner-v5.12: plain scope fields (not relay copy).
+    ...(signals && signals.placeScope ? { place_scope: signals.placeScope } : {}),
+    ...(signals && signals.scopeWidened ? { scope_widened: signals.scopeWidened } : {}),
     ...(() => { const u = _uncoveredConstraints(sc.intent, sc);
                 return u ? { uncovered_constraints: u } : {}; })(),
     // r-taxonomy (v5.9, enum v5.10): why this answer needed LIVE data —
@@ -14359,7 +14454,10 @@ export function _planQuery(intent, context) {
   // boost would count as its own evidence that the text matched.
   const _anyTextMatch = scored.some((s) => s.score > 0);
   for (const s of scored) {
-    if (s.cls.id === 'site_analysis' && (d.coords || d.candidateId)) s.score += 2;
+    // v5.12: coordinates from the corridor table bind ARGUMENTS only; they are
+    // not evidence that the question is about one parcel (same split as
+    // isoFromPlace vs iso).
+    if (s.cls.id === 'site_analysis' && ((d.coords && !d.placeScope) || d.candidateId)) s.score += 2;
     // ★★★[#209] A TYPED iso is SCOPE, not evidence about the question. It may
     //  RESCUE an intent the text could not route at all, but it must never
     //  OVERRULE a class the text itself established. Measured: adding iso=PJM
@@ -17012,6 +17110,59 @@ const _STEP_SLIM_KEEP = ['ok', 'error', 'empty_result', 'applied_filters',
 const _STEP_SLIM_HEADLINE = ['verdict', 'composite_score', 'dcgi', 'score', 'headline'];
 const _HEADLINE_MAX = 600;
 
+// ★ r-execute-plan v5.12 (owner guard, 2026-09-25): relay lines,
+// for_your_human, /upgrade/h and every unlock/upgrade field pass through a
+// slimmed step BYTE-IDENTICAL. Slimming may drop rows; it never rewrites,
+// trims or moves one of these. A top-level protected key is kept whole; a
+// nested one keeps its path (objects are never flattened into the preview in
+// structured mode) and a row carrying one is never dropped.
+export const _STEP_PROTECTED_KEY_RE = /for_your_human|relay|upgrade|unlock/i;
+const _PROTECTED_TEXT_RE = /\/go\/c\/|\/upgrade|for your human|unlock|verbatim/i;
+
+function _carriesProtected(v, depth = 0) {
+  if (!v || typeof v !== 'object' || depth > 6) return false;
+  if (Array.isArray(v)) return v.some((x) => _carriesProtected(x, depth + 1));
+  return Object.keys(v).some((k) => _STEP_PROTECTED_KEY_RE.test(k) || _carriesProtected(v[k], depth + 1));
+}
+
+// Rows are the recoverable part: keep the first `rows` of every array (and any
+// later row carrying a protected field), cut long plain strings, recurse into
+// objects. Protected keys and protected strings are returned as they are.
+function _shrinkStructured(v, rows, totals, path, depth = 0) {
+  if (Array.isArray(v)) {
+    if (v.length > rows) totals[path || '(root)'] = v.length;
+    const keep = v.filter((x, i) => i < rows || _carriesProtected(x));
+    return keep.map((x, i) => _shrinkStructured(x, rows, totals, path + '[' + i + ']', depth + 1));
+  }
+  if (v && typeof v === 'object') {
+    if (depth > 6) return v;
+    const o = {};
+    for (const k of Object.keys(v)) {
+      o[k] = _STEP_PROTECTED_KEY_RE.test(k) ? v[k]
+        : _shrinkStructured(v[k], rows, totals, path ? path + '.' + k : k, depth + 1);
+    }
+    return o;
+  }
+  if (typeof v === 'string' && v.length > 400 && !_PROTECTED_TEXT_RE.test(v)) return v.slice(0, 400) + '…';
+  return v;
+}
+
+// A non-JSON step (text content): the head, cut at a line, plus every line
+// that carries a relay / upgrade / unlock instruction, verbatim.
+export function _slimStepText(txt, limit = 6000) {
+  const t = String(txt == null ? '' : txt);
+  if (t.length <= limit) return { text: t };
+  const lines = t.split('\n');
+  let head = '';
+  const tail = [];
+  for (const ln of lines) {
+    if (head.length + ln.length + 1 <= limit) head += (head ? '\n' : '') + ln;
+    else if (_PROTECTED_TEXT_RE.test(ln)) tail.push(ln);
+  }
+  return { text: head + (tail.length ? '\n' + tail.join('\n') : ''), truncated: true,
+    text_chars_total: t.length };
+}
+
 export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
   try {
     if (!out || typeof out !== 'object' || Array.isArray(out)) return out;
@@ -17019,6 +17170,8 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
 
     const kept = {};
     for (const k of _STEP_SLIM_KEEP) if (out[k] !== undefined) kept[k] = out[k];
+    // Protected fields ride whole at the top level (owner guard above).
+    for (const k of Object.keys(out)) if (_STEP_PROTECTED_KEY_RE.test(k)) kept[k] = out[k];
     // The answer itself, size-bounded — see _STEP_SLIM_HEADLINE.
     for (const k of _STEP_SLIM_HEADLINE) {
       if (out[k] === undefined) continue;
@@ -17034,10 +17187,42 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
         excluded_top: kept.empty_result.excluded_top.slice(0, 3) };
     }
 
-    // Preview the REST — the keys already kept would waste the budget.
+    // The REST, kept STRUCTURED: arrays cut to their first rows, long strings
+    // cut, every key still where it was. A 1,200-character JSON prefix handed
+    // an agent a string to parse and lost everything past the first rows
+    // (live screen 2026-09-25: step outputs cut at ~1.2 KB).
     const rest = {};
     for (const k of Object.keys(out)) if (!(k in kept)) rest[k] = out[k];
+    for (const rows of [5, 3, 1]) {
+      const totals = {};
+      const shrunk = _shrinkStructured(rest, rows, totals, '');
+      const cand = { ...kept, ...shrunk, truncated: true,
+        truncation: { basis: 'structured', rows_kept_per_array: rows,
+          ...(Object.keys(totals).length ? { rows_total: totals } : {}) } };
+      if (JSON.stringify(cand).length <= limit * 1.5 || rows === 1 && !_carriesProtected(rest)) {
+        if (JSON.stringify(cand).length <= limit * 1.5) {
+          cand.note = 'step result slimmed — every array keeps its first ' + rows
+            + ' row(s) (rows_total gives the full counts) and long text is cut; call '
+            + name + ' directly for the full payload. The blocks that state what this '
+            + 'answer does and does not cover, and any relay/upgrade/unlock fields, '
+            + 'are kept whole.';
+          return cand;
+        }
+      }
+    }
+    // Still too big structured: the kept blocks plus a preview of the rest, and
+    // any nested protected field carried whole so the guard holds here too.
     const preview = JSON.stringify(rest).slice(0, previewChars);
+    const protectedFields = {};
+    (function collect(v, path, depth) {
+      if (!v || typeof v !== 'object' || depth > 6) return;
+      for (const k of Object.keys(v)) {
+        const p = Array.isArray(v) ? path + '[' + k + ']' : (path ? path + '.' + k : k);
+        if (!Array.isArray(v) && _STEP_PROTECTED_KEY_RE.test(k)) protectedFields[p] = v[k];
+        else collect(v[k], p, depth + 1);
+      }
+    })(rest, '', 0);
+    if (Object.keys(protectedFields).length) kept.protected_fields = protectedFields;
 
     return { ...kept, truncated: true, preview,
       note: 'step result truncated to ' + Math.round(previewChars / 100) / 10
@@ -18328,7 +18513,7 @@ function createServer(descOverrides, instructionsTail) {
           }
         }
       }
-      const replay = _planReplay(sc);
+      const replay = _planReplay(sc, _sig);
       try {
         // r-invariants: constraint_check decisions — 'completed without
         // invariant violations' is what completion-rate can't see.
@@ -20230,7 +20415,7 @@ function createServer(descOverrides, instructionsTail) {
       if (!out) {
         const txt = res && Array.isArray(res.content)
           ? (res.content.find((b) => b.type === 'text') || {}).text : null;
-        if (txt) { try { out = JSON.parse(txt); } catch (_e) { out = { text: String(txt).slice(0, 1200) }; } }
+        if (txt) { try { out = JSON.parse(txt); } catch (_e) { out = _slimStepText(txt); } }
       }
       if (!out) out = { error: 'no_result', http_status: r.status };
       let slim = _slimStepResult(out, name);
