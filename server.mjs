@@ -6260,19 +6260,55 @@ const _LP_COUNT_KEY = /(^|_)(count|counts|total)$|_count$|^n_|_in_radius$|_\d+km
 const _LP_COORD_KEY = /^(lat|lon|lng|latitude|longitude)$/;
 // (A verdict is NOT on this list: most are a bare band, which carries no digit
 // and stays, but some are prose that quotes the figures behind them.)
-const _LP_KEEP_STR = /^(name|names|carrier|provider|operator|state|state_code|iso|market|market_slug|slug|id|_entity|tool|type|source|license|cite_as|url|period|timestamp|as_of|version|coverage_ratio|deliverable)$/;
+// 2026-09-25 (live verify, site-score composite-v2.4): methodology and basis
+// strings are LABELS, not figures — "composite-v2.4", "4/5",
+// "measured_point:nearest_hv_substation", "resilience = 100 − NRI risk". They
+// were nulled for carrying a digit, so a free key could not tell which build
+// scored it or what each factor rests on.
+const _LP_KEEP_STR = /^(name|names|carrier|provider|operator|state|state_code|iso|market|market_slug|slug|id|_entity|tool|type|source|license|cite_as|url|period|timestamp|as_of|version|coverage_ratio|deliverable|methodology|methodology_version|scored_factors|overall_basis|basis)$|_basis$/;
+// Caveats are what an answer does NOT cover: kept whole (never cut to three),
+// with any number in them that equals a figure withheld from the same payload
+// blanked, so a caveat cannot quote a score back.
+const _LP_CAVEAT_KEY = /^(caveats|_caveats|caveat)$/;
 const _LP_DROP_KEY = /pdf|report_url|share_text|share_hint|download|upgrade_url|pricing_url/i;
 // The caller's own request, echoed back: kept, so a preview still shows what
 // was asked (a 5 GW constraint must not vanish without a trace).
 const _LP_ECHO_KEY = /^(capacity_requested_mw|requested_mw)$/;
 
-export function _lpPreviewPayload(v, key = '') {
-  if (Array.isArray(v)) return v.slice(0, 3).map((x) => _lpPreviewPayload(x, key));
+// Every figure the preview withholds, as the number tokens it can appear as in
+// prose ("81.2", "81"), so a kept caveat can be scrubbed of them.
+function _lpWithheldFigures(v, key = '', out = new Set()) {
+  if (Array.isArray(v)) { for (const x of v) _lpWithheldFigures(x, key, out); return out; }
+  if (v && typeof v === 'object') {
+    for (const [k, x] of Object.entries(v)) _lpWithheldFigures(x, k, out);
+    return out;
+  }
+  const add = (n) => {
+    if (!Number.isFinite(n)) return;
+    // Exact, and its 1- and 2-decimal roundings. NOT the integer rounding: a
+    // withheld 1.2 km would otherwise blank every "1" in the caveats.
+    out.add(String(n));
+    if (!Number.isInteger(n)) for (const d of [1, 2]) out.add(String(Number(n.toFixed(d))));
+  };
+  if (typeof v === 'number' && !_LP_COORD_KEY.test(key) && !_LP_COUNT_KEY.test(key)
+      && !_LP_ECHO_KEY.test(key)) add(v);
+  if (typeof v === 'string' && /\d/.test(v) && !_LP_KEEP_STR.test(key) && !_LP_CAVEAT_KEY.test(key)) {
+    for (const t of v.match(/\d+(?:\.\d+)?/g) || []) add(Number(t));
+  }
+  return out;
+}
+
+export function _lpPreviewPayload(v, key = '', withheld = undefined) {
+  if (withheld === undefined) withheld = _lpWithheldFigures(v, key);
+  if (Array.isArray(v)) {
+    const rows = _LP_CAVEAT_KEY.test(key) ? v : v.slice(0, 3);
+    return rows.map((x) => _lpPreviewPayload(x, key, withheld));
+  }
   if (v && typeof v === 'object') {
     const out = {};
     for (const [k, x] of Object.entries(v)) {
       if (_LP_DROP_KEY.test(k)) { out[k] = null; continue; }
-      out[k] = _lpPreviewPayload(x, k);
+      out[k] = _lpPreviewPayload(x, k, withheld);
     }
     return out;
   }
@@ -6282,6 +6318,11 @@ export function _lpPreviewPayload(v, key = '') {
   }
   if (typeof v === 'string') {
     if (!/\d/.test(v) || _LP_KEEP_STR.test(key)) return v;
+    if (_LP_CAVEAT_KEY.test(key)) {
+      // A figure is a free-standing number; "v1", "4/5" in an id are not.
+      return v.replace(/(?<![A-Za-z\d.])\d+(?:\.\d+)?(?![A-Za-z\d])/g,
+        (t) => (withheld.has(t) ? '…' : t));
+    }
     return null;
   }
   return v;   // boolean, null
