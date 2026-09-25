@@ -106,7 +106,8 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
-         installDirectoryResponseFilter as _installDirectoryFilter } from './lib/chatgpt-directory.mjs';
+         installDirectoryResponseFilter as _installDirectoryFilter,
+         applyDirectoryArgDefaults as _applyDirectoryArgDefaults } from './lib/chatgpt-directory.mjs';
 import { coarsenFacilityLocation, coarsenToolResultLocation, splitLeadingJson as _splitLeadingJson, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
@@ -13547,6 +13548,43 @@ export function _planCorridor(text) {
   } catch (_e) { return null; }
 }
 
+// Live verify 2026-09-25 (ChatGPT directory review): search "Ashburn data
+// center power" returned "Golds Gym Ashburn" (a non-DC row in the facility
+// table), and fetch printed "Operator: n/a ... Market: n/a" with coordinates
+// the record did carry. Conservative on purpose: a name with any data-center
+// word always stays; only a clear non-DC business name goes.
+const _NON_DC_NAME_RE = /\b(gym|fitness|yoga|crossfit|pilates|restaurant|pizza|pizzeria|cafe|coffee|bakery|salon|barber|spa|dental|dentist|orthodont|chiropract|veterinar|church|daycare|car wash|grocery|pharmacy|apartments?|condominiums?|realty|real estate)\b/i;
+const _DC_NAME_RE = /\b(data ?cent(er|re)s?|dc\d*|colo(cation)?|campus|hyperscale|compute|cloud|server|interconnect|carrier hotel|internet exchange|ix)\b/i;
+export function _isNonDcName(name) {
+  const n = String(name || '');
+  return _NON_DC_NAME_RE.test(n) && !_DC_NAME_RE.test(n);
+}
+
+export function _facilityFetchRecord(id, d, url) {
+  const name = d.name || d.facility_name || id;
+  const loc = [d.city, d.state, d.country].filter(Boolean).join(', ');
+  const city = String(d.city || '').trim().toLowerCase();
+  const market = d.market_slug || d.market || (_CITY_ISO_META[city] && _CITY_ISO_META[city].slug) || null;
+  const lat = Number(d.latitude ?? d.lat), lon = Number(d.longitude ?? d.lon ?? d.lng);
+  const hasPt = Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
+  const approx = /approx|2dp/i.test(String(d.coordinates_status || ''));
+  const operator = d.operator || d.provider || null;
+  const cap = Number(d.capacity_mw ?? d.power_mw);
+  const parts = [String(name) + (loc ? (' — ' + loc) : '') + '.'];
+  if (operator) parts.push('Operator: ' + operator + '.');
+  if (d.status) parts.push('Status: ' + d.status + '.');
+  if (market) parts.push('Market: ' + market + '.');
+  if (hasPt) parts.push((approx ? 'Approximate location: ' : 'Location: ') + lat + ', ' + lon + '.');
+  if (Number.isFinite(cap) && cap > 0) parts.push('Power capacity: ' + cap + ' MW.');
+  if (d.connectivity_note) parts.push('Connectivity: ' + d.connectivity_note + '.');
+  if (d.v === 'verified' || d.verified === true) parts.push('Record verified.');
+  parts.push('Source: DC Hub (dchub.cloud), ' + url + '.');
+  const metadata = { source: 'DC Hub (dchub.cloud)', market, country: d.country || null,
+    city: d.city || null, state: d.state || null, status: d.status || null,
+    ...(hasPt ? { lat, lon, coordinates: approx ? 'approximate' : 'exact' } : {}) };
+  return { id, title: String(name), text: parts.join(' '), url, metadata };
+}
+
 export function _planSignals(intent, context) {
   const text = String(intent || '');
   const c = (context && typeof context === 'object' && !Array.isArray(context)) ? context : {};
@@ -18359,6 +18397,7 @@ function createServer(descOverrides, instructionsTail) {
       const results = rows.map((r) => {
         const id = String((r && (r.slug || r.id || r.facility_id)) || '').trim();
         if (!id) return null;
+        if (_isNonDcName(r && (r.name || r.facility_name))) return null;
         const name = (r && (r.name || r.facility_name)) || id;
         const loc = _facLoc(r);
         return { id, title: loc ? (name + ' — ' + loc) : String(name), url: _facUrl(id) };
@@ -18373,17 +18412,10 @@ function createServer(descOverrides, instructionsTail) {
       if (!id) return { content: [{ type: 'text', text: JSON.stringify({ error: 'id is required (use an id from the search tool)' }) }], isError: true };
       const out = await callAPI('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
       const d = (out && (out.data || out)) || {};
-      const name = d.name || d.facility_name || id;
-      const loc = _facLoc(d);
-      const url = _facUrl(id);
-      const market = d.market_slug || d.market || null;
-      const text = String(name) + (loc ? (' — ' + loc) : '') + '. '
-        + 'Operator: ' + (d.operator || d.provider || 'n/a') + '. '
-        + 'Status: ' + (d.status || 'n/a') + '. '
-        + 'Market: ' + (market || 'n/a') + '. '
-        + 'Capacity (MW), coordinates and full specs: open ' + url + ' or call get_facility (DC Hub). '
-        + 'Source: DC Hub (dchub.cloud).';
-      const rec = { id, title: String(name), text, url, metadata: { source: 'DC Hub (dchub.cloud)', market, country: d.country || null } };
+      if (out && out.success === false && !d.name) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'No DC Hub facility has that id. Use an id returned by the search tool.' }) }], isError: true };
+      }
+      const rec = _facilityFetchRecord(id, d, _facUrl(id));
       return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
     });
 
@@ -23390,12 +23422,12 @@ app.post(MCP_PATHS, async (req, res) => {
         if (!_isDirectoryTool(_n)) {
           return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
         }
+        if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
         const _a = _b.params.arguments;
-        if (_a && typeof _a === 'object') {
-          for (const k of Object.keys(_a)) {
-            if (/^(mpp_|x402|payment|credential)/i.test(k)) delete _a[k];
-          }
+        for (const k of Object.keys(_a)) {
+          if (/^(mpp_|x402|payment|credential)/i.test(k)) delete _a[k];
         }
+        _applyDirectoryArgDefaults(_n, _a);
       }
       if (_b.method === 'prompts/list') return _writeRpcResult(req, res, _b.id, { prompts: [] });
       if (_b.method === 'resources/list') return _writeRpcResult(req, res, _b.id, { resources: [] });

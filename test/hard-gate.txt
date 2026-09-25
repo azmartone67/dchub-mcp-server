@@ -34,6 +34,7 @@ test/challenge-budget-key.test.mjs
 test/challenge-carries-human-line.test.mjs
 test/chatgpt-directory-probe-hard-wall.test.mjs
 test/chatgpt-directory-probe.test.mjs
+test/chatgpt-directory-resubmission.test.mjs
 test/chatgpt-openai-session-sid.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs

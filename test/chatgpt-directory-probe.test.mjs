@@ -164,11 +164,14 @@ describe('/mcp/chatgpt — handshake and catalog', () => {
       expect(Object.keys(t.inputSchema.properties || {}).filter((k) => /^mpp_|payment|credential/.test(k)), t.name).toEqual([]);
       expect(t.description).toBe(DIRECTORY_TOOLS[t.name]);
     }
-    const digest = result.tools.find((t) => t.name === 'subscribe_digest');
-    expect(digest.annotations.readOnlyHint).toBe(false);
-    expect(digest.annotations.openWorldHint).toBe(true);
+    // Owner 2026-09-25 (before the OpenAI resubmission): subscribe_digest, the
+    // one tool that emailed an address, is off the profile — every listed tool
+    // is read-only.
+    expect(result.tools.find((t) => t.name === 'subscribe_digest')).toBeUndefined();
     for (const t of result.tools) {
-      if (!EMAIL_OR_WEBHOOK_TOOLS.has(t.name)) expect(t.annotations.readOnlyHint, t.name).toBe(true);
+      expect(EMAIL_OR_WEBHOOK_TOOLS.has(t.name), t.name).toBe(false);
+      expect(t.annotations.readOnlyHint, t.name).toBe(true);
+      expect(t.annotations.destructiveHint, t.name).toBe(false);
     }
     expect(probeHits(r.raw)).toEqual([]);
   });
@@ -281,8 +284,9 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
     expect(probeHits(r.raw).length).toBeGreaterThan(0);
   }, 60_000);
 
-  it('subscribe_digest with no email answers without commerce', async () => {
+  it('subscribe_digest is not callable on the profile, and says so without commerce', async () => {
     const r = await call(DIR, 'subscribe_digest', {});
+    expect(r.raw).toMatch(/Unknown tool/);
     expect(probeHits(r.raw)).toEqual([]);
   });
 });
