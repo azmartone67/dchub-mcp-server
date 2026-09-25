@@ -11938,7 +11938,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     note: _oStr('Router disclaimer — deterministic keyword routing, tools/list stays canonical'),
     replay: z.looseObject({
       schema_version: _oNum('Version of the REPLAY OBJECT SHAPE (field set) — independent of planner_version; pin THIS in an SDK. Bumps only on a breaking shape change, so the planner routing revs so far (5.1 → 5.6) have all left it at 1.'),
-      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical). Distinct from schema_version.'),
+      planner_version: _oStr('Semantic version of the PLANNER BEHAVIOR (routing/output) — bumps when routing changes (e.g. 5.1 replay field renames → 5.2 capacity_search/market_comparison → 5.4 fiber_power_pairing → 5.5 the hosting_capacity distribution class → 5.6 the incentives_tax class + stateFromPlace arg signal → 5.7 rank-vs-incentives arbitration: ranking language demotes the statutory class, "rank markets by" credits market_ranking → 5.8 reversed-order timing vocabulary: "timeline for power …" reaches power_timeline on state-phrased asks while the ISO boost holds operator-phrased asks on grid_headroom → 5.9 replay.why_live_data, an additive per-class "why this answer needed live data" reason; routing unchanged → 5.10 why_live enum-ized: why_live_code from the canonical taxonomy why_live_reasons + phrase resolved from the snapshot; routing unchanged → 5.11 GEOGRAPHY SCOPING: a market_ranking intent naming a US state (or a city whose slug carries one) leads with site_selection_canvas region=<ST> — the only ranking tool with a state parameter; ai_capacity_index takes only horizon/limit and rank_markets region accepts only global/us/canada/eu/apac/americas, so both previously answered state-scoped questions nationally. _execConstraintIsoSet also resolves a named state to its ISO set, so the C1 constraint_check can finally fire on state-phrased intents → 5.12 CORRIDORS: named corridor places (Loudoun, Prince William, Ashburn, Secaucus, Piscataway …) bind a centroid + radius for ARGUMENTS only — never class scoring — reported as replay.place_scope; a county or metro that could only be scoped to a state/ISO is reported as replay.scope_widened {widened_from, to}; execute_plan step results slim STRUCTURED (arrays to their first rows) and relay/upgrade/unlock fields pass through byte-identical → 5.13 GEOGRAPHY BINDS: every execute_plan step whose tool accepts a point, radius or state gets the plan geography when unset (executed[].geo_injected names what was set; _EXEC_GEO_ARGS pinned to toolspec.json); VA/NJ counties join the corridor table (Middlesex only beside New Jersey); the corridor radius cap is 300 km; step slimming is ALWAYS structured (no JSON-prefix fallback) and machine_pay, retry_*, persist_command and auto_trial_key join the never-cut fields). Distinct from schema_version.'),
       compatibility: _oAny('The stability contract, published in-object: schema v1 is additive-only (no removals / semantic changes); planner_version may change routing/confidence/sequences/coverage without a schema bump; breaking changes only ever at a new schema_version. Pin schema_version, not planner_version.'),
       intent: _oStr('The routed intent (echoed) — duplicated so replay is self-contained'),
       intent_class: _oStr('The matched intent class (duplicated from plan_query.intent_class so replay deserializes alone)'),
@@ -13292,6 +13292,63 @@ export function _execDedupeUpsell(executed) {
   }
 }
 export const _EXEC_IS_RTO = (v) => _EXEC_RTOS.has(String(v || '').toUpperCase());
+// v5.13 (live verify 2026-09-25): place_scope bound NO step. "find data center
+// sites near Ashburn for 100 MW" ran search_facilities {min_capacity_mw:100}
+// and returned Frankfurt and New Mexico. Every step whose tool ACCEPTS a point,
+// a radius or a state now gets the plan's geography when the planner left it
+// unset. Derived from toolspec.json and pinned to it by
+// test/execute-plan-geo-bind.test.mjs. Tools that write (save_site,
+// register_standing_intent) or produce a deliverable (generate_site_analysis)
+// are left out on purpose.
+export const _EXEC_GEO_ARGS = {
+  analyze_parcel:               { point: true },
+  analyze_site:                 { point: true, state: 'state' },
+  find_sites:                   { point: true, radius: true, state: 'state' },
+  get_climate_intel:            { point: true, radius: true },
+  get_composite_site_score:     { point: true, state: 'state' },
+  get_disaster_risk:            { point: true },
+  get_fiber_readiness:          { point: true, radius: true },
+  get_hosting_capacity:         { point: true, radius: true },
+  get_infrastructure:           { point: true, radius: true },
+  get_peering_intel:            { point: true },
+  get_renewable_energy:         { point: true, state: 'state' },
+  get_subsea_cables:            { point: true, radius: true },
+  get_water_risk:               { point: true, state: 'state' },
+  search_facilities:            { state: 'state' },
+  site_selection_canvas:        { state: 'state' },
+  source_capacity:              { state: 'state' },
+  get_energy_prices:            { state: 'state' },
+  get_gas_index:                { state: 'state' },
+  get_gas_intelligence:         { state: 'state' },
+  get_infra_projects:           { state: 'state' },
+  get_permitting_intel:         { state: 'state' },
+  get_power_availability_timeline: { state: 'state' },
+  get_power_pipeline:           { state: 'state' },
+  get_tax_incentives:           { state: 'state' },
+};
+const _GEO_POINT_KEYS = ['lat', 'lon', 'lng', 'latitude', 'longitude'];
+
+// Mutates args; returns the names it set (the step records them as
+// geo_injected, a plain field). Never overwrites what the planner, the caller
+// or a minted hand-off already bound.
+export function _execInjectGeo(tool, args, sig) {
+  const spec = _EXEC_GEO_ARGS[tool];
+  if (!spec || !sig || !args || typeof args !== 'object') return [];
+  const set = [];
+  const pt = sig.coords;
+  if (spec.point && pt && Number.isFinite(pt.lat) && Number.isFinite(pt.lon)
+      && !_GEO_POINT_KEYS.some((k) => args[k] != null)) {
+    args.lat = pt.lat; args.lon = pt.lon; set.push('lat', 'lon');
+    if (spec.radius && sig.radiusKm && args.radius_km == null) {
+      args.radius_km = sig.radiusKm; set.push('radius_km');
+    }
+  }
+  const st = sig.state || sig.stateFromPlace;
+  if (spec.state && st && args[spec.state] == null && args.region == null) {
+    args[spec.state] = st; set.push(spec.state);
+  }
+  return set;
+}
 export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
   get_interconnection_queue: 'iso', get_refined_queue: 'iso',
   get_retirement_headroom: 'region_iso' };
@@ -13396,6 +13453,14 @@ export const _PLAN_CORRIDOR_META = {
   'carteret':              { label: 'Carteret, NJ',              state: 'NJ', lat: 40.5773, lon: -74.2282, radius_km: 10 },
   'edison':                { label: 'Edison, NJ',                state: 'NJ', lat: 40.5187, lon: -74.4121, radius_km: 10 },
   'newark':                { label: 'Newark, NJ',                state: 'NJ', lat: 40.7357, lon: -74.1724, radius_km: 12 },
+  // v5.13 (live verify 2026-09-25): counties. "sites in Fairfax County for 50 MW"
+  // bound nothing, routed unknown and an anonymous run minted iso ERCOT.
+  'fairfax county':        { label: 'Fairfax County, VA',        state: 'VA', lat: 38.8462, lon: -77.3064, radius_km: 25 },
+  'fairfax':               { label: 'Fairfax County, VA',        state: 'VA', lat: 38.8462, lon: -77.3064, radius_km: 25 },
+  'hudson county':         { label: 'Hudson County, NJ',         state: 'NJ', lat: 40.7453, lon: -74.0535, radius_km: 12 },
+  // Middlesex County also exists in MA, CT and VA: bound only when the text
+  // names New Jersey or another NJ corridor place matched.
+  'middlesex county':      { label: 'Middlesex County, NJ',      state: 'NJ', lat: 40.4400, lon: -74.4100, radius_km: 25, needs: 'NJ' },
 };
 
 function _kmBetween(a, b) {
@@ -13412,13 +13477,22 @@ export function _planCorridor(text) {
   try {
     let rest = String(text || '');
     const hits = [];
+    const deferred = [];
     const keys = Object.keys(_PLAN_CORRIDOR_META).sort((a, b) => b.length - a.length);
     for (const k of keys) {
       const re = new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'ig');
       if (!re.test(rest)) continue;
       const m = _PLAN_CORRIDOR_META[k];
+      if (m.needs) { deferred.push({ re, m }); continue; }
       if (!hits.some((h) => h.label === m.label)) hits.push(m);
       rest = rest.replace(re, ' ');
+    }
+    // An ambiguous name binds only beside its state (named, or another place).
+    for (const { m } of deferred) {
+      const stateNamed = m.needs === 'NJ' ? /\bNJ\b|new jersey/i.test(String(text || ''))
+        : new RegExp('\\b' + m.needs + '\\b').test(String(text || ''));
+      if ((stateNamed || hits.some((h) => h.state === m.needs))
+          && !hits.some((h) => h.label === m.label)) hits.push(m);
     }
     if (!hits.length) return null;
     const lat = hits.reduce((t, h) => t + h.lat, 0) / hits.length;
@@ -13427,7 +13501,8 @@ export function _planCorridor(text) {
     const radius = Math.max(...hits.map((h) => _kmBetween(c, h) + h.radius_km));
     const states = [...new Set(hits.map((h) => h.state))];
     return { places: hits.map((h) => h.label), lat: c.lat, lon: c.lon,
-      radius_km: Math.min(100, Math.round(radius)), state: states.length === 1 ? states[0] : null };
+      // v5.13: cap lifted 100 -> 300 km ("Ashburn and Secaucus" needs ~175).
+      radius_km: Math.min(300, Math.round(radius)), state: states.length === 1 ? states[0] : null };
   } catch (_e) { return null; }
 }
 
@@ -13750,7 +13825,7 @@ export function _planWorkflowConfidence(seq, d) {
 //         requires_* code from the canonical taxonomy (why_live_reasons);
 //         replay adds why_live_code, why_live_data becomes the code's canon
 //         phrase. OUTPUT-only rev: routing unchanged, schema stays 1.
-export const PLANNER_VERSION = '5.12';
+export const PLANNER_VERSION = '5.13';
 // r-planner-v5.2 (ChatGPT SDK-author review): schema_version is INDEPENDENT of
 // planner_version — the planner can rev its routing/output (5.1 -> 5.2) without
 // touching the replay object's SHAPE. SDK consumers pin schema_version (the
@@ -17116,7 +17191,10 @@ const _HEADLINE_MAX = 600;
 // trims or moves one of these. A top-level protected key is kept whole; a
 // nested one keeps its path (objects are never flattened into the preview in
 // structured mode) and a row carrying one is never dropped.
-export const _STEP_PROTECTED_KEY_RE = /for_your_human|relay|upgrade|unlock/i;
+// v5.13 (live verify): machine_pay (price_usd, covered_tools), retry_*,
+// persist_command and auto_trial_key are on the rule too — the fallback path
+// dropped them and structured slimming cut machine_pay.covered_tools 13 -> 5.
+export const _STEP_PROTECTED_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retry_|persist_command|auto_trial_key/i;
 const _PROTECTED_TEXT_RE = /\/go\/c\/|\/upgrade|for your human|unlock|verbatim/i;
 
 function _carriesProtected(v, depth = 0) {
@@ -17128,22 +17206,22 @@ function _carriesProtected(v, depth = 0) {
 // Rows are the recoverable part: keep the first `rows` of every array (and any
 // later row carrying a protected field), cut long plain strings, recurse into
 // objects. Protected keys and protected strings are returned as they are.
-function _shrinkStructured(v, rows, totals, path, depth = 0) {
+function _shrinkStructured(v, rows, totals, path, depth = 0, strCap = 400) {
   if (Array.isArray(v)) {
     if (v.length > rows) totals[path || '(root)'] = v.length;
     const keep = v.filter((x, i) => i < rows || _carriesProtected(x));
-    return keep.map((x, i) => _shrinkStructured(x, rows, totals, path + '[' + i + ']', depth + 1));
+    return keep.map((x, i) => _shrinkStructured(x, rows, totals, path + '[' + i + ']', depth + 1, strCap));
   }
   if (v && typeof v === 'object') {
     if (depth > 6) return v;
     const o = {};
     for (const k of Object.keys(v)) {
       o[k] = _STEP_PROTECTED_KEY_RE.test(k) ? v[k]
-        : _shrinkStructured(v[k], rows, totals, path ? path + '.' + k : k, depth + 1);
+        : _shrinkStructured(v[k], rows, totals, path ? path + '.' + k : k, depth + 1, strCap);
     }
     return o;
   }
-  if (typeof v === 'string' && v.length > 400 && !_PROTECTED_TEXT_RE.test(v)) return v.slice(0, 400) + '…';
+  if (typeof v === 'string' && v.length > strCap && !_PROTECTED_TEXT_RE.test(v)) return v.slice(0, strCap) + '…';
   return v;
 }
 
@@ -17193,42 +17271,36 @@ export function _slimStepResult(out, name, limit = 6000, previewChars = 1200) {
     // (live screen 2026-09-25: step outputs cut at ~1.2 KB).
     const rest = {};
     for (const k of Object.keys(out)) if (!(k in kept)) rest[k] = out[k];
-    for (const rows of [5, 3, 1]) {
-      const totals = {};
-      const shrunk = _shrinkStructured(rest, rows, totals, '');
-      const cand = { ...kept, ...shrunk, truncated: true,
-        truncation: { basis: 'structured', rows_kept_per_array: rows,
-          ...(Object.keys(totals).length ? { rows_total: totals } : {}) } };
-      if (JSON.stringify(cand).length <= limit * 1.5 || rows === 1 && !_carriesProtected(rest)) {
+    // v5.13 (live verify 2026-09-25): ALWAYS structured. The 1.2 KB
+    // JSON-prefix fallback fired on 7 live steps and dropped whole blocks
+    // (the canvas synthesis, machine_pay, auto_trial_key). Tighten rows, then
+    // string length, until it fits; if even the tightest pass is over budget,
+    // return it anyway and say so — a larger structured step beats a string.
+    let last = null;
+    for (const strCap of [400, 200, 100]) {
+      for (const rows of [5, 3, 1]) {
+        const totals = {};
+        const shrunk = _shrinkStructured(rest, rows, totals, '', 0, strCap);
+        const cand = { ...kept, ...shrunk, truncated: true,
+          truncation: { basis: 'structured', rows_kept_per_array: rows,
+            string_cap_chars: strCap, rows_total: totals } };
+        last = cand;
         if (JSON.stringify(cand).length <= limit * 1.5) {
           cand.note = 'step result slimmed — every array keeps its first ' + rows
-            + ' row(s) (rows_total gives the full counts) and long text is cut; call '
-            + name + ' directly for the full payload. The blocks that state what this '
-            + 'answer does and does not cover, and any relay/upgrade/unlock fields, '
-            + 'are kept whole.';
+            + ' row(s) (truncation.rows_total gives the full counts) and text over '
+            + strCap + ' characters is cut; call ' + name + ' directly for the full '
+            + 'payload. The blocks that state what this answer does and does not '
+            + 'cover, and any relay/upgrade/unlock/payment fields, are kept whole.';
           return cand;
         }
       }
     }
-    // Still too big structured: the kept blocks plus a preview of the rest, and
-    // any nested protected field carried whole so the guard holds here too.
-    const preview = JSON.stringify(rest).slice(0, previewChars);
-    const protectedFields = {};
-    (function collect(v, path, depth) {
-      if (!v || typeof v !== 'object' || depth > 6) return;
-      for (const k of Object.keys(v)) {
-        const p = Array.isArray(v) ? path + '[' + k + ']' : (path ? path + '.' + k : k);
-        if (!Array.isArray(v) && _STEP_PROTECTED_KEY_RE.test(k)) protectedFields[p] = v[k];
-        else collect(v[k], p, depth + 1);
-      }
-    })(rest, '', 0);
-    if (Object.keys(protectedFields).length) kept.protected_fields = protectedFields;
-
-    return { ...kept, truncated: true, preview,
-      note: 'step result truncated to ' + Math.round(previewChars / 100) / 10
-        + 'KB — call ' + name + ' directly for the full payload. The blocks that '
-        + 'state what this answer does and does not cover are kept in full above, '
-        + 'never in the preview.' };
+    last.truncation.over_budget = true;
+    last.note = 'step result slimmed as far as it structurally goes (1 row per array, '
+      + 'text cut at 100 characters) and is still over the step budget; call ' + name
+      + ' directly for the full payload. The blocks that state what this answer does '
+      + 'and does not cover, and any relay/upgrade/unlock/payment fields, are kept whole.';
+    return last;
   } catch (_e) {
     return out;
   }
@@ -18415,11 +18487,13 @@ function createServer(descOverrides, instructionsTail) {
             const isoKey = _EXEC_ISO_ARG[s.tool];
             if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
                 && args[isoKey] == null) args[isoKey] = constraintIso;
-            return _execLoopbackCall(s.tool, args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS)).then((out) => ({ s, args, out }));
+            const geo = _execInjectGeo(s.tool, args, _sig);
+            return _execLoopbackCall(s.tool, args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS)).then((out) => ({ s, args, out, geo }));
           }));
-          for (const { s, args, out } of results) {
+          for (const { s, args, out, geo } of results) {
             calls += 1;
             const entry = { step: s.step, tool: s.tool, args,
+                            ...(geo && geo.length ? { geo_injected: geo } : {}),
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
@@ -18480,6 +18554,7 @@ function createServer(descOverrides, instructionsTail) {
           const isoKey2 = _EXEC_ISO_ARG[s.tool];
           if (isoKey2 && constraintIso && _EXEC_IS_RTO(constraintIso)
               && r2.args[isoKey2] == null) r2.args[isoKey2] = constraintIso;
+          const geo2 = _execInjectGeo(s.tool, r2.args, _sig);
           ran += 1;
           // [#210] was a hardcoded 15000 — it escaped _EXEC_STEP_TIMEOUT_MS entirely,
           // and because this retry is sequential AFTER the parallel wave, its budget
@@ -18487,6 +18562,7 @@ function createServer(descOverrides, instructionsTail) {
           const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS));
           calls += 1;
           const entry2 = { step: s.step, tool: s.tool, args: r2.args,
+                           ...(geo2.length ? { geo_injected: geo2 } : {}),
                            status: out2.ok ? 'executed'
                                  : (out2.gated ? 'gated_preview'
                                  : (out2.timed_out ? 'timed_out' : 'failed')),

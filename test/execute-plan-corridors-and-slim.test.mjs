@@ -122,9 +122,9 @@ describe('named corridors bind a point', () => {
   });
 
   it('a county we have no point for says it was widened, as a plain field', () => {
-    const d = _planSignals('find sites in Fairfax County, Virginia for 100 MW');
+    const d = _planSignals('find sites in Culpeper County, Virginia for 100 MW');
     expect(d.coords).toBeNull();
-    expect(d.scopeWidened).toEqual({ widened_from: 'Fairfax County', to: 'VA' });
+    expect(d.scopeWidened).toEqual({ widened_from: 'Culpeper County', to: 'VA' });
   });
 
   it('a corridor point binds arguments, never routing: a market question stays a market question', () => {
@@ -142,7 +142,7 @@ describe('named corridors bind a point', () => {
   it('the plan replay carries place_scope / scope_widened', () => {
     const a = _planQuery('rank sites in the Loudoun–Prince William corridor for a 200 MW AI build');
     expect(a.replay.place_scope.basis).toBe('corridor_table');
-    const b = _planQuery('find sites in Fairfax County, Virginia for 100 MW');
-    expect(b.replay.scope_widened).toEqual({ widened_from: 'Fairfax County', to: 'VA' });
+    const b = _planQuery('find sites in Culpeper County, Virginia for 100 MW');
+    expect(b.replay.scope_widened).toEqual({ widened_from: 'Culpeper County', to: 'VA' });
   });
 });
