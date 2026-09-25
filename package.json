@@ -1,6 +1,6 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.12.19",
+  "version": "2.12.20",
   "description": "DC Hub Intelligence MCP Server — Standalone Streamable HTTP",
   "type": "module",
   "main": "server.mjs",
