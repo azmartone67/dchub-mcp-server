@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import {
-  DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, PLANS_NOTICE,
+  DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, PLANS_NOTICE, scrubStructured,
   STANDARD_ANNOTATION_KEYS, EMAIL_OR_WEBHOOK_TOOLS,
 } from '../lib/chatgpt-directory.mjs';
 import { PROBE_PATTERNS, probeHits, annotationViolations, GUESS_ARGS, CHATGPT_HEADERS, CHATGPT_META, classifyResponse } from '../scripts/probe-chatgpt-directory.mjs';
@@ -217,6 +217,8 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
         const r = await call(DIR, name, args);
         const hits = probeHits(r.raw);
         if (hits.length) offenders.push(`${name} ${args === GUESS_ARGS ? '(args)' : '(no args)'}: ${hits.join(', ')}`);
+        const named = DIRECTORY_REMOVED.filter((t) => new RegExp(`\\b${t}\\b`).test(r.raw));
+        if (named.length) offenders.push(`${name} ${args === GUESS_ARGS ? '(args)' : '(no args)'}: names removed ${named.join(', ')}`);
         const msg = JSON.parse(r.body);
         if (!msg.result) continue;
         answered += 1;
@@ -282,6 +284,32 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
   it('subscribe_digest with no email answers without commerce', async () => {
     const r = await call(DIR, 'subscribe_digest', {});
     expect(probeHits(r.raw)).toEqual([]);
+  });
+});
+
+describe('removed tools are never pointed at', () => {
+  // Land & Power (analyze_site, compare_sites, generate_site_analysis,
+  // get_composite_site_score) is Pro-only and this profile is No Auth, so it is
+  // not listed (owner 2026-09-25). Shapes below are the live ones: discover_tools
+  // family arrays, execute_plan's rejected steps, get_grid_scoreboard pointers.
+  it('the four Land & Power tools are removed, not listed', () => {
+    for (const t of ['analyze_site', 'compare_sites', 'generate_site_analysis', 'get_composite_site_score']) {
+      expect(DIRECTORY_REMOVED).toContain(t);
+      expect(Object.keys(DIRECTORY_TOOLS)).not.toContain(t);
+    }
+  });
+  it('scrubStructured drops removed names from arrays, pointers and {tool} entries', () => {
+    const out = scrubStructured({
+      tools: ['find_sites', 'analyze_site', 'rank_sites', 'get_shortlist'],
+      rejected: [{ id: 'R5', tool: 'predict_market_trajectory', reason: 'Asked for present state.' },
+                 { id: 'R6', tool: 'analyze_site', reason: 'Scored 2 vs 5.' }],
+      pointers: { score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)', grid: 'get_grid_intelligence (iso=…)' },
+    });
+    expect(out).toEqual({
+      tools: ['find_sites', 'rank_sites'],
+      rejected: [{ id: 'R5', tool: 'predict_market_trajectory', reason: 'Asked for present state.' }],
+      pointers: { grid: 'get_grid_intelligence (iso=…)' },
+    });
   });
 });
 
