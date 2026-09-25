@@ -157,6 +157,6 @@ describe('version', () => {
   it('bumped the planner version for the routing change', () => {
     // Routing changed, so planner_version must move; schema_version must not
     // (the replay SHAPE is untouched).
-    expect(PLANNER_VERSION).toBe('5.12');
+    expect(PLANNER_VERSION).toBe('5.13');
   });
 });
