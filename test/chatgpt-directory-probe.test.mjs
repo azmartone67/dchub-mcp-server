@@ -27,7 +27,7 @@ import {
   DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, PLANS_NOTICE,
   STANDARD_ANNOTATION_KEYS, EMAIL_OR_WEBHOOK_TOOLS,
 } from '../lib/chatgpt-directory.mjs';
-import { PROBE_PATTERNS, probeHits, annotationViolations, GUESS_ARGS, CHATGPT_HEADERS, CHATGPT_META } from '../scripts/probe-chatgpt-directory.mjs';
+import { PROBE_PATTERNS, probeHits, annotationViolations, GUESS_ARGS, CHATGPT_HEADERS, CHATGPT_META, classifyResponse } from '../scripts/probe-chatgpt-directory.mjs';
 
 const foreign = [];
 const realConnect = net.Socket.prototype.connect;
@@ -286,6 +286,26 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
 });
 
 describe('probe patterns themselves', () => {
+  // A refusal must count as refused, or a run of refusals reads as clean.
+  // The hard-wall body is verbatim from /mcp/chatgpt, 2026-09-24 23:06Z.
+  it('classifyResponse counts every per-IP and per-session refusal as refused', () => {
+    const wrap = (result) => { const msg = { jsonrpc: '2.0', id: 1, result }; return [JSON.stringify(msg), msg]; };
+    const hardWall = wrap({ content: [{ type: 'text', text: "You've made more than 300 anonymous calls from this IP today (10x the free anonymous allowance of 30). Anonymous access is paused for this IP until UTC midnight." }],
+      structuredContent: { _entity: 'news', error: 'anon_hard_wall', tool: 'get_news', current_tier: 'free', binding_limit: 'anon_ip_daily_hard', limit: 300, soft_cap: 30, retry_after: 'UTC midnight' }, isError: true });
+    const rate429 = wrap({ content: [{ type: 'text', text: 'DC Hub API 429: rate_limit_exceeded' }], isError: true });
+    const sweep = wrap({ content: [{ type: 'text', text: 'We noticed this session is running the same 5-tool sweep. Anonymous sweep blocked.' }], isError: true });
+    const data = wrap({ content: [{ type: 'text', text: '{"articles":[{"id":"9c70"}]}' }] });
+    const failed = wrap({ content: [{ type: 'text', text: 'Invalid arguments' }], isError: true });
+    expect(classifyResponse(...hardWall)).toBe('refused');
+    // The hard wall still counts with the text scrubbed away: the error code alone.
+    const codeOnly = wrap({ content: [], structuredContent: { error: 'anon_hard_wall' }, isError: true });
+    expect(classifyResponse(...codeOnly)).toBe('refused');
+    expect(classifyResponse(...rate429)).toBe('refused');
+    expect(classifyResponse(...sweep)).toBe('refused');
+    expect(classifyResponse(...data)).toBe('data');
+    expect(classifyResponse(...failed)).toBe('other');
+  });
+
   it('each pattern fires on the string it exists for', () => {
     const samples = {
       '/go/c': 'https://dchub.cloud/go/c/abc.def',
