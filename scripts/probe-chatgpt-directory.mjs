@@ -25,6 +25,9 @@ export const PROBE_PATTERNS = {
   // the profile: it refuses the call and its copy offers keys. The response
   // filter strips part of that copy, so match the sentences that survive it.
   'scraper block': /scraper_pattern_blocked|Automated usage detected|5-tool sweep|Anonymous sweep blocked|\b(enterprise|benchmark|dev) key\b/i,
+  // A tool the profile does not list, named in a response, sends the model to
+  // "Unknown tool" (discover_tools families, execute_plan steps, pointers).
+  'removed tool named': new RegExp(`\\b(?:${DIRECTORY_REMOVED.join('|')})\\b`),
 };
 
 export function probeHits(text) {
@@ -164,6 +167,7 @@ async function main() {
 
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { DIRECTORY_REMOVED } from '../lib/chatgpt-directory.mjs';
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch((e) => { console.error(e); process.exit(2); });
 }
