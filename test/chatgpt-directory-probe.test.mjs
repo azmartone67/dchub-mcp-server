@@ -305,6 +305,13 @@ describe('removed tools are never pointed at', () => {
                  { id: 'R6', tool: 'analyze_site', reason: 'Scored 2 vs 5.' }],
       pointers: { score_a_specific_site: 'analyze_site (lat, lon, capacity_mw)', grid: 'get_grid_intelligence (iso=…)' },
     });
+    // Removed tool as an object KEY (live shape on get_refined_queue,
+    // analyze_parcel, get_retirement_headroom): the key goes, and a handoff left
+    // empty goes with it.
+    expect(scrubStructured({ site: 'x', site_evaluation_handoff: { analyze_site: { lat: 1, lon: 2 }, get_fiber_readiness: { lat: 1, lon: 2 } } }))
+      .toEqual({ site: 'x', site_evaluation_handoff: { get_fiber_readiness: { lat: 1, lon: 2 } } });
+    expect(scrubStructured({ site: 'x', site_evaluation_handoff: { analyze_site: { lat: 1, lon: 2 } } }))
+      .toEqual({ site: 'x' });
     expect(out).toEqual({
       tools: ['find_sites', 'rank_sites'],
       rejected: [{ id: 'R5', tool: 'predict_market_trajectory', reason: 'Asked for present state.' }],
