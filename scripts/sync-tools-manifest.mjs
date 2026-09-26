@@ -864,6 +864,10 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'docs/contextual-triggers.md',   // ★2026-09-01: was in NO list; "70 live tools" since 07-08
                  'docs/distribution-targets.md', 'docs/canonical-workflows.md',
                  'scripts/smithery_description.txt', 'dxt/manifest.json',
+                 // ★2026-09-26: the Cursor Marketplace manifest. Its description is
+                 // the listing copy Cursor reviews, and it sat at "91 tools" since
+                 // it landed on 09-13 (#416) because no loop scanned it.
+                 '.cursor-plugin/plugin.json',
                  // ★2026-08-11 — the GitHub repo DESCRIPTION. It is METADATA, not
                  // a file, so no guard that walks the working tree could ever see
                  // it: git grep returns nothing and COVERAGE could not list it.
@@ -882,13 +886,18 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   const counts = [
     ...[...live.matchAll(/(\d+)(?: live| MCP| read-only)* tools/g)].map((x) => Number(x[1])),
     ...[...live.matchAll(/badge\/tools-(\d+)/g)].map((x) => Number(x[1])),
+    // ★2026-09-26: llms-install.md's header read "**Tools exposed:** 70" while
+    // its own body said 92 -- the one form "N tools" cannot see. That file is
+    // what Cline's marketplace reviewers hand their agent to test an install.
+    ...[...live.matchAll(/Tools exposed:\*{0,2} (\d+)/g)].map((x) => Number(x[1])),
   ];
   const wrong = counts.filter((c) => c !== COUNT && c > 20); // ignore small unrelated numbers
   if (wrong.length) {
     problems.push(`${f} has tool-count(s) ${[...new Set(wrong)].join('/')} != ${COUNT}`);
     if (FIX) pend(f, healLines(txt, (ln) => ln
       .replace(/\b(\d+)((?: live| MCP| read-only)*) tools\b/g, (s, n, adj) => (Number(n) > 20 ? `${COUNT}${adj || ''} tools` : s))
-      .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))));
+      .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))
+      .replace(/(Tools exposed:\*{0,2} )(\d+)/g, (s, pre, n) => (Number(n) > 20 ? `${pre}${COUNT}` : s))));
   }
 }
 
@@ -990,6 +999,8 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     // through this sync while all 28 siblings healed. A number an AGENT
     // reads back to a user is as published as a README.
     'integrations/packs/site.json',
+    // ★2026-09-26: Cursor Marketplace listing copy (see the count loop above).
+    '.cursor-plugin/plugin.json',
   ];
   // ★2026-09-19. ASSET_QUANTITIES was applied to server.mjs ALONE, so every
   // registry-INGESTED file published the asset layers hand-typed and unwatched.
