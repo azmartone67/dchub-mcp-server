@@ -108,6 +108,10 @@ import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults } from './lib/chatgpt-directory.mjs';
+import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
+         createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
+         setCanonicalToolNames as _setCoreCanonicalNames,
+         limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
 import { coarsenFacilityLocation, coarsenToolResultLocation, splitLeadingJson as _splitLeadingJson, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
@@ -2527,6 +2531,12 @@ export function _pathProfile(req) {
   return _normPath(req) === DIRECTORY_PATH ? DIRECTORY_PROFILE : null;
 }
 
+// r-core-profile (2026-09-25): /mcp/core, the slim read-only core profile
+// (lib/core-profile.mjs). Served by _serveCore below; /mcp is untouched.
+export function _pathIsCore(req) {
+  return _normPath(req) === CORE_PATH;
+}
+
 export function _pathSelfTag(req) {
   return MCP_SELF_PATHS.get(_normPath(req)) || '';
 }
@@ -2754,6 +2764,9 @@ export const MCP_PATHS = [
   // allowlisted catalog and an outermost scrub of every response. See
   // _pathProfile and the directory prelude in app.post(MCP_PATHS).
   DIRECTORY_PATH,
+  // r-core-profile (2026-09-25): ten task-shaped read-only tools composed from
+  // the canonical handlers. See lib/core-profile.mjs and _serveCore.
+  CORE_PATH,
   ...MCP_SELF_PATHS.keys(),
   ...MCP_SOURCE_PATHS.keys(),
   ...MCP_PACKS.keys(),
@@ -3878,6 +3891,8 @@ export async function mintAutoTrial(tool_name) {
     // preview" answer, which is the owner's decision for that surface
     // (dec-chatgpt-keyless-tier: trimmed anonymous previews, no full keyless tier).
     if (c && c.profile === DIRECTORY_PROFILE) return null;
+    // r-core-profile: /mcp/core returns no keys either, so it mints none.
+    if (c && c.profile === CORE_PROFILE) return null;
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
     if (tool_name) url.searchParams.set('tool', tool_name);
     const headers = {
@@ -14190,6 +14205,7 @@ export const _DEAL_DESK_SKIP_TIERS = new Set([
 ]);
 export function _dealDeskEligible(c) {
   if ((process.env.DCHUB_DEAL_DESK_AUTOMINT || '1') === '0') return false;
+  if (c && c.profile === CORE_PROFILE) return false;   // r-core-profile: no minting on /mcp/core
   if (!c || !c.api_key) return false;          // anonymous cannot be Pro
   return !_DEAL_DESK_SKIP_TIERS.has(String(c.tier || 'free').toLowerCase());
 }
@@ -20599,6 +20615,9 @@ function createServer(descOverrides, instructionsTail) {
                         'Accept': 'application/json, text/event-stream' };
       if (c && c.api_key) headers['X-API-Key'] = c.api_key;
       if (c && c.platform) headers['X-MCP-Platform'] = String(c.platform);
+      // r-core-profile: a plan run from /mcp/core keeps its steps in the core
+      // profile (no key minting) via a single-use in-process token.
+      if (c && c.profile === CORE_PROFILE) headers[CORE_LOOPBACK_HEADER] = _mintCoreLoopbackToken();
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -23379,6 +23398,172 @@ app.get('/internal/edge-key', (req, res) => {
   });
 });
 
+// ── r-core-profile (2026-09-25): /mcp/core ────────────────────────────────
+//
+// A separate, stateless endpoint listing ten task-shaped, read-only tools
+// (lib/core-profile.mjs). Each core tool delegates IN PROCESS to the canonical
+// tool handlers registered by createServer(), under the caller's own key and
+// tier, so every existing gate, preview and quota applies unchanged. What the
+// core layer adds is a uniform evidence envelope and an outermost scrub.
+//
+// /mcp is not changed: _serveCore runs only when the path is CORE_PATH, and it
+// is reached after the SAME credential resolution and OAuth / invalid-bearer
+// challenges as every other path, so auth is identical.
+
+// execute_plan runs its steps through an HTTP loopback to /mcp. A plan started
+// on /mcp/core marks those loopback calls with a single-use random token so the
+// steps run in the core profile too (no key minting). The token is minted and
+// consumed in this process only and expires in two minutes; a request without
+// a valid token is an ordinary /mcp request.
+const CORE_LOOPBACK_HEADER = 'x-dchub-core-loopback';
+const CORE_LOOPBACK_TTL_MS = 120_000;
+const _coreLoopbackTokens = new Map();   // token -> expiry (ms)
+export function _mintCoreLoopbackToken(now = Date.now()) {
+  if (_coreLoopbackTokens.size > 5000) {
+    for (const [t, exp] of _coreLoopbackTokens) if (exp < now) _coreLoopbackTokens.delete(t);
+  }
+  const tok = randomUUID() + randomUUID();
+  _coreLoopbackTokens.set(tok, now + CORE_LOOPBACK_TTL_MS);
+  return tok;
+}
+export function _consumeCoreLoopbackToken(tok, now = Date.now()) {
+  if (typeof tok !== 'string' || !tok) return false;
+  const exp = _coreLoopbackTokens.get(tok);
+  if (exp === undefined) return false;
+  _coreLoopbackTokens.delete(tok);
+  return exp >= now;
+}
+function _isLoopbackPeer(req) {
+  const a = String(req?.socket?.remoteAddress || '');
+  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+}
+
+const _CORE_TOOL_SET = new Set(CORE_TOOL_NAMES);
+let _coreNamesSet = false;
+const _coreSlugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+
+// The keyless evaluate_site headline calls the composite scorer directly, so
+// it gets its own per-caller budget (in-process, like the challenge budget).
+const CORE_HEADLINE_PER_HOUR = Number(process.env.DCHUB_CORE_HEADLINE_PER_HOUR || 30);
+const _coreHeadlineHits = new Map();   // caller -> [timestamps]
+export function _coreHeadlineAllowed(caller, now = Date.now()) {
+  const k = String(caller || 'unknown');
+  const since = now - 3_600_000;
+  const arr = (_coreHeadlineHits.get(k) || []).filter((t) => t > since);
+  if (arr.length >= CORE_HEADLINE_PER_HOUR) { _coreHeadlineHits.set(k, arr); return false; }
+  arr.push(now);
+  _coreHeadlineHits.set(k, arr);
+  if (_coreHeadlineHits.size > 20000) {
+    for (const [kk, v] of _coreHeadlineHits) if (!v.length || v[v.length - 1] < since) _coreHeadlineHits.delete(kk);
+  }
+  return true;
+}
+
+// Dependencies handed to createCoreServer. One delegate McpServer per core
+// request (the stateless /mcp branch also builds one per request), created
+// lazily on the first delegated call.
+export function _coreDeps() {
+  let delegateSrv = null;
+  const tools = () => {
+    if (!delegateSrv) {
+      delegateSrv = createServer(null, '');
+      if (!_coreNamesSet) {
+        try { _setCoreCanonicalNames(Object.keys(delegateSrv._registeredTools || {})); _coreNamesSet = true; } catch (_) {}
+      }
+    }
+    return delegateSrv._registeredTools || {};
+  };
+  return {
+    async delegate(name, args) {
+      if (!_isCoreDelegate(name)) throw new Error(`not a core delegate: ${name}`);
+      const T = tools()[name];
+      if (!T || typeof T.handler !== 'function') throw new Error(`tool not registered: ${name}`);
+      const parsed = await T.inputSchema.safeParseAsync(args || {});
+      if (!parsed.success) {
+        const msg = (parsed.error?.issues || []).map((i) => `${(i.path || []).join('.')}: ${i.message}`).join('; ');
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: 'invalid_arguments', message: msg.slice(0, 300) }) }] };
+      }
+      const ctl = new AbortController();
+      let timer = null;
+      const timeout = new Promise((_, rej) => {
+        timer = setTimeout(() => { ctl.abort(); rej(new Error('timed out')); }, CORE_DELEGATE_TIMEOUT_MS);
+      });
+      try {
+        return await Promise.race([
+          T.handler(parsed.data, { signal: ctl.signal, sendNotification: async () => {} }),
+          timeout,
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    async resolveLocation(text) {
+      const slug = _coreSlugify(text);
+      if (!slug) return { ok: false };
+      const row = await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true });
+      const r = _locationPoint(text, slug, row);
+      if (!r.ok) return { ok: false };
+      return { ok: true, lat: r.lat, lon: r.lon, state: r.state || null, market_slug: slug,
+               market_name: r.resolved_from ? r.resolved_from.market_name : null };
+    },
+    // evaluate_site's headline for a caller without Land & Power access: the
+    // same composite read the canonical handler makes, reduced by the SAME
+    // _lpPreviewPayload a free key gets (verdicts, bands, names, counts and
+    // coverage; every score and figure null), plus the NAME of the limiting
+    // factor. Kill switch: DCHUB_CORE_KEYLESS_HEADLINE=0 (checked in the lib).
+    async siteHeadline({ lat, lon, state }) {
+      const c = getCtx() || {};
+      if (!_coreHeadlineAllowed(c.api_key || c.client_ip)) return { ok: false, error: 'rate_limited' };
+      const raw = await callAPI('/api/v1/site-planner/composite-score', { lat, lng: lon, state: state || '' });
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.error) return { ok: false, error: 'unavailable' };
+      return { ok: true, payload: _lpPreviewPayload(raw), limiting_factor: _coreLimitingFactor(raw) };
+    },
+  };
+}
+
+async function _serveCore(req, res, o) {
+  const body = req.body;
+  let apiKey = o.apiKey;
+  if (body.method === 'initialize') {
+    const _initErr = _initRequestError(body);
+    if (_initErr) return _writeRpcError(res, body.id, { code: _initErr.code, message: _initErr.message, data: _initErr.data });
+  }
+  const platform = body.method === 'initialize'
+    ? detectPlatformFromInit(body, o.userAgent, o.platformHeader)
+    : _resolvePlatform(body, o.userAgent, o.platformHeader, null);
+  let validation = { valid: false };
+  let tier = 'free';
+  const keyPresented = apiKey;
+  if (body.method === 'tools/call') {
+    // Same resolution as the stateless /mcp tools/call branch.
+    validation = await validateKey(apiKey);
+    tier = validation.valid ? validation.tier : 'free';
+    apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
+  }
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  const srv = _createCoreServer(McpServer, _coreDeps(), { version: SERVER_VERSION });
+  await srv.connect(transport);
+  return ctx.run({
+    api_key: apiKey, platform, tier, session_id: null, profile: CORE_PROFILE,
+    auth_source: o.authChannel,
+    auth_refused: body.method === 'tools/call' ? _authRefusal(keyPresented, apiKey, validation) : null,
+    auth_unverified: body.method === 'tools/call' ? _authUnverified(keyPresented, validation) : false,
+    auth_demoted: body.method === 'tools/call' ? _authDemoted(keyPresented, validation) : false,
+    source: '',
+    is_trial: validation.is_trial === true,
+    metered_enforce: validation.metered_enforce === true,
+    developer_id: validation.developer_id || null,
+    email: validation.email || null,
+    client_name_raw: null,
+    referer: req.headers.referer || req.headers.referrer || null,
+    user_agent: o.userAgent, client_ip: o.clientIp,
+    // No per-call payment rails on the core profile.
+    x_payment: null,
+  }, async () => {
+    await transport.handleRequest(req, res, body);
+  });
+}
+
 app.post(MCP_PATHS, async (req, res) => {
   try {
     // r-apps-sdk-csp (2026-07-19): the ChatGPT App Directory (Apps SDK)
@@ -23395,6 +23580,15 @@ app.post(MCP_PATHS, async (req, res) => {
       _installDirectoryFilter(req, res);
       delete req.headers['mcp-session-id'];
     }
+    // r-core-profile: /mcp/core is stateless too; a session id sent to it is ignored.
+    const _coreProfile = _pathIsCore(req);
+    if (_coreProfile) delete req.headers['mcp-session-id'];
+    // r-core-profile: an execute_plan step started on /mcp/core. Read once and
+    // removed so it can never ride further; only honoured from this process.
+    const _coreLoopbackTok = req.headers[CORE_LOOPBACK_HEADER];
+    delete req.headers[CORE_LOOPBACK_HEADER];
+    const _coreLoopback = !_dirProfile && !_coreProfile && _isLoopbackPeer(req)
+      && _consumeCoreLoopbackToken(_coreLoopbackTok);
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
     // r-platform-header (2026-07-20): explicit platform attribution header —
@@ -23431,7 +23625,9 @@ app.post(MCP_PATHS, async (req, res) => {
     // and never reaches the stateless handler). `req.body` is the same object the
     // downstream `const body = req.body` points at, so this one mutation covers all.
     try {
-      if (req.body && req.body.method === 'tools/call' && req.body.params && req.body.params.name) {
+      // r-core-profile: /mcp/core has its own ten names; the canonical aliases
+      // do not apply there.
+      if (!_coreProfile && req.body && req.body.method === 'tools/call' && req.body.params && req.body.params.name) {
         const _canon = Object.prototype.hasOwnProperty.call(TOOL_ALIASES, req.body.params.name)
           ? TOOL_ALIASES[req.body.params.name] : null;
         if (_canon) {
@@ -23442,7 +23638,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // r-argalias: normalize GUESSED argument names on the same mutation of
       // req.body, for the same reason and on every tools/call path. Runs AFTER
       // the tool-name alias so a guessed name + guessed arg both land.
-      const _am = req.body && req.body.params
+      const _am = !_coreProfile && req.body && req.body.params
         && Object.prototype.hasOwnProperty.call(ARG_ALIASES, req.body.params.name)
         ? ARG_ALIASES[req.body.params.name] : null;
       const _args = req.body && req.body.params && req.body.params.arguments;
@@ -23479,6 +23675,31 @@ app.post(MCP_PATHS, async (req, res) => {
           if (/^(mpp_|x402|payment|credential)/i.test(k)) delete _a[k];
         }
         _applyDirectoryArgDefaults(_n, _a);
+      }
+      if (_b.method === 'prompts/list') return _writeRpcResult(req, res, _b.id, { prompts: [] });
+      if (_b.method === 'resources/list') return _writeRpcResult(req, res, _b.id, { resources: [] });
+      if (_b.method === 'resources/templates/list') return _writeRpcResult(req, res, _b.id, { resourceTemplates: [] });
+      if (/^(prompts|resources|completion)\//.test(_b.method)) {
+        return _writeRpcError(res, _b.id, { code: -32601, message: `Method not found: ${_b.method}` }, 200);
+      }
+    }
+    // r-core-profile: what /mcp/core answers before credential logic runs.
+    if (_coreProfile) {
+      const _b = req.body;
+      if (!_b || typeof _b !== 'object' || Array.isArray(_b) || typeof _b.method !== 'string') {
+        return _writeRpcError(res, null, { code: -32600, message: 'Invalid Request: send one JSON-RPC request per POST.' });
+      }
+      if (_b.id === undefined) return res.status(202).end();   // notifications
+      if (_b.method === 'tools/call') {
+        const _n = _b.params && _b.params.name;
+        if (!_CORE_TOOL_SET.has(_n)) {
+          return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
+        }
+        if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
+        const _a = _b.params.arguments;
+        for (const k of Object.keys(_a)) {
+          if (/^(mpp_|x402|payment|credential)/i.test(k)) delete _a[k];
+        }
       }
       if (_b.method === 'prompts/list') return _writeRpcResult(req, res, _b.id, { prompts: [] });
       if (_b.method === 'resources/list') return _writeRpcResult(req, res, _b.id, { resources: [] });
@@ -23882,6 +24103,12 @@ app.post(MCP_PATHS, async (req, res) => {
     // the tool handler's x402 block can verify it. null when absent (the norm).
     const xPayment = req.headers['x-payment'] || null;
 
+    // r-core-profile: /mcp/core is served here, after the same credential
+    // resolution and challenges as every other path.
+    if (_coreProfile) {
+      return await _serveCore(req, res, { apiKey, userAgent, platformHeader, clientIp, authChannel: _authChannel });
+    }
+
     // Existing session — reuse meta
     if (sessionId && sessions.has(sessionId)) {
       touchSession(sessionId);  // r41: mark active
@@ -24204,7 +24431,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
-        api_key: apiKey, platform, tier, profile: _dirProfile,
+        api_key: apiKey, platform, tier, profile: _coreLoopback ? CORE_PROFILE : _dirProfile,
         auth_source: _authChannel,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
@@ -24271,6 +24498,12 @@ app.post(MCP_PATHS, async (req, res) => {
     }
   }
 });
+
+// r-core-profile: /mcp/core is stateless (no SSE stream to resume, no session
+// to delete), so GET and DELETE answer 405. Registered before the MCP_PATHS
+// handlers, which Express would otherwise reach first.
+app.get(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
+app.delete(CORE_PATH, (req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Method not allowed. POST JSON-RPC to this endpoint.' }));
 
 app.get(MCP_PATHS, async (req, res) => {
   const sid = req.headers['mcp-session-id'];

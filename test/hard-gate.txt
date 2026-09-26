@@ -53,6 +53,7 @@ test/constraint-iso-shape.test.mjs
 test/continuation.test.mjs
 test/coord-aliases.test.mjs
 test/copycheck-tolerates-edge-flap.test.mjs
+test/core-profile.test.mjs
 test/coverage-counts-not-masked.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
 test/deal-desk-automint.test.mjs
