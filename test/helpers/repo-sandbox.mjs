@@ -93,6 +93,9 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         // every must-fail control then 'passes' on a stack trace instead
                         // of on the drift it was written to catch.
                         'scripts/dxt-bundle.mjs',
+                        // ★2026-09-26: and this one (the canon floor rule). Same failure
+                        // mode: missing, every floor control dies on the import.
+                        'scripts/canon-floor.mjs',
                         // The shipped bundle the dchub.dxt guard compares against.
                         'dchub.dxt',
                         // ★2026-08-30: the release-asset guard and the workflow it runs
