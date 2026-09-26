@@ -67,6 +67,7 @@ test/deal-desk-automint.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
 test/deterministic-install.test.mjs
+test/directory-output-schema-contract.test.mjs
 test/discovery-coverage.test.mjs
 test/doc-stripe-links-are-canonical.test.mjs
 test/ecosystem-sync.test.mjs
