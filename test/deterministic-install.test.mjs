@@ -31,7 +31,6 @@ describe("the build installs the locked dependency tree", () => {
 
   for (const [file, needle] of [
     ["Dockerfile", /^RUN npm ci\b/m],
-    ["railway.toml", /buildCommand\s*=\s*"npm ci"/],
     [".github/workflows/test.yml", /run:\s*npm ci\b/],
   ]) {
     it(`${file} uses npm ci, never npm install`, () => {
@@ -47,6 +46,30 @@ describe("the build installs the locked dependency tree", () => {
       expect(asCommand).toEqual([]);
     });
   }
+
+  it("production builds that Dockerfile (Railway IaC), so its npm ci is what ships", () => {
+    // Until 2026-09-26 this list also checked railway.toml's buildCommand. That
+    // line never ran: Railway auto-detected ./Dockerfile (build log of
+    // 1d6c347c: "load build definition from Dockerfile"). The service is now on
+    // .railway/railway.ts, which declares the Dockerfile builder explicitly, so
+    // the Dockerfile check above IS the production check — pin that link.
+    // Full-line comments are dropped so a comment cannot satisfy the match.
+    const code = read(".railway/railway.ts")
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("//"))
+      .join("\n");
+    expect(code).toMatch(/service\("dchub-mcp-server"/);
+    expect(code).toMatch(/builder:\s*"DOCKERFILE"/);
+    expect(code).toMatch(/dockerfilePath:\s*"Dockerfile"/);
+  });
+
+  it("no Config-as-Code file overrides the IaC build", () => {
+    // railway.toml overrode IaC per deploy until 2026-12-01; nixpacks.toml
+    // carried a bare `npm install`. Either coming back is a silent override.
+    for (const f of ["railway.toml", "railway.json", "nixpacks.toml"]) {
+      expect(existsSync(join(ROOT, f)), `${f} is back`).toBe(false);
+    }
+  });
 
   it("Dockerfile copies the lockfile deterministically", () => {
     const txt = read("Dockerfile");

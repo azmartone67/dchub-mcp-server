@@ -1,7 +1,9 @@
 // Railway Infrastructure as Code for the dchub-mcp-server service.
 //
 // Replaces railway.toml (Config as Code), which Railway stops reading on
-// 2026-12-01. Evaluated by the Railway CLI (`railway config plan` / `apply`),
+// 2026-12-01; railway.toml and nixpacks.toml were deleted 2026-09-26 after this
+// was applied and verified (test/deterministic-install.test.mjs fails if either
+// comes back). Evaluated by the Railway CLI (`railway config plan` / `apply`),
 // NOT at deploy time: merging a change here does nothing until it is applied.
 //
 // ★ partial: this repo owns ONLY this service. Project resourceful-essence also
