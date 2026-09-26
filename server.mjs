@@ -13609,7 +13609,11 @@ export async function _facilityFetch(id, api) {
   if (!(d && (d.name || d.facility_name))) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: 'No DC Hub facility has that id. Use an id returned by the search tool.' }) }], isError: true };
   }
-  const rec = _facilityFetchRecord(id, d, 'https://dchub.cloud/facility/' + encodeURIComponent(id));
+  // The record's data vintage rides the backend's provenance block (backend
+  // r-record-as-of). The OpenAI demo's fetch on 8484 showed no as_of.
+  const asOf = (out && out.provenance && out.provenance.as_of) || d.as_of || null;
+  const rec = _facilityFetchRecord(id, asOf ? { ...d, as_of: asOf } : d,
+    'https://dchub.cloud/facility/' + encodeURIComponent(id));
   return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
 }
 
@@ -13644,9 +13648,12 @@ export function _facilityFetchRecord(id, d, url) {
   if (Number.isFinite(cap) && cap > 0) parts.push('Power capacity: ' + cap + ' MW.');
   if (d.connectivity_note) parts.push('Connectivity: ' + d.connectivity_note + '.');
   if (d.v === 'verified' || d.verified === true) parts.push('Record verified.');
+  const asOf = typeof d.as_of === 'string' && d.as_of ? d.as_of : null;
+  if (asOf) parts.push('As of ' + asOf.slice(0, 10) + '.');
   parts.push('Source: DC Hub (dchub.cloud), ' + url + '.');
   const metadata = { source: 'DC Hub (dchub.cloud)', market, country: d.country || null,
     city: d.city || null, state: d.state || null, status: d.status || null,
+    ...(asOf ? { as_of: asOf } : {}),
     ...(hasPt ? { lat, lon, coordinates: 'approximate' } : {}) };
   return { id, title: String(name), text: parts.join(' '), url, metadata };
 }

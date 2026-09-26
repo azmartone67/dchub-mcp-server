@@ -1,0 +1,2709 @@
+{
+ "_readme": "frz-chatgpt-toolset (owner, 2026-09-26): the /mcp/chatgpt tools/list as submitted to the OpenAI app directory (DC Hub 1.0.0, submitted 2026-09-25 ~18:06 PT, in review). Names, count, titles, descriptions, annotations and input schemas are frozen while the app is in review: adding, removing or renaming a tool, or changing any of these, forces a new review. Captured from live https://dchub.cloud/mcp/chatgpt tools/list. To change it deliberately after the review closes, regenerate this file in the same PR and say so.",
+ "captured_from": "https://dchub.cloud/mcp/chatgpt tools/list",
+ "captured_at": "2026-09-26",
+ "count": 67,
+ "tools": [
+  {
+   "name": "ai_capacity_index",
+   "title": "AI Capacity Index",
+   "description": "Rank data-center markets by where large AI training capacity could land in the next 30, 60 or 90 days, with facility and operator counts.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "horizon": {
+      "description": "Deployment horizon in days: 30, 60, or 90 (default 90)",
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 90
+     },
+     "limit": {
+      "description": "Number of top markets to return (default 20)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "AI Capacity Index",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "analyze_parcel",
+   "title": "Analyze Parcel",
+   "description": "Analyze a parcel boundary (GeoJSON, or lat/lon in a hosted county) for acreage, shape and nearby infrastructure.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "geometry": {
+      "description": "GeoJSON Polygon or MultiPolygon parcel boundary, e.g. {\"type\":\"Polygon\",\"coordinates\":[[[lng,lat],[lng,lat],...]]} — a MultiPolygon carries discontinuous parcels as one envelope. Omit to look up the hosted parcel containing lat/lon instead"
+     },
+     "lat": {
+      "description": "Latitude of a point ON the parcel — used with lon when geometry is omitted to look up the containing parcel from the hosted county/state GIS layer",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Longitude of a point ON the parcel (used with lat when geometry is omitted)",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "capacity_mw": {
+      "description": "Optional target load in MW to pass through into the site_evaluation_handoff",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Analyze Parcel",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "cluster_sites_by_latency",
+   "title": "Cluster Sites By Latency",
+   "description": "Group 2-8 sites into low-latency clusters using physics-bound round-trip time floors between each pair.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "sites": {
+      "description": "\"39.04,-77.48:ashburn;39.29,-76.61:baltimore\". cand_… tokens are also accepted here and resolve to frozen mint coordinates. Optional if candidate_ids is given",
+      "type": "string"
+     },
+     "candidate_ids": {
+      "description": "Array (or comma-separated string) of candidate_id values from get_refined_queue — each resolves to its FROZEN mint coordinates (zero transcription drift); expired/unknown are dropped and declared in candidate_contract. Use instead of, or alongside, sites"
+     },
+     "max_latency_us": {
+      "description": "Round-trip latency budget in microseconds (default 1000 µs = 1 ms; sync replication is typically 1000-2000 µs)",
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10000000
+     },
+     "min_confidence": {
+      "description": "Minimum evidence tier a pair must meet to count as viable: \"published\" | \"tracked\" | \"inferred\" (default inferred = include all)",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Cluster Sites By Latency",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "compare_isos",
+   "title": "Compare ISO Regions",
+   "description": "Compare 2-4 US ISO grids side by side (comma-separated, e.g. \"PJM,ERCOT\"): fuel mix, demand, renewable and gas share, queue depth and time to power.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "isos": {
+      "type": "string",
+      "description": "Comma-separated list of 2-4 US ISO/RTO grid regions to compare, e.g. \"PJM,ERCOT,CAISO\" (valid: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE)"
+     }
+    },
+    "required": [
+     "isos"
+    ]
+   },
+   "annotations": {
+    "title": "Compare ISO Regions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "deal_autopsy",
+   "title": "Deal Autopsy",
+   "description": "List recent data-center deals with the DCPI verdict and time to power of each deal's market.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "limit": {
+      "description": "Number of recent deals to return (default ~15)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "comparables": {
+      "description": "Comparables detail: \"none\" (default — count only, cheapest), \"summary\" (top-2 grounding signals), or \"full\" (the complete cited set). Escalate only for deals you're drilling into.",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Deal Autopsy",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "discover_tools",
+   "title": "Discover Tools",
+   "description": "List DC Hub tools grouped by family (facility, market, grid and power, gas, site, fiber, deals and news), optionally filtered by a query.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "description": "Optional keyword to filter families/tools, e.g. \"site selection\", \"grid queue\", \"fiber\", \"deals\", \"market\"",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Discover Tools",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "execute_plan",
+   "title": "Execute Plan",
+   "description": "Answer a multi-part data-center infrastructure question in one call. Pass the question as intent; DC Hub plans the lookups (markets, grid, fiber, water, incentives), runs them, and returns each step's result with a replay of how the answer was built.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "intent": {
+      "type": "string",
+      "description": "The user's infrastructure question, passed through UNCHANGED. Examples: \"rank markets for a 200 MW AI campus\" · \"evaluate 100 MW power headroom for a GPU training cluster in PJM\" · \"compare Dallas vs Phoenix for a hyperscale campus\" · \"find 100 MW of buildable capacity near Ashburn\" · \"where do fiber density and grid headroom overlap in Atlanta\""
+     },
+     "context": {
+      "description": "Optional structured hints AND step-arg overrides: {lat, lon, iso, market, capacity_mw, candidate_id, state, since} — user-supplied values beat minted ones. The typed top-level params below are merged into this and WIN on conflict."
+     },
+     "market": {
+      "description": "Metro slug or name to pin the analysis to, e.g. \"ashburn\". Beats any market the planner would mint.",
+      "type": "string"
+     },
+     "capacity_mw": {
+      "description": "Target capacity in MW, e.g. 100.",
+      "type": "number"
+     },
+     "iso": {
+      "description": "ISO/RTO code to pin geography, e.g. \"PJM\", \"ERCOT\".",
+      "type": "string"
+     },
+     "state": {
+      "description": "US state code, e.g. \"VA\".",
+      "type": "string"
+     },
+     "lat": {
+      "description": "Latitude for a specific site.",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Longitude for a specific site.",
+      "type": "number"
+     },
+     "max_steps": {
+      "description": "Max plan steps to execute, 1-8 (default 6)"
+     },
+     "max_fanout": {
+      "description": "Max per-finalist fan-out calls for one step, 1-3 (default 2)"
+     },
+     "cohort": {
+      "description": "Optional experiment tag for adoption/retention measurement, e.g. \"cohort.front_door\". Has NO effect on routing, planning, geography or results — it is recorded only. Put your user's question in `intent` and the tag HERE; never inside the intent string, which would break classification. Max 64 chars, [a-z0-9._-]; a malformed tag is ignored, never an error."
+     }
+    },
+    "required": [
+     "intent"
+    ]
+   },
+   "annotations": {
+    "title": "Execute Plan",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "fetch",
+   "title": "Fetch",
+   "description": "Fetch one DC Hub facility record by an id returned from search. Returns {id, title, text, url, metadata} with name, operator, location, status and market.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "A facility id/slug from a prior `search` result, e.g. equinix-dc1-ashburn"
+     }
+    },
+    "required": [
+     "id"
+    ]
+   },
+   "annotations": {
+    "title": "Fetch",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "find_alternatives",
+   "title": "Find Alternative Facilities",
+   "description": "Find facilities similar to a given facility nearby, with similarity scores and key differences.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "facility_id": {
+      "type": "string",
+      "description": "The seed facility id/slug (required) to find alternatives to, from a prior search result — there is no `name` param; an undeclared key is silently stripped"
+     },
+     "radius_km": {
+      "description": "Search radius in km for candidate alternatives around the seed facility",
+      "type": "number"
+     },
+     "match_on": {
+      "description": "Optional similarity dimension to weight, e.g. capacity, operator, fiber, market",
+      "type": "string"
+     },
+     "exclude_operator": {
+      "description": "If true, exclude facilities from the same operator as the seed",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    },
+    "required": [
+     "facility_id"
+    ]
+   },
+   "annotations": {
+    "title": "Find Alternative Facilities",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "find_sites",
+   "title": "Find Sites",
+   "description": "Find candidate data-center sites in a state or around a point, filtered by substation voltage and distance to gas and fiber.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "state": {
+      "description": "2-letter US state to search, e.g. OH — required unless you pass lat + lon",
+      "type": "string"
+     },
+     "lat": {
+      "description": "Latitude of a search centre, e.g. 39.04 — use with lon (+ radius_km) instead of state",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Longitude of a search centre, e.g. -77.48",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "radius_km": {
+      "description": "Search radius in km around lat/lon (default 80, clamped 5-400); ignored in state mode",
+      "type": "number"
+     },
+     "min_voltage_kv": {
+      "description": "Only anchor on substations at or above this voltage in kV (default 115). 230+ for hyperscale, 500 for the largest campuses",
+      "type": "number"
+     },
+     "max_gas_km": {
+      "description": "Drop candidates farther than this from the nearest gas pipeline. Applied ONLY if the gas layer answers — check constraint_coverage",
+      "type": "number"
+     },
+     "max_fiber_km": {
+      "description": "Drop candidates farther than this from the nearest fiber route (CHORD approximation — see fiber_distance_basis). Applied ONLY if the fiber layer answers",
+      "type": "number"
+     },
+     "exclude_moratorium": {
+      "description": "true = drop candidates in a state with a published data-center moratorium. STATE grain, not jurisdiction grain",
+      "type": "boolean"
+     },
+     "cluster_km": {
+      "description": "Collapse anchors within this many km into one candidate area (default 8, max 100). Raise it for broader coverage, lower it for denser results",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Find Sites",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_agent_registry",
+   "title": "AI Agent Registry",
+   "description": "List the AI platforms and agent frameworks that connect to DC Hub, with their status.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "title": "AI Agent Registry",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_backup_status",
+   "title": "Platform Health",
+   "description": "Get per-feed freshness for DC Hub's data ingest: health, record count and refresh interval for each feed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "title": "Platform Health",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_changes",
+   "title": "Get Changes",
+   "description": "List what changed in DC Hub since a timestamp: DCPI market movers, newly found facilities, new deals and news.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "since": {
+      "description": "Return changes since this ISO-8601 timestamp (YYYY-MM-DD or full datetime) or shorthand \"24h\"/\"7d\"; default 24h",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Changes",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_climate_intel",
+   "title": "Get Climate Intel",
+   "description": "Get seismic design values (USGS ASCE 7) and climate normals (NOAA) for a lat/lon, such as cooling degree-days and temperature extremes.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "radius_km": {
+      "description": "Max distance (km) to snap to the nearest NOAA station (optional, default 25)",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Climate Intel",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_dchub_recommendation",
+   "title": "DC Hub Recommendation",
+   "description": "Get a short description of DC Hub for one of four contexts (general, investment, site-selection, technical), plus the current top-ranked market.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "context": {
+      "description": "Free-text description of the siting request — MW, geography, workload, deadline, constraints, e.g. \"100MW AI training campus in Texas, short time-to-power\"",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "DC Hub Recommendation",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_disaster_risk",
+   "title": "Get Disaster Risk",
+   "description": "Get natural-hazard risk for a US lat/lon from the FEMA National Risk Index: flood, wildfire, hurricane, earthquake, heat, drought, tornado and more.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Site latitude in decimal degrees (-90 to 90, required), e.g. 33.45",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Site longitude in decimal degrees (-180 to 180, required), e.g. -112.07",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Disaster Risk",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_energy_prices",
+   "title": "Energy Prices",
+   "description": "Get energy prices by US state or ISO: retail electricity, wholesale and natural gas.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "data_type": {
+      "description": "Optional price type focus, e.g. retail, wholesale, gas",
+      "type": "string"
+     },
+     "state": {
+      "description": "US state abbreviation for state-level pricing context, e.g. TX",
+      "type": "string"
+     },
+     "iso": {
+      "description": "ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Energy Prices",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_facility",
+   "title": "Get Facility Details",
+   "description": "Get details for one data-center facility by id, slug or name: operator, address, coordinates, power capacity, cooling, fiber carriers, status, its market's DCPI verdict and nearby facilities.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "facility_id": {
+      "description": "Facility id from a prior search_facilities/search result (numeric or string), e.g. equinix-dc1-ashburn",
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "slug": {
+      "description": "Facility slug from a prior search result, e.g. digital-realty-iad8",
+      "type": "string"
+     },
+     "id": {
+      "description": "Alias for facility_id — a facility id/slug from a prior search result",
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "number"
+       }
+      ]
+     },
+     "name": {
+      "description": "Facility name as a fallback lookup when no id/slug is known, e.g. \"QTS Ashburn\"",
+      "type": "string"
+     },
+     "include_nearby": {
+      "description": "Include peer facilities near this one in the response (default true)",
+      "type": "boolean"
+     },
+     "include_power": {
+      "description": "Include power capacity detail (total/used MW) in the response (default true)",
+      "type": "boolean"
+     }
+    },
+    "anyOf": [
+     {
+      "properties": {
+       "facility_id": {}
+      },
+      "required": [
+       "facility_id"
+      ]
+     },
+     {
+      "properties": {
+       "id": {}
+      },
+      "required": [
+       "id"
+      ]
+     },
+     {
+      "properties": {
+       "slug": {}
+      },
+      "required": [
+       "slug"
+      ]
+     },
+     {
+      "properties": {
+       "name": {}
+      },
+      "required": [
+       "name"
+      ]
+     }
+    ]
+   },
+   "annotations": {
+    "title": "Get Facility Details",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_facility_risk_delta",
+   "title": "Get Facility Risk Delta",
+   "description": "Show how a facility's market DCPI health changed over a time window, with direction (improving, worsening or flat).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "facility_id": {
+      "description": "A DC Hub facility id or canonical slug to resolve the market context",
+      "type": "string"
+     },
+     "market": {
+      "description": "Alternatively, a market name or slug (e.g. \"northern-virginia\")",
+      "type": "string"
+     },
+     "since": {
+      "description": "Look-back window, e.g. \"7d\" or \"30d\" (default 7d)",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Facility Risk Delta",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_fiber_intel",
+   "title": "Fiber Intelligence",
+   "description": "Get fiber route intelligence by carrier, route type or market: long-haul and metro routes and dark-fiber availability.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "carrier": {
+      "description": "Fiber carrier to filter on, e.g. Zayo, Lumen, Cogent, \"Crown Castle\", Windstream, GTT, Uniti; omit for all carriers",
+      "type": "string"
+     },
+     "route_type": {
+      "description": "Route class: \"metro\", \"longhaul\", \"dark\", or \"ix\"",
+      "type": "string"
+     },
+     "market": {
+      "description": "Metro name or slug (e.g. \"dallas\", \"ashburn\", \"northern-virginia\") — returns only routes touching that metro (either endpoint within ~1.2°). Great with route_type=longhaul.",
+      "type": "string"
+     },
+     "include_sources": {
+      "description": "Include upstream data-source/provenance metadata in the response",
+      "type": "boolean"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Fiber Intelligence",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_fiber_readiness",
+   "title": "Get Fiber Readiness",
+   "description": "Assess fiber readiness for a lat/lon: distance to a carrier-served facility, number of reachable carriers, and single-carrier risk.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Site latitude in decimal degrees (-90 to 90, required), e.g. 39.04",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Site longitude in decimal degrees (-180 to 180, required), e.g. -77.48",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "radius_km": {
+      "description": "Search radius in km for reachable fiber carriers (default 50, range 5-200)",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Fiber Readiness",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_gas_economics",
+   "title": "Get Gas Economics",
+   "description": "Get gas-fired power inputs for a US data-center market: Henry Hub spot, regional basis and delivered industrial and electric gas tariffs, each with its source.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "market": {
+      "type": "string",
+      "description": "Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank"
+     },
+     "heat_rate_btu_per_kwh": {
+      "description": "Optional custom generator heat rate in Btu/kWh for the gas-to-grid $/MWh scenario, e.g. 6800 (avg CCGT)",
+      "type": "number"
+     }
+    },
+    "required": [
+     "market"
+    ]
+   },
+   "annotations": {
+    "title": "Get Gas Economics",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_gas_index",
+   "title": "Gas Index (DCGI)",
+   "description": "Get the Data Center Gas Index (DCGI): a per-US-state natural-gas suitability score for gas-fired or behind-the-meter power.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "state": {
+      "description": "US state abbreviation, e.g. TX, VA, AZ. Returns the DCGI score and verdict, plus `gas_price_series` naming which EIA series priced the state. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason` — absence, not a low score. Withdrawn 2026-08-08, restored 2026-08-30: do NOT compare against a figure published before 2026-08-08. Use get_gas_intelligence for the per-state pipeline and operator brief",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Gas Index (DCGI)",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_gas_intelligence",
+   "title": "Get Gas Intelligence",
+   "description": "Get gas-fired power context for a US state or region: gas index, Henry Hub price, pipeline operators and the grid's gas share.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "region": {
+      "description": "US state code or name (required), e.g. \"TX\", \"Texas\", \"Virginia\"",
+      "type": "string"
+     },
+     "state": {
+      "description": "Alias for region — the US state code or name",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Gas Intelligence",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_global_power",
+   "title": "Get Global Power",
+   "description": "List power plants and generating units worldwide (operating and pipeline, all fuels) from the Global Energy Monitor tracker. Filter by country, fuel, status, area or size.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "country": {
+      "description": "Country/area name to filter, e.g. Germany, India, Brazil, Japan",
+      "type": "string"
+     },
+     "fuel": {
+      "description": "Fuel/type filter, comma-separated for a union: coal, oil/gas, nuclear, solar, wind, hydro, bioenergy, geothermal",
+      "type": "string"
+     },
+     "status": {
+      "description": "Status substring filter, e.g. operating, construction, pre-construction, announced",
+      "type": "string"
+     },
+     "pipeline": {
+      "description": "true = ONLY the forward pipeline (announced + pre-construction + under-construction)",
+      "type": "boolean"
+     },
+     "bbox": {
+      "description": "Viewport filter as minLng,minLat,maxLng,maxLat",
+      "type": "string"
+     },
+     "min_mw": {
+      "description": "Minimum unit capacity in MW",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Global Power",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_grid_data",
+   "title": "Live Grid Data",
+   "description": "Get real-time grid data for one of the 7 US ISOs from EIA hourly data: fuel mix, demand and the 24-hour demand curve.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "iso": {
+      "description": "ISO/RTO grid region (required): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE",
+      "type": "string"
+     },
+     "metric": {
+      "description": "Optional metric focus, e.g. fuel_mix, demand, demand_curve",
+      "type": "string"
+     },
+     "period": {
+      "description": "Optional time window for the metric, e.g. 24h",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Live Grid Data",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_grid_intelligence",
+   "title": "Grid Intelligence",
+   "description": "Get a grid brief for one US ISO: demand, fuel mix, excess-power and constraint score bands, interconnection queue and time to power.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "region_id": {
+      "description": "Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id=\"PJM-DOM\" for live Ashburn / Northern Virginia zone load + real-time LMP (the world's #1 DC market, invisible in EIA)",
+      "type": "string"
+     },
+     "iso": {
+      "description": "Alias for region_id — the ISO/RTO or balancing-authority code",
+      "type": "string"
+     },
+     "region": {
+      "description": "Alias for region_id — the ISO/RTO or balancing-authority code",
+      "type": "string"
+     },
+     "market": {
+      "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — \"Ashburn\" is not a grid code.",
+      "type": "string"
+     }
+    },
+    "anyOf": [
+     {
+      "properties": {
+       "region_id": {}
+      },
+      "required": [
+       "region_id"
+      ]
+     },
+     {
+      "properties": {
+       "iso": {}
+      },
+      "required": [
+       "iso"
+      ]
+     },
+     {
+      "properties": {
+       "region": {}
+      },
+      "required": [
+       "region"
+      ]
+     },
+     {
+      "properties": {
+       "market": {}
+      },
+      "required": [
+       "market"
+      ]
+     }
+    ]
+   },
+   "annotations": {
+    "title": "Grid Intelligence",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_grid_scoreboard",
+   "title": "Grid Scoreboard",
+   "description": "Get a live scoreboard of grid operators in the US, Great Britain, Europe and parts of Asia-Pacific and Latin America: demand, fuel mix, renewable share and gas share right now.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "title": "Grid Scoreboard",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_hosting_capacity",
+   "title": "Feeder Hosting Capacity",
+   "description": "Get utility-published feeder hosting capacity near a location or in a market: the MW named distribution feeders can accept, from utility GIS data.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Latitude of the point to search around, decimal degrees. Must be paired with lon.",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Longitude of the point to search around, decimal degrees. Must be paired with lat.",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "radius_km": {
+      "description": "Search radius in km around lat/lon (default 25, max 150). Ignored when utility/market is passed — that mode covers the utility's entire published extent.",
+      "type": "number",
+      "minimum": 1,
+      "maximum": 150
+     },
+     "utility": {
+      "description": "Utility or market name, case-insensitive substring — e.g. \"Ameren Illinois\", \"Con Edison\", \"Providence\". Searches that utility's whole published territory instead of a point radius. Call with NO arguments to list every covered utility.",
+      "type": "string"
+     },
+     "market": {
+      "description": "Alias for utility — either name works (e.g. \"Northern Virginia · Richmond\", \"New York City · Westchester\").",
+      "type": "string"
+     },
+     "capacity_type": {
+      "description": "Restrict to one published type: \"load\" (what a new data-center load can DRAW — the type that answers siting), \"gen\" (DER/generation EXPORT headroom — NOT available load), or \"bus_headroom\" (transmission bus MW). Omit to get all three reported separately.",
+      "type": "string"
+     },
+     "min_mw": {
+      "description": "Only return feeders whose published capacity is at or above this many MW.",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Feeder Hosting Capacity",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_infra_projects",
+   "title": "Get Infra Projects",
+   "description": "List planned, approved and under-construction gas pipeline and transmission line projects. Filter by type, state, status, capacity, voltage and in-service dates.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "type": {
+      "description": "Which project list: gas_pipeline (EIA, US-wide), transmission (ERCOT TPIT, Texas only) or all (default)",
+      "type": "string",
+      "enum": [
+       "gas_pipeline",
+       "transmission",
+       "all"
+      ]
+     },
+     "state": {
+      "description": "US state abbreviation, e.g. TX or LA. Gas projects match any state they cross; transmission projects are all TX",
+      "type": "string"
+     },
+     "status": {
+      "description": "Status, case-insensitive; comma list allowed. Gas: Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed. Transmission: Planned, Conceptual, Under Construction, Completed, Cancelled",
+      "type": "string"
+     },
+     "min_capacity": {
+      "description": "Gas only: minimum pipeline capacity in million cubic feet per day (MMcf/d), e.g. 1000. With type=all it narrows to gas projects",
+      "type": "number"
+     },
+     "min_kv": {
+      "description": "Transmission only: minimum voltage in kilovolts (kV), e.g. 345. With type=all it narrows to transmission projects",
+      "type": "number"
+     },
+     "in_service_after": {
+      "description": "Only projects entering service on or after this date (YYYY-MM-DD or YYYY). Gas compares the in-service year; transmission the actual, else projected, in-service date",
+      "type": "string"
+     },
+     "in_service_before": {
+      "description": "Only projects entering service on or before this date (YYYY-MM-DD or YYYY)",
+      "type": "string"
+     },
+     "new_since": {
+      "description": "Only projects DC Hub first saw on or after this date (YYYY-MM-DD). The initial backfill is never counted as new",
+      "type": "string"
+     },
+     "include_delisted": {
+      "description": "Also return projects the latest source release no longer lists (completed, withdrawn or dropped). Default false",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Infra Projects",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_infrastructure",
+   "title": "Nearby Infrastructure",
+   "description": "List infrastructure near a location: substations, transmission lines, gas pipelines and power plants, with distance and capacity.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Center latitude in decimal degrees (-90 to 90, required), e.g. 33.45",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Center longitude in decimal degrees (-180 to 180, required), e.g. -112.07",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "radius_km": {
+      "description": "Search radius in kilometers around the point, e.g. 25",
+      "type": "number"
+     },
+     "layer": {
+      "description": "Optional single asset layer to return, e.g. substations, transmission, pipelines, power_plants",
+      "type": "string"
+     },
+     "min_voltage_kv": {
+      "description": "Only include transmission/substations at or above this voltage in kV, e.g. 69",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Nearby Infrastructure",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_intelligence_index",
+   "title": "Market Intelligence Index",
+   "description": "Get a composite 0-100 health index for a data-center market, combining supply and demand, vacancy, absorption, fiber, power availability and pricing trend.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {}
+   },
+   "annotations": {
+    "title": "Market Intelligence Index",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_interconnection_queue",
+   "title": "Interconnection Queue",
+   "description": "Get the interconnection queue snapshot per US ISO: queued generation capacity, and for ERCOT the large-load (data-center) queue.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "iso": {
+      "description": "ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Interconnection Queue",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_iso_context",
+   "title": "Get Iso Context",
+   "description": "Get a token-budgeted briefing for one US ISO/RTO: live grid snapshot, DCPI verdicts across its markets, queue depth, benchmark prices and tracked markets.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "iso": {
+      "type": "string",
+      "description": "ISO/RTO grid region (required): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE"
+     },
+     "max_tokens": {
+      "description": "Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent",
+      "type": "number"
+     }
+    },
+    "required": [
+     "iso"
+    ]
+   },
+   "annotations": {
+    "title": "Get Iso Context",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_market_context",
+   "title": "Get Market Context",
+   "description": "Get a token-budgeted briefing for one data-center market: DCPI verdict, power and grid facts, outlook, deals, pipeline, operators, risks and news, each section timestamped.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "market": {
+      "type": "string",
+      "description": "Market slug (required), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank"
+     },
+     "max_tokens": {
+      "description": "Token budget for the pack, 200-8000 (default 4000); sections are filled in priority order until the budget is spent",
+      "type": "number"
+     }
+    },
+    "required": [
+     "market"
+    ]
+   },
+   "annotations": {
+    "title": "Get Market Context",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_market_dcpi_rank",
+   "title": "DCPI Market Rank",
+   "description": "Get the DC Hub Power Index (DCPI) read for one market: BUILD/CAUTION/AVOID verdict, score bands, time to power, data basis and a short analyst narrative.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "market_slug": {
+      "type": "string",
+      "description": "Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank"
+     }
+    },
+    "required": [
+     "market_slug"
+    ]
+   },
+   "annotations": {
+    "title": "DCPI Market Rank",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_market_intel",
+   "title": "Market Intelligence",
+   "description": "Get market intelligence for one data-center market (by market slug): vacancy, capacity pricing, supply pipeline, main operators and growth.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "market": {
+      "description": "Market slug (metro), e.g. northern-virginia, dallas, frankfurt, singapore — valid slugs come from rank_markets / get_market_dcpi_rank",
+      "type": "string"
+     },
+     "metric": {
+      "description": "Optional single metric to focus on, e.g. vacancy, pricing, absorption, pipeline",
+      "type": "string"
+     },
+     "period": {
+      "description": "Optional time window for the metric, e.g. ttm, 12mo, ytd",
+      "type": "string"
+     },
+     "compare_to": {
+      "description": "Optional second market slug to compare against, e.g. dallas",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Market Intelligence",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_metro_fiber",
+   "title": "Get Metro Fiber",
+   "description": "Get the fiber profile of a US data-center metro: carriers, route miles, on-net buildings, fiber-density score, exchanges and carrier hotels.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "market": {
+      "description": "Optional metro name or slug for a single-market deep dive (carrier-by-carrier + dark fiber), e.g. \"Dallas-Fort Worth\", \"dallas\", \"Northern Virginia\", \"ashburn\". Omit to list every tracked metro ranked by fiber density.",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Metro Fiber",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_news",
+   "title": "Industry News",
+   "description": "Get curated data-center industry news. Filter by keyword, category, source and date range.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "description": "Free-text keyword to filter news, e.g. \"Stargate\" or \"interconnection queue\"",
+      "type": "string"
+     },
+     "category": {
+      "description": "News topic filter, e.g. deals, permits, outages, policy, AI",
+      "type": "string"
+     },
+     "source": {
+      "description": "Restrict to one trade source, e.g. DCD, \"Data Center Frontier\", \"Capacity Media\"",
+      "type": "string"
+     },
+     "date_from": {
+      "description": "Earliest published date, ISO-8601 (YYYY-MM-DD)",
+      "type": "string"
+     },
+     "date_to": {
+      "description": "Latest published date, ISO-8601 (YYYY-MM-DD)",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "min_relevance": {
+      "description": "Minimum relevance score 0-1 to include an item, e.g. 0.5",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Industry News",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_peering_intel",
+   "title": "Get Peering Intel",
+   "description": "Get internet-exchange and peering density near a lat/lon from PeeringDB, or the top peering facilities overall.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Latitude of the site, e.g. 39.04 — with lon, returns the peering profile around it; omit both for the IXP directory",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Longitude of the site, e.g. -77.48",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Peering Intel",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_permitting_intel",
+   "title": "Permitting & Moratorium Intel",
+   "description": "List data-center permitting and moratorium records by jurisdiction: moratoriums, zoning restrictions, tax changes and utility pauses, each stage-tagged with a source.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "state": {
+      "description": "US state filter, e.g. NY or MN (optional)",
+      "type": "string"
+     },
+     "class": {
+      "description": "Record class: \"moratorium\" | \"zoning\" | \"tax\" | \"utility_pause\" (optional)",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Permitting & Moratorium Intel",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_pipeline",
+   "title": "Construction Pipeline",
+   "description": "List data centers that are announced, permitted or under construction. Filter by status, country, operator, minimum capacity or expected completion date.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "status": {
+      "description": "Pipeline stage filter: announced, permitted, construction, or operational",
+      "type": "string"
+     },
+     "country": {
+      "description": "ISO 3166-1 alpha-2 country code, e.g. US, DE, SG",
+      "type": "string"
+     },
+     "operator": {
+      "description": "Operator/provider company name, e.g. Equinix, Digital Realty, AWS",
+      "type": "string"
+     },
+     "min_capacity_mw": {
+      "description": "Minimum project power capacity filter in megawatts (MW), e.g. 50 for hyperscale",
+      "type": "number"
+     },
+     "expected_completion_before": {
+      "description": "Only projects with expected commissioning before this ISO-8601 date (YYYY-MM-DD), e.g. 2027-01-01",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "offset": {
+      "description": "Pagination offset, 0-based (skip this many results)",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+     }
+    }
+   },
+   "annotations": {
+    "title": "Construction Pipeline",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_power_availability_timeline",
+   "title": "Get Power Availability Timeline",
+   "description": "Show year by year when power gets easier in one US state: new generation by confidence class, scheduled retirements, and interconnection-queue depth.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "state": {
+      "type": "string",
+      "description": "2-letter US state code (required), e.g. OH, GA, TX — the timeline grain; a state can span ISOs and the response reports ISO membership as context"
+     },
+     "years": {
+      "description": "Window in years from now, 1-6 (default 5)",
+      "type": "number"
+     },
+     "mw": {
+      "description": "Optional target MW for CONTEXT ONLY — echoed back with an explicit note; never converted into an energize-by date, which this data cannot honestly state",
+      "type": "number"
+     }
+    },
+    "required": [
+     "state"
+    ]
+   },
+   "annotations": {
+    "title": "Get Power Availability Timeline",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_power_pipeline",
+   "title": "Get Power Pipeline",
+   "description": "List planned and under-construction US power generators from EIA-860M, including non-ISO regions. Filter by state, balancing authority, status or minimum MW.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "state": {
+      "description": "US state abbreviation to filter generators, e.g. VA, TX",
+      "type": "string"
+     },
+     "ba": {
+      "description": "Balancing-authority / ISO code, e.g. PJM, ERCO, SOCO, TVA, AZPS",
+      "type": "string"
+     },
+     "status": {
+      "description": "Generator status code: P/L/T (planned), U/V (under construction), TS (testing)",
+      "type": "string"
+     },
+     "min_mw": {
+      "description": "Minimum nameplate capacity filter in megawatts (MW)",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Power Pipeline",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_refined_queue",
+   "title": "Get Refined Queue",
+   "description": "Filter the US ISO interconnection queue server-side by size, wait time, ISO, fuel, status, fiber distance and geocoding, and return only matching projects.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "min_mw": {
+      "description": "Minimum project capacity in MW, e.g. 1000 for 1 GW+",
+      "type": "number"
+     },
+     "max_ttp_months": {
+      "description": "Max time-to-power in months (ISO-level avg interconnection wait; HARD cut keeping projects in ISOs at/under this — PJM ~51, CAISO ~40, ISO-NE ~34, MISO ~34, ERCOT ~33, NYISO ~31, SPP ~24; <=30 leaves only SPP)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120
+     },
+     "iso": {
+      "description": "Restrict to one or more ISOs, comma-separated for a union: PJM, ERCOT, MISO, CAISO, SPP, NYISO, ISONE (ISO-NE). e.g. iso=ERCOT,PJM. Omit for all; combines with max_ttp_months as an intersection",
+      "type": "string"
+     },
+     "baseload_only": {
+      "description": "Keep only firm/dispatchable fuel (nuclear, gas, steam, geothermal, hydro, coal); exclude wind/solar/storage. Firm-vs-intermittent split only — does NOT sub-divide peaker vs combined-cycle gas (no duty-cycle field in the queue). Default false",
+      "type": "boolean"
+     },
+     "fuel_type": {
+      "description": "Isolate a fuel by inclusive substring match on the raw label; comma/semicolon-separated for a union, e.g. 'gas' hits GAS/Natural Gas, 'nuclear,hydro' unions both. Runs the fuel filter server-side instead of post-filtering survivors in context",
+      "type": "string"
+     },
+     "status": {
+      "description": "Queue status filter. Default 'active' = still progressing (excludes withdrawn/cancelled/suspended/in-commercial-operation) — cross-ISO safe (SPP labels live projects 'IA FULLY EXECUTED/ON SCHEDULE' not 'active'). Pass 'all' for every status, or a literal label to substring-match",
+      "type": "string"
+     },
+     "max_fiber_km": {
+      "description": "Keep only survivors within N km of the nearest MAPPED long-haul fiber route endpoint — coarse backbone proximity from a sparse ~260-node dataset over a county-centroid origin, NOT last-mile fiber. Implies geocoded rows only",
+      "type": "number"
+     },
+     "geocoded_only": {
+      "description": "Default false",
+      "type": "boolean"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Refined Queue",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_renewable_energy",
+   "title": "Renewable Energy",
+   "description": "Get renewable energy data for a US state or location: renewable generation mix and resource inputs for PPA sizing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "energy_type": {
+      "description": "Renewable type: \"solar\", \"wind\", or \"combined\"; omit for all",
+      "type": "string"
+     },
+     "state": {
+      "description": "US state abbreviation, e.g. TX, VA, AZ",
+      "type": "string"
+     },
+     "lat": {
+      "description": "Optional latitude in decimal degrees (-90 to 90) to find nearest projects within 50mi",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Optional longitude in decimal degrees (-180 to 180) to find nearest projects within 50mi",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Renewable Energy",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_retirement_headroom",
+   "title": "Get Retirement Headroom",
+   "description": "Find scheduled generator retirements within a time horizon that could free grid capacity for a target MW, with the nearest substations to each.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "target_mw": {
+      "type": "number",
+      "description": "Minimum required headroom in megawatts (MW) — filters to retiring generators at/above this size."
+     },
+     "horizon_months": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120,
+      "description": "Time horizon in months to look ahead for planned retirements, 1-120 (e.g., 12, 18, 36)."
+     },
+     "region_iso": {
+      "description": "Optional target region or ISO (e.g., 'MISO', 'PJM', 'ERCOT', 'SPP', 'CAISO', 'NYISO', 'ISONE'). Matches the generator's own EIA balancing-authority code — real market boundaries, not state lines. Comma-separated for a union.",
+      "type": "string"
+     },
+     "fuel_filter": {
+      "description": "Optional filter for retiring fuel categories, substring-matched (e.g., 'Coal', 'Natural Gas', 'Petroleum').",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    },
+    "required": [
+     "target_mw",
+     "horizon_months"
+    ]
+   },
+   "annotations": {
+    "title": "Get Retirement Headroom",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_subsea_cables",
+   "title": "Get Subsea Cables",
+   "description": "List subsea cable landing points near a coordinate, or the catalogue of tracked subsea cables.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Latitude of the site, e.g. 36.85 — with lon, returns landing points near it; omit both for the cable catalogue",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Longitude of the site, e.g. -75.98",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "radius_km": {
+      "description": "Search radius in km around lat/lon for landing points (default 200)",
+      "type": "number"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Get Subsea Cables",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_tax_incentives",
+   "title": "Tax Incentives",
+   "description": "List data-center tax incentive programs for a US state: sales-tax exemptions, property-tax abatements and other programs, with thresholds.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "state": {
+      "description": "US state abbreviation (required), e.g. VA, TX, AZ",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Tax Incentives",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "get_water_risk",
+   "title": "Water Risk",
+   "description": "Get water-stress risk for a US lat/lon or state, for cooling-water planning.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "description": "Site latitude in decimal degrees (-90 to 90) for the most precise water-risk read, e.g. 33.45",
+      "type": "number"
+     },
+     "lon": {
+      "description": "Site longitude in decimal degrees (-180 to 180), e.g. -112.07",
+      "type": "number"
+     },
+     "latitude": {
+      "description": "Alias for lat — either name works",
+      "type": "number"
+     },
+     "lng": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "longitude": {
+      "description": "Alias for lon — either name works",
+      "type": "number"
+     },
+     "state": {
+      "description": "US state abbreviation as an alternative to lat/lon, e.g. AZ",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Water Risk",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "grid_transition_radar",
+   "title": "Grid Transition Radar",
+   "description": "List US markets and ISOs with the strongest near-term signal of new grid headroom for large loads, with an ISO rollup.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "max_months": {
+      "description": "Maximum acceptable time-to-power in months for the emergence signal, 1-120, e.g. 24",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120
+     },
+     "limit": {
+      "description": "Number of emerging markets to return",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Grid Transition Radar",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "hyperscaler_deals",
+   "title": "Hyperscaler Deal Tracker",
+   "description": "List recent hyperscaler and AI infrastructure deals and announcements, with amounts and MW where stated.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "limit": {
+      "description": "Number of recent AI-capex deals to return (default 20)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Hyperscaler Deal Tracker",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "list_transactions",
+   "title": "M&A Transactions",
+   "description": "List data-center M&A and capital transactions since 2019. Filter by buyer, seller, deal value, deal type, date range or region.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "buyer": {
+      "description": "Filter by acquiring company name, e.g. Blackstone, KKR, Digital Realty",
+      "type": "string"
+     },
+     "seller": {
+      "description": "Filter by selling/target company name, e.g. CyrusOne",
+      "type": "string"
+     },
+     "min_value_usd": {
+      "description": "Minimum disclosed deal value in US dollars, e.g. 1000000000 for USD 1B+",
+      "type": "number"
+     },
+     "max_value_usd": {
+      "description": "Maximum disclosed deal value in US dollars",
+      "type": "number"
+     },
+     "deal_type": {
+      "description": "Deal type filter, e.g. acquisition, jv, refinance, recap",
+      "type": "string"
+     },
+     "date_from": {
+      "description": "Earliest deal date, ISO-8601 (YYYY-MM-DD)",
+      "type": "string"
+     },
+     "date_to": {
+      "description": "Latest deal date, ISO-8601 (YYYY-MM-DD)",
+      "type": "string"
+     },
+     "region": {
+      "description": "Geographic region filter, e.g. us, eu, apac, americas",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "offset": {
+      "description": "Pagination offset, 0-based (skip this many results)",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+     }
+    }
+   },
+   "annotations": {
+    "title": "M&A Transactions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "plan_fiber_leadin",
+   "title": "Plan Fiber Leadin",
+   "description": "Plan diverse road-following fiber lead-in routes from a site to a carrier hotel or POP, with distances, indicative build cost and shared-corridor points.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "from": {
+      "type": "string",
+      "description": "Origin site as \"lat,lng\" OR a street address, e.g. \"250 Paringa Road, Murarrie QLD\""
+     },
+     "to": {
+      "type": "string",
+      "description": "Destination carrier hotel/POP as \"lat,lng\" OR an address, e.g. \"20 Wharf Street, Brisbane City QLD\""
+     },
+     "n": {
+      "description": "Number of diverse routes to plan, 1-6 (default 4)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6
+     },
+     "fibre": {
+      "description": "Fibre count spec for cost estimate: \"720F\" or \"1440F\"",
+      "type": "string"
+     },
+     "bore_m": {
+      "description": "River/rail bore length in metres to add to the route, 0-100000 (optional)",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+     }
+    },
+    "required": [
+     "from",
+     "to"
+    ]
+   },
+   "annotations": {
+    "title": "Plan Fiber Leadin",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "plan_query",
+   "title": "Plan Query",
+   "description": "Show the step-by-step tool plan DC Hub would run for a question, without running it.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "intent": {
+      "type": "string",
+      "description": "Natural-language description of what you are trying to find out, e.g. \"rank markets for a 200MW AI campus\" or \"how much power is available in ERCOT\""
+     },
+     "context": {
+      "description": "Optional structured hints: {lat, lon, iso, market, capacity_mw, candidate_id, state (2-letter), since} — sharpens args_hint values and routing (e.g. lat/lon boosts the site-analysis route)"
+     }
+    },
+    "required": [
+     "intent"
+    ]
+   },
+   "annotations": {
+    "title": "Plan Query",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "predict_market_trajectory",
+   "title": "Predict Market Trajectory",
+   "description": "Project a market's DCPI excess-power and constraint scores 1-8 quarters ahead from its daily history, with confidence bands.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "market_slug": {
+      "type": "string",
+      "description": "Market slug (metro), e.g. dallas, phoenix, northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank"
+     },
+     "horizon_quarters": {
+      "description": "Forecast horizon in quarters (1-8, default 4); 2 = ~6 months ahead",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8
+     }
+    },
+    "required": [
+     "market_slug"
+    ]
+   },
+   "annotations": {
+    "title": "Predict Market Trajectory",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "rank_markets",
+   "title": "Rank Markets",
+   "description": "Rank data-center markets by a chosen criterion, optionally within a region or above a minimum capacity.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "criteria": {
+      "description": "Ranking criterion: \"cheapest_power\", \"most_capacity\", \"most_operators\", \"fastest_growing\", \"best_overall\" (default), or \"ai_ready\" (DCPI buildability — where new AI load can land, for AI-campus siting; region us/global)",
+      "type": "string"
+     },
+     "region": {
+      "description": "Region scope: \"global\", \"us\" (default), \"canada\", \"eu\", \"apac\", or \"americas\"",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Number of markets to return, 1-50 (default 10)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "min_capacity_mw": {
+      "description": "Minimum existing capacity filter in megawatts (MW), e.g. 100",
+      "type": "number"
+     },
+     "fields": {
+      "description": "Return ONLY these row fields (array or comma string) — a token diet.",
+      "anyOf": [
+       {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
+     "projection": {
+      "description": "Named field preset, cheaper to send than a field list: market_summary (ranking rows), siting_summary (site/point rows), identity_only (ids + names).",
+      "type": "string",
+      "enum": [
+       "siting_summary",
+       "market_summary",
+       "identity_only"
+      ]
+     }
+    }
+   },
+   "annotations": {
+    "title": "Rank Markets",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "rank_sites",
+   "title": "Rank Sites",
+   "description": "Rank candidate sites you pass in (each with lat/lng and metric fields) under hard constraints and weighted objectives, with a normalized score per site.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "candidates": {
+      "description": "Array of candidate objects. Legacy: {id?, lat?, lng?, <metric fields>} flat objects also work. Omit if using shortlist_name"
+     },
+     "shortlist_name": {
+      "type": "string"
+     },
+     "constraints": {
+      "description": "Hard filters {field: {min?, max?}} — a candidate missing a constrained field is dropped (fail-closed). e.g. {\"risk_resilience\": {\"min\": 70}, \"estimated_ttp_months\": {\"max\": 34}}"
+     },
+     "objectives": {
+      "description": "Weighted objectives {field: signedWeight} — +weight maximizes, -weight minimizes. e.g. {\"water_stress\": -0.6, \"fiber_km\": -0.4}. Omit with shortlist_name to reuse the shortlist's saved objectives; required with candidates"
+     },
+     "absolute": {
+      "type": "boolean"
+     },
+     "percentile": {
+      "description": "true = score each objective as its PERCENTILE against the viable-site POPULATION (\"better than X% of viable sites\") — the strongest cross-run + cross-region comparability. Takes precedence over absolute",
+      "type": "boolean"
+     },
+     "require_complete": {
+      "description": "true = DROP any candidate missing one or more of your (validated) objectives — dropped candidates are DECLARED in excluded_incomplete, never silent. Default false keeps incomplete candidates ranked on their carried objectives with missing_objectives flagged. Recommended true for autonomous take-rank-1 workflows (an incomplete candidate can otherwise top the ranking on its single best metric).",
+      "type": "boolean"
+     },
+     "top_k": {
+      "description": "How many top-ranked sites to return (1-50, default 3)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+     }
+    }
+   },
+   "annotations": {
+    "title": "Rank Sites",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "research_task",
+   "title": "Research Dossier (async)",
+   "description": "Request a cited research brief on a data-center question from DC Hub's news, deals, facilities and market analyses. Returns the brief, or a task_id to check back with.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "question": {
+      "description": "The research question (min 12 chars) — omit when polling with task_id",
+      "type": "string"
+     },
+     "task_id": {
+      "description": "Poll an earlier submission: the task_id returned by a previous research_task call",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Research Dossier (async)",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "score_facility",
+   "title": "Score Facility",
+   "description": "Score one existing facility 0-100 across power, fiber, water, climate risk, tax environment, talent pool and expansion room.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "facility_id": {
+      "type": "string",
+      "description": "The facility id/slug to score (required), from a prior search_facilities result"
+     },
+     "weighting": {
+      "description": "Scoring profile: \"balanced\" (default), \"power_priority\", \"risk_priority\", or \"expansion_priority\"",
+      "type": "string"
+     }
+    },
+    "required": [
+     "facility_id"
+    ]
+   },
+   "annotations": {
+    "title": "Score Facility",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "search",
+   "title": "Search",
+   "description": "Search DC Hub for data-center facilities matching a text query. Returns a list of {id, title, url}; pass an id to fetch for the record.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Free-text query, e.g. \"data centers in Northern Virginia\" or \"Ashburn hyperscale power\""
+     }
+    },
+    "required": [
+     "query"
+    ]
+   },
+   "annotations": {
+    "title": "Search",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "search_facilities",
+   "title": "Search Facilities",
+   "description": "Search data-center facilities by name, country, state, city, operator, capacity range (MW) or Uptime tier. Returns matching facilities with location, operator and capacity where known.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "description": "Free-text search over facility name/operator/location (mapped to the backend `q` param), e.g. \"hyperscale Ashburn\"",
+      "type": "string"
+     },
+     "country": {
+      "description": "ISO 3166-1 alpha-2 country code, e.g. US, GB, SG",
+      "type": "string"
+     },
+     "state": {
+      "description": "US state abbreviation or region, e.g. VA, TX",
+      "type": "string"
+     },
+     "city": {
+      "description": "City name to filter facilities, e.g. Ashburn, Dallas",
+      "type": "string"
+     },
+     "operator": {
+      "description": "Operator/provider company name, e.g. Equinix, Digital Realty",
+      "type": "string"
+     },
+     "min_capacity_mw": {
+      "description": "Minimum power capacity filter in megawatts (MW)",
+      "type": "number"
+     },
+     "max_capacity_mw": {
+      "description": "Maximum power capacity filter in megawatts (MW)",
+      "type": "number"
+     },
+     "tier": {
+      "description": "Uptime Institute tier filter (1-4)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+     },
+     "limit": {
+      "description": "Max results to return (1-500; default varies by tool)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     },
+     "offset": {
+      "description": "Pagination offset, 0-based (skip this many results)",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+     }
+    }
+   },
+   "annotations": {
+    "title": "Search Facilities",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "search_intelligence",
+   "title": "Search Intelligence",
+   "description": "Search DC Hub news, M&A deals, facilities and market analyses by meaning, choosing corpora by name. Same retrieval as semantic_search with a different call shape.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "description": "Natural-language query (required), e.g. \"grids opening up for AI load in the Southeast\"",
+      "type": "string"
+     },
+     "q": {
+      "description": "Alias for query",
+      "type": "string"
+     },
+     "corpus": {
+      "description": "Optional corpus to restrict to: news | deals | facilities | market_narratives. CSV of several is allowed; default searches all.",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Max results to return, 1-15 (default 8)",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Search Intelligence",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "semantic_search",
+   "title": "Semantic Search",
+   "description": "Search DC Hub news, M&A deals, facilities and market analyses by meaning rather than keywords. Returns ranked records with source fields for citation.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "q": {
+      "description": "Natural-language query (required), e.g. \"grids opening up for AI load in the Southeast\"",
+      "type": "string"
+     },
+     "query": {
+      "description": "Alias for q — the same natural-language query; send exactly one of q/query",
+      "type": "string"
+     },
+     "corpus": {
+      "description": "Optional CSV of corpora: news_articles, deals, discovered_facilities, market_narratives (default: all)",
+      "type": "string"
+     },
+     "k": {
+      "description": "Number of results, 1-15 (default 8)",
+      "type": "number"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Semantic Search",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "simulate_scenario",
+   "title": "Market Scenario Simulator",
+   "description": "Re-score DC Hub power markets under what-if changes you set (power price, time to power, queue wait, reserve margin, curtailment) and show how rankings move.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "avg_kwh_cents_pct": {
+      "description": "Power price % change, e.g. 30 for +30% or -20 for -20%",
+      "type": "number"
+     },
+     "time_to_power_months_delta": {
+      "description": "Months added (+) or removed (-) from time-to-power, e.g. 12",
+      "type": "number"
+     },
+     "queue_wait_months_delta": {
+      "description": "Months added/removed from interconnection queue wait",
+      "type": "number"
+     },
+     "reserve_margin_pct_delta": {
+      "description": "Percentage POINTS added/removed from reserve margin, e.g. -5",
+      "type": "number"
+     },
+     "curtailment_pct_delta": {
+      "description": "Percentage POINTS added/removed from curtailment",
+      "type": "number"
+     },
+     "market": {
+      "description": "Score ONE market by slug (optional), e.g. abilene — slugs from rank_markets",
+      "type": "string"
+     },
+     "top_n": {
+      "description": "Markets to return, ranked by |score delta| (default 10)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 25
+     }
+    }
+   },
+   "annotations": {
+    "title": "Market Scenario Simulator",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "site_selection_canvas",
+   "title": "Site Selection Canvas",
+   "description": "Shortlist US markets for a capacity target, geography and deadline, ranked by DCPI verdict, excess-power headroom and time to power.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "capacity_mw": {
+      "description": "Target power load for the build in megawatts (MW), 1-5000, e.g. 100",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+     },
+     "region": {
+      "description": "Geography scope: a US state code like TX, an ISO like ERCOT, or a region like us/apac. `state` and `iso` are accepted as aliases for this same filter.",
+      "type": "string"
+     },
+     "state": {
+      "description": "US state code, e.g. OH — alias for `region`. Use either; `region` wins if both are sent.",
+      "type": "string"
+     },
+     "iso": {
+      "description": "ISO/RTO code, e.g. ERCOT or PJM — alias for `region`. Use either; `region` wins if both are sent.",
+      "type": "string"
+     },
+     "max_months": {
+      "description": "Maximum acceptable time-to-power in months, 1-120, e.g. 24",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120
+     },
+     "verdict": {
+      "description": "Optional DCPI verdict filter: BUILD, CAUTION, or AVOID — or ALL to see every scored market in the geography. Defaults to BUILD,CAUTION, so a geography whose markets are all AVOID returns matched:0 plus an `empty_result` block explaining that; re-run with verdict=ALL to see those rows.",
+      "type": "string"
+     },
+     "limit": {
+      "description": "Number of shortlist markets to return",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+     }
+    }
+   },
+   "annotations": {
+    "title": "Site Selection Canvas",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  },
+  {
+   "name": "summarize_for_citation",
+   "title": "Citation Block",
+   "description": "Build an attribution line for a DC Hub figure you are about to quote, with the licence that applies to its data layer.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "subject": {
+      "description": "What you are citing, in the words you will show the human, e.g. \"Ashburn DCPI verdict\" or \"ERCOT interconnection queue depth\"",
+      "type": "string"
+     },
+     "as_of": {
+      "description": "The as_of you read off the cited response (provenance.as_of). Omit it and the line says RETRIEVED instead of claiming a data date.",
+      "type": "string"
+     },
+     "url": {
+      "description": "The profile_url or dcpi_url from the cited row. Must be a dchub.cloud URL; anything else is dropped and named in `omitted`.",
+      "type": "string"
+     },
+     "completeness": {
+      "description": "The completeness flag from the cited response, if it carried one",
+      "type": "string"
+     },
+     "layer": {
+      "description": "Which layer the figure came from: dcpi | grid_analysis | facility_inventory | physical_infrastructure | deals | other. Decides the licence line; omit and you get the scoped statement rather than a grant.",
+      "type": "string"
+     }
+    }
+   },
+   "annotations": {
+    "title": "Citation Block",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+   },
+   "execution": {
+    "taskSupport": "forbidden"
+   }
+  }
+ ]
+}
