@@ -27,13 +27,30 @@ const UA = { 'user-agent': 'Claude-User' };
 let H, fence;
 const runs = {};
 
+// Usage rows and beacons are fire-and-forget, sent after the response. Wait
+// until the stub backend has been quiet for 400 ms (max 8 s) before closing a
+// run's window, so a late row from the /mcp control can never land in the
+// /mcp/claude window (CI run 36228865348: an untagged execute_plan_steps row
+// from the control was counted against /mcp/claude on a slow runner).
+async function settle(quietMs = 400, maxMs = 8000) {
+  const t0 = Date.now();
+  let n = H.hits.length, last = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await new Promise((r) => setTimeout(r, 50));
+    if (H.hits.length !== n) { n = H.hits.length; last = Date.now(); }
+    else if (Date.now() - last >= quietMs) return;
+  }
+}
+
 async function run(path) {
+  await settle();
   const before = H.hits.length;
   const counts0 = new Map(H.S._chCounts);
   const init = await H.init(path, 'claude-ai', UA);
   const sid = init.headers.get('mcp-session-id');
   const hdr = sid ? { ...UA, 'mcp-session-id': sid } : UA;
   for (const t of TOOLS) await H.call(path, t, GUESS_ARGS, hdr);
+  await settle();
   const hits = H.hits.slice(before);
   const counts = new Map(H.S._chCounts);
   const delta = {};
