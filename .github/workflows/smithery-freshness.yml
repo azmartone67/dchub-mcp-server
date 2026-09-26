@@ -496,7 +496,7 @@ jobs:
           fi
           BODY=$(jq -cn --arg s "$STATUS" --arg n "$NOTE" '{feed:"smithery-freshness",status:$s,cadence_hours:24,note:$n}')
           echo "beat: $BODY"
-          curl -fsS -X POST "https://dchub.cloud/api/v1/admin/ingest-runs/beat" \
+          curl -fsS -X POST "https://dchub-backend-production.up.railway.app/api/v1/admin/ingest-runs/beat" \
             -H "Content-Type: application/json" \
             -H "X-Admin-Key: $DCHUB_ADMIN_KEY" \
             -H "User-Agent: dchub-smithery-freshness/1.0" \

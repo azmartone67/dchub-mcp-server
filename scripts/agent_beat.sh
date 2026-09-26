@@ -50,7 +50,7 @@
 #   curl -s https://dchub.cloud/api/v1/ops/deadman | grep -o 'agent:[a-z-]*'
 # ─────────────────────────────────────────────────────────────────────────────
 
-AGENT_BEAT_URL="${AGENT_BEAT_URL:-https://dchub.cloud/api/v1/admin/ingest-runs/beat}"
+AGENT_BEAT_URL="${AGENT_BEAT_URL:-https://dchub-backend-production.up.railway.app/api/v1/admin/ingest-runs/beat}"
 AGENT_BEAT_ENV="${AGENT_BEAT_ENV:-$HOME/.config/dchub/agent.env}"
 
 # Resolve the admin key WITHOUT echoing it. Env first, then a mode-restricted
