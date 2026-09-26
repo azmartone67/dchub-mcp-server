@@ -1,0 +1,66 @@
+# Claude Connectors Directory listing copy for DC Hub (paste into the submission portal)
+#
+# Written 2026-09-26 for https://dchub.cloud/mcp/claude (lib/claude-directory.mjs).
+# Submit AFTER the 2026-10-01 relay readout. Quantities are from
+# canonical/canon_phrases.json (retrieved 2026-09-24); re-check them against
+# https://dchub.cloud/api/v1/canon/phrases on the day you paste.
+# Written against https://claude.com/docs/connectors/building/review-criteria and
+# https://support.claude.com/en/articles/13145358 (Software Directory Policy):
+# plain descriptions, no prices, no superlatives, read-only tools, three or more
+# working example prompts, privacy policy, support contact and documentation.
+# Lines starting with # are notes for the owner and are not pasted.
+
+== Name ==
+DC Hub
+
+== Server URL ==
+https://dchub.cloud/mcp/claude
+
+== Short description ==
+Data on data-center facilities, markets, power grids, fiber, site risk and deals.
+
+== Long description ==
+DC Hub is a data service about the physical infrastructure behind data centers. This connector gives Claude 67 read-only tools over DC Hub's database: 24,600+ data-center facilities, 300+ markets scored with the DC Hub Power Index (DCPI), US grid operators and their interconnection queues, power plants and planned generation, gas pipelines, fiber routes and subsea cables, water stress and natural-hazard risk, tax incentives, permitting and moratorium records, and data-center deals and news.
+
+Use it to look up a facility or an operator, compare markets or grid operators, check power availability and queue depth, assess the risks at a specific site, or find recent transactions. A planning tool (execute_plan) answers a question that spans several of these areas in one call and shows which lookups it ran.
+
+Responses include an as_of timestamp and a citation for each figure. Without a DC Hub account some results are previews: withheld fields are marked, and the result says that the full result needs a DC Hub plan. The connector does not take actions, send messages or change any data.
+
+== Example prompts ==
+1. Which US data-center markets have the most power headroom for a 200 MW AI campus in the next two years?
+2. Compare PJM and ERCOT for a 100 MW data center: fuel mix, interconnection-queue depth and time to power.
+3. List the data centers under construction in Northern Virginia with their planned capacity.
+4. What are the flood, wildfire and water-stress risks at latitude 33.45, longitude -112.07?
+5. Which data-center acquisitions over 1 billion US dollars were announced this year, and who were the buyers?
+
+== Authentication ==
+Optional. The connector works without an account and returns preview results.
+Signing in with a DC Hub account (OAuth 2.0, hosted by WorkOS AuthKit) returns the full results that account's plan includes.
+
+# Owner notes on auth (not for pasting):
+# - OAuth on /mcp/claude needs the protected-resource metadata at
+#   https://dchub.cloud/.well-known/oauth-protected-resource/mcp/claude to say
+#   "resource": "https://dchub.cloud/mcp/claude". Today the Cloudflare worker
+#   (dchub-frontend _worker.js, the /.well-known/oauth-protected-resource block)
+#   answers "https://dchub.cloud/mcp" for every suffix. Fix that before choosing
+#   OAuth in the portal; until then choose "No authentication".
+# - A key can also be passed in the URL for a custom connector:
+#   https://dchub.cloud/mcp/claude?api_key=<key>. It is not the directory's auth
+#   method (the policy asks for OAuth 2.0 where auth is required); do not put it
+#   in the listing.
+# - Test credentials: the portal requires a test account with a fully
+#   populated plan. Provide a DC Hub account with site-analysis access so
+#   analyze_site, compare_sites, get_composite_site_score and
+#   generate_site_analysis return full results for the reviewer.
+
+== Support contact ==
+jonathan@dchub.cloud
+
+== Privacy policy ==
+https://dchub.cloud/privacy
+
+== Documentation ==
+https://dchub.cloud/integrations/mcp
+
+== Tools (67, all read-only) ==
+search, fetch, execute_plan, search_facilities, get_facility, get_market_intel, get_market_dcpi_rank, predict_market_trajectory, get_gas_index, get_grid_scoreboard, compare_isos, get_intelligence_index, list_transactions, get_news, semantic_search, search_intelligence, get_market_context, get_iso_context, get_pipeline, get_power_pipeline, get_infra_projects, get_power_availability_timeline, get_global_power, get_interconnection_queue, get_refined_queue, get_retirement_headroom, get_hosting_capacity, analyze_parcel, rank_sites, discover_tools, plan_query, get_grid_data, get_changes, get_facility_risk_delta, find_sites, analyze_site, compare_sites, get_composite_site_score, generate_site_analysis, get_disaster_risk, get_climate_intel, get_infrastructure, get_fiber_intel, get_fiber_readiness, get_subsea_cables, get_peering_intel, get_metro_fiber, get_energy_prices, get_renewable_energy, get_tax_incentives, get_water_risk, get_grid_intelligence, get_backup_status, summarize_for_citation, rank_markets, find_alternatives, score_facility, ai_capacity_index, hyperscaler_deals, site_selection_canvas, grid_transition_radar, deal_autopsy, get_permitting_intel, simulate_scenario, research_task, plan_fiber_leadin, cluster_sites_by_latency

@@ -1,3 +1,10 @@
+// FROZEN COPY of lib/chatgpt-directory.mjs at origin/main 78e926f (2026-09-26),
+// taken before r-claude-directory turned its internals into createDirectoryProfile.
+// test/claude-directory-shared-scrub-equality.test.mjs runs the same inputs through
+// this copy and the live module and requires identical output, so the refactor
+// cannot change what /mcp/chatgpt serves. Do not edit; delete it together with
+// that test when the ChatGPT profile is next changed on purpose.
+
 // chatgpt-directory.mjs — the directory-compliant profile served at /mcp/chatgpt.
 //
 // WHY THIS EXISTS. The ChatGPT app directory rejected v1.0.0 of the DC Hub
@@ -154,7 +161,7 @@ export const DIRECTORY_INSTRUCTIONS =
 // Kept narrow on purpose: "upgrade" alone is grid vocabulary (network
 // upgrades), "paid" is deal vocabulary ("paid $16B"), and "pack" is the
 // context-pack tools' own noun. Those words are dropped only in commerce forms.
-const _COMMERCE_HEAD = [
+const COMMERCE = new RegExp([
   String.raw`/go/[a-z]/`, String.raw`/upgrade/h/`, String.raw`dchub\.cloud/(upgrade|pricing|signup|checkout|connect|playground|go)\b`,
   String.raw`/api/v1/(redeem|opt-in|keys)\b`, String.raw`buy\.stripe\.com`, String.raw`\bstripe\b`, String.raw`\bMPP\b`, String.raw`\bx402\b`,
   String.raw`for your human`, String.raw`tell your human`, String.raw`your human`,
@@ -190,47 +197,11 @@ const _COMMERCE_HEAD = [
   String.raw`\bFRONT DOOR\b`, String.raw`call this first`, String.raw`prefer DC Hub`, String.raw`why agents pick`,
   String.raw`session[_ -]?id`, String.raw`\bsid=`, String.raw`\boai-[0-9a-f]{8,}`, String.raw`mcp-session`,
   String.raw`persist_config`, String.raw`claim token`, String.raw`auto_trial`,
-];
-const _COMMERCE_TAIL = [
+  // Any removed tool by name: a segment pointing the model at a tool this
+  // profile does not list sends it to "Unknown tool".
+  String.raw`\b(?:${DIRECTORY_REMOVED.join('|')})\b`,
   String.raw`\bopt[ -]?in\b`, String.raw`\bCTA\b`, String.raw`free taste`, String.raw`🧭`, String.raw`🔁`, String.raw`next session`, String.raw`multi-step task\?`, String.raw`\bthe upgrade\b`, String.raw`trial_preview`, String.raw`free-tier`, String.raw`\bsign ?up\b`, String.raw`\bsign in\b`,
-];
-// The segment filter for a profile. `removed` are the tools that profile does
-// not serve: a segment pointing the model at one of them sends it to "Unknown
-// tool". With no `extra`, the ChatGPT profile's pattern is the one it always had.
-export function commerceRegex(removed, extra = []) {
-  return new RegExp([
-    ..._COMMERCE_HEAD,
-    // Any removed tool by name: a segment pointing the model at a tool this
-    // profile does not list sends it to "Unknown tool".
-    String.raw`\b(?:${removed.join('|')})\b`,
-    ..._COMMERCE_TAIL,
-    ...extra,
-  ].join('|'), 'i');
-}
-
-// ── Structured scrub ────────────────────────────────────────────────────────
-// Keys dropped wherever they appear: commerce, key and session plumbing,
-// steering, and per-call metadata the directory's minimisation rule excludes.
-const _DROP_KEY_PARTS = [
-  'for_your_human', '_?upgrade.*', '.*unlock.*', '.*checkout.*', 'pricing.*', 'price_label', 'paywall.*',
-  '_?trial.*', 'auto_trial.*', 'mpp.*', 'x402.*', 'machine_pay.*', 'agent_payment', 'payment.*', 'pay_arg', 'credential_.*',
-  'credits?(_.*)?', 'pro_.*', 'developer_(url|usd.*|hint)', 'enterprise_(url|usd.*|note|offer|licensing.*)', 'pack_.*', 'buy.*',
-  'claim.*', 'persist.*', 'retry_with_header', 'retry_instructions', 'x-api-key', 'api_key', 'key', 'held_key.*',
-  'connect_url', 'signup_url', 'redeem_url', 'web_explore_url', 'optin.*', 'opt_in.*', 'digest_offer', 'first_call_nudge',
-  '_?front_door.*', '_end_of_burst', 'next_recipe', '_agent_instruction', 'next_tool.*', 'next_step.*', 'next_session', 'come_back', 'retention_tools',
-  'relay.*', 'handoff.*', '_?cta', 'cta_.*', 'human_message', 'render', 'required_plan', 'tier_required', 'plans',
-  'session.*', 'sid', 'mcp_session.*', 'request_id', 'trace_id', 'span_id', '_debug', '_telemetry',
-  'identity', 'quota', 'platform', 'caller_tier', 'auth_.*', 'continuation', 'continuations', '_meta',
-  // Live verify 2026-09-25: get_grid_data's gated block (email_capture,
-  // agent_action, enterprise_note, gating_matrix, learn) and source_capacity's
-  // viewer.sign_in_url + program.register_interest.
-  'email_capture', 'capture_email.*', 'agent_action', 'gating_matrix', 'learn',
-  '.*sign_in.*', 'register_interest', 'interest_registration',
-  'what_unlocks', 'after_checkout', 'next_call_full_after_checkout', 'preview_warning', 'fields_unlocked',
-];
-export function dropKeyRegex(extra = []) {
-  return new RegExp('^(' + [..._DROP_KEY_PARTS, ...extra].join('|') + ')$', 'i');
-}
+].join('|'), 'i');
 
 // Last-line redactions, applied to whatever survives the segment filter. These
 // are the probe's hard patterns; a match here means the segment filter missed
@@ -260,6 +231,46 @@ function scrubUrl(s) {
   } catch (_) { return s; }
 }
 
+// Split prose into segments at line breaks and sentence ends; drop the ones
+// that sell, then tidy separators the removal orphaned.
+export function scrubText(s) {
+  if (typeof s !== 'string' || !s) return s;
+  if (/^https?:\/\/\S+$/i.test(s.trim())) {
+    const u = scrubUrl(s.trim());
+    return COMMERCE.test(u) ? '' : u;
+  }
+  const lines = s.split('\n').map((line) => {
+    const parts = line.split(/(?<=[.!?;])\s+(?=[A-Z0-9"'`(*_\[→•\-\u{1F300}-\u{1FAFF}☀-➿])/u);
+    return parts.filter((p) => !COMMERCE.test(p)).join(' ');
+  });
+  let out = lines.join('\n');
+  for (const [re, rep] of HARD_REDACT) out = out.replace(re, rep);
+  out = out.replace(DOLLAR, 'USD ');
+  out = out.replace(/(^|\n)\s*-{3,}\s*(?=\n|$)/g, '$1').replace(/\n{3,}/g, '\n\n');
+  return out.trim() === '' ? '' : out.replace(/\s+$/, '');
+}
+
+// ── Structured scrub ────────────────────────────────────────────────────────
+// Keys dropped wherever they appear: commerce, key and session plumbing,
+// steering, and per-call metadata the directory's minimisation rule excludes.
+const DROP_KEY = new RegExp('^(' + [
+  'for_your_human', '_?upgrade.*', '.*unlock.*', '.*checkout.*', 'pricing.*', 'price_label', 'paywall.*',
+  '_?trial.*', 'auto_trial.*', 'mpp.*', 'x402.*', 'machine_pay.*', 'agent_payment', 'payment.*', 'pay_arg', 'credential_.*',
+  'credits?(_.*)?', 'pro_.*', 'developer_(url|usd.*|hint)', 'enterprise_(url|usd.*|note|offer|licensing.*)', 'pack_.*', 'buy.*',
+  'claim.*', 'persist.*', 'retry_with_header', 'retry_instructions', 'x-api-key', 'api_key', 'key', 'held_key.*',
+  'connect_url', 'signup_url', 'redeem_url', 'web_explore_url', 'optin.*', 'opt_in.*', 'digest_offer', 'first_call_nudge',
+  '_?front_door.*', '_end_of_burst', 'next_recipe', '_agent_instruction', 'next_tool.*', 'next_step.*', 'next_session', 'come_back', 'retention_tools',
+  'relay.*', 'handoff.*', '_?cta', 'cta_.*', 'human_message', 'render', 'required_plan', 'tier_required', 'plans',
+  'session.*', 'sid', 'mcp_session.*', 'request_id', 'trace_id', 'span_id', '_debug', '_telemetry',
+  'identity', 'quota', 'platform', 'caller_tier', 'auth_.*', 'continuation', 'continuations', '_meta',
+  // Live verify 2026-09-25: get_grid_data's gated block (email_capture,
+  // agent_action, enterprise_note, gating_matrix, learn) and source_capacity's
+  // viewer.sign_in_url + program.register_interest.
+  'email_capture', 'capture_email.*', 'agent_action', 'gating_matrix', 'learn',
+  '.*sign_in.*', 'register_interest', 'interest_registration',
+  'what_unlocks', 'after_checkout', 'next_call_full_after_checkout', 'preview_warning', 'fields_unlocked',
+].join('|') + ')$', 'i');
+
 function renameKey(k) {
   if (/_total_in_pro$/i.test(k)) return k.replace(/_total_in_pro$/i, '_total_available');
   if (/_in_pro$/i.test(k)) return k.replace(/_in_pro$/i, '_withheld');
@@ -285,6 +296,60 @@ function outageNotice(v) {
     : 'This data source is temporarily unavailable. Try again later.';
   return out;
 }
+
+function scrubValue(v, key) {
+  if (v && typeof v === 'object' && !Array.isArray(v) && v.source_unavailable === true) {
+    // Returned as built (plain fields and a fixed message); only its citation
+    // is an arbitrary object, so only that is scrubbed again.
+    const n = outageNotice(v);
+    if (n.citation && typeof n.citation === 'object') n.citation = scrubValue(n.citation, 'citation');
+    return n;
+  }
+  if (typeof v === 'string') {
+    if (key === 'error' && PLAN_ERRORS.test(v)) return 'plan_required';
+    return scrubText(v);
+  }
+  if (Array.isArray(v)) {
+    const out = [];
+    for (const x of v) {
+      const y = scrubValue(x, key);
+      if (y === '' || y === undefined) continue;
+      out.push(y);
+    }
+    return out;
+  }
+  if (v && typeof v === 'object') {
+    // An entry about a removed tool ({tool: 'analyze_site', reason: ...}) goes
+    // whole, rather than leaving its other fields behind without a subject.
+    if (typeof v.tool === 'string' && _REMOVED_SET.has(v.tool)) return '';
+    // A write instruction ({method: 'POST', url|path, body}) goes whole: every
+    // tool on this profile is a read-only lookup (agent_action, register_interest).
+    if (typeof v.method === 'string' && /^(POST|PUT|PATCH|DELETE)$/i.test(v.method)) return '';
+    const out = {};
+    let droppedRemoved = false;
+    for (const [k, x] of Object.entries(v)) {
+      if (DROP_KEY.test(k)) continue;
+      // A dotted-path key names fields elsewhere in the result: execute_plan's
+      // truncation.rows_total listed "agent_payment.pay_now.steps" after the
+      // payment block itself was stripped (live 2026-09-25). Drop any path
+      // with a dropped segment, so the count never outlives its field.
+      if (k.includes('.') && k.split('.').some((seg) => DROP_KEY.test(seg.replace(/\[\d+\]$/, '')))) continue;
+      // A removed tool as a KEY: site_evaluation_handoff: {analyze_site: {...args}}
+      // on get_refined_queue, analyze_parcel and get_retirement_headroom
+      // (measured live 2026-09-25, after mcp#551).
+      if (_REMOVED_SET.has(k)) { droppedRemoved = true; continue; }
+      const y = scrubValue(x, k);
+      if (y === '' || y === undefined) continue;
+      out[renameKey(k)] = y;
+    }
+    // A handoff that pointed only at removed tools goes whole.
+    if (droppedRemoved && !Object.keys(out).length) return '';
+    return out;
+  }
+  return v;
+}
+
+export function scrubStructured(obj) { return scrubValue(obj, null); }
 
 // ── Gating ──────────────────────────────────────────────────────────────────
 // A result is gated when the server withheld part of it for plan reasons.
@@ -341,10 +406,80 @@ function splitJsonPrefix(text) {
   return null;
 }
 
+// Prose that TRAILS a JSON payload is dropped whole. It is always a decorator's
+// (the payload is the answer; the tail is a relay line, a nudge or an upsell),
+// and it was written in dozens of wordings no phrase list keeps up with.
+function scrubTextBlock(text) {
+  const split = splitJsonPrefix(text);
+  if (split) return JSON.stringify(scrubStructured(split.json));
+  return scrubText(text);
+}
+
+// A tools/call result, scrubbed. Gated results end with exactly PLANS_NOTICE.
 // OpenAI's connector contract: search and fetch return exactly ONE text item
 // holding the JSON. Live: search answered 2 items (JSON plus the plans line) in
 // 7 of 7 calls.
 const CONNECTOR_TOOLS = new Set(['search', 'fetch']);
+
+export function scrubToolResult(result, tool) {
+  if (!result || typeof result !== 'object') return result;
+  const connector = CONNECTOR_TOOLS.has(tool);
+  const gated = !connector && isGated(result);
+  const out = {};
+  const content = [];
+  const blocks = result.content || [];
+  for (let i = 0; i < blocks.length; i++) {
+    const c = blocks[i];
+    if (!c || typeof c !== 'object') continue;
+    if (c.type === 'text') {
+      const raw = String(c.text || '');
+      // Block 0 is the tool's answer: filter it segment by segment. Later
+      // prose blocks are decorations; one selling or steering segment means
+      // the block exists to sell or steer, so it goes whole.
+      if (i > 0 && !splitJsonPrefix(raw) && raw.split(/\n|(?<=[.!?;])\s+/).some((seg) => COMMERCE.test(seg))) continue;
+      const t = scrubTextBlock(raw);
+      if (t && t.trim()) content.push({ type: 'text', text: t });
+    } else if (c.type === 'resource_link' || c.type === 'resource') {
+      const s = scrubStructured(c);
+      if (s && !COMMERCE.test(JSON.stringify(s))) content.push(s);
+    } else {
+      content.push(c);
+    }
+  }
+  if (gated) content.push({ type: 'text', text: PLANS_NOTICE });
+  out.content = connector ? content.filter((c) => c.type === 'text').slice(0, 1) : content;
+  if (result.structuredContent && typeof result.structuredContent === 'object') {
+    const sc = scrubStructured(result.structuredContent);
+    out.structuredContent = gated ? { ...sc, notice: PLANS_NOTICE } : sc;
+  }
+  if (result.isError === true) out.isError = true;
+  return out;
+}
+
+// ── Catalog ─────────────────────────────────────────────────────────────────
+function scrubSchema(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(scrubSchema);
+  const out = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === 'properties' && v && typeof v === 'object') {
+      const props = {};
+      for (const [pk, pv] of Object.entries(v)) {
+        if (/^(mpp_|x402|payment|credential|api_key|apikey|key$)/i.test(pk)) continue;
+        props[pk] = scrubSchema(pv);
+      }
+      out.properties = props;
+    } else if (k === 'required' && Array.isArray(v)) {
+      out.required = v.filter((r) => !/^(mpp_|x402|payment|credential|api_key|apikey|key$)/i.test(r));
+    } else if (k === 'description' && typeof v === 'string') {
+      const d = scrubText(v);
+      if (d) out.description = d;
+    } else {
+      out[k] = scrubSchema(v);
+    }
+  }
+  return out;
+}
 
 export function directoryAnnotations(name, canonical) {
   const a = canonical || {};
@@ -367,6 +502,34 @@ export function directoryAnnotations(name, canonical) {
   return ann;
 }
 
+// Project a canonical ListToolsResult onto the directory profile: allowlisted
+// tools only, plain descriptions, the five standard annotations, payment
+// parameters removed, and no tool-level or result-level _meta. outputSchema is
+// dropped because scrubToolResult reshapes structuredContent; a declared schema
+// would make a strict client reject the scrubbed result.
+export function directoryToolsList(result) {
+  const have = new Map((result?.tools || []).map((t) => [t.name, t]));
+  const tools = [];
+  const missing = [];
+  for (const [name, description] of Object.entries(DIRECTORY_TOOLS)) {
+    const t = have.get(name);
+    if (!t) { missing.push(name); continue; }
+    const entry = {
+      name,
+      title: (t.annotations && t.annotations.title) || t.title || name,
+      description,
+      inputSchema: scrubSchema(t.inputSchema || { type: 'object', properties: {} }),
+      annotations: directoryAnnotations(name, t.annotations),
+    };
+    if (t.execution) entry.execution = t.execution;
+    tools.push(entry);
+  }
+  if (missing.length) {
+    console.error(`[directory] ${missing.length} allowlisted tool(s) absent from the catalog — serving short: ${missing.join(', ')}`);
+  }
+  return { tools };
+}
+
 // Argument defaults on this profile only (live verify 2026-09-25): the canvas
 // defaults to verdict BUILD,CAUTION, so a geography whose markets are all AVOID
 // answered "0 markets" to a reviewer. Here it shows every scored market; the
@@ -374,383 +537,129 @@ export function directoryAnnotations(name, canonical) {
 export const DIRECTORY_ARG_DEFAULTS = Object.freeze({
   site_selection_canvas: Object.freeze({ verdict: 'ALL' }),
 });
-
-// ── Profile factory ─────────────────────────────────────────────────────────
-// r-claude-directory (2026-09-26): the scrub, catalog projection and response
-// filter below were written for /mcp/chatgpt and are reused by /mcp/claude
-// (lib/claude-directory.mjs). Everything a profile differs in is a parameter:
-//   tools         {name: plain description}  — the allowlist, in listing order
-//   removed       [name]                      — tools the profile never serves
-//   instructions  string                      — initialize instructions
-//   plansNotice   string                      — the one line a gated result ends with
-//   argDefaults   {tool: {arg: value}}
-//   commerceExtra [regex source]              — more segment patterns to drop
-//   dropKeyExtra  [key regex source]          — more keys to drop
-//   dropObject    (obj) => bool               — drop a whole object (e.g. a sponsor block)
-//   textPre       (text) => text              — runs before the segment filter
-//   listFilter    (canonicalTool) => bool     — false keeps a tool off tools/list
-//   schemaFor     (name, schema) => schema    — per-profile input-schema edit
-//   resultGuard   (scrubbedResult) => result  — last check on a tools/call result
-//   secretsFor    (req) => [string]           — values removed from every body
-// The ChatGPT instance passes none of the optional hooks, so its output is the
-// output this module produced before the factory existed
-// (test/claude-directory-shared-scrub-equality.test.mjs pins that).
-export function createDirectoryProfile(cfg) {
-  const TOOLS = cfg.tools;
-  const REMOVED = cfg.removed;
-  const REMOVED_SET = new Set(REMOVED);
-  const INSTRUCTIONS = cfg.instructions;
-  const NOTICE = cfg.plansNotice || PLANS_NOTICE;
-  const ARG_DEFAULTS = cfg.argDefaults || {};
-  const COMMERCE = commerceRegex(REMOVED, cfg.commerceExtra || []);
-  const DROP_KEY = dropKeyRegex(cfg.dropKeyExtra || []);
-  const dropObject = typeof cfg.dropObject === 'function' ? cfg.dropObject : null;
-  const textPre = typeof cfg.textPre === 'function' ? cfg.textPre : null;
-  const listFilter = typeof cfg.listFilter === 'function' ? cfg.listFilter : null;
-  const schemaFor = typeof cfg.schemaFor === 'function' ? cfg.schemaFor : null;
-  const resultGuard = typeof cfg.resultGuard === 'function' ? cfg.resultGuard : null;
-  const secretsFor = typeof cfg.secretsFor === 'function' ? cfg.secretsFor : null;
-  const label = cfg.label || 'directory';
-
-  // Split prose into segments at line breaks and sentence ends; drop the ones
-  // that sell, then tidy separators the removal orphaned.
-  function scrubText(s) {
-    if (typeof s !== 'string' || !s) return s;
-    if (textPre) s = textPre(s);
-    if (/^https?:\/\/\S+$/i.test(s.trim())) {
-      const u = scrubUrl(s.trim());
-      return COMMERCE.test(u) ? '' : u;
-    }
-    const lines = s.split('\n').map((line) => {
-      const parts = line.split(/(?<=[.!?;])\s+(?=[A-Z0-9"'`(*_\[→•\-\u{1F300}-\u{1FAFF}☀-➿])/u);
-      return parts.filter((p) => !COMMERCE.test(p)).join(' ');
-    });
-    let out = lines.join('\n');
-    for (const [re, rep] of HARD_REDACT) out = out.replace(re, rep);
-    out = out.replace(DOLLAR, 'USD ');
-    out = out.replace(/(^|\n)\s*-{3,}\s*(?=\n|$)/g, '$1').replace(/\n{3,}/g, '\n\n');
-    return out.trim() === '' ? '' : out.replace(/\s+$/, '');
-  }
-
-  function scrubValue(v, key) {
-    if (v && typeof v === 'object' && !Array.isArray(v) && v.source_unavailable === true) {
-      // Returned as built (plain fields and a fixed message); only its citation
-      // is an arbitrary object, so only that is scrubbed again.
-      const n = outageNotice(v);
-      if (n.citation && typeof n.citation === 'object') n.citation = scrubValue(n.citation, 'citation');
-      return n;
-    }
-    if (typeof v === 'string') {
-      if (key === 'error' && PLAN_ERRORS.test(v)) return 'plan_required';
-      return scrubText(v);
-    }
-    if (Array.isArray(v)) {
-      const out = [];
-      for (const x of v) {
-        const y = scrubValue(x, key);
-        if (y === '' || y === undefined) continue;
-        out.push(y);
-      }
-      return out;
-    }
-    if (v && typeof v === 'object') {
-      if (dropObject && dropObject(v)) return '';
-      // An entry about a removed tool ({tool: 'analyze_site', reason: ...}) goes
-      // whole, rather than leaving its other fields behind without a subject.
-      if (typeof v.tool === 'string' && REMOVED_SET.has(v.tool)) return '';
-      // A write instruction ({method: 'POST', url|path, body}) goes whole: every
-      // tool on this profile is a read-only lookup (agent_action, register_interest).
-      if (typeof v.method === 'string' && /^(POST|PUT|PATCH|DELETE)$/i.test(v.method)) return '';
-      const out = {};
-      let droppedRemoved = false;
-      for (const [k, x] of Object.entries(v)) {
-        if (DROP_KEY.test(k)) continue;
-        // A dotted-path key names fields elsewhere in the result: execute_plan's
-        // truncation.rows_total listed "agent_payment.pay_now.steps" after the
-        // payment block itself was stripped (live 2026-09-25). Drop any path
-        // with a dropped segment, so the count never outlives its field.
-        if (k.includes('.') && k.split('.').some((seg) => DROP_KEY.test(seg.replace(/\[\d+\]$/, '')))) continue;
-        // A removed tool as a KEY: site_evaluation_handoff: {analyze_site: {...args}}
-        // on get_refined_queue, analyze_parcel and get_retirement_headroom
-        // (measured live 2026-09-25, after mcp#551).
-        if (REMOVED_SET.has(k)) { droppedRemoved = true; continue; }
-        const y = scrubValue(x, k);
-        if (y === '' || y === undefined) continue;
-        out[renameKey(k)] = y;
-      }
-      // A handoff that pointed only at removed tools goes whole.
-      if (droppedRemoved && !Object.keys(out).length) return '';
-      return out;
-    }
-    return v;
-  }
-
-  function scrubStructured(obj) { return scrubValue(obj, null); }
-
-  // Prose that TRAILS a JSON payload is dropped whole. It is always a decorator's
-  // (the payload is the answer; the tail is a relay line, a nudge or an upsell),
-  // and it was written in dozens of wordings no phrase list keeps up with.
-  function scrubTextBlock(text) {
-    const split = splitJsonPrefix(text);
-    if (split) return JSON.stringify(scrubStructured(split.json));
-    return scrubText(text);
-  }
-
-  // A tools/call result, scrubbed. Gated results end with exactly the notice.
-  function scrubToolResult(result, tool) {
-    if (!result || typeof result !== 'object') return result;
-    const connector = CONNECTOR_TOOLS.has(tool);
-    const gated = !connector && isGated(result);
-    const out = {};
-    const content = [];
-    const blocks = result.content || [];
-    for (let i = 0; i < blocks.length; i++) {
-      const c = blocks[i];
-      if (!c || typeof c !== 'object') continue;
-      if (c.type === 'text') {
-        const raw = String(c.text || '');
-        // Block 0 is the tool's answer: filter it segment by segment. Later
-        // prose blocks are decorations; one selling or steering segment means
-        // the block exists to sell or steer, so it goes whole.
-        if (i > 0 && !splitJsonPrefix(raw) && raw.split(/\n|(?<=[.!?;])\s+/).some((seg) => COMMERCE.test(seg))) continue;
-        const t = scrubTextBlock(raw);
-        if (t && t.trim()) content.push({ type: 'text', text: t });
-      } else if (c.type === 'resource_link' || c.type === 'resource') {
-        const s = scrubStructured(c);
-        if (s && !COMMERCE.test(JSON.stringify(s))) content.push(s);
-      } else {
-        content.push(c);
-      }
-    }
-    if (gated) content.push({ type: 'text', text: NOTICE });
-    out.content = connector ? content.filter((c) => c.type === 'text').slice(0, 1) : content;
-    if (result.structuredContent && typeof result.structuredContent === 'object') {
-      const sc = scrubStructured(result.structuredContent);
-      out.structuredContent = gated ? { ...sc, notice: NOTICE } : sc;
-    }
-    if (result.isError === true) out.isError = true;
-    return resultGuard ? resultGuard(out, tool) : out;
-  }
-
-  // ── Catalog ───────────────────────────────────────────────────────────────
-  function scrubSchema(schema) {
-    if (!schema || typeof schema !== 'object') return schema;
-    if (Array.isArray(schema)) return schema.map(scrubSchema);
-    const out = {};
-    for (const [k, v] of Object.entries(schema)) {
-      if (k === 'properties' && v && typeof v === 'object') {
-        const props = {};
-        for (const [pk, pv] of Object.entries(v)) {
-          if (/^(mpp_|x402|payment|credential|api_key|apikey|key$)/i.test(pk)) continue;
-          props[pk] = scrubSchema(pv);
-        }
-        out.properties = props;
-      } else if (k === 'required' && Array.isArray(v)) {
-        out.required = v.filter((r) => !/^(mpp_|x402|payment|credential|api_key|apikey|key$)/i.test(r));
-      } else if (k === 'description' && typeof v === 'string') {
-        const d = scrubText(v);
-        if (d) out.description = d;
-      } else {
-        out[k] = scrubSchema(v);
-      }
-    }
-    return out;
-  }
-
-  // Project a canonical ListToolsResult onto the directory profile: allowlisted
-  // tools only, plain descriptions, the five standard annotations, payment
-  // parameters removed, and no tool-level or result-level _meta. outputSchema is
-  // dropped because scrubToolResult reshapes structuredContent; a declared schema
-  // would make a strict client reject the scrubbed result.
-  function directoryToolsList(result) {
-    const have = new Map((result?.tools || []).map((t) => [t.name, t]));
-    const tools = [];
-    const missing = [];
-    for (const [name, description] of Object.entries(TOOLS)) {
-      const t = have.get(name);
-      if (!t) { missing.push(name); continue; }
-      if (listFilter && !listFilter(t)) continue;
-      const entry = {
-        name,
-        title: (t.annotations && t.annotations.title) || t.title || name,
-        description,
-        inputSchema: (() => {
-          const sch = scrubSchema(t.inputSchema || { type: 'object', properties: {} });
-          return schemaFor ? schemaFor(name, sch) : sch;
-        })(),
-        annotations: directoryAnnotations(name, t.annotations),
-      };
-      if (t.execution) entry.execution = t.execution;
-      tools.push(entry);
-    }
-    if (missing.length) {
-      console.error(`[${label}] ${missing.length} allowlisted tool(s) absent from the catalog — serving short: ${missing.join(', ')}`);
-    }
-    return { tools };
-  }
-
-  function applyDirectoryArgDefaults(name, args) {
-    const d = ARG_DEFAULTS[name];
-    if (!d || !args || typeof args !== 'object') return args;
-    for (const [k, v] of Object.entries(d)) if (args[k] == null || args[k] === '') args[k] = v;
-    return args;
-  }
-
-  function isDirectoryTool(name) {
-    return Object.prototype.hasOwnProperty.call(TOOLS, name);
-  }
-
-  // ── Whole-message transform ───────────────────────────────────────────────
-  // `method` is the request's JSON-RPC method (responses do not carry it).
-  function transformDirectoryMessage(msg, method, tool) {
-    if (!msg || typeof msg !== 'object') return msg;
-    if (msg.result && typeof msg.result === 'object') {
-      let r = msg.result;
-      if (method === 'initialize') {
-        // Tools only: prompts and resources carry the canonical steering copy,
-        // and the profile answers their list methods empty (server.mjs prelude).
-        r = { ...r, instructions: INSTRUCTIONS,
-              capabilities: { tools: (r.capabilities && r.capabilities.tools) || {} } };
-        delete r._meta;
-      } else if (method === 'tools/list') {
-        r = directoryToolsList(r);
-      } else if (method === 'tools/call') {
-        r = scrubToolResult(r, tool);
-      } else {
-        r = scrubStructured(r);
-      }
-      return { ...msg, result: r };
-    }
-    if (msg.error && typeof msg.error === 'object') {
-      const m = String(msg.error.message || '');
-      const e = { code: msg.error.code,
-                  message: scrubText(m) || (/^Unknown tool/.test(m) ? 'Unknown tool.' : 'Request failed.') };
-      return { ...msg, error: e };
-    }
-    // Server-initiated notifications (progress, logging) ride the same stream.
-    if (msg.method && msg.params) return { ...msg, params: scrubStructured(msg.params) };
-    return msg;
-  }
-
-  // Rewrite a complete response body: JSON (single or batch) or SSE frames.
-  function transformDirectoryBody(text, method, tool) {
-    if (typeof text !== 'string' || !text) return text;
-    const trimmed = text.trimStart();
-    if (trimmed[0] === '{' || trimmed[0] === '[') {
-      try {
-        const j = JSON.parse(trimmed);
-        const out = Array.isArray(j) ? j.map((m) => transformDirectoryMessage(m, method, tool)) : transformDirectoryMessage(j, method, tool);
-        return JSON.stringify(out);
-      } catch (_) { return scrubText(text); }
-    }
-    if (/(^|\n)data:/.test(text)) {
-      return text.split(/\n\n/).map((ev) => {
-        const lines = ev.split('\n');
-        const data = lines.filter((l) => l.startsWith('data:')).map((l) => l.slice(5).replace(/^ /, '')).join('\n');
-        if (!data) return ev;
-        let out;
-        try { out = JSON.stringify(transformDirectoryMessage(JSON.parse(data), method, tool)); } catch (_) { out = scrubText(data); }
-        const kept = lines.filter((l) => !l.startsWith('data:') && !/^id:/.test(l));
-        return [...kept, `data: ${out}`].join('\n');
-      }).join('\n\n');
-    }
-    return scrubText(text);
-  }
-
-  // Buffer the whole Express response, transform it once, then send it. Every
-  // request on the profile is single-shot (stateless), so buffering changes no
-  // streaming behaviour a client could rely on. Session and length headers are
-  // removed: the profile mints no session, and the body length changes.
-  function installDirectoryResponseFilter(req, res) {
-    const method = (req.body && typeof req.body.method === 'string') ? req.body.method : null;
-    const tool = (method === 'tools/call' && req.body.params && typeof req.body.params.name === 'string')
-      ? req.body.params.name : null;
-    // Read now, before later handler code strips an inline key from the args.
-    let secrets = [];
-    if (secretsFor) {
-      try { secrets = (secretsFor(req) || []).filter((x) => typeof x === 'string' && x.length >= 6); } catch (_) { secrets = []; }
-    }
-    const origWriteHead = res.writeHead.bind(res);
-    const origEnd = res.end.bind(res);
-    const chunks = [];
-    let head = null;
-    let done = false;
-    const push = (chunk, enc) => {
-      if (chunk === undefined || chunk === null || typeof chunk === 'function') return;
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, typeof enc === 'string' ? enc : 'utf8'));
-    };
-    res.flushHeaders = () => {};
-    res.writeHead = (status, a, b) => { head = [status, a, b]; return res; };
-    res.write = (chunk, enc, cb) => {
-      push(chunk, enc);
-      const fn = typeof enc === 'function' ? enc : cb;
-      if (typeof fn === 'function') fn();
-      return true;
-    };
-    res.end = (chunk, enc, cb) => {
-      if (done) return res;
-      done = true;
-      push(chunk, enc);
-      const fn = typeof chunk === 'function' ? chunk : (typeof enc === 'function' ? enc : cb);
-      const raw = Buffer.concat(chunks).toString('utf8');
-      let body;
-      try { body = transformDirectoryBody(raw, method, tool); } catch (e) {
-        console.error(`[${label}] transform failed:`, e && e.message);
-        body = JSON.stringify({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32603, message: 'Internal error. Retry once.' } });
-      }
-      // The caller's own credential never goes back out, whatever carried it.
-      for (const s of secrets) {
-        if (body.includes(s)) body = body.split(s).join('');
-        const js = JSON.stringify(s).slice(1, -1);   // as it appears inside a JSON string
-        if (js !== s && body.includes(js)) body = body.split(js).join('');
-      }
-      const strip = (h) => {
-        if (!h || typeof h !== 'object' || Array.isArray(h)) return h;
-        const o = {};
-        for (const [k, v] of Object.entries(h)) {
-          if (/^(content-length|mcp-session-id)$/i.test(k)) continue;
-          o[k] = v;
-        }
-        return o;
-      };
-      try { res.removeHeader('Content-Length'); res.removeHeader('Mcp-Session-Id'); } catch (_) {}
-      // Restore before the final write: Node's end() sends implicit headers by
-      // calling res.writeHead, and the capturing override would swallow them
-      // (every Express res.json / res.status().end() response had no head).
-      res.writeHead = origWriteHead;
-      if (head) {
-        const [status, a, b] = head;
-        if (typeof a === 'string') origWriteHead(status, a, strip(b));
-        else origWriteHead(status, strip(a));
-      }
-      return origEnd(body, 'utf8', fn);
-    };
-  }
-
-  return Object.freeze({
-    tools: TOOLS, removed: REMOVED, instructions: INSTRUCTIONS, plansNotice: NOTICE,
-    scrubText, scrubStructured, scrubToolResult, scrubSchema, directoryToolsList,
-    applyDirectoryArgDefaults, isDirectoryTool,
-    transformDirectoryMessage, transformDirectoryBody, installDirectoryResponseFilter,
-  });
+export function applyDirectoryArgDefaults(name, args) {
+  const d = DIRECTORY_ARG_DEFAULTS[name];
+  if (!d || !args || typeof args !== 'object') return args;
+  for (const [k, v] of Object.entries(d)) if (args[k] == null || args[k] === '') args[k] = v;
+  return args;
 }
 
-// ── The ChatGPT profile (/mcp/chatgpt) ─────────────────────────────────────
-const _CHATGPT = createDirectoryProfile({
-  label: 'directory',
-  tools: DIRECTORY_TOOLS,
-  removed: DIRECTORY_REMOVED,
-  instructions: DIRECTORY_INSTRUCTIONS,
-  plansNotice: PLANS_NOTICE,
-  argDefaults: DIRECTORY_ARG_DEFAULTS,
-});
-export const CHATGPT_PROFILE = _CHATGPT;
-export const scrubText = _CHATGPT.scrubText;
-export const scrubStructured = _CHATGPT.scrubStructured;
-export const scrubToolResult = _CHATGPT.scrubToolResult;
-export const directoryToolsList = _CHATGPT.directoryToolsList;
-export const applyDirectoryArgDefaults = _CHATGPT.applyDirectoryArgDefaults;
-export const isDirectoryTool = _CHATGPT.isDirectoryTool;
-export const transformDirectoryMessage = _CHATGPT.transformDirectoryMessage;
-export const transformDirectoryBody = _CHATGPT.transformDirectoryBody;
-export const installDirectoryResponseFilter = _CHATGPT.installDirectoryResponseFilter;
+export function isDirectoryTool(name) {
+  return Object.prototype.hasOwnProperty.call(DIRECTORY_TOOLS, name);
+}
+
+// ── Whole-message transform ─────────────────────────────────────────────────
+// `method` is the request's JSON-RPC method (responses do not carry it).
+export function transformDirectoryMessage(msg, method, tool) {
+  if (!msg || typeof msg !== 'object') return msg;
+  if (msg.result && typeof msg.result === 'object') {
+    let r = msg.result;
+    if (method === 'initialize') {
+      // Tools only: prompts and resources carry the canonical steering copy,
+      // and the profile answers their list methods empty (server.mjs prelude).
+      r = { ...r, instructions: DIRECTORY_INSTRUCTIONS,
+            capabilities: { tools: (r.capabilities && r.capabilities.tools) || {} } };
+      delete r._meta;
+    } else if (method === 'tools/list') {
+      r = directoryToolsList(r);
+    } else if (method === 'tools/call') {
+      r = scrubToolResult(r, tool);
+    } else {
+      r = scrubStructured(r);
+    }
+    return { ...msg, result: r };
+  }
+  if (msg.error && typeof msg.error === 'object') {
+    const m = String(msg.error.message || '');
+    const e = { code: msg.error.code,
+                message: scrubText(m) || (/^Unknown tool/.test(m) ? 'Unknown tool.' : 'Request failed.') };
+    return { ...msg, error: e };
+  }
+  // Server-initiated notifications (progress, logging) ride the same stream.
+  if (msg.method && msg.params) return { ...msg, params: scrubStructured(msg.params) };
+  return msg;
+}
+
+// Rewrite a complete response body: JSON (single or batch) or SSE frames.
+export function transformDirectoryBody(text, method, tool) {
+  if (typeof text !== 'string' || !text) return text;
+  const trimmed = text.trimStart();
+  if (trimmed[0] === '{' || trimmed[0] === '[') {
+    try {
+      const j = JSON.parse(trimmed);
+      const out = Array.isArray(j) ? j.map((m) => transformDirectoryMessage(m, method, tool)) : transformDirectoryMessage(j, method, tool);
+      return JSON.stringify(out);
+    } catch (_) { return scrubText(text); }
+  }
+  if (/(^|\n)data:/.test(text)) {
+    return text.split(/\n\n/).map((ev) => {
+      const lines = ev.split('\n');
+      const data = lines.filter((l) => l.startsWith('data:')).map((l) => l.slice(5).replace(/^ /, '')).join('\n');
+      if (!data) return ev;
+      let out;
+      try { out = JSON.stringify(transformDirectoryMessage(JSON.parse(data), method, tool)); } catch (_) { out = scrubText(data); }
+      const kept = lines.filter((l) => !l.startsWith('data:') && !/^id:/.test(l));
+      return [...kept, `data: ${out}`].join('\n');
+    }).join('\n\n');
+  }
+  return scrubText(text);
+}
+
+// Buffer the whole Express response, transform it once, then send it. Every
+// request on the profile is single-shot (stateless), so buffering changes no
+// streaming behaviour a client could rely on. Session and length headers are
+// removed: the profile mints no session, and the body length changes.
+export function installDirectoryResponseFilter(req, res) {
+  const method = (req.body && typeof req.body.method === 'string') ? req.body.method : null;
+  const tool = (method === 'tools/call' && req.body.params && typeof req.body.params.name === 'string')
+    ? req.body.params.name : null;
+  const origWriteHead = res.writeHead.bind(res);
+  const origEnd = res.end.bind(res);
+  const chunks = [];
+  let head = null;
+  let done = false;
+  const push = (chunk, enc) => {
+    if (chunk === undefined || chunk === null || typeof chunk === 'function') return;
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, typeof enc === 'string' ? enc : 'utf8'));
+  };
+  res.flushHeaders = () => {};
+  res.writeHead = (status, a, b) => { head = [status, a, b]; return res; };
+  res.write = (chunk, enc, cb) => {
+    push(chunk, enc);
+    const fn = typeof enc === 'function' ? enc : cb;
+    if (typeof fn === 'function') fn();
+    return true;
+  };
+  res.end = (chunk, enc, cb) => {
+    if (done) return res;
+    done = true;
+    push(chunk, enc);
+    const fn = typeof chunk === 'function' ? chunk : (typeof enc === 'function' ? enc : cb);
+    const raw = Buffer.concat(chunks).toString('utf8');
+    let body;
+    try { body = transformDirectoryBody(raw, method, tool); } catch (e) {
+      console.error('[directory] transform failed:', e && e.message);
+      body = JSON.stringify({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32603, message: 'Internal error. Retry once.' } });
+    }
+    const strip = (h) => {
+      if (!h || typeof h !== 'object' || Array.isArray(h)) return h;
+      const o = {};
+      for (const [k, v] of Object.entries(h)) {
+        if (/^(content-length|mcp-session-id)$/i.test(k)) continue;
+        o[k] = v;
+      }
+      return o;
+    };
+    try { res.removeHeader('Content-Length'); res.removeHeader('Mcp-Session-Id'); } catch (_) {}
+    // Restore before the final write: Node's end() sends implicit headers by
+    // calling res.writeHead, and the capturing override would swallow them
+    // (every Express res.json / res.status().end() response had no head).
+    res.writeHead = origWriteHead;
+    if (head) {
+      const [status, a, b] = head;
+      if (typeof a === 'string') origWriteHead(status, a, strip(b));
+      else origWriteHead(status, strip(a));
+    }
+    return origEnd(body, 'utf8', fn);
+  };
+}
