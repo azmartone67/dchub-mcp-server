@@ -7,7 +7,7 @@ Node ≥ 18).
 
 ## Install
 ```bash
-npm i dchub               # from this repo: npm i ./sdk/node
+npm i dchub               # published on npm as `dchub`; from this repo: npm i ./sdk/node
 ```
 
 ## Quickstart (5 lines)
@@ -23,10 +23,10 @@ console.log(await dc.grid("ERCOT"));                 // live grid intel
 | Method | Tool | Returns |
 |--------|------|---------|
 | `dc.market(slug)` | `get_market_intel` | by-status counts, operators, recent facilities |
-| `dc.search({ q, state, country, limit })` | `search_facilities` | rows w/ canonical slug, provider, location |
+| `dc.search({ q, state, country, limit })` | `search_facilities` (`q` is sent as the tool's `query` argument) | rows w/ canonical slug, provider, location |
 | `dc.grid(iso)` | `get_grid_data` | live demand / mix / headroom |
-| `dc.call(tool, args)` | *any of 38* | cleaned data payload |
-| `dc.tools()` | `tools/list` | array of 38 tool names |
+| `dc.call(tool, args)` | *any of the 92 tools* | cleaned data payload |
+| `dc.tools()` | `tools/list` | array of tool names (92 today) |
 
 ## Auth & tiers
 Set `DCHUB_API_KEY` (sent as `X-API-Key`) for full data:
@@ -40,8 +40,7 @@ way. Source/citation: https://dchub.cloud (CC-BY-4.0).
 
 ## Tests
 ```bash
-npm test          # node --test — 5 live, gate-graceful tests
+npm test          # node --test — live, gate-graceful tests + offline argument-mapping tests
 ```
 
-> Packaging is configured but **not published** — the maintainer runs
-> `npm publish` to ship to npm.
+Published on npm as [`dchub`](https://www.npmjs.com/package/dchub).
