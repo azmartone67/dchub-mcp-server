@@ -7,6 +7,8 @@
 // five standard keys, calls every tool (no arguments, then plausible ones) and
 // scans each raw response body for the patterns below. Exits 1 on any hit.
 // subscribe_digest is called with NO email, so the probe never sends mail.
+// When tools/list serves outputSchema, every structuredContent is validated
+// against it (strict 2020-12 Ajv); --schemas=on|off pins whether it should.
 //
 // The same patterns back test/chatgpt-directory-probe.test.mjs, so CI and the
 // live check cannot drift apart.
@@ -84,6 +86,11 @@ export const CHATGPT_HEADERS = { 'user-agent': 'openai-mcp/1.0.0', 'x-mcp-platfo
 // server-side session, so one run's calls counted against the next.
 export const CHATGPT_META = { 'openai/session': `v1/probe-${randomUUID()}` };
 const AS_CHATGPT = process.argv.includes('--as-chatgpt');
+// r-directory-output-schema: --schemas=on requires an outputSchema on every
+// listed tool, --schemas=off requires none (the reviewed listing). Either way,
+// every structuredContent is validated against its tool's served schema with a
+// strict 2020-12 Ajv, which is what a strict client does.
+const SCHEMAS_ARG = (process.argv.find((a) => a.startsWith('--schemas=')) || '').slice('--schemas='.length) || null;
 const MIN_DATA_ANSWERS = 20;
 
 async function rpc(url, body) {
@@ -119,6 +126,23 @@ async function main() {
   for (const v of annotationViolations(tools)) failures.push(`annotations ${v}`);
   for (const h of probeHits(list.raw)) failures.push(`tools/list: ${h}`);
 
+  const withSchema = tools.filter((t) => t.outputSchema);
+  const validators = new Map();
+  let schemaValidated = 0;
+  if (SCHEMAS_ARG === 'on' && withSchema.length !== tools.length) failures.push(`outputSchema on ${withSchema.length}/${tools.length} tools; --schemas=on wants all`);
+  if (SCHEMAS_ARG === 'off' && withSchema.length) failures.push(`outputSchema on ${withSchema.length}/${tools.length} tools; --schemas=off wants none`);
+  if (!SCHEMAS_ARG && withSchema.length && withSchema.length !== tools.length) failures.push(`outputSchema on only ${withSchema.length}/${tools.length} tools`);
+  if (withSchema.length) {
+    const Ajv2020 = (await import('ajv/dist/2020.js')).default;
+    const addFormats = (await import('ajv-formats')).default;
+    const ajv = new Ajv2020({ strict: true });
+    addFormats(ajv);
+    for (const t of withSchema) {
+      if (t.outputSchema.$schema) failures.push(`${t.name}: outputSchema declares $schema`);
+      try { validators.set(t.name, { ajv, v: ajv.compile(t.outputSchema) }); } catch (e) { failures.push(`${t.name}: outputSchema does not compile: ${e.message}`); }
+    }
+  }
+
   let gated = 0;
   let rateLimited = 0;
   let dataAnswers = 0;
@@ -140,6 +164,16 @@ async function main() {
       // so count what actually came back instead of reading silence as clean.
       const kind = classifyResponse(r.raw, r.msg);
       if (kind === 'refused') rateLimited += 1;
+      const val = validators.get(name);
+      const res = r.msg && r.msg.result;
+      if (val && res) {
+        if (res.structuredContent) {
+          if (val.v(res.structuredContent)) schemaValidated += 1;
+          else failures.push(`${tag}: structuredContent fails its outputSchema: ${val.ajv.errorsText(val.v.errors)}`);
+        } else if (!res.isError) {
+          failures.push(`${tag}: success result without structuredContent while an outputSchema is declared`);
+        }
+      }
       else if (kind === 'data') dataAnswers += 1;
       if (r.raw.includes('dchub.cloud/plans')) {
         gated += 1;
@@ -152,6 +186,7 @@ async function main() {
   console.log(JSON.stringify({
     url, as: AS_CHATGPT ? 'chatgpt' : SELF_TAG, tools: tools.length, calls: tools.length * 2 - (tools.some((t) => t.name === 'subscribe_digest') ? 1 : 0),
     data_answers: dataAnswers, rate_limited: rateLimited,
+    output_schemas: withSchema.length, schema_validated: schemaValidated,
     gated_responses: gated, failures: failures.length,
   }));
   for (const f of failures) console.log('FAIL', f);
