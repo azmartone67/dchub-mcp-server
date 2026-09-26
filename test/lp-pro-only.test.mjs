@@ -136,7 +136,12 @@ async function call(name, args, s) {
   return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
 }
 const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
-const all = (r) => textOf(r) + '\n' + JSON.stringify(r.structuredContent || {});
+// Wall-clock ISO timestamps (retrieved_at, as_of …) are masked before the
+// "no figure" substring checks: a withheld figure like '0.53' or '8.37' can
+// occur by chance inside "…T06:27:50.534Z" and fail the test at random
+// (measured 2026-09-26: 1 in ~7 local runs; mcp#571 smoke run 36220517830).
+const _ISO_TS = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/g;
+const all = (r) => (textOf(r) + '\n' + JSON.stringify(r.structuredContent || {})).replace(_ISO_TS, '<ts>');
 function head(r) {
   const t = textOf(r);
   try { return JSON.parse(t); } catch { /* prose */ }
