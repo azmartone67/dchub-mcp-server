@@ -13598,11 +13598,21 @@ export async function _facilityFetch(id, api) {
   return { content: [{ type: 'text', text: JSON.stringify(rec) }], structuredContent: rec };
 }
 
+// Metro for fetch's "Market:" line where the planner city table has no slug.
+// Names match the backend's metro definitions (fiber_boost.py "New York
+// Metro"). Live: 7453 CoreSite - Secaucus (NY3) printed no market.
+const _FETCH_METRO = {
+  secaucus: 'New York Metro', 'jersey city': 'New York Metro', newark: 'New York Metro',
+  weehawken: 'New York Metro', piscataway: 'New York Metro', carlstadt: 'New York Metro',
+  'new york': 'New York Metro', manhattan: 'New York Metro', brooklyn: 'New York Metro',
+};
+
 export function _facilityFetchRecord(id, d, url) {
   const name = d.name || d.facility_name || id;
   const loc = [d.city, d.state, d.country].filter(Boolean).join(', ');
   const city = String(d.city || '').trim().toLowerCase();
-  const market = d.market_slug || d.market || (_CITY_ISO_META[city] && _CITY_ISO_META[city].slug) || null;
+  const market = d.market_slug || d.market || (_CITY_ISO_META[city] && _CITY_ISO_META[city].slug)
+    || _FETCH_METRO[city] || null;
   // Always 2 dp and labelled approximate: fetch is keyless, and live it printed
   // 6-decimal coordinates beside metadata that said approximate_2dp.
   const _r2 = (x) => Math.round(Number(x) * 100) / 100;

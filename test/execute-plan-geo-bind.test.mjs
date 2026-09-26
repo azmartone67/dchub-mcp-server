@@ -141,7 +141,18 @@ describe('4 + 5. counties bind; the radius covers far-apart places', () => {
   });
 });
 
+const GRID_SLIM = _slimStepResult({ region: 'PJM',
+  demand_24h: Array.from({ length: 24 }, (_, i) => ({ period: 'h' + i, mw: 90000 + i, note: 'n'.repeat(300) })),
+  agent_payment: { challenges: [{ request: { methodDetails: { paymentMethodTypes: ['card', 'link', 'ach', 'sepa', 'usdc', 'pix'] } } }],
+                   pay_now: { steps: ['s1', 's2', 's3', 's4', 's5', 's6'] } } }, 'get_grid_intelligence');
+
 describe('6. /mcp/chatgpt strips commerce out of slimmed step output', () => {
+  it('the slimmed grid fixture really carries agent_payment paths in rows_total', () => {
+    const paths = Object.keys((GRID_SLIM && GRID_SLIM.truncation && GRID_SLIM.truncation.rows_total) || {});
+    expect(paths.some((k) => k.startsWith('agent_payment.'))).toBe(true);
+    expect(paths).toContain('demand_24h');
+  });
+
   it('no /go, /upgrade/h, machine_pay, auto_trial_key, persist_command or key reaches the directory', () => {
     const slim = _slimStepResult(QUEUE_STEP, 'get_interconnection_queue');
     const text = _slimStepText(Array.from({ length: 300 }, (_, i) => 'row ' + i + ' ' + 'p'.repeat(40)).join('\n')
@@ -153,14 +164,19 @@ describe('6. /mcp/chatgpt strips commerce out of slimmed step output', () => {
       { step: 3, tool: 'get_facility', status: 'executed', result: { name: 'X',
         persist_command: 'claude mcp add dchub https://dchub.cloud/mcp',
         machine_pay: { covered_tools: ['get_facility'] }, auto_trial_key: 'abc' } },
+      // Live 2026-09-25: a slimmed get_grid_intelligence step's truncation.rows_total
+      // listed agent_payment paths after the payment block itself was stripped.
+      { step: 4, tool: 'get_grid_intelligence', status: 'executed', result: GRID_SLIM },
     ] };
     const out = scrubToolResult({ content: [{ type: 'text', text: JSON.stringify(envelope) }],
                                   structuredContent: envelope });
     const all = JSON.stringify(out);
     for (const bad of ['/go/c/', '/upgrade/h/', 'machine_pay', 'auto_trial_key', 'persist_command',
+                       'agent_payment', 'paymentMethodTypes', 'pay_now',
                        'dch_trial_', 'for_your_human', 'For your human', 'X-API-Key', 'retry_instructions'])
       expect(all, bad).not.toContain(bad);
     // …and the data survived
     expect(all).toContain('"project":"P0"');
+    expect(out.structuredContent.executed[3].result.truncation.rows_total).toHaveProperty('demand_24h');
   });
 });

@@ -59,6 +59,15 @@ describe('B3: reviewer-visible results', () => {
   });
 });
 
+describe('fetch market for a metro the planner table has no slug for', () => {
+  it('7453 CoreSite - Secaucus (NY3) prints Market: New York Metro', () => {
+    const r = _facilityFetchRecord('7453', { name: 'CoreSite - Secaucus (NY3)', city: 'Secaucus', state: 'NJ',
+      latitude: 40.78, longitude: -74.06, status: 'Operational' }, 'https://dchub.cloud/facility/7453');
+    expect(r.text).toMatch(/Market: New York Metro\./);
+    expect(r.metadata.market).toBe('New York Metro');
+  });
+});
+
 describe('B4: a source outage is one plain line', () => {
   const OUT = { region: 'PJM-DOM', iso: 'PJM', zone: 'DOMINION', source_unavailable: true, temporary: true,
     retry_after_utc: '2026-10-01T00:00:00Z',
