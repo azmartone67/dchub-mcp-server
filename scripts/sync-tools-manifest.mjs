@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
+import { judgeCount, describeVerdict, ghWarning } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = process.argv.includes('--fix');
@@ -33,6 +34,9 @@ const readJSON = (f) => JSON.parse(read(f));
 // the tool list is derived, so a single --fix regenerates mcp-server.json from
 // the HEALED descriptions instead of converging one run later.
 const problems = [];
+// Canon floors that are still TRUE but below canon (see floorGate). They pass
+// CHECK and print as ::warning::; --fix still heals them to the canon value.
+const warnings = [];
 const pending = new Map();
 // Set by the server.json version fence below; reported at the end so a bump
 // (or a fence that could not run) is never silent.
@@ -451,6 +455,26 @@ const applyRx = (txt, rx, decide, commentAware) => {
   }
   return out + txt.slice(last);
 };
+// ★2026-09-26 THE CANON FLOOR RULE (owner decision; scripts/canon-floor.mjs,
+// same rule as dchub-desktop-extension#5). Before this, CHECK failed on ANY
+// difference from the snapshot (`lit === canon()`), so a still-true floor one
+// canon step behind was a red required check. Now a "+" literal fails only when
+// it OVERCLAIMS (above canon) or is more than 5% below; inside 5% it passes with
+// a ::warning::. A literal without "+" stays exact by value. Tool counts do not
+// come through here — they keep their own exact `=== COUNT` rule below.
+// Returns true when the literal should be rewritten: always for a failure, and
+// in --fix mode for a passing literal that is not byte-identical to canon (the
+// heal still converges every surface on the canon value; CHECK just no longer
+// calls a true floor a defect).
+const floorGate = (file, text, lit, canonLit, label) => {
+  const v = judgeCount(qtyValue(lit), qtyValue(canonLit), { floor: /\+$/.test(lit) && /\+$/.test(canonLit) });
+  const where = `${file}: "${text.trim().replace(/\s+/g, ' ')}"`;
+  if (v.warn) { warnings.push(`${where} — ${label} ${describeVerdict(v, canonLit)}`); return FIX; }
+  if (v.pass) return FIX;
+  problems.push(`${where} — stale ${label} (canonical ${canonLit}) — ${describeVerdict(v, canonLit)}`);
+  return true;
+};
+
 // One quantity rule against one file: reports drift into `problems` and
 // returns healed text. Same code path for CHECK and FIX — they cannot diverge.
 const applyQuantities = (file, txt, rules, commentAware) => {
@@ -463,8 +487,7 @@ const applyQuantities = (file, txt, rules, commentAware) => {
     out = applyRx(out, quantityRx(noun), (m) => {
       if (same(m[1]) || !bigEnough(m[1])) return null;
       if (skip && skip(m[0])) return null;
-      problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
-      return repl(m[1]) + m[2];
+      return floorGate(file, m[0], m[1], canon(), label) ? repl(m[1]) + m[2] : null;
     }, commentAware);
     // ★2026-08-05 number-AFTER-noun rules (3 groups: prefix, number, suffix).
     // Same file, same skip, same report — a claim must not become invisible
@@ -473,8 +496,7 @@ const applyQuantities = (file, txt, rules, commentAware) => {
       out = applyRx(out, rx, (m) => {
         if (same(m[2]) || !bigEnough(m[2])) return null;
         if (skip && skip(m[0])) return null;
-        problems.push(`${file}: "${m[0].trim().replace(/\s+/g, ' ')}" — stale ${label} (canonical ${canon()})`);
-        return m[1] + repl(m[2]) + m[3];
+        return floorGate(file, m[0], m[2], canon(), label) ? m[1] + repl(m[2]) + m[3] : null;
       }, commentAware);
     }
   }
@@ -518,8 +540,7 @@ const applyQuantities = (file, txt, rules, commentAware) => {
   for (const { rx, canon, label } of AFTER_NOUN) {
     txt = applyRx(txt, rx, (m) => {
       if (m[2] === canon()) return null;
-      problems.push(`${f}: "${m[0].trim()}" — stale ${label} (canonical ${canon()})`);
-      return m[1] + canon();
+      return floorGate(f, m[0], m[2], canon(), label) ? m[1] + canon() : null;
     }, true);
   }
   const C_ANCHORED = [
@@ -530,8 +551,7 @@ const applyQuantities = (file, txt, rules, commentAware) => {
   for (const rx of C_ANCHORED) {
     txt = applyRx(txt, rx, (m) => {
       if (m[2] === P.countries) return null;
-      problems.push(`${f}: "${m[0].trim()}" — stale country count (canonical ${P.countries})`);
-      return m[1] + P.countries + m[3];
+      return floorGate(f, m[0], m[2], P.countries, 'country count') ? m[1] + P.countries + m[3] : null;
     }, true);
   }
   // ★2026-09-01: the adjective slot is why two counts rotted unseen. "82 live
@@ -1096,6 +1116,8 @@ if (facts) {
 }
 
 // ---- apply / report --------------------------------------------------------
+// Printed in BOTH modes: a floor inside tolerance passes, but it must say so.
+for (const w of warnings) console.log(ghWarning(w));
 if (FIX) {
   for (const [f, content] of pending) fs.writeFileSync(path.join(ROOT, f), content);
   // ★ The bump is announced BEFORE the summary line, because a version change is

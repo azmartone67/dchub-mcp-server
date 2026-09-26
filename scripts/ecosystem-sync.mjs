@@ -60,6 +60,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decide, sourceMarker } from './refresh-canon-phrases.mjs';
+import { FLOOR_TOLERANCE, judgeCount, ghWarning } from './canon-floor.mjs';
 import { CAPACITY_SUMMARY_PATH, capacityPasteClause, capacityPointersEnabled, capacitySummaryFromHttp, isCapacityLive }
   from '../lib/capacity-source-summary.mjs';
 
@@ -100,7 +101,15 @@ export const STALE_TOTAL_ABOVE = 10;
 // maintainers. Within this fraction of canon (and never above it) a hosted
 // floor is reported as a conservative floor, not drift. Our own surfaces and
 // the ones we publish to are generated from canon, so they stay exact.
-export const FLOOR_TOLERANCE = 0.95;
+// ★2026-09-26 the arithmetic is the shared CANON FLOOR RULE (scripts/canon-floor.mjs,
+// owner decision, same as dchub-desktop-extension#5): FLOOR_TOLERANCE is now the
+// 0.05 *fraction below canon* (it was the 0.95 multiplier), overclaim is drift,
+// more than 5% below is drift, inside 5% is in_sync with a note + ::warning::.
+// `ours`/`push` stay exact ON PURPOSE: here a verdict is a HEAL TRIGGER, not a
+// pass/fail gate, and those surfaces are regenerated from canon by the lanes
+// this script dispatches. Exact there is the analogue of sync-tools-manifest's
+// --fix still healing a floor that its CHECK passes.
+export { FLOOR_TOLERANCE };
 const EXACT_FLOOR_KINDS = new Set(['ours', 'push']);
 const CONFIRM_DELAY_MS = Number(process.env.ECOSYSTEM_CONFIRM_DELAY_MS || 40000);
 
@@ -491,7 +500,7 @@ export function judge(obs, ssot, { kind } = {}) {
   if (canonFloor != null) {
     const floors = [...new Set(obs.floors || [])];
     const exact = kind == null || EXACT_FLOOR_KINDS.has(kind);
-    const conservative = (n) => !exact && n != null && n < canonFloor && n >= canonFloor * FLOOR_TOLERANCE;
+    const conservative = (n) => !exact && n != null && judgeCount(n, canonFloor, { floor: true }).warn;
     const off = floors.filter((f) => parseFloor(f) !== canonFloor && !conservative(parseFloor(f)));
     const low = floors.filter((f) => conservative(parseFloor(f)));
     if (off.length) reasons.push(`says ${off.join(' / ')} facilities (canon ${ssot.facilities})`);
@@ -1218,6 +1227,9 @@ async function main() {
     console.log(`  ${mark} ${r.label.padEnd(34)} ${r.verdict.state === 'in_sync' ? (r.obs?.info || '') : r.verdict.reasons.join('; ')}`);
     if (r.verdict.state === 'drift' && process.env.GITHUB_ACTIONS) {
       console.log(`::warning title=${r.label}::${r.verdict.reasons.join('; ')}`);
+    }
+    if (r.verdict.state === 'in_sync' && r.verdict.notes?.length && process.env.GITHUB_ACTIONS) {
+      console.log(ghWarning(`${r.label}: ${r.verdict.notes.join('; ')} (within ${FLOOR_TOLERANCE * 100}%; refresh it)`));
     }
   }
   for (const [lane, p] of Object.entries(plan)) console.log(`  ${p.dispatch ? 'DISPATCH' : 'hold    '} ${WORKFLOWS[lane]}: ${p.why}`);

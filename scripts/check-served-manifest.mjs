@@ -30,6 +30,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { judgeCount, describeVerdict, ghWarning } from './canon-floor.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SERVED = 'https://dchub.cloud/.well-known/mcp.json';
@@ -97,10 +98,19 @@ const checks = [
   ['deals', /([\d,]+\+)\s*tracked\s*M&A/i, canon.deals],
   ['countries', /([\d,]+\+)\s*countries/i, canon.countries],
 ];
+// ★2026-09-26 THE CANON FLOOR RULE (scripts/canon-floor.mjs; owner decision,
+// same as dchub-desktop-extension#5). This used to be `seen !== expected`, so a
+// served "24,600+" one canon step behind 24,800+ was DRIFT although still true.
+// Now a "+" floor is drift only when it overclaims or is more than 5% below;
+// inside 5% it is OK with a ::warning::. Tool counts above stay exact.
+const num = (s) => Number(String(s).replace(/[,+]/g, ''));
 for (const [name, re, expected] of checks) {
   if (!expected) continue;
   const seen = qty(desc, re);
-  if (seen && seen !== expected) note(`description.${name}`, seen, expected, CANON);
+  if (!seen || seen === expected) continue;
+  const v = judgeCount(num(seen), num(expected), { floor: /\+$/.test(seen) && /\+$/.test(String(expected)) });
+  if (v.warn) console.log(ghWarning(`description.${name}: served ${seen} — ${describeVerdict(v, expected)}`));
+  else if (!v.pass) note(`description.${name}`, seen, expected, CANON);
 }
 
 // ── report ─────────────────────────────────────────────────────────────────

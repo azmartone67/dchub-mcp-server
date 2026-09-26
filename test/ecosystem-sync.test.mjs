@@ -458,7 +458,7 @@ describe('a true floor on a hosted listing is not drift (2026-09-25: 24,500+ vs 
   });
 
   it('holds at the tolerance edge and fails one facility under it', () => {
-    const edge = Math.ceil(24600 * FLOOR_TOLERANCE);
+    const edge = Math.ceil(24600 * (1 - FLOOR_TOLERANCE));
     expect(hosted([`${edge.toLocaleString('en-US')}+`]).state).toBe('in_sync');
     expect(hosted([`${(edge - 1).toLocaleString('en-US')}+`]).state).toBe('drift');
   });
