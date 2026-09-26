@@ -1,7 +1,0 @@
-[build]
-builder = "nixpacks"
-buildCommand = "npm ci"
-
-[deploy]
-startCommand = "node server.mjs"
-healthcheckPath = "/health"
