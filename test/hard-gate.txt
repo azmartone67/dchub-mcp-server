@@ -44,6 +44,11 @@ test/citation-shape-contract.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
+test/claude-directory-auth.test.mjs
+test/claude-directory-catalog.test.mjs
+test/claude-directory-probe.test.mjs
+test/claude-directory-readout.test.mjs
+test/claude-directory-shared-scrub-equality.test.mjs
 test/claude-passive-arrivals.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/comparison-symmetry.test.mjs

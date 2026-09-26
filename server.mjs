@@ -108,6 +108,13 @@ import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults } from './lib/chatgpt-directory.mjs';
+// r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
+// profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
+import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
+         installClaudeResponseFilter as _installClaudeFilter,
+         applyClaudeArgDefaults as _applyClaudeArgDefaults,
+         excludedFromRelayReadout as _excludedFromRelayReadout,
+         CLAUDE_INVALID_TOKEN_CHALLENGE, CLAUDE_INVALID_TOKEN_MESSAGE } from './lib/claude-directory.mjs';
 import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
          setCanonicalToolNames as _setCoreCanonicalNames,
@@ -2518,6 +2525,14 @@ const MCP_SOURCE_PATHS = new Map([
   //   handed out a BARE https://dchub.cloud/mcp, indistinguishable from direct.
   //   Glama's CONNECTOR page is a different URL (/mcp/registry, cascade-fed).
   ['/mcp/github', 'github-readme'],
+  // ★ 2026-09-26 — the Claude Connectors Directory PROFILE (r-claude-directory).
+  //   Unlike every path above, this one does not serve the full /mcp: it is a
+  //   profile (lib/claude-directory.mjs — plain read-only subset, scrubbed
+  //   responses), selected by _pathProfile. The tag is here so its calls carry
+  //   source='claude-directory', which is also what keeps them out of the relay
+  //   readout (excludedFromRelayReadout). /mcp/anthropic above is unchanged: it
+  //   still serves the full /mcp under 'anthropic-directory'.
+  [CLAUDE_PATH, CLAUDE_SOURCE],
 ]);
 
 function _normPath(req) {
@@ -2528,7 +2543,10 @@ function _normPath(req) {
 // null everywhere else. Rides ctx as `profile` so code that mints or hands out
 // something (mintAutoTrial) can refuse on the directory surface.
 export function _pathProfile(req) {
-  return _normPath(req) === DIRECTORY_PATH ? DIRECTORY_PROFILE : null;
+  const p = _normPath(req);
+  if (p === DIRECTORY_PATH) return DIRECTORY_PROFILE;
+  if (p === CLAUDE_PATH) return CLAUDE_PROFILE;   // r-claude-directory
+  return null;
 }
 
 // r-core-profile (2026-09-25): /mcp/core, the slim read-only core profile
@@ -3015,6 +3033,9 @@ export function _recipeLifecyclePayload(phase, fields, c) {
 // paywall response. 1500ms timeout to match the rest of the telemetry
 // pipeline (track / heartbeat / validateKey).
 async function signalPaywall(payload) {
+  // r-claude-directory: /mcp/claude shows no relay line, so its gated calls are
+  // not paywall signals and stay out of the relay readout.
+  try { if (_excludedFromRelayReadout(getCtx())) return; } catch (_) {}
   try {
     await fetch(new URL('/api/v1/mcp/signal-paywall', API_BASE).toString(), {
       method: 'POST',
@@ -3127,6 +3148,7 @@ async function trackPaidHit(sessionId, toolName) {
   if (!_isRealSession(sessionId)) return;
   try {
     const c = getCtx();
+    if (_excludedFromRelayReadout(c)) return;   // r-claude-directory: not in the relay readout
     if (isBotOrInternalCtx(c)) return;  // r72: don't track bot/probe paid-hits
     const variant = claimVariantFromCtx(c);
     // 2026-07-01: 3000→10000 + status logging. This fires BEFORE/concurrent
@@ -3161,6 +3183,7 @@ async function shouldMintClaim(sessionId, toolName) {
   if (!_isRealSession(sessionId) || !toolName) return null;
   try {
     const c = getCtx();
+    if (_excludedFromRelayReadout(c)) return null;   // r-claude-directory: no claims on /mcp/claude
     if (isBotOrInternalCtx(c)) return null;  // r72: never mint claims for bots/probes
     const variant = claimVariantFromCtx(c);
     const url = new URL('/api/v1/mcp/should-mint-claim', API_BASE);
@@ -3891,6 +3914,8 @@ export async function mintAutoTrial(tool_name) {
     // preview" answer, which is the owner's decision for that surface
     // (dec-chatgpt-keyless-tier: trimmed anonymous previews, no full keyless tier).
     if (c && c.profile === DIRECTORY_PROFILE) return null;
+    // r-claude-directory: /mcp/claude hands out no keys either.
+    if (c && c.profile === CLAUDE_PROFILE) return null;
     // r-core-profile: /mcp/core returns no keys either, so it mints none.
     if (c && c.profile === CORE_PROFILE) return null;
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
@@ -5650,10 +5675,18 @@ async function _workosFetchEmail(sub) {
     return (typeof e === 'string' && e.includes('@')) ? e.trim().toLowerCase() : null;
   } catch (_) { return null; }
 }
-async function resolveWorkosBearer(token) {
+// r-claude-directory (2026-09-26): `opts.audiences` widens the accepted `aud`
+// for ONE path. /mcp/claude is its own RFC 9728 resource, so a client that read
+// its metadata asks AuthKit for aud https://dchub.cloud/mcp/claude; that path
+// also accepts an /mcp token (it lists a subset of /mcp). Without opts — every
+// other path — the check, and the cache key, are exactly what they were, so a
+// token minted for /mcp/claude is still refused on /mcp.
+async function resolveWorkosBearer(token, opts) {
   if (!_workosEnabled() || !_WORKOS_DOMAIN) return null;
   if (!_looksLikeJwt(token)) return null;               // not a JWT → fall through
-  const cached = _workosTokenCache.get(token);
+  const _auds = (opts && Array.isArray(opts.audiences) && opts.audiences.length) ? opts.audiences : null;
+  const _cacheKey = _auds ? token + '\u0000' + _auds.join(',') : token;
+  const cached = _workosTokenCache.get(_cacheKey);
   if (cached && cached.exp > Date.now()) return cached.api_key ? cached : null;
   const jwks = _getWorkosJwks();
   if (!jwks) return null;
@@ -5686,15 +5719,15 @@ async function resolveWorkosBearer(token) {
       console.log(`[oauth] workos jwt verify failed: ${e && (e.code || e.message)}`
         + (peek ? ` kid=${peek.kid} alg=${peek.alg} iss=${peek.iss} aud=${peek.aud} exp=${peek.exp}`
                 : ' (unparseable jwt)'));
-      _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
+      _workosTokenCache.set(_cacheKey, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
       return null;
     }
   }
   // Audience binding — the token must be issued FOR this resource.
   const auds = Array.isArray(payload.aud) ? payload.aud : (payload.aud ? [payload.aud] : []);
-  if (_workosAudEnforce() && !auds.includes(_WORKOS_AUD)) {
-    console.log(`[oauth] workos jwt aud mismatch: got=${JSON.stringify(auds)} want=${_WORKOS_AUD}`);
-    _workosTokenCache.set(token, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
+  if (_workosAudEnforce() && !(_auds ? _auds.some((x) => auds.includes(x)) : auds.includes(_WORKOS_AUD))) {
+    console.log(`[oauth] workos jwt aud mismatch: got=${JSON.stringify(auds)} want=${_auds ? _auds.join('|') : _WORKOS_AUD}`);
+    _workosTokenCache.set(_cacheKey, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
     return null;
   }
   const sub = payload.sub;
@@ -5730,7 +5763,7 @@ async function resolveWorkosBearer(token) {
   // oauth.mjs does. A first-seen-in-this-process heuristic would double count
   // across replicas and restarts, so it is deliberately not used.)
   if (idn.created === true) _chStage('identity_created');
-  _workosTokenCache.set(token, out);
+  _workosTokenCache.set(_cacheKey, out);
   console.log(`[oauth] workos bearer → durable key ${idn.api_key.slice(0, 12)}… tier=${out.tier}`);
   return out;
 }
@@ -15015,7 +15048,7 @@ function trackedTool(srv, name, description, schema, handler) {
     // signature tools, and every later call came back as this block — whose
     // key-offer copy is itself the commerce the profile exists to remove.
     // The anonymous per-IP rate limit still applies there.
-    if (c.profile !== DIRECTORY_PROFILE && _isScraperSession(c.session_id, name, !!c.api_key)) {
+    if (c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE && _isScraperSession(c.session_id, name, !!c.api_key)) {
       status = 'blocked_scraper';
       console.log(`[scraper-block] sid=${(c.session_id||'').slice(0,8)} tool=${name} platform=${c.platform||'?'} — pattern matched 5-tool sweep`);
       // fire-and-forget telemetry, then return.
@@ -18778,6 +18811,9 @@ function createServer(descOverrides, instructionsTail) {
           platform: (c && c.platform) || 'unknown', client_name: null,
           api_key: null, tier: null, session_id: (c && c.session_id) || null,
           status: 'success', duration_ms: Date.now() - t0,
+          // r-claude-directory: tag the planner row with its arrival source when
+          // there is one; the /mcp payload (no source) is unchanged.
+          ...(c && c.source ? { source: c.source } : {}),
         });
         // r-recipe-lifecycle: the paired terminal event. Carries started_at
         // again so a dropped `started` (track is fire-and-forget) is healed
@@ -20625,6 +20661,9 @@ function createServer(descOverrides, instructionsTail) {
       // r-core-profile: a plan run from /mcp/core keeps its steps in the core
       // profile (no key minting) via a single-use in-process token.
       if (c && c.profile === CORE_PROFILE) headers[CORE_LOOPBACK_HEADER] = _mintCoreLoopbackToken();
+      // r-claude-directory: a plan run from /mcp/claude keeps its steps in the
+      // Claude profile (no key minting, out of the relay readout), same mechanism.
+      if (c && c.profile === CLAUDE_PROFILE) headers[CLAUDE_LOOPBACK_HEADER] = _mintClaudeLoopbackToken();
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -23099,6 +23138,19 @@ const _oauthStore = {
     return (j && j.data) ? j.data : null;
   },
 };
+// r-claude-directory (2026-09-26): RFC 9728 metadata for the /mcp/claude
+// resource. RFC 9728 §3.3 has the client check that `resource` equals the URL
+// it connected to, and the live document for this path (the Cloudflare worker,
+// dchub-frontend _worker.js) names https://dchub.cloud/mcp for every suffix.
+// This route serves the correct document at the origin; the worker must answer
+// the same (or pass this path through) before OAuth on /mcp/claude can work.
+// Advertised only while AuthKit bearers are actually resolved (_workosEnabled).
+app.get('/.well-known/oauth-protected-resource/mcp/claude', (req, res) => {
+  if (!_workosEnabled()) return res.status(404).json({ error: 'not_found' });
+  res.set('Cache-Control', 'no-store');
+  res.set('Access-Control-Allow-Origin', '*');
+  return res.json(CLAUDE_PRM);
+});
 registerOAuthRoutes(app, {
   issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
   store: _oauthStore,
@@ -23440,6 +23492,26 @@ export function _consumeCoreLoopbackToken(tok, now = Date.now()) {
   _coreLoopbackTokens.delete(tok);
   return exp >= now;
 }
+// r-claude-directory: the same single-use in-process token for /mcp/claude's
+// execute_plan steps. A separate map, so a core token can never select the
+// Claude profile or the reverse.
+const CLAUDE_LOOPBACK_HEADER = 'x-dchub-claude-loopback';
+const _claudeLoopbackTokens = new Map();
+export function _mintClaudeLoopbackToken(now = Date.now()) {
+  if (_claudeLoopbackTokens.size > 5000) {
+    for (const [t, exp] of _claudeLoopbackTokens) if (exp < now) _claudeLoopbackTokens.delete(t);
+  }
+  const tok = randomUUID() + randomUUID();
+  _claudeLoopbackTokens.set(tok, now + CORE_LOOPBACK_TTL_MS);
+  return tok;
+}
+export function _consumeClaudeLoopbackToken(tok, now = Date.now()) {
+  if (typeof tok !== 'string' || !tok) return false;
+  const exp = _claudeLoopbackTokens.get(tok);
+  if (exp === undefined) return false;
+  _claudeLoopbackTokens.delete(tok);
+  return exp >= now;
+}
 function _isLoopbackPeer(req) {
   const a = String(req?.socket?.remoteAddress || '');
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
@@ -23583,8 +23655,12 @@ app.post(MCP_PATHS, async (req, res) => {
     // installed before anything below can write. The profile is stateless: it
     // mints no session, and a session id sent to it is ignored.
     const _dirProfile = _pathProfile(req);
+    // r-claude-directory: /mcp/claude is a directory profile too, with its own
+    // allowlist and its own filter (lib/claude-directory.mjs).
+    const _claudeProfile = _dirProfile === CLAUDE_PROFILE;
     if (_dirProfile) {
-      _installDirectoryFilter(req, res);
+      if (_claudeProfile) _installClaudeFilter(req, res);
+      else _installDirectoryFilter(req, res);
       delete req.headers['mcp-session-id'];
     }
     // r-core-profile: /mcp/core is stateless too; a session id sent to it is ignored.
@@ -23596,6 +23672,12 @@ app.post(MCP_PATHS, async (req, res) => {
     delete req.headers[CORE_LOOPBACK_HEADER];
     const _coreLoopback = !_dirProfile && !_coreProfile && _isLoopbackPeer(req)
       && _consumeCoreLoopbackToken(_coreLoopbackTok);
+    // r-claude-directory: likewise an execute_plan step started on /mcp/claude,
+    // so the step runs under the Claude profile (no minting, no readout rows).
+    const _claudeLoopbackTok = req.headers[CLAUDE_LOOPBACK_HEADER];
+    delete req.headers[CLAUDE_LOOPBACK_HEADER];
+    const _claudeLoopback = !_dirProfile && !_coreProfile && !_coreLoopback && _isLoopbackPeer(req)
+      && _consumeClaudeLoopbackToken(_claudeLoopbackTok);
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
     // r-platform-header (2026-07-20): explicit platform attribution header —
@@ -23673,7 +23755,7 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_b.id === undefined) return res.status(202).end();   // notifications
       if (_b.method === 'tools/call') {
         const _n = _b.params && _b.params.name;
-        if (!_isDirectoryTool(_n)) {
+        if (!(_claudeProfile ? _isClaudeTool(_n) : _isDirectoryTool(_n))) {
           return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown tool: ${String(_n || '').slice(0, 80)}` }, 200);
         }
         if (!_b.params.arguments || typeof _b.params.arguments !== 'object') _b.params.arguments = {};
@@ -23681,7 +23763,11 @@ app.post(MCP_PATHS, async (req, res) => {
         for (const k of Object.keys(_a)) {
           if (/^(mpp_|x402|payment|credential)/i.test(k)) delete _a[k];
         }
-        _applyDirectoryArgDefaults(_n, _a);
+        // r-claude-directory: execute_plan's experiment tag is not offered on
+        // /mcp/claude and is not recorded from it either.
+        if (_claudeProfile) delete _a.cohort;
+        if (_claudeProfile) _applyClaudeArgDefaults(_n, _a);
+        else _applyDirectoryArgDefaults(_n, _a);
       }
       if (_b.method === 'prompts/list') return _writeRpcResult(req, res, _b.id, { prompts: [] });
       if (_b.method === 'resources/list') return _writeRpcResult(req, res, _b.id, { resources: [] });
@@ -23794,7 +23880,9 @@ app.post(MCP_PATHS, async (req, res) => {
         // DORMANT unless DCHUB_WORKOS_OAUTH_ENABLED; null → apiKey stays as the
         // raw Bearer (treated as X-API-Key, exactly as before). X-API-Key wins
         // (this branch only runs when no x-api-key header was sent).
-        const _wid = await resolveWorkosBearer(_bearer);
+        // r-claude-directory: /mcp/claude also accepts tokens issued for its own resource.
+        const _wid = await resolveWorkosBearer(_bearer,
+          _claudeProfile ? { audiences: [_WORKOS_AUD, CLAUDE_RESOURCE] } : undefined);
         if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; _bearerResolved = true; }
       }
     }
@@ -23888,7 +23976,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // (read at GET /api/v1/mcp/oauth-challenge/state). Kill: the same
     // DCHUB_OAUTH_CHALLENGE_COUNT_DISABLE=1 that gates _chBump. The Claude challenge below
     // is UNCHANGED — this block only observes.
-    if (detectPlatformFromInit(req.body, userAgent, platformHeader) === 'chatgpt' && _challengeMethod
+    if (!_claudeProfile && detectPlatformFromInit(req.body, userAgent, platformHeader) === 'chatgpt' && _challengeMethod
         && !req.headers['x-api-key'] && !_workosAuthed
         && !(sessionId && sessions.has(sessionId))) {
       _chBump('chatgpt_connector_seen', req.body?.method);
@@ -23967,7 +24055,9 @@ app.post(MCP_PATHS, async (req, res) => {
     // it would have produced a confident, permanent zero on the exact series
     // this exists to populate. The credential checks are what scope this to the
     // anonymous cohort — the same three the challenge uses.
-    if (_challengeMethod && _chAllowed
+    // r-claude-directory: /mcp/claude (and its execute_plan steps) is not an
+    // arrival in the Claude-connector series the 10-01 readout reads.
+    if (!_claudeProfile && !_claudeLoopback && _challengeMethod && _chAllowed
         && !req.headers['x-api-key'] && !_workosAuthed
         && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))) {
       _chBump('claude_connector_seen', req.body?.method);
@@ -23979,8 +24069,12 @@ app.post(MCP_PATHS, async (req, res) => {
     const _chCallerKey = (req.headers['x-dc-client-ip'] || '').trim()
                       || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
                       || sessionId || '';
+    // r-claude-directory: the anonymous-connector challenge is the /mcp
+    // experiment under readout; /mcp/claude does not run it. Keyless callers
+    // there are served (authless with an optional key); OAuth starts from the
+    // path's protected-resource metadata, and a bad bearer is challenged below.
     if (_workosEnabled() && !_challengeDisabled && _claudeChallengeEligible({
-          isClaudeConnector: _chAllowed,
+          isClaudeConnector: _chAllowed && !_claudeProfile && !_claudeLoopback,
           method: req.body?.method,
           hasApiKeyHeader: !!req.headers['x-api-key'],
           workosAuthed: _workosAuthed,
@@ -24019,7 +24113,7 @@ app.post(MCP_PATHS, async (req, res) => {
     // handler because every path below this point serves the call; a bump that
     // waited for success would need to thread through the stateless transport,
     // and under-counting there would silently restore "never challenge".
-    if (req.body?.method === 'tools/call' && _chAllowed
+    if (!_claudeProfile && !_claudeLoopback && req.body?.method === 'tools/call' && _chAllowed
         && !req.headers['x-api-key'] && !_workosAuthed
         && !/^Bearer\s+\S/i.test(String(req.headers['authorization'] || ''))) {
       _bumpAnonCall(sessionId);
@@ -24062,7 +24156,30 @@ app.post(MCP_PATHS, async (req, res) => {
       forwardedFor: req.headers['x-forwarded-for'],
       remoteAddress: req.socket?.remoteAddress,
     });
-    if (_workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
+    // r-claude-directory: the same decision on /mcp/claude, with this path's
+    // own resource_metadata (RFC 9728 §5.1) so the client's OAuth flow targets
+    // https://dchub.cloud/mcp/claude, a plain message, and no funnel counter.
+    if (_claudeProfile && _workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
+          authHeader: req.headers['authorization'],
+          hasApiKeyHeader: !!req.headers['x-api-key'],
+          bearerResolved: _bearerResolved,
+          method: req.body?.method,
+          hasSession: false,
+          challengesIssued: _challengesIssued(_ibKey),
+          challengeMax: CHALLENGE_MAX,
+        })) {
+      const _bv = await validateKey(_bearer);
+      if (!_bv.valid) {
+        res.set('WWW-Authenticate', CLAUDE_INVALID_TOKEN_CHALLENGE);
+        _bumpChallengeIssued(_ibKey);
+        return res.status(401).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: CLAUDE_INVALID_TOKEN_MESSAGE },
+          id: (req.body && req.body.id) ?? null,
+        });
+      }
+    }
+    if (!_claudeProfile && _workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
           authHeader: req.headers['authorization'],
           hasApiKeyHeader: !!req.headers['x-api-key'],
           bearerResolved: _bearerResolved,
@@ -24438,12 +24555,14 @@ app.post(MCP_PATHS, async (req, res) => {
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
-        api_key: apiKey, platform, tier, profile: _coreLoopback ? CORE_PROFILE : _dirProfile,
+        api_key: apiKey, platform, tier,
+        profile: _coreLoopback ? CORE_PROFILE : (_claudeLoopback ? CLAUDE_PROFILE : _dirProfile),
         auth_source: _authChannel,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
         auth_demoted: _authDemoted(_keyPresented, validation),   // r-auth-demoted
-        source: _pathSource(req),   // r-source-path: rides EVERY request
+        // r-claude-directory: an execute_plan step started on /mcp/claude keeps its source.
+        source: _claudeLoopback ? CLAUDE_SOURCE : _pathSource(req),   // r-source-path: rides EVERY request
         is_trial: validation.is_trial === true,      // r62c-conv trial-taste gate
         metered_enforce: validation.metered_enforce === true,  // r-metered-enforce (DARK)
         developer_id: validation.developer_id || null,

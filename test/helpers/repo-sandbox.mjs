@@ -234,3 +234,39 @@ export function createScratchRepo(label = 'dchub-scratch', { git: init = true } 
     cleanup() { fs.rmSync(root, { recursive: true, force: true }); },
   };
 }
+
+/**
+ * A read-only copy of the repo AT A GIT REF, for tests that compare this
+ * branch's output with another commit's (r-claude-directory, 2026-09-26: /mcp
+ * must answer byte-identically to origin/main while the relay wording is
+ * frozen). It lives here because this helper is the one file allowed to write.
+ *
+ * The copy is extracted under <repo>/node_modules/.cache/, which git ignores,
+ * so the ref's server.mjs resolves its npm imports from this checkout's
+ * node_modules by ordinary parent-directory lookup: nothing is installed.
+ *
+ * @returns {{root: string, sha: string, cleanup: () => void} | null}
+ *   null when the ref does not resolve here (a shallow CI clone has no
+ *   origin/main); the caller says so rather than passing silently.
+ */
+export function createGitRefSandbox(repoRoot, ref, label = 'dchub-ref') {
+  let sha;
+  try {
+    sha = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch { return null; }
+  if (!sha) return null;
+  const parent = path.join(repoRoot, 'node_modules', '.cache');
+  fs.mkdirSync(parent, { recursive: true });
+  const root = fs.mkdtempSync(path.join(parent, `${label}-`));
+  try {
+    const tar = execFileSync('git', ['-C', repoRoot, 'archive', '--format=tar', sha],
+      { maxBuffer: 512 * 1024 * 1024 });
+    execFileSync('tar', ['-x', '-C', root], { input: tar });
+    if (!fs.existsSync(path.join(root, 'server.mjs'))) throw new Error(`git archive of ${ref} has no server.mjs`);
+  } catch (e) {
+    fs.rmSync(root, { recursive: true, force: true });
+    throw e;
+  }
+  return { root, sha, cleanup() { fs.rmSync(root, { recursive: true, force: true }); } };
+}
