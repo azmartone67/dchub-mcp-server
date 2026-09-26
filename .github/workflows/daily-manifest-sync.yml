@@ -283,7 +283,7 @@ jobs:
           OWNED="README.md smithery.yaml mcp-server.json server.json package.json \
                  server.mjs canonical/canon_phrases.json canonical/problem_taxonomy.json \
                  canonical/tool_maturity.json \
-                 llms-install.md REGISTRY-LISTINGS.md \
+                 llms-install.md REGISTRY-LISTINGS.md .cursor-plugin/plugin.json \
                  skills/README.md skills/dc-hub-data-center-intelligence/SKILL.md \
                  scripts/tier3_presence.sh scripts/smithery_description.txt \
                  integrations/README.md integrations/chatgpt/README.md \

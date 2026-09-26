@@ -1,7 +1,7 @@
 {
   "name": "dchub",
-  "version": "1.0.0",
-  "description": "Live data-center, power-grid, fiber, interconnection-queue & M&A intelligence for AI agents — 21,800+ facilities, 91 tools. Remote MCP at https://dchub.cloud/mcp.",
+  "version": "1.1.0",
+  "description": "Live data-center, power-grid, fiber, interconnection-queue & M&A intelligence for AI agents — 24,600+ facilities, 92 tools. Remote MCP at https://dchub.cloud/mcp.",
   "author": {
     "name": "Jonathan Martone",
     "email": "jonathan@dchub.cloud"
@@ -19,6 +19,7 @@
     "site-selection"
   ],
   "logo": "dchub-logo.png",
+  "mcpServers": "mcp.json",
   "variables": {
     "type": "object",
     "properties": {
