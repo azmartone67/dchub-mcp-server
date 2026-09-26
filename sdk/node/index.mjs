@@ -9,7 +9,7 @@
  *   await dc.market("northern-virginia");
  *   await dc.search({ state: "VA" });
  *   await dc.grid("ERCOT");
- *   await dc.call("get_market_intel", { market: "dallas" });  // any of the 81 tools
+ *   await dc.call("get_market_intel", { market: "dallas" });  // any of the 92 tools
  *   await dc.tools();                        // list tool names
  *
  * Zero runtime dependencies (uses global fetch, Node >= 18).
@@ -126,10 +126,17 @@ export class DCHub {
     return this.call("get_market_intel", { market: slug });
   }
 
-  /** Search facilities by free-text / state / country. */
-  search({ q, state, country, limit = 5 } = {}) {
+  /** Search facilities by free-text / state / country.
+   *
+   * `q` is the SDK's short name; the MCP tool's declared argument is `query`
+   * (search_facilities maps it to the backend's own parameter). Sending `q`
+   * straight through was an undeclared argument, dropped before the handler,
+   * so `search({ q: "Ashburn" })` returned the unfiltered fleet — Hampton
+   * first. `query` is accepted too, and wins if both are given. */
+  search({ q, query, state, country, limit = 5 } = {}) {
     const args = { limit };
-    if (q) args.q = q;
+    const text = query ?? q;
+    if (text) args.query = text;
     if (state) args.state = state;
     if (country) args.country = country;
     return this.call("search_facilities", args);

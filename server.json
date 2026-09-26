@@ -4,7 +4,30 @@
   "title": "DC Hub — Data Center Site Selection & Colocation: Electricity, Power Grid, Gas, Fiber",
   "description": "Live power, energy, grid, gas, fiber + off-market data-center capacity in kW/MW — query and cite.",
   "websiteUrl": "https://dchub.cloud",
-  "version": "2.12.20",
+  "icons": [
+    {
+      "src": "https://dchub.cloud/icons/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    },
+    {
+      "src": "https://dchub.cloud/icons/icon-192.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "192x192"
+      ]
+    },
+    {
+      "src": "https://dchub.cloud/icons/dchub-logo.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
+  "version": "2.12.21",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"

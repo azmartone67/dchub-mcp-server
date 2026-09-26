@@ -1,14 +1,14 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **92 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.17** · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **92 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.20** (isLatest, published 2026-09-25T02:59Z, measured 2026-09-25 via `GET registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub/mcp-server`; `server.json` 2.12.21 publishes on merge) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
 ## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
 - ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.3.3 live.** Auto-republishes on every `server.json` version bump (GitHub Action `registry-refresh.yml`, DNS-auth). **Most directories mirror this**, so you're already broadly listed.
 - ✅ **Glama** — auto-listed from this repo's `glama.json`; just hit **Refresh** on your Glama page if it looks stale.
 - ⏳ **3 quick web forms left** (~5 min each — there's NO "upload a document" field; paste the values below):
   1. **PulseMCP** → https://www.pulsemcp.com → "Submit" in the top nav.
-  2. **mcp.so** → https://mcp.so → "Submit".
+  2. ~~**mcp.so**~~ → **listed** (see the 2026-09-25 note under the owner hand-edit section).
   3. **Smithery** → CLI, no form: `smithery mcp publish "https://dchub.cloud/mcp" -n azmartone67/dchub` (or "Add Server" on smithery.ai).
 - For ALL of them, paste from the **One-liner / Short description / Connection** blocks below. Manifest the form may ask for: `https://dchub.cloud/.well-known/mcp-server.json` (now v2.3.3 / 92 tools at origin; CF edge refreshes within ~10 min).
 
@@ -32,7 +32,7 @@ was called, so we can finally answer "did this listing ever send anyone".
 | **Smithery** | `https://dchub.cloud/mcp/smithery` | ✅ CLI publish — see below |
 | **Glama** | `https://dchub.cloud/mcp/glama` | ❌ dashboard only (cascade-fed) |
 | **PulseMCP** | `https://dchub.cloud/mcp/pulsemcp` | ❌ web form / dashboard |
-| **mcp.so** ⚠️ we are NOT listed — see note below | `https://dchub.cloud/mcp/mcpso` | ❌ paid submission ($39) + sign-in |
+| **mcp.so** — listed: `https://mcp.so/servers/dchub-mcp-server` (+ a second, repo-derived `/servers/dchub-backend`); copy is stale — see the 2026-09-25 note below | `https://dchub.cloud/mcp/mcpso` | ❌ verify-only: the edit form refuses published listings |
 | **LobeHub** | `https://dchub.cloud/mcp/lobehub` | ❌ dashboard |
 | **ToolPlex** ⚠️ destination UNLOCATED — see note below | `https://dchub.cloud/mcp/toolplex` | ⚠️ unverified |
 | **MCPMarketHub** | `https://dchub.cloud/mcp/mcpmarket` | ❌ dashboard |
@@ -269,6 +269,19 @@ subscription. https://dchub.cloud/pricing
 > it is the one a reader uses to decide.
 
 ## ★ OWNER HAND-EDIT — mcp.so (2026-09-16)
+
+> **2026-09-25 — mcp.so IS LISTED; the "NOT listed" notes on this page are
+> superseded.** Measured 2026-09-25: `https://mcp.so/servers/dchub-mcp-server`
+> answers 200 with the title "Dc Hub — Data Center Intelligence | MCP Server",
+> and `https://mcp.so/servers/dchub-backend` answers 200 as a second listing.
+> The primary listing's copy is stale (an old tool count, old facility floors
+> and the pre-2026-09-05 price table) and cannot be fixed from here: mcp.so's
+> edit form refuses published listings (owner, 2026-09-24) and mcp.so support
+> was asked on 2026-09-25 to fix it and to merge the second listing. Both are
+> tracked as verify-only sinks (`mcp_so`, `mcp_so_secondary`) in
+> `scripts/ecosystem-sync.mjs`, which reports them on issue #410. The
+> submission steps below are kept for reference only.
+
 Nothing in this repo can write the mcp.so listing: it is a paid ($39 one-time),
 signed-in submission, so it stays an owner action. Everything it asks for is
 above; paste in this order, and use the TAGGED url or the listing's arrivals are
@@ -450,7 +463,7 @@ nothing about any of them, in either direction:
 |---|---|---|
 | **PulseMCP** | ✅ listed | classification "Official", #11,607 of ~21,970 (#8,547 this week), 624 est. visitors (24 this week) |
 | **Glama** | ✅ listed | already covered by `scripts/registry_monitor.py` |
-| **mcp.so** | ❌ **ABSENT** | control-verified: `data center` (55KB) and `datacenter` (75KB) return results that do NOT include us; `dchub` / `dc hub` → "No servers match" |
+| **mcp.so** | ❌ **ABSENT** (superseded: listed as of 2026-09-25, see the owner hand-edit section) | control-verified: `data center` (55KB) and `datacenter` (75KB) return results that do NOT include us; `dchub` / `dc hub` → "No servers match" |
 | **ToolPlex** | ⚠️ **destination unlocated** | `toolplex.ai` is a forecasting/inventory SaaS; `/mcp` `/servers` `/directory` `/registry` `/tools` all 404. This repo named ToolPlex 11× but the ONLY url it ever recorded is our own `/mcp/toolplex` — it never said where ToolPlex is |
 
 ★ Both source paths are KEPT. They cost nothing, they already serve

@@ -193,6 +193,57 @@ export function stripChangelogDiffs(text) {
   return String(text || '').replace(/Previous value:[\s\S]*?New value:/g, ' ');
 }
 
+const decodeEntities = (s) => String(s || '').replace(/&(?:amp|#x27|#39|quot|lt|gt|nbsp);/g, (m) => ENTITY[m]);
+const CARD_META_RE = /^(?:description|og:description|twitter:description|og:title|twitter:title)$/i;
+
+/** The listing CARD a page publishes in its <head>: the meta / og / twitter
+ *  description and title. A link preview, a search result and an AI crawler
+ *  read these, and visibleText() never sees them — it deletes every tag, and a
+ *  meta's text lives in an attribute. QA 2026-09-25 read "92 tools across
+ *  22,900+ facilities" in Glama's meta/og/JSON-LD while the sweep, reading only
+ *  the body, reported the body's 22,100+. */
+export function metaCardText(html) {
+  const out = [];
+  for (const m of String(html || '').matchAll(/<meta\b[^>]*>/gi)) {
+    const tag = m[0];
+    const key = tag.match(/\b(?:name|property)\s*=\s*"([^"]*)"/i)?.[1];
+    const content = tag.match(/\bcontent\s*=\s*"([^"]*)"/i)?.[1];
+    if (key && content != null && CARD_META_RE.test(key)) out.push(decodeEntities(content));
+  }
+  return out.join('\n');
+}
+
+// JSON-LD node types that describe THIS listing. Organization / BreadcrumbList
+// are the host's own and carry nothing about us; an ItemList of related servers
+// would carry other servers' counts, so it is not read either.
+const LD_TYPES = new Set(['SoftwareApplication', 'WebApplication', 'Product', 'FAQPage']);
+
+/** Every string inside the page's JSON-LD nodes about this listing. Like the
+ *  meta card, it sits in a <script> that visibleText() drops wholesale. */
+export function jsonLdText(html) {
+  const out = [];
+  const walk = (v) => {
+    if (typeof v === 'string') out.push(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  for (const m of String(html || '').matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let doc;
+    try { doc = JSON.parse(m[1]); } catch { continue; }
+    const nodes = Array.isArray(doc?.['@graph']) ? doc['@graph'] : (Array.isArray(doc) ? doc : [doc]);
+    for (const n of nodes) {
+      const types = [].concat(n?.['@type'] || []);
+      if (types.some((t) => LD_TYPES.has(t))) walk(n);
+    }
+  }
+  return out.join('\n');
+}
+
+/** What a hosted page states about us in its <head>: meta card + JSON-LD. */
+export function headText(html) {
+  return `${metaCardText(html)}\n${jsonLdText(html)}`.trim();
+}
+
 const FLOOR_RE = /\b(\d{1,3}(?:,\d{3})+|\d{1,3}(?:\.\d)?\s?[kK])\+\s+(?:(?:distinct|discovered|verified|tracked|mapped|global)\s+)?(?:data[- ]cent(?:er|re)\s+)?(?:facilit(?:y|ies)|data[- ]cent(?:er|re)s)\b/g;
 
 /** "21,800+" -> 21800 · "20K+" -> 20000 · anything else -> null */
@@ -358,15 +409,22 @@ export function glamaDeprecation(html) {
   return null;
 }
 
-/** The duplicate's verdict is its deprecation, never its text: the frozen AI
- *  review on it is Glama's own copy, and no commit or admin edit reaches it. */
+/** The duplicate's verdict is its deprecation plus its CARD. The frozen AI
+ *  review in the body is Glama's own copy, and no commit or admin edit reaches
+ *  it, so the body is never judged. The card is different: the <head> meta /
+ *  og / JSON-LD is what a link preview, a search result and a crawler quote,
+ *  deprecated or not, so a stale floor or a banned price there is reported
+ *  (QA 2026-09-25 reported the duplicate showing the server page's card while
+ *  this lane marked it in sync: only the deprecation banner was read). */
 export function observeGlamaDuplicate(html) {
   if (!/cloud\.dchub/.test(String(html || ''))) return { read: false, error: 'no DC Hub identity on the page' };
   const d = glamaDeprecation(html);
   if (!d) return { read: false, error: 'deprecation state is not on the page' };
+  const card = headText(html);
+  const said = { floors: facilityFloors(card), toolClaims: toolClaims(metaCardText(html)), banned: bannedClaims(card) };
   return d.deprecated
-    ? { read: true, info: `deprecated${d.at ? ` since ${d.at}` : ''}` }
-    : { read: true, extra: ['the duplicate is live again: it is no longer deprecated'] };
+    ? { read: true, ...said, info: `deprecated${d.at ? ` since ${d.at}` : ''}` }
+    : { read: true, ...said, extra: ['the duplicate is live again: it is no longer deprecated'] };
 }
 
 /** Pack names from the What's New MCP pack cards ("/mcp/grid" -> "grid"). */
@@ -761,11 +819,20 @@ async function readGlama(key) {
   const r = await fetchText(bust(SINKS[key].url));
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   if (!/dchub/i.test(r.text)) return { read: false, error: 'no DC Hub identity on the page' };
-  const badge = glamaBadge(r.text);
-  const text = stripChangelogDiffs(visibleText(r.text));
-  const rel = glamaLatestRelease(r.text);
+  return observeGlama(r.text);
+}
+
+/** One Glama page: the badge for the tool count, and floors / banned copy from
+ *  the body AND the <head> card (meta, og, twitter, JSON-LD). The body alone
+ *  missed a card that disagreed with it (QA 2026-09-25). Tool claims come only
+ *  from the meta card: the body's AI review quotes old counts by design. */
+export function observeGlama(html) {
+  const badge = glamaBadge(html);
+  const text = `${stripChangelogDiffs(visibleText(html))}\n${headText(html)}`;
+  const rel = glamaLatestRelease(html);
   return {
     read: true, tools: badge, floors: facilityFloors(text), banned: bannedClaims(text),
+    toolClaims: toolClaims(metaCardText(html)),
     extra: badge == null ? ['no "Available Tools" badge: Glama has not introspected a build'] : [],
     info: rel ? `newest Glama release ${rel.version} at ${rel.at} (Glama's own counter)` : '',
   };
@@ -927,7 +994,7 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
   if (manual.length) {
     out.push('| listing | what it says now | what fixes it |', '|---|---|---|');
     for (const r of manual) out.push(line(r));
-    out.push('', 'Paste-ready line, generated from the single source (Pro is $99/mo, never $299, no Founding offer):', '', '```', pasteLine(ssot), '```');
+    out.push('', 'Paste-ready line, generated from the single source (Pro is $99/mo; quote no other Pro price and no launch offer):', '', '```', pasteLine(ssot), '```');
     out.push('', 'For an open PR on a curated list, update THAT PR in place. A second PR reads as a duplicate to those bots.');
   } else {
     out.push('Nothing. Every listing a person has to edit matches the live source.');

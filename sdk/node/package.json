@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DC Hub Node SDK — live data-center, power & gas intelligence over MCP.",
   "type": "module",
   "main": "index.mjs",

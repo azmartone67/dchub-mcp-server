@@ -18,6 +18,7 @@ import {
   hiveItem, packCodes, usableCanon, repoDrift, judge, gate, planActions, stuckKeys,
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
+  metaCardText, jsonLdText, headText, observeGlama,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
@@ -515,5 +516,79 @@ describe('mcp.so is verify-only: its edit form refuses published listings (owner
     const rest = body.split('### Verify-only')[1] || '';
     expect(rest).toMatch(/\[mcp\.so\]\(https:\/\/mcp\.so\/servers\/dchub-mcp-server\): [^\n]*banned pricing copy: \$299/);
     expect(stuckMarker(body)).toEqual([]);
+  });
+});
+
+describe('Glama <head> card: meta / og / JSON-LD are read, not only the body', () => {
+  // QA 2026-09-25 (21:29-21:44 PT) read this card in the server page's meta
+  // description, og:description and SoftwareApplication JSON-LD while #410
+  // reported only the body's 22,100+. visibleText() deletes every tag, so a
+  // meta attribute and a <script type="application/ld+json"> never reached
+  // the reader. Canon that day: 92 tools, 24,600+ facilities.
+  const CANON = { tools: 92, facilities: '24,600+', version: '2.12.21' };
+  const STALE_CARD = 'AI agents call 92 tools across 22,900+ facilities for land+power, grid and fiber. Pro $99/mo (never $299/Founding).';
+  const CLEAN_CARD = 'AI agents call 92 tools across 24,600+ facilities for land+power, grid and fiber. Pro $99/mo.';
+  const head = (card) => `<head><meta content="${card}" name="description"/>`
+    + `<meta property="og:description" content="${card}"/>`
+    + '<script type="application/ld+json">' + JSON.stringify({ '@context': 'https://schema.org', '@graph': [
+      { '@type': 'Organization', name: 'Glama', description: 'Host org: 10,000+ data centers' },
+      { '@type': 'ItemList', itemListElement: [{ '@type': 'ListItem', item: { name: 'Other server', description: '5,000+ facilities' } }] },
+      { '@type': 'SoftwareApplication', name: 'DC Hub', description: card },
+    ] }) + '</script></head>';
+  const body = '<body><p>DC Hub: 24,600+ facilities</p><div id="tools"><h2 class="x">Available Tools</h2><span>92<!-- --> tool<!-- -->s</span></div></body>';
+
+  it('the body-only read cannot see the card (the defect)', () => {
+    expect(facilityFloors(visibleText(head(STALE_CARD) + body))).toEqual(['24,600+']);
+    expect(bannedClaims(visibleText(head(STALE_CARD) + body))).toEqual([]);
+  });
+
+  it('reads meta / og and the SoftwareApplication node, never the host Organization or a related-server list', () => {
+    expect(metaCardText(head(STALE_CARD))).toContain('22,900+ facilities');
+    const ld = jsonLdText(head(STALE_CARD));
+    expect(ld).toContain('22,900+ facilities');
+    expect(ld).not.toContain('10,000+');
+    expect(ld).not.toContain('5,000+');
+    expect(facilityFloors(headText(head(STALE_CARD)))).toEqual(['22,900+']);
+  });
+
+  it('a stale card is drift: floor below tolerance, dual floor, banned copy', () => {
+    const v = judge(observeGlama(head(STALE_CARD) + body), CANON, { kind: SINKS.glama_server.kind });
+    expect(v.state).toBe('drift');
+    const why = v.reasons.join(' | ');
+    expect(why).toMatch(/22,900\+/);
+    expect(why).toMatch(/banned pricing copy: \$299, Founding/);
+  });
+
+  it('the card Glama serves once it catches up is in sync', () => {
+    expect(judge(observeGlama(head(CLEAN_CARD) + body), CANON, { kind: SINKS.glama_server.kind }))
+      .toEqual({ state: 'in_sync', reasons: [] });
+  });
+
+  it('tool claims come from the meta card only, so the body AI review is not re-read', () => {
+    const review = '<p>With 82 tools, this server is heavy</p>';
+    expect(observeGlama(head(CLEAN_CARD) + body + review).toolClaims).toEqual([92]);
+    expect(judge(observeGlama(head(CLEAN_CARD.replace('92 tools', '88 tools')) + body), CANON, { kind: 'watch' }).reasons.join(' '))
+      .toMatch(/says 88 tools \(live 92\)/);
+  });
+
+  it('the deprecated duplicate is drift when its card is stale, in sync when its card is clean', () => {
+    const dep = '<strong>This connector has been deprecated</strong>'
+      + '<script>\\"cloud.dchub/dc-hub-data-center-intelligence-mcp-server\\",\\"deprecatedAt\\",\\"2026-09-05T17:14:48.727945Z\\"</script>';
+    const stale = judge(observeGlamaDuplicate(head(STALE_CARD) + dep), CANON, { kind: SINKS.glama_duplicate.kind });
+    expect(stale.state).toBe('drift');
+    expect(stale.reasons.join(' | ')).toMatch(/22,900\+.*\|.*banned pricing copy/);
+    expect(judge(observeGlamaDuplicate(head(CLEAN_CARD) + dep), CANON, { kind: SINKS.glama_duplicate.kind }))
+      .toEqual({ state: 'in_sync', reasons: [] });
+  });
+});
+
+describe('the #410 issue body never prints a banned price itself', () => {
+  it('the paste-line header states the $99 price without quoting a banned figure', () => {
+    const results = [{ key: 'mcphive', kind: 'manual', label: 'MCP Hive', fix: 'f', verdict: { state: 'drift', reasons: ['says 88 tools (live 90)'] } }];
+    const body = renderIssue({ ssot: SSOT, results, stuck: ['mcphive'], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    const header = body.split('\n').find((l) => l.startsWith('Paste-ready line'));
+    expect(header).toContain('Pro is $99/mo');
+    expect(bannedClaims(header)).toEqual([]);
+    expect(bannedClaims(body)).toEqual([]);
   });
 });
