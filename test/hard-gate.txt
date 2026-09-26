@@ -48,6 +48,7 @@ test/claude-directory-auth.test.mjs
 test/claude-directory-catalog.test.mjs
 test/claude-directory-probe.test.mjs
 test/claude-directory-readout.test.mjs
+test/claude-directory-search-plans-line.test.mjs
 test/claude-directory-shared-scrub-equality.test.mjs
 test/claude-passive-arrivals.test.mjs
 test/client-config-transport-matches-canon.test.mjs
