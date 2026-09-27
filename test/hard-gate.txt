@@ -190,6 +190,7 @@ test/platform-recall.test.mjs
 test/portfolio-nudge.test.mjs
 test/power-timeline-class.test.mjs
 test/pricing-canon-and-go-links.test.mjs
+test/pro-trial-offer.test.mjs
 test/problem-taxonomy.test.mjs
 test/public-doors-banned-floors.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
