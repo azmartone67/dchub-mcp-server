@@ -53,6 +53,15 @@ import sys
 
 import requests
 
+# Web Bot Auth: sign this script's requests to dchub.cloud (no-op without
+# WEB_BOT_AUTH_PRIVATE_JWK or `cryptography`). See scripts/web_bot_auth.py.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+try:
+    import web_bot_auth
+    web_bot_auth.install_requests_signing()
+except ImportError:
+    pass
+
 MANIFEST_URL = os.environ.get("DCHUB_MANIFEST_URL", "https://dchub.cloud/.well-known/mcp.json")
 MCP_URL = os.environ.get("MCP_URL", "https://dchub.cloud/mcp")
 MIN_TOOLS_COUNT = 74

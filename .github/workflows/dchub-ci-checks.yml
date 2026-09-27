@@ -28,9 +28,12 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests cryptography
 
       - name: Run DC Hub CI checks
         env:
           X_API_KEY: ${{ secrets.DC_HUB_API_KEY }}
+          # Web Bot Auth: scripts/web_bot_auth.py signs this step's requests to
+          # dchub.cloud (unsigned if the key or `cryptography` is missing).
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: python tools/ci_dchub_checks_envkey.py

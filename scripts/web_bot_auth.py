@@ -22,7 +22,8 @@ Unset, malformed, or `cryptography` missing -> probe_signature_headers() returns
     from web_bot_auth import probe_signature_headers
     headers = {**base_headers, **probe_signature_headers(url)}
 
-Or, for a whole script: `import web_bot_auth; web_bot_auth.install_urllib_signing()`.
+Or, for a whole script: `import web_bot_auth; web_bot_auth.install_urllib_signing()`
+(urllib) or `install_requests_signing()` (requests).
 """
 from __future__ import annotations
 
@@ -146,4 +147,32 @@ def install_urllib_signing() -> bool:
 
     setattr(urlopen, _INSTALLED, True)
     urllib.request.urlopen = urlopen
+    return True
+
+
+def install_requests_signing() -> bool:
+    """Wrap requests' HTTPAdapter.send once: the requests twin of
+    install_urllib_signing(). send() sees every prepared request, each redirect
+    hop included, so the signature always matches the host it goes to. Same
+    rules: our hosts only, an existing Signature is kept, no key adds nothing,
+    and a signing error never fails a request. Returns False if already
+    installed or if requests is not importable."""
+    try:
+        import requests.adapters as ra
+    except ImportError:
+        return False
+    orig = ra.HTTPAdapter.send
+    if getattr(orig, _INSTALLED, False):
+        return False
+
+    def send(self, request, *args, **kwargs):
+        try:
+            if "Signature" not in request.headers:
+                request.headers.update(sign_if_own_host(request.url))
+        except Exception:  # a signature is never worth breaking a request
+            pass
+        return orig(self, request, *args, **kwargs)
+
+    setattr(send, _INSTALLED, True)
+    ra.HTTPAdapter.send = send
     return True

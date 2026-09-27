@@ -272,7 +272,7 @@ jobs:
       # this file, 13 of them notes like this one, and two notes appended at the
       # same spot conflict exactly as the one line did.
       - name: Python signer dependency (test/web-bot-auth-python.test.mjs)
-        run: python3 -c 'import cryptography' 2>/dev/null || python3 -m pip install -q --break-system-packages cryptography
+        run: python3 -c 'import cryptography, requests' 2>/dev/null || python3 -m pip install -q --break-system-packages cryptography requests
       - name: Unit gate — gating logic (HARD gate, no network)
         run: |
           files=$(grep -v '^[[:space:]]*$' test/hard-gate.txt || true)

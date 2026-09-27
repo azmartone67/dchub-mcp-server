@@ -85,6 +85,11 @@ jobs:
         id: publish
         env:
           SMITHERY_API_KEY: ${{ secrets.SMITHERY_API_KEY || secrets.SMITHERY_TOKEN }}
+          # Web Bot Auth: the Smithery CLI is Node, so the preload signs any request
+          # it makes to dchub.cloud (unsigned if the key is missing). Absolute path:
+          # npx may run the CLI from its own cache directory.
+          NODE_OPTIONS: --import ${{ github.workspace }}/lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: |
           if [ -z "${SMITHERY_API_KEY:-}" ]; then
             echo "::warning::SMITHERY_API_KEY secret not set — skipping freshness heartbeat (add it to re-enable)."
