@@ -22,6 +22,7 @@ const g2g = {
 const pricing = { henry_hub_spot_usd_mmbtu: SENT, delivered_electric_usd_mmbtu: SENT, market_name: 'Dallas' };
 const brief = {
   region: 'TX', henry_hub_usd_mmbtu: 2.9,
+  basis_usd_mmbtu: SENT, delivered_price_usd_mmbtu: SENT,
   gas_to_grid_usd_per_mwh: { new_ccgt_6400_btu_kwh: SENT, avg_ccgt_6800_btu_kwh: SENT },
   headline_behind_meter_vs_grid_delta_usd_mwh: SENT,
   headline: { delta_usd_mwh: SENT, gas_to_grid_new_ccgt_usd_mwh: SENT, interpretation: `≈ $${SENT}/MWh`, note: 'n' },
@@ -81,6 +82,8 @@ describe('anonymous MCP callers get the REST free view of gas $/MWh', () => {
     expect(text.length).toBeGreaterThan(50);
     expect(text).not.toContain(String(SENT));
     expect(text).not.toContain('41.74');   // no rounded copy either
+    // Henry Hub stays: the REST anonymous teaser shows it too.
+    expect(JSON.parse(text).henry_hub_usd_mmbtu).toBe(2.9);
   });
 });
 

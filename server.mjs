@@ -2092,6 +2092,12 @@ export function _maskGasEconomicsBelowPro(out) {
 export function _maskGasIntelligenceAnonymous(out) {
   const o = { ...out };
   const masked = [];
+  // ★2026-09-27: the $/MMBtu layers the REST teaser also gates (routes/
+  //   gas_intelligence.py _teaser: basis + delivered are identified+). Henry
+  //   Hub is NOT here on purpose — the REST teaser shows it to anonymous too.
+  for (const k of ['basis_usd_mmbtu', 'delivered_price_usd_mmbtu']) {
+    if (o[k] != null) { o[k] = null; masked.push(k); }
+  }
   const sc = o.gas_to_grid_usd_per_mwh;
   if (sc && typeof sc === 'object') {
     o.gas_to_grid_usd_per_mwh = Object.fromEntries(Object.keys(sc).map((k) => [k, null]));
@@ -2106,7 +2112,7 @@ export function _maskGasIntelligenceAnonymous(out) {
   }
   if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
   if (masked.length) o.tier_masked = { tier_required: 'identified', fields: masked,
-    note: 'Gas-to-grid $/MWh needs any DC Hub key (claim_free_key is free), the same rule the REST API applies.' };
+    note: 'Gas-to-grid $/MWh and the basis and delivered gas prices need any DC Hub key (claim_free_key is free), the same rule the REST API applies.' };
   return o;
 }
 async function _callerIsProOrAbove() {
