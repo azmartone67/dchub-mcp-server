@@ -2050,6 +2050,78 @@ async function _paidKeyIsProOrAbove(apiKey) {
 // webhook's email provisioning delivered anything. A trial key therefore binds a
 // SUBSCRIPTION by session, exactly as a keyless caller does. The $10 pack keeps pk-:
 // its credits are stored by key hash whichever table holds the key.
+// ★2026-09-27 — GAS $/MWh BY THE END USER'S TIER, NOT THE TRANSPORT'S.
+// callAPI always sends X-Internal-Key, so dchub-backend resolves EVERY MCP call
+// as internal (= Pro) and returns the full payload; tiering is this layer's job.
+// get_gas_economics sat in no gate list and get_gas_intelligence's depth-tease
+// masks score-shaped keys only, so once gas-to-grid $/MWh was republished
+// (dchub-backend#5705) an ANONYMOUS MCP caller received the full scenario table,
+// burner_tip.usd_mmbtu and the BTM-vs-grid delta — measured live 2026-09-27
+// (dallas: gas_price_used 2.868, avg CCGT $19.50). The direct API already gates
+// them: /markets/<slug>/gas-to-grid + /gas-pricing are PRO (free keeps one
+// rounded illustrative scenario), /gas/intelligence gates $/MWh to identified+.
+// This mirrors exactly those rules. Values are NULLED, keys kept, so a shape an
+// agent parses does not change; no upsell copy and no beacon — it is a mask,
+// not a paywall.
+const _GAS_BT_NUMERIC = ['usd_mmbtu', 'monthly_min_usd_mmbtu', 'monthly_max_usd_mmbtu'];
+function _maskBurnerTip(bt) {
+  if (!bt || typeof bt !== 'object') return bt;
+  const o = { ...bt };
+  for (const k of _GAS_BT_NUMERIC) if (k in o) o[k] = null;
+  return o;
+}
+const _GAS_ECON_NUMERIC = ['henry_hub_spot_usd_mmbtu', 'hub_spot_usd_mmbtu', 'basis_diff_usd_mmbtu',
+  'delivered_industrial_usd_mmbtu', 'delivered_electric_usd_mmbtu', 'gas_price_used_usd_mmbtu'];
+export function _maskGasEconomicsBelowPro(out) {
+  const o = { ...out };
+  const masked = [];
+  for (const k of _GAS_ECON_NUMERIC) if (o[k] != null) { o[k] = null; masked.push(k); }
+  const sc = o.scenarios_usd_per_mwh;
+  if (sc && typeof sc === 'object') {
+    const keep = 'avg_ccgt_6800_btu_kwh';
+    const v = sc[keep];
+    o.scenarios_usd_per_mwh = Object.fromEntries(Object.keys(sc).map((k) => [k,
+      k === keep && typeof v === 'number' ? `~$${Math.round(v)}/MWh (illustrative)` : null]));
+    masked.push('scenarios_usd_per_mwh');
+  }
+  if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
+  o.tier_masked = { tier_required: 'pro', fields: masked,
+    note: 'Numeric gas prices and the full $/MWh table are Pro-tier values, the same rule the REST API applies.' };
+  return o;
+}
+export function _maskGasIntelligenceAnonymous(out) {
+  const o = { ...out };
+  const masked = [];
+  const sc = o.gas_to_grid_usd_per_mwh;
+  if (sc && typeof sc === 'object') {
+    o.gas_to_grid_usd_per_mwh = Object.fromEntries(Object.keys(sc).map((k) => [k, null]));
+    masked.push('gas_to_grid_usd_per_mwh');
+  }
+  if (o.headline_behind_meter_vs_grid_delta_usd_mwh != null) {
+    o.headline_behind_meter_vs_grid_delta_usd_mwh = null; masked.push('headline_behind_meter_vs_grid_delta_usd_mwh');
+  }
+  if (o.headline && typeof o.headline === 'object') {
+    o.headline = { ...o.headline, delta_usd_mwh: null, gas_to_grid_new_ccgt_usd_mwh: null, interpretation: null };
+    masked.push('headline');
+  }
+  if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
+  if (masked.length) o.tier_masked = { tier_required: 'identified', fields: masked,
+    note: 'Gas-to-grid $/MWh needs any DC Hub key (claim_free_key is free), the same rule the REST API applies.' };
+  return o;
+}
+async function _callerIsProOrAbove() {
+  let c = {};
+  try { c = getCtx() || {}; } catch (_) { c = {}; }
+  const t = String(c.tier || 'free').toLowerCase();
+  if (t === 'enterprise' || t === 'internal') return true;
+  if (_isUnambiguousProOrAbove(t)) return true;
+  if (t === 'paid') return _paidKeyIsProOrAbove(c.api_key);
+  return false;
+}
+function _callerIsKeyed() {
+  try { return !!(getCtx() || {}).api_key; } catch (_) { return false; }
+}
+
 export function _subRefLandsOnKey(apiKey) {
   return !!apiKey && !/^dch_trial_/.test(String(apiKey));
 }
@@ -19302,7 +19374,8 @@ function createServer(descOverrides, instructionsTail) {
         gas_to_grid_error:              g2g && g2g.error,
         gas_to_grid_status:             g2gStatus,
       };
-      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+      const _shown = (await _callerIsProOrAbove()) ? out : _maskGasEconomicsBelowPro(out);
+      return { content: [{ type: 'text', text: JSON.stringify(_shown, null, 2) }], structuredContent: _shown };
     });
 
   // r40 (2026-05-31): all-ISO grid scoreboard, rebuilt on the VERIFIED source.
@@ -21540,7 +21613,8 @@ function createServer(descOverrides, instructionsTail) {
     async (a) => {
       const raw = String((a && (a.region || a.state)) || '').trim();
       if (!raw) return { content: [{ type: 'text', text: JSON.stringify({ error: 'region required (US state code or name)', example: 'get_gas_intelligence region="TX"' }) }] };
-      const out = await callAPI(`/api/v1/gas/intelligence/${encodeURIComponent(raw)}`, {}, { internal: true });
+      const full = await callAPI(`/api/v1/gas/intelligence/${encodeURIComponent(raw)}`, {}, { internal: true });
+      const out = (full && typeof full === 'object' && !_callerIsKeyed()) ? _maskGasIntelligenceAnonymous(full) : full;
       return { content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out };
     });
 

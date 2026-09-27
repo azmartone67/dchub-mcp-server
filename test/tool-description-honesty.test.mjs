@@ -137,7 +137,9 @@ describe('get_gas_economics forwards gas_to_grid_status', () => {
     pricingPayload = { delivered_electric_usd_mmbtu: 1.9 };
     g2gPayload = { scenarios_usd_per_mwh: { ccgt: 31.2 } };
     const out = await callTool('get_gas_economics', { market: 'dallas' });
-    expect(out.scenarios_usd_per_mwh).toEqual({ ccgt: 31.2 });
+    // ★2026-09-27: this call is ANONYMOUS, so the values are masked to the
+    //   REST free view (test/gas-tier-mask.test.mjs); the keys still arrive.
+    expect(Object.keys(out.scenarios_usd_per_mwh)).toEqual(['ccgt']);
     expect(out.gas_to_grid_status).toBeUndefined();
   });
 
