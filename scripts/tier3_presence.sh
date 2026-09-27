@@ -32,7 +32,7 @@ Two things I cared about: (1) it's remote (streamable-HTTP) so it works in Claud
 Desktop, Cursor, VS Code, and Cline with no install; (2) every full-data response
 is CC-BY-4.0, so an agent can both query it AND cite it.
 
-Free tier with no key (10 calls/day). Endpoint: https://dchub.cloud/mcp ·
+Free tier with no key (previews + 2 full answers per tool per day). Endpoint: https://dchub.cloud/mcp ·
 Repo: https://github.com/azmartone67/dchub-mcp-server · Playground (no signup):
 https://dchub.cloud/playground
 

@@ -8,7 +8,7 @@ every record carries a citation URL so Cohere's grounded generation cites
 ## Get a key (one call, no email)
 ```bash
 curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"cohere"}'
-# → {"api_key":"dch_live_..."}   Free tier: 10 calls/day.
+# → {"api_key":"dch_live_..."}   Free key: 10 calls to try.
 ```
 
 ## Enterprise partner key (for Cohere's eval — admin runs this)
