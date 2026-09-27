@@ -8504,10 +8504,9 @@ function _nullFreeFigures(row) {
       if (next.some((r, i) => r !== v[i])) { out[k] = next; changed = true; }
     } else if (_FREE_NUMERIC_KEY_RE.test(k) && !_FREE_NUMERIC_KEEP_RE.test(k) && _isFigure(v)) {
       out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
-    } else if (k === 'value' && typeof v === 'string' && /\bMW\b/.test(v)) {
-      // rank_markets' display string: "191 fac / 5793 MW / 55 ops" keeps its counts
-      const next = v.replace(/(\s*\/\s*)?-?\d[\d,.]*\s*MW\b(\s*\/\s*)?/g,
-        (_m, a, b) => ((a && b) ? ' / ' : '')).trim();
+    } else if (k === 'value' && typeof v === 'string') {
+      // rank_markets' display string keeps only its free words (_freeRankValue)
+      const next = _freeRankValue(v);
       if (next !== v) { out[k] = next; changed = true; }
     } else if (v && typeof v === 'object' && !Array.isArray(v) && k === 'forecast') {
       const inner = _nullFreeFigures(v);
@@ -8515,6 +8514,47 @@ function _nullFreeFigures(row) {
     }
   }
   return { value: out, changed };
+}
+// ── r-value-strip (2026-09-27): rank_markets' `value` restates the gated number ──
+// Measured live 2026-09-27 08:57 UTC, anonymous POST /mcp rank_markets
+// {criteria:"ai_ready"}: every row had score, excess_power_score and
+// time_to_power_months null, and "value":"BUILD · 86.4 excess-power · ~9mo to
+// power" beside them, in both channels. The display string is built from the
+// same fields the preview withholds, so for a free caller it keeps its free
+// words only:
+//   ai_ready        "BUILD · 86.4 excess-power · ~9mo to power" -> "BUILD"
+//   best_overall    "191 fac / 5793 MW / 55 ops"                -> "191 fac / 55 ops"
+//   most_capacity   "5793 MW"                                   -> ""
+//   cheapest_power  "~$13.04/MWh"                               -> ""  (42 - MW/200: it is MW)
+//   most_operators / fastest_growing: "55 operators" / "191 facilities" stay (free counts)
+// Applied by both free trims: trimForTrial (keyless previews) and
+// _gateToolNumerics (keyed free tiers). Paid callers never reach either.
+export function _freeRankValue(v) {
+  if (typeof v !== 'string' || !/\d/.test(v)) return v;
+  if (/\/\s*MWh\b/i.test(v)) return '';
+  if (v.includes('\u00b7')) {
+    return v.split('\u00b7').map((x) => x.trim()).filter((x) => x && !/\d/.test(x)).join(' \u00b7 ');
+  }
+  if (/\bMW\b/.test(v)) {
+    return v.replace(/(\s*\/\s*)?-?\d[\d,.]*\s*MW\b(\s*\/\s*)?/g,
+      (_m, a, b) => ((a && b) ? ' / ' : '')).trim();
+  }
+  return v;
+}
+function _stripRankValues(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  let res = payload;
+  for (const key of _RANK_ROW_KEYS) {
+    const rows = payload[key];
+    if (!Array.isArray(rows)) continue;
+    const next = rows.map((row) => {
+      if (!row || typeof row !== 'object' || typeof row.value !== 'string') return row;
+      const val = _freeRankValue(row.value);
+      return val === row.value ? row : { ...row, value: val };
+    });
+    if (next.some((r, i) => r !== rows[i])) { if (res === payload) res = { ...payload }; res[key] = next; }
+  }
+  return res;
 }
 function _nullFreeRows(payload, keys) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { value: payload, changed: false };
@@ -9028,6 +9068,8 @@ function trimForTrial(parsed, toolName) {
   if (toolName === 'rank_markets') {
     const pub = _publishCountSortScores(parsed, out);
     if (pub !== out) Object.assign(out, pub);
+    const stripped = _stripRankValues(out);       // r-value-strip
+    if (stripped !== out) Object.assign(out, stripped);
   }
   if (typeof out.note === 'string'
       && /showing\s+\d+\s+of\s+\d+/i.test(out.note)
