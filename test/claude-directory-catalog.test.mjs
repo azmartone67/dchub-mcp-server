@@ -115,7 +115,9 @@ describe('tools/list', () => {
     const names = new Set(LIST.tools.map((t) => t.name));
     for (const n of CLAUDE_WITHDRAWN) expect(names.has(n), n).toBe(false);
     const withdrawn = CANON.filter((t) => t.annotations && t.annotations.withdrawn).map((t) => t.name);
-    expect(withdrawn.length).toBeGreaterThan(0);   // non-vacuous: /mcp does mark some
+    // ★2026-09-27: the last partially-withdrawn tools (gas $/MWh) were restored,
+    //   so /mcp may legitimately mark none. Non-vacuity now comes from the
+    //   named CLAUDE_WITHDRAWN list above; the loop still bites if one returns.
     for (const n of withdrawn) expect(names.has(n), n).toBe(false);
   });
 

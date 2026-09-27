@@ -10,7 +10,7 @@ Capacity Source: data-center capacity to buy or lease — powered land, powered 
 
 Liveness is the product, and it is checkable. DC Hub is rebuilt continuously from its sources rather than published and left. Every collection response carries a provenance as_of. The ingest layer itself is public and keyless at https://dchub.cloud/api/v1/ops/deadman — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Including the ones that are late. Verify it rather than take the sentence for it.
 
-The DCGI gas composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh stays withdrawn.
+The DCGI gas composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh, withdrawn the same day, was restored 2026-09-27 under one burner-tip price rule.
 
 Connect direct and keyless at https://dchub.cloud/mcp/smithery — no signup, no config and no key to paste; claim_free_key mints one in-session when you want a higher limit.
 

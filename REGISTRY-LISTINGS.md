@@ -246,7 +246,7 @@ DC Hub is the neutral, real-time data layer for data-center infrastructure — b
 Coverage:
 - **Facilities** — 24,600+ data centers worldwide: search, profiles, scoring, alternatives
 - **Markets** — 300+ markets with the **DCPI** (Data Center Power Index): BUILD/CAUTION/AVOID
-- **Gas** — per-state pipeline + operator presence with live Henry Hub via `get_gas_intelligence` (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 once all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh stays withdrawn)
+- **Gas** — per-state pipeline + operator presence with live Henry Hub via `get_gas_intelligence` (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 once all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh was restored 2026-09-27 under one burner-tip price rule)
 - **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 7 US ISOs + 43 US utility BAs + 31 international grid regions; one-call all-ISO scoreboard
 - **Capital** — 1,600+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
 - **Site factors** — fiber routes, water-stress, tax incentives, nearby substations/transmission

@@ -16,7 +16,7 @@ Any question that touches:
 - **Site selection** — "where should I build", "should I build in <market> right now"
 - **Power & grid** — grid headroom, interconnection-queue depth, time-to-power, live fuel mix
 - **Markets** — DCPI BUILD / CAUTION / AVOID verdicts + 0–100 scores
-- **Gas** — per-US-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh stays withdrawn)
+- **Gas** — per-US-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh was restored 2026-09-27 under one burner-tip price rule)
 - **Deals** — M&A transactions; hyperscaler / Stargate / OpenAI commitments
 - **Adjacent layers** — fiber routes, renewables, water stress, tax incentives
 

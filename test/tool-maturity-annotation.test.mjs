@@ -234,14 +234,15 @@ describe('withdrawn capabilities say so at selection time', () => {
     //   a restored capability keep a 'withdrawn' annotation: an agent reading
     //   selection-time metadata would skip a live, corrected index.
     const marked = listed.tools.filter((t) => t.annotations.withdrawn);
-    expect(marked.map((t) => t.name).sort())
-      .toEqual(['get_gas_economics', 'get_gas_intelligence']);
-    const byName = Object.fromEntries(marked.map((t) => [t.name, t.annotations]));
-    // Named fields retracted ($/MWh), the tools still answer.
-    expect(byName.get_gas_economics.withdrawn).toBe('partially_withdrawn');
-    expect(byName.get_gas_intelligence.withdrawn).toBe('partially_withdrawn');
-    // A withdrawn capability can never read as mature.
-    for (const t of marked) expect(t.annotations.maturity).not.toBe('mature');
+    // ★ 2026-09-27: the gas-fired $/MWh was restored too, so no gas tool
+    //   is marked withdrawn any more. All three must read as restored.
+    expect(marked.map((t) => t.name).sort()).toEqual([]);
+    for (const name of ['get_gas_economics', 'get_gas_intelligence']) {
+      const t = listed.tools.find((x) => x.name === name);
+      expect(t, `${name} missing from tools/list`).toBeTruthy();
+      expect(t.annotations.withdrawn).toBeUndefined();
+      expect(t.description).toMatch(/RESTORED\s+2026-09-27/i);
+    }
 
     // The restored one carries NEITHER the flag NOR the partial cap.
     const gi = listed.tools.find((t) => t.name === 'get_gas_index');
@@ -251,8 +252,8 @@ describe('withdrawn capabilities say so at selection time', () => {
     // is never compared with a post-repair one.
     expect(gi.description).toMatch(/RESTORED\s+2026-08-30/i);
     expect(gi.description).toMatch(/DO NOT COMPARE/i);
-    // …and it still names what did NOT come back with it.
-    expect(gi.description).toMatch(/STILL WITHDRAWN/i);
+    // …and it says the $/MWh came back separately, on its own date.
+    expect(gi.description).toMatch(/republished 2026-09-27/i);
   });
 
   it('the verdict is read from the tool description, not a list', () => {
