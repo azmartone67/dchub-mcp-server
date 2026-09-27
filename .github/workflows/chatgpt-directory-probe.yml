@@ -34,6 +34,10 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: '22' }
       - name: Probe https://dchub.cloud/mcp/chatgpt with no key
+        env:
+          # Web Bot Auth: sign the probe's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: |
           set +e
           node scripts/probe-chatgpt-directory.mjs https://dchub.cloud/mcp/chatgpt | tee probe.log

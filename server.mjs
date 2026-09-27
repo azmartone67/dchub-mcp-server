@@ -91,6 +91,9 @@ import { ListToolsRequestSchema, InitializeRequestSchema } from '@modelcontextpr
 // error codes, so payment challenge/failure are surfaced as structured TOOL
 // RESULTS (matching the gateway's credits_depleted shape), NOT thrown McpError.
 import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mppCallDigest, mppWantsChallenge, mppTakeArgSignal, mppArgShape, mppOffer, mppPrewallOffer, mppUndercapOffer, mppPrice, MPP_CRED_KEY, MPP_RECEIPT_KEY, MPP_ARG_PAY, MPP_ARG_CRED, MPP_PAYMENT_REQUIRED, MPP_PAYMENT_FAILED, MPP_COVERED_TOOLS, MPP_FUNNEL_STATUS, MPP_FUNNEL_BASIS, MPP_FUNNEL_UNMEASURED } from './mpp-hook.mjs';
+// Web Bot Auth: sign this process's own requests to dchub.cloud (no-op without
+// WEB_BOT_AUTH_PRIVATE_JWK). See lib/web-bot-auth.mjs.
+import './lib/web-bot-auth-preload.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
