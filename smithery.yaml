@@ -70,8 +70,8 @@ remote:
   url: "https://dchub.cloud/mcp"
 
 # Optional API key. DC Hub is keyless-first — with NO key you still get the
-# free tier (5 calls/day keyless, live grid scoreboard, previews). Paste a key here to
-# raise limits + unlock full results, and Smithery reuses it across sessions so
+# free tier (previews + 2 full answers per tool per day, live grid scoreboard). Paste a
+# key here to raise limits + unlock full results, and Smithery reuses it across sessions so
 # you never re-mint. Get a free key by calling the `claim_free_key` tool once
 # (no email), or use a paid key. Left blank → the header renders empty and the
 # server treats it exactly like no key (anonymous tier), so this never breaks
@@ -82,12 +82,13 @@ configSchema:
   properties:
     apiKey:
       type: string
-      title: "DC Hub API key — paste one to double your daily calls"
+      title: "DC Hub API key — paste one to raise your limits"
       description: >-
-        Recommended. Blank = anonymous tier, 5 calls/day, results trimmed to a
-        preview. A FREE key doubles that to 10 calls/day and returns full
-        results — no email, no card: connect once and call `claim_free_key`,
-        then paste the key here so every future session starts identified.
+        Recommended. Blank = anonymous tier: previews + 2 full answers per
+        tool per day. A FREE key gives 10 calls to try — no email, no card:
+        connect once and call `claim_free_key`, then paste the key here so
+        every future session starts identified. Add an email with
+        `bind_email` for 50 calls/day (up to 10 full answers per tool per day).
         Saved sites and alerts need a key at all (they are per-account).
         A paid key raises limits further.
       format: password
@@ -195,11 +196,12 @@ tools:
 
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
-  anonymous: "5 calls/day, no signup, 2 results per query"
-  free: "Free dev key (call claim_free_key — no email) — 10 calls/day, all 92 tools"
-  developer: "$49/mo — 500 calls/day, all 92 tools, full results"
+  anonymous: "Previews + 2 full answers per tool per day, no signup"
+  free: "Free key (call claim_free_key — no email) — 10 calls to try; every tool callable, most as previews"
+  identified: "Add an email (bind_email) — 50 calls/day, up to 10 full answers per tool per day"
+  developer: "$49/mo — 500 calls/day; full results on all tools except 7 Pro tools (10 full grid/fiber answers/day, previews of site analysis)"
   pro: "$99/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
-  enterprise: "Custom — dedicated support, SLAs, 100,000+ calls/day"
+  enterprise: "From $12,000/yr — dedicated support, SLAs, 100,000+ calls/day"
 
 gated_tools:
   - get_intelligence_index
