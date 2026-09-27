@@ -3968,7 +3968,18 @@ export const QUOTA_EXEMPT_TOOLS = new Set([
 
 export function _quotaTtlMs(d) {
   if (!d || d.allowed === false) return 30_000;   // blocked → re-check fast
-  const rem = d.remaining;
+  // r-daily-quota: the DAILY half of the same decision. A key past its daily
+  // allowance re-checks as fast as a monthly-blocked one, so the UTC-midnight
+  // reset (or an upgrade) lands within 30s. The tighter of the two remainders
+  // sets the TTL: an identified key has ~1,450 monthly calls left and only a
+  // handful today, and caching it on the monthly figure for 5 minutes would let
+  // it run far past 50/day before the gateway asked again.
+  const day = d.daily;
+  if (day && day.allowed === false) return 30_000;
+  let rem = d.remaining;
+  if (day && typeof day.remaining === 'number') {
+    rem = (typeof rem === 'number') ? Math.min(rem, day.remaining) : day.remaining;
+  }
   if (rem === null || rem === undefined) return 300_000;  // nothing to enforce
   if (rem > 500) return 300_000;
   if (rem > 50)  return 60_000;
@@ -4023,6 +4034,48 @@ export async function checkMonthlyQuota(api_key, tier) {
   })();
   _quotaInflight.set(api_key, p);
   return p;
+}
+
+// ── r-daily-quota (2026-09-27): the published per-DAY allowance for keys ────
+//
+// The rule DC Hub publishes (canon `free_tier`): anonymous = previews + 2 full
+// answers per tool per day; a free key with no email = 10 trial calls in total;
+// with an email bound = 50 calls/day; Developer = 500 calls/day. The first two
+// were enforced; the per-DAY half for keyed callers was not — email-bound keys
+// had only the 1,500/month wall, so "50/day" was a sentence, not a limit.
+//
+// The backend owns the count and the decision (monthly_quota.daily_decision,
+// behind DAILY_QUOTA_ENFORCE, default OFF) and returns it as `daily` on the SAME
+// /api/v1/mcp/monthly-usage answer this file already fetches — one hop, one
+// cache, no new store. This reads it.
+//
+// ★ OVER THE LIMIT = PREVIEWS, NOT A WALL. A key past its daily allowance is
+//   served exactly as an anonymous caller is (previews + the per-tool full
+//   answers), plus a note naming the limit. That is the pattern the two other
+//   gates on call COUNT already use — the anonymous soft cap (preview + nudge)
+//   and the unbound-key bind gate (refused key → served anonymously) — and it
+//   is the only choice under which holding a key can never be worse than
+//   holding none. The monthly wall stays a hard error; it is unchanged.
+//
+// ★ /mcp/chatgpt IS EXEMPT (frz-chatgpt-toolset). The directory profile is in
+//   OpenAI review; its limits and behaviour must not move while it is. null
+//   here means "no daily action", and the profile check is first so nothing
+//   else can reach past it.
+//
+// Returns null (serve normally) or the facts the preview note carries.
+export function _dailyQuotaOver(q, c) {
+  if (c && c.profile === DIRECTORY_PROFILE) return null;
+  const day = q && q.daily;
+  if (!day || day.allowed !== false) return null;
+  return {
+    used: (typeof day.used === 'number') ? day.used : null,
+    quota: (typeof day.quota === 'number') ? day.quota : null,
+    tier: day.quota_tier || null,
+    day: day.day || null,
+    message: (typeof day.message === 'string' && day.message) ? day.message : null,
+    upgrade_url: day.upgrade_url || null,
+    pricing_url: day.pricing_url || null,
+  };
 }
 
 // A paid upgrade or a credit top-up must clear the wall on the NEXT call, not
@@ -15466,6 +15519,40 @@ function trackedTool(srv, name, description, schema, handler) {
             };
           }
         }
+        // r-daily-quota: past the key's published DAILY allowance (identified
+        // 50, Developer 500) → this call is served as an anonymous one would be:
+        // previews plus the per-tool full answers, with the limit named in the
+        // identity block. See _dailyQuotaOver for why previews and not a wall,
+        // and why /mcp/chatgpt never reaches this. Pack credits carry a caller
+        // past it for the same reason they carry one past the monthly wall.
+        const _dq = _dailyQuotaOver(_q, c);
+        if (_dq) {
+          let _dqc = { credits: 0, had_pack: false };
+          try { _dqc = await _getCredits(c); } catch (_) {}
+          if (!((_dqc.credits || 0) > 0)) {
+            try {
+              signalPaywall({
+                tool: name, args, signal_type: 'daily_quota_exhausted',
+                session_id: (c && c.session_id) || 'no-session', mcp_client: c.platform || 'mcp',
+                user_agent: c.client_ua || null, ip_address: c.client_ip || null,
+                api_key: c.api_key || null, tier_current: c.tier || _gateTier || 'free',
+                tier_required: _dq.tier || 'paid', daily_limit: _dq.quota,
+                message_shown: 'daily_quota',
+              });
+            } catch (_) {}
+            status = 'daily_quota_preview';
+            c.daily_quota = _dq;
+            // Served anonymously for THIS call only: the ctx is per request and
+            // sessionMeta still holds the key, so the next call re-checks (30s
+            // TTL while over) and is keyed again the moment the day rolls over.
+            c.api_key = null;
+            c.email = null;
+            c.tier = 'free';
+            c.is_trial = false;
+            tier = 'free';
+            _gateTier = 'free';
+          }
+        }
       }
       // ★ ONE-OF REQUIRED — before the gate, on purpose. The gate answers
       //   "you need to pay"; a call missing its identifier needs "you need to
@@ -17975,6 +18062,19 @@ export function _identitySource(ctxLike) {
     out.credential_demoted = c.auth_demoted;
     out.means = _demotedMeans(src, c.auth_demoted, c.tier || 'free');
   }
+  // r-daily-quota: the key is good and was accepted; its DAILY allowance is
+  // spent, so this call was served at anonymous depth. The wording is the
+  // backend's (monthly_quota._wall_message, the monthly wall's own sentence with
+  // the period set to the day) — this layer states no allowance of its own.
+  if (c.daily_quota) {
+    const dq = c.daily_quota;
+    out.daily_quota_reached = {
+      used: dq.used, quota: dq.quota, tier: dq.tier, day: dq.day,
+      served_as: 'anonymous_preview', resets: 'UTC midnight',
+      upgrade_url: dq.upgrade_url, pricing_url: dq.pricing_url,
+    };
+    if (dq.message) out.means = dq.message;
+  }
   return out;
 }
 
@@ -18022,9 +18122,25 @@ function _refusedMeans(src, reason, servedUnderSessionKey) {
   return head + ' Send a key DC Hub accepts; `claim_free_key` issues one.';
 }
 
+// r-daily-quota: on a call served at preview depth because the key's daily
+// allowance is spent, put the backend's sentence in CONTENT too — content is
+// what an agent reads, and the identity block is structured-only. Appended, never
+// replacing a line, and only when the ctx carries the over-limit mark, which is
+// never set on /mcp/chatgpt (_dailyQuotaOver).
+export function _stampDailyQuotaNote(result) {
+  try {
+    const dq = (getCtx() || {}).daily_quota;
+    if (!dq || !dq.message || !result || !Array.isArray(result.content)) return result;
+    return { ...result, content: [...result.content, { type: 'text', text: '\n\n' + dq.message }] };
+  } catch {
+    return result;
+  }
+}
+
 export function _stampIdentitySource(result) {
   try {
     if (!result || typeof result !== 'object') return result;
+    result = _stampDailyQuotaNote(result);
     const sc = result.structuredContent;
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
     if (sc.identity !== undefined) return result;      // handler said it better

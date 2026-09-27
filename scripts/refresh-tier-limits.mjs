@@ -27,7 +27,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(ROOT, 'canonical', 'tier_limits.json');
+// DCHUB_TIER_LIMITS_OUT: tests write to a temp file, never the committed snapshot.
+const OUT = process.env.DCHUB_TIER_LIMITS_OUT || path.join(ROOT, 'canonical', 'tier_limits.json');
 const SRC = process.env.DCHUB_API_BASE || 'https://dchub.cloud';
 const URL_ = `${SRC}/api/v1/tiers`;
 
@@ -62,21 +63,51 @@ if (!tiers || typeof tiers !== 'object') bail('no `tiers` object in the response
 const PRICED_TIERS = ['starter', 'founding', 'developer', 'pro', 'team', 'enterprise'];
 const OPTIONAL_PRICED = new Set(['founding', 'team']);
 
+// ★ 2026-09-27 — THE FREE-TIER RULE (owner decision D2). The backend now
+// publishes each tier's allowance IN ITS OWN UNIT (`allowance`: calls + period)
+// and a null calls_per_day for the two tiers that have no per-day count:
+//   anonymous  previews + 2 full answers per tool per day  (calls null)
+//   free       10 calls IN TOTAL                            (period 'lifetime')
+// Those two may be null here ONLY when `allowance` names a non-daily unit; a
+// null with no unit is still a degraded read. An older backend that still
+// sends an anonymous calls_per_day is accepted as-is, so the merge order of
+// the two repos does not matter.
+const PERIODS = new Set([null, 'day', 'lifetime', 'month']);
 const out = {};
+const allowance = {};
 for (const t of PUBLIC_TIERS) {
   const row = tiers[t];
   if (!row) bail(`ladder is missing the public tier '${t}'`);
+  const a = row.allowance;
+  if (a !== undefined) {
+    const calls = a && a.calls;
+    const period = a ? (a.period === undefined ? null : a.period) : undefined;
+    if (!a || typeof a !== 'object' || !PERIODS.has(period)
+        || !(calls === null || (Number.isSafeInteger(calls) && calls > 0))
+        || (calls === null) !== (period === null)) {
+      bail(`'${t}'.allowance is malformed: ${JSON.stringify(a)}`);
+    }
+    const full = a.full_answers_per_tool_per_day;
+    allowance[t] = {
+      calls, period,
+      ...(Number.isSafeInteger(full) && full > 0 ? { full_answers_per_tool_per_day: full } : {}),
+    };
+  }
   const n = row.calls_per_day;
+  if (n === null && allowance[t] && allowance[t].period !== 'day') continue;
   // A zero or negative allowance is never a real published tier; treat it as a
   // degraded read rather than writing "0 calls/day" onto every surface.
   if (!Number.isSafeInteger(n) || n <= 0) bail(`'${t}'.calls_per_day is ${JSON.stringify(n)}`);
   out[t] = n;
 }
-// The ladder must be MONOTONIC — anon <= free <= identified <= starter <= dev <= pro <= ent.
-// A ladder that inverts means the upstream is degraded (or a tier was
-// renamed), and publishing it would advertise a paid tier as smaller than free.
-for (let i = 1; i < PUBLIC_TIERS.length; i++) {
-  const lo = PUBLIC_TIERS[i - 1], hi = PUBLIC_TIERS[i];
+// The per-DAY ladder must be MONOTONIC over the tiers that have one —
+// free <= identified <= starter <= dev <= pro <= ent (anonymous and a lifetime
+// free key sit off it). A ladder that inverts means the upstream is degraded
+// (or a tier was renamed), and publishing it would advertise a paid tier as
+// smaller than free.
+const daily = PUBLIC_TIERS.filter((t) => out[t] !== undefined);
+for (let i = 1; i < daily.length; i++) {
+  const lo = daily[i - 1], hi = daily[i];
   if (out[hi] < out[lo]) bail(`ladder inverts: ${lo}=${out[lo]} > ${hi}=${out[hi]}`);
 }
 
@@ -113,6 +144,7 @@ const next = JSON.stringify({
   _comment: 'DERIVED — do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs',
   source: '/api/v1/tiers',
   calls_per_day: out,
+  ...(Object.keys(allowance).length ? { allowance } : {}),
   price_usd_month: price,
   stripe_link,
 }, null, 2) + '\n';

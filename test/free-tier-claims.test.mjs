@@ -22,7 +22,28 @@ import { dirname, join } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
-const CANON = JSON.parse(read("canonical/tier_limits.json")).calls_per_day;
+// ★2026-09-27 (free-tier rule, owner decision D2): the snapshot's calls_per_day
+// carries only PER-DAY rungs. Anonymous has no call count (previews + 2 full
+// answers per tool per day) and the free key is 10 calls IN TOTAL — both now
+// live in `allowance`. CANON is the rung set a published number may name: the
+// per-day rungs plus the free key's allowance count (10 is still the free rung;
+// what is stale is the "/day" some frozen copy puts after it).
+const SNAP = JSON.parse(read("canonical/tier_limits.json"));
+const CANON = { ...SNAP.calls_per_day };
+if (SNAP.allowance && SNAP.allowance.free && Number.isFinite(SNAP.allowance.free.calls)) {
+  CANON.free = SNAP.allowance.free.calls;
+}
+// The retired anonymous figure ("5 calls/day", TIER_LIMITS 2026-08-03..09-27)
+// still printed on these surfaces, per file. Copy is out of scope for the
+// enforcement change that retired it, and the ChatGPT/relay wording is frozen
+// (frz-chatgpt-toolset, frz-claude-relay-wording) — so this pins the EXACT
+// residue: a NEW "5 calls/day" anywhere fails, and so does fixing one of these
+// without removing it here (the list must shrink to {} in the copy follow-up).
+const LEGACY_ANON_5 = {
+  "llms-install.md": 2, "smithery.yaml": 1, "dxt/manifest.json": 2,
+  "integrations/README.md": 1, "integrations/chatgpt/README.md": 1,
+  "integrations/chatgpt/openapi.json": 3,
+};
 
 // Everything an agent, a registry or an installing human actually reads.
 const SURFACES = [
@@ -64,23 +85,31 @@ function claims() {
 
 describe("published calls/day claims", () => {
   it("finds claims at all (guards against a vacuous pass)", () => {
-    expect(CANON.anonymous).toBe(5);
+    // Anonymous has no call count under the free-tier rule.
+    expect(CANON.anonymous).toBeUndefined();
+    expect(SNAP.allowance.anonymous.calls).toBeNull();
     expect(claims().length).toBeGreaterThan(10);
+  });
+
+  it("the retired anonymous 5/day survives only where it is pinned as residue", () => {
+    const got = {};
+    for (const c of claims().filter((x) => x.n === 5)) got[c.file] = (got[c.file] || 0) + 1;
+    expect(got).toEqual(LEGACY_ANON_5);
   });
 
   it("every number is a rung on the canonical ladder", () => {
     const allowed = new Set(Object.values(CANON));
-    const bad = claims().filter((c) => !allowed.has(c.n));
+    const bad = claims().filter((c) => c.n !== 5 && !allowed.has(c.n));
     expect(bad.map((b) => `${b.file}:${b.line} → ${b.n} calls/day`)).toEqual([]);
   });
 
-  it("an anonymous/keyless claim states the anonymous rung", () => {
+  it("an anonymous/keyless claim names no other rung", () => {
     // THE regression. `10 calls/day` is a real rung (free), so a
     // ladder-membership check alone cannot catch "anonymous: 10 calls/day".
-    const bad = claims().filter(
-      (c) => ANON_CTX.test(c.text) && c.n !== CANON.anonymous,
-    );
-    expect(bad.map((b) => `${b.file}:${b.line} → ${b.n}, expected ${CANON.anonymous} — ${b.text.slice(0, 70)}`))
+    // Anonymous has no calls/day figure at all now; the only anonymous-context
+    // number tolerated is the pinned 5/day residue above.
+    const bad = claims().filter((c) => ANON_CTX.test(c.text) && c.n !== 5);
+    expect(bad.map((b) => `${b.file}:${b.line} → ${b.n} — ${b.text.slice(0, 70)}`))
       .toEqual([]);
   });
 
@@ -166,7 +195,7 @@ describe("server.mjs states no rung as a literal", () => {
   });
   it("FREE_TIER mirrors the snapshot exactly", async () => {
     const { FREE_TIER } = await import("../lib/tier-canon.mjs");
-    expect(FREE_TIER.anonymous_calls_per_day).toBe(CANON.anonymous);
+    expect(FREE_TIER.anonymous_calls_per_day).toBe('n/a');   // no call count
     expect(FREE_TIER.free_calls_per_day).toBe(CANON.free);
     expect(FREE_TIER.identified_calls_per_day).toBe(CANON.identified);
     expect(FREE_TIER.unbound_calls_total).toBe(CANON.free);
@@ -175,7 +204,9 @@ describe("server.mjs states no rung as a literal", () => {
 
 describe("the canon snapshot itself", () => {
   it("is a monotonic ladder", () => {
-    const order = ["anonymous", "free", "identified", "starter", "developer", "pro", "enterprise"];
+    // Anonymous sits off the call ladder (no call count); the free rung is
+    // its allowance count, below the first per-day rung.
+    const order = ["free", "identified", "starter", "developer", "pro", "enterprise"];
     for (let i = 1; i < order.length; i++) {
       expect(CANON[order[i]]).toBeGreaterThanOrEqual(CANON[order[i - 1]]);
     }

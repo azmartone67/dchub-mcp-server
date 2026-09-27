@@ -2,13 +2,43 @@
   "_comment": "DERIVED \u2014 do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs",
   "source": "/api/v1/tiers",
   "calls_per_day": {
-    "anonymous": 5,
-    "free": 10,
     "identified": 50,
     "starter": 200,
     "developer": 500,
     "pro": 2000,
     "enterprise": 100000
+  },
+  "allowance": {
+    "anonymous": {
+      "calls": null,
+      "period": null,
+      "full_answers_per_tool_per_day": 2
+    },
+    "free": {
+      "calls": 10,
+      "period": "lifetime"
+    },
+    "identified": {
+      "calls": 50,
+      "period": "day",
+      "full_answers_per_tool_per_day": 10
+    },
+    "starter": {
+      "calls": 6000,
+      "period": "month"
+    },
+    "developer": {
+      "calls": 500,
+      "period": "day"
+    },
+    "pro": {
+      "calls": 60000,
+      "period": "month"
+    },
+    "enterprise": {
+      "calls": 3000000,
+      "period": "month"
+    }
   },
   "price_usd_month": {
     "starter": 9,
