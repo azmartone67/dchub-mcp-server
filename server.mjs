@@ -3661,7 +3661,14 @@ const keyCache = new Map(); // api_key → { valid, tier, exp }
 // concurrent callers await the same promise. Success caching (keyCache, 5 min)
 // and the NEVER-cache-a-downgrade rule below are unchanged.
 const _keyValidateInflight = new Map();      // api_key → Promise<validation>
-async function validateKey(api_key) {
+// r-free-key-per-call (2026-09-27): `opts.count` decides whether the backend hop
+// SPENDS one of a free key's calls. Resolving a key (initialize, a stateless
+// request, a late key, a Bearer) is NOT a call and sends count_call:false; the
+// one counted hop per tool call is _freeKeyCallRefusal, at the tool chokepoint.
+// { count: true } here keeps the pre-fix meaning (a cache miss is a counted
+// validate) for the two paths that do not go through that chokepoint — the
+// frozen /mcp/chatgpt profile and /mcp/core. See _freeKeyCallRefusal.
+async function validateKey(api_key, opts = {}) {
   // key_rejected = the BACKEND authoritatively said this credential is not a
   // key. It is deliberately NOT the same as `!valid`: `valid:false` is also
   // what a backend timeout/5xx returns, and those two must not be treated
@@ -3669,24 +3676,32 @@ async function validateKey(api_key) {
   if (!api_key) return { valid: false, tier: 'free', key_rejected: false };
   const hit = keyCache.get(api_key);
   if (hit && hit.exp > Date.now()) return hit;
-  const inflight = _keyValidateInflight.get(api_key);
+  const count = opts.count === true;
+  const flightKey = (count ? 'c:' : 'r:') + api_key;
+  const inflight = _keyValidateInflight.get(flightKey);
   if (inflight) return inflight;
-  const p = _validateKeyUncached(api_key)
-    .finally(() => _keyValidateInflight.delete(api_key));
-  _keyValidateInflight.set(api_key, p);
+  const p = _validateKeyUncached(api_key, { count })
+    .finally(() => _keyValidateInflight.delete(flightKey));
+  _keyValidateInflight.set(flightKey, p);
   return p;
 }
-async function _validateKeyUncached(api_key) {
+// Injectable for tests: the backend /keys/validate hop.
+export let _validateFetchImpl = null;
+export function _setValidateFetchImpl(fn) { _validateFetchImpl = fn; }
+export function _dropKeyCache(api_key) { if (api_key) keyCache.delete(api_key); else keyCache.clear(); }
+async function _validateKeyUncached(api_key, opts = {}) {
   try {
-    const resp = await fetch(new URL('/api/v1/keys/validate', API_BASE).toString(), {
+    const _req = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Key': INTERNAL_KEY,
       },
-      body: JSON.stringify({ api_key }),
+      body: JSON.stringify({ api_key, count_call: opts.count === true }),
       signal: AbortSignal.timeout(3000),
-    });
+    };
+    const _vurl = new URL('/api/v1/keys/validate', API_BASE).toString();
+    const resp = _validateFetchImpl ? await _validateFetchImpl(_vurl, _req) : await fetch(_vurl, _req);
     if (!resp.ok) {
       // 2026-06-07 (Devin QA — revenue-critical hardening): do NOT CACHE the
       // downgrade. A transient backend 500/503/flap must not lock a PAID key to
@@ -3743,6 +3758,9 @@ async function _validateKeyUncached(api_key) {
       // returned it as tier_detail.users_plan — just unused here until now. Absent on an
       // older backend or when no users row cross-checked (null), never a wrong plan name.
       plan_tier: (data.tier_detail && data.tier_detail.users_plan) || null,
+      // r-free-key-per-call: the backend marks the keys whose allowance is spent
+      // per call (an unbound free key, a trial key). Absent on an older backend.
+      counts_tool_calls: data.counts_tool_calls === true,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -4076,6 +4094,55 @@ export function _dailyQuotaOver(q, c) {
     upgrade_url: day.upgrade_url || null,
     pricing_url: day.pricing_url || null,
   };
+}
+
+// ── r-free-key-per-call (2026-09-27): "Free key: 10 calls to try" = TOOL CALLS ──
+//
+// The free key's lifetime allowance lives in the backend (validate_calls on an
+// unbound dch_live_ key, call_count on a dch_trial_ key) and used to be spent by
+// every /keys/validate hop. This server validates on initialize and on each
+// stateless request, then caches the answer for KEY_CACHE_TTL (5 min) — and a
+// stateful session never re-validates at all. So the counter measured
+// handshakes and cache windows, and a free key made more than 10 tool calls.
+//
+// Now: every resolve sends count_call:false (same decision, nothing spent), and
+// THIS is the one counted hop, once per tool call, for the keys the backend
+// marks counts_tool_calls. It is uncached on purpose — the count is the point —
+// and it refreshes keyCache with its answer, so the call after the refusal
+// resolves the key as refused at the request level exactly as it did before.
+//
+// Over the limit it returns the refused validation and the caller serves THIS
+// call exactly as the 11th validation always has: the key is dropped from the
+// call (r-invalid-key-anon), credential_refused names the reason, and results
+// fall back to previews. The backend's own wording rides unchanged.
+//
+// ★ NOT on /mcp/chatgpt (frz-chatgpt-toolset): that profile keeps the pre-fix
+//   counted-validate semantics (validateKey(..., {count:true})) and never
+//   reaches this. Not on /mcp/core either, which has no tool chokepoint here.
+// ★ Paid-class tiers skip it without a hop; QUOTA_EXEMPT_TOOLS (bind_email,
+//   claim_free_key, recover_my_key, unlock_more_data…) are neither counted nor
+//   refused, so the way out of the gate is never behind it.
+// ★ Indeterminate (timeout / 5xx) serves keyed, as validateKey's fail-soft does.
+const _FREE_KEY_COUNT_GATES = new Set(['bind_email_required', 'daily_cap_unbound', 'daily_cap']);
+export async function _freeKeyCallRefusal(c, toolName) {
+  if (!c || !c.api_key) return null;
+  if (c.profile === DIRECTORY_PROFILE || c.profile === CORE_PROFILE) return null;
+  if (QUOTA_EXEMPT_TOOLS.has(toolName)) return null;
+  if (_tierRank(c.tier || 'free') > _tierRank('identified')) return null;
+  if (_invalidKeyAnonDisabled()) return null;
+  let v = null;
+  try { v = await validateKey(c.api_key); } catch (_) { v = null; }
+  // A key already refused by one of the COUNTING gates (a session holds it in
+  // sessionMeta, or the cache holds the refusal) is re-asked per call too: that
+  // keeps it refused in a stateful session, and lifts the refusal on the very
+  // next call once the key is bound. A key refused for any other reason was
+  // never this gate's to touch.
+  const _gateRefusal = v && v.key_rejected === true && _FREE_KEY_COUNT_GATES.has(v.reason);
+  if (!v || !(v.counts_tool_calls === true || _gateRefusal)) return null;
+  let r = null;
+  try { r = await _validateKeyUncached(c.api_key, { count: true }); } catch (_) { r = null; }
+  if (!r || _effectiveCallerKey(c.api_key, r) !== null) return null;
+  return r;
 }
 
 // A paid upgrade or a credit top-up must clear the wall on the NEXT call, not
@@ -15435,6 +15502,25 @@ function trackedTool(srv, name, description, schema, handler) {
           }
         } catch (_) { /* never block a tool call on the tier-bind resolution */ }
       }
+      // r-free-key-per-call: a free key's "10 calls to try" is spent HERE, once
+      // per tool call. Refused → this call is served as the 11th validation
+      // always served it: anonymously, with credential_refused naming why.
+      // The ctx is per request, so the key is not dropped from sessionMeta.
+      {
+        let _fk = null;
+        try { _fk = await _freeKeyCallRefusal(c, name); } catch (_) { _fk = null; }
+        if (_fk) {
+          c.auth_refused = _authRefusal(c.api_key, null, _fk);
+          c.api_key = null;
+          c.email = null;
+          c.developer_id = null;
+          c.tier = 'free';
+          c.is_trial = false;
+          c.metered_enforce = false;
+          tier = 'free';
+          _gateTier = 'free';
+        }
+      }
       // r-starterdev-parity (2026-07-20): $9 Starter / $49 Developer are paid-class
       // for every tool EXCEPT the Pro-only set. The backend hands us the literal tier
       // ('starter'/'developer'; the Stripe webhook stamps starter->developer), but the
@@ -23957,8 +24043,10 @@ async function _serveCore(req, res, o) {
   let tier = 'free';
   const keyPresented = apiKey;
   if (body.method === 'tools/call') {
-    // Same resolution as the stateless /mcp tools/call branch.
-    validation = await validateKey(apiKey);
+    // Same resolution as the stateless /mcp tools/call branch. /mcp/core has
+    // no tool chokepoint of its own, so it keeps the counted validate
+    // (r-free-key-per-call).
+    validation = await validateKey(apiKey, { count: true });
     tier = validation.valid ? validation.tier : 'free';
     apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
   }
@@ -24882,7 +24970,11 @@ app.post(MCP_PATHS, async (req, res) => {
     if (body?.method === 'tools/call'
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_STATELESS_CALL_DISABLE || ''))) {
       const platform   = _resolvePlatform(body, userAgent, platformHeader, sessionId);
-      const validation = await validateKey(apiKey);
+      // r-free-key-per-call: /mcp/chatgpt keeps the counted validate it always
+      // had (frz-chatgpt-toolset), and so does a /mcp/core plan step (the core
+      // profile skips the chokepoint); everywhere else this resolve spends
+      // nothing and the tool chokepoint counts the call (_freeKeyCallRefusal).
+      const validation = await validateKey(apiKey, { count: _dirProfile === DIRECTORY_PROFILE || !!_coreLoopback });
       const tier       = validation.valid ? validation.tier : 'free';
       // r-invalid-key-anon: same drop as the initialize branch. This path is the
       // one the Smithery gateway takes (stale session id → stateless serve), so
