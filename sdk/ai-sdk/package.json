@@ -1,0 +1,31 @@
+{
+  "name": "dchub-ai-sdk",
+  "version": "0.1.0",
+  "description": "DC Hub tools for the Vercel AI SDK: live data-center, power-grid, fiber and site-selection data from the DC Hub remote MCP server.",
+  "type": "module",
+  "main": "index.mjs",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    }
+  },
+  "files": ["index.mjs", "index.d.ts", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "@ai-sdk/mcp": ">=1.0.0",
+    "ai": ">=5.0.0"
+  },
+  "keywords": ["ai-sdk", "vercel-ai-sdk", "mcp", "data-center", "energy", "grid", "infrastructure", "site-selection"],
+  "license": "MIT",
+  "homepage": "https://dchub.cloud/connect-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azmartone67/dchub-mcp-server.git",
+    "directory": "sdk/ai-sdk"
+  }
+}
