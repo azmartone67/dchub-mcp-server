@@ -78,6 +78,10 @@ jobs:
         # dchub-frontend heal reads) into canonical/canon_phrases.json.
         # Fail-closed — on any fetch/validation failure it logs and leaves the
         # committed snapshot in force, so a backend blip can never move canon.
+        env:
+          # Web Bot Auth: sign this step's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: node scripts/refresh-canon-phrases.mjs
       - name: Push the healed GitHub repo description
         # ★2026-08-11 — THE SURFACE NO FILE-WALKING GUARD COULD SEE.
@@ -195,6 +199,10 @@ jobs:
         # routes/problem_taxonomy.py) into canonical/problem_taxonomy.json.
         # Same fail-closed contract as the phrases refresh — a backend blip
         # can never move the scope lists.
+        env:
+          # Web Bot Auth: sign this step's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: node scripts/refresh-problem-taxonomy.mjs
       - name: Refresh per-tool maturity + coverage limits from the owner endpoints
         # ★2026-08-12: pulls /api/v1/canon/coverage (owner: dchub-backend
@@ -205,6 +213,10 @@ jobs:
         # snapshot rather than half-writing one — an empty deferred list is the
         # FLATTERING state (it demotes nobody), so it must never arrive by
         # accident.
+        env:
+          # Web Bot Auth: sign this step's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: node scripts/refresh-tool-maturity.mjs
       - name: Refresh the canonical per-tier daily call ladder
         # ★2026-08-23: this repo advertised the free tier as 10 calls/day (x12),
@@ -214,6 +226,10 @@ jobs:
         # refreshes above: a backend blip keeps the committed snapshot rather
         # than half-writing one, because a bad snapshot would move every
         # published claim at once. test/free-tier-claims.test.mjs gates on it.
+        env:
+          # Web Bot Auth: sign this step's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: node scripts/refresh-tier-limits.mjs
       - name: Regenerate toolspec.json from the live tools/list
         # toolspec.json is in the COVERAGE list below, so this job healed the
@@ -223,6 +239,10 @@ jobs:
         # owns the tools; sync-tools-manifest owns the numbers. Fails CLOSED:
         # any transport error, or a result as vacuous as what it replaces,
         # leaves the file untouched and exits 0.
+        env:
+          # Web Bot Auth: sign this step's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: node scripts/refresh-toolspec.mjs
 
       - name: Sync tool count + version + canon quantities into every owned surface

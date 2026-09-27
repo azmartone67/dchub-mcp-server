@@ -56,7 +56,13 @@ jobs:
 
       - name: Run rank + drift monitor
         id: mon
-        run: python3 scripts/registry_monitor.py
+        env:
+          # Web Bot Auth: scripts/web_bot_auth.py signs this step's requests to
+          # dchub.cloud (unsigned if the key or `cryptography` is missing).
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
+        run: |
+          python3 -c 'import cryptography' 2>/dev/null || python3 -m pip install -q --break-system-packages cryptography || true
+          python3 scripts/registry_monitor.py
 
       - name: Open / refresh alert issue on regression
         if: steps.mon.outputs.regression == 'true'

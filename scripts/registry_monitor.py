@@ -15,6 +15,14 @@ UA is set on every request.
 """
 import datetime, json, os, re, time, urllib.request, urllib.parse, urllib.error
 
+# Web Bot Auth: sign this script's requests to dchub.cloud (no-op without
+# WEB_BOT_AUTH_PRIVATE_JWK or `cryptography`). See scripts/web_bot_auth.py.
+try:
+    import web_bot_auth
+    web_bot_auth.install_urllib_signing()
+except ImportError:
+    pass
+
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 SMITHERY_SLUG = "azmartone67/dchub"
 REPO_SLUG = "azmartone67/dchub-mcp-server"

@@ -76,6 +76,9 @@ jobs:
       - name: Observe the single source and every sink
         id: observe
         env:
+          # Web Bot Auth: sign this step's requests to dchub.cloud (unsigned if unset).
+          NODE_OPTIONS: --import ./lib/web-bot-auth-preload.mjs
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.scope || github.event_name == 'repository_dispatch' && 'full' || github.event.schedule == '11 */2 * * *' && 'full' || 'core' }}
         run: node scripts/ecosystem-sync.mjs --scope "$SCOPE" --out ecosystem-sync
