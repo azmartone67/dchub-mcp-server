@@ -58,6 +58,16 @@ CONVERGE_INTERVAL="${SMITHERY_CONVERGE_INTERVAL:-30}"
 # claim_free_key in-session). Advertising the apiKey config turned into a "Connection
 # settings" step that Smithery flagged Required — forcing a key to connect and breaking
 # the no-signup funnel. The "No config schema provided" warning is cosmetic; leave it.
+# Web Bot Auth: sign this lane's requests to dchub.cloud with the key in
+# ~/.dchub-secrets (0600; never in the repo). The preload covers the Smithery CLI
+# (Node); verify_smithery_converged.py installs the Python signer itself. No key
+# file → unsigned, exactly as before.
+WBA_KEY="${WEB_BOT_AUTH_KEY_FILE:-$HOME/.dchub-secrets/web-bot-auth.jwk}"
+if [ -z "${WEB_BOT_AUTH_PRIVATE_JWK:-}" ] && [ -r "$WBA_KEY" ]; then
+  WEB_BOT_AUTH_PRIVATE_JWK="$(cat "$WBA_KEY")"
+  export WEB_BOT_AUTH_PRIVATE_JWK
+fi
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import $REPO/lib/web-bot-auth-preload.mjs"
 echo "[$TS] freshness heartbeat → smithery mcp publish https://dchub.cloud/mcp -n azmartone67/dchub" >> "$LOG"
 OUT="$("$SMITHERY_BIN" mcp publish https://dchub.cloud/mcp -n azmartone67/dchub 2>&1)"
 RC=$?

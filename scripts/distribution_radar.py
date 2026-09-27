@@ -19,6 +19,14 @@ Run: python3 scripts/distribution_radar.py  (wired weekly via distribution-radar
 import os
 import urllib.request
 
+# Web Bot Auth: sign this script's requests to dchub.cloud (no-op without
+# WEB_BOT_AUTH_PRIVATE_JWK or `cryptography`). See scripts/web_bot_auth.py.
+try:
+    import web_bot_auth
+    web_bot_auth.install_urllib_signing()
+except ImportError:
+    pass
+
 UA = "Mozilla/5.0 (compatible; DCHub-DistributionRadar/1.0; +https://dchub.cloud)"
 FIND = ("dchub", "dc hub")  # presence signals (case-insensitive)
 
