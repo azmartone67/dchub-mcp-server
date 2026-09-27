@@ -9,6 +9,7 @@ Both expose the same surface: `.market(slug)`, `.search(...)`, `.grid(iso)`,
 |-----|---------|-----------|
 | [Python](python/) | `pip install ./sdk/python` | `from dchub import DCHub; DCHub().market("northern-virginia")` |
 | [Node](node/) | `npm i ./sdk/node` | `import { DCHub } from "dchub"; await new DCHub().market("northern-virginia")` |
+| [Vercel AI SDK](ai-sdk/) | `npm i ./sdk/ai-sdk ai @ai-sdk/mcp` | `import { withDCHubTools } from "dchub-ai-sdk"` → pass `tools` to `generateText` |
 
 Set `DCHUB_API_KEY` (sent as `X-API-Key`) for full-tier data; the free tier works
 without one (some fields masked). Get a key:
