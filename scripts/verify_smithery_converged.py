@@ -45,6 +45,14 @@ import sys
 import time
 import urllib.request
 
+# Web Bot Auth: sign this script's requests to dchub.cloud (no-op without
+# WEB_BOT_AUTH_PRIVATE_JWK or `cryptography`). See scripts/web_bot_auth.py.
+try:
+    import web_bot_auth
+    web_bot_auth.install_urllib_signing()
+except ImportError:
+    pass
+
 REGISTRY = "https://registry.smithery.ai/servers/azmartone67/dchub"
 MCP = "https://dchub.cloud/mcp"
 UA = {"User-Agent": "dchub-smithery-freshness-verify/1.0"}

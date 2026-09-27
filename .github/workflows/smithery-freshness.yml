@@ -109,7 +109,12 @@ jobs:
       # A check that exists in two places drifts; this one now exists once.
       - name: Verify the listing actually converged
         id: converge
+        env:
+          # Web Bot Auth: scripts/web_bot_auth.py signs this step's requests to
+          # dchub.cloud (unsigned if the key or `cryptography` is missing).
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: |
+          python3 -c 'import cryptography' 2>/dev/null || python3 -m pip install -q --break-system-packages cryptography || true
           set +e
           python3 scripts/verify_smithery_converged.py --checks 20 --interval 30
           rc=$?
