@@ -117,7 +117,21 @@ describe("smithery.yaml pricing block matches the ladder label-by-label", () => 
     );
   });
 
-  for (const r of rows) {
+  // ★2026-09-27 owner decision D2: the anonymous row states the rule
+  // ("previews + 2 full answers per tool per day") and the free-key row states
+  // "10 calls to try" — neither is a calls/day rung, so they are checked by the
+  // rule's words. Every other row still carries its canonical calls/day rung.
+  const RULE = {
+    anonymous: /previews \+ 2 full answers per tool per day/i,
+    free: /10 calls to try/i,
+  };
+  for (const r of rows.filter((x) => RULE[x.tier])) {
+    it(`${r.tier}: states the owner's free-tier rule, not a calls/day figure`, () => {
+      expect(r.text).toMatch(RULE[r.tier]);
+      expect(r.text).not.toMatch(/calls?\/day/i);
+    });
+  }
+  for (const r of rows.filter((x) => !RULE[x.tier])) {
     it(`${r.tier}: the calls/day figure is canon's ${r.tier} rung`, () => {
       expect(CANON[r.tier], `no canonical rung is labelled "${r.tier}"`).toBeDefined();
       const m = r.text.match(/([\d,]+)\+?\s*calls?\/day/i);

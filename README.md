@@ -248,11 +248,12 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 
 ## Pricing
 
-- **Anonymous:** 5 calls/day, no API key needed
-- **Free key (one `claim_free_key` call, no email):** 10 calls/day; 50 calls/day once an email is bound with `bind_email`
-- **Developer ($49/mo):** 500 calls/day, full field access → [Stripe](https://buy.stripe.com/7sY5kE8F4fs13ml0PEaZi0c)
+- **Anonymous:** previews + 2 full answers per tool per day, no API key needed
+- **Free key (one `claim_free_key` call, no email):** 10 calls to try — every tool callable, most as previews
+- **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
+- **Developer ($49/mo):** 500 calls/day; full results on all tools except 7 Pro tools (10 full grid/fiber answers/day, previews of site analysis) → [Stripe](https://buy.stripe.com/7sY5kE8F4fs13ml0PEaZi0c)
 - **Pro ($99/mo):** 2,000 calls/day + bulk export, historical data → [Stripe](https://buy.stripe.com/dRm28s2gGcfP6yx0PEaZi0p)
-- **Enterprise (custom):** 100,000 calls/day, dedicated support, custom integrations
+- **Enterprise (from $12,000/yr):** 100,000 calls/day, dedicated support, custom integrations
 - **Credit pack:** $10 one-time = 1,000 API calls (no subscription) → [Stripe](https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i)
 
 ## Data sources
