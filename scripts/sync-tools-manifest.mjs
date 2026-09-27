@@ -1004,6 +1004,12 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     'docs/canonical-workflows.md', 'docs/distribution-targets.md',
     'docs/contextual-triggers.md',
     'scripts/smithery_description.txt',
+    // ★2026-09-27: the Claude Connectors Directory listing copy the owner
+    // pastes. Its test pins canon facilities/markets, and nothing healed it,
+    // so a canon move left daily-manifest-sync red with no fixer.
+    // Quantities only: its "67 read-only tools" is the directory profile,
+    // not the /mcp count, so it stays out of the tool-count loop.
+    'scripts/claude_directory_listing.txt',
     // ★2026-07-30 (PR #107) additions — current-claim copy the 07-30 sweep
     // found stale (21k+/12,650+/58 tools era): per-platform integration
     // READMEs, living docs/, the legacy python server's docstrings, the
