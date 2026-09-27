@@ -8527,8 +8527,9 @@ function _nullFreeFigures(row) {
 //   most_capacity   "5793 MW"                                   -> ""
 //   cheapest_power  "~$13.04/MWh"                               -> ""  (42 - MW/200: it is MW)
 //   most_operators / fastest_growing: "55 operators" / "191 facilities" stay (free counts)
-// Applied by both free trims: trimForTrial (keyless previews) and
-// _gateToolNumerics (keyed free tiers). Paid callers never reach either.
+// _gateToolNumerics (the free tiers, trial included) applies all of it;
+// trimForTrial applies the DCPI case (see _stripRankValues). Paid callers
+// reach neither.
 export function _freeRankValue(v) {
   if (typeof v !== 'string' || !/\d/.test(v)) return v;
   if (/\/\s*MWh\b/i.test(v)) return '';
@@ -8541,6 +8542,10 @@ export function _freeRankValue(v) {
   }
   return v;
 }
+// trimForTrial's pass. It strips the DCPI display string only: that trim keeps
+// total_mw TYPED on purpose (r-typed-preview, test/typed-preview-rank-markets),
+// so the MW in "191 fac / 5793 MW / 55 ops" is not withheld there, and the
+// keyed free gate (_gateToolNumerics) that does null total_mw strips it too.
 function _stripRankValues(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
   let res = payload;
@@ -8548,7 +8553,7 @@ function _stripRankValues(payload) {
     const rows = payload[key];
     if (!Array.isArray(rows)) continue;
     const next = rows.map((row) => {
-      if (!row || typeof row !== 'object' || typeof row.value !== 'string') return row;
+      if (!row || typeof row !== 'object' || typeof row.value !== 'string' || !row.value.includes('\u00b7')) return row;
       const val = _freeRankValue(row.value);
       return val === row.value ? row : { ...row, value: val };
     });

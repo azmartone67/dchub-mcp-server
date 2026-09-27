@@ -127,10 +127,18 @@ describe('paid callers are untouched', () => {
   });
 });
 
+// trimForTrial strips the DCPI string only. It keeps total_mw typed on purpose
+// (test/typed-preview-rank-markets.test.mjs), so its MW value strings agree
+// with a published total_mw; the free-tier gate above withholds both.
 describe('trimForTrial (the keyless preview trims)', () => {
-  it.each(Object.keys(PAYLOADS))('%s', (criteria) => {
+  it('ai_ready: value is the verdict only', () => {
+    const out = S.trimForTrial({ criteria: 'ai_ready', region: 'us', results: PAYLOADS.ai_ready.map((r) => ({ ...r })) }, 'rank_markets');
+    expect(out.results.map((r) => r.value)).toEqual(WANT.ai_ready);
+    expect(JSON.stringify(out)).not.toContain('86.4');
+  });
+  it.each(['best_overall', 'most_capacity', 'most_operators'])('%s: value untouched (total_mw is typed here)', (criteria) => {
     const out = S.trimForTrial({ criteria, region: 'us', results: PAYLOADS[criteria].map((r) => ({ ...r })) }, 'rank_markets');
-    expect(out.results.map((r) => r.value)).toEqual(WANT[criteria]);
+    expect(out.results.map((r) => r.value)).toEqual(PAYLOADS[criteria].map((r) => r.value));
   });
 });
 
