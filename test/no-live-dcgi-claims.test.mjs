@@ -74,9 +74,9 @@ const CAPABILITY_STATE = {
   'gas-fired $/MWh': {
     names: /\$\/MWh|per[-\s]MWh|gas[-\s]to[-\s]grid/i,
     withdrawn_on: '2026-08-08',
-    restored_on: null,
-    verified: 'get_gas_economics(market=dallas) -> $/MMBtu layers only, no $/MWh field '
-            + '(2026-08-31T09:10Z); get_gas_intelligence(TX).gas_to_grid_status.available === false',
+    restored_on: '2026-09-27',
+    verified: 'get_gas_economics(market=dallas) -> gas_price_used_usd_mmbtu 2.868, avg_ccgt_6800 $19.50/MWh '
+            + '(2026-09-27T09:12Z); /markets/phoenix/gas-to-grid -> burner_tip withheld, 5 of 12 months',
   },
 };
 

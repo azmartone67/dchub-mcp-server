@@ -123,20 +123,34 @@ CONNECTOR_SLUGS = [
 # and answers we do not have (were the two defective terms fixed, or was the
 # score restored on different math; is 81.9 comparable to the pre-08-08 68.0).
 # Deliberately left open rather than guessed at.
+# ★2026-09-27 — the gas-to-grid $/MWh was RESTORED under one burner-tip price
+# rule (dchub-backend#5705 + DCHUB_GAS_TO_GRID_ENABLED). Per the lesson above,
+# the entry is not deleted (an empty list is a structural alarm) — it INVERTS:
+# a restored capability is flagged when a listing still calls it withdrawn
+# without saying it came back. Same line-scoped scan, opposite predicate.
+# (name, pattern, withdrawn_on, restored_on-or-None)
 WITHDRAWN_CAPABILITIES = [
     ("gas-to-grid $/MWh",
      re.compile(r"gas[-\s]?to[-\s]?grid|levelized (?:gas )?cost", re.I),
-     "2026-08-08"),
+     "2026-08-08", "2026-09-27"),
 ]
 
 
 def scan_withdrawn(text):
-    """Names of withdrawn capabilities advertised WITHOUT the withdrawal. Pure."""
+    """Capabilities whose listing copy contradicts their current state. Pure.
+
+    Still withdrawn: advertised WITHOUT the withdrawal. Restored: still called
+    withdrawn WITHOUT the restoration."""
     out = []
-    for name, pat, date in WITHDRAWN_CAPABILITIES:
+    for name, pat, date, restored in WITHDRAWN_CAPABILITIES:
         for line in re.split(r"[\r\n]|(?<=[.;])\s+", text):
-            if pat.search(line) and not re.search(r"withdraw", line, re.I):
-                out.append((name, date, line.strip()[:120]))
+            if not pat.search(line):
+                continue
+            says_gone = re.search(r"withdraw|no longer returned", line, re.I)
+            stale = ((says_gone and not re.search(r"restor|republish", line, re.I))
+                     if restored else not says_gone)
+            if stale:
+                out.append((name, restored or date, line.strip()[:120]))
                 break
     return out
 
@@ -223,8 +237,8 @@ def connector_regressions():
             continue
         for name, date, line in scan_withdrawn(html):
             regressions.append(
-                f"🚨 connector `{slug}` advertises {name} as a live capability "
-                f"(withdrawn {date}) — a stored blurb never re-crawls, so this "
+                f"🚨 connector `{slug}` states {name} wrongly (current state as "
+                f"of {date}) — a stored blurb never re-crawls, so this "
                 f"does not self-heal: {line!r}")
     return regressions, notes
 
@@ -1832,12 +1846,16 @@ def _self_test():
          "tool display name — no longer flags, so the description-region scoping "
          "is no longer load-bearing for THIS entry; it stays because the next "
          "entry will need it"),
-        # The claim that IS still withdrawn.
-        ("gas-to-grid levelized cost across CCGT heat rates", True,
-         "the $/MWh withdrawal, still true 2026-08-31"),
-        ("gas to grid $/MWh for this market", True, "spacing variant"),
-        ("the gas-to-grid figure was WITHDRAWN 2026-08-08", False,
-         "honest mention — allowed, an agent asking deserves the answer"),
+        # The $/MWh was RESTORED 2026-09-27: the fence now flags the inverse.
+        ("gas-to-grid levelized cost across CCGT heat rates", False,
+         "restored 2026-09-27 — advertising it is now TRUE copy"),
+        ("gas to grid $/MWh for this market", False, "spacing variant"),
+        ("the gas-to-grid figure was WITHDRAWN 2026-08-08", True,
+         "stale — calls a restored capability gone"),
+        ("gas-to-grid $/MWh WITHDRAWN 2026-08-08, RESTORED 2026-09-27", False,
+         "honest record — both dates"),
+        ("the gas-to-grid $/MWh is NO LONGER RETURNED", True,
+         "stale phrasing without the word withdrawn"),
         ("wholesale power at $42/MWh in ERCOT", False,
          "a legitimate electricity price — why the pattern matches the PHRASE, not the unit"),
     ]
