@@ -98,6 +98,7 @@ test/front-door-nudge.test.mjs
 test/front-door-routing-descriptions.test.mjs
 test/full-cap-enforce.test.mjs
 test/funnel-invariants.test.mjs
+test/gas-tier-mask.test.mjs
 test/gated-tool-cta.test.mjs
 test/gated-unlock-is-tokenized.test.mjs
 test/gating.test.mjs
