@@ -50,6 +50,16 @@ const PAID = {
 const PAID_NEEDLES = ['power_mw', '48.5', 'total_sqft', '250001', 'raw_data', 'anonmask-raw-row',
   'Anonmask Example Road', 'jv_partners', 'Anonmask JV Partner', 'procurement', 'investment_usd',
   '731000017', 'acreage', '131.5', 'confidence_score'];
+// A numeric needle is matched as a whole number only. Every answer also carries
+// per-request material — ISO timestamps (retrieved_at) and signed hex/base64url
+// links — so a bare substring test for "48.5" failed whenever a timestamp landed
+// on second 48 with milliseconds 5xx, or a signature happened to contain the
+// digits (~1 run in a few dozen). A value standing inside a longer run of
+// digits/letters or after a "." is not the paid field; a JSON value or a prose
+// number ("48.5 MW") still matches.
+const leaks = (hay, needle) => (/^[\d.]+$/.test(needle)
+  ? new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\./g, '\\.')}(?![0-9A-Za-z_])`).test(hay)
+  : hay.includes(needle));
 const ROWS = 5;                                  // more than the preview keeps, so the row trim is visible
 const record = (i) => ({
   id: `fac-${i}`, name: `Anonmask DC ${i}`, slug: `anonmask-dc-${i}`, provider: 'Anonmask Provider',
@@ -192,8 +202,8 @@ async function expectFreeAllowlist(out, label) {
   expect(row.provider, `${label}: a free field went missing`).toBe('Anonmask Provider');
   expect(row.slug, `${label}: a free field went missing`).toMatch(/^anonmask-dc-/);
   for (const needle of PAID_NEEDLES) {
-    expect(out.text.includes(needle), `${label}: paid field "${needle}" reached the text`).toBe(false);
-    expect(JSON.stringify(out.sc || {}).includes(needle), `${label}: paid field "${needle}" reached structuredContent`).toBe(false);
+    expect(leaks(out.text, needle), `${label}: paid field "${needle}" reached the text`).toBe(false);
+    expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: paid field "${needle}" reached structuredContent`).toBe(false);
   }
   const free = await keyedFreeRowKeys();
   const extra = Object.keys(row).filter((k) => !free.has(k));

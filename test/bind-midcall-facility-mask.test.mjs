@@ -44,6 +44,12 @@ const PAID = {
 };
 const PAID_NEEDLES = ['power_mw', '48.5', 'total_sqft', '250001', 'raw_data', 'bindmask-raw-row',
   'Bindmask Example Road', 'jv_partners', 'Bindmask JV Partner', 'procurement', 'confidence_score'];
+// Numeric needles match as whole numbers only: answers also carry ISO timestamps
+// and signed hex/base64url links, and a bare substring "48.5" matched a timestamp
+// on second 48 with milliseconds 5xx. Same matcher as anon-facility-free-fields.
+const leaks = (hay, needle) => (/^[\d.]+$/.test(needle)
+  ? new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\./g, '\\.')}(?![0-9A-Za-z_])`).test(hay)
+  : hay.includes(needle));
 const record = (i) => ({
   id: `fac-${i}`, name: `Bindmask DC ${i}`, slug: `bindmask-dc-${i}`, provider: 'Bindmask Provider',
   city: 'Ashburn', state: 'VA', country: 'US', status: 'operational',
@@ -173,8 +179,8 @@ function expectKeyedFreeMask(out, label) {
   expect(row.name, `${label}: no facility row came back — the absences below would be vacuous`).toMatch(/^Bindmask DC /);
   expect(row.provider, `${label}: a free field went missing`).toBe('Bindmask Provider');
   for (const needle of PAID_NEEDLES) {
-    expect(out.text.includes(needle), `${label}: paid field "${needle}" reached the text`).toBe(false);
-    expect(JSON.stringify(out.sc || {}).includes(needle), `${label}: paid field "${needle}" reached structuredContent`).toBe(false);
+    expect(leaks(out.text, needle), `${label}: paid field "${needle}" reached the text`).toBe(false);
+    expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: paid field "${needle}" reached structuredContent`).toBe(false);
   }
   expect(String((out.lead._upgrade || {}).message || ''), `${label}: not the KEYED free mask`).toContain(KEYED_SIGNATURE);
 }
