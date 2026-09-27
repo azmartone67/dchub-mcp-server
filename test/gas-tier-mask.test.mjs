@@ -101,3 +101,21 @@ describe('the masks themselves', () => {
     expect(o).toEqual({ region: 'TX', henry_hub_usd_mmbtu: 2.9 });
   });
 });
+
+describe('the free preview does not truncate the mask disclosure', () => {
+  it('trimForTrial keeps tier_masked.fields whole and the rule constant', () => {
+    const fields = ['a', 'b', 'c', 'd', 'e'];
+    const out = S.trimForTrial({
+      tier_masked: { tier_required: 'identified', fields },
+      burner_tip: { min_reported_months: 9, months_reported: 12 },
+    }, 'get_gas_intelligence');
+    expect(out.tier_masked.fields).toEqual(fields);
+    expect(out.tier_masked._fields_total_in_pro).toBeUndefined();
+    expect(out.burner_tip.min_reported_months).toBe(9);
+  });
+
+  it('control: an ordinary long list IS still cut', () => {
+    const out = S.trimForTrial({ rows: [1, 2, 3, 4, 5] }, 'get_gas_intelligence');
+    expect(out.rows.length).toBeLessThan(5);
+  });
+});

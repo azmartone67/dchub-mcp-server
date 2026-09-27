@@ -9070,7 +9070,11 @@ export function _stripReasonNumerics(r, force = false) {
 // mcp#562: keyless execute_plan cut machine_pay.covered_tools 13 -> 3 and
 // unlocked_tools 9 -> 3, because this trim ran over the whole envelope after
 // step slimming had protected them. _STEP_PROTECTED_KEY_RE is this regex.
-const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retry_|persist_command|auto_trial_key/i;
+// 2026-09-27: + tier_masked (the list of what a tier mask withheld — cutting it
+// to 3 made the disclosure itself partial: "fields: 3 of 4 shown") and
+// ^min_reported_months$ (a constant of the gas burner-tip RULE, 9 — not data;
+// the metric heuristic was nulling it as if it were a gated figure).
+const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retry_|persist_command|auto_trial_key|^tier_masked$|^min_reported_months$/i;
 
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
