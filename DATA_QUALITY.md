@@ -1,7 +1,7 @@
 # DATA_QUALITY.md — DC Hub MCP Tool Status Report
 
 > Probed 2026-06-07 against `https://dchub.cloud/mcp` with a free dev key
-> (`dch_live_…`, 10 calls/day, claimed via `/api/v1/keys/claim`).
+> (`dch_live_…`, claimed via `/api/v1/keys/claim`; a free key is 10 calls to try).
 >
 > Authoritative tool count: **38** (live `tools/list` = 38 `trackedTool` registrations in `server.mjs`).
 

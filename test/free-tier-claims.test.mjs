@@ -34,15 +34,21 @@ if (SNAP.allowance && SNAP.allowance.free && Number.isFinite(SNAP.allowance.free
   CANON.free = SNAP.allowance.free.calls;
 }
 // The retired anonymous figure ("5 calls/day", TIER_LIMITS 2026-08-03..09-27)
-// still printed on these surfaces, per file. Copy is out of scope for the
-// enforcement change that retired it, and the ChatGPT/relay wording is frozen
-// (frz-chatgpt-toolset, frz-claude-relay-wording) — so this pins the EXACT
-// residue: a NEW "5 calls/day" anywhere fails, and so does fixing one of these
-// without removing it here (the list must shrink to {} in the copy follow-up).
+// still printed on these surfaces, per file. ★2026-09-27 copy follow-up: every
+// unfrozen one now states the published rule. What is left is the Smithery
+// description (smithery.yaml `description:`), which is frz-smithery-description
+// — it moves after 2026-10-01, and this entry is removed with it. A NEW
+// "5 calls/day" anywhere fails, and so does fixing this one without removing it.
 const LEGACY_ANON_5 = {
-  "llms-install.md": 2, "smithery.yaml": 1, "dxt/manifest.json": 2,
-  "integrations/README.md": 1, "integrations/chatgpt/README.md": 1,
-  "integrations/chatgpt/openapi.json": 3,
+  "smithery.yaml": 1,
+};
+// The retired free-key figure ("10 calls/day"; the free key is 10 calls to try,
+// lifetime). Left ONLY inside MCP tool descriptions (claim_free_key,
+// unlock_more_data), which are frozen: the /mcp tools/list must stay
+// byte-identical (frz-claude-relay-wording, until 2026-10-01) and the same text
+// reaches /mcp/chatgpt (frz-chatgpt-toolset). Moves after 10-01.
+const LEGACY_FREE_10_PER_DAY = {
+  "mcp-server.json": 2,
 };
 
 // Everything an agent, a registry or an installing human actually reads.
@@ -60,6 +66,13 @@ const SURFACES = [
   "integrations/chatgpt/openapi.json",
 ];
 
+// The published rule, verbatim (canon phrase `free_tier`, /api/v1/canon/phrases;
+// dchub-backend ai_surface_canon.PINNED['free_tier_rule']). A surface quoting it
+// whole names "Anonymous:" and "50 calls/day" in one sentence by design — that
+// is the rule, not an anonymous 50/day claim.
+const FREE_TIER_RULE = "Anonymous: previews + 2 full answers per tool per day. "
+  + "Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers "
+  + "per tool per day). Developer $49: 500/day.";
 const CLAIM = /([\d,]+)\s*calls?\/day/gi;
 const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|no key needed/i;
 const num = (s) => Number(String(s).replace(/,/g, ""));
@@ -76,7 +89,11 @@ function claims() {
         // descriptions to their first literal) — so "keyless" 3,000 chars
         // upstream of "10 calls/day" must not read as an anonymous claim.
         const at = m.index ?? 0;
-        out.push({ file: f, line: i + 1, n: num(m[1]), text: line.slice(Math.max(0, at - 110), at + m[0].length + 40).trim() });
+        let inRule = false;
+        for (let r = line.indexOf(FREE_TIER_RULE); r !== -1; r = line.indexOf(FREE_TIER_RULE, r + 1)) {
+          if (at >= r && at < r + FREE_TIER_RULE.length) inRule = true;
+        }
+        out.push({ file: f, line: i + 1, n: num(m[1]), inRule, text: line.slice(Math.max(0, at - 110), at + m[0].length + 40).trim() });
       }
     });
   }
@@ -84,6 +101,13 @@ function claims() {
 }
 
 describe("published calls/day claims", () => {
+  it("surfaces quote the published rule verbatim (and the exemption is not vacuous)", () => {
+    const quoted = claims().filter((c) => c.inRule);
+    expect(new Set(quoted.map((c) => c.file))).toEqual(
+      new Set(["llms-install.md", "integrations/README.md"]));
+    expect(quoted.every((c) => c.n === 50)).toBe(true);
+  });
+
   it("finds claims at all (guards against a vacuous pass)", () => {
     // Anonymous has no call count under the free-tier rule.
     expect(CANON.anonymous).toBeUndefined();
@@ -97,6 +121,16 @@ describe("published calls/day claims", () => {
     expect(got).toEqual(LEGACY_ANON_5);
   });
 
+  it("the retired free-key 10 calls/day survives only in the frozen tool descriptions", () => {
+    const got = {};
+    for (const c of claims().filter((x) => x.n === 10)) got[c.file] = (got[c.file] || 0) + 1;
+    expect(got).toEqual(LEGACY_FREE_10_PER_DAY);
+  });
+
+  it("no surface still prints a 3 calls/day taste", () => {
+    expect(claims().filter((x) => x.n === 3).map((c) => `${c.file}:${c.line}`)).toEqual([]);
+  });
+
   it("every number is a rung on the canonical ladder", () => {
     const allowed = new Set(Object.values(CANON));
     const bad = claims().filter((c) => c.n !== 5 && !allowed.has(c.n));
@@ -108,7 +142,7 @@ describe("published calls/day claims", () => {
     // ladder-membership check alone cannot catch "anonymous: 10 calls/day".
     // Anonymous has no calls/day figure at all now; the only anonymous-context
     // number tolerated is the pinned 5/day residue above.
-    const bad = claims().filter((c) => ANON_CTX.test(c.text) && c.n !== 5);
+    const bad = claims().filter((c) => ANON_CTX.test(c.text) && c.n !== 5 && !c.inRule);
     expect(bad.map((b) => `${b.file}:${b.line} → ${b.n} — ${b.text.slice(0, 70)}`))
       .toEqual([]);
   });
