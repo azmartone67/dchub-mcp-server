@@ -6,6 +6,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
+    // Live-prod suites (mcp, regression) sign their probes to dchub.cloud when
+    // WEB_BOT_AUTH_PRIVATE_JWK is set; a no-op otherwise.
+    setupFiles: ["./lib/web-bot-auth-preload.mjs"],
     // ★2026-09-04 — the 5s default is not a timeout, it is a load meter.
     // 158 files run in parallel across 14 workers and several of them import
     // server.mjs (19k lines) more than once per test via vi.resetModules(), at

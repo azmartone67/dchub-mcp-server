@@ -339,6 +339,8 @@ jobs:
         env:
           MCP_URL: https://dchub.cloud/mcp
           MCP_API_KEY: ${{ secrets.MCP_API_KEY || secrets.DC_HUB_API_KEY }}
+          # Web Bot Auth: probes to dchub.cloud are signed (vitest setupFile); unsigned if unset.
+          WEB_BOT_AUTH_PRIVATE_JWK: ${{ secrets.WEB_BOT_AUTH_PRIVATE_JWK }}
         run: npx vitest run test/mcp.test.mjs test/regression.test.mjs
 
       - name: Upload live-suite output
