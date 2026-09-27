@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ci_dchub_checks_envkey.py — DC Hub CI checks (env-key edition).
 
-Partner-authored CI harness, adapted for the live MCP transport. Three checks:
+Partner-authored CI harness, adapted for the live MCP transport. Four checks:
 
   1. MANIFEST  — GET https://dchub.cloud/.well-known/mcp.json and assert
                  tools_count >= 74.
@@ -13,6 +13,9 @@ Partner-authored CI harness, adapted for the live MCP transport. Three checks:
                  (structuredContent.error == "paid_only" with a human_message)
                  OR full data. Both are success — the check is that the paid
                  gate answers coherently, not which side of it the key lands on.
+  4. GAS PRO   — with the Pro key in DC_HUB_API_KEY, get_gas_economics(dallas)
+                 and get_gas_intelligence(TX) return prices: no tier_masked
+                 block, a numeric burner-tip price and $/MWh.
 
 Transport note (verified live 2026-07-18): https://dchub.cloud/mcp speaks the
 MCP Streamable-HTTP protocol. A naive single-POST tools/call happens to be
@@ -31,12 +34,14 @@ Canonical failure flags (verbatim, greppable):
     MANIFEST_FAIL: tools_count = <n>
     MISSING_KEY_FAIL
     PAID_PREVIEW_FAIL: <json>
+    GAS_PRO_FAIL: <tool>: <reason>
 
 Exit codes:
     0  ALL_CHECKS_PASSED
     2  manifest check failed
     3  no API key in the environment
     4  paid-preview / MCP-call check failed
+    5  gas tools masked (or missing prices) for the Pro key
 
 On success the provenance line (structuredContent.citation.cite_as +
 retrieved_at) is printed so the CI log carries the citation trail.
@@ -216,10 +221,61 @@ def check_paid_preview(api_key: str) -> None:
     print(f"provenance: cite_as={cite_as} retrieved_at={retrieved_at}")
 
 
+# ── check 4: gas tools unmasked for a Pro key ────────────────────────────────
+
+def _num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _gas_sc(api_key: str, tool: str, arguments: dict) -> dict:
+    payload = mcp_call_tool(api_key, tool, arguments)
+    sc = (payload.get("result") or {}).get("structuredContent")
+    if not isinstance(sc, dict):
+        raise RuntimeError(f"no structuredContent: {json.dumps(payload)[:600]}")
+    return sc
+
+
+def gas_pro_problems(econ: dict, intel: dict) -> list:
+    """Every reason the two gas payloads are not what a Pro caller gets."""
+    bad = []
+    for tool, sc in (("get_gas_economics", econ), ("get_gas_intelligence", intel)):
+        if "tier_masked" in sc:
+            bad.append(f"{tool}: tier_masked {json.dumps(sc['tier_masked'])[:300]}")
+        bt = sc.get("burner_tip") if isinstance(sc.get("burner_tip"), dict) else {}
+        if not _num(bt.get("usd_mmbtu")):
+            bad.append(f"{tool}: burner_tip.usd_mmbtu={bt.get('usd_mmbtu')!r} reason={bt.get('reason')!r}")
+    if not _num(econ.get("gas_price_used_usd_mmbtu")):
+        bad.append(f"get_gas_economics: gas_price_used_usd_mmbtu={econ.get('gas_price_used_usd_mmbtu')!r}")
+    sc = econ.get("scenarios_usd_per_mwh")
+    if not (isinstance(sc, dict) and sc and all(_num(v) for v in sc.values())):
+        bad.append(f"get_gas_economics: scenarios_usd_per_mwh={json.dumps(sc)[:300]}")
+    g2g = intel.get("gas_to_grid_usd_per_mwh")
+    if not (isinstance(g2g, dict) and any(_num(v) for v in g2g.values())):
+        bad.append(f"get_gas_intelligence: gas_to_grid_usd_per_mwh={json.dumps(g2g)[:300]}")
+    return bad
+
+
+def check_gas_pro(api_key: str) -> None:
+    try:
+        econ = _gas_sc(api_key, "get_gas_economics", {"market": "dallas"})
+        intel = _gas_sc(api_key, "get_gas_intelligence", {"region": "TX"})
+    except Exception as exc:
+        print(f"GAS_PRO_FAIL: transport: {exc}")
+        sys.exit(5)
+    bad = gas_pro_problems(econ, intel)
+    for b in bad:
+        print(f"GAS_PRO_FAIL: {b}")
+    if bad:
+        sys.exit(5)
+    print(f"gas Pro path OK: dallas burner tip {econ['burner_tip']['usd_mmbtu']} $/MMBtu, "
+          f"avg CCGT {econ['scenarios_usd_per_mwh'].get('avg_ccgt_6800_btu_kwh')} $/MWh; TX brief unmasked")
+
+
 def main() -> None:
     check_manifest()
     api_key = read_env_key()
     check_paid_preview(api_key)
+    check_gas_pro(api_key)
     print("ALL_CHECKS_PASSED")
     sys.exit(0)
 
