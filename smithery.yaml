@@ -199,9 +199,9 @@ pricing:
   anonymous: "Previews + 2 full answers per tool per day, no signup"
   free: "Free key (call claim_free_key — no email) — 10 calls to try; every tool callable, most as previews"
   identified: "Add an email (bind_email) — 50 calls/day, up to 10 full answers per tool per day"
-  developer: "$49/mo — 500 calls/day; full results on all tools except 7 Pro tools (10 full grid/fiber answers/day, previews of site analysis)"
-  pro: "$99/mo — 2,000 calls/day + Pro tools, bulk export, historical data"
-  enterprise: "From $12,000/yr — dedicated support, SLAs, 100,000+ calls/day"
+  developer: "500 calls/day; full results on all tools except 7 Pro tools (10 full grid/fiber answers/day, previews of site analysis) — see https://dchub.cloud/pricing"
+  pro: "2,000 calls/day + Pro tools, bulk export, historical data — see https://dchub.cloud/pricing"
+  enterprise: "Dedicated support, SLAs, 100,000+ calls/day — see https://dchub.cloud/pricing"
 
 # The Pro-only tools: PRO_ONLY_TOOLS in server.mjs (test/smithery-gated-tools.test.mjs keeps them equal).
 gated_tools:

@@ -114,7 +114,7 @@ describe('the manifests the registries ingest', () => {
     expect(SERVER_JSON.description).toMatch(/capacity/i);
   });
 
-  it('the Pro price is $99 and $299 appears on no published surface', () => {
+  it('no monthly price and no retired $299 on any published surface; the $10 pack is stated', () => {
     // The 2.12.11 note: mcp.so served "$299/mo Pro" seven times for months
     // after the reprice, because server.json's version had not moved.
     for (const [name, text] of [['mcp-server.json', MANIFEST.description],
@@ -122,7 +122,10 @@ describe('the manifests the registries ingest', () => {
                                 ['smithery description', SMITHERY]]) {
       expect(text, `${name} quotes the retired $299 price`).not.toContain('$299');
     }
-    expect(MANIFEST.description).toContain('$99/mo');
+    // ★2026-09-28 owner rule (09-27): the only price stated is the $10 pack.
+    expect(MANIFEST.description).not.toMatch(/\$\d[\d,]*\s*\/\s*(?:mo|month|yr)\b/);
+    expect(MANIFEST.description).toContain('$10 one-time pack of 1,000 API credits');
+    expect(MANIFEST.description).toContain('https://dchub.cloud/pricing');
   });
 });
 
