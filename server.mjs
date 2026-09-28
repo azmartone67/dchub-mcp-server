@@ -8233,7 +8233,48 @@ const _FACILITY_FREE_FIELDS = new Set([
   'id', 'name', 'slug', 'profile_url', 'city', 'state', 'country', 'status',
   'provider', 'operator', 'region', 'market', 'facility_type',
   'latitude', 'longitude', 'confidence_badge',
+  // r-unverified-agent-surfaces (2026-09-28, growth audit #4): the backend's
+  // per-row verification marker (backend #5784 + follow-up). Measured before
+  // this line: /api/v1/facilities served "Stack Portland 1" with
+  // v="unverified" + listing="Unverified directory listing", and this mask
+  // dropped both, so search_facilities showed the row with no marker at all.
+  // A label is not a paid field; every tier keeps it.
+  'v', 'listing', 'verification', 'source_class',
 ]);
+
+// r-unverified-agent-surfaces (2026-09-28): the backend (util/unverified_
+// listings.py) marks a third-party directory row v="unverified" +
+// listing="Unverified directory listing", with no status. This makes the MCP
+// answer say so explicitly on every tier, from THAT marker (never a second
+// predicate): `verification` = "unverified_directory_listing", and status /
+// lifecycle_status nulled if a backend path still carried one. A row the
+// backend calls verified/tracked gets `verification` = its `v`. Rows with no
+// marker are left exactly as they are. Pure; returns a new value.
+export const UNVERIFIED_LISTING_LABEL = 'Unverified directory listing';
+export const VERIFICATION_UNVERIFIED = 'unverified_directory_listing';
+function _isUnverifiedListing(o) {
+  return o.v === 'unverified' || o.verification === VERIFICATION_UNVERIFIED
+    || o.listing === UNVERIFIED_LISTING_LABEL;
+}
+export function _markUnverifiedListings(x, depth = 0) {
+  if (depth > 6 || x == null || typeof x !== 'object') return x;
+  if (Array.isArray(x)) return x.map((v) => _markUnverifiedListings(v, depth + 1));
+  const out = {};
+  for (const [k, v] of Object.entries(x)) out[k] = _markUnverifiedListings(v, depth + 1);
+  if (!('name' in out)) return out;
+  if (_isUnverifiedListing(out)) {
+    out.v = 'unverified';
+    out.listing = UNVERIFIED_LISTING_LABEL;
+    out.verification = VERIFICATION_UNVERIFIED;
+    for (const k of ['status', 'lifecycle_status']) if (k in out) out[k] = null;
+  } else if (out.verification == null && (out.v === 'verified' || out.v === 'tracked')) {
+    out.verification = out.v;
+  }
+  return out;
+}
+function _markUnverifiedText(obj) {
+  try { return JSON.stringify(_markUnverifiedListings(obj)); } catch (_) { return JSON.stringify(obj); }
+}
 function _looksLikeFacility(o) {
   return o && typeof o === 'object' && !Array.isArray(o) && 'name' in o
     && ('power_mw' in o || 'provider' in o || 'latitude' in o
@@ -19383,7 +19424,7 @@ function createServer(descOverrides, instructionsTail) {
       // silently ignored. Map it through (callAPI drops undefined values).
       const p = { ...a };
       if (p.query !== undefined) { p.q = p.query; delete p.query; }
-      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/facilities', p)) }] };
+      return { content: [{ type: 'text', text: _markUnverifiedText(await callAPI('/api/v1/facilities', p)) }] };
     });
 
   trackedTool(srv, 'get_facility', 'Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers "who operates this data center and how big is it", "how many fiber carriers are in that building". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',
@@ -19415,7 +19456,7 @@ function createServer(descOverrides, instructionsTail) {
           }
         }
       } catch (_e) { /* non-fatal */ }
-      return { content: [{ type: 'text', text: JSON.stringify(main) }] };
+      return { content: [{ type: 'text', text: _markUnverifiedText(main) }] };
     });
 
   trackedTool(srv, 'get_market_intel', 'Use when a user asks about ONE data-center market — vacancy, capacity pricing, supply pipeline, dominant operators, YoY growth — across any of 300+ markets. Example: "What is Northern Virginia\'s vacancy rate, $/MW-day pricing, and current DCPI verdict?" — get_market_intel market=northern-virginia. Params: market is the market_slug (e.g. "northern-virginia", "dallas", "phoenix", "frankfurt", "tokyo", "singapore"). Returns: {market, country, capacity_mw_total, capacity_mw_under_construction, vacancy_pct, absorption_mw_ttm, price_per_mw_day_usd, yoy_growth_pct, dominant_operators[], dcpi_verdict (BUILD/CAUTION/AVOID), composite_score, last_updated}. Do NOT use to rank multiple markets (use rank_markets) or for a single facility (use get_facility).',
