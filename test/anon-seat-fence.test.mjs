@@ -159,8 +159,21 @@ describe('anon-seat fence — published counts match canon', () => {
     })
     .join('\n');
 
+  // ★2026-10-02 (mcp#612): the facility COUNT is withdrawn (owner decision
+  // 2026-09-27, "corroborated count pending"), so the facilities rule is no
+  // longer "equals canon" but "none at all" — canon_phrases.json keeps a numeric
+  // `facilities` that no served string may quote.
+  const FACILITY_CLAIM = /([\d][\d,]*\+)\s+(?:(?:global\s+)?data.center\s+|discovered\s+)?facilit/gi;
+  it('no "+N facilities" claim is served (count withdrawn, corroboration pending)', () => {
+    // CONTROL: the regex still recognises every shape the count used to take.
+    for (const c of ['24,600+ facilities', '24,600+ global data center facilities', '24,600+ discovered facilities']) {
+      expect([...c.matchAll(FACILITY_CLAIM)].length, c).toBe(1);
+    }
+    expect([...code.matchAll(FACILITY_CLAIM)].map((m) => m[0])).toEqual([]);
+    expect(code).toMatch(/corroborated count pending/);
+  });
+
   const CLAIMS = [
-    ['facilities', /([\d][\d,]*\+)\s+(?:data.center\s+)?facilit/gi],
     ['markets',    /([\d][\d,]*\+)\s+markets/gi],
     ['countries',  /([\d][\d,]*\+)\s+countries/gi],
     ['deals',      /([\d][\d,]*\+)\s+(?:tracked\s+)?deals/gi],

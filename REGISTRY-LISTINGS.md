@@ -1,7 +1,7 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **92 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.20** (isLatest, published 2026-09-25T02:59Z, measured 2026-09-25 via `GET registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub/mcp-server`; `server.json` 2.12.21 publishes on merge) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **92 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.21** (isLatest, published 2026-09-26T06:43Z, measured 2026-09-28 via `GET registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub/mcp-server`) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
 ## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
 - ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.3.3 live.** Auto-republishes on every `server.json` version bump (GitHub Action `registry-refresh.yml`, DNS-auth). **Most directories mirror this**, so you're already broadly listed.
@@ -417,7 +417,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 >
 > Built for agents answering power, siting and capacity questions: pull live **interconnection-queue** depth, wait times and per-ISO BUILD/CAUTION/AVOID verdicts across 7 US ISOs + 43 US utility BAs + 31 international grid regions; track the **construction capacity pipeline** plus the AI Compute Capacity Index; rank 300+ markets by the DCPI power index; search the global data-center facility map across 170+ countries (corroborated count pending); score any lat/lon for buildability; compare US + European + GB + Taiwan + Japan + Korea + Brazil grids live (fuel mix, renewables, carbon, demand); and reach hyperscaler $1B+ deals, 1,600+ tracked M&A, gas-vs-grid economics, fiber routes, water-stress & tax incentives. **Capacity Source** adds the supply side: powered land, powered shells, turnkey capacity and colocation to buy or lease — off-market listings included — searched by size and location with `source_capacity`, browsable at https://dchub.cloud/listings.
 >
-> Free tier works with no key (10 calls/day). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
+> Free to start with no key (previews + 2 full answers per tool per day; limits at https://dchub.cloud/pricing). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
 **Try it:** `get_interconnection_queue iso=PJM` · `get_power_pipeline` (construction pipeline) · `get_grid_scoreboard` · `get_market_dcpi_rank market=northern-virginia`
 
 ### Glama — audience: quality-graded directory (rich copy lifts the grade)

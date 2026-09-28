@@ -88,9 +88,10 @@ export const FACILITY_COUNT_PENDING_STATUS = 'corroboration_pending';
 // so it moves with it. (packs/gas.json and packs/siting.json are frozen too but
 // carry no facility number, so they need no exemption here.)
 export const FACILITY_COUNT_FROZEN_UNTIL = '2026-10-02';
-export const FACILITY_COUNT_FROZEN_FILES = [
-  'server.mjs', 'toolspec.json', 'mcp-server.json', 'integrations/packs/site.json',
-];
+// ★2026-10-02 MCP-text batch (mcp#612): server.mjs, toolspec.json,
+// mcp-server.json and packs/site.json now carry the map wording, so the list is
+// empty (the dead-entry test requires it). Kept as a mechanism for the next freeze.
+export const FACILITY_COUNT_FROZEN_FILES = [];
 export function facilityCountFrozen(file, today = new Date().toISOString().slice(0, 10)) {
   return FACILITY_COUNT_FROZEN_FILES.includes(file) && today < FACILITY_COUNT_FROZEN_UNTIL;
 }

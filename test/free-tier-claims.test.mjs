@@ -39,17 +39,17 @@ if (SNAP.allowance && SNAP.allowance.free && Number.isFinite(SNAP.allowance.free
 // description (smithery.yaml `description:`), which is frz-smithery-description
 // — it moves after 2026-10-01, and this entry is removed with it. A NEW
 // "5 calls/day" anywhere fails, and so does fixing this one without removing it.
-const LEGACY_ANON_5 = {
-  "smithery.yaml": 1,
-};
+// ★2026-10-02 MCP-text batch: the Smithery description now states the rule, so
+// nothing is pinned.
+const LEGACY_ANON_5 = {};
 // The retired free-key figure ("10 calls/day"; the free key is 10 calls to try,
 // lifetime). Left ONLY inside MCP tool descriptions (claim_free_key,
 // unlock_more_data), which are frozen: the /mcp tools/list must stay
 // byte-identical (frz-claude-relay-wording, until 2026-10-01) and the same text
 // reaches /mcp/chatgpt (frz-chatgpt-toolset). Moves after 10-01.
-const LEGACY_FREE_10_PER_DAY = {
-  "mcp-server.json": 2,
-};
+// ★2026-10-02 MCP-text batch: both descriptions now say "calls to try", so
+// nothing is pinned.
+const LEGACY_FREE_10_PER_DAY = {};
 
 // Everything an agent, a registry or an installing human actually reads.
 const SURFACES = [

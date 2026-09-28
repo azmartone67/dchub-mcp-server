@@ -250,6 +250,7 @@ test/smithery-drift-guard.test.mjs
 test/smithery-first-touch.test.mjs
 test/smithery-freshness-honest.test.mjs
 test/smithery-freshness-ledger.test.mjs
+test/smithery-gated-tools.test.mjs
 test/smithery-reclaim-terms.test.mjs
 test/snapshot-repairs-missing-keys.test.mjs
 test/starter-pack.test.mjs
