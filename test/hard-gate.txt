@@ -149,6 +149,7 @@ test/late-key.test.mjs
 test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
 test/list-transactions-free-values.test.mjs
+test/listing-no-monthly-price.test.mjs
 test/listing-paste-single-origin.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs

@@ -57,7 +57,10 @@ describe('every Stripe link in a tracked doc is canonical', () => {
       n += [...readFileSync(join(ROOT, d), 'utf8').matchAll(ID)].length;
     }
     expect(n, 'no buy.stripe.com links found in any tracked doc — this guard '
-      + 'now protects nothing; either the docs changed shape or DOCS is stale').toBeGreaterThanOrEqual(4);
+      + 'now protects nothing; either the docs changed shape or DOCS is stale').toBeGreaterThanOrEqual(2);
+    // ★2026-09-28: floor 4 -> 2. The README's Developer and Pro Stripe links went
+    // with the monthly prices (owner rule 09-27: the only price stated is the
+    // $10 pack); the pack link in README.md and llms-install.md remains.
   });
 
   it('the canonical id set is non-empty', () => {

@@ -258,10 +258,8 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
 
 ## Pricing line (paste wherever a form asks for pricing)
-Free tier, no signup — Anonymous: previews + 2 full answers per tool per day. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Developer $49: 500/day. $10 one-time pack (1,000 API credits) · Developer $49/mo · **Pro $99/mo** (2,000 calls/day + `analyze_site`,
-`compare_sites`, `get_grid_intelligence`, `get_fiber_intel`, PDF + CSV export) ·
-Enterprise custom. There is also a $10 one-time 1,000-call pack — no
-subscription. https://dchub.cloud/pricing
+Free tier, no signup — Anonymous: previews + 2 full answers per tool per day. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Developer $49: 500/day. $10 one-time pack of 1,000 API credits — no subscription. Developer, Pro and
+Enterprise plans: see https://dchub.cloud/pricing
 
 > Keep this block in sync with `tier_registry.py` in dchub-backend, which is
 > where the prices are canonical. Pro was $299/mo until 2026-09-05; a listing

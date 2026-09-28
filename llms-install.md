@@ -121,11 +121,11 @@ claude mcp add dchub --transport http --header "X-API-Key: YOUR_KEY_HERE" https:
 | Anonymous | free | 5 |
 | Free key (`claim_free_key`, no email) | free | 10 |
 | Free key with an email bound (`bind_email`) | free | 50 |
-| Developer | $49/mo | 500 |
-| Pro | $99/mo | 2,000 |
+| Developer | see https://dchub.cloud/pricing | 500 |
+| Pro | see https://dchub.cloud/pricing | 2,000 |
 | Enterprise | custom | 100,000 |
 
-A $10 one-time credit pack (1,000 API calls, no subscription) is available at https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i.
+A $10 one-time pack of 1,000 API credits (no subscription) is available at https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i.
 
 ## Verify the connection
 
