@@ -128,6 +128,10 @@ import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList a
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
          installGrokResultCap as _installGrokResultCap,
          GROK_OAUTH_CHALLENGE, GROK_OAUTH_MESSAGE } from './lib/grok-profile.mjs';
+// G4 (2026-09-27 Grok audit): 7-day, time-boxed log of what a Grok request
+// carries (header NAMES, UA, clientInfo, session behaviour) — lib/grok-ident-log.mjs.
+import { grokIdentLogActive as _grokIdentLogActive, grokSignals as _grokSignals,
+         grokIdentRecord as _grokIdentRecord } from './lib/grok-ident-log.mjs';
 import { coarsenFacilityLocation, coarsenToolResultLocation, splitLeadingJson as _splitLeadingJson, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
@@ -24458,6 +24462,25 @@ app.post(MCP_PATHS, async (req, res) => {
       if (_src) {
         console.log(`[source] registry=${_src} path=${req.path} method=${req.body?.method || '?'} `
           + `tool=${req.body?.params?.name || '-'} sid=${String(req.headers['mcp-session-id'] || '').slice(0, 8)}`);
+      }
+    } catch (_) { /* observability must never affect the handler */ }
+    // G4 (2026-09-27 Grok audit): is there a stable Grok identifier? Logs one
+    // `[grok-ident]` JSON line per Grok request until GROK_IDENT_LOG_UNTIL, then
+    // stops by itself. Header NAMES only, never values; session id and caller IP
+    // only as keyed 12-hex hashes. Read with: railway logs | grep '\[grok-ident\]'.
+    try {
+      if (_grokIdentLogActive()) {
+        const _recalled = sessionId ? (_recallClientName(sessionId) || '') : '';
+        const _gs = _grokSignals(req, _recalled);
+        if (_gs.length) {
+          const _ip = (req.headers['x-dc-client-ip'] || '').trim()
+                   || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+                   || req.socket?.remoteAddress || '';
+          console.log('[grok-ident] ' + JSON.stringify(_grokIdentRecord(req, {
+            sessionKnown: !!(sessionId && sessions.has(sessionId)),
+            recalledClientName: _recalled, clientIp: _ip, signals: _gs,
+          })));
+        }
       }
     } catch (_) { /* observability must never affect the handler */ }
     try { _chEnsureFlusher(); } catch (_) { /* r-oauth-funnel: never affect the handler */ }

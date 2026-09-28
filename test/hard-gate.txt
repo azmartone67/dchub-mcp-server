@@ -118,6 +118,7 @@ test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
 test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
+test/grok-ident-log.test.mjs
 test/grok-profile.test.mjs
 test/grok-relay-label.test.mjs
 test/handler-args-declared.test.mjs
