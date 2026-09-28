@@ -20,7 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
-import { judgeCount, describeVerdict, ghWarning } from './canon-floor.mjs';
+import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = process.argv.includes('--fix');
@@ -371,7 +371,17 @@ const QUANTITIES = [
   // Listed LAST so the fuller "tracked M&A deals" alternative still wins the match.
   { noun: String.raw`tracked\s+(?:M&A\s+)?(?:deals?|transactions?)|M&A\s+(?:deals?|transactions?)|deals?\b|tracked\s+M&A\b`,
     canon: () => P.deals, label: 'deal count' },
-  { noun: FACILITY_NOUN, canon: () => P.facilities, label: 'facility count',
+  // ★2026-09-27 WITHDRAWN (owner decision): no headline facility number on any
+  // public surface until a corroborated "r3" count lands. `withdrawn` turns this
+  // rule from a heal into a ban: any facility floor is a problem, even one equal
+  // to canon (canon_phrases.json keeps a numeric `facilities`, so "matches canon"
+  // is no longer a pass). It is never auto-healed — there is no number to heal
+  // to; the surface is reworded to FACILITY_MAP_PROSE by hand. Only the files
+  // frozen until 2026-10-02 (frz-claude-relay-wording, FACILITY_COUNT_FROZEN_FILES
+  // in canon-floor.mjs) keep the old heal-to-canon rule, and that exemption
+  // expires on its own. RAW_PILE is not skipped here: a "tracked facilities"
+  // figure is still a facility count.
+  { noun: FACILITY_NOUN, canon: () => P.facilities, label: 'facility count', withdrawn: true,
     skip: (m) => RAW_PILE.test(m) || CAPACITY_UNIT.test(m),
     // number-AFTER-noun: "facility search (15,300+)" / "data centers (16,500+)"
     after: [new RegExp(
@@ -477,9 +487,30 @@ const floorGate = (file, text, lit, canonLit, label) => {
 
 // One quantity rule against one file: reports drift into `problems` and
 // returns healed text. Same code path for CHECK and FIX — they cannot diverge.
+const withdrawnHit = (file, text) => {
+  problems.push(`${file}: "${text.trim().replace(/\s+/g, ' ')}" — facility ${FACILITY_COUNT_WITHDRAWN_REASON}; `
+    + `say "${FACILITY_MAP_PROSE}" instead (not auto-healed)`);
+};
+// `file` may carry a " (…)" suffix naming the field ("mcp-server.json (top-level
+// description)"); the freeze is keyed on the bare path.
+const bareFile = (file) => String(file).replace(/\s+\(.*\)$/, '');
 const applyQuantities = (file, txt, rules, commentAware) => {
   let out = txt;
-  for (const { noun, canon, label, skip, after, numeric } of rules) {
+  for (const rule of rules) {
+    const { noun, canon, label, after, numeric } = rule;
+    const { skip } = rule;
+    if (rule.withdrawn && !facilityCountFrozen(bareFile(file))) {
+      // Report every floor; heal none. A capacity ("a 100 MW data center") is
+      // still not a fleet count.
+      const report = (m, lit) => {
+        if (!bigEnough(lit) || CAPACITY_UNIT.test(m[0])) return null;
+        withdrawnHit(file, m[0]);
+        return null;
+      };
+      applyRx(out, quantityRx(noun), (m) => (/\+$/.test(m[1]) ? report(m, m[1]) : null), commentAware);
+      for (const rx of after || []) applyRx(out, rx, (m) => report(m, m[2]), commentAware);
+      continue;
+    }
     // `numeric` rules match on VALUE and heal in the sample's own notation; the
     // default stays byte equality so server.mjs keeps healing to the canon form.
     const same = (lit) => numeric ? qtyValue(lit) === qtyValue(canon()) : lit === canon();
@@ -539,6 +570,7 @@ const applyQuantities = (file, txt, rules, commentAware) => {
   ];
   for (const { rx, canon, label } of AFTER_NOUN) {
     txt = applyRx(txt, rx, (m) => {
+      if (label === 'facility count' && !facilityCountFrozen(f)) { withdrawnHit(f, m[0]); return null; }
       if (m[2] === canon()) return null;
       return floorGate(f, m[0], m[2], canon(), label) ? m[1] + canon() : null;
     }, true);

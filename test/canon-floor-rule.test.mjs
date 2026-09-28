@@ -64,15 +64,21 @@ describe('judgeCount: the rule itself', () => {
 
 // ---- the required check: sync-tools-manifest.mjs CHECK mode -----------------
 // Moves the canon SNAPSHOT so the committed tree lands at a chosen distance from
-// it. Every surface states the snapshot's facility floor, so this is the real
-// "canon moved, prose did not" case, end to end, in a private copy of the repo.
+// it — the real "canon moved, prose did not" case, end to end, in a private copy
+// of the repo.
+//
+// ★2026-09-27: the tree-wide cases walk the DEAL floor, not facilities. The
+// facility COUNT is withdrawn (owner decision) and is being removed from every
+// surface, so a facility-based case here would go vacuous the day the last
+// frozen file (server.mjs, until 2026-10-02) loses its number. Deals is the
+// same "+" floor rule on a quantity every surface still states.
 const SANDBOX = createRepoSandbox(REAL_ROOT, 'dchub-floor');
 afterAll(() => SANDBOX.cleanup());
 const ROOT = SANDBOX.root;
 const SCRIPT = path.join(ROOT, 'scripts', 'sync-tools-manifest.mjs');
 const CANON_PATH = path.join(ROOT, 'canonical', 'canon_phrases.json');
 const SNAP = JSON.parse(fs.readFileSync(CANON_PATH, 'utf8'));
-const TREE_FACILITIES = num(SNAP.facilities);
+const TREE_DEALS = num(SNAP.deals);
 
 function check() {
   try {
@@ -93,33 +99,33 @@ function withFile(file, mutate, fn) {
     SANDBOX.write(file, original);
   }
 }
-const withCanonFacilities = (phrase, fn) =>
-  withFile(CANON_PATH, (s) => JSON.stringify({ ...JSON.parse(s), facilities: phrase }, null, 2) + '\n', fn);
+const withCanonDeals = (phrase, fn) =>
+  withFile(CANON_PATH, (s) => JSON.stringify({ ...JSON.parse(s), deals: phrase }, null, 2) + '\n', fn);
 
 describe('sync-tools-manifest.mjs CHECK applies the floor rule', () => {
   it('snapshot is a real floor phrase (else every case below is vacuous)', () => {
-    expect(SNAP.facilities).toMatch(/^\d[\d,]*\+$/);
-    expect(TREE_FACILITIES).toBeGreaterThan(1000);
+    expect(SNAP.deals).toMatch(/^\d[\d,]*\+$/);
+    expect(TREE_DEALS).toBeGreaterThan(1000);
   });
 
   it('CONTROL: equal to canon -> pass, no warning', () => {
     const r = check();
     expect(r.ok, r.out).toBe(true);
-    expect(r.out).not.toMatch(/::warning::.*facility count/);
+    expect(r.out).not.toMatch(/::warning::.*deal count/);
   });
 
   it('tree 3% below canon -> pass, with a ::warning:: naming the floor', () => {
-    const canon = fmt(TREE_FACILITIES / 0.97);
-    withCanonFacilities(canon, () => {
+    const canon = fmt(TREE_DEALS / 0.97);
+    withCanonDeals(canon, () => {
       const r = check();
       expect(r.ok, r.out).toBe(true);
-      expect(r.out).toMatch(new RegExp(`::warning::.*${SNAP.facilities.replace('+', '\\+')}.*below canon ${canon.replace('+', '\\+')} but within 5%`));
+      expect(r.out).toMatch(new RegExp(`::warning::.*${SNAP.deals.replace('+', '\\+')}.*below canon ${canon.replace('+', '\\+')} but within 5%`));
     });
   });
 
   it('tree 6% below canon -> fail as too stale', () => {
-    const canon = fmt(TREE_FACILITIES / 0.94);
-    withCanonFacilities(canon, () => {
+    const canon = fmt(TREE_DEALS / 0.94);
+    withCanonDeals(canon, () => {
       const r = check();
       expect(r.ok, 'a floor 6% below canon passed').toBe(false);
       expect(r.out).toMatch(/too stale, more than 5% below canon/);
@@ -127,8 +133,8 @@ describe('sync-tools-manifest.mjs CHECK applies the floor rule', () => {
   });
 
   it('tree above canon -> fail as an overclaim, even by 1%', () => {
-    const canon = fmt(TREE_FACILITIES * 0.99);
-    withCanonFacilities(canon, () => {
+    const canon = fmt(TREE_DEALS * 0.99);
+    withCanonDeals(canon, () => {
       const r = check();
       expect(r.ok, 'an overclaim passed').toBe(false);
       expect(r.out).toMatch(/OVERCLAIM/);
@@ -147,39 +153,50 @@ describe('sync-tools-manifest.mjs CHECK applies the floor rule', () => {
 
   it('a prose floor 3% under canon in ONE file passes with a warning; 6% under fails', () => {
     const readme = path.join(ROOT, 'README.md');
-    const warmer = fmt(TREE_FACILITIES * 0.97);
-    const colder = fmt(TREE_FACILITIES * 0.94);
-    withFile(readme, (s) => s.split(SNAP.facilities).join(warmer), () => {
+    const warmer = fmt(TREE_DEALS * 0.97);
+    const colder = fmt(TREE_DEALS * 0.94);
+    withFile(readme, (s) => s.split(SNAP.deals).join(warmer), () => {
       const r = check();
       expect(r.ok, r.out).toBe(true);
       expect(r.out).toMatch(/::warning::README\.md:.*within 5%/);
     });
-    withFile(readme, (s) => s.split(SNAP.facilities).join(colder), () => {
+    withFile(readme, (s) => s.split(SNAP.deals).join(colder), () => {
       expect(check().ok).toBe(false);
+    });
+  });
+
+  // ★2026-09-27 the facility COUNT is withdrawn: a facility floor on a
+  // non-frozen surface fails CHECK even when it EQUALS canon — "matches canon"
+  // is no longer a pass for this one quantity.
+  it('a facility floor equal to canon in README fails as withdrawn', () => {
+    const readme = path.join(ROOT, 'README.md');
+    withFile(readme, (s) => s.replace('300+ markets', `${SNAP.facilities} facilities, 300+ markets`), () => {
+      const r = check();
+      expect(r.ok, 'a withdrawn facility count passed CHECK').toBe(false);
+      expect(r.out).toMatch(/README\.md: .*facility count withdrawn — owner decision 2026-09-27/);
     });
   });
 });
 
-// ---- ecosystem-sync judge(): hosted listings use the same arithmetic --------
-describe('ecosystem-sync judge() uses the same rule for hosted listings', () => {
+// ---- ecosystem-sync judge(): hosted listings ----------------------------------
+// Tools use the exact rule; facilities are WITHDRAWN (owner decision 2026-09-27):
+// no floor = in_sync, any floor (equal, below or above canon) = drift.
+describe('ecosystem-sync judge() on hosted listings', () => {
   const CANON = { tools: 92, facilities: '24,800+', version: '2.12.21' };
   const hosted = (floors, extra = {}) => judge({ read: true, floors, ...extra }, CANON, { kind: 'manual' });
-  it('equal -> in_sync, no note', () => {
-    expect(hosted(['24,800+'])).toEqual({ state: 'in_sync', reasons: [] });
+  it('no facility floor -> in_sync, no note', () => {
+    expect(hosted([])).toEqual({ state: 'in_sync', reasons: [] });
   });
-  it('3% below -> in_sync with a note', () => {
-    const v = hosted([fmt(24800 * 0.97)]);
-    expect(v.state).toBe('in_sync');
-    expect(v.notes.join(' ')).toMatch(/conservative floor/);
-  });
-  it('6% below -> drift', () => {
-    expect(hosted([fmt(24800 * 0.94)]).state).toBe('drift');
-  });
-  it('above canon -> drift', () => {
-    expect(hosted(['24,900+']).state).toBe('drift');
-  });
+  for (const f of ['24,800+', fmt(24800 * 0.97), fmt(24800 * 0.94), '24,900+']) {
+    it(`a ${f} floor -> drift, count withdrawn`, () => {
+      const v = hosted([f]);
+      expect(v.state).toBe('drift');
+      expect(v.reasons.join(' ')).toMatch(/count withdrawn — owner decision 2026-09-27/);
+      expect(v.notes).toBeUndefined();
+    });
+  }
   it('tool count off by one -> drift', () => {
-    expect(hosted(['24,800+'], { tools: 91 }).state).toBe('drift');
+    expect(hosted([], { tools: 91 }).state).toBe('drift');
   });
 });
 
@@ -190,6 +207,11 @@ describe('check-served-manifest.mjs routes quantities through the rule', () => {
     expect(src).toMatch(/import \{[^}]*judgeCount[^}]*\} from '\.\/canon-floor\.mjs'/);
     expect(src).not.toMatch(/seen !== expected\) note/);
     expect(src).toMatch(/if \(v\.warn\) console\.log\(ghWarning/);
+  });
+  it('reports ANY served facility floor as drift (count withdrawn), not by the floor rule', () => {
+    expect(src).toMatch(/import \{[^}]*findFacilityFloors[^}]*\} from '\.\/canon-floor\.mjs'/);
+    expect(src).toMatch(/findFacilityFloors\(desc\)/);
+    expect(src).not.toMatch(/\['facilities', \//);
   });
   it('keeps tool counts exact', () => {
     expect(src).toMatch(/String\(servedTools\) !== String\(canon\.tools\)/);

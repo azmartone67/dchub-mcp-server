@@ -36,6 +36,11 @@
     "deals": "1,600+",
     "pipeline_gw": 369
   },
+  "facility_count": {
+    "status": "corroboration_pending",
+    "public_phrase": "Global facility map (corroborated count pending)",
+    "prose": "a global data-center facility map (corroborated count pending)"
+  },
   "grid_coverage": {
     "us_isos": 7,
     "eia_balancing_authorities": 43,

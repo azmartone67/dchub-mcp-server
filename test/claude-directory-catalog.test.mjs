@@ -254,7 +254,10 @@ describe('listing copy', () => {
     const prompts = section('Example prompts').split('\n').filter((l) => /^\d+\. /.test(l));
     expect(prompts.length).toBeGreaterThanOrEqual(3);
     const canon = JSON.parse(readFileSync(path.join(REPO, 'canonical', 'canon_phrases.json'), 'utf8'));
-    expect(PASTED).toContain(`${canon.facilities} data-center facilities`);
+    // The facility COUNT is withdrawn (owner decision 2026-09-27): the pending
+    // wording, never canon's numeric floor.
+    expect(PASTED).toContain('a global data-center facility map (corroborated count pending)');
+    expect(PASTED).not.toContain(canon.facilities);
     expect(PASTED).toContain(`${canon.markets} markets`);
     expect(PASTED).not.toMatch(/\$\s?\d|\bUSD\s?\d|per month|\/mo\b|\bpricing\b|\bprice\b|\bcheckout\b|\bpro\b|\btrial\b|\bfree\b/i);
     expect(PASTED).not.toMatch(/\b(best|leading|most comprehensive|world'?s|#1|unmatched|unrivall?ed|premier|ultimate|the only)\b/i);

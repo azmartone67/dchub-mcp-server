@@ -46,21 +46,30 @@ describe('facility floors: every phrasing the live surfaces use reads as one num
     expect(facilityFloors('127,000+ substations and 320,000+ mapped power/grid/gas/fiber assets')).toEqual([]);
   });
 
-  it('flags two floors on one surface as a dual floor, even when one is right', () => {
+  // ★2026-09-27 the facility COUNT is withdrawn (owner decision) until a
+  // corroborated "r3" count lands: any facility floor is drift, and a surface
+  // showing none is in sync on facilities.
+  it('names every floor on one surface, and each is drift', () => {
     const v = judge({ read: true, floors: ['21,800+', '21,600+'] }, SSOT);
     expect(v.state).toBe('drift');
-    expect(v.reasons.join(' ')).toMatch(/dual floor/);
-    expect(v.reasons.join(' ')).toMatch(/21,600\+/);
+    expect(v.reasons).toEqual(['says 21,800+ / 21,600+ facilities — count withdrawn — owner decision 2026-09-27']);
   });
 
-  it('passes a surface whose only floor is the canon one', () => {
-    expect(judge({ read: true, floors: ['21,800+'] }, SSOT)).toEqual({ state: 'in_sync', reasons: [] });
+  it('a floor EQUAL to canon is drift too: the count is withdrawn, not stale', () => {
+    const v = judge({ read: true, floors: ['21,800+'] }, SSOT);
+    expect(v.state).toBe('drift');
+    expect(v.reasons.join(' ')).toMatch(/count withdrawn — owner decision 2026-09-27/);
   });
 
-  it('judges no floor at all when canon was not live this cycle', () => {
-    // A cold canon must never become the yardstick — that IS the second floor.
+  it('CONTROL: a surface with no facility number is in sync', () => {
+    expect(judge({ read: true, floors: [] }, SSOT)).toEqual({ state: 'in_sync', reasons: [] });
+    expect(judge({ read: true, floors: facilityFloors('a global data-center facility map (corroborated count pending)') }, SSOT))
+      .toEqual({ state: 'in_sync', reasons: [] });
+  });
+
+  it('judges floors even when canon was not live this cycle: no canon value could make one right', () => {
     const v = judge({ read: true, floors: ['21,500+'] }, { ...SSOT, facilities: null });
-    expect(v.state).toBe('in_sync');
+    expect(v.state).toBe('drift');
   });
 });
 
@@ -80,7 +89,7 @@ describe('tool counts: a stale TOTAL is flagged, a pack size is not', () => {
     expect(v.state).toBe('drift');
     expect(v.reasons).toEqual([
       'says 79 tools (live 90)',
-      'says 12,650+ facilities (canon 21,800+)',
+      'says 12,650+ facilities — count withdrawn — owner decision 2026-09-27',
       'banned pricing copy: $299',
     ]);
   });
@@ -295,7 +304,8 @@ describe('escalation: who needs a person, and when to say so', () => {
   it('the paste line is built from the live source and quotes no banned price', () => {
     const line = pasteLine(SSOT);
     expect(line).toContain('90 MCP tools');
-    expect(line).toContain('21,800+ facilities');
+    expect(line).toContain('a global data-center facility map (corroborated count pending)');
+    expect(facilityFloors(line)).toEqual([]);
     expect(bannedClaims(line)).toEqual([]);
   });
 
@@ -323,7 +333,7 @@ describe('MCP Hive: our record, not the other providers on the page', () => {
     const item = hiveItem(html);
     expect(item.name).toBe('DC Hub');
     expect(judge({ read: true, floors: facilityFloors(item.description), toolClaims: toolClaims(item.description) }, SSOT).reasons)
-      .toEqual(['says 88 tools (live 90)', 'says 21,200+ facilities (canon 21,800+)']);
+      .toEqual(['says 88 tools (live 90)', 'says 21,200+ facilities — count withdrawn — owner decision 2026-09-27']);
   });
 
   it('returns null when we are not on the page', () => {
@@ -385,7 +395,7 @@ describe('mcpservers.org: the card is our record, not the servers printed beside
 
   it("judges the card alone: its floor and its tool count, never a neighbour's", () => {
     expect(judge(observeMcpServers(page, SSOT, SLUG), SSOT).reasons)
-      .toEqual(['says 20,000+ facilities (canon 21,800+)', 'card says 15 tools (live 90)']);
+      .toEqual(['says 20,000+ facilities — count withdrawn — owner decision 2026-09-27', 'card says 15 tools (live 90)']);
   });
 
   it('a page without our record is unreadable, never clean', () => {
@@ -446,56 +456,35 @@ describe('the workflow dispatches exactly the lanes the planner names', () => {
   });
 });
 
-describe('a true floor on a hosted listing is not drift (2026-09-25: 24,500+ vs canon 24,600+)', () => {
+// 2026-09-25 introduced a tolerance for a conservative floor on a hosted
+// listing (24,500+ vs canon 24,600+). ★2026-09-27 the facility COUNT is
+// withdrawn (owner decision), so no floor is conservative any more: every kind
+// of listing is judged the same way, and a floor is drift in any position.
+describe('a facility floor on a hosted listing is drift of every kind (count withdrawn 2026-09-27)', () => {
   const CANON = { ...SSOT, facilities: '24,600+' };
   const hosted = (floors) => judge({ read: true, floors }, CANON, { kind: 'manual' });
 
-  it('passes a floor below canon but within tolerance, and says so in notes', () => {
-    const v = hosted(['24,500+']);
-    expect(v.state).toBe('in_sync');
-    expect(v.reasons).toEqual([]);
-    expect(v.notes.join(' ')).toMatch(/conservative floor 24,500\+, still true against canon 24,600\+/);
-  });
+  for (const f of ['24,500+', '24,600+', '24,700+', '21,800+']) {
+    it(`${f} -> drift, no conservative-floor note`, () => {
+      const v = hosted([f]);
+      expect(v.state).toBe('drift');
+      expect(v.reasons).toEqual([`says ${f} facilities — count withdrawn — owner decision 2026-09-27`]);
+      expect(v.notes).toBeUndefined();
+    });
+  }
 
-  it('holds at the tolerance edge and fails one facility under it', () => {
-    const edge = Math.ceil(24600 * (1 - FLOOR_TOLERANCE));
-    expect(hosted([`${edge.toLocaleString('en-US')}+`]).state).toBe('in_sync');
-    expect(hosted([`${(edge - 1).toLocaleString('en-US')}+`]).state).toBe('drift');
-  });
-
-  it('still flags a floor far below canon', () => {
-    const v = hosted(['21,800+']);
-    expect(v.state).toBe('drift');
-    expect(v.reasons.join(' ')).toMatch(/says 21,800\+ facilities \(canon 24,600\+\)/);
-  });
-
-  it('still flags a floor ABOVE canon: that one is false', () => {
-    expect(hosted(['24,700+']).state).toBe('drift');
-  });
-
-  it('still flags two floors on one listing, even when both are within tolerance', () => {
-    const v = hosted(['24,500+', '24,600+']);
-    expect(v.state).toBe('drift');
-    expect(v.reasons.join(' ')).toMatch(/dual floor/);
-  });
-
-  it('keeps our own surfaces, the ones we publish to, and an unstated kind exact', () => {
-    for (const opts of [{ kind: 'ours' }, { kind: 'push' }, {}]) {
+  it('applies to every kind: ours, push, pull, watch, manual and an unstated kind', () => {
+    for (const opts of [{ kind: 'ours' }, { kind: 'push' }, { kind: 'pull' }, { kind: 'watch' }, { kind: 'manual' }, {}]) {
       expect(judge({ read: true, floors: ['24,500+'] }, CANON, opts).state).toBe('drift');
-    }
-    expect(judge({ read: true, floors: ['24,500+'] }, CANON).state).toBe('drift');
-  });
-
-  it('applies to every hosted kind: pull, watch and manual', () => {
-    for (const kind of ['pull', 'watch', 'manual']) {
-      expect(judge({ read: true, floors: ['24,500+'] }, CANON, { kind }).state).toBe('in_sync');
+      expect(judge({ read: true, floors: [] }, CANON, opts).state).toBe('in_sync');
     }
   });
 
-  it('prints the conservative floor next to the label in the In sync list', () => {
+  it('a drifted listing prints the withdrawal reason, never "conservative floor"', () => {
     const results = [{ key: 'mcphive', kind: 'manual', label: 'MCP Hive', fix: 'f', verdict: hosted(['24,500+']) }];
-    const body = renderIssue({ ssot: CANON, results, stuck: [], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
-    expect(body).toMatch(/### In sync\nMCP Hive \(conservative floor 24,500\+, still true against canon 24,600\+\)/);
+    const body = renderIssue({ ssot: CANON, results, stuck: ['mcphive'], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    expect(body).toMatch(/says 24,500\+ facilities — count withdrawn — owner decision 2026-09-27/);
+    expect(body).not.toMatch(/conservative floor/);
   });
 });
 
@@ -527,7 +516,8 @@ describe('Glama <head> card: meta / og / JSON-LD are read, not only the body', (
   // the reader. Canon that day: 92 tools, 24,600+ facilities.
   const CANON = { tools: 92, facilities: '24,600+', version: '2.12.21' };
   const STALE_CARD = 'AI agents call 92 tools across 22,900+ facilities for land+power, grid and fiber. Pro $99/mo (never $299/Founding).';
-  const CLEAN_CARD = 'AI agents call 92 tools across 24,600+ facilities for land+power, grid and fiber. Pro $99/mo.';
+  // ★2026-09-27: the clean card carries no facility number (count withdrawn).
+  const CLEAN_CARD = 'AI agents call 92 tools across a global data-center facility map (corroborated count pending) for land+power, grid and fiber. Pro $99/mo.';
   const head = (card) => `<head><meta content="${card}" name="description"/>`
     + `<meta property="og:description" content="${card}"/>`
     + '<script type="application/ld+json">' + JSON.stringify({ '@context': 'https://schema.org', '@graph': [
@@ -535,10 +525,10 @@ describe('Glama <head> card: meta / og / JSON-LD are read, not only the body', (
       { '@type': 'ItemList', itemListElement: [{ '@type': 'ListItem', item: { name: 'Other server', description: '5,000+ facilities' } }] },
       { '@type': 'SoftwareApplication', name: 'DC Hub', description: card },
     ] }) + '</script></head>';
-  const body = '<body><p>DC Hub: 24,600+ facilities</p><div id="tools"><h2 class="x">Available Tools</h2><span>92<!-- --> tool<!-- -->s</span></div></body>';
+  const body = '<body><p>DC Hub: global facility map</p><div id="tools"><h2 class="x">Available Tools</h2><span>92<!-- --> tool<!-- -->s</span></div></body>';
 
   it('the body-only read cannot see the card (the defect)', () => {
-    expect(facilityFloors(visibleText(head(STALE_CARD) + body))).toEqual(['24,600+']);
+    expect(facilityFloors(visibleText(head(STALE_CARD) + body))).toEqual([]);
     expect(bannedClaims(visibleText(head(STALE_CARD) + body))).toEqual([]);
   });
 

@@ -197,9 +197,14 @@ describe('prose copy matches the CURRENT state of each withdrawn capability', ()
 
 describe('scripts/smithery_description.txt is the single origin the daily check compares', () => {
   const txt = read('scripts/smithery_description.txt');
-  it('carries every canon quantity the healer owns (facilities/deals/markets/countries)', () => {
+  it('carries every canon quantity the healer owns (deals/markets/countries)', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
-    for (const k of ['facilities', 'deals', 'markets', 'countries']) expect(txt, k).toContain(canon[k]);
+    for (const k of ['deals', 'markets', 'countries']) expect(txt, k).toContain(canon[k]);
+  });
+  it('carries no facility count (withdrawn, owner decision 2026-09-27) — the map instead', () => {
+    const canon = JSON.parse(read('canonical/canon_phrases.json'));
+    expect(txt).not.toContain(canon.facilities);
+    expect(txt).toMatch(/global facility map/i);
   });
   it('never states a tracked-feed COUNT (the deadman count moves; the sentence must not rot)', () => {
     expect(/\b\d+ tracked feeds\b/.test(txt)).toBe(false);
