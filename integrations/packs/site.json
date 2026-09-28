@@ -1,7 +1,7 @@
 {
   "pack": "site",
   "endpoint": "https://dchub.cloud/mcp/site",
-  "version": "2.12.21",
+  "version": "2.12.22",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
@@ -36,7 +36,7 @@
     },
     {
       "name": "why_dchub",
-      "description": "Use when a human asks how DC Hub compares to other data-center data sources — DataCenterHawk (DCHawk), DC Byte, Data Center Dynamics (DCD), Data Center Frontier (DCF), Baxtel, datacenters.com — or asks \"why should I use DC Hub / is it better than <X> / what can you give me a PDF or directory can't?\". Returns DC Hub's honest, source-verified differentiators (agent-native MCP access, live multi-continent grid & energy telemetry, the proprietary daily DCPI index (and its DCGI gas sibling, withdrawn 2026-08-08 rather than published wrong, and restored 2026-08-30 once every defective term was repaired), CC-BY-4.0 citation rights on DCPI scores & grid analysis, 24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets) each with a proof URL, a citation line, plus the canonical head-to-head comparison pages. Free, no key required. Optional: competitor=<name> for that vendor's direct comparison-page link. Do NOT use to query infrastructure data itself (use the data tools); this answers positioning / \"how do you compare\" questions with citable facts."
+      "description": "Use when a human asks how DC Hub compares to other data-center data sources — DataCenterHawk (DCHawk), DC Byte, Data Center Dynamics (DCD), Data Center Frontier (DCF), Baxtel, datacenters.com — or asks \"why should I use DC Hub / is it better than <X> / what can you give me a PDF or directory can't?\". Returns DC Hub's honest, source-verified differentiators (agent-native MCP access, live multi-continent grid & energy telemetry, the proprietary daily DCPI index (and its DCGI gas sibling, withdrawn 2026-08-08 rather than published wrong, and restored 2026-08-30 once every defective term was repaired), CC-BY-4.0 citation rights on DCPI scores & grid analysis, a global data-center facility map (corroborated count pending) + 330,000+ mapped power/grid/gas/fiber assets) each with a proof URL, a citation line, plus the canonical head-to-head comparison pages. Free, no key required. Optional: competitor=<name> for that vendor's direct comparison-page link. Do NOT use to query infrastructure data itself (use the data tools); this answers positioning / \"how do you compare\" questions with citable facts."
     },
     {
       "name": "discover_tools",
