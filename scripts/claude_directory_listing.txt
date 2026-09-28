@@ -20,7 +20,7 @@ https://dchub.cloud/mcp/claude
 Data on data-center facilities, markets, power grids, fiber, site risk and deals.
 
 == Long description ==
-DC Hub is a data service about the physical infrastructure behind data centers. This connector gives Claude 67 read-only tools over DC Hub's database: 24,600+ data-center facilities, 300+ markets scored with the DC Hub Power Index (DCPI), US grid operators and their interconnection queues, power plants and planned generation, gas pipelines, fiber routes and subsea cables, water stress and natural-hazard risk, tax incentives, permitting and moratorium records, and data-center deals and news.
+DC Hub is a data service about the physical infrastructure behind data centers. This connector gives Claude 67 read-only tools over DC Hub's database: 24,600+ data-center facilities, 300+ markets scored with the Data Center Power Index (DCPI), US grid operators and their interconnection queues, power plants and planned generation, gas pipelines, fiber routes and subsea cables, water stress and natural-hazard risk, tax incentives, permitting and moratorium records, and data-center deals and news.
 
 Use it to look up a facility or an operator, compare markets or grid operators, check power availability and queue depth, assess the risks at a specific site, or find recent transactions. A planning tool (execute_plan) answers a question that spans several of these areas in one call and shows which lookups it ran.
 
