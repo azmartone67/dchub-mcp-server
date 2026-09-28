@@ -87,6 +87,7 @@ test/execute-plan-invariants.test.mjs
 test/facility-location-allowance.test.mjs
 test/facility-location-tier.test.mjs
 test/fetch-as-of.test.mjs
+test/fetch-unverified-listing.test.mjs
 test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs

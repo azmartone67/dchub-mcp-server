@@ -14054,7 +14054,24 @@ const _FETCH_METRO = {
   'new york': 'New York Metro', manhattan: 'New York Metro', brooklyn: 'New York Metro',
 };
 
+// r-unverified-fetch (2026-09-28): the backend marks a third-party directory
+// row (backend util/unverified_listings.py, #5784/#5802) with v="unverified",
+// listing="Unverified directory listing", verification="unverified_directory_
+// listing" and no status. fetch rebuilds the record as prose + metadata, so a
+// marker the backend sent is lost unless it is carried here. Measured live
+// 2026-09-28 05:10Z, fetch id=568 (STACK Portland 1, a Cloudscene row):
+// "Status: Operational. ... Record verified." Read from the backend's marker —
+// never a second predicate — and the row then says so, with no status line and
+// never "Record verified".
+export const FETCH_UNVERIFIED = 'unverified_directory_listing';
+export function _isUnverifiedFetchRow(d) {
+  return !!d && (d.verification === FETCH_UNVERIFIED || d.v === 'unverified'
+    || d.listing === 'Unverified directory listing');
+}
+
 export function _facilityFetchRecord(id, d, url) {
+  const unverified = _isUnverifiedFetchRow(d);
+  if (unverified) d = { ...d, status: null, v: 'unverified' };
   const name = d.name || d.facility_name || id;
   const loc = [d.city, d.state, d.country].filter(Boolean).join(', ');
   const city = String(d.city || '').trim().toLowerCase();
@@ -14075,12 +14092,15 @@ export function _facilityFetchRecord(id, d, url) {
   if (hasPt) parts.push('Approximate location: ' + lat + ', ' + lon + '.');
   if (Number.isFinite(cap) && cap > 0) parts.push('Power capacity: ' + cap + ' MW.');
   if (d.connectivity_note) parts.push('Connectivity: ' + d.connectivity_note + '.');
-  if (d.v === 'verified' || d.verified === true) parts.push('Record verified.');
+  if (unverified) {
+    parts.push('Unverified directory listing: this record came from a third-party directory DC Hub has not verified; its status and details are unconfirmed.');
+  } else if (d.v === 'verified' || d.verified === true) parts.push('Record verified.');
   const asOf = typeof d.as_of === 'string' && d.as_of ? d.as_of : null;
   if (asOf) parts.push('As of ' + asOf.slice(0, 10) + '.');
   parts.push('Source: DC Hub (dchub.cloud), ' + url + '.');
   const metadata = { source: 'DC Hub (dchub.cloud)', market, country: d.country || null,
     city: d.city || null, state: d.state || null, status: d.status || null,
+    ...(unverified ? { verification: FETCH_UNVERIFIED, listing: 'Unverified directory listing' } : {}),
     ...(asOf ? { as_of: asOf } : {}),
     ...(hasPt ? { lat, lon, coordinates: 'approximate' } : {}) };
   return { id, title: String(name), text: parts.join(' '), url, metadata };
