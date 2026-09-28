@@ -1,6 +1,6 @@
 # dchub-mcp-server
 
-Live data-center and energy intelligence for AI agents, from [DC Hub](https://dchub.cloud): 24,900+ facilities and 92 MCP tools covering power grids, interconnection queues, fiber, gas, site selection, markets and M&A.
+Live data-center and energy intelligence for AI agents, from [DC Hub](https://dchub.cloud): a global data-center facility map (corroborated count pending) and 92 MCP tools covering power grids, interconnection queues, fiber, gas, site selection, markets and M&A.
 
 DC Hub is a **hosted** MCP server at `https://dchub.cloud/mcp` (Streamable HTTP). If your client supports remote MCP servers, point it at that URL directly. This package is a small launcher for clients that only run local (stdio) servers: it connects them to the hosted server.
 
