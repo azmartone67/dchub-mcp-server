@@ -77,8 +77,11 @@ describe('verified is de-duplication, not analyst verification', () => {
     expect(hits.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('the provenance resource defines verified by its filter', () => {
-    expect(src).toContain('COALESCE(is_duplicate,0)=0');
+  // 2026-09-28 (owner request via Grok): the definition is plain words now —
+  // no SQL filter in agent-facing text (test/no-sql-tokens-in-output.test.mjs).
+  it('the provenance resource defines verified in plain words', () => {
+    expect(src).not.toContain('COALESCE(is_duplicate,0)=0');
+    expect(src).toContain('the one record kept for each building after duplicates are merged');
     expect(src).toMatch(/\*\*verified\*\* — DE-DUPLICATED, not analyst-verified/);
     expect(src).toMatch(/\*\*tracked\*\* — every row of the discovery pile/);
   });
