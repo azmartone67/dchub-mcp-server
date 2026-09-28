@@ -249,7 +249,7 @@ describe('G5: /mcp/grok/oauth challenges an unauthenticated initialize', () => {
       const r = await post(path, INIT);
       expect(r.status).toBe(401);
       expect(r.headers.get('www-authenticate')).toContain(
-        'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
+        'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource/mcp"');
       expect(r.json.error.code).toBe(-32001);
     });
   }
