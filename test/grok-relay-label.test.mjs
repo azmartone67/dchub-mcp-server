@@ -202,7 +202,12 @@ async function gatedAs(clientName) {
 
 describe('the relay link label on Grok vs everyone else', () => {
   it('Grok (connectors-manager) gets the label that names payoff and price', async () => {
-    const fyh = await gatedAs('connectors-manager');
+    // Paywall contract + G3 (2026-09-28): Grok's FIRST free grid answer is served
+    // in full with allowance left, and a full answer carries no pitch at all. The
+    // ask — and this label — ride the LAST free answer of the day, so call until
+    // the allowance is spent (same IP, fresh session per call, as Grok does).
+    let fyh;
+    for (let i = 0; i < 4 && !fyh; i++) fyh = await gatedAs('connectors-manager');
     expect(fyh, 'no relay minted on the Grok path').toBeTruthy();
     expect(fyh.markdown.startsWith(S.GROK_RELAY_LABEL + '(https://dchub.cloud/upgrade/h/')).toBe(true);
     expect(fyh.markdown).toContain('$10 one-time');
