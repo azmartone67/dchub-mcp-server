@@ -13,6 +13,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import * as R from '../lib/retention.mjs';
+import { __test as OAUTH } from '../oauth.mjs';
 import { _freeTierRuleText, _rungNum } from '../lib/tier-canon.mjs';
 
 const realConnect = net.Socket.prototype.connect;
@@ -147,8 +148,8 @@ async function post(path, headers, body) {
 
 let ipN = 10;
 let rpcId = 10;
-async function session(path, clientName, key) {
-  const h0 = { 'x-forwarded-for': `198.51.100.${ipN++}`, ...(key ? { 'x-api-key': key } : {}) };
+async function session(path, clientName, key, extra = {}) {
+  const h0 = { 'x-forwarded-for': `198.51.100.${ipN++}`, ...(key ? { 'x-api-key': key } : {}), ...extra };
   const init = await post(path, h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: clientName, version: '1.0' } } });
   const sid = init.headers.get('mcp-session-id');
@@ -384,5 +385,51 @@ describe('nudgeDecision (pure)', () => {
     expect(R.isoWeek(Date.parse('2026-10-04T23:59:59Z'))).toBe('2026-W40');
     expect(R.isoWeek(Date.parse('2026-10-05T00:00:00Z'))).toBe('2026-W41');
     expect(R.isoWeek(Date.parse('2027-01-01T00:00:00Z'))).toBe('2026-W53');
+  });
+});
+
+// ── email_source (backend be#5836) ─────────────────────────────────────────
+describe('email_source sent to /keys/identify and /keys/claim', () => {
+  afterEach(() => { delete process.env.DCHUB_OAUTH_ENABLED; OAUTH._tokens.clear(); });
+
+  it('bind_email on an API-key request sends agent_supplied', async () => {
+    identifyBody = null;
+    const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
+    await s.call('bind_email', { email: 'jane@firm.com' });
+    expect(identifyBody.email).toBe('jane@firm.com');
+    expect(identifyBody.email_source).toBe('agent_supplied');
+  });
+
+  it('a raw key sent as a Bearer is still agent_supplied (bearer channel is not OAuth)', async () => {
+    identifyBody = null;
+    const s = await session('/mcp', 'Claude Code', null, { authorization: 'Bearer ' + OLD_NOEMAIL });
+    await s.call('bind_email', { email: 'jane@firm.com' });
+    expect(identifyBody.email_source).toBe('agent_supplied');
+  });
+
+  it('bind_email on an OAuth-authenticated request sends oauth', async () => {
+    process.env.DCHUB_OAUTH_ENABLED = 'on';
+    OAUTH._tokens.set('dcht_retention_test_token', { api_key: OLD_NOEMAIL, tier: 'free', expires: 0 });
+    identifyBody = null;
+    const s = await session('/mcp', 'Claude Code', null, { authorization: 'Bearer dcht_retention_test_token' });
+    await s.call('bind_email', { email: 'jane@firm.com' });
+    expect(identifyBody.email_source).toBe('oauth');
+  });
+
+  it('claim_free_key sends email_source only with an email', async () => {
+    const s = await session('/mcp', 'Claude Code');
+    await s.call('claim_free_key', { client_name: 'retention-test' });
+    expect(claimBody.email).toBeUndefined();
+    expect('email_source' in claimBody).toBe(false);
+    const s2 = await session('/mcp', 'Claude Code');
+    await s2.call('claim_free_key', { client_name: 'retention-test', email: 'jane@firm.com' });
+    expect(claimBody.email_source).toBe('agent_supplied');
+  });
+
+  it('never human_typed: nothing on this server can know it', () => {
+    for (const c of [null, {}, { auth_source: 'header' }, { auth_source: 'bearer' }, { auth_oauth: 'yes' }]) {
+      expect(R.emailSourceFor(c)).toBe('agent_supplied');
+    }
+    expect(R.emailSourceFor({ auth_oauth: true })).toBe('oauth');
   });
 });
