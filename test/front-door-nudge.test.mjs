@@ -83,8 +83,10 @@ describe('withFrontDoorNudge', () => {
 // one channel every MCP client reads, so the guidance has to live here too.
 describe('front-door + key guidance live in the tool-description channel', () => {
   const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-  const claim = src.slice(src.indexOf('Mint a FREE DC Hub dev key'),
-                          src.indexOf('Returns {api_key', src.indexOf('Mint a FREE DC Hub dev key')));
+  // 2026-09-28: the claim_free_key description was rewritten short (growth
+  // plan); slice from its registration to its first schema line.
+  const _ci = src.indexOf("trackedTool(srv, 'claim_free_key',");
+  const claim = src.slice(_ci, src.indexOf('{ client_name:', _ci));
 
   it('the nudge routes to the tool that ANSWERS, not the one that only plans', () => {
     const i = src.indexOf('Starting a multi-step task?');
@@ -94,13 +96,14 @@ describe('front-door + key guidance live in the tool-description channel', () =>
   });
 
   it('claim_free_key tells the agent to keep and reuse the key', () => {
-    expect(claim).toMatch(/SAVE THE KEY AND REUSE IT/);
-    expect(claim).toMatch(/Do NOT call this again/);
+    expect(claim.length, 'claim_free_key slice is empty — anchor moved').toBeGreaterThan(200);
+    expect(claim).toMatch(/Save and reuse the key/);
+    expect(claim).toMatch(/don\\?'t re-mint/);
     expect(claim).toContain('recover_my_key');
   });
 
   it('claim_free_key tells the agent to actually use it next', () => {
-    expect(claim).toMatch(/THEN ACTUALLY USE IT/);
+    expect(claim).toMatch(/Then ask the real question/);
     expect(claim).toContain('execute_plan');
   });
 });

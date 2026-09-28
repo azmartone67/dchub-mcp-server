@@ -29,10 +29,16 @@ const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 // description out of the registration call itself — transcribing the text
 // here would drift from the live surface, which is the whole failure class
 // this repo keeps hitting (manifests are not the source of truth).
+// 2026-09-28 (growth-plan tool descriptions): search_facilities and
+// rank_markets dropped their FRONT DOOR preamble. The plan's rule is that
+// routing hints live in execute_plan's own description, which already says
+// both halves ("THE FRONT DOOR ... single-tool questions should call that tool
+// directly"), asserted below in place of the two rank_markets-only checks.
 const ROUTED = [
-  'search_facilities', 'get_water_risk', 'get_renewable_energy',
-  'get_news', 'get_energy_prices', 'rank_markets',
+  'get_water_risk', 'get_renewable_energy',
+  'get_news', 'get_energy_prices',
 ];
+const UNROUTED = ['search_facilities', 'rank_markets'];
 
 // Pull the description literal: trackedTool(srv, '<name>',\n? '<desc>',
 function descOf(tool) {
@@ -74,21 +80,18 @@ describe('front-door routing lives in the tool-description channel', () => {
     }
   });
 
-  it('is honest that the planner costs more — at least one tool states the trade', () => {
-    // Naming the cost somewhere in the channel keeps the copy from reading as
-    // pure promotion. rank_markets carries it: it is the 191-agent case.
-    const d = descOf('rank_markets');
-    expect(d).toMatch(/latency/i);
-    expect(d).toMatch(/should NOT be routed through the planner/);
-  });
-
-  it('rank_markets states what the one call actually returns', () => {
-    // The specific claim the shell asked for: ranking AND per-finalist verdict
-    // AND grid reality-check, plus the replay of what was rejected.
-    const d = descOf('rank_markets');
-    expect(d).toMatch(/BUILD\/CAUTION\/AVOID/);
-    expect(d).toMatch(/grid reality-check/);
-    expect(d).toMatch(/replay/);
+  it('execute_plan carries the routing both ways for the tools that dropped the preamble', () => {
+    // 2026-09-28 (growth-plan descriptions): rank_markets no longer states the
+    // planner trade itself; execute_plan's own description carries both halves.
+    const d = descOf('execute_plan');
+    expect(d, 'execute_plan description did not parse').toBeTruthy();
+    expect(d).toMatch(/THE FRONT DOOR/);
+    expect(d).toMatch(/single-tool questions should call that tool directly/);
+    for (const t of UNROUTED) {
+      const u = descOf(t);
+      expect(u, `${t} description did not parse`).toBeTruthy();
+      expect(u.indexOf('FRONT DOOR CHECK'), `${t} regrew the preamble the plan removed`).toBe(-1);
+    }
   });
 
   it('the front-door pointer leads the description an agent reads first', () => {
@@ -138,7 +141,7 @@ describe('discover_tools families point at the front door', () => {
 
 describe('routing changes did not touch behaviour', () => {
   it('all six tools are still registered under their original names', () => {
-    for (const t of ROUTED) {
+    for (const t of [...ROUTED, ...UNROUTED]) {
       expect(SRC).toContain(`trackedTool(srv, '${t}',`);
     }
   });

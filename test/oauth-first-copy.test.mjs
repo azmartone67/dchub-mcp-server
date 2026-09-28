@@ -31,7 +31,14 @@ function descAfter(startMarker, endMarker) {
   return src.slice(i, j);
 }
 
-const claim = descAfter('★ BEFORE YOU MINT', 'Returns {api_key');
+// 2026-09-28 (growth-plan rewrite): claim_free_key's description is now a
+// short paragraph with no ALL-CAPS headers, so it is sliced from its
+// registration to its first schema line. The semantics below are unchanged:
+// OAuth named, the human browser step in the same breath, the unchallenged
+// escape, how the door is recognised, and keyless first. The retention
+// percentage moved to docs with the other measurements, so the description
+// must no longer carry an unqualified rate at all.
+const claim = descAfter("trackedTool(srv, 'claim_free_key',", '{ client_name:');
 const bind  = descAfter('★ WHAT THIS DOES AND DOES NOT DO', 'Returns the unlocked benefits');
 // r-preview-rows (2026-08-26): the end-anchor tracks the copy. The preview is
 // no longer 1-of-N (it is TRIAL_PREVIEW_ROWS, default 3), so the sentence it
@@ -43,14 +50,13 @@ const instr = descAfter('GOLDEN PATH for your first session', 'If a result comes
 describe('claim_free_key leads with the identity that retains', () => {
   it('names the durable OAuth path', () => {
     expect(claim).toMatch(/OAuth/);
-    expect(claim).toMatch(/DURABLE IDENTITY/);
+    expect(claim).toMatch(/identity persists/i);
   });
 
   // The honesty constraint, encoded: the human cost may not be relegated to
   // some other paragraph the agent might not read. Same description, always.
   it('names the human browser step in the same description as the recommendation', () => {
-    expect(claim).toMatch(/HUMAN at a browser/i);
-    expect(claim).toMatch(/NO agent-only path/i);
+    expect(claim).toMatch(/a human must finish it in a browser/i);
   });
 
   // The anti-wall clause. Without this, the recommendation is a trap for the
@@ -58,7 +64,7 @@ describe('claim_free_key leads with the identity that retains', () => {
   it('tells an unchallenged client that OAuth is unavailable and the key is correct', () => {
     expect(claim).toMatch(/NOT AVAILABLE TO YOU/i);
     expect(claim).toMatch(/Claude Code/);
-    expect(claim).toMatch(/not a downgrade/i);
+    expect(claim).toMatch(/the key is right/i);
   });
 
   it('states how the door is recognised, so the advice is actionable', () => {
@@ -67,16 +73,15 @@ describe('claim_free_key leads with the identity that retains', () => {
 
   // n=7. Saying 57.1% without saying n=7 is the overclaim this whole task was
   // written to avoid.
-  it('qualifies the retention number with its cohort size', () => {
-    expect(claim).toMatch(/57\.1%/);
-    expect(claim).toMatch(/7 mature|n=7/);
+  it('carries no retention rate (it moved to docs; n=7 was never a settled rate)', () => {
+    expect(claim).not.toMatch(/\d+(?:\.\d+)?%/);
   });
 });
 
 describe('the keyless free tier is preserved, not traded away', () => {
   it('claim_free_key still tells the agent it needs no key to start', () => {
-    expect(claim).toMatch(/do NOT need a key to start/i);
-    expect(claim).toMatch(/KEYLESS/);
+    expect(claim).toMatch(/no key is needed to start/i);
+    expect(claim).toMatch(/keyless/i);
   });
 
   it('the server instructions still advertise keyless free-tier depth', () => {

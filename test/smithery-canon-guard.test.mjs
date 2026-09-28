@@ -259,8 +259,10 @@ describe('smithery.yaml canonical-quantity guard', () => {
     withServerMutation(
       // ★2026-10-02 (mcp#612): server.mjs carries the withdrawn-count wording
       // now, so the control puts a count back where search_facilities had one.
-      (orig) => orig.replace("Search DC Hub\\'s global data-center facility map (170+ countries; corroborated count pending)",
-        'Search 12,650+ global data center facilities across 170+ countries'),
+      // 2026-09-28 (growth-plan descriptions): search_facilities no longer has
+      // a coverage clause at all, so the count is injected into its lead.
+      (orig) => orig.replace('Call when the user wants existing data centers matching filters',
+        'Search 12,650+ global data center facilities across 170+ countries matching filters'),
       () => {
         const { ok, out } = check();
         expect(ok, 'guard did NOT catch a facility count in server.mjs').toBe(false);
