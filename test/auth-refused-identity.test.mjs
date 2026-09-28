@@ -88,6 +88,12 @@ function decode(raw) {
 
 // The tool text is a JSON object often followed by a human-relay markdown block;
 // walk to the balanced close rather than parsing the whole string.
+// G6 (2026-09-27): a refused or unverifiable key now gets a leading plain-text
+// notice item (invalid-key-visible.test.mjs pins it). The DATA is still the
+// JSON item behind it; this reads past the notice, and only past the notice.
+const G6_NOTICE = /^(?:This|The) DC Hub .*API key.* isn't valid, so you're getting free-tier results|^DC Hub couldn't verify /;
+const dataItems = (content) => (content || []).filter((c) => !G6_NOTICE.test(c.text || ''));
+
 function leadingJson(text) {
   const s = String(text || '').trimStart();
   if (!s.startsWith('{')) return null;
@@ -123,7 +129,7 @@ async function search(path, headers) {
     params: { name: 'search_facilities', arguments: { query: 'Ashburn', limit: 25 } },
   });
   const r = JSON.parse(decode(raw)).result || {};
-  const payload = leadingJson((r.content || []).map((c) => c.text || '').join(''));
+  const payload = leadingJson(dataItems(r.content).map((c) => c.text || '').join(''));
   return {
     rows: Array.isArray(payload && payload.data) ? payload.data.length : null,
     identity: (r.structuredContent && r.structuredContent.identity) || null,
@@ -252,6 +258,7 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
               credential_source: channel, tier: 'free',
               credential_unverified: true,
               means: expect.stringContaining('could NOT be checked'),
+              key_status: 'unverified',   // G6
             }
           : { credential_source: channel, tier: 'free' });
     });
@@ -288,6 +295,7 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
       credential_source: 'header', tier: 'free',
       credential_unverified: true,
       means: expect.stringContaining('could NOT be checked'),
+      key_status: 'unverified',   // G6
     });
   });
 
