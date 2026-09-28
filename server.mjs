@@ -157,6 +157,9 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
+// Owner decision 2026-09-28: provenance.verification_counts never reaches tool
+// output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
+import { dropVerificationCounts as _dropVerificationCounts } from './lib/verification-counts.mjs';
 
 // ★★★ r-tier-canon (2026-09-02, QA sweep D8 + pricing #3): every allowance and
 // price this server states is READ from lib/tier-canon.mjs (canonical/
@@ -17742,6 +17745,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   top-level citation and no provenance at all (verified live 2026-08-12).
   //   The caller's tier is passed so `completeness` can only read
   //   'unrestricted' when the tier genuinely removes the gates.
+  // ★ _dropVerificationCounts sits directly OUTSIDE _stampAttribution, the last
+  //   step that could add provenance.verification_counts (owner decision
+  //   2026-09-28: agents quoted the pair as the withdrawn facility count). It
+  //   removes the key from structuredContent and every JSON text item and the
+  //   counts from the provenance footer — lib/verification-counts.mjs,
+  //   test/no-verification-counts-in-output.test.mjs.
   // ★ _withCapacityPointer sits directly INSIDE _flagUpstreamError, which stays
   //   outermost so nothing after it can drop the flag. The pointer step asks
   //   that same predicate first and leaves anything it would flag untouched,
@@ -17756,11 +17765,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   // `Tell the user:` line is already there. It only ever prepends one line, and
   // leaves failure envelopes alone, so the flag's verdict cannot change.
   // Inert unless DCHUB_RETURN_NUDGE is on.
-  }, async (args, extra) => _flagUpstreamError(await _returnNudgeStep(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(await _returnNudgeStep(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name),
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' })), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name),
        name, args, _outSchema), name), name));
 }
 
@@ -21445,7 +21454,7 @@ function createServer(descOverrides, instructionsTail) {
               } }
           : {}),
         // 2026-07-11 provenance differentiator (honest wording, no "only" claims).
-        provenance_note: 'DC Hub stamps provenance on responses — per-record verification flags (verified/tracked/published/inferred) + an as_of-dated provenance block — so you can cite the verification LEVEL, not just the number. Read both counts off `provenance.verification_counts` in the response you are citing and quote them with its `as_of` — "<verified> de-duplicated of <tracked> tracked — DC Hub, as of <as_of>". `verified` is DE-DUPLICATION, not analyst verification: it counts distinct buildings that have an elected keeper (COALESCE(is_duplicate,0)=0), and DC Hub does not publish an analyst-verified population at all, so do not call it one. Neither number is the facility COUNT — that is a floor at /api/v1/canon/phrases, and `verified` reads below it while `tracked` reads above it, because they are the deduplicated subset and the raw discovery pile behind THIS answer. Never take either count from memory or from this sentence: coverage moves, and a number frozen into a citation outlives the walk that retired it. Platform-wide coverage figures are at https://dchub.cloud/api/v1/canon/phrases, each with a value_source. Licence is PER LAYER — call summarize_for_citation rather than assuming CC-BY-4.0 over a facility record.',
+        provenance_note: 'DC Hub stamps provenance on responses — per-record verification flags (verified/tracked/published/inferred) + an as_of-dated provenance block — so you can cite the verification LEVEL, not just the number. Quote a record\'s flag and the block\'s `as_of` — "de-duplicated record — DC Hub, as of <as_of>". `verified` is DE-DUPLICATION, not analyst verification: it marks distinct buildings that have an elected keeper (COALESCE(is_duplicate,0)=0), and DC Hub does not publish an analyst-verified population at all, so do not call it one. DC Hub\'s facility count is pending corroboration, so responses carry no verified/tracked totals: do not quote a facility count — not from a response, not from memory, not from this sentence — and describe coverage as "a global data-center facility map (corroborated count pending)". Other platform-wide coverage figures (markets, grid assets, deals) are at https://dchub.cloud/api/v1/canon/phrases, each with a value_source; its facility figure is not a corroborated count, so do not quote that one either. Licence is PER LAYER — call summarize_for_citation rather than assuming CC-BY-4.0 over a facility record.',
         _source: 'DC Hub — dchub.cloud' };
       return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
     });
@@ -22327,7 +22336,7 @@ function createServer(descOverrides, instructionsTail) {
         // 2026-07-11 provenance differentiator (honest wording — "stamps", no
         // "only" claims): agents can quote HOW verified a number is, not just
         // the number.
-        provenance_note: 'DC Hub stamps provenance on its responses — per-record verification flags (verified/tracked/published/inferred) plus a collection-level provenance block (source, method, as_of, verification counts, cite_as) — so you can cite the verification LEVEL, not just the number. Read both counts off `provenance.verification_counts` in the response you are citing and quote them with its `as_of` — "<verified> de-duplicated of <tracked> tracked — DC Hub, as of <as_of>". `verified` is DE-DUPLICATION, not analyst verification: it counts distinct buildings that have an elected keeper (COALESCE(is_duplicate,0)=0), and DC Hub does not publish an analyst-verified population at all, so do not call it one. Neither number is the facility COUNT — that is a floor at /api/v1/canon/phrases, and `verified` reads below it while `tracked` reads above it, because they are the deduplicated subset and the raw discovery pile behind THIS answer. Never take either count from memory or from this sentence: coverage moves, and a number frozen into a citation outlives the walk that retired it. Platform-wide coverage figures are at https://dchub.cloud/api/v1/canon/phrases, each with a value_source. Licence is PER LAYER — call summarize_for_citation rather than assuming CC-BY-4.0 over a facility record.',
+        provenance_note: 'DC Hub stamps provenance on its responses — per-record verification flags (verified/tracked/published/inferred) plus a collection-level provenance block (source, method, as_of, cite_as) — so you can cite the verification LEVEL, not just the number. Quote a record\'s flag and the block\'s `as_of` — "de-duplicated record — DC Hub, as of <as_of>". `verified` is DE-DUPLICATION, not analyst verification: it marks distinct buildings that have an elected keeper (COALESCE(is_duplicate,0)=0), and DC Hub does not publish an analyst-verified population at all, so do not call it one. DC Hub\'s facility count is pending corroboration, so responses carry no verified/tracked totals: do not quote a facility count — not from a response, not from memory, not from this sentence — and describe coverage as "a global data-center facility map (corroborated count pending)". Other platform-wide coverage figures (markets, grid assets, deals) are at https://dchub.cloud/api/v1/canon/phrases, each with a value_source; its facility figure is not a corroborated count, so do not quote that one either. Licence is PER LAYER — call summarize_for_citation rather than assuming CC-BY-4.0 over a facility record.',
         comparison_hub: 'https://dchub.cloud/vs',
         comparison_pages: pages,
         ...(comparison_page ? { comparison_page } : {}),
@@ -23664,8 +23673,8 @@ This is a deal registration: DC Hub sends the provider only your human's company
       async () => ['# DC Hub provenance & citation contract', '',
         'Every DC Hub response carries a provenance envelope so agents cite instead of guessing.', '',
         '## Per-record verification flags',
-        '- **verified** — DE-DUPLICATED, not analyst-verified. It counts distinct buildings that passed the fleet filter with an elected keeper (COALESCE(is_duplicate,0)=0), which is what the response\'s own `provenance.method` says. DC Hub publishes no analyst-verified-against-a-primary-source population, so citing one would be a claim we cannot support. The verified and tracked counts THAT APPLY TO A GIVEN ANSWER are in that answer: `provenance.verification_counts`. Platform-wide coverage is at https://dchub.cloud/api/v1/canon/phrases. Do not quote a count out of this document — it would be frozen the moment it was written.',
-        '- **tracked** — every row of the discovery pile behind the answer, before de-duplication. It therefore reads ABOVE the published facility floor while **verified** reads below it; neither is that floor, which lives at /api/v1/canon/phrases.',
+        '- **verified** — DE-DUPLICATED, not analyst-verified. It counts distinct buildings that passed the fleet filter with an elected keeper (COALESCE(is_duplicate,0)=0), which is what the response\'s own `provenance.method` says. DC Hub publishes no analyst-verified-against-a-primary-source population, so citing one would be a claim we cannot support. DC Hub\'s facility count is pending corroboration, so responses carry the per-record flag and no verified/tracked totals. Do not quote a facility count — not from a response, not from memory, not from this document; describe coverage as "a global data-center facility map (corroborated count pending)". Other platform-wide coverage figures are at https://dchub.cloud/api/v1/canon/phrases; its facility figure is not a corroborated count.',
+        '- **tracked** — every row of the discovery pile behind the answer, before de-duplication. Neither flag\'s population is a facility count.',
         '- **published** vs **inferred** — whether a figure was published by the source or derived by DC Hub models; inferred figures are flagged, never silently presented as published.', '',
         '## Collection-level provenance',
         'List/aggregate responses include a `provenance` block with an `as_of` date and the upstream `source` (EIA, FEMA NRI, USGS, U.S. Drought Monitor, WRI Aqueduct, ISO queues, …).', '',

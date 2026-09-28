@@ -199,7 +199,9 @@ describe('withProvenance — backend PROVENANCE ENVELOPE mirror (fail-soft)', ()
     const out = withProvenance(res);
     expect(out.content).toHaveLength(2);                        // no NEW block — appended to the footer
     expect(out.content[1].text.startsWith('Source: DC Hub')).toBe(true); // withCitation idempotency preserved
-    expect(out.content[1].text).toContain('📎 provenance: 4,903/21,900 verified · as_of 2026-07-10 · cite DC Hub, dchub.cloud');
+    // No verification counts in the footer (owner decision 2026-09-28).
+    expect(out.content[1].text).toContain('📎 provenance: as_of 2026-07-10 · cite DC Hub, dchub.cloud');
+    expect(out.content[1].text).not.toMatch(/4,903|21,900/);
     expect(out.content[0].text).toBe(res.content[0].text);      // payload byte-identical
   });
 
@@ -240,14 +242,16 @@ describe('withProvenance — backend PROVENANCE ENVELOPE mirror (fail-soft)', ()
 });
 
 describe('provenanceFooterLine', () => {
-  it('formats counts / as_of / cite_as compactly', () => {
+  // Owner decision 2026-09-28: the footer prints no verification counts —
+  // agents quoted "N/M verified" as the withdrawn facility count.
+  it('formats as_of / cite_as compactly and never prints the counts', () => {
     expect(provenanceFooterLine({
       verification_counts: { verified: 4903, tracked: 21900 }, as_of: '2026-07-10', cite_as: 'DC Hub, dchub.cloud',
-    })).toBe('📎 provenance: 4,903/21,900 verified · as_of 2026-07-10 · cite DC Hub, dchub.cloud');
+    })).toBe('📎 provenance: as_of 2026-07-10 · cite DC Hub, dchub.cloud');
   });
   it('degrades gracefully on partial blocks', () => {
-    expect(provenanceFooterLine({ verification_counts: { verified: 12 } })).toBe('📎 provenance: 12 verified');
-    expect(provenanceFooterLine({ verification_counts: { tracked: 7 } })).toBe('📎 provenance: 7 tracked');
+    expect(provenanceFooterLine({ verification_counts: { verified: 12 } })).toBeNull();
+    expect(provenanceFooterLine({ verification_counts: { tracked: 7 } })).toBeNull();
     expect(provenanceFooterLine({ as_of: '2026-07-10' })).toBe('📎 provenance: as_of 2026-07-10');
   });
   it('returns null when there is nothing honest to print (never fabricate)', () => {
