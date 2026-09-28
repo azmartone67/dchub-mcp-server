@@ -22,10 +22,12 @@ WANT = open("scripts/smithery_description.txt", encoding="utf-8").read()
 #   The count moves every time a tool is added; the PHRASE does not.
 #   Raising on a miss matters as much as the regex: a fixture that cannot build
 #   its scenario must fail loudly, not assert against nothing.
-_m = re.search(r"\b\d+ live MCP tools\b", WANT)
+# ★2026-09-28: the listing now says "92 MCP tools at https://dchub.cloud/mcp"
+#   (owner-requested copy); "live" is optional so either form builds the case.
+_m = re.search(r"\b\d+ (?:live )?MCP tools\b", WANT)
 if not _m:
     raise SystemExit(
-        "run_copycheck fixture: no '<N> live MCP tools' phrase in "
+        "run_copycheck fixture: no '<N> [live] MCP tools' phrase in "
         "scripts/smithery_description.txt — the stale scenario cannot be built, "
         "and injecting nothing would make the test assert against an empty case.")
 _TOOLS_PHRASE = _m.group(0)

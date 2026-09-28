@@ -67,11 +67,21 @@ function pyList(name) {
   return [...m[1].matchAll(/"([^"]+)"/g)].map(x => x[1]);
 }
 
+// ★2026-09-28 — OWNER DECISION (frz-smithery-description lifted for this change).
+// The owner replaced the listing with the short site-selection copy that was
+// live on Smithery, corrected to the copy rules (dec-price-canon,
+// dec-mcp-paid-means-pro). That copy does not carry these RECLAIM terms. They
+// are named here, exactly, so the drop is a recorded decision rather than a
+// silent one: any FURTHER RECLAIM term dropped still fails, and re-adding one
+// of these fails too until it is removed from this list.
+const DROPPED_BY_OWNER_0928 = ['energy', 'natural gas', 'hyperscale', 'electricity'];
+
 describe('smithery canonical description keeps the terms we reclaim with it', () => {
-  it('every RECLAIM term appears in the canonical description', () => {
+  it('every RECLAIM term appears in the canonical description (except the owner-dropped set)', () => {
     const missing = pyList('RECLAIM').filter(
       t => !DESC.toLowerCase().includes(t.toLowerCase()));
-    expect(missing, `RECLAIM terms absent from scripts/smithery_description.txt: ${missing.join(', ')}`).toEqual([]);
+    expect(missing, `RECLAIM terms absent from scripts/smithery_description.txt: ${missing.join(', ')}`)
+      .toEqual(DROPPED_BY_OWNER_0928.filter(t => pyList('RECLAIM').includes(t)));
   });
 
   it('electricity survives the 1000-char search truncation', () => {
@@ -82,7 +92,7 @@ describe('smithery canonical description keeps the terms we reclaim with it', ()
     // as though copy were its remedy. `electricity` stays: still RECLAIM, still the one
     // of the three holding a decodable list position.
     const head = DESC.slice(0, SEARCH_TRUNCATION).toLowerCase();
-    for (const t of ['electricity']) {
+    for (const t of ['electricity'].filter(x => !DROPPED_BY_OWNER_0928.includes(x))) {
       expect(head.includes(t), `"${t}" must appear within the first ${SEARCH_TRUNCATION} chars — Smithery's search API shows no more than that`).toBe(true);
     }
   });

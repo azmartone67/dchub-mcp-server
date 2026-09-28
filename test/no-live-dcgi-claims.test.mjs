@@ -197,20 +197,21 @@ describe('prose copy matches the CURRENT state of each withdrawn capability', ()
 
 describe('scripts/smithery_description.txt is the single origin the daily check compares', () => {
   const txt = read('scripts/smithery_description.txt');
-  it('carries every canon quantity the healer owns (deals/markets/countries)', () => {
+  // ★2026-09-28 owner decision: the listing is now the short site-selection
+  // copy. It states markets only (no deals/countries), and no facility count.
+  it('carries the canon market quantity the healer owns', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
-    for (const k of ['deals', 'markets', 'countries']) expect(txt, k).toContain(canon[k]);
+    expect(txt, 'markets').toContain(canon.markets);
   });
-  it('carries no facility count (withdrawn, owner decision 2026-09-27) — the map instead', () => {
+  it('carries no facility count (withdrawn, owner decision 2026-09-27)', () => {
     const canon = JSON.parse(read('canonical/canon_phrases.json'));
     expect(txt).not.toContain(canon.facilities);
-    expect(txt).toMatch(/global facility map/i);
+    expect(/\b\d[\d,]*\+? (?:data[- ]center )?facilities\b/i.test(txt)).toBe(false);
   });
   it('never states a tracked-feed COUNT (the deadman count moves; the sentence must not rot)', () => {
     expect(/\b\d+ tracked feeds\b/.test(txt)).toBe(false);
   });
-  it('still leads with the liveness claim Smithery relevance-ranks on', () => {
-    expect(txt).toMatch(/^DC Hub is the neutral, real-time data layer/);
-    expect(txt).toContain('https://dchub.cloud/api/v1/ops/deadman');
+  it('leads with the owner-approved live-data-layer sentence (2026-09-28)', () => {
+    expect(txt).toMatch(/^DC Hub is the live data layer for data-center siting\./);
   });
 });
