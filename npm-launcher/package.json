@@ -1,0 +1,21 @@
+{
+  "name": "dchub-mcp-server",
+  "version": "2.12.21",
+  "description": "DC Hub MCP server launcher: live data-center, power-grid, fiber and site-selection intelligence for AI agents (24,900+ facilities, 92 tools). Connects any stdio MCP client to the hosted server at https://dchub.cloud/mcp.",
+  "type": "module",
+  "bin": {
+    "dchub-mcp-server": "bin/dchub-mcp-server.mjs"
+  },
+  "files": ["bin", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "mcp-remote": "^0.14.3"
+  },
+  "keywords": ["mcp", "model-context-protocol", "mcp-server", "data-center", "datacenter", "energy", "power-grid", "fiber", "site-selection", "ai-agents", "dchub"],
+  "homepage": "https://dchub.cloud/connect",
+  "repository": { "type": "git", "url": "git+https://github.com/azmartone67/dchub-mcp-server.git" },
+  "bugs": { "url": "https://github.com/azmartone67/dchub-mcp-server/issues" },
+  "author": "DC Hub <api@dchub.cloud> (https://dchub.cloud)",
+  "license": "MIT",
+  "mcpName": "cloud.dchub/mcp-server"
+}
