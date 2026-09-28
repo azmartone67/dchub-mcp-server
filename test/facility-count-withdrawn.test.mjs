@@ -112,14 +112,16 @@ describe('facility count withdrawn (owner decision 2026-09-27)', () => {
 describe('the freeze exemption is dated, narrow, and not dead', () => {
   it(`exempts only the frz-claude-relay-wording files, and only before ${FACILITY_COUNT_FROZEN_UNTIL}`, () => {
     expect(FACILITY_COUNT_FROZEN_UNTIL).toBe('2026-10-02');
-    expect(facilityCountFrozen('server.mjs', '2026-10-01')).toBe(true);
+    // mcp#612 reworded the frozen files and emptied the list: nothing is exempt.
+    expect(FACILITY_COUNT_FROZEN_FILES).toEqual([]);
+    expect(facilityCountFrozen('server.mjs', '2026-10-01')).toBe(false);
     expect(facilityCountFrozen('server.mjs', '2026-10-02')).toBe(false);
     expect(facilityCountFrozen('README.md', '2026-09-27')).toBe(false);
   });
 
-  it('CONTROL: on 2026-10-02 a frozen file still carrying a number is reported', () => {
+  it('CONTROL: a server.mjs carrying a number is reported, before and after 2026-10-02', () => {
     const read = () => 'Search 24,600+ global data center facilities across 170+ countries';
-    expect(offenders(['server.mjs'], '2026-10-01', read)).toEqual([]);
+    expect(offenders(['server.mjs'], '2026-10-01', read)).toHaveLength(1);
     expect(offenders(['server.mjs'], '2026-10-02', read)).toHaveLength(1);
   });
 

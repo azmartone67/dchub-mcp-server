@@ -2,7 +2,7 @@ DC Hub is the neutral, real-time data layer for data center site selection and t
 
 Site selection and grid interconnection: find_sites proposes candidate areas near high-voltage substations, analyze_site scores one coordinate, compare_sites picks the best of 2-4 parcels, and site_selection_canvas turns a capacity target, region and deadline into a ranked market shortlist.
 
-Coverage: global facility map (count pending) in 170+ countries; 300+ markets scored by the DCPI (Data Center Power Index) with BUILD/CAUTION/AVOID verdicts. Renewables, natural gas, hyperscale capex and 1,600+ tracked M&A deals. Live power grid and electricity telemetry with interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) and 40+ balancing authorities; 58,000+ fiber routes, 133,000+ substations and 94,000+ transmission lines.
+Coverage: global facility map (count pending) in 170+ countries; 300+ markets scored by the DCPI (Data Center Power Index) with BUILD/CAUTION/AVOID verdicts. Renewables, natural gas, hyperscale capex and 1,600+ tracked M&A deals. Live power grid and electricity telemetry with interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) and 40+ balancing authorities; 58,000+ fiber routes, 134,000+ substations and 94,000+ transmission lines.
 
 Also live: Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; retirement headroom; per-state pipeline and midstream presence with live Henry Hub; water stress, tax incentives and FEMA/USGS/NOAA hazard reads.
 

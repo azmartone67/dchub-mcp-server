@@ -291,6 +291,26 @@ describe('the rebuilt worker carries no baked facility count', () => {
 
   beforeAll(() => {
     const spec = JSON.parse(fs.readFileSync(path.join(REPO, 'toolspec.json'), 'utf8'));
+    // ★2026-10-02 (mcp#612): the served descriptions no longer carry a facility
+    // count at all (owner decision 2026-09-27, "corroborated count pending"), so
+    // the real corpus gives the scrub nothing to remove and the must-fail control
+    // below would run over an empty set. The scrub is still the guard against a
+    // count ever coming back, so feed it one: put the pre-withdrawal count back
+    // into the three descriptions dchub-backend renders from canon, and check
+    // each injection landed.
+    const INJECT = {
+      search_facilities: [/Search DC Hub(?:\\'|')s global data-center facility map \(170\+ countries; corroborated count pending\)/,
+        'Search 24,600+ global data center facilities across 170+ countries'],
+      semantic_search: [/the global facility map/, '24,600+ discovered facilities'],
+      why_dchub: [/a global facility map \+ 330,000\+/, '24,600+ facilities + 330,000+'],
+    };
+    for (const t of spec) {
+      const inj = INJECT[t.name];
+      if (!inj) continue;
+      const next = t.description.replace(inj[0], inj[1]);
+      if (next === t.description) throw new Error(`count injection did not land on ${t.name}; the control would prove nothing`);
+      t.description = next;
+    }
     served = [...spec, HAZARD, KEEPER];
     box = createScratchRepo('cf-worker-scrub', { git: false });
     box.write('tools.json', JSON.stringify(served));

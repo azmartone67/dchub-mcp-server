@@ -24,7 +24,7 @@ fiber, capacity, and interconnection.)
 
 It exposes 92 tools + 6 guided prompts over: a global data-center facility map
 (170+ countries; corroborated count pending), 300+ power markets scored by a Data Center Power Index (DCPI),
-real-time grid telemetry for 10 ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
+real-time grid telemetry for the 7 US ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
 time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,600+
 tracked M&A deals.
 
@@ -73,7 +73,7 @@ assistant LIVE, citable ground truth on the infrastructure behind AI:
 
 → A global data-center facility map across 170+ countries (corroborated count pending)
 → 300+ markets scored by our Data Center Power Index (BUILD / CAUTION / AVOID)
-→ Real-time grid telemetry for 10 ISOs — headroom, fuel mix, time-to-power
+→ Real-time grid telemetry for the 7 US ISOs — headroom, fuel mix, time-to-power
 → Fiber routes, gas pipelines, interconnection queues, 1,600+ M&A deals
 
 92 tools + 6 guided prompts, free tier, and every figure is CC-BY-4.0 so agents

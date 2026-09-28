@@ -176,9 +176,12 @@ describe('smithery.yaml canonical-quantity guard', () => {
     // Move canon to a value the surfaces cannot already carry. The guard must
     // now report the COMMITTED surfaces as drifted against it — proving the
     // quantities it enforces come from the snapshot, not from source.
+    // ★2026-10-02 (mcp#612): moves `deals`, not `facilities`. The facility count
+    // is withdrawn from every surface, so moving it drifts nothing and this
+    // control would pass vacuously; deals are still quoted from the snapshot.
     withCanonMutation((orig) => {
       const j = JSON.parse(orig);
-      j.facilities = IMPOSSIBLE;
+      j.deals = IMPOSSIBLE;
       return JSON.stringify(j, null, 2);
     }, () => {
       const { ok, out } = check();
@@ -254,12 +257,14 @@ describe('smithery.yaml canonical-quantity guard', () => {
 
   it(`FAILS when a server.mjs tool description claims "12,650+ … facilities"`, () => {
     withServerMutation(
-      (orig) => orig.replace(`${FACILITIES} global data center facilities`,
-        '12,650+ global data center facilities'),
+      // ★2026-10-02 (mcp#612): server.mjs carries the withdrawn-count wording
+      // now, so the control puts a count back where search_facilities had one.
+      (orig) => orig.replace("Search DC Hub\\'s global data-center facility map (170+ countries; corroborated count pending)",
+        'Search 12,650+ global data center facilities across 170+ countries'),
       () => {
         const { ok, out } = check();
-        expect(ok, 'guard did NOT catch a stale facility count in server.mjs').toBe(false);
-        expect(out).toMatch(/server\.mjs: .*stale facility count/);
+        expect(ok, 'guard did NOT catch a facility count in server.mjs').toBe(false);
+        expect(out).toMatch(/server\.mjs: .*(stale facility count|facility count withdrawn)/);
       });
   });
 
