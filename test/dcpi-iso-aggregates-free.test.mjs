@@ -52,6 +52,14 @@ const SCOREBOARD_FIELDS = { avg_queue_wait_months: 'avg_queue_wait_months', avg_
   grid_emergencies_30d: 'sum_emergency_30d' };
 const NEEDLES = ROWS.flatMap((r) => [String(r.avg_queue_wait_months), String(r.avg_kwh_cents),
   String(r.avg_curtailment_pct), String(r.avg_time_to_power_months), `":${r.sum_emergency_30d}`]);
+// A numeric needle matches only as a whole number, not inside a longer run: the
+// same boundary as anon-facility-free-fields (#597). Every answer carries
+// per-request retrieved_at timestamps and signed links, and a bare substring
+// test reads their digits as a leaked figure. A JSON value or a prose number
+// still matches; key-prefixed and string needles stay plain substrings.
+const leaks = (hay, needle) => (/^[\d.]+$/.test(needle)
+  ? new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\./g, '\\.')}(?![0-9A-Za-z_])`).test(hay)
+  : hay.includes(needle));
 
 let S, PORT, httpServer, stub;
 let isoCmpHits = 0;
@@ -165,8 +173,8 @@ async function callTool(key, name, args = {}) {
 
 function expectNoNeedles(out, label) {
   for (const needle of NEEDLES) {
-    expect(out.text.includes(needle), `${label}: "${needle}" reached the text`).toBe(false);
-    expect(JSON.stringify(out.sc || {}).includes(needle), `${label}: "${needle}" reached structuredContent`).toBe(false);
+    expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);
+    expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: "${needle}" reached structuredContent`).toBe(false);
   }
 }
 

@@ -50,6 +50,14 @@ const CANDIDATES = [
 ];
 const EXACT_NEEDLES = ['39.04371', '77.48749', '38.96512', '77.35988', 'Coarsen Power Co', 'Coarsen Grid LLC',
   '"capacity_mva":1200', '"capacity_mva":845'];
+// A numeric needle matches only as a whole number, not inside a longer run: the
+// same boundary as anon-facility-free-fields (#597). Every answer carries
+// per-request retrieved_at timestamps and signed links, and a bare substring
+// test reads their digits as a leaked figure. A JSON value or a prose number
+// still matches; key-prefixed and string needles stay plain substrings.
+const leaks = (hay, needle) => (/^[\d.]+$/.test(needle)
+  ? new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\./g, '\\.')}(?![0-9A-Za-z_])`).test(hay)
+  : hay.includes(needle));
 const COARSE = [
   { lat: 39, lon: -77.5, next: ['analyze_site lat=39 lon=-77.5', 'get_fiber_readiness lat=39 lon=-77.5'] },
   { lat: 39, lon: -77.4, next: ['analyze_site lat=39 lon=-77.4', 'get_fiber_readiness lat=39 lon=-77.4'] },
@@ -179,8 +187,8 @@ function expectFreePreview(out, label) {
     expect(String(body._upgrade_cta || ''), `${label} ${where}: _upgrade_cta`).toContain('coarsened to ~11 km');
   }
   for (const needle of EXACT_NEEDLES) {
-    expect(out.text.includes(needle), `${label}: exact value "${needle}" reached the text`).toBe(false);
-    expect(JSON.stringify(out.sc || {}).includes(needle), `${label}: exact value "${needle}" reached structuredContent`).toBe(false);
+    expect(leaks(out.text, needle), `${label}: exact value "${needle}" reached the text`).toBe(false);
+    expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: exact value "${needle}" reached structuredContent`).toBe(false);
   }
 }
 
