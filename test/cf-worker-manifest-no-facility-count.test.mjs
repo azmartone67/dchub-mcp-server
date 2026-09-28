@@ -299,10 +299,12 @@ describe('the rebuilt worker carries no baked facility count', () => {
     // into the three descriptions dchub-backend renders from canon, and check
     // each injection landed.
     const INJECT = {
-      search_facilities: [/Search DC Hub(?:\\'|')s global data-center facility map \(170\+ countries; corroborated count pending\)/,
-        'Search 24,600+ global data center facilities across 170+ countries'],
+      // growth-plan rewrite (mcp#616): the descriptions no longer name the map,
+      // so the count goes in front of a stable opening clause instead.
+      search_facilities: [/^Call when the user wants existing data centers/,
+        'Search 24,600+ global data center facilities across 170+ countries. Call when the user wants existing data centers'],
       semantic_search: [/the global facility map/, '24,600+ discovered facilities'],
-      why_dchub: [/a global facility map \+ 330,000\+/, '24,600+ facilities + 330,000+'],
+      why_dchub: [/Returns DC Hub(?:\\'|')s differentiators/, "Returns DC Hub's differentiators (24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets)"],
     };
     for (const t of spec) {
       const inj = INJECT[t.name];

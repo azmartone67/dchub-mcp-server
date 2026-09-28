@@ -168,14 +168,15 @@ describe('trimForTrial (the keyless preview trims)', () => {
 describe('rank_markets description names score_basis', () => {
   it('names score_basis in the Returns shape and says what score is per criteria', () => {
     const d = TOOLS.rank_markets.description;
-    expect(d).toMatch(/methodology, score_basis\}/);
-    expect(d).toContain('0.4×total_mw + 50×operator_count + 20×facility_count');
-    expect(d).toContain('most_operators = operator_count');
-    expect(d).toContain('fastest_growing = facility_count');
-    expect(d).toContain('ai_ready = the DCPI composite');
+    // 2026-09-28 (growth-plan rewrite): the per-criteria formulas moved out of
+    // the description; the response's score_basis states them in words. What
+    // the description must still say: score is the sort value, not a scale,
+    // and score_basis is where its meaning lives.
+    expect(d).toMatch(/score is the sort value/);
+    expect(d).toMatch(/score_basis says what it is/);
     // ai_ready's live response carries no score_basis (measured 2026-09-24); the
     // description must not promise one there
     expect(d).toMatch(/ai_ready omits it and explains its composite in `methodology`/);
-    expect(d).toMatch(/NOT a 0-100 scale/);
+    expect(d).toMatch(/not a 0-100 scale/i);
   });
 });

@@ -93,8 +93,14 @@ describe('_claimVia — never mints an attribution tag from an absence', () => {
     // save-line AND in the tool description an agent reads before calling.
     // Asserting mere presence let a mutation strip one of the two and still
     // pass (caught by mutation, 2026-08-26).
+    // 2026-09-28: the tool description was rewritten short (growth plan) and
+    // now says it as "the only thing hosted chat clients keep"; the full
+    // gateway list stays in the claim response's save-line.
     const sites = SRC.split('Perplexity, Smithery — a URL box, no header field').length - 1;
-    expect(sites, 'both the save-line and the tool description must name it').toBe(2);
+    expect(sites, 'the save-line must name the gateway class').toBe(1);
+    const _ci = SRC.indexOf("trackedTool(srv, 'claim_free_key',");
+    const desc = SRC.slice(_ci, SRC.indexOf('{ client_name:', _ci));
+    expect(desc).toMatch(/connect_url[^.]*the only thing hosted chat clients keep/);
     expect(SRC).toMatch(/Smithery[^.]*runs behind their proxy/);
   });
 
@@ -186,7 +192,9 @@ describe('claim_free_key wiring — every keyed branch ships the artifact', () =
   it('the tool description names connect_url in its Returns contract', () => {
     // The description is what a model reads BEFORE calling. If connect_url is
     // not named there, an agent has no reason to look for it in the response.
-    expect(SRC).toContain('Returns {api_key, connect_url, for_your_human, header, daily_limit, upgrade_url}.');
+    const _ci = SRC.indexOf("trackedTool(srv, 'claim_free_key',");
+    const desc = SRC.slice(_ci, SRC.indexOf('{ client_name:', _ci));
+    expect(desc).toMatch(/returns it plus connect_url/);
   });
 
   it('claude is NOT in the BYO lead set (the tag collapses two client classes)', () => {
