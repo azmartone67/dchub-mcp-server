@@ -17485,7 +17485,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name))),
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name),
        name, args, _outSchema), name));
 }
 
@@ -18223,16 +18223,136 @@ export function _stampDailyQuotaNote(result) {
   }
 }
 
-export function _stampIdentitySource(result) {
+// ── G6 (Grok audit 2026-09-27): an invalid key must be VISIBLE, not silent ────
+// `Authorization: Bearer <invalid>` answers 401 + WWW-Authenticate. The same
+// junk key sent as X-API-Key or ?apiKey= (also api_key / key, and an inline
+// argument) answered 200 and was served as free tier. That is deliberate — a
+// hard error there would break the keyless connector URL and hosted clients
+// (Grok, ChatGPT) that cannot recover from one — but the ONLY trace of the
+// refusal was structuredContent.identity.credential_refused, which is not what
+// most clients show. Someone with a mistyped connector URL never found out.
+//
+// So the call is still served free, and now says so where it is read:
+//   • content[0] — a separate leading text item (the JSON item is untouched and
+//     moves to content[1], so nothing that parses it breaks);
+//   • structuredContent.identity.key_status and _meta.key_status — machine field.
+//
+// key_status values (ABSENT when no key was presented or nothing was wrong):
+//   'invalid'    — the backend answered and refused the key outright.
+//   'restricted' — refused by a counting gate (bind_email_required / daily_cap*):
+//                  the key is REAL, so it must never be called invalid; the
+//                  identity block's `means` already says what to do.
+//   'unverified' — the validator did not answer (timeout / 5xx). Says NOTHING
+//                  about the key; nothing was cached (_validateKeyUncached),
+//                  so the next call re-validates.
+//   (absent)     — accepted, or not re-checked on this call. A demoted account
+//                  or a spent daily quota is about the account, not the key.
+// The key value itself is never echoed — the notice names only the channel.
+const _KEY_HELP_PATHS = {
+  grok: '/install/grok', 'connectors-manager': '/install/grok',
+  chatgpt: '/install/chatgpt', claude: '/install/claude',
+};
+// Every path above and the fallback were read live 2026-09-27: 200 with a
+// "Get a durable free key in this URL" flow (/connect is the generic setup page).
+export function _keyHelpUrl(platform) {
+  const p = String(platform || '').trim().toLowerCase();
+  return 'https://dchub.cloud' + (_KEY_HELP_PATHS[p] || '/connect');
+}
+
+export function _keyStatus(ctxLike) {
+  const c = ctxLike || {};
+  const src = c.auth_source;
+  if (!src || src === 'none') return null;
+  if (c.auth_unverified) return 'unverified';
+  if (c.auth_refused) {
+    return _FREE_KEY_COUNT_GATES.has(c.auth_refused) ? 'restricted' : 'invalid';
+  }
+  // No 'valid'. A key that was not refused is not thereby proven good: a
+  // session whose initialize validate was indeterminate serves the same key
+  // later WITHOUT re-validating, and the kill switch lets a rejected key ride
+  // with no refusal recorded. Absent is the honest "nothing wrong was seen".
+  return null;
+}
+
+function _keyWhere(src, lead = true) {
+  const w = src === 'query' ? "this DC Hub connector URL's API key"
+    : src === 'header' ? "the DC Hub API key in this connector's X-API-Key header"
+      : src === 'inline_argument' ? "the DC Hub API key passed in this tool call's arguments"
+        : 'the DC Hub API key sent with this request';
+  return lead ? w[0].toUpperCase() + w.slice(1) : w;
+}
+
+// The one user-visible line, or null. Only for a call actually SERVED free
+// because of the key: a refused key on a session that already holds another
+// key was served under that key, so "free-tier results" would be false there.
+export function _keyNoticeLine(ctxLike) {
+  const c = ctxLike || {};
+  const status = _keyStatus(c);
+  const url = _keyHelpUrl(c.platform);
+  if (status === 'invalid' && !c.api_key) {
+    return `${_keyWhere(c.auth_source)} isn't valid, so you're getting free-tier results. `
+      + `Get a new key at ${url}`;
+  }
+  if (status === 'unverified') {
+    return `DC Hub couldn't verify ${_keyWhere(c.auth_source, false)} `
+      + 'just now, so its access may not apply to this result. This is not a problem '
+      + 'with your key; calling again re-checks it.';
+  }
+  return null;
+}
+
+// Initialize-time counterpart (stateful /mcp initialize): the tail appended to
+// the server instructions when the key presented at initialize was refused.
+export function _instrTailInvalidKey(src, platform) {
+  return '\n\n' + _keyNoticeLine({ auth_source: src, auth_refused: 'rejected', platform, api_key: null })
+    + ' Until then, tell the user this once when you first use DC Hub.';
+}
+
+// OpenAI's connector contract holds search/fetch to exactly ONE text item that
+// is the JSON answer (the directory profile enforces it; ChatGPT dev-mode
+// connectors on /mcp parse it the same way). They get the machine field only.
+const _KEY_NOTICE_SINGLE_ITEM_TOOLS = new Set(['search', 'fetch']);
+
+export function _stampKeyStatus(result, toolName) {
+  try {
+    if (!result || typeof result !== 'object') return result;
+    const c = getCtx() || {};
+    // The directory profiles (/mcp/chatgpt, /mcp/claude) scrub key and _meta
+    // plumbing by contract, and hold search/fetch to exactly one text item;
+    // they authenticate by OAuth, where a bad token is already a 401. /mcp/core
+    // is served outside this chokepoint. So: the main /mcp surfaces only.
+    if (c.profile) return result;
+    const status = _keyStatus(c);
+    if (!status) return result;
+    const out = { ...result };
+    const meta = (result._meta && typeof result._meta === 'object' && !Array.isArray(result._meta)) ? result._meta : {};
+    out._meta = { ...meta, key_status: status };
+    const sc = result.structuredContent;
+    if (sc && typeof sc === 'object' && !Array.isArray(sc)
+        && sc.identity && typeof sc.identity === 'object' && !Array.isArray(sc.identity)
+        && sc.identity.key_status === undefined) {
+      out.structuredContent = { ...sc, identity: { ...sc.identity, key_status: status } };
+    }
+    const line = _keyNoticeLine(c);
+    if (line && Array.isArray(result.content) && !_KEY_NOTICE_SINGLE_ITEM_TOOLS.has(toolName)) {
+      out.content = [{ type: 'text', text: line }, ...result.content];
+    }
+    return out;
+  } catch {
+    return result;
+  }
+}
+
+export function _stampIdentitySource(result, toolName) {
   try {
     if (!result || typeof result !== 'object') return result;
     result = _stampDailyQuotaNote(result);
     const sc = result.structuredContent;
-    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
-    if (sc.identity !== undefined) return result;      // handler said it better
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return _stampKeyStatus(result, toolName);
+    if (sc.identity !== undefined) return _stampKeyStatus(result, toolName);      // handler said it better
     const id = _identitySource(getCtx());
-    if (!id) return result;
-    return { ...result, structuredContent: { ...sc, identity: id } };
+    if (!id) return _stampKeyStatus(result, toolName);
+    return _stampKeyStatus({ ...result, structuredContent: { ...sc, identity: id } }, toolName);
   } catch {
     return result;
   }
@@ -24747,6 +24867,7 @@ app.post(MCP_PATHS, async (req, res) => {
       const platform   = detectPlatformFromInit(body, userAgent, platformHeader);
       const validation = await validateKey(apiKey);
       const tier       = validation.valid ? validation.tier : 'free';
+      const _initKeyPresented = apiKey;   // G6: the key as sent, before the drop
       // r-invalid-key-anon: drop a credential the backend authoritatively
       // rejected BEFORE it reaches sessionMeta/ctx, so every downstream
       // `!!c.api_key` gate sees an anonymous caller. See _effectiveCallerKey.
@@ -24827,6 +24948,14 @@ app.post(MCP_PATHS, async (req, res) => {
         }
       } catch (_) { _instrTail = ''; }
       try { _instrTail += _INSTR_TAIL_PACK(_pathPack(req)); } catch (_) { /* r-pack: additive */ }
+      // G6: a key refused outright at initialize is named in the instructions
+      // too, so a client that surfaces them tells the user before any call.
+      try {
+        if (_keyStatus({ auth_source: _authChannel,
+                         auth_refused: _authRefusal(_initKeyPresented, apiKey, validation) }) === 'invalid') {
+          _instrTail += _instrTailInvalidKey(_authChannel, platform);
+        }
+      } catch (_) { /* additive */ }
       const mcpServer = createServer(_descOverrides, _instrTail);
       await mcpServer.connect(transport);
 

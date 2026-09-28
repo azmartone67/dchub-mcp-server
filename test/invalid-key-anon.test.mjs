@@ -142,6 +142,12 @@ function decode(raw) {
 // markdown block, so JSON.parse over the whole string throws. Walk to the
 // balanced close instead. (Parsing the whole string is exactly how the original
 // report mis-read anonymous limit=100 as "0 rows" — it returns 3.)
+// G6 (2026-09-27): a refused or unverifiable key now gets a leading plain-text
+// notice item (invalid-key-visible.test.mjs pins it). The DATA is still the
+// JSON item behind it; this reads past the notice, and only past the notice.
+const G6_NOTICE = /^(?:This|The) DC Hub .*API key.* isn't valid, so you're getting free-tier results|^DC Hub couldn't verify /;
+const dataItems = (content) => (content || []).filter((c) => !G6_NOTICE.test(c.text || ''));
+
 function leadingJson(text) {
   const s = String(text || '').trimStart();
   if (!s.startsWith('{')) return null;
@@ -178,7 +184,7 @@ async function callStateless(path, headers, args = { query: 'Ashburn', limit: 25
     params: { name: 'search_facilities', arguments: args },
   });
   const r = JSON.parse(decode(raw)).result || {};
-  const text = (r.content || []).map((c) => c.text || '').join('');
+  const text = dataItems(r.content).map((c) => c.text || '').join('');
   return shape(leadingJson(text), text);
 }
 
@@ -198,7 +204,7 @@ async function callSessioned(path, headers, args = { query: 'Ashburn', limit: 25
     params: { name: 'search_facilities', arguments: args },
   });
   const r = JSON.parse(decode(raw)).result || {};
-  const text = (r.content || []).map((c) => c.text || '').join('');
+  const text = dataItems(r.content).map((c) => c.text || '').join('');
   return shape(leadingJson(text), text);
 }
 
