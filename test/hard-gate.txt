@@ -175,6 +175,7 @@ test/named-constraint-routing.test.mjs
 test/no-live-dcgi-claims.test.mjs
 test/no-push-to-protected-main.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs
+test/no-sql-tokens-in-output.test.mjs
 test/no-starter-offer.test.mjs
 test/no-verification-counts-in-output.test.mjs
 test/nodata-trial-side-effects.test.mjs
