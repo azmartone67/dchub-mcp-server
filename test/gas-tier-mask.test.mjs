@@ -7,7 +7,7 @@
 // $/MWh needs any key. Sentinel 41.7371 appears in no template.
 //
 // Hard-gate qualified: loopback stub backend only, no disk writes.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import http from 'node:http';
 
 const SENT = 41.7371;
@@ -77,11 +77,26 @@ describe('anonymous MCP callers get the REST free view of gas $/MWh', () => {
     expect(out.tier_masked.tier_required).toBe('pro');
   });
 
+  it('get_gas_intelligence at a …:41.745Z instant: the timestamp is not read as a rounded price', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });                 // Date only: sockets stay real
+    vi.setSystemTime(new Date('2026-09-27T21:24:41.745Z'));
+    let text;
+    try { text = await callTool('get_gas_intelligence', { region: 'TX' }); } finally { vi.useRealTimers(); }
+    expect(text, 'the pinned clock did not reach the response').toContain('T21:24:41.745Z');
+    expect(text).not.toMatch(/(?<![0-9A-Za-z_.])41\.74(?![0-9A-Za-z_])/);
+    expect(text).not.toContain(String(SENT));
+  });
+
   it('get_gas_intelligence: no sentinel anywhere in the response', async () => {
     const text = await callTool('get_gas_intelligence', { region: 'TX' });
     expect(text.length).toBeGreaterThan(50);
     expect(text).not.toContain(String(SENT));
-    expect(text).not.toContain('41.74');   // no rounded copy either
+    // No rounded copy either. Matched as a whole NUMBER: the response carries
+    // retrieved_at with milliseconds, and a call at second :41, ms 740-749
+    // ("…T21:24:41.745Z") contains "41.74" (same flake class as
+    // anon-facility-free-fields, #597; reproduced with a pinned clock). Same
+    // boundary as #597: no digit, letter, "_" or "." on either side.
+    expect(text).not.toMatch(/(?<![0-9A-Za-z_.])41\.74(?![0-9A-Za-z_])/);
     // Henry Hub stays: the REST anonymous teaser shows it too.
     expect(JSON.parse(text).henry_hub_usd_mmbtu).toBe(2.9);
   });
