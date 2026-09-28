@@ -122,6 +122,12 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
          setCanonicalToolNames as _setCoreCanonicalNames,
          limitingFactor as _coreLimitingFactor } from './lib/core-profile.mjs';
+// G1/G2/G5 (2026-09-27 Grok path audit): /mcp/grok, a Grok-sized listing with
+// capped result text, and /mcp/grok/oauth, its opt-in OAuth variant.
+import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
+         isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
+         installGrokResultCap as _installGrokResultCap,
+         GROK_OAUTH_CHALLENGE, GROK_OAUTH_MESSAGE } from './lib/grok-profile.mjs';
 import { coarsenFacilityLocation, coarsenToolResultLocation, splitLeadingJson as _splitLeadingJson, SCOPE_RECORD as _LOC_RECORD, SCOPE_DETECT as _LOC_DETECT } from './lib/facility-location.mjs';
 import { continuationHumanText as _continuationHumanText,
          extractLockedFromPayload as _extractLocked,
@@ -2884,10 +2890,19 @@ export function packToolNames(def) {
   return def.spine ? [...def.tools, ...PACK_SPINE] : [...def.tools];
 }
 
+// G1 (2026-09-27): /mcp/grok (and its OAuth variant) is served as a pack with
+// one difference, `compact`: _packFilter hands it to lib/grok-profile.mjs, which
+// caps each description at 600 characters and drops outputSchema. Kept out of
+// MCP_PACKS so the r-pack suite's pinned per-pack membership is unchanged; the
+// Grok list is pinned by test/grok-profile.test.mjs.
+const GROK_PACK = Object.freeze({ pack: GROK_PACK_NAME, spine: false, tools: GROK_TOOLS, compact: true });
+
 // The pack definition for this request, or null for /mcp and for every source
 // or self path (which are attribution tags and serve the full catalog).
 export function _pathPack(req) {
-  return MCP_PACKS.get(_normPath(req)) || null;
+  const p = _normPath(req);
+  if (p === GROK_PATH || p === GROK_OAUTH_PATH) return GROK_PACK;
+  return MCP_PACKS.get(p) || null;
 }
 
 // Project a canonical ListToolsResult onto a pack. Order follows the pack
@@ -2898,6 +2913,7 @@ export function _pathPack(req) {
 // The result-level _meta rides through unchanged; it carries the maturity basis
 // an agent reads once per session.
 export function _packFilter(result, def) {
+  if (def && def.compact) return _grokToolsList(result);
   const want = packToolNames(def);
   const have = new Map((result?.tools || []).map((t) => [t.name, t]));
   const tools = [];
@@ -2955,6 +2971,8 @@ export const MCP_PATHS = [
   // r-core-profile (2026-09-25): ten task-shaped read-only tools composed from
   // the canonical handlers. See lib/core-profile.mjs and _serveCore.
   CORE_PATH,
+  // G1/G5 (2026-09-27): the Grok-sized listing and its opt-in OAuth variant.
+  GROK_PATH, GROK_OAUTH_PATH,
   ...MCP_SELF_PATHS.keys(),
   ...MCP_SOURCE_PATHS.keys(),
   ...MCP_PACKS.keys(),
@@ -24291,6 +24309,20 @@ app.post(MCP_PATHS, async (req, res) => {
     // r-core-profile: /mcp/core is stateless too; a session id sent to it is ignored.
     const _coreProfile = _pathIsCore(req);
     if (_coreProfile) delete req.headers['mcp-session-id'];
+    // G2 (2026-09-27 Grok audit): a Grok tools/call gets its text capped at
+    // 12,000 characters (lib/grok-profile.mjs capToolResultText): JSON is slimmed
+    // structurally by _slimStepResult, so tier_masked and every relay / upgrade /
+    // unlock / payment field rides whole, and structuredContent is untouched.
+    // Installed before anything below can write. Not on the directory or core
+    // profiles, which rewrite their own responses.
+    if (!_dirProfile && !_coreProfile && req.body && req.body.method === 'tools/call' && _isGrokRequest(req)) {
+      try {
+        _installGrokResultCap(req, res, {
+          tool: String((req.body.params && req.body.params.name) || 'this tool').slice(0, 80),
+          slimJson: _slimStepResult, slimText: _slimStepText,
+        });
+      } catch (_) { /* the cap is additive: never block the call */ }
+    }
     // r-core-profile: an execute_plan step started on /mcp/core. Read once and
     // removed so it can never ride further; only honoured from this process.
     const _coreLoopbackTok = req.headers[CORE_LOOPBACK_HEADER];
@@ -24523,6 +24555,29 @@ app.post(MCP_PATHS, async (req, res) => {
     // Final channel, after every fallback has had its turn. Rides ctx so the
     // envelope stamper can report it without re-deriving auth.
     const _authChannel = _authSourceRestored ? 'session_restore' : _authSource;
+    // G5 (2026-09-27 Grok audit): /mcp/grok/oauth (or /mcp/grok?auth=oauth) is
+    // the opt-in OAuth URL. An initialize or tools/call arriving with NO
+    // credential at all is answered 401 + WWW-Authenticate, so a connector whose
+    // setup step "completes any required authentication" (grok.com Custom
+    // connector) can run the AuthKit flow the protected-resource metadata
+    // advertises. tools/list stays open (the catalog renders), a present bearer
+    // goes through the same validation as /mcp (an invalid one is 401'd by
+    // r-invalid-bearer-401 below), and the plain /mcp/grok is never challenged.
+    // Only while OAuth is enabled: without it the token could not be validated,
+    // so the URL serves keyless rather than lock the caller out.
+    // Kill switch: DCHUB_GROK_OAUTH_DISABLE=1.
+    if (!apiKey && _isGrokOauthRequest(req)
+        && (req.body?.method === 'initialize' || req.body?.method === 'tools/call')
+        && _workosEnabled()
+        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_GROK_OAUTH_DISABLE || ''))) {
+      res.set('WWW-Authenticate', GROK_OAUTH_CHALLENGE);
+      console.log(`[oauth] 401 challenge → ${GROK_OAUTH_PATH} (no credential, method=${req.body?.method})`);
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: GROK_OAUTH_MESSAGE },
+        id: (req.body && req.body.id) ?? null,
+      });
+    }
     // ── Phase B+ (r-workos-challenge): trigger the OAuth handshake ──────────
     // Per the MCP auth spec (2025-06-18) + Claude's connector docs, a client
     // only STARTS OAuth when the server answers an unauthenticated request with
@@ -24858,8 +24913,16 @@ app.post(MCP_PATHS, async (req, res) => {
       return await _serveCore(req, res, { apiKey, userAgent, platformHeader, clientIp, authChannel: _authChannel });
     }
 
-    // Existing session — reuse meta
-    if (sessionId && sessions.has(sessionId)) {
+    // Existing session — reuse meta.
+    // G1 (2026-09-27): except tools/list on a pack path (/mcp/grok, /mcp/site,
+    // ...). The session's own McpServer knows nothing about packs and answers
+    // with the full catalog, so a client that initializes and then lists with
+    // its Mcp-Session-Id (every spec-following client) was handed all 92 tools
+    // on a path that advertises a subset. It falls through to the stateless
+    // tools/list branch below, which applies the pack filter; that listing is
+    // caller-independent, so skipping the session loses nothing.
+    if (sessionId && sessions.has(sessionId)
+        && !(req.body?.method === 'tools/list' && _pathPack(req))) {
       touchSession(sessionId);  // r41: mark active
       const transport = sessions.get(sessionId);
       let meta = sessionMeta.get(sessionId) || {};
