@@ -6644,12 +6644,17 @@ function _accessTagFor(name) {
     tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
   } else {
     tag.pricing_url = `https://dchub.cloud/pricing/upgrade?tool=${q}&ref=mcp-tools-list`;
-    // Single-link contract (growth plan 2026-09-28, lib/paywall-contract.mjs):
-    // one human link per gated result, in its first `Tell the user:` line.
-    tag.upgrade_relay = 'Call the tool first: a gated result carries one human '
-      + 'link (dchub.cloud/upgrade/h/<token>) in its first `Tell the user:` '
-      + 'line. Relay that line. This pricing_url is only a fallback for clients '
-      + 'that render annotations before any call.';
+    // This tag rides the SHARED tools/list, so it cannot know the caller's
+    // paywall arm (DCHUB_PAYWALL_CONTRACT=ab). The v2 arm leads with one
+    // /upgrade/h/ link in a `Tell the user:` line; the v1 control arm (and the
+    // contract switched off) keeps the older `For your human:` / `Tell your
+    // human:` lines, which can carry /go/c/ checkout links instead. So the
+    // pointer names the line, not a link shape that is true for one arm only.
+    tag.upgrade_relay = 'Call the tool first: a gated result carries the link '
+      + 'minted for this caller in the line addressed to the human (`Tell the user:`, '
+      + 'or `For your human:` on some results). Relay that line verbatim, links '
+      + 'included. This pricing_url is only a fallback for clients that render '
+      + 'annotations before any call.';
   }
   return tag;
 }

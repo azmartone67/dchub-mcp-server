@@ -47,12 +47,13 @@ describe('the gated-tool CTA', () => {
     for (const name of GATED) {
       const tag = _accessTagFor(name);
       expect(tag.upgrade_relay, `${name} has no relay pointer`).toBeTruthy();
-      // Single-link contract (2026-09-28): one human link, in the first
-      // `Tell the user:` line. The checkout link is no longer a second thing
-      // to relay, so the pointer must not name it.
-      expect(tag.upgrade_relay).toContain('/upgrade/h/');
+      // tools/list is shared across paywall arms: v2 leads with one /upgrade/h/
+      // link, the v1 control can carry /go/c/ links. The pointer must name the
+      // line to relay and promise no single link shape.
       expect(tag.upgrade_relay).toContain('Tell the user:');
-      expect(tag.upgrade_relay).not.toContain('/go/c/');
+      expect(tag.upgrade_relay).toContain('For your human:');
+      expect(tag.upgrade_relay).toContain('verbatim');
+      expect(tag.upgrade_relay).not.toMatch(/\/upgrade\/h\/|\/go\/c\/|one human link/);
     }
   });
 
