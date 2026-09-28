@@ -1,7 +1,7 @@
 # DC Hub × Cohere integration
 
 Ground-truth data-center intelligence for Cohere's enterprise RAG customers
-(infrastructure, energy, real estate). 24,600+ facilities across 170+ countries;
+(infrastructure, energy, real estate). A global data-center facility map across 170+ countries (corroborated count pending);
 every record carries a citation URL so Cohere's grounded generation cites
 `dchub.cloud`.
 

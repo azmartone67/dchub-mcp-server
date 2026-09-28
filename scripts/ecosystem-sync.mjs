@@ -60,7 +60,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decide, sourceMarker } from './refresh-canon-phrases.mjs';
-import { FLOOR_TOLERANCE, judgeCount, ghWarning } from './canon-floor.mjs';
+import { FLOOR_TOLERANCE, ghWarning, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE, FACILITY_COUNT_PENDING_STATUS } from './canon-floor.mjs';
 import { CAPACITY_SUMMARY_PATH, capacityPasteClause, capacityPointersEnabled, capacitySummaryFromHttp, isCapacityLive }
   from '../lib/capacity-source-summary.mjs';
 
@@ -109,8 +109,14 @@ export const STALE_TOTAL_ABOVE = 10;
 // pass/fail gate, and those surfaces are regenerated from canon by the lanes
 // this script dispatches. Exact there is the analogue of sync-tools-manifest's
 // --fix still healing a floor that its CHECK passes.
+//
+// ★2026-09-27 SUPERSEDED for facilities: the facility COUNT is withdrawn (owner
+// decision) until a corroborated "r3" count lands. A listing that shows NO
+// facility number is in_sync on facilities; one that still shows ANY facility
+// floor — conservative, equal to canon or not — is drift, reason
+// "count withdrawn — owner decision 2026-09-27". The tolerance above no longer
+// applies to facilities; FLOOR_TOLERANCE stays exported for the shared rule.
 export { FLOOR_TOLERANCE };
-const EXACT_FLOOR_KINDS = new Set(['ours', 'push']);
 const CONFIRM_DELAY_MS = Number(process.env.ECOSYSTEM_CONFIRM_DELAY_MS || 40000);
 
 // kind: push   — an API we drive; the dispatched lane fixes it
@@ -449,7 +455,12 @@ export function usableCanon(body) {
   const verdict = decide(body);
   if (verdict !== 'heal') return { canon: null, verdict, marker: sourceMarker(body?.source) };
   const tools = Number(body.tools);
-  if (!Number.isInteger(tools) || parseFloor(body.facilities) == null) {
+  // facilities may be numeric (kept by the backend) or, once the backend says
+  // so, carry facilities_count_status "corroboration_pending" instead; neither is
+  // published by this lane any more, so neither is required.
+  const facilitiesOk = parseFloor(body.facilities) != null
+    || body.facilities_count_status === FACILITY_COUNT_PENDING_STATUS;
+  if (!Number.isInteger(tools) || !facilitiesOk) {
     return { canon: null, verdict: 'keep', marker: sourceMarker(body?.source) };
   }
   return {
@@ -483,7 +494,9 @@ export function repoDrift({ snapshot, canon, serverJson, liveTools }) {
 
 /** in_sync / drift / unreadable for one observation against the single source.
  *  `kind` is the sink's kind. Without it every floor must match exactly. A
- *  conservative floor on a hosted surface is returned in `notes`, never dropped. */
+ *  conservative floor on a hosted surface is returned in `notes`, never dropped.
+ *  (2026-09-27: facility floors no longer produce notes — any one is drift.
+ *  `kind` is kept in the signature for callers and future per-kind rules.) */
 export function judge(obs, ssot, { kind } = {}) {
   if (!obs || obs.read !== true) return { state: 'unreadable', reasons: [obs?.error || 'not read'] };
   const reasons = [];
@@ -496,17 +509,10 @@ export function judge(obs, ssot, { kind } = {}) {
     const stale = (obs.toolClaims || []).filter((n) => isStaleTotal(n, liveTools));
     if (stale.length) reasons.push(`says ${stale.join('/')} tools (live ${liveTools})`);
   }
-  const canonFloor = ssot?.facilities ? parseFloor(ssot.facilities) : null;
-  if (canonFloor != null) {
-    const floors = [...new Set(obs.floors || [])];
-    const exact = kind == null || EXACT_FLOOR_KINDS.has(kind);
-    const conservative = (n) => !exact && n != null && judgeCount(n, canonFloor, { floor: true }).warn;
-    const off = floors.filter((f) => parseFloor(f) !== canonFloor && !conservative(parseFloor(f)));
-    const low = floors.filter((f) => conservative(parseFloor(f)));
-    if (off.length) reasons.push(`says ${off.join(' / ')} facilities (canon ${ssot.facilities})`);
-    if (low.length) notes.push(`conservative floor ${low.join(' / ')}, still true against canon ${ssot.facilities}`);
-    if (new Set(floors.map(parseFloor)).size > 1) reasons.push(`dual floor on one surface: ${floors.join(' + ')}`);
-  }
+  // Judged whatever canon says, and whether or not canon was read: there is no
+  // canon value a facility number could match any more.
+  const floors = [...new Set(obs.floors || [])];
+  if (floors.length) reasons.push(`says ${floors.join(' / ')} facilities — ${FACILITY_COUNT_WITHDRAWN_REASON}`);
   if (obs.version && ssot?.version && semverCmp(obs.version, ssot.version) < 0) {
     reasons.push(`version ${obs.version} (server.json ${ssot.version})`);
   }
@@ -970,7 +976,7 @@ export function attachCapacity(ssot, res) {
 export function pasteLine(ssot) {
   const parts = [
     `${ssot.tools} MCP tools`,
-    ssot.facilities ? `${ssot.facilities} facilities` : null,
+    FACILITY_MAP_PROSE,   // the count is withdrawn (owner decision 2026-09-27)
     ssot.markets ? `${ssot.markets} markets` : null,
     ssot.deals ? `${ssot.deals} tracked deals` : null,
   ].filter(Boolean);
@@ -1107,7 +1113,7 @@ async function main() {
     notes: [],
   };
   attachCapacity(ssot, capR);
-  if (!canonR.read) ssot.notes.push(`canon not usable: ${canonR.error}. Floors are UNMEASURED this cycle, so no floor is judged and no heal is planned from them.`);
+  if (!canonR.read) ssot.notes.push(`canon not usable: ${canonR.error}. Floors are UNMEASURED this cycle, so no heal is planned from them (facility floors are still judged: the count is withdrawn, whatever canon says).`);
   if (!liveR.read) ssot.notes.push(`live tools/list unreadable: ${liveR.error}. Tool counts are UNMEASURED this cycle.`);
   if (canonR.read && liveR.read && canonR.canon.tools !== liveR.count) {
     ssot.notes.push(`canon says ${canonR.canon.tools} tools while live tools/list serves ${liveR.count}.`);

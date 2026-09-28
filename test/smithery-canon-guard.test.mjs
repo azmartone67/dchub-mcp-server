@@ -197,8 +197,12 @@ describe('smithery.yaml canonical-quantity guard', () => {
 
   // ── must-fail controls: each is a value the OLD denylist permitted ──
   const CONTROLS = [
-    ['21,000+ facilities', (s) => s.replace(`${FACILITIES} facilities`, '21,000+ facilities')],
-    ['21k+ facilities',    (s) => s.replace(`${FACILITIES} facilities`, '21k+ facilities')],
+    // ★2026-09-27 the facility COUNT is withdrawn (owner decision): smithery.yaml
+    // carries none, so these controls INSERT one — and it fails even when it
+    // equals canon (the third row), because no facility number is right now.
+    ['21,000+ facilities', (s) => s.replace('On the demand side: ', 'On the demand side: 21,000+ facilities, ')],
+    ['21k+ facilities',    (s) => s.replace('On the demand side: ', 'On the demand side: 21k+ facilities, ')],
+    [`${FACILITIES} facilities (= canon)`, (s) => s.replace('On the demand side: ', `On the demand side: ${FACILITIES} facilities, `)],
     ['1,400+ tracked M&A deals',
       (s) => s.replace(`${DEALS} tracked M&A deals`, '1,400+ tracked M&A deals')],
   ];
@@ -214,15 +218,14 @@ describe('smithery.yaml canonical-quantity guard', () => {
       }, () => {
         const { ok, out } = check();
         expect(ok, `guard did NOT catch "${label}" — it is permitting stale canon`).toBe(false);
-        expect(out).toMatch(/stale (facility|deal) count/);
+        expect(out).toMatch(/stale deal count|facility count withdrawn — owner decision 2026-09-27/);
       });
     });
   }
 
   it('a canon:frozen line is exempt (historical statements stay historical)', () => {
     withMutation(
-      (orig) => orig.replace(`${FACILITIES} facilities`,
-        '21,000+ facilities  # canon:frozen: historical'),
+      (orig) => `${orig.replace(/\n$/, '')}\n# once said 21,000+ facilities  # canon:frozen: historical\n`,
       () => {
         const { ok, out } = check();
         expect(ok, `canon:frozen should exempt the line:\n${out}`).toBe(true);
@@ -312,18 +315,18 @@ describe('smithery.yaml canonical-quantity guard', () => {
   // (a) the "data center(s)" noun — number FIRST
   it('FAILS when a listing claims a stale "N data centers" (the noun the rule lacked)', () => {
     withFileMutation(LISTINGS,
-      (orig) => orig.replace(`${FACILITIES} data centers`, '15,300+ data centers'),
+      (orig) => orig.replace('- **Facilities** — ', '- **Facilities** — 15,300+ data centers; '),
       () => {
         const { ok, out } = check();
-        expect(ok, 'guard did NOT catch a stale "data centers" count — the noun gap is back').toBe(false);
-        expect(out).toMatch(/REGISTRY-LISTINGS\.md: .*stale facility count/);
+        expect(ok, 'guard did NOT catch a "data centers" count — the noun gap is back').toBe(false);
+        expect(out).toMatch(/REGISTRY-LISTINGS\.md: "15,300\+ data centers.*facility count withdrawn/);
       });
   });
 
   // (b) number AFTER the noun — "facility search (15,300+)"
   it('FAILS when the quantity trails the noun — "facility search (15,300+)"', () => {
     withFileMutation(LISTINGS,
-      (orig) => orig.replace(`facility search (${FACILITIES})`, 'facility search (15,300+)'),
+      (orig) => orig.replace('facility search (global map; corroborated count pending)', 'facility search (15,300+)'),
       () => {
         const { ok, out } = check();
         expect(ok, 'guard did NOT catch a trailing parenthesised quantity').toBe(false);
@@ -357,17 +360,20 @@ describe('smithery.yaml canonical-quantity guard', () => {
     expect(ok, `a capacity claim must not read as a stale count:\n${out}`).toBe(true);
   });
 
-  // (e) the raw-discovery-pile phrase must stay exempt under the WIDER noun —
-  // "~4,900 of 21,900+ tracked facilities" is the verified-of-tracked basis, a
-  // different quantity from the deduped fleet. Healing it to the fleet figure
-  // would erase the distinction.
-  it('still exempts the raw-pile "N tracked facilities" provenance phrase', () => {
+  // (e) the raw-discovery-pile phrase — "~4,900 of 21,900+ tracked facilities",
+  // the verified-of-tracked basis — was exempt so it would never be HEALED to
+  // the deduped fleet figure. ★2026-09-27 the facility count is withdrawn (owner
+  // decision): it is still a facility number on a public surface, so it is
+  // reported — and still never rewritten to the fleet figure.
+  it('reports the raw-pile "N tracked facilities" phrase as withdrawn, and never heals it to the fleet canon', () => {
     withFileMutation(LISTINGS,
       (orig) => orig.replace('## Categories / tags',
         '~4,900 analyst-verified of 21,900+ tracked facilities.\n\n## Categories / tags'),
       () => {
         const { ok, out } = check();
-        expect(ok, `the raw-pile phrase must never track the fleet canon:\n${out}`).toBe(true);
+        expect(ok, 'a raw-pile facility number passed CHECK').toBe(false);
+        expect(out).toMatch(/21,900\+ tracked facilities.*facility count withdrawn/);
+        expect(out).not.toMatch(/stale facility count/);
       });
   });
 
@@ -942,10 +948,13 @@ describe('copilot descriptor publish-version guard', () => {
   // pends, then COVERAGE reads the PENDING content. If either dropped the
   // other's write, the daily job would ship a file healed on one axis and
   // reverted on the other — and converge only one run later, if at all.
+  // ★2026-09-27 walks the COUNTRY floor: the facility count is withdrawn and
+  // never healed, so it can no longer stand in for "a phrase quantity".
   it('heals version AND phrase quantities in the SAME --fix run (the two heals chain)', () => {
-    expect(FACILITIES, 'canon facilities phrase unresolved — this control would be vacuous').toBeTruthy();
+    const COUNTRIES = SNAP && isPhrase(SNAP.countries) ? SNAP.countries : null;
+    expect(COUNTRIES, 'canon countries phrase unresolved — this control would be vacuous').toBeTruthy();
     withCopilotMutation((orig) => {
-      const staleQty = orig.replace(`${FACILITIES} facilities`, '12,650+ facilities');
+      const staleQty = orig.replace(`${COUNTRIES} countries`, '120+ countries');
       expect(staleQty, 'quantity mutation did not land — canon phrase not present as written')
         .not.toBe(orig);
       return staleQty.replace(`version: "${CANON_VERSION}"`, 'version: "2.1.13"');
@@ -956,8 +965,8 @@ describe('copilot descriptor publish-version guard', () => {
       expect(COPILOT_VERSION_RX.exec(after)[1], 'the COVERAGE heal clobbered the version heal')
         .toBe(CANON_VERSION);
       expect(after, 'the version heal clobbered the COVERAGE quantity heal')
-        .toContain(`${FACILITIES} facilities`);
-      expect(after, 'the stale quantity survived').not.toContain('12,650+ facilities');
+        .toContain(`${COUNTRIES} countries`);
+      expect(after, 'the stale quantity survived').not.toContain('120+ countries');
     });
   });
 });

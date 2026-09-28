@@ -19,6 +19,7 @@
 // file remains pushable verbatim.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { findFacilityFloors } from '../scripts/canon-floor.mjs';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const DESC = read('canonical/github_description.txt');
@@ -70,10 +71,14 @@ describe('it is healed by the SAME engine as every other surface', () => {
 });
 
 describe('the healed content matches canon', () => {
-  it('carries the canonical facility count, not the stale one', () => {
+  // ★2026-09-27 the facility COUNT is withdrawn (owner decision) until a
+  // corroborated "r3" count lands: the About text names the map, not a number,
+  // whatever canon's numeric `facilities` says.
+  it('carries no facility count — the map, with no number (count withdrawn 2026-09-27)', () => {
     expect(CANON.facilities).toBeTruthy();
-    expect(DESC).toContain(CANON.facilities);
-    expect(DESC).not.toMatch(/16,9\d\d\+/);   // the exact figure that drifted
+    expect(DESC).not.toContain(CANON.facilities);
+    expect(findFacilityFloors(DESC)).toEqual([]);
+    expect(DESC).toMatch(/global facility map/i);
   });
 
   it('carries the canonical market and deal counts', () => {

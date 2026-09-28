@@ -32,7 +32,7 @@ them). Re-read before pasting.
 **Server type:** remote, Streamable HTTP, at `https://dchub.cloud/mcp`. There is nothing to clone or build. `llms-install.md` gives Cline the exact `cline_mcp_settings.json` entry (`"type": "streamableHttp"`).
 
 **Why it benefits Cline users**
-DC Hub is live data on the physical infrastructure behind AI: 92 tools across 24,600+ data-center facilities in 170+ countries, 300+ scored markets, live ISO grid telemetry, interconnection queues, fiber, gas and water risk, and 1,600+ tracked M&A deals. Every answer carries its source and states what it does not cover. Cline can query and cite current infrastructure data for site selection, energy and market research instead of relying on training data.
+DC Hub is live data on the physical infrastructure behind AI: 92 tools across a global data-center facility map in 170+ countries (corroborated count pending), 300+ scored markets, live ISO grid telemetry, interconnection queues, fiber, gas and water risk, and 1,600+ tracked M&A deals. Every answer carries its source and states what it does not cover. Cline can query and cite current infrastructure data for site selection, energy and market research instead of relying on training data.
 
 **Installation testing**
 - [x] Cline can set up this server using only README.md / llms-install.md

@@ -64,6 +64,61 @@ export function describeVerdict(verdict, canonText) {
 /** A GitHub Actions annotation line. Printed outside Actions too: it is plain text. */
 export const ghWarning = (msg) => `::warning::${String(msg).replace(/\r?\n/g, ' ')}`;
 
+// ---- the facility COUNT is withdrawn (owner decision 2026-09-27) ------------
+// No headline facility number ("24,600+ facilities", "24.8K+ data centers") on
+// any public surface until a corroborated "r3" count lands. The wording matches
+// the r2 comparison brief. /api/v1/canon/phrases keeps a numeric `facilities`
+// (plus, from the backend's parallel PR, facilities_count_status:
+// "corroboration_pending"); the generators here emit the pending wording
+// REGARDLESS of that field, so a numeric canon can never re-publish a number.
+export const FACILITY_COUNT_DECISION = '2026-09-27';
+export const FACILITY_COUNT_WITHDRAWN_REASON = 'count withdrawn — owner decision 2026-09-27';
+export const FACILITY_MAP_PROSE = 'a global data-center facility map (corroborated count pending)';
+export const FACILITY_MAP_TILE = 'Global facility map';
+export const FACILITY_MAP_CELL = 'Global map; corroborated count pending';
+// The backend's status value, honoured when present, never required.
+export const FACILITY_COUNT_PENDING_STATUS = 'corroboration_pending';
+
+// frz-claude-relay-wording (test/index-name-canon.test.mjs,
+// test/claude-directory-catalog.test.mjs): /mcp instructions + tools/list stay
+// byte-identical until 2026-10-02, so these files keep their facility number
+// until the do-not-merge-before-2026-10-02 PR. The exemption EXPIRES: from
+// 2026-10-02 every check here treats them like any other surface and goes red.
+// integrations/packs/site.json is generated from mcp-server.json (why_dchub),
+// so it moves with it. (packs/gas.json and packs/siting.json are frozen too but
+// carry no facility number, so they need no exemption here.)
+export const FACILITY_COUNT_FROZEN_UNTIL = '2026-10-02';
+export const FACILITY_COUNT_FROZEN_FILES = [
+  'server.mjs', 'toolspec.json', 'mcp-server.json', 'integrations/packs/site.json',
+];
+export function facilityCountFrozen(file, today = new Date().toISOString().slice(0, 10)) {
+  return FACILITY_COUNT_FROZEN_FILES.includes(file) && today < FACILITY_COUNT_FROZEN_UNTIL;
+}
+
+// A headline facility floor, number first ("24,600+ facilities", "24.6K+ global
+// data center facilities", "24,600+ discovered facilities") or number after the
+// noun ("facility search (24,600+)", "**Facilities:** 24,600+"). A power unit
+// between number and noun ("a 100 MW data center") is a build size, never a
+// fleet count, and "+" is required so a bare integer (a score, an ID) is not read
+// as a claim.
+const FAC_NUM = String.raw`\d{1,3}(?:,\d{3})+\+|\d{1,3}(?:\.\d)?\s?[kK]\+`;
+const FAC_NOUN = String.raw`facilit(?:y|ies)|data[\s-]+cent(?:er|re)s?`;
+const FAC_BEFORE = new RegExp(String.raw`(?<![\d,.])(${FAC_NUM})((?:\s+[A-Za-z-]+){0,3}?\s+(?:${FAC_NOUN}))`, 'gi');
+const FAC_AFTER = new RegExp(String.raw`(?:(?:${FAC_NOUN})(?:\s+[A-Za-z&/-]+){0,3}\s*\(|\*\*Facilities:\*\*\s+)(${FAC_NUM})`, 'gi');
+const FAC_UNIT = /\b(?:[kKmMgGtT]?W|[kKmMgGtT]?Wh|[kKmM]?VA)\b/;
+
+/** Every headline facility floor a text states, as written. */
+export function findFacilityFloors(text) {
+  const out = [];
+  for (const rx of [FAC_BEFORE, FAC_AFTER]) {
+    for (const m of String(text || '').matchAll(rx)) {
+      if (FAC_UNIT.test(m[0])) continue;
+      out.push(m[0].replace(/\s+/g, ' ').trim());
+    }
+  }
+  return out;
+}
+
 // ---- self-test --------------------------------------------------------------
 export function selfTest() {
   const C = 24800;
@@ -80,7 +135,20 @@ export function selfTest() {
     ['CONTROL: an exact count equal to canon passes', judgeCount(92, 92, { exact: true }), 'ok'],
     ['an unparseable count fails, never passes', judgeCount(NaN, C, { floor: true }), 'mismatch'],
   ];
-  let bad = 0;
+  const facCases = [
+    ['withdrawn: a number-first facility floor is found', findFacilityFloors('92 tools over 24,600+ data-center facilities').length, 1],
+    ['withdrawn: a number-after-noun floor is found', findFacilityFloors('facility search (24,600+)').length, 1],
+    ['withdrawn: the K form is found', findFacilityFloors('24.6K+ data centers').length, 1],
+    ['CONTROL: the pending wording carries no floor', findFacilityFloors(FACILITY_MAP_PROSE).length, 0],
+    ['CONTROL: a capacity is not a fleet count', findFacilityFloors('a 1,000+ MW data center').length, 0],
+    ['CONTROL: an asset count is not a facility count', findFacilityFloors('330,000+ mapped assets').length, 0],
+  ];
+  for (const [label, got, want] of facCases) {
+    const ok = got === want;
+    if (!ok) cases.bad = (cases.bad || 0) + 1;
+    console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${label}${ok ? '' : ` (got ${got}, want ${want})`}`);
+  }
+  let bad = cases.bad || 0;
   for (const [label, v, want] of cases) {
     const ok = v.state === want && v.pass === (want === 'ok' || want === 'warn') && v.warn === (want === 'warn');
     if (!ok) bad++;

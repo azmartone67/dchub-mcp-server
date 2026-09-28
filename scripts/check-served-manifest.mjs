@@ -30,7 +30,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { judgeCount, describeVerdict, ghWarning } from './canon-floor.mjs';
+import { judgeCount, describeVerdict, ghWarning, findFacilityFloors, FACILITY_MAP_PROSE, FACILITY_COUNT_WITHDRAWN_REASON } from './canon-floor.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SERVED = 'https://dchub.cloud/.well-known/mcp.json';
@@ -93,8 +93,14 @@ if (canon.tools && String(servedTools) !== String(canon.tools)) {
 
 // ── quantities embedded in the description ─────────────────────────────────
 const desc = servedDoc.description;
+// ★2026-09-27 the facility COUNT is withdrawn (owner decision) until a
+// corroborated "r3" count lands. A served facility number is drift whatever
+// canon says — including one equal to canon's numeric `facilities`.
+{
+  const served = findFacilityFloors(desc);
+  if (served.length) note('description.facilities', served.join(' / '), `no number: "${FACILITY_MAP_PROSE}"`, FACILITY_COUNT_WITHDRAWN_REASON);
+}
 const checks = [
-  ['facilities', /([\d,]+\+)\s*facilities/i, canon.facilities],
   ['deals', /([\d,]+\+)\s*tracked\s*M&A/i, canon.deals],
   ['countries', /([\d,]+\+)\s*countries/i, canon.countries],
 ];
