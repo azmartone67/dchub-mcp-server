@@ -170,7 +170,8 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum,
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
-         nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine } from './lib/retention.mjs';
+         nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
+         emailSourceFor as _retEmailSourceFor } from './lib/retention.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
@@ -22962,7 +22963,11 @@ function createServer(descOverrides, instructionsTail) {
       } catch (_) { /* fall through to the normal mint */ }
       const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
       const body = { client_name: cn };
-      if (a.email) body.email = String(a.email).trim().slice(0, 200);
+      if (a.email) {
+        body.email = String(a.email).trim().slice(0, 200);
+        // Where the email came from (backend be#5836). See lib/retention.mjs emailSourceFor.
+        body.email_source = _retEmailSourceFor(getCtx());
+      }
       const r = await callAPIWrite('/api/v1/keys/claim', body);
       const key = r && (r.api_key || r.key);
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
@@ -23224,7 +23229,9 @@ function createServer(descOverrides, instructionsTail) {
           example: 'bind_email email="<the email your human gave you>"',
         }) }] };
       }
-      const body = { email };
+      // email_source (backend be#5836): 'oauth' on an OAuth-authenticated
+      // request, else 'agent_supplied'. See lib/retention.mjs emailSourceFor.
+      const body = { email, email_source: _retEmailSourceFor(getCtx()) };
       // api_key OPTIONAL: when omitted, callAPIWrite forwards the session/context
       // X-API-Key (the auto-mint identify path). Pass it through only if given.
       const _key = (a.api_key || '').toString().trim();
@@ -25193,7 +25200,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // stored meta carries the init-time IP; a returning request may come
       // from a different hop, so prefer the current one when present).
       return ctx.run({ ...meta, client_ip: clientIp || meta.client_ip || null, session_id: sessionId, x_payment: xPayment,
-        auth_source: _authChannel,
+        auth_source: _authChannel, auth_oauth: _bearerResolved,
         auth_refused: _authRefused,   // r-auth-refused: per request, never carried in meta
         auth_unverified: _authUnverifiedFlag,   // r-auth-unverified: same per-request rule
         auth_demoted: _authDemotedFlag,   // r-auth-demoted: same per-request rule
@@ -25218,7 +25225,7 @@ app.post(MCP_PATHS, async (req, res) => {
       await ephServer.connect(ephTransport);
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
-        auth_source: _authChannel, source: _pathSource(req),
+        auth_source: _authChannel, auth_oauth: _bearerResolved, source: _pathSource(req),
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
       }, async () => {
@@ -25335,7 +25342,7 @@ app.post(MCP_PATHS, async (req, res) => {
 
       return ctx.run({
         api_key: apiKey, platform, tier, session_id: null,
-        auth_source: _authChannel,
+        auth_source: _authChannel, auth_oauth: _bearerResolved,
         // r-auth-unverified is deliberately ABSENT here. An initialize response
         // is a protocol handshake with no structuredContent, and
         // _stampIdentitySource only stamps a result that has one — so plumbing
@@ -25436,7 +25443,7 @@ app.post(MCP_PATHS, async (req, res) => {
       // If anything here ever becomes key-dependent, this exemption must go.
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
-        auth_source: _authChannel,
+        auth_source: _authChannel, auth_oauth: _bearerResolved,
         source: _pathSource(req),   // r-source-path: rides EVERY request
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
@@ -25495,7 +25502,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier,
         profile: _coreLoopback ? CORE_PROFILE : (_claudeLoopback ? CLAUDE_PROFILE : _dirProfile),
-        auth_source: _authChannel,
+        auth_source: _authChannel, auth_oauth: _bearerResolved,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
         auth_demoted: _authDemoted(_keyPresented, validation),   // r-auth-demoted
