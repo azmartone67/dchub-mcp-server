@@ -234,6 +234,7 @@ test/request-interpretation.test.mjs
 test/required-args.test.mjs
 test/resolution-gap.test.mjs
 test/result-shaping.test.mjs
+test/retention-email-ask.test.mjs
 test/retired-claims.test.mjs
 test/return-affordance-anon.test.mjs
 test/routing-hint.test.mjs

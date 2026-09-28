@@ -163,7 +163,11 @@ import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _freeKeyAllowanceText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+// Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
+import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
+         returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
+         nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine } from './lib/retention.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
@@ -684,12 +688,19 @@ function _paywallOffer(name, c) {
   if (PRO_ONLY_TOOLS.has(name) && _tierRank((c && c.tier) || 'free') >= _tierRank('starter')) return 'pro';
   return 'pack';
 }
+const _OWN_TELL_TOOLS = new Set(['claim_free_key', 'bind_email', 'recover_my_key']);
 export function _paywallContractStep(result, name) {
   try {
     const c = getCtx() || {};
     const arm = _paywallArmFor(c);
     if (!arm) return result;
     if (arm === 'v1') return _pcTagLinks(result, 'v1');
+    // The identity tools are not paywalls. Their success responses carry
+    // upgrade_url / for_your_human, which read as "gated" to the contract, and
+    // the rewrite then stripped connect_url and persist_config — the install
+    // artifact itself — and replaced the email ask (growth plan §3) with
+    // "Complete answer." They keep their own single Tell-the-user line.
+    if (_OWN_TELL_TOOLS.has(name)) return result;
     if (_isCleanPlatform() || !_pcIsGated(result)) return result;
     const sc = (result && result.structuredContent) || {};
     // Reuse the relay this response already minted (same token the teaser was
@@ -7608,6 +7619,72 @@ async function _keyReturning(apiKey) {
     return returning;
   } catch (_) { return false; }
 }
+// ── Returning-key nudge (DCHUB_RETURN_NUDGE, growth plan §3, 2026-09-28) ──
+// The first call of a new ISO week from a key at least 7 days old, at most once
+// a week per key, and never for a key with an alert or subscription, gets ONE
+// `Tell the user:` line prepended — "Welcome back…". The decision and the copy
+// are lib/retention.mjs; this is the wiring.
+//
+// STATE IT NEEDS, AND WHERE IT IS SUPPOSED TO COME FROM. The only backend read
+// is /api/v1/keys/standing (already called for DCHUB_RETURN_REWARD). Today that
+// route answers from auto_trial_keys only — a dch_live_ key from
+// claim_free_key comes back found:false — and it returns neither has_alert,
+// last_seen_at (the key's PREVIOUS call; validate overwrites last_used_at
+// before any tool runs, so last_used_at is always "now") nor top_market. Each
+// missing field keeps the nudge quiet (lib/retention.mjs nudgeDecision): a
+// "welcome back" to someone who already set an alert, or a score move credited
+// to the wrong window, is worse than no line. Until the backend adds them the
+// flag can be on and the nudge fires for no one — by design.
+//
+// "At most once a week" is held per replica, in memory: the first call this
+// replica sees from a key in a given ISO week is the only one evaluated.
+const _NUDGE_WEEK = new Map();            // api_key -> ISO week last evaluated
+const _nudgeStandingCache = new Map();    // api_key -> { at, body }
+async function _keyStandingFull(apiKey) {
+  const now = Date.now();
+  const hit = _nudgeStandingCache.get(apiKey);
+  if (hit && (now - hit.at) < 600_000) return hit.body;
+  let body = null;
+  try {
+    const u = new URL('/api/v1/keys/standing', API_BASE);
+    u.searchParams.set('api_key', apiKey);
+    const r = await fetch(u.toString(), {
+      method: 'GET', headers: { 'X-Internal-Key': INTERNAL_KEY }, signal: AbortSignal.timeout(2500),
+    });
+    if (r.ok) body = await r.json();
+  } catch (_) { body = null; }
+  if (_nudgeStandingCache.size > 50000) _nudgeStandingCache.clear();
+  _nudgeStandingCache.set(apiKey, { at: now, body });
+  return body;
+}
+export async function _returnNudgeStep(result, name, env = process.env) {
+  try {
+    if (!_retNudgeEnabled(env)) return result;               // flag off: the same object, untouched
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (_isFailureEnvelope(result)) return result;           // an upstream failure is not a welcome
+    if (_OWN_TELL_TOOLS.has(name)) return result;
+    if (_retHasTellLine(result)) return result;              // one Tell-the-user line per response
+    const c = getCtx() || {};
+    if (!_retNudgeEligible(c, { directoryProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE],
+                               isBot: isBotOrInternalCtx })) return result;
+    const now = Date.now();
+    const wk = _retIsoWeek(now);
+    if (_NUDGE_WEEK.get(c.api_key) === wk) return result;
+    if (_NUDGE_WEEK.size > 50000) _NUDGE_WEEK.clear();
+    _NUDGE_WEEK.set(c.api_key, wk);
+    const standing = await _keyStandingFull(c.api_key);
+    if (!standing || typeof standing !== 'object') return result;
+    let movers = null;
+    if (c.email && standing.found === true && standing.has_alert === false
+        && standing.top_market && standing.last_seen_at) {
+      const ch = await callAPI('/api/v1/changes/since', { since: '7d', limit: 200 });
+      movers = ch && ch.diff && Array.isArray(ch.diff.dcpi_movers) ? ch.diff.dcpi_movers : null;
+    }
+    const d = _retNudgeDecision({ standing, email: c.email || null, movers, now });
+    return d && d.kind ? _retPrependTellLine(result, d.line) : result;
+  } catch (_) { return result; }
+}
+export function _resetReturnNudgeState() { _NUDGE_WEEK.clear(); _nudgeStandingCache.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
 function _returnRewardAvailableToday(apiKey) {
   try {
@@ -17673,12 +17750,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   pointer: every envelope, attribution and teaser step has run, so it sees the
   //   final gated response and rewrites it once. Inert unless the caller is in an
   //   arm (DCHUB_PAYWALL_CONTRACT, or Grok).
-  }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
+  // ★ _returnNudgeStep (growth plan §3) sits directly inside _flagUpstreamError,
+  // which stays outermost: every other step has run, so it can see whether a
+  // `Tell the user:` line is already there. It only ever prepends one line, and
+  // leaves failure envelopes alone, so the flag's verdict cannot change.
+  // Inert unless DCHUB_RETURN_NUDGE is on.
+  }, async (args, extra) => _flagUpstreamError(await _returnNudgeStep(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name),
-       name, args, _outSchema), name));
+       name, args, _outSchema), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -23006,10 +23088,17 @@ function createServer(descOverrides, instructionsTail) {
       // separate bind line would be the third competing human CTA.
       const _bindDefaultOn  = process.env.CLAIM_BIND_DEFAULT !== '0';
       const _bindDefault    = _bindDefaultOn && !a.email && !_isByo;
-      const _bindDefaultLine = _bindDefault
-        ? '🔗 **One free step so this key is still yours tomorrow:** ask your human for their email and call `bind_email {email}` — it lifts this key to ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes it recoverable next session (no card, works on any client). Binding is what turns a one-session key into a durable identity.\n\n'
-        : '';
+      // Growth plan §3 (2026-09-28): the prose line that asked for the email here
+      // ("One free step so this key is still yours tomorrow…") is gone — the
+      // Tell-the-user lead asks once. next_tool stays bind_email below.
+      // Growth plan §3 (2026-09-28): the human-facing email ask leads. Line 1 is
+      // the one sentence the assistant repeats; line 2 tells the agent how to
+      // use the answer. Skipped when an email already came with the claim
+      // (the ask would be for something the caller just gave). The rest of the
+      // response — key, connector URL, persist_config — follows unchanged.
+      const _emailAtClaim = !!a.email;
       const text =
+        (_emailAtClaim ? '' : _retClaimLead()) +
         '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
         (_autoBound
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
@@ -23018,7 +23107,7 @@ function createServer(descOverrides, instructionsTail) {
         _headerlessLead +
         _saveLine +
         _tierLine +
-        _bindDefaultLine +
+
         // r-return (2026-06-18): retention hook at the point of PEAK engagement.
         // The funnel pushed UPGRADE here but gave the agent no reason to COME BACK
         // — and ~1 returning IP/wk (not conversion) is the binding constraint.
@@ -23041,13 +23130,18 @@ function createServer(descOverrides, instructionsTail) {
           client_name:             cn,
           tier:                    (r && r.tier) || 'free',
           header:                  'X-API-Key',
-          // honest daily_limit: echo the backend claim response so gateway and
-          // backend agree. Fallback = 10 to match the CF worker's ENFORCED free
-          // cap (worker.js MCP_TIERS.free.daily_limit=10) and this tool's own
-          // description — NOT 25, which over-promised vs the 10 the worker
-          // actually enforces (promise 25 → capped at 10 = broken promise).
-          daily_limit:             (r && typeof r.daily_calls === 'number') ? r.daily_calls
-                                     : (r && typeof r.daily_limit === 'number') ? r.daily_limit : _rungNum('free'),
+          // Free-tier rule (published 2026-09-27, ai_surface_canon.free_tier_rule):
+          // a free key is N calls TO TRY in total, then a per-day rung once an
+          // email is bound. daily_limit used to echo the backend's claim figure
+          // or fall back to the free rung, which stated that lifetime count as a
+          // daily one. Now: an unbound key has no daily limit (null) and says
+          // how many calls it has in total; a key claimed with an email (the
+          // backend reports email_captured) is on the bound rung.
+          daily_limit:             (r && r.email_captured === true) ? _rungNum('identified') : null,
+          ...((r && r.email_captured === true) ? {} : { free_calls_total: _rungNum('free') }),
+          daily_limit_with_email:  _rungNum('identified'),
+          full_answers_per_tool_per_day_with_email: _fullAnswersPerToolPerDay('identified'),
+          free_tier_rule:          _freeTierRuleText(),
           key_is_durable:          true,
           // r-persist (2026-07-11): copy-paste-ready client-config snippets with
           // the REAL key inlined — the agent shows its human the right one so
@@ -23167,8 +23261,21 @@ function createServer(descOverrides, instructionsTail) {
         } catch (_) { /* soft-fail: consent is best-effort; the email bind stands */ }
       }
       const _benefits = (r && (r.unlocked || r.message)) || 'key recovery + upgrade receipts now route to that email';
+      // Growth plan §3 (2026-09-28): lead with the one sentence the assistant
+      // repeats — the address it is tied to, masked, and an offer to watch —
+      // then the agent line naming the three watch tools. {market} would be the
+      // key's most-queried market; nothing on the backend reports it yet, so
+      // the sentence is the neutral one.
+      const _boundEmail = String((r && (r.email || r.operator_email)) || email);
+      const _identRung = _rungNum('identified');
+      const _identFull = _fullAnswersPerToolPerDay('identified');
       const text =
+        _retBindLead(_boundEmail, null) +
         '✅ **Email bound — your key is now recoverable + upgrade receipts will land there.**\n' +
+        (Number.isFinite(_identRung)
+          ? 'Free with an email: ' + _identRung + ' calls/day'
+            + (Number.isFinite(_identFull) ? ' (up to ' + _identFull + ' full answers per tool per day)' : '') + '.\n'
+          : '') +
         (r && r.message ? r.message + '\n' : '') +
         (_optedIn ? '📬 Subscribed to the free weekly digest (markets/deals/facilities that moved — unsubscribe anytime).\n' : '') +
         '\n' + _consent;
@@ -23177,6 +23284,11 @@ function createServer(descOverrides, instructionsTail) {
         structuredContent: {
           ok: true,
           bound: true,
+          // Free-tier rule (2026-09-27): the bound rung, from canon.
+          daily_limit: _identRung,
+          full_answers_per_tool_per_day: _identFull,
+          free_tier_rule: _freeTierRuleText(),
+          watch_tools: ['set_market_alert', 'save_site', 'set_site_alert', 'subscribe_digest'],
           identified: r && r.identified !== false,
           unlocked: r && r.unlocked,
           message: (r && r.message) || 'Email bound — key recovery + upgrade receipts enabled.',

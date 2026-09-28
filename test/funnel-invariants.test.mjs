@@ -21,11 +21,16 @@ import { readFileSync } from 'node:fs';
 describe('funnel invariants (peace 2026-07-05)', () => {
   const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
-  it('claim_free_key daily_limit fallback is the canonical free rung (10), not 25', async () => {
+  it('claim_free_key limits come from the canonical rungs, never a typed number', async () => {
     // r-tier-canon (2026-09-02): the literal 10 became _rungNum('free'), read
     // from canonical/tier_limits.json — the same guard, one source instead of two.
-    expect(src).toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : _rungNum\('free'\)/);
-    expect(src).not.toMatch(/typeof r\.daily_limit === 'number'\) \? r\.daily_limit : 25\b/);
+    // Free-tier rule (2026-09-27, growth plan §3): the free key's 10 is a total,
+    // so an unbound key reports free_calls_total and daily_limit null; a key
+    // claimed with an email is on the bound per-day rung. Behaviour is covered
+    // over HTTP in test/retention-email-ask.test.mjs.
+    expect(src).toMatch(/daily_limit:\s*\(r && r\.email_captured === true\) \? _rungNum\('identified'\) : null/);
+    expect(src).toMatch(/free_calls_total: _rungNum\('free'\)/);
+    expect(src).not.toMatch(/r\.daily_limit : 25\b/);
     const { _rungNum } = await import('../lib/tier-canon.mjs');
     expect(_rungNum('free')).toBe(10);
   });

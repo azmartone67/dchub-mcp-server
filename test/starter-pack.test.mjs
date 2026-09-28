@@ -109,7 +109,9 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
     //   registerTool callback where all return paths have merged, NOT that it
     //   must be the outermost call; "not on one inner return" is still pinned
     //   exactly, by the clean-only-path assertion at the bottom of this block.
-    const m = SRC.match(/}\s*,\s*async \(args, extra\) =>\s*(?:\w+\(\s*)*withStarterPack\(/);
+    // An awaited outer wrapper counts too (2026-09-28: _returnNudgeStep is async
+    // and sits inside _flagUpstreamError).
+    const m = SRC.match(/}\s*,\s*async \(args, extra\) =>\s*(?:(?:await\s+)?\w+\(\s*)*withStarterPack\(/);
     expect(m, 'withStarterPack must wrap the registerTool callback').toBeTruthy();
   });
 
