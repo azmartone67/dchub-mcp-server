@@ -187,6 +187,7 @@ test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
 test/payload-diet.test.mjs
+test/paywall-contract.test.mjs
 test/paywall-extras-attribution.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs

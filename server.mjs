@@ -134,6 +134,12 @@ import { continuationHumanText as _continuationHumanText,
          buildContinuation as _buildContinuation,
          buildContinueUrl as _buildContinueUrl,
          continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
+// Paywall response contract (growth audit item c) + Grok G3: lib/paywall-contract.mjs.
+import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallContract,
+         isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
+         tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
+         isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
+         lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields } from './lib/paywall-contract.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -642,6 +648,64 @@ export async function _withProTrialOffer(result, toolName, c, env = process.env,
     }
     return { ...result, content, structuredContent: { ...sc, for_your_human: relay } };
   } catch (_e) { return result; }   // an ask is never worth failing a response over
+}
+
+// ── Paywall response contract (growth audit item c, 2026-09-28) ─────────────
+// The rewrite itself is lib/paywall-contract.mjs; this is the wiring. Which arm a
+// caller is in: 'grok' (G3, always), 'v2'/'v1' (DCHUB_PAYWALL_CONTRACT=ab, 50/50
+// per identity for 14 days), 'v2' (=on), or null (=off, the default: nothing
+// changes). Directory profiles keep their own commerce rules and are never
+// assigned; neither are our own probes and bots.
+export function _paywallArmFor(c) {
+  try {
+    if (!c) return null;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return null;
+    if (isBotOrInternalCtx(c)) return null;
+    const identity = c.api_key
+      ? 'k:' + createHash('sha256').update(String(c.api_key)).digest('hex')
+      : (c.client_ip ? 'ip:' + c.client_ip : (c.session_id ? 's:' + c.session_id : ''));
+    return _pcArm({ identity, platform: c.platform });
+  } catch (_) { return null; }
+}
+// True when this caller gets the new contract (not off, not the control arm).
+function _paywallContractOn(c) {
+  const arm = _paywallArmFor(c === undefined ? getCtx() : c);
+  return !!arm && arm !== 'v1';
+}
+// Land & Power sells Pro (owner 2026-09-22, reaffirmed 2026-09-28): the $10 pack
+// does not open it. So does a Pro-only tool for a caller who already pays for a
+// lower plan. Everything else leads with the $10 pack.
+function _paywallOffer(name, c) {
+  if (LP_TOOLS.has(name)) return 'pro';
+  if (PRO_ONLY_TOOLS.has(name) && _tierRank((c && c.tier) || 'free') >= _tierRank('starter')) return 'pro';
+  return 'pack';
+}
+export function _paywallContractStep(result, name) {
+  try {
+    const c = getCtx() || {};
+    const arm = _paywallArmFor(c);
+    if (!arm) return result;
+    if (arm === 'v1') return _pcTagLinks(result, 'v1');
+    if (_isCleanPlatform() || !_pcIsGated(result)) return result;
+    const sc = (result && result.structuredContent) || {};
+    // Reuse the relay this response already minted (same token the teaser was
+    // stored under, and the pro-trial offer's ?offer=), else mint one.
+    let url = (sc.for_your_human && typeof sc.for_your_human.url === 'string'
+               && sc.for_your_human.url.includes('/upgrade/h/')) ? sc.for_your_human.url : '';
+    if (!url) {
+      const r = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+      url = (r && r.url) || '';
+    }
+    if (!url) return result;   // no signing secret: no relay to lead with, leave it as it was
+    const offer = _paywallOffer(name, c);
+    return _applyPaywallContract(result, name, {
+      arm, offer, relayUrl: _pcTagUrl(url, arm), proPrice: _priceLabel('pro'),
+      // platform collapses Claude Desktop, Code and claude.ai to 'claude'; the raw
+      // clientInfo name tells claude.ai (hosted) apart.
+      hosted: _pcHosted((c.platform || '') + ' ' + (c.client_name_raw || '')),
+      markdownLabel: (_pcIsGrok(c.platform) && offer === 'pack') ? GROK_RELAY_LABEL : undefined,
+    });
+  } catch (_) { return result; }
 }
 
 // ── r-two-rungs (2026-09-13, owner) ─────────────────────────────────────────
@@ -4226,6 +4290,12 @@ export async function mintAutoTrial(tool_name) {
     if (c && c.profile === CLAUDE_PROFILE) return null;
     // r-core-profile: /mcp/core returns no keys either, so it mints none.
     if (c && c.profile === CORE_PROFILE) return null;
+    // G3 (2026-09-28): Grok opens a new session, often from a new egress IP, per
+    // tool call, so a key minted into a result is never presented again (Grok
+    // keys made exactly one call) and every call minted another. No mint; the
+    // daily allowance is served keyless and the one ask is the /upgrade/h/ link
+    // (see _grokTaste). Kill switch: DCHUB_PAYWALL_CONTRACT_GROK=0.
+    if (c && _pcIsGrok(c.platform) && _pcGrokOn()) return null;
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
     if (tool_name) url.searchParams.set('tool', tool_name);
     const headers = {
@@ -6691,11 +6761,12 @@ function _lpProLink() {
   return _subCheckoutUrl(PRO_URL + promoParam(), sid);
 }
 
-export function _lpWallResult(name) {
+export function _lpWallResult(name, headline = null) {
   const url = _lpProLink();
   const price = _priceLabel('pro');
   const payload = {
     error: 'pro_required', tool: name, _gated: true, _wall: true, required_plan: 'pro',
+    ..._pcLpHeadlineFields(headline),
     message: `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
       + 'returns no data: no verdict, score or figure. A free key opens the preview '
       + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
@@ -6710,11 +6781,12 @@ export function _lpWallResult(name) {
   };
 }
 
-export function _lpPreviewResult(name, result) {
+export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
   let parsed = null;
   try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
   if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
   const preview = _lpPreviewPayload(parsed);
+  if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed)));
   if (name === 'compare_sites') {
     // The pick is made from the scores, so it is Pro with them.
     preview.winner = null;
@@ -15824,7 +15896,23 @@ function trackedTool(srv, name, description, schema, handler) {
       // Land & Power (owner, 2026-09-22): only Pro opens the details (LP_TOOLS).
       if (LP_TOOLS.has(name)) {
         const _lpAccess = await _lpAccessFor(c, tier);
-        if (_lpAccess === 'wall') { status = 'lp_wall'; return _lpWallResult(name); }
+        // Paywall contract (spec rule 7): in a contract arm the anonymous wall
+        // carries the free headline the tool description promises — the verdict
+        // band and the NAME of the weakest factor, no score or figure — and the
+        // preview names the weakest factor too. Rate-limited like /mcp/core's
+        // keyless headline; any failure serves the plain wall.
+        const _pcOn = _paywallContractOn(c);
+        if (_lpAccess === 'wall') {
+          status = 'lp_wall';
+          let _hl = null;
+          if (_pcOn && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+            try {
+              const _raw = _noDataGuard(await handler(args));
+              _hl = _pcLpHeadline(name, JSON.parse(_raw?.content?.[0]?.text || ''));
+            } catch (_) { _hl = null; }
+          }
+          return _lpWallResult(name, _hl);
+        }
         if (_lpAccess === 'preview') {
           status = 'lp_preview';
           // r-pro-trial-offer: only a DATA answer reaches the offer (the guard
@@ -16386,7 +16474,10 @@ function trackedTool(srv, name, description, schema, handler) {
             // returns the full taste with no header/reconnect (the 94%-drop fix).
             // 2026-06-15: gated by DCHUB_ANON_INLINE_FULL — when 'off', skip the
             // auto-bind so full data requires the agent to configure the key.
-            const _mintBound = ANON_INLINE_FULL ? _autoBindTrialToSession(_mint) : false;
+            // G3: Grok gets its daily full answers without a minted key (none is
+            // minted for it); the cap below still counts them per identity.
+            const _grokTaste = !_mint && ANON_INLINE_FULL && _pcIsGrok(c.platform) && _pcGrokOn();
+            const _mintBound = ANON_INLINE_FULL ? (_autoBindTrialToSession(_mint) || _grokTaste) : false;
             // r62b-conv: honest, machine-actionable unlock block (shared helper)
             // — replaces the false "retry <pro tool> for the full result" promise
             // a trial (IDENTIFIED) key can't keep on grid_intelligence/fiber_intel.
@@ -16557,6 +16648,7 @@ function trackedTool(srv, name, description, schema, handler) {
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
                     tool: name,
                     ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map; the full map is Pro (${_priceLabel('pro')}).` } : {}),
+                    ...(_grokTaste && typeof _remainingFull === 'number' ? { remaining_full_today: _remainingFull } : {}),
                     ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
                     ..._hiSC,
                   })),
@@ -17573,11 +17665,15 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   that same predicate first and leaves anything it would flag untouched,
   //   so an upstream error never carries a pointer. It never waits on the
   //   network.
-  }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
+  // ★ _paywallContractStep (growth audit item c) sits just inside the capacity
+  //   pointer: every envelope, attribution and teaser step has run, so it sees the
+  //   final gated response and rewrites it once. Inert unless the caller is in an
+  //   arm (DCHUB_PAYWALL_CONTRACT, or Grok).
+  }, async (args, extra) => _flagUpstreamError(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name),
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name),
        name, args, _outSchema), name));
 }
 
