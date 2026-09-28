@@ -36,6 +36,14 @@ const DEALS = Array.from({ length: 12 }, (_, i) => ({
   value: 7100.25 + i, value_display: `$7.1${i}B-deal${i}`, value_confirmed: true, mw: 655 + i,
 }));
 const EXACT_NEEDLES = DEALS.slice(0, 3).flatMap((d) => [String(d.value), d.value_display, `"mw":${d.mw}`]);
+// A numeric needle matches only as a whole number, not inside a longer run: the
+// same boundary as anon-facility-free-fields (#597). Every answer carries
+// per-request retrieved_at timestamps and signed links, and a bare substring
+// test reads their digits as a leaked figure. A JSON value or a prose number
+// still matches; key-prefixed and string needles stay plain substrings.
+const leaks = (hay, needle) => (/^[\d.]+$/.test(needle)
+  ? new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\./g, '\\.')}(?![0-9A-Za-z_])`).test(hay)
+  : hay.includes(needle));
 
 let S, PORT, httpServer, stub;
 const creditHits = new Map();
@@ -174,8 +182,8 @@ function expectFreePreview(out, label) {
     expect(String(body._upgrade_cta || ''), `${label} ${where}: _upgrade_cta`).toContain('deal $ values and MW are withheld');
   }
   for (const needle of EXACT_NEEDLES) {
-    expect(out.text.includes(needle), `${label}: "${needle}" reached the text`).toBe(false);
-    expect(JSON.stringify(out.sc || {}).includes(needle), `${label}: "${needle}" reached structuredContent`).toBe(false);
+    expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);
+    expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: "${needle}" reached structuredContent`).toBe(false);
   }
 }
 
@@ -203,7 +211,7 @@ describe('r-teaser-parity — list_transactions keeps deal $ values and MW paid'
     const out = await listTransactions(K_TRIAL);
     expect(out.text, 'trial: expected the bound-email wall').toContain('needs a bound email');
     for (const needle of EXACT_NEEDLES) {
-      expect(out.text.includes(needle) || JSON.stringify(out.sc || {}).includes(needle), `trial: "${needle}" reached the wall`).toBe(false);
+      expect(leaks(out.text, needle) || leaks(JSON.stringify(out.sc || {}), needle), `trial: "${needle}" reached the wall`).toBe(false);
     }
   });
 
