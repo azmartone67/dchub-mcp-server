@@ -219,7 +219,7 @@
       "get": {
         "operationId": "getMarketDcpiRank",
         "summary": "Full DCPI score for one market (market_selection step 2)",
-        "description": "recipe market_selection, step 2 of 2. Returns the full DC Hub Power Index (DCPI) breakdown for a single market: composite_score, constraint_score, excess_power_score, avg_kwh_cents, curtailment_pct, data_basis and computed_at. Pass the metro_slug from a rankMarkets row (e.g. 'ashburn') or a market slug (e.g. 'ashburn-va'). Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe market_selection, step 2 of 2. Returns the full Data Center Power Index (DCPI) breakdown for a single market: composite_score, constraint_score, excess_power_score, avg_kwh_cents, curtailment_pct, data_basis and computed_at. Pass the metro_slug from a rankMarkets row (e.g. 'ashburn') or a market slug (e.g. 'ashburn-va'). Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "slug",

@@ -64,7 +64,7 @@ const DRY = !LIVE;
 // display-name used for the alphabetical guard + PR title
 // Counts kept current (was stale "70 tools / 300+ markets / 2,000+ deals" — the exact
 // pre-stale-entry bug the 07-13 audit flagged). Update alongside the honest-numbers.
-const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — DC Hub Power Index (${MARKETS} markets), ISO grid telemetry, fiber routes, ${N_TOOLS} tools. Remote MCP at ${HOMEPAGE} — query and cite.`;
+const DESC = `Live data-center, power-grid, energy, interconnection-queue, fiber, natural-gas & M&A intelligence for AI agents — Data Center Power Index (${MARKETS} markets), ISO grid telemetry, fiber routes, ${N_TOOLS} tools. Remote MCP at ${HOMEPAGE} — query and cite.`;
 
 // PR-accepting, README-based awesome-mcp lists we're missing from. NB: wong2 +
 // appcypher were dropped 2026-07-10 — their owners DISABLED pull requests (the
@@ -87,7 +87,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Data Analysis & Business Intelligence',
     alphabetical: false,
-    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — DC Hub Power Index (${MARKETS} US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, ${DEALS} M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
+    entry: `- [DC Hub](${REPO_URL}): Live data-center, power-grid, fiber, gas & M&A intelligence for AI agents — Data Center Power Index (${MARKETS} US markets, BUILD/CAUTION/AVOID), ISO grid telemetry, fiber routes, ${DEALS} M&A deals; ${N_TOOLS} tools. Streamable HTTP endpoint at https://dchub.cloud/mcp. Free tier, no signup. In the official MCP Registry. CC-BY-4.0.`,
   },
   {
     // YuzeHao2023 (1051★, hand-curated, github-repo entries). Terse em-dash convention:
@@ -97,7 +97,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: 'Category: Research & Data',   // header: "## Category: Research & Data (🧬)"
     alphabetical: false,                    // section isn't sorted — append at end
-    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — DC Hub Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, free tier, no signup)`,
+    entry: `- DC Hub — https://github.com/azmartone67/dchub-mcp-server (live data-center, power-grid, energy, interconnection-queue, fiber & gas intelligence for AI agents — Data Center Power Index across ${MARKETS} markets, ISO grid telemetry, fiber routes; ${N_TOOLS} tools, free tier, no signup)`,
   },
   // ── VETTED 2026-09-06 · e2b-dev/awesome-mcp-gateways (★168) — NOT A FIT ──
   // Kept here DECLINED rather than deleted: discovery dedupes on presence in
@@ -167,7 +167,7 @@ export const TARGETS = [
     listedRe: /dchub|dc[\s-]?hub/i,
     section: '### Cloud, ops & data',
     alphabetical: true,
-    entry: `- **[DC Hub](${REPO_URL})** \`http\` — Live data-center, power-grid, fiber and energy intelligence: facilities worldwide, DC Hub Power Index market scores, ISO grid telemetry, interconnection queues, fiber routes and tracked M&A, queried by name or coordinate with cited sources. Install: \`claude mcp add --transport http dchub https://dchub.cloud/mcp\` — keyless at free-tier depth.`,
+    entry: `- **[DC Hub](${REPO_URL})** \`http\` — Live data-center, power-grid, fiber and energy intelligence: facilities worldwide, Data Center Power Index market scores, ISO grid telemetry, interconnection queues, fiber routes and tracked M&A, queried by name or coordinate with cited sources. Install: \`claude mcp add --transport http dchub https://dchub.cloud/mcp\` — keyless at free-tier depth.`,
   },
   // ── VETTED 2026-09-06 · beriberikix/awesome-mcp-hardware (★51) — NOT A FIT ──
   // Scope is "MCP servers for interacting with hardware and the physical
@@ -674,7 +674,7 @@ if (_IS_MAIN) (async () => {
         branch: headBranch(t, 'refresh'),
         title: `Refresh DC Hub MCP entry (${N_TOOLS} tools, ${MARKETS} markets, ${DEALS} deals)`,
         message: 'Refresh DC Hub stats',
-        body: `Updates the existing DC Hub entry to current stats: **${N_TOOLS} tools**, **${MARKETS} markets** (DC Hub Power Index), **${DEALS} M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
+        body: `Updates the existing DC Hub entry to current stats: **${N_TOOLS} tools**, **${MARKETS} markets** (Data Center Power Index), **${DEALS} M&A deals**. In-place edit of our own line only. Repo: ${REPO_URL} · in the official MCP registry.`,
       });
       if (r.skipped) { console.log(`      skip: ${r.skipped}`); receipt(t, 'refresh', r.pr); }
       else if (r.blocked) { console.log(`      ⚠️  auto-PR blocked (${r.blocked}) → ${r.compare}`); readyLinks.push({ key: `${t.key}-refresh`, compare: r.compare }); }

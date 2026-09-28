@@ -10687,7 +10687,7 @@ export async function _scoreboardForCaller(res, c) {
     const out = { ...d };
     for (const k of _SCOREBOARD_DCPI_PAID) out[k] = null;
     out._locked_fields = [..._SCOREBOARD_DCPI_PAID];
-    out.note = 'DCPI per-ISO intelligence, live from the DC Hub Power Index. BUILD-rate is free; queue '
+    out.note = 'DCPI per-ISO intelligence, live from the Data Center Power Index. BUILD-rate is free; queue '
       + 'wait, curtailment and 30-day grid emergencies come with a paid plan or the $10 pack — call unlock_more_data.';
     return out;
   };
@@ -10781,7 +10781,7 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   }
   const pctOf = (mw) => genTot > 0 ? Math.round((mw / genTot) * 1000) / 10 : null;
   const mixPct = {}; for (const [k, mw] of Object.entries(mixMw)) mixPct[k] = pctOf(mw > 0 ? mw : 0);
-  // (2) DC Hub Power Index (DCPI) per-ISO row
+  // (2) Data Center Power Index (DCPI) per-ISO row
   const rows = (cmp && Array.isArray(cmp.isos)) ? cmp.isos : [];
   const row  = rows.find((r) => norm(r.iso) === dcpiIso) || null;
   // (3) live interconnection-queue row (US ISOs)
@@ -10865,14 +10865,14 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     data_center_load:         (gi && !gi.error && gi.data_center_load) ? gi.data_center_load : null,
     headroom:                 (gi && !gi.error && gi.headroom) ? gi.headroom : null,
     headroom_preview:         (gi && !gi.error && gi.headroom_preview) ? gi.headroom_preview : null,
-    _scores_note: 'constraint_score, excess_power_score and build_rate_pct are 0-100 DC Hub Power Index (DCPI) aggregates across the ISO markets, not MW. queue_depth_gw is the live interconnection-queue load total. demand_24h is the trailing-24h hourly demand curve; peak_mw/min_mw/load_factor summarize it. data_center_load (ERCOT) is the queued large-load total. headroom_preview, when present, is an ESTIMATE that may NOT be region-specific (see its note) — do not cite as exact substation headroom; full per-substation available-MW is Pro-gated (use get_grid_data or analyze_site).',
+    _scores_note: 'constraint_score, excess_power_score and build_rate_pct are Data Center Power Index (DCPI) aggregates, scored 0-100, across the ISO markets, not MW. queue_depth_gw is the live interconnection-queue load total. demand_24h is the trailing-24h hourly demand curve; peak_mw/min_mw/load_factor summarize it. data_center_load (ERCOT) is the queued large-load total. headroom_preview, when present, is an ESTIMATE that may NOT be region-specific (see its note) — do not cite as exact substation headroom; full per-substation available-MW is Pro-gated (use get_grid_data or analyze_site).',
   };
   const haveGrid = !!(gi && !gi.error && (out.demand_mw != null || out.generation_mix_pct));
   if (!haveGrid && !row && !q) {
     out._warning = `No live feed for "${ISO}". Supported: the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (SOCO, DUK, FPL, AZPS, NEVP, PGE, SCL, LDWP, GCPD, PSCO, TVA). For GB/EU/Taiwan/Australia use get_grid_scoreboard.`;
   } else {
     if (!haveGrid) out._warning_grid = `Live EIA fuel-mix/demand feed unavailable for ${ISO} right now (Power Index scores still shown).`;
-    if (!row)      out._warning_dcpi = `No DC Hub Power Index row for ${ISO}.`;
+    if (!row)      out._warning_dcpi = `No Data Center Power Index row for ${ISO}.`;
     // r-ba-coverage-note (2026-09-24): a Grok run read DUK's null scores as "DUK is
     // not covered" and asked us to point agents at get_interconnection_queue for
     // SERC. That tool refuses iso=SERC (7 ISOs only), so that hint would have been a
@@ -10892,7 +10892,7 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
 const _SEVEN_ISOS = new Set(['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISONE', 'ISO-NE']);
 export function _baCoverageNote(ISO) {
   return `${ISO} is a balancing authority outside the 7 ISOs. Covered here: live EIA-930 demand `
-    + `and fuel mix. Not published for ${ISO}: DC Hub Power Index scores and interconnection-queue `
+    + `and fuel mix. Not published for ${ISO}: Data Center Power Index scores and interconnection-queue `
     + `depth (get_interconnection_queue covers ERCOT, PJM, MISO, CAISO, SPP, NYISO and ISONE only). `
     + `For power at a specific site in this footprint, call analyze_site with its coordinates.`;
 }
@@ -20012,7 +20012,7 @@ function createServer(descOverrides, instructionsTail) {
                 total_markets:         _num(d.market_count),
                 build_rate_pct:        (d.market_count ? Math.round((d.build_count / d.market_count) * 1000) / 10 : null),
                 grid_emergencies_30d:  _num(d.sum_emergency_30d),
-                note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the DC Hub Power Index.',
+                note: 'DCPI per-ISO intelligence (queue wait, curtailment, BUILD-rate, 30d emergencies), live from the Data Center Power Index.',
               };
             }
           }
@@ -21649,7 +21649,7 @@ function createServer(descOverrides, instructionsTail) {
       // "empty {freshness,citation} payload" bug). Now we assemble the real
       // per-ISO brief from the three feeds that work ungated via the internal UA:
       //   (1) /grid/intelligence/<iso>        EIA hourly RTO → demand + fuel mix
-      //   (2) /dcpi/iso-comparison            DC Hub Power Index → constraint/excess/queue-wait/curtailment
+      //   (2) /dcpi/iso-comparison            Data Center Power Index → constraint/excess/queue-wait/curtailment
       //   (3) /interconnection-queue/snapshot live queue depth + DC share
       // The substation-level available-MW headroom block stays Pro-gated server-side
       // (use get_grid_data / analyze_site for a site-specific available-MW estimate).
