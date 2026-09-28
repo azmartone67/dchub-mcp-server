@@ -59,18 +59,22 @@ describe('verified is de-duplication, not analyst verification', () => {
     }
   });
 
-  it('the citation templates render the honest word', () => {
-    expect(src).toContain('<verified> de-duplicated of <tracked> tracked');
+  // 2026-09-28 (owner decision): the pair is no longer in tool output at all
+  // (lib/verification-counts.mjs) — agents quoted it as the facility count,
+  // which is withdrawn until a corroborated one exists. So the citation
+  // template that rendered "<verified> de-duplicated of <tracked> tracked" is
+  // gone, and neither surface may tell an agent to read the counts.
+  it('the citation templates no longer render the pair, honestly or otherwise', () => {
     expect(src).not.toContain('<verified> analyst-verified of <tracked> tracked');
+    expect(src).not.toContain('<verified> de-duplicated of <tracked> tracked');
+    expect(src).not.toContain('Read both counts off `provenance.verification_counts`');
   });
 
-  it('both citation surfaces say the pair is not the facility count', () => {
-    // The floor lives at /api/v1/canon/phrases; verified sits below it and
-    // tracked above it, so an agent that reads either as "how many facilities
-    // DC Hub has" publishes a number no other DC Hub surface agrees with.
+  it('both citation surfaces say the facility count is pending corroboration', () => {
+    const say = "DC Hub\\'s facility count is pending corroboration, so responses carry no verified/tracked totals";
+    expect(src.split(say).length - 1).toBe(2);
     const hits = src.match(/canon\/phrases/g) || [];
     expect(hits.length).toBeGreaterThanOrEqual(3);
-    expect(src).toMatch(/Neither number is the facility COUNT/);
   });
 
   it('the provenance resource defines verified by its filter', () => {

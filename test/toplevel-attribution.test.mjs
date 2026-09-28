@@ -204,10 +204,13 @@ describe('does not inflate: as_of and verification counts describe THIS response
     expect('verification_counts' in p).toBe(false);   // a flattering zero is a bug
   });
 
-  it('uses the REAL backend counts when the payload actually carries them', () => {
+  // Owner decision 2026-09-28: no summed verification_counts even when the
+  // backend carries them — agents quoted the pair as the withdrawn facility
+  // count. collectVerificationCounts still reads them (the input is real).
+  it('does not publish verification counts even when the payload carries them', () => {
+    expect(collectVerificationCounts(GRID_GATED_WITH_BACKEND_PROV).verified).toBe(4903);
     const p = buildProvenance(GRID_GATED_WITH_BACKEND_PROV, { tier: 'free' });
-    expect(p.verification_counts.verified).toBe(4903);
-    expect(p.verification_counts.tracked).toBe(21900);
+    expect('verification_counts' in p).toBe(false);
   });
 
   it('binds as_of to the OLDEST source timestamp, not the newest', () => {
