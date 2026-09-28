@@ -6833,7 +6833,9 @@ function _teaseDepth(parsed, keep) {
   if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
-    if (Array.isArray(v) && v.length > keep) {
+    if (_PUBLIC_SUBTREE_KEYS.has(k)) {
+      out[k] = v;                                    // r-market-pricing: published figures, see trimForTrial
+    } else if (Array.isArray(v) && v.length > keep) {
       out[k] = v.slice(0, keep).map(x => _teaseDepth(x, keep));
       out[`_${k}_total_in_developer`] = v.length;   // honest "N total" for the upgrade pitch
     } else if (_isMetricKey(k) && typeof v === 'number') {
@@ -9196,6 +9198,17 @@ export function _stripReasonNumerics(r, force = false) {
 // the metric heuristic was nulling it as if it were a gated figure).
 const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retry_|persist_command|auto_trial_key|^tier_masked$|^min_reported_months$/i;
 
+// r-market-pricing (2026-09-28): published lease-rate headline figures pass
+// the free preview byte-identical. dchub-backend#5799 added `market_pricing`
+// to /api/v1/markets/<m> (the row get_market_intel proxies): broker asking
+// rates with their report period, or a labelled DC Hub estimate range, or an
+// explicit available:false. The same figures are free on /market-intelligence
+// and /markets/<slug>; masking them here would null `asking_rate` (_rate$) and
+// `vacancy_percent` for the one question this block exists to answer — "how
+// much is 1 MW in LA" — while the web page answers it. Exact key, not a
+// pattern: no other tool's field is exempted by this.
+const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing']);
+
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
   // execute_plan: every step already ran as a real tools/call at the caller's
@@ -9221,7 +9234,7 @@ function trimForTrial(parsed, toolName) {
   if (typeof parsed !== 'object') return parsed;
   const out = {};
   for (const [k, v] of Object.entries(parsed)) {
-    if (_NEVER_CUT_KEY_RE.test(k)) {
+    if (_NEVER_CUT_KEY_RE.test(k) || _PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                             // never-cut: byte-identical
     } else if (k === 'verdict_reasons' && Array.isArray(v)) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
