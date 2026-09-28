@@ -94,6 +94,7 @@ test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/free-key-arbitrage.test.mjs
 test/free-key-counts-tool-calls.test.mjs
+test/free-key-runtime-allowance.test.mjs
 test/free-numerics-gate.test.mjs
 test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs

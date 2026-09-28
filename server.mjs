@@ -163,7 +163,7 @@ import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _freeKeyAllowanceText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
@@ -910,7 +910,7 @@ export function _unlockMoreDataEnvelope(a) {
   const human_message =
     HUMAN_FIRST_MARKER + ' ' + _ladderText('unlock_more_data', _tier, _sid) + '\n' +
     '🔓 **I can unlock full DC Hub data for you.** I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
-    '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + FREE_TIER.free_calls_per_day + ' calls/day.*';
+    '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*';
   const _mppOn = mppEnabled();
   const text =
     human_message + '\n\n' +
@@ -955,7 +955,7 @@ export function _unlockMoreDataEnvelope(a) {
         { id: 'developer', label: _priceLabel('developer'), calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer },
         { id: 'pro',       label: _priceLabel('pro'),       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro },
       ],
-      free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + FREE_TIER.free_calls_per_day + ' calls/day, all tools' },
+      free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
       what_unlocks: 'Full grid intelligence (all ISOs/grids, not 1), full fiber depth, every premium tool, complete result sets (not partial previews), and higher rate limits.',
       binds_to_session: !!_sid,
       // r-anon-attrib (2026-08-26): was hardcoded `true` while binds_to_session
@@ -1525,7 +1525,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
       + '*Your client opens a fresh session for every tool call, so a key handed back inside a tool '
       + 'result is gone by your next call. `claim_free_key` also returns a **connector URL** that '
       + 'carries the key \u2014 the only artifact that survives this session, and the one thing worth '
-      + 'relaying to your human. Free tier: ' + FREE_TIER.free_calls_per_day + ' calls/day; full depth '
+      + 'relaying to your human. Free tier: ' + _freeKeyAllowanceText() + '; full depth '
       + 'still needs the $10 above.*';
   };
   // ★ The PRO_ONLY exclusion applies to the ANONYMOUS branch only. Leading an
@@ -1544,7 +1544,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
     ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
       ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
-      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + FREE_TIER.free_calls_per_day + ' calls/day) \u2014 full depth still needs the $10 above.*';
+      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + _freeKeyAllowanceText() + ') \u2014 full depth still needs the $10 above.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
   // agents, custom MCP scripts, aggregator pipelines). Those callers
@@ -13312,7 +13312,7 @@ export const _PLAN_CLASSES = [
       { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel is depth-teased below Developer tier (free tier ~' + FREE_TIER.free_calls_per_day + ' calls/day). cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel is depth-teased below Developer tier (free tier: ' + _freeKeyAllowanceText() + '). cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -16934,12 +16934,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. Works in any browser: click, pay, refresh this chat — \`${name}\` returns in full.
 
-*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for the free tier (${FREE_TIER.free_calls_per_day} calls/day) — full depth still needs one of the options above.*`
+*On Claude Code CLI / Cursor / Cline? Call the \`claim_free_key\` tool (no email) for the free tier (${_freeKeyAllowanceText()}) — full depth still needs one of the options above.*`
           : `## \u{1F512} \`${name}\` is a paid feature
 
 \u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, this session is served in full.
 
-*Hold your own key? Call the \`claim_free_key\` tool (no email) for the free tier (${FREE_TIER.free_calls_per_day} calls/day) — full depth still needs one of the options above.*`;
+*Hold your own key? Call the \`claim_free_key\` tool (no email) for the free tier (${_freeKeyAllowanceText()}) — full depth still needs one of the options above.*`;
 
         // r50 (2026-05-26): mark paywall response as isError=true so
         // MCP clients (Claude Desktop/Cursor/Cline/ChatGPT-MCP) surface
@@ -17060,7 +17060,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // front-door ladder instead of the bare "or upgrade".
             trimmed._upgrade = {
               tier: 'anon_daily_cap',
-              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + FREE_TIER.free_calls_per_day + " calls/day) and SAVE the key to your MCP config. Want full depth now? 💳 $10 one-time = 1,000 API credits (no subscription) → call `unlock_more_data` for the one-click link. The moment your human pays, your next call returns full data — no reconnect.",
+              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config. Want full depth now? 💳 $10 one-time = 1,000 API credits (no subscription) → call `unlock_more_data` for the one-click link. The moment your human pays, your next call returns full data — no reconnect.",
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
@@ -22993,7 +22993,7 @@ function createServer(descOverrides, instructionsTail) {
         : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '`, or — if their client only offers a URL box — paste `' + _cUrl + '` as the DC Hub server URL. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`. Ready-to-paste snippets for Claude Desktop / Cursor / VS Code / Cline / Windsurf are in `persist_config`.\n\n';
       const _tierLine = CLAIM_CAROT_COPY
         ? 'Full free toolset — no card, no browser.\n\n'
-        : 'Free tier = ' + FREE_TIER.free_calls_per_day + ' calls/day, full toolset.\n\n';
+        : 'Free tier = ' + _freeKeyAllowanceText() + ', full toolset.\n\n';
       // r-bind-default (2026-07-21): make email-bind the DEFAULT persist step at
       // claim success, not only at exhaustion. Only 55/346 keys are email-bound
       // because the ask fired solely on the paywall/exhaustion branch — so
