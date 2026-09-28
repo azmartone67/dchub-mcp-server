@@ -67,7 +67,8 @@ describe('SMITHERY-LISTING-PASTE.md — one origin for the description', () => {
     const b = blocks();
     expect(b.length, 'no fenced blocks parsed — every check below would be vacuous').toBeGreaterThan(3);
     expect(b.some((x) => x.lang === 'bash'), 'no bash block found').toBe(true);
-    expect(SRC.length, 'the description source is missing or trivial').toBeGreaterThan(1500);
+    // ★2026-09-28: the owner's short copy is ~550 chars (was >1,500).
+    expect(SRC.length, 'the description source is missing or trivial').toBeGreaterThan(300);
     // The keywords block is the largest LEGITIMATE paste field; if it ever
     // disappears, R1 could pass because there is nothing left to check.
     expect(b.some((x) => x.body.length > 400), 'no substantial block left to police').toBe(true);
@@ -100,30 +101,20 @@ describe('SMITHERY-LISTING-PASTE.md — one origin for the description', () => {
     expect(DOC).toMatch(/cat scripts\/smithery_description\.txt/);
   });
 
-  it('R4 the direct keyless connect URL is in the SOURCE, past the search cut', () => {
-    const at = SRC.indexOf(CONNECT_URL);
-    expect(
-      at,
-      `the listing copy does not carry ${CONNECT_URL}. A bare /mcp here is NOT ` +
-      `equivalent: Smithery's gateway proxies to bare /mcp, so an untagged URL makes ` +
-      `listing arrivals indistinguishable from gateway arrivals and unmeasurable.`,
-    ).toBeGreaterThan(-1);
-    // and the untagged form must not be the one we advertise
+  // ★2026-09-28 OWNER DECISION: the description is now the short site-selection
+  // copy, which names the canon endpoints (MCP at https://dchub.cloud/mcp, REST
+  // at https://dchub.cloud/api/v1) and does NOT carry the tagged connect URL.
+  // The attribution concern above still holds for a "connect here" line, so the
+  // untagged "Connect direct and keyless at /mcp" promise stays banned; what
+  // changed is that the listing no longer makes a connect promise at all.
+  it('R4 the source never advertises an UNTAGGED "connect direct" /mcp line', () => {
     expect(
       /Connect direct and keyless at https:\/\/dchub\.cloud\/mcp(?!\/)/.test(SRC),
-      'the listing advertises the UNTAGGED /mcp — arrivals from it cannot be attributed',
+      'the listing advertises the UNTAGGED /mcp as a connect URL — arrivals from it cannot be attributed',
     ).toBe(false);
-    // Deliberate: the first 1,000 chars are the only text that can RANK, so the
-    // connect URL — which is for an agent already reading the detail page — must
-    // not be spent there. Moving it earlier is a ranking decision, not a typo.
-    expect(
-      at,
-      `the connect URL sits at char ${at}, inside Smithery's ${SEARCH_CHARS}-char search ` +
-      `window. Only text inside that window can rank; a URL there spends ranking real ` +
-      `estate on something no search query will ever match.`,
-    ).toBeGreaterThan(SEARCH_CHARS);
-    // and it must be the keyless promise, not a bare link
-    expect(SRC).toMatch(/keyless/i);
+    // if the tagged URL comes back, it must still sit past the search cut
+    const at = SRC.indexOf(CONNECT_URL);
+    if (at > -1) expect(at).toBeGreaterThan(SEARCH_CHARS);
   });
 
   // R5 (2026-09-22). R1-R4 police the FENCED blocks — the pasteable copy. The

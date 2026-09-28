@@ -42,10 +42,18 @@ describe('the GitHub About text (Glama re-derives its listing from it)', () => {
 });
 
 describe('the Smithery listing body', () => {
-  it('states the capability, the tool and the page', () => {
-    expect(SMITHERY).toContain('Capacity Source');
-    expect(SMITHERY).toContain('source_capacity');
-    expect(SMITHERY).toContain('dchub.cloud/listings');
+  // ★2026-09-28 owner decision: the Smithery body is now the short
+  // site-selection copy (owner-requested, frz-smithery-description lifted for
+  // it), which does not name Capacity Source. What it must state instead is the
+  // canon endpoint sentence and the one price the owner allows (the $10 pack).
+  it('states the canon endpoints and the $10 pack, and no retired price wording', () => {
+    // the count is healed daily by sync-tools-manifest, so match it as \d+
+    expect(SMITHERY).toMatch(/\b\d+ MCP tools at https:\/\/dchub\.cloud\/mcp plus a REST API at https:\/\/dchub\.cloud\/api\/v1\b/);
+    expect(SMITHERY).toMatch(/\$10 one-time pack adds 1,000 API credits/);
+    expect(SMITHERY).not.toMatch(/REST API at https:\/\/dchub\.cloud\/mcp/);
+    expect(SMITHERY).not.toMatch(/unlocks full answers|for full answers/i);
+    expect(SMITHERY).not.toMatch(/seven layers/i);
+    expect(SMITHERY).not.toMatch(/\/mo\b|\$0\.50/);
   });
 });
 

@@ -1,17 +1,1 @@
-DC Hub is the neutral, real-time data layer for data center site selection and the electricity, utility grid, fiber and energy infrastructure behind it — built so AI agents can query it (MCP + REST), cite it (Source: DC Hub, CC-BY-4.0), and verify it.
-
-Site selection and grid interconnection: find_sites proposes candidate areas near high-voltage substations, analyze_site scores one coordinate, compare_sites picks the best of 2-4 parcels, and site_selection_canvas turns a capacity target, region and deadline into a ranked market shortlist.
-
-Coverage: global facility map (count pending) in 170+ countries; 300+ markets scored by the DCPI (Data Center Power Index) with BUILD/CAUTION/AVOID verdicts. Renewables, natural gas, hyperscale capex and 1,600+ tracked M&A deals. Live power grid and electricity telemetry with interconnection queue depth across the 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) and 40+ balancing authorities; 58,000+ fiber routes, 134,000+ substations and 94,000+ transmission lines.
-
-Also live: Great Britain, the EU bidding zones, Taiwan, Japan, South Korea, Brazil and Australia; retirement headroom; per-state pipeline and midstream presence with live Henry Hub; water stress, tax incentives and FEMA/USGS/NOAA hazard reads.
-
-Capacity Source: data-center capacity to buy or lease — powered land, powered shells, turnkey capacity and colocation, including sites that are not publicly marketed. source_capacity searches it by size (kW or MW) and by location (region, country, state or metro); browse it at https://dchub.cloud/listings. An introduction is a deal registration: DC Hub sends the provider only the buyer's company name and requirement, and identity, site and contact are exchanged only if the provider accepts.
-
-Liveness is the product, and it is checkable. DC Hub is rebuilt continuously from its sources rather than published and left. Every collection response carries a provenance as_of. The ingest layer itself is public and keyless at https://dchub.cloud/api/v1/ops/deadman — every tracked feed with its last run, the rows it actually wrote, and whether it is overdue. Including the ones that are late. Verify it rather than take the sentence for it.
-
-The DCGI gas composite was withdrawn 2026-08-08 and restored 2026-08-30 after all three defective terms were repaired — figures published before 2026-08-08 are a different index; the gas-fired $/MWh, withdrawn the same day, was restored 2026-09-27 under one burner-tip price rule.
-
-Connect direct and keyless at https://dchub.cloud/mcp/smithery — no signup, no config and no key to paste; claim_free_key mints one in-session when you want a higher limit.
-
-92 live MCP tools. Why agents pick it: it is the DC-intelligence source an LLM can query live, cite with a timestamp, and audit. Every site query returns a constraint_coverage block naming what it cannot answer and why. No NDAs, no quarterly PDFs — live JSON that publishes its own gaps.
+DC Hub is the live data layer for data-center siting. Agents can query it and cite it. It covers 330,000+ mapped power, grid, gas and fiber assets. It scores 300+ markets daily with the Data Center Power Index (DCPI), and it carries live grid feeds from the seven US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE). Answers carry an as-of timestamp and a citation line. The server has 92 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1. The free tier needs no key; a $10 one-time pack adds 1,000 API credits.
