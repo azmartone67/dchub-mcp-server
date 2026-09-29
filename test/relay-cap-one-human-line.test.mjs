@@ -136,7 +136,7 @@ async function session(port, ip, extra = {}) {
   const headers = { 'x-dc-client-ip': ip, ...extra };
   const init = await post(port, headers, {
     jsonrpc: '2.0', id: 1, method: 'initialize',
-    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'relay-cap-test', version: '1.0' } },
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'relay-cap-agent', version: '1.0' } },
   });
   const sid = init.headers.get('mcp-session-id');
   expect(sid, 'initialize did not mint a session id').toBeTruthy();

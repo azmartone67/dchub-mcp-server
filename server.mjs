@@ -4453,6 +4453,21 @@ export async function mintAutoTrial(tool_name) {
     // daily allowance is served keyless and the one ask is the /upgrade/h/ link
     // (see _grokTaste). Kill switch: DCHUB_PAYWALL_CONTRACT_GROK=0.
     if (c && _pcIsGrok(c.platform) && _pcGrokOn()) return null;
+    // r-internal-no-mint (2026-09-29): our own harnesses mint nothing. Measured
+    // 2026-09-29 10:50Z: one keyless 'dchub-internal' session swept ~10 gated
+    // tools every 5 min and each call minted a fresh dch_trial_ key (1:1 with
+    // POST /keys/auto-mint in the backend http log) — 2,843 keys/day on one
+    // caller IP, inflating active-key and retention counts. Log who it was so
+    // the probe can be named and given a key. Kill switch:
+    // DCHUB_MINT_SKIP_INTERNAL=0.
+    if (c && c.platform === 'dchub-internal'
+        && (process.env.DCHUB_MINT_SKIP_INTERNAL || '1') !== '0') {
+      console.log(`[auto_mint] skipped internal tool=${tool_name || '-'} `
+        + `client=${JSON.stringify(String(c.client_name_raw || '').slice(0, 60))} `
+        + `ua=${JSON.stringify(String(c.user_agent || '').slice(0, 80))} `
+        + `ip=${c.client_ip || '-'} sid=${String(c.session_id || '').slice(0, 8)}`);
+      return null;
+    }
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
     if (tool_name) url.searchParams.set('tool', tool_name);
     const headers = {

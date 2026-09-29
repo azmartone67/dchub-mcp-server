@@ -168,7 +168,7 @@ async function session(headers) {
   const init = await post(headers, {
     jsonrpc: '2.0', id: 1, method: 'initialize',
     params: { protocolVersion: '2025-06-18', capabilities: {},
-              clientInfo: { name: 'automint-trial-rungs-test', version: '1.0' } },
+              clientInfo: { name: 'automint-trial-rungs-agent', version: '1.0' } },
   });
   const sid = init.headers.get('mcp-session-id');
   expect(sid, 'initialize did not mint a session id').toBeTruthy();
