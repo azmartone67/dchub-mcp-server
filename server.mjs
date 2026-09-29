@@ -117,6 +117,7 @@ import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE
          installClaudeResponseFilter as _installClaudeFilter,
          applyClaudeArgDefaults as _applyClaudeArgDefaults,
          excludedFromRelayReadout as _excludedFromRelayReadout,
+         claudePromptListing as _claudePromptListing, claudePromptText as _claudePromptText,
          CLAUDE_INVALID_TOKEN_CHALLENGE, CLAUDE_INVALID_TOKEN_MESSAGE } from './lib/claude-directory.mjs';
 import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
@@ -5321,6 +5322,31 @@ export const _CAPACITY_POINTER_TOOLS = new Set([
   'get_market_intel', 'analyze_site', 'get_market_context',
 ]);
 
+// The /dchub:find_capacity prompt (Capacity Source, 2026-09-14). Module level so
+// /mcp/claude can serve the SAME prompt (owner 2026-09-29) without a second
+// copy of its wording; /mcp registers it through _P below, unchanged.
+export const FIND_CAPACITY_PROMPT = Object.freeze({
+  name: 'find_capacity',
+  title: 'Find data-center capacity to buy or lease',
+  description: 'Search DC Hub Capacity Source for capacity that fits a requirement (powered land, powered shells, turnkey capacity), then register a deal with the provider behind a listing.',
+  args: Object.freeze({
+    requirement: 'What your human needs, e.g. "40 MW powered shell in Dallas, energized by Q2 2027"',
+    state: 'Two-letter US state to search, e.g. TX',
+    min_mw: 'The size your human needs, in MW, e.g. 40 — matched against what each listing can actually deliver, not just its headline total',
+  }),
+});
+export function findCapacityPromptText(a = {}) {
+  const st = _capacityStateCode(a.state);
+  const mw = Number(a.min_mw);
+  const args = [st ? `state="${st}"` : '', Number.isFinite(mw) && mw > 0 ? `min_mw=${mw}` : '']
+    .filter(Boolean).join(' ');
+  return `Use DC Hub Capacity Source to find data-center capacity for this requirement: ${a.requirement}
+1. Call source_capacity${args ? ` ${args}` : ''} — live listings of powered land, powered shells and turnkey capacity (market, state, capacity, and when each listing was last updated), or the program status while listings are being onboarded. Narrow it the way the requirement does: size as min_mw, or min_kw in kW; location as region (e.g. region=europe) or location (a country, state or metro); plus delivery_type and available_by. A size is matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total, so a listing with plenty of total capacity but a smaller contiguous block will not come back for a large size.
+2. Say which listings fit the requirement and why. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
+3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is live yet, call request_capacity_intro without a slug to register the requirement for new listings.
+This is a deal registration: DC Hub sends the provider only your human's company name and the requirement, the provider accepts or declines, and only on acceptance are the provider's identity, site and contact shared with your human (and your human's name, role and email with the provider); on a decline nothing is shared. Treat listing details as confidential: cite "DC Hub Capacity Source (dchub.cloud)" and do not republish them.`;
+}
+
 function _capacityStateCode(v) {
   if (typeof v !== 'string') return null;
   const s = v.trim();
@@ -5412,6 +5438,11 @@ export function _withCapacityPointer(result, name, args, outSchema) {
     // Lean-output platforms get the data and nothing else, the rule the
     // front-door and cookbook nudges already follow.
     if (_isCleanPlatform()) return result;
+    // /mcp/claude lists source_capacity itself since 2026-09-29, so its scrub no
+    // longer removes a line naming it: a pointer there would be DC Hub promoting
+    // its own listings inside another tool's answer, which the directory policy
+    // excludes. The tool is listed; the pointer is not added.
+    if (getCtx()?.profile === CLAUDE_PROFILE) return result;
     const summary = _capacitySummary.peek();
     if (!isCapacityLive(summary)) return result;
     const q = _capacityPointerQuery(name, args, result);
@@ -24150,22 +24181,11 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
   // recipes above (a prompt lists nothing live), and removed together with the
   // rest of the distribution layer by DCHUB_CAPACITY_POINTERS=off.
   if (capacityPointersEnabled()) {
-    _P('find_capacity', 'Find data-center capacity to buy or lease',
-       'Search DC Hub Capacity Source for capacity that fits a requirement (powered land, powered shells, turnkey capacity), then register a deal with the provider behind a listing.',
-       { requirement: z.string().describe('What your human needs, e.g. "40 MW powered shell in Dallas, energized by Q2 2027"'),
-         state: z.string().optional().describe('Two-letter US state to search, e.g. TX'),
-         min_mw: z.string().optional().describe('The size your human needs, in MW, e.g. 40 — matched against what each listing can actually deliver, not just its headline total') },
-       (a) => {
-         const st = _capacityStateCode(a.state);
-         const mw = Number(a.min_mw);
-         const args = [st ? `state="${st}"` : '', Number.isFinite(mw) && mw > 0 ? `min_mw=${mw}` : '']
-           .filter(Boolean).join(' ');
-         return `Use DC Hub Capacity Source to find data-center capacity for this requirement: ${a.requirement}
-1. Call source_capacity${args ? ` ${args}` : ''} — live listings of powered land, powered shells and turnkey capacity (market, state, capacity, and when each listing was last updated), or the program status while listings are being onboarded. Narrow it the way the requirement does: size as min_mw, or min_kw in kW; location as region (e.g. region=europe) or location (a country, state or metro); plus delivery_type and available_by. A size is matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total, so a listing with plenty of total capacity but a smaller contiguous block will not come back for a large size.
-2. Say which listings fit the requirement and why. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
-3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is live yet, call request_capacity_intro without a slug to register the requirement for new listings.
-This is a deal registration: DC Hub sends the provider only your human's company name and the requirement, the provider accepts or declines, and only on acceptance are the provider's identity, site and contact shared with your human (and your human's name, role and email with the provider); on a decline nothing is shared. Treat listing details as confidential: cite "DC Hub Capacity Source (dchub.cloud)" and do not republish them.`;
-       });
+    _P('find_capacity', FIND_CAPACITY_PROMPT.title, FIND_CAPACITY_PROMPT.description,
+       { requirement: z.string().describe(FIND_CAPACITY_PROMPT.args.requirement),
+         state: z.string().optional().describe(FIND_CAPACITY_PROMPT.args.state),
+         min_mw: z.string().optional().describe(FIND_CAPACITY_PROMPT.args.min_mw) },
+       findCapacityPromptText);
   }
 
   // Reference resources (r-promres) — read-only, fail-soft. _RD = dynamic
@@ -25205,6 +25225,30 @@ app.post(MCP_PATHS, async (req, res) => {
         if (_claudeProfile) delete _a.cohort;
         if (_claudeProfile) _applyClaudeArgDefaults(_n, _a);
         else _applyDirectoryArgDefaults(_n, _a);
+      }
+      // r-claude-capacity (owner 2026-09-29): /mcp/claude serves the one
+      // prompt it lists, /dchub:find_capacity, from the same definition /mcp
+      // registers; /mcp/chatgpt keeps answering prompts empty.
+      if (_claudeProfile && capacityPointersEnabled()) {
+        if (_b.method === 'prompts/list') {
+          return _writeRpcResult(req, res, _b.id, { prompts: [_claudePromptListing(FIND_CAPACITY_PROMPT)] });
+        }
+        if (_b.method === 'prompts/get') {
+          const _pn = _b.params && _b.params.name;
+          if (_pn !== FIND_CAPACITY_PROMPT.name) {
+            return _writeRpcError(res, _b.id, { code: -32602, message: `Unknown prompt: ${String(_pn || '').slice(0, 80)}` }, 200);
+          }
+          const _pa = (_b.params.arguments && typeof _b.params.arguments === 'object') ? _b.params.arguments : {};
+          if (typeof _pa.requirement !== 'string' || !_pa.requirement.trim()) {
+            return _writeRpcError(res, _b.id, { code: -32602, message: 'Missing required argument: requirement' }, 200);
+          }
+          const _pargs = {};
+          for (const k of Object.keys(FIND_CAPACITY_PROMPT.args)) if (typeof _pa[k] === 'string') _pargs[k] = _pa[k].slice(0, 500);
+          return _writeRpcResult(req, res, _b.id, {
+            description: _claudePromptListing(FIND_CAPACITY_PROMPT).description,
+            messages: [{ role: 'user', content: { type: 'text', text: _claudePromptText(findCapacityPromptText(_pargs)) } }],
+          });
+        }
       }
       if (_b.method === 'prompts/list') return _writeRpcResult(req, res, _b.id, { prompts: [] });
       if (_b.method === 'resources/list') return _writeRpcResult(req, res, _b.id, { resources: [] });

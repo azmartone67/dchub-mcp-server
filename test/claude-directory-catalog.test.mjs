@@ -5,6 +5,11 @@
 // (claude.com/docs/connectors/building/review-criteria):
 //   - instructions under 1,500 characters and free of steering;
 //   - tools/list about the size of /mcp/chatgpt, not /mcp;
+//   - ★ 2026-09-29, owner-approved: the tool list changed ON PURPOSE from 67 to
+//     68 — source_capacity (Capacity Source browse, read-only) is listed, and
+//     the /dchub:find_capacity prompt is served. accept_capacity_terms and
+//     request_capacity_intro stay /mcp only. /mcp keeps 92 and /mcp/chatgpt
+//     is untouched (frz-chatgpt-toolset);
 //   - annotations with ONLY title / readOnlyHint / destructiveHint /
 //     idempotentHint / openWorldHint, every tool read-only;
 //   - no withdrawn, commerce, key or write tool; plain descriptions with no
@@ -22,6 +27,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import {
   CLAUDE_TOOLS, CLAUDE_REMOVED, CLAUDE_WITHDRAWN, CLAUDE_INSTRUCTIONS, EXECUTE_PLAN_DESCRIPTION,
+  CLAUDE_PROMPTS, SOURCE_CAPACITY_DESCRIPTION,
 } from '../lib/claude-directory.mjs';
 import { STANDARD_ANNOTATION_KEYS } from '../lib/chatgpt-directory.mjs';
 import { startHarness, fenceNetwork, injectionHits, claudeProbePatterns, hitsOf } from './helpers/claude-directory-harness.mjs';
@@ -46,13 +52,14 @@ afterAll(async () => {
 });
 
 describe('initialize', () => {
-  it('is stateless and advertises tools only, with the plain instructions', async () => {
+  it('is stateless and advertises tools and (since 2026-09-29) prompts, with the plain instructions', async () => {
     const r = await H.init(DIR);
     expect(r.status).toBe(200);
     expect(r.headers.get('mcp-session-id')).toBeNull();
     const res = r.msg.result;
     expect(res.instructions).toBe(CLAUDE_INSTRUCTIONS);
-    expect(Object.keys(res.capabilities)).toEqual(['tools']);
+    // Owner-approved 2026-09-29: prompts is advertised for /dchub:find_capacity.
+    expect(Object.keys(res.capabilities)).toEqual(['tools', 'prompts']);
     expect(res._meta).toBeUndefined();
     expect(hitsOf(PATTERNS, r.raw)).toEqual([]);
   });
@@ -79,7 +86,9 @@ describe('tools/list', () => {
   it('exactly the allowlist, in a ChatGPT-sized payload', () => {
     const names = LIST.tools.map((t) => t.name);
     expect(names).toEqual(Object.keys(CLAUDE_TOOLS));
-    expect(names).toHaveLength(67);
+    // 67 → 68 on 2026-09-29 (owner-approved): source_capacity added.
+    expect(names).toHaveLength(68);
+    expect(names).toContain('source_capacity');
     // /mcp/chatgpt measured 72,831 chars live and /mcp 473,081 (2026-09-26).
     expect(LIST_RAW.length).toBeLessThan(90_000);
     expect(LIST_RAW.length).toBeGreaterThan(40_000);
@@ -125,7 +134,7 @@ describe('tools/list', () => {
     const names = new Set(LIST.tools.map((t) => t.name));
     for (const n of ['unlock_more_data', 'claim_free_key', 'bind_email', 'recover_my_key', 'why_dchub',
       'save_site', 'set_market_alert', 'set_site_alert', 'set_shortlist_alert', 'subscribe_digest',
-      'register_standing_intent', 'delete_standing_intent', 'source_capacity', 'request_capacity_intro',
+      'register_standing_intent', 'delete_standing_intent', 'request_capacity_intro',
       'accept_capacity_terms', 'export_dataset']) expect(names.has(n), n).toBe(false);
     // Every tool /mcp itself marks non-read-only is off the profile.
     for (const t of CANON) {
@@ -151,6 +160,21 @@ describe('tools/list', () => {
     }
   });
 
+  it('source_capacity (listed 2026-09-29) is read-only, non-destructive, and read-only on /mcp too', () => {
+    const t = LIST.tools.find((x) => x.name === 'source_capacity');
+    expect(t).toBeTruthy();
+    expect(t.description).toBe(SOURCE_CAPACITY_DESCRIPTION);
+    expect(t.annotations.readOnlyHint).toBe(true);
+    expect(t.annotations.destructiveHint).toBe(false);
+    // The profile copies the canonical hint, it does not set it: /mcp itself
+    // marks source_capacity read-only, and its two writes are not.
+    const canon = Object.fromEntries(CANON.map((x) => [x.name, x.annotations || {}]));
+    expect(canon.source_capacity.readOnlyHint).toBe(true);
+    expect(canon.request_capacity_intro.readOnlyHint).toBe(false);
+    expect(canon.accept_capacity_terms.readOnlyHint).toBe(false);
+    expect(CLAUDE_REMOVED).toEqual(expect.arrayContaining(['request_capacity_intro', 'accept_capacity_terms']));
+  });
+
   it('CONTROL: the phrase list fires on the /mcp descriptions it exists for', () => {
     const ep = CANON.find((t) => t.name === 'execute_plan');
     expect(injectionHits(ep.description).length).toBeGreaterThan(0);
@@ -173,8 +197,49 @@ describe('tools/list', () => {
 });
 
 describe('prompts and resources', () => {
-  it('list empty; other prompt/resource methods are not found', async () => {
-    expect((await H.post(DIR, { jsonrpc: '2.0', id: 3, method: 'prompts/list' })).msg.result).toEqual({ prompts: [] });
+  // Owner-approved 2026-09-29: /dchub:find_capacity is the one prompt served.
+  it('prompts/list is exactly find_capacity, the /mcp prompt\'s name, title and arguments', async () => {
+    const got = (await H.post(DIR, { jsonrpc: '2.0', id: 3, method: 'prompts/list' })).msg.result.prompts;
+    expect(got.map((p) => p.name)).toEqual(CLAUDE_PROMPTS);
+    // The definition /mcp registers (server.mjs _P('find_capacity', FIND_CAPACITY_PROMPT…)).
+    const canon = H.S.FIND_CAPACITY_PROMPT;
+    expect(got[0].name).toBe(canon.name);
+    expect(got[0].title).toBe(canon.title);
+    expect(got[0].arguments.map((a) => [a.name, !!a.required]))
+      .toEqual([['requirement', true], ['state', false], ['min_mw', false]]);
+    expect(got[0].arguments.map((a) => a.name)).toEqual(Object.keys(canon.args));
+    // The listing is plain: no steering, no removed tool, no relay wording.
+    expect(injectionHits(JSON.stringify(got))).toEqual([]);
+    expect(hitsOf(PATTERNS, JSON.stringify(got))).toEqual([]);
+  });
+
+  it('prompts/get find_capacity: the /mcp text through the profile scrub, no step naming a tool this profile lacks', async () => {
+    const r = await H.post(DIR, { jsonrpc: '2.0', id: 6, method: 'prompts/get',
+      params: { name: 'find_capacity', arguments: { requirement: '40 MW powered shell in Dallas', state: 'TX', min_mw: '40' } } });
+    const text = r.msg.result.messages[0].content.text;
+    expect(text).toMatch(/^Use DC Hub Capacity Source to find data-center capacity for this requirement: 40 MW powered shell in Dallas/);
+    expect(text).toContain('1. Call source_capacity state="TX" min_mw=40');
+    expect(text).toContain('2. Say which listings fit the requirement and why.');
+    expect(text).not.toMatch(/^\s*\d+\.\s*$/m);          // no emptied step left behind
+    expect(text).not.toMatch(/^3\./m);
+    expect(hitsOf(PATTERNS, r.raw)).toEqual([]);             // removed tools, relay, commerce
+    // Steering phrasing, except naming source_capacity, which the prompt exists to call.
+    expect(injectionHits(text).filter((h) => !/source_capacity/.test(h))).toEqual([]);
+    // CONTROL: the same prompt on /mcp does name the two writes this profile lacks.
+    const full = H.S.findCapacityPromptText({ requirement: '40 MW powered shell in Dallas', state: 'TX', min_mw: '40' });
+    expect(full).toMatch(/accept_capacity_terms/);
+    expect(full).toMatch(/request_capacity_intro/);
+    expect(hitsOf(PATTERNS, full)).toContain('removed tool named');
+  });
+
+  it('prompts/get: an unknown prompt or a missing requirement is an error, not a prompt', async () => {
+    const u = await H.post(DIR, { jsonrpc: '2.0', id: 7, method: 'prompts/get', params: { name: 'analyze-site', arguments: {} } });
+    expect(u.msg.error.code).toBe(-32602);
+    const m = await H.post(DIR, { jsonrpc: '2.0', id: 8, method: 'prompts/get', params: { name: 'find_capacity', arguments: {} } });
+    expect(m.msg.error.code).toBe(-32602);
+  });
+
+  it('resources list empty; other resource methods are not found', async () => {
     expect((await H.post(DIR, { jsonrpc: '2.0', id: 4, method: 'resources/list' })).msg.result).toEqual({ resources: [] });
     expect((await H.post(DIR, { jsonrpc: '2.0', id: 5, method: 'resources/read', params: { uri: 'dchub://x' } })).msg.error.code).toBe(-32601);
   });
@@ -272,7 +337,8 @@ describe('listing copy', () => {
     expect(section('Name')).toBe('DC Hub');
   });
   it('lists exactly the profile tools and states the profile count', () => {
-    const tools = section('Tools \\(67, all read-only\\)').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+    // 67 → 68 on 2026-09-29 (owner-approved): source_capacity added.
+    const tools = section('Tools \\(68, all read-only\\)').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
     expect(tools).toEqual(Object.keys(CLAUDE_TOOLS));
     expect(section('Long description')).toMatch(new RegExp(`\\b${Object.keys(CLAUDE_TOOLS).length} read-only tools\\b`));
   });
@@ -287,7 +353,11 @@ describe('listing copy', () => {
     expect(PASTED).toContain(`${canon.markets} markets`);
     expect(PASTED).not.toMatch(/\$\s?\d|\bUSD\s?\d|per month|\/mo\b|\bpricing\b|\bprice\b|\bcheckout\b|\bpro\b|\btrial\b|\bfree\b/i);
     expect(PASTED).not.toMatch(/\b(best|leading|most comprehensive|world'?s|#1|unmatched|unrivall?ed|premier|ultimate|the only)\b/i);
-    expect(injectionHits(PASTED.replace(/== Example prompts ==[\s\S]*?(?=\n== )/, ''))).toEqual([]);
+    // The tool-name list is exempt: since 2026-09-29 it names source_capacity,
+    // which the phrase list carries to catch steering toward it in prose.
+    expect(injectionHits(PASTED.replace(/== Example prompts ==[\s\S]*?(?=\n== )/, '')
+      .replace(/== Tools \(\d+, all read-only\) ==[\s\S]*$/, ''))).toEqual([]);
+    expect(section('Prompts')).toMatch(/^\/dchub:find_capacity: /);
     expect(PASTED).not.toMatch(/api_key=/);   // the URL-key channel stays out of the public copy
   });
 });
