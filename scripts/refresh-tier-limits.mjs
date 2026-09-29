@@ -133,11 +133,29 @@ for (const t of PRICED_TIERS) {
     stripe_link[t] = link;
   }
 }
-// founding == pro for access (backend `rule`); its price must sit BELOW pro or
-// the "founding is the deal" copy every surface derives from this is a lie.
-if (price.founding !== undefined && price.pro !== undefined && price.founding >= price.pro) {
-  bail(`founding ${price.founding} is not below pro ${price.pro}`);
+// ★ 2026-09-28 (owner decision 3a): FOUNDING IS A CLOSED EARLY-SUPPORTER
+// COHORT, NOT A PUBLIC TIER. It is Pro access (backend `rule`), and since
+// r-price-collapse (09-05) it costs the SAME as Pro ($99 == $99). This check
+// used to demand founding < pro, so the day the two prices met every daily
+// refresh bailed ("founding 99 is not below pro 99") and the whole snapshot —
+// calls/day, allowance, every price and link — froze with it.
+//   founding <= pro   fine (equal is the steady state)
+//   founding >  pro   bail: an early supporter never pays MORE than Pro; that
+//                     is a degraded or mis-keyed read, not a price change.
+// Nonsense values (missing/null/zero/negative/non-integer) already bailed in
+// the loop above, for founding as for every other priced rung.
+if (price.founding !== undefined && price.pro !== undefined && price.founding > price.pro) {
+  bail(`founding ${price.founding} is above pro ${price.pro}`);
 }
+// …and it is VALIDATED but never PUBLISHED. lib/tier-canon.mjs turns any
+// price_usd_month.founding into "Founding $99/mo (Pro access, while seats
+// last)" at the head of _paidPlansLine() and into the `pricing` block, i.e.
+// into served copy — and the only public price is the $10 pack, the /mcp
+// tools/list is frozen, and the /mcp/chatgpt catalog is frozen. So the price
+// rung stays OUT of the snapshot. stripe_link.founding stays IN: legacy /go
+// links and the existing founding subscriptions still attribute through it
+// (FOUNDING_URL → _GO_PLAN_BY_LINK), and it offers nothing to a new buyer.
+delete price.founding;
 
 const prev = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
 const next = JSON.stringify({
