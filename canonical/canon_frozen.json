@@ -1,0 +1,15 @@
+{
+  "_what": "OWNER-EDITED freeze list for canonical/canon_phrases.json. scripts/refresh-canon-phrases.mjs holds every key listed under `frozen` at its `value` and keeps refreshing every other key from /api/v1/canon/phrases. A frozen key is intentional: the canon floor checks report it and never fail on it. Nothing lifts a freeze automatically; the owner removes the entry.",
+  "_registry": "dchub-backend data/agent_brief.json frozen[] (served at https://dchub.cloud/api/v1/ops/brief)",
+  "frozen": {
+    "facilities": {
+      "id": "frz-canon-facility-floor",
+      "value": "24,900+",
+      "reason": "corroboration pending (r3)",
+      "since": "2026-09-29",
+      "approved_by": "owner",
+      "lifts_when": "corroborated r3 count lands",
+      "lifted_by": "owner only"
+    }
+  }
+}

@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
+import { readFrozen, applyFreeze, describeHeld } from './canon-freeze.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'canonical', 'canon_phrases.json');
@@ -93,6 +94,20 @@ export function selectPhrases(body, prev) {
     if (!isPhrase(v) && isPhrase(prev?.[k])) bad.push(`${k} (was ${prev[k]}, now ${JSON.stringify(v)})`);
   }
   return { fields, bad };
+}
+
+/** selectPhrases() over a body with every FROZEN key held first. PURE.
+ *
+ * ★2026-09-29 frz-canon-facility-floor. canonical/canon_frozen.json (owner-
+ *   edited, scripts/canon-freeze.mjs) names keys the owner froze; each is
+ *   written at its frozen value whatever live says, and every other key keeps
+ *   refreshing. The freeze is applied to the INPUT, so a frozen key also
+ *   satisfies REQUIRED and the prose check on its own, and the snapshot's
+ *   change detection sees no difference while live moves. `frozen` = {} is the
+ *   exact pre-freeze behaviour. Returns {fields, bad, held}. */
+export function phrasesForSnapshot(body, prev, frozen = {}) {
+  const { body: heldBody, held } = applyFreeze(body, frozen);
+  return { ...selectPhrases(heldBody, prev), held };
 }
 
 /** 'heal' | 'keep' | 'fail' — what a body entitles us to do to canon. */
@@ -172,7 +187,15 @@ async function main() {
   // publishes in floor-phrase shape is copied; a field it adds later joins
   // with no edit here. Names appear below only as a FLOOR (see REQUIRED),
   // never as the definition of what is eligible.
-  const { fields, bad } = selectPhrases(body, readSnapshot());
+  const fz = readFrozen();
+  if (fz.bad.length) {
+    // LOUD: ignoring a broken freeze would silently UN-freeze its key.
+    console.error(`canon-phrases refresh: canonical/canon_frozen.json is malformed (${fz.bad.join('; ')}) — `
+      + 'NOT refreshing. Fix the freeze file; the owner lifts a freeze by removing its entry.');
+    process.exit(1);
+  }
+  const { fields, bad, held } = phrasesForSnapshot(body, readSnapshot(), fz.frozen);
+  for (const h of held) console.log(`canon-phrases refresh: ${describeHeld(h, fz.frozen[h.key]?.lifts_when)}`);
   if (!Number.isInteger(tools) || tools < 20 || tools > 500) bad.push('tools');
   if (bad.length) {
     console.log(`canon-phrases refresh: implausible field(s) ${bad.join(', ')} — keeping the committed snapshot`);

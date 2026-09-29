@@ -60,6 +60,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decide, sourceMarker } from './refresh-canon-phrases.mjs';
+import { readFrozen } from './canon-freeze.mjs';
 import { FLOOR_TOLERANCE, ghWarning, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE, FACILITY_COUNT_PENDING_STATUS } from './canon-floor.mjs';
 import { CAPACITY_SUMMARY_PATH, capacityPasteClause, capacityPointersEnabled, capacitySummaryFromHttp, isCapacityLive }
   from '../lib/capacity-source-summary.mjs';
@@ -475,11 +476,17 @@ export function usableCanon(body) {
 
 export const SNAPSHOT_FIELDS = ['tools', 'facilities', 'deals', 'markets', 'countries', 'substations'];
 
-/** What a heal would change: the committed snapshot and server.json vs live. */
-export function repoDrift({ snapshot, canon, serverJson, liveTools }) {
+/** What a heal would change: the committed snapshot and server.json vs live.
+ *
+ * ★2026-09-29 `frozen` (canonical/canon_frozen.json, scripts/canon-freeze.mjs):
+ *   a frozen key differs from live ON PURPOSE (frz-canon-facility-floor), and a
+ *   heal would not change it, so it is not drift. Counting it would dispatch
+ *   daily-manifest-sync every run for a difference nothing may close. */
+export function repoDrift({ snapshot, canon, serverJson, liveTools, frozen = {} }) {
   const out = [];
   if (canon) {
     for (const k of SNAPSHOT_FIELDS) {
+      if (Object.hasOwn(frozen || {}, k)) continue;
       if (canon[k] != null && snapshot?.[k] != null && String(snapshot[k]) !== String(canon[k])) {
         out.push(`canon_phrases.json ${k} ${snapshot[k]} -> ${canon[k]}`);
       }
@@ -1190,7 +1197,7 @@ async function main() {
   const official = results.find((r) => r.key === 'official');
   const smithery = results.find((r) => r.key === 'smithery');
   const healDrift = canonR.read || liveR.read
-    ? repoDrift({ snapshot, canon: canonR.read ? canonR.canon : null, serverJson, liveTools: ssot.tools })
+    ? repoDrift({ snapshot, canon: canonR.read ? canonR.canon : null, serverJson, liveTools: ssot.tools, frozen: readFrozen().frozen })
     : [];
   const registryBehind = official?.verdict.state !== 'unreadable' && official?.obs.version && ssot.version
     && semverCmp(official.obs.version, ssot.version) < 0
