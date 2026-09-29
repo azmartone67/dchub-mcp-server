@@ -61,8 +61,9 @@ describe('instructions compose gate', () => {
     // ★2026-10-02 (mcp#612): the facility count is withdrawn (owner decision
     // 2026-09-27). facts.numbers.facilities is still exported, so the composed
     // string must NOT quote it, and must say the count is pending instead.
-    expect(String(FACTS.numbers.facilities)).toMatch(/\d/);
-    expect(out).not.toContain(String(FACTS.numbers.facilities));
+    if (/\d/.test(String(FACTS.numbers.facilities ?? ''))) {
+      expect(out).not.toContain(String(FACTS.numbers.facilities));
+    }
     expect(out).toContain('global data-center facility map');
     expect(out).toContain('corroborated count pending');
     expect(out).toContain('generating UNITS across all statuses');
@@ -116,6 +117,19 @@ describe('instructions compose gate', () => {
       expect(hasFigures(out), `facts=${JSON.stringify(bad)}`).toBe(false);
       expect(out).toContain('DC Hub is the live infrastructure data layer');
     }
+  });
+
+  it('numbers.facilities is not required: absent or withheld prose composes the SAME bytes', () => {
+    // ★2026-09-29: the backend withholds the count from mcp_facts.json (owner rule).
+    // The composed instructions never read it, so /mcp's bytes must not move.
+    expect(_FACTS_REQUIRED).not.toContain('facilities');
+    const base = _composeInstructions(freshFacts(), NOW);
+    expect(hasFigures(base)).toBe(true);
+    const gone = freshFacts(); delete gone.numbers.facilities;
+    const prose = freshFacts(); prose.numbers.facilities = 'corroborated count pending';
+    const digit = freshFacts(); digit.numbers.facilities = '99,999+';
+    for (const f of [gone, prose, digit]) expect(_composeInstructions(f, NOW)).toBe(base);
+    expect(base).not.toMatch(/99,999/);
   });
 
   it('each missing required key → prose without figures', () => {
