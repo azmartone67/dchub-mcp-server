@@ -197,6 +197,7 @@ test/paid-lift-in-session.test.mjs
 test/payload-diet.test.mjs
 test/paywall-contract.test.mjs
 test/paywall-extras-attribution.test.mjs
+test/paywall-output-no-monthly-price.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/place-name-iso.test.mjs
