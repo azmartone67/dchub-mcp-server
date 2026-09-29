@@ -5798,6 +5798,97 @@ export function _listingIntroBody(args, { termsVersion = null, client = null } =
   return body;
 }
 
+// ── register_standing_intent kind="capacity" (2026-09-28) ─────────────────
+// A capacity intent is a Capacity Source STANDING REQUIREMENT: the backend
+// (dchub-backend routes/agentic_master_shell.py, kind "capacity") registers it
+// in-process in the listings lane, so it lives ONLY there — lead register,
+// confirmation email, introduction terms, alert state — and comes back as
+// intent_id "cap_<lead_id>". No webhook, no secret: matches are EMAILED to the
+// bound address, at most one email a day, after the email is confirmed.
+export const CAPACITY_INTENT_KIND = 'capacity';
+export const CAPACITY_INTENT_ID_PREFIX = 'cap_';
+export const isCapacityIntentId = (id) => typeof id === 'string'
+  && id.trim().toLowerCase().startsWith(CAPACITY_INTENT_ID_PREFIX);
+
+// Same refusal contract as request_capacity_intro: a structured NON-error
+// result, no network, when the terms were not accepted or the person is unnamed.
+export function _capacityIntentPreflight(args) {
+  const a = args || {};
+  const missing = [];
+  const termsMissing = a.accept_terms !== true;
+  if (termsMissing) missing.push('accept_terms');
+  if (!_listingStr(a.name)) missing.push('name');
+  if (!_listingStr(a.company)) missing.push('company');
+  const hasTarget = [a.target_mw, a.target_kw].some((v) => typeof v === 'number' && Number.isFinite(v));
+  const hasWhere = ['markets', 'states', 'regions', 'countries'].some((k) => _listingCsv(a[k]).length);
+  if (!hasTarget && !hasWhere) missing.push('target_mw|target_kw|markets|states|regions|countries');
+  if (!missing.length) return null;
+  const parts = ['Nothing was sent to DC Hub and no capacity requirement was registered.'];
+  if (termsMissing) {
+    parts.push('Your human must read and agree to the introduction terms first (' + LISTING_TERMS_URL
+      + '; machine-readable at ' + LISTING_TERMS_API + '). Only after they agree, call register_standing_intent kind=capacity again with accept_terms=true.');
+  }
+  const people = missing.filter((m) => m === 'name' || m === 'company');
+  if (people.length) {
+    parts.push('Also pass ' + people.join(' and ') + ' of the person registering the requirement, exactly as your human gives them. Never invent them.');
+  }
+  if (!hasTarget && !hasWhere) {
+    parts.push('Give at least a size (target_mw or target_kw) or a location (markets, states, regions or countries).');
+  }
+  const out = {
+    ok: false,
+    sent: false,
+    error: termsMissing ? 'terms_not_accepted' : 'invalid_request',
+    missing,
+    message: parts.join(' '),
+    next_steps: ['register_standing_intent'],
+  };
+  if (termsMissing) { out.terms_url = LISTING_TERMS_URL; out.terms_api = LISTING_TERMS_API; }
+  return _listingResult(out, { isError: false });
+}
+
+// The POST /api/v1/agentic/intents body for kind="capacity". Absent optional
+// fields are omitted; comma-separated location strings become arrays.
+export function _capacityIntentBody(args, { termsVersion = null } = {}) {
+  const a = args || {};
+  const params = {};
+  for (const k of ['target_mw', 'target_kw', 'min_chunk_kw', 'max_sites']) {
+    if (typeof a[k] === 'number' && Number.isFinite(a[k])) params[k] = a[k];
+  }
+  for (const k of ['markets', 'states', 'regions', 'countries']) {
+    const list = _listingCsv(a[k]);
+    if (list.length) params[k] = list;
+  }
+  for (const k of ['available_by', 'delivery_type', 'use_case', 'notes', 'timeline',
+                   'name', 'company', 'role', 'message']) {
+    const v = _listingStr(a[k]);
+    if (v) params[k] = v;
+  }
+  params.accept_terms = a.accept_terms === true;
+  if (termsVersion) params.terms_version = termsVersion;
+  return { kind: CAPACITY_INTENT_KIND, params };
+}
+
+// Success: the backend's payload plus what happens next — the confirmation
+// email, the once-a-day alert email, and how to list and delete it.
+export function _capacityIntentNext(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const id = typeof b.intent_id === 'string' ? b.intent_id : null;
+  const to = typeof b.email_masked === 'string' && b.email_masked ? b.email_masked : 'the bound email address';
+  const pending = b.status === 'pending_email_confirmation';
+  const notes = [];
+  if (pending) {
+    notes.push('A confirmation link was emailed to ' + to + '. Ask your human to click it: the requirement is registered, and alerts start, only once it is confirmed.');
+  } else {
+    notes.push('The requirement is registered and confirmed.');
+  }
+  notes.push('When a matching Capacity Source listing opens, DC Hub emails ' + to
+    + ' (at most one email a day; no webhook). Alerts expire unless extended.');
+  notes.push('See it with list_standing_intents' + (id ? '; remove it with delete_standing_intent intent_id=' + id : '') + '.');
+  return { next_steps: ['list_standing_intents', 'delete_standing_intent'],
+           next_steps_note: notes.join(' ') };
+}
+
 // ★ terms_version records WHICH terms the human agreed to, so it is never pinned
 //   in this file: a hardcoded version goes stale on the first terms change, and
 //   from then on every introduction 409s with no way forward until a redeploy.
@@ -22638,21 +22729,55 @@ function createServer(descOverrides, instructionsTail) {
   //   action); TOOL_ALIASES never appears in tools/list, so nothing advertises a
   //   bundled tool any more.
   trackedTool(srv, 'list_standing_intents',
-    'List the standing intents (webhook watches) registered on your key. Read-only. Returns each intent_id, kind, watch params, webhook_url and enabled state — use it to find the intent_id for delete_standing_intent, or to confirm a register landed. Requires a key. Answers "what am I currently watching". Do NOT use to create a watch (register_standing_intent) or for one-shot reads (get_news / list_transactions).',
+    'List the standing intents registered on your key: webhook watches, plus your capacity requirements (kind "capacity", intent_id cap_...). Read-only. Returns each intent_id, kind, watch params, webhook_url and enabled state; capacity items also carry status, confirmed, expires_at, last_alert_at and matching_now. Use it to find the intent_id for delete_standing_intent, or to confirm a register landed. Requires a key (or an OAuth connection for capacity items). Answers "what am I currently watching". Do NOT use to create a watch (register_standing_intent) or for one-shot reads (get_news / list_transactions).',
     {},
     async () => {
       const out = await callAPI('/api/v1/agentic/intents', {});
+      if (out && Array.isArray(out.intents)
+          && out.intents.some((i) => i && i.kind === CAPACITY_INTENT_KIND)) {
+        out.capacity_note = 'kind "capacity" items are Capacity Source requirements: matches are emailed '
+          + '(at most one email a day, only once the email is confirmed), not sent to a webhook. '
+          + 'delete_standing_intent with their cap_ intent_id removes one.';
+      }
       return { content: [{ type: 'text', text: JSON.stringify(out) }] };
     });
 
   trackedTool(srv, 'register_standing_intent',
-    'Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: kind ("new_deal_in_market" watches deals in the market param · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers "notify my system whenever a new moratorium appears", "push me new matches instead of making me poll", "tell my orchestrator when a deal lands in Columbus". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.',
-    { kind: Sreq.describe('Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change"'),
-      webhook_url: Sreq.describe('Your public HTTPS webhook endpoint (required)'),
+    'Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: "notify my orchestrator on any new deal in Columbus"). Requires a key. Params: kind ("new_deal_in_market" watches deals in the market param · "news_keyword" watches news matching q · "permitting_change" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers "notify my system whenever a new moratorium appears", "push me new matches instead of making me poll", "tell my orchestrator when a deal lands in Columbus". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. kind="capacity" instead registers a standing CAPACITY REQUIREMENT with DC Hub Capacity Source (no webhook_url): target_mw or target_kw, markets / states / regions / countries (comma-separated), optional available_by (YYYY-MM or YYYY-MM-DD), delivery_type, min_chunk_kw, max_sites (1-6), use_case, notes, plus your human\'s name and company and accept_terms=true only after they agreed to https://dchub.cloud/listings#terms. Needs a key with your human\'s email bound (claim_free_key, then bind_email) or an OAuth connection. Returns intent_id cap_<id>; DC Hub emails a confirmation link, then emails matching listings at most once a day. Do NOT use for one-shot reads (get_news / list_transactions), a one-off capacity search (source_capacity) or email alerts on a market (set_market_alert).',
+    { kind: Sreq.describe('Watch kind: "new_deal_in_market" | "news_keyword" | "permitting_change" | "capacity" (a Capacity Source requirement, emailed, no webhook)'),
+      webhook_url: S.describe('Your public HTTPS webhook endpoint (required for every kind except capacity)'),
       market: S.describe('For new_deal_in_market: the market/region substring to watch, e.g. columbus'),
       q: S.describe('For news_keyword: the keyword/phrase to watch in title+summary, e.g. moratorium'),
-      state: S.describe('For permitting_change: optional US state filter, e.g. MN') },
+      state: S.describe('For permitting_change: optional US state filter, e.g. MN'),
+      target_mw: N.describe('For capacity: capacity needed, in MW (or target_kw, not both)'),
+      target_kw: N.describe('For capacity: capacity needed, in kW (or target_mw, not both)'),
+      markets: S.describe('For capacity: comma-separated markets, e.g. "Dallas, Phoenix"'),
+      states: S.describe('For capacity: comma-separated US states, e.g. "TX, AZ"'),
+      regions: S.describe('For capacity: comma-separated regions from north_america, latin_america, europe, asia_pacific, middle_east_africa (aliases emea, apac, latam, americas)'),
+      countries: S.describe('For capacity: comma-separated countries, e.g. "Germany, Netherlands"'),
+      available_by: S.describe('For capacity: needed by this date, YYYY-MM or YYYY-MM-DD'),
+      delivery_type: z.enum(['land', 'powered_shell', 'turnkey', 'colocation']).optional().describe('For capacity: land, powered_shell, turnkey or colocation'),
+      min_chunk_kw: N.describe('For capacity: the smallest block worth taking, in kW'),
+      max_sites: N.describe('For capacity: how many sites the requirement may be split across, 1-6'),
+      use_case: S.describe('For capacity: what the capacity is for, e.g. "AI inference"'),
+      notes: S.describe('For capacity: anything else about the requirement; leave out anything that identifies your human'),
+      name: S.describe("For capacity: your human's full name, exactly as given; never invent it"),
+      company: S.describe("For capacity: your human's company"),
+      role: S.describe("For capacity: your human's role or title"),
+      accept_terms: B.describe('For capacity: true ONLY after your human read and agreed to https://dchub.cloud/listings#terms; otherwise nothing is sent'),
+      terms_version: S.describe('For capacity: the terms version your human agreed to; omit to send the version currently published') },
     async (a) => {
+      if (String(a.kind || '').trim() === CAPACITY_INTENT_KIND) {
+        const refused = _capacityIntentPreflight(a);
+        if (refused) return refused;
+        const body = _capacityIntentBody(a, { termsVersion: await _listingTermsVersion(a.terms_version) });
+        const r = await callAPIWrite('/api/v1/agentic/intents', body, { withStatus: true });
+        if (r && Number.isInteger(r.http_status) && r.http_status >= 200 && r.http_status < 300
+            && r.body && typeof r.body === 'object' && !Array.isArray(r.body)) {
+          r.body = { ...r.body, ..._capacityIntentNext(r.body) };
+        }
+        return _listingsToolResult('register_standing_intent', r);
+      }
       // ★ Named, actionable, and it names the SIBLING tools — an old caller
       //   aliased here from `standing_intent action="delete"` arrives with no
       //   webhook_url, and this is the message that tells them where to go.
@@ -22662,12 +22787,12 @@ function createServer(descOverrides, instructionsTail) {
         return { content: [{ type: 'text', text: JSON.stringify({
           error: 'missing_required_argument',
           detail: 'register_standing_intent needs both `kind` and `webhook_url`.',
-          accepts: { kind: ['new_deal_in_market', 'news_keyword', 'permitting_change'],
-                     webhook_url: 'public https URL' },
+          accepts: { kind: ['new_deal_in_market', 'news_keyword', 'permitting_change', CAPACITY_INTENT_KIND],
+                     webhook_url: 'public https URL (not used by kind=capacity)' },
           siblings: { list: 'list_standing_intents', delete: 'delete_standing_intent' },
           _error_mitigation: {
             error_code: 'invalid_parameter', severity: 'parameter_adjustment',
-            deterministic_hint: 'To CREATE a watch pass kind + webhook_url. To see existing '
+            deterministic_hint: 'To CREATE a watch pass kind + webhook_url (kind=capacity needs no webhook_url). To see existing '
               + 'watches call list_standing_intents. To remove one call '
               + 'delete_standing_intent with its intent_id.',
           },
@@ -22683,7 +22808,7 @@ function createServer(descOverrides, instructionsTail) {
     });
 
   trackedTool(srv, 'delete_standing_intent',
-    'Permanently retire a registered standing intent (webhook watch) by intent_id — deliveries stop and the watch cannot be recovered. Requires a key. Get the intent_id from list_standing_intents or from the register response. Answers "stop watching this". Do NOT use to pause temporarily; there is no pause, this removes the watch.',
+    'Permanently retire a registered standing intent (webhook watch) by intent_id — deliveries stop and the watch cannot be recovered. A cap_ intent_id retires your own Capacity Source requirement instead, and its alert emails stop. Requires a key (or an OAuth connection for cap_ ids). Get the intent_id from list_standing_intents or from the register response. Answers "stop watching this". Do NOT use to pause temporarily; there is no pause, this removes the watch.',
     { intent_id: Sreq.describe('The intent_id to delete (from list_standing_intents or register)') },
     async (a) => {
       const id = String(a.intent_id || '').trim();
@@ -22697,6 +22822,12 @@ function createServer(descOverrides, instructionsTail) {
             deterministic_hint: 'Call list_standing_intents to find the intent_id, then retry.',
           },
         }) }], isError: true };
+      }
+      if (isCapacityIntentId(id)) {
+        // The listings lane answers: the caller's own requirement only, 404 for
+        // anyone else's id; identity walls come back with next_steps.
+        return _listingsToolResult('delete_standing_intent', await callAPIWrite(
+          `/api/v1/agentic/intents/${encodeURIComponent(id)}`, {}, { method: 'DELETE', withStatus: true }));
       }
       const out = await callAPIWrite(
         `/api/v1/agentic/intents/${encodeURIComponent(id)}`, {}, { method: 'DELETE' });
