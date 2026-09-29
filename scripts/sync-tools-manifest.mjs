@@ -73,8 +73,7 @@ try { _TC = await import(new URL('../lib/tier-canon.mjs', import.meta.url)); } c
 const DESC_SCOPE = {
   FREE_TIER:      _TC ? _TC.FREE_TIER : undefined,
   PLAN_PRICE:     _TC ? _TC.PLAN_PRICE : undefined,
-  _priceLabel:    _TC ? _TC._priceLabel : undefined,
-  _paidPlansLine: _TC ? _TC._paidPlansLine : undefined,
+  _paidPlansOutputLine: _TC ? _TC._paidPlansOutputLine : undefined,
   _callsPerDay:   _TC ? _TC._callsPerDay : undefined,
   // operator knob (env), mirrored from server.mjs with the same default
   TRIAL_DAILY_FULL_CAP: Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10)),
@@ -88,7 +87,7 @@ function evalDescription(expr) {
 function canonicalTools() {
   const src = readCur('server.mjs');
   // a term: a string literal, or a canon reference — bare (FREE_TIER.x), a
-  // no-arg call (_paidPlansLine()), or a one-literal call (_priceLabel('pro')).
+  // no-arg call (_paidPlansOutputLine()), or a one-literal call (_callsPerDay('pro')).
   // ★A bare identifier that is a FUNCTION must not be accepted: `+ fn +`
   // coerces it to its own source text, which is exactly what shipped once.
   const TERM = String.raw`(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|[A-Za-z_$][\w$.]*(?:\((?:'(?:[^'\\]|\\.)*')?\))?)`;
