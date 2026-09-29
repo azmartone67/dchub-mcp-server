@@ -3454,7 +3454,7 @@ async function trackPaidHit(sessionId, toolName) {
   }
 }
 
-async function shouldMintClaim(sessionId, toolName) {
+export async function shouldMintClaim(sessionId, toolName) {
   if (!_isRealSession(sessionId) || !toolName) return null;
   try {
     const c = getCtx();
@@ -3465,6 +3465,12 @@ async function shouldMintClaim(sessionId, toolName) {
     url.searchParams.set('session_id', sessionId);
     url.searchParams.set('tool', toolName);
     url.searchParams.set('variant', variant);
+    // r-arm-at-mint (2026-09-29): the paywall-contract arm this caller is in, so
+    // the backend can stamp mcp_high_intent_sessions.paywall_arm and the
+    // scorecard can divide opens by mints per arm. Null (contract off, outside
+    // the A/B window, directory profiles, bots) sends nothing.
+    const _arm = _paywallArmFor(c);
+    if (_arm) url.searchParams.set('pc', _arm);
     const resp = await fetch(url.toString(), {
       method: 'GET',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Accept': 'application/json' },
