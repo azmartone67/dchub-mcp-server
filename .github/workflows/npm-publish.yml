@@ -1,0 +1,135 @@
+# Publish npm-launcher/ as the npm package `dchub-mcp-server` — OIDC only.
+#
+# ★2026-09-28. Until now the package was published by hand (2.12.23 went out
+# 2026-09-28 06:31Z from a laptop). npm served 2.12.19 while the server was
+# 2.12.21 once already because nothing tied a version bump to a publish.
+#
+# TRIGGER: a push to main that touches a version file. Version bumps land here
+# as merged PRs that edit server.json + package.json + npm-launcher/package.json
+# together (e.g. #630 → 2.12.23); GitHub releases are cut only occasionally
+# (latest release v2.12.20 while main is at 2.12.23), so a `release:` trigger
+# would miss most versions. registry-refresh.yml publishes the MCP registry on
+# the same event for the same reason.
+#
+# AUTH: npm trusted publishing (GitHub Actions OIDC). There is NO NPM_TOKEN —
+# the short-lived credential is minted from `id-token: write` and only works for
+# the repo + workflow filename registered on npmjs.com (package Settings →
+# Trusted Publisher). Needs npm >= 11.5.1. Pinned by
+# test/npm-publish-trusted.test.mjs.
+#
+# ★ Values reach the shell through env:, never by ${{ }} inside `run:`.
+name: npm publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server.json'
+      - 'package.json'
+      - 'npm-launcher/**'
+      - '.github/workflows/npm-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write          # npm trusted publishing (OIDC) + provenance
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish dchub-mcp-server to npm (OIDC)
+    runs-on: ubuntu-latest
+    # A published npm version cannot be reused, so never publish from a branch.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.x.
+      - name: Ensure npm >= 11.5.1
+        run: |
+          have=$(npm -v)
+          if node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$have"; then
+            echo "npm $have is new enough"
+          else
+            echo "npm $have < 11.5.1 — installing npm@^11.5.1"
+            npm install -g 'npm@^11.5.1'
+          fi
+          npm -v
+
+      # Refuse to publish a launcher whose version disagrees with the server.
+      - name: Version parity (npm-launcher == server.json == package.json)
+        id: ver
+        run: |
+          SERVER=$(node -p 'require("./server.json").version')
+          ROOT=$(node -p 'require("./package.json").version')
+          LAUNCHER=$(node -p 'require("./npm-launcher/package.json").version')
+          echo "server.json=$SERVER package.json=$ROOT npm-launcher=$LAUNCHER"
+          if [ "$LAUNCHER" != "$SERVER" ] || [ "$ROOT" != "$SERVER" ]; then
+            echo "::error::npm-launcher/package.json version ($LAUNCHER) does not match server.json ($SERVER) / package.json ($ROOT). Bump all three together."
+            exit 1
+          fi
+          echo "version=$SERVER" >> "$GITHUB_OUTPUT"
+
+      # Idempotent: a version already on npm is a no-op, not a failure. A 404 is
+      # the only answer that means "not published"; any other npm error fails the
+      # job rather than guessing.
+      - name: Skip if this version is already published
+        id: published
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set +e
+          out=$(npm view "dchub-mcp-server@$VERSION" version 2>"$RUNNER_TEMP/npm-view.err")
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ] && [ "$out" = "$VERSION" ]; then
+            echo "::notice::dchub-mcp-server@$VERSION is already on npm — skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif grep -q 'E404' "$RUNNER_TEMP/npm-view.err"; then
+            echo "dchub-mcp-server@$VERSION is not on npm yet — will publish."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            cat "$RUNNER_TEMP/npm-view.err"
+            echo "::error::npm view failed (rc=$rc) with something other than a 404 — refusing to guess."
+            exit 1
+          fi
+
+      # The tarball must be exactly the 4 files the hand-published 2.12.23 had.
+      - name: Dry-run pack — tarball is exactly the expected 4 files
+        working-directory: npm-launcher
+        run: |
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack.json"
+          node -e '
+            const files = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[0].files.map((f) => f.path).sort();
+            const expected = ["LICENSE", "README.md", "bin/dchub-mcp-server.mjs", "package.json"];
+            console.log("tarball:", files.join(", "));
+            if (JSON.stringify(files) !== JSON.stringify(expected)) {
+              console.log("::error::tarball file list " + JSON.stringify(files) + " != expected " + JSON.stringify(expected));
+              process.exit(1);
+            }
+          ' "$RUNNER_TEMP/pack.json"
+
+      - name: Publish (trusted publishing, provenance)
+        if: steps.published.outputs.skip == 'false'
+        working-directory: npm-launcher
+        run: npm publish --provenance --access public
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          SKIP: ${{ steps.published.outputs.skip }}
+        run: |
+          if [ "$SKIP" = "true" ]; then
+            echo "### dchub-mcp-server@$VERSION already on npm — nothing published" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Published dchub-mcp-server@$VERSION to npm (OIDC, provenance)" >> "$GITHUB_STEP_SUMMARY"
+          fi

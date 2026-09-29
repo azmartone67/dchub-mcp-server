@@ -184,6 +184,7 @@ test/no-starter-offer.test.mjs
 test/no-verification-counts-in-output.test.mjs
 test/nodata-trial-side-effects.test.mjs
 test/npm-launcher-version-parity.test.mjs
+test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
 test/oauth-funnel-stages.test.mjs
 test/oauth.test.mjs
