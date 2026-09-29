@@ -19557,7 +19557,11 @@ export async function _testimonialsResourceText() {
 // to figure-less prose rather than risking a stale over-claim (311-markets
 // class). Tool count is NOT a fact — it stays repo-owned via
 // CANONICAL_TOOL_COUNT (sync-tools-manifest.mjs keeps it == tools/list).
-export const _FACTS_REQUIRED = ['facilities', 'countries', 'markets', 'deals',
+// ★2026-09-29: 'facilities' is NOT required. The facility count is withdrawn
+// (owner, 2026-09-27) and the composed text never reads numbers.facilities, so
+// requiring a digit in it only let the backend's withheld value ("corroborated
+// count pending") drop these instructions to figure-less prose.
+export const _FACTS_REQUIRED = ['countries', 'markets', 'deals',
   'substations', 'infrastructure_assets_total', 'transmission_lines',
   'fiber_routes', 'gas_pipelines', 'power_plants_us', 'submarine_cables',
   'cable_landings', 'generating_units_global', 'live_feeds', 'grid_regions'];
