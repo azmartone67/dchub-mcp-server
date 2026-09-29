@@ -75,6 +75,20 @@ export function selectPhrases(body, prev) {
     ([k, v]) => typeof v === 'string' && !k.startsWith('_') && !RESERVED.has(k));
   const fields = Object.fromEntries(candidates.filter(([, v]) => isPhrase(v)));
 
+  // ★2026-09-29 the backend withholds the facility count from
+  //   /api/v1/canon/phrases (`facilities: "corroborated count pending"` +
+  //   facilities_count_status, owner rule, dchub-backend#5966). While that status
+  //   is set, prose in `facilities` is the ANSWER, not a corrupt source: carry
+  //   the committed snapshot's phrase forward (what the freeze does today) instead
+  //   of refusing every canon key. Only a value that is prose AND carries no digit
+  //   qualifies; a status alone never substitutes for a phrase that turned into
+  //   something else, and with no committed phrase to carry it still refuses.
+  const pending = ['facilities_count_status', 'facility_count_status']
+    .some((k) => body?.[k] === 'corroboration_pending')
+    && typeof body?.facilities === 'string' && !/\d/.test(body.facilities);
+  const carried = pending && !isPhrase(fields.facilities) && isPhrase(prev?.facilities);
+  if (carried) fields.facilities = prev.facilities;
+
   // ★ A SCAN THAT CAN FIND NOTHING NEEDS A FLOOR. Discovery by shape means a
   //   body that returned {} would yield zero fields, zero complaints and an
   //   EMPTY snapshot — which sync-tools-manifest treats as fatal, but only
@@ -91,6 +105,7 @@ export function selectPhrases(body, prev) {
   //   case entirely, and silently dropping it would republish the old number
   //   under a green check — refuse instead.
   for (const [k, v] of candidates) {
+    if (carried && k === 'facilities') continue;
     if (!isPhrase(v) && isPhrase(prev?.[k])) bad.push(`${k} (was ${prev[k]}, now ${JSON.stringify(v)})`);
   }
   return { fields, bad };

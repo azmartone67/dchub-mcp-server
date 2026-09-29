@@ -231,6 +231,7 @@ test/rank-markets-value-strip.test.mjs
 test/recipe-lifecycle.test.mjs
 test/recommendation-returns-contract.test.mjs
 test/recommendation-returns-truth.test.mjs
+test/refresh-canon-pending.test.mjs
 test/refresh-scripts-import-inert.test.mjs
 test/refresh-tier-limits-founding.test.mjs
 test/refresh-tier-limits-rule.test.mjs
