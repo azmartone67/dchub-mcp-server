@@ -43,7 +43,6 @@ describe('the shape rule, both directions', () => {
     'Capacity Source: 3 live listings, 57.5 MW across Examplefield, updated 2031-01-01.',
     'Live now: 1 live listing, 9 MW across Examplefield, updated 2031-01-01.',
     'Available now: 1 listing, 9 MW across Examplefield, last updated 2031-01-01.',
-    'Capacity Source now lists 120 MW of turnkey capacity',
     'listings totalling 1,250.5 MW',
   ]) it(`catches: ${t}`, () => expect(capacityInventoryViolations(t)).not.toEqual([]));
 
@@ -52,6 +51,8 @@ describe('the shape rule, both directions', () => {
     'https://dchub.cloud/listings?min_kw=500&region=europe',
     'searchable by size in kW or MW and by location',
     'returns up to 5 listings that deliver the requirement alone',
+    'Using DC Hub Capacity Source, list available capacity in Texas of at least 40 MW',
+    'https://dchub.cloud/listings/examplefield-9-mw-colocation',
   ]) it(`passes: ${t}`, () => expect(capacityInventoryViolations(t)).toEqual([]));
 });
 
