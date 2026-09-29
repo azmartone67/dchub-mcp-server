@@ -13046,7 +13046,7 @@ export const _PLAN_CLASSES = [
       { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
-    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel full depth is Developer+ (free tiers get a headline tease). Treat any factor returned as unavailable as unknown — never estimate it.',
+    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Starter and up get the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
@@ -13112,7 +13112,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom lists retiring generators below Developer too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below Developer, and below Developer target_mw is held at 50 — the same rule as the REST API. get_refined_queue is depth-teased below Developer tier (top rows + count free); get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below Developer too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below Developer, and below Developer target_mw is held at 50 — the same rule as the REST API. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "compare Phoenix vs Columbus" fell to unknown —
@@ -13164,7 +13164,7 @@ export const _PLAN_CLASSES = [
       { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel full depth is Developer+. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Starter and up get the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -13207,7 +13207,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence / get_interconnection_queue / get_refined_queue are depth-teased below Developer tier (headline + top rows free). iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a $10 credit pack. get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
@@ -13233,7 +13233,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue and get_refined_queue are depth-teased below Developer tier. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -13399,7 +13399,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.',
         rejected_because: 'No single deal/market was named — the verdict overlay comes bundled in deal_autopsy anyway.' },
     ],
-    coverage_notes: 'hyperscaler_deals is free-tier friendly; list_transactions full depth ($ aggregates) is Developer+ (teased below). Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
+    coverage_notes: 'hyperscaler_deals and list_transactions: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
   {
     // r-planner-v5.4 (2026-07-26): CROSS-DOMAIN fiber + power. Live battery:
@@ -13449,7 +13449,7 @@ export const _PLAN_CLASSES = [
       { tool: 'analyze_site', when: 'You have coordinates and want every factor for that one site in a single call.',
         rejected_because: 'The question was market-wide overlap, not a single-site multi-factor read.' },
     ],
-    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel depth is Developer+. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
+    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a $10 credit pack. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
   },
   {
     id: 'fiber', recipe: null,
@@ -13476,7 +13476,7 @@ export const _PLAN_CLASSES = [
       { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel is depth-teased below Developer tier (free tier: ' + _freeKeyAllowanceText() + '). cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a $10 credit pack. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -13503,7 +13503,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. Gas synthesis (get_gas_index / get_gas_economics / get_gas_intelligence) is depth-teased below Developer.',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Starter and up get the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below Pro (Developer included).',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
