@@ -26,14 +26,16 @@ describe('isFreeWithEmailTool', () => {
   it('marks the tools a bound email unlocks', () => {
     for (const t of ['get_interconnection_queue', 'compare_isos', 'list_transactions',
                      'hyperscaler_deals', 'get_facility', 'get_market_intel',
-                     'rank_markets', 'ai_capacity_index']) {
+                     'rank_markets', 'ai_capacity_index',
+                     // ladder stage 1 (2026-09-29): no longer Pro-only — the same
+                     // keyed daily allowance as get_market_intel, unlimited at Developer.
+                     'get_grid_intelligence', 'get_fiber_intel']) {
       expect(isFreeWithEmailTool(t), t).toBe(true);
     }
   });
 
   it('does NOT mark the genuinely Pro tools', () => {
-    for (const t of ['analyze_site', 'compare_sites', 'get_grid_intelligence',
-                     'get_fiber_intel', 'get_dchub_recommendation',
+    for (const t of ['analyze_site', 'compare_sites', 'get_dchub_recommendation',
                      'generate_site_analysis']) {
       expect(isFreeWithEmailTool(t), t).toBe(false);
     }

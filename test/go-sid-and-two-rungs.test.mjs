@@ -157,21 +157,33 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       expect(go).toHaveLength(2);
       expect(fields(go[0], GO).parts).toEqual(['metered', 'pk-' + TRIAL_HASH, SID]);
       expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
-      const proGo = _rungsText('get_grid_intelligence', 'free').match(GO_RE);
-      expect(fields(proGo[1], GO).parts).toEqual(['pro', SID]);
+      // ladder stage 1: a Pro-only tool's ask is Pro alone (the pack opens no Pro tool).
+      const proGo = _rungsText('compare_sites', 'free').match(GO_RE);
+      expect(proGo).toHaveLength(1);
+      expect(fields(proGo[0], GO).parts).toEqual(['pro', SID]);
     });
   });
 
   it('r-dev-rung: a Pro-only tool keeps Pro — Developer does not open it', () => {
-    for (const tool of ['get_grid_intelligence', 'get_fiber_intel', 'analyze_site', 'compare_sites']) {
+    // ladder stage 1 (owner 2026-09-29): nor does the $10 pack, so Pro is the one rung.
+    for (const tool of ['analyze_site', 'compare_sites', 'get_dchub_recommendation']) {
       withCtx({ session_id: SID }, () => {
         const text = _rungsText(tool, 'free');
         const go = text.match(GO_RE);
-        expect(go, tool).toHaveLength(2);
-        expect(fields(go[0], GO).parts, tool).toEqual(['metered', SID]);
-        expect(fields(go[1], GO).parts, tool).toEqual(['pro', SID]);
+        expect(go, tool).toHaveLength(1);
+        expect(fields(go[0], GO).parts, tool).toEqual(['pro', SID]);
         expect(text, tool).toContain('**Pro**');
         expect(text, tool).not.toContain('Developer');
+        expect(text, tool).not.toContain('$10 one-time');
+      });
+    }
+    // ...and grid/fiber intel left the Pro-only set: pack, then Developer.
+    for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
+      withCtx({ session_id: SID }, () => {
+        const go = _rungsText(tool, 'free').match(GO_RE);
+        expect(go, tool).toHaveLength(2);
+        expect(fields(go[0], GO).parts, tool).toEqual(['metered', SID]);
+        expect(fields(go[1], GO).parts, tool).toEqual(['developer', SID]);
       });
     }
   });
@@ -188,12 +200,17 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       const out = await withCtx({ session_id: SID }, () => buildDepthTease(tool, res(), { session_id: SID }, 'free'));
       return JSON.parse(out.content[0].text)._upgrade;
     };
+    // ladder stage 1 (2026-09-29): the grid/fiber pair left the Pro-only set, so
+    // their tease names Developer like every other DEPTH_TEASE tool.
     for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
       const u = await upgrade(tool);
-      expect(u.message, tool).toContain('or a Pro subscription.');
-      expect(u.message, tool).not.toContain('Developer');
-      expect(u.pro_url, tool).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
+      expect(u.message, tool).toContain('or a Developer subscription.');
+      expect(u.pro_url, tool).toBeUndefined();
     }
+    // The Pro branch itself still names Pro (a Pro-only tool driven directly).
+    const up = await upgrade('get_dchub_recommendation');
+    expect(up.message).toContain('or a Pro subscription.');
+    expect(up.pro_url).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
     // Control: a tool Developer opens still names Developer, and gets no pro_url.
     const u = await upgrade('get_pipeline');
     expect(u.message).toContain('or a Developer subscription.');

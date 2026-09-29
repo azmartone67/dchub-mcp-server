@@ -201,7 +201,10 @@ describe('the pack is sold as credits', () => {
   });
 
   it('a heavy tool names its own cost on its wall; a light tool does not', () => {
-    expect(S._rungsText('analyze_site', 'free', 'sid-t')).toContain('`analyze_site` uses 5 credits per call');
+    // ladder stage 1: a Pro-only tool carries no pack rung, so a heavy NON-Pro tool
+    // (get_grid_intelligence, 5 credits) is the one that names its cost now.
+    expect(S._rungsText('get_grid_intelligence', 'free', 'sid-t')).toContain('`get_grid_intelligence` uses 5 credits per call');
+    expect(S._rungsText('analyze_site', 'free', 'sid-t')).not.toMatch(/uses \d+ credits per call/);
     expect(S._rungsText('get_pipeline', 'free', 'sid-t')).not.toMatch(/uses \d+ credits per call/);
     expect(S._rungsText('get_pipeline', 'free', 'sid-t')).toContain('**$10 one-time = 1,000 API credits**');
   });
@@ -239,17 +242,21 @@ describe('a keyed pack holder gets the rows it paid for', () => {
   });
 });
 
-describe('a Developer blocked on a Pro-only tool', () => {
+describe('a Developer on a Pro-only tool', () => {
   it('is told it is on Developer and what opens the tool, never "free tier"', async () => {
     const s = await openSession({ 'x-api-key': K_DEV });
     // 2026-09-22: analyze_site became Land & Power, which answers Developer with
     // its own preview (test/lp-pro-only.test.mjs). get_dchub_recommendation is
     // the same class of tool (Pro-only, heavy) outside Land & Power.
+    // Ladder stage 1 (2026-09-29): Developer gets the free key's preview here, not
+    // a wall, and the one rung named is Pro — never the pack, which opens no Pro tool.
     const t = textOf(await s.call('get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }));
-    expect(t).toContain("You're on **Developer**");
-    expect(t).toContain('is one of the Pro-only tools, so it opens on Pro');
+    expect(t).toContain('is a Pro tool');
+    expect(t).toContain('On Developer this is the same preview a free key gets');
+    expect(t).toContain('DC Hub Pro');
     expect(t).not.toContain('free tier');
-    expect(t).toContain('`get_dchub_recommendation` uses 5 credits per call');
+    expect(t).not.toContain('1,000 API credits');
+    expect(t).not.toContain('still covers every other tool');
   });
 
 });
