@@ -9235,7 +9235,7 @@ export function _postRelayTeaser(result, ctx, post = callAPIWrite) {
 }
 
 const _FREE_NUMERIC_KEY_RE = /(^|_)score$|^composite_score|^overall_score|time_to_power|_months$|kwh|cents|(^|_)mw$|_mw_/i;
-const _FREE_NUMERIC_KEEP_RE = /(_in_pro$|_total_in_(?:pro|developer|free)$|^_|_band$|_note$|_basis$|_count$|_count_\d+d$|^rank$)/i;
+const _FREE_NUMERIC_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_band$|_note$|_basis$|_count$|_count_\d+d$|^rank$)/i;
 function _isFigure(v) {
   if (typeof v === 'number') return Number.isFinite(v);
   return typeof v === 'string' && /^\s*-?\d[\d,]*(\.\d+)?\s*$/.test(v);
@@ -9438,7 +9438,7 @@ const _DEPTH_ID_KEYS = new Set(['queue_id', 'project_name', 'project_number',
                                 'queue_position', 'interconnection_request_id']);
 // Never gate a field whose job is to SAY something is gated, or the coarse
 // band that replaces the number. `_score_basis` is the methodology sentence.
-const _DEPTH_KEEP_RE = /(_in_pro$|_total_in_(?:pro|developer|free)$|^_|_note$|_basis$|_band$|_preview$)/i;
+const _DEPTH_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_note$|_basis$|_band$|_preview$)/i;
 
 function _gatesDepth(k) {
   if (!DEPTH_GATE) return false;
@@ -9767,10 +9767,11 @@ const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retr
 const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance']);
 
 
-// ── ladder stage 1 (owner 2026-09-29): `_<k>_total_in_<set>` names the real rung ──
-// trimForTrial stamped every trimmed list's full length as `_<k>_total_in_pro`,
-// yet a free key, the $10 pack or Developer opens most of those rows (tier audit
-// 2026-09-29, §3.9). The suffix is now the SET whose lowest rung returns the rows:
+// ── ladder stage 1 (owner 2026-09-29): `_<k>_total_unlocks_at` names the real rung ──
+// trimForTrial stamps every trimmed list's full length as `_<k>_total_in_pro` (kept:
+// the initialize instructions document it), yet a free key, the $10 pack or
+// Developer opens most of those rows (tier audit 2026-09-29, §3.9). The sibling
+// `_<k>_total_unlocks_at` names the SET whose lowest rung returns the rows:
 //   free       a free key returns them (the keyless trim on a free-full tool)
 //   developer  the $10 pack or Developer returns them
 //   pro        only Pro returns them
@@ -9779,7 +9780,6 @@ const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi
 // gets every facility row with MW masked opens the rows, so the count is 'free'.
 // No tool, or anything unexpected → 'pro' (the old label).
 export const ROWS_TOTAL_SETS = Object.freeze(['free', 'developer', 'pro']);
-export const ROWS_TOTAL_KEY_RE = /^_(.+)_total_in_(free|developer|pro)$/;
 // Does a seat get every row of `tool`? Keyless never (the keyless trim). Keyed:
 // the pack's credit cascade opens it; otherwise the tier gate must let the call
 // through un-trimmed — a capped taste (trial_taste / paid_taste) is a preview
@@ -9862,9 +9862,11 @@ function trimForTrial(parsed, toolName) {
       // the load-bearing honesty contract: it is the FULL length, never the
       // shown length, so an agent can always compute what it is missing.
       out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
-      // ladder stage 1: the suffix names the lowest rung's SET that returns these
-      // rows (free / developer / pro), no longer "pro" whatever opens them.
-      out[`_${k}_total_in_${_rowsTotalSet(toolName)}`] = v.length;   // honest total in a side field agents can read
+      out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
+      // ladder stage 1: `_<k>_total_in_pro` is a DOCUMENTED contract (the initialize
+      // instructions name it), so it stays, byte-for-byte, on every trimmed list.
+      // Which rung actually returns these rows rides beside it: free / developer / pro.
+      out[`_${k}_total_unlocks_at`] = _rowsTotalSet(toolName);
     } else if (_isMetricKey(k) && !_keepTyped.has(k) && typeof v === 'number') {
       _noteMaskedKey(k, v);                   // r-missed-upgrade: a figure this trim hid
       out[k] = null;                          // gated metric → null (was a promo STRING
@@ -9898,9 +9900,9 @@ function trimForTrial(parsed, toolName) {
   }
   if (typeof out.note === 'string'
       && /showing\s+\d+\s+of\s+\d+/i.test(out.note)
-      && Object.keys(out).some((k) => ROWS_TOTAL_KEY_RE.test(k))) {
+      && Object.keys(out).some((k) => k.endsWith('_total_in_pro'))) {
     out.note = 'Free tier preview — up to ' + TRIAL_PREVIEW_ROWS + ' rows shown per '
-      + 'list; each list\'s full length is in its _<field>_total_in_' + _rowsTotalSet(toolName) + ' sibling. '
+      + 'list; each list\'s full length is in its _<field>_total_in_pro sibling. '
       + 'Call claim_free_key (no email) for the free tier, or unlock_more_data '
       + 'for full results.';
   }

@@ -83,8 +83,7 @@ describe('trimForTrial leaves an error envelope alone', () => {
     const out = trimForTrial(structuredClone(REGION_REQUIRED), 'get_grid_intelligence');
     expect(out.valid_regions).toHaveLength(7);
     expect(out.valid_regions).toEqual(REGION_REQUIRED.valid_regions);
-    // ladder stage 1: the suffix names the rung set (free/developer/pro); none may appear.
-    for (const set of ['pro', 'developer', 'free']) expect(out[`_valid_regions_total_in_${set}`]).toBeUndefined();
+    expect(out._valid_regions_total_in_pro).toBeUndefined();
     expect(out.hint).toBe(REGION_REQUIRED.hint);
   });
 
@@ -93,8 +92,7 @@ describe('trimForTrial leaves an error envelope alone', () => {
     const real = { regions: ['PJM', 'ERCOT', 'CAISO', 'MISO', 'SPP', 'NYISO', 'ISO-NE'] };
     const out = trimForTrial(real, 'get_grid_intelligence');
     expect(out.regions).toHaveLength(TRIAL_PREVIEW_ROWS);
-    // ladder stage 1: a free key's allowance is a taste, so unlimited rows are the pack / Developer set.
-    expect(out._regions_total_in_developer).toBe(7);
+    expect(out._regions_total_in_pro).toBe(7);
   });
 });
 

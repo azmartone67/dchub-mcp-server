@@ -46,6 +46,7 @@ const SEATS = [['anon', null], ['free', K_FREE], ['ident', K_IDENT], ['pack', K_
 // lower ≤ upper
 const WITH_DATA_FLOOR = 70;   // measured 77 of 92
 const GRADED_FLOOR = 55;      // measured 65 of 92
+const ROW_LABEL_FLOOR = 2500;   // measured 3180 labelled trimmed lists across the sweep
 const LADDER_PAIRS = [['anon', 'free'], ['free', 'ident'], ['ident', 'pack'], ['pack', 'developer'],
   ['developer', 'pro'], ['ident', 'starter'], ['starter', 'developer']];
 const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY'];
@@ -243,6 +244,37 @@ function dataTokens(texts, sc) {
   return out;
 }
 
+// The documented row-total contract (initialize instructions: "the full count is
+// in the sibling `_..._total_in_pro` field"). Every trimmed list's rung label
+// `_<k>_total_unlocks_at` must sit beside `_<k>_total_in_pro`, and no rung-suffixed
+// total (`_<k>_total_in_free|developer`) may replace it.
+function rowTotalScan(texts, sc) {
+  const out = { inPro: 0, labelled: 0, broken: [] };
+  const walk = (o, d = 0) => {
+    if (d > 14 || !o || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach((x) => walk(x, d + 1)); return; }
+    for (const [k, v] of Object.entries(o)) {
+      let m = /^_(.+)_total_in_pro$/.exec(k);
+      if (m && typeof v === 'number') out.inPro++;
+      m = /^_(.+)_total_unlocks_at$/.exec(k);
+      if (m) {
+        out.labelled++;
+        if (typeof o[`_${m[1]}_total_in_pro`] !== 'number') out.broken.push(`${k} without _${m[1]}_total_in_pro`);
+        if (!['free', 'developer', 'pro'].includes(v)) out.broken.push(`${k}=${JSON.stringify(v)}`);
+      }
+      if (/^_(.+)_total_in_(free)$/.test(k)) out.broken.push(`${k} (rung-suffixed total replaces the documented one)`);
+      if (v && typeof v === 'object') walk(v, d + 1);
+    }
+  };
+  walk(sc);
+  for (const t of texts) {
+    const i = t.indexOf('{'); const j = t.lastIndexOf('}');
+    if (i < 0 || j <= i) continue;
+    try { walk(JSON.parse(t.slice(i, j + 1))); } catch (_) { /* prose */ }
+  }
+  return out;
+}
+
 async function call(tool, args, key, spent) {
   for (const mp of [S._anonUsageCounts, S._trialDayCounts, S._fullCapHydrated]) mp && mp.clear && mp.clear();
   PEEK_N = spent ? 999 : 0;
@@ -259,7 +291,8 @@ async function call(tool, args, key, spent) {
   const texts = (r.content || []).map((c) => c.text || '');
   const text = texts.join('\n');
   return { text, sc: r.structuredContent || null, isError: r.isError === true,
-    wall: S.isHardWallText(text), tokens: dataTokens(texts, r.structuredContent || null) };
+    wall: S.isHardWallText(text), tokens: dataTokens(texts, r.structuredContent || null),
+    rowTotals: rowTotalScan(texts, r.structuredContent || null) };
 }
 
 // full: every value Pro saw · preview: some · none: no backend value at all
@@ -378,11 +411,29 @@ describe('ladder stage 1 — per-seat outcome on the tools it changed', () => {
 });
 
 // ── 2. the inversion guard, all tools ─────────────────────────────────────────
+describe('ladder stage 1 — the documented row total survives the rung label', () => {
+  // The initialize instructions tell agents the full count of a trimmed list is in
+  // `_<k>_total_in_pro`. Stage 1 names the real rung in a SIBLING, never instead.
+  const list = { ok: true, data: Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })) };
+  for (const [tool, rung] of [['get_refined_queue', 'free'], ['get_interconnection_queue', 'developer'],
+    ['get_dchub_recommendation', 'pro']]) {
+    it(`${tool} (keyless): _data_total_in_pro kept, _data_total_unlocks_at = ${rung}`, () => {
+      const out = S.trimForTrial(JSON.parse(JSON.stringify(list)), tool);
+      expect(out.data).toHaveLength(S.TRIAL_PREVIEW_ROWS);
+      expect(out._data_total_in_pro).toBe(10);
+      expect(out._data_total_unlocks_at).toBe(rung);
+      expect(Object.keys(out).filter((k) => /_total_in_(free|developer)$/.test(k))).toEqual([]);
+    });
+  }
+});
+
 describe('ladder stage 1 — no rung gets more than the rung above it, on any tool', () => {
   it('drives every tool in tools/list at every seat, fresh and spent', async () => {
     const inversions = [];
     let compared = 0;
     const withData = new Set();     // tools where Pro receives backend values
+    let inPro = 0, labelled = 0;    // documented row totals seen / rung labels seen
+    const brokenTotals = [];
     const graded = new Set();       // tools where some rung receives FEWER values than Pro
     for (const t of TOOLS) {
       const args = argsFor(t);
@@ -391,6 +442,8 @@ describe('ladder stage 1 — no rung gets more than the rung above it, on any to
         for (const [seat, key] of SEATS) {
           const r = await call(t.name, args, key, spent);
           got[seat] = r.tokens;
+          inPro += r.rowTotals.inPro; labelled += r.rowTotals.labelled;
+          for (const x of r.rowTotals.broken) brokenTotals.push(`${t.name} ${seat}${spent ? ' spent' : ''}: ${x}`);
         }
         if (got.pro.size) withData.add(t.name);
         if (SEATS.some(([seat]) => got[seat].size < got.pro.size)) graded.add(t.name);
@@ -404,6 +457,11 @@ describe('ladder stage 1 — no rung gets more than the rung above it, on any to
       }
     }
     expect(compared).toBe(TOOLS.length * 2 * LADDER_PAIRS.length);
+    // The documented `_..._total_in_pro` contract holds wherever a preview withholds rows.
+    if (process.env.LADDER_DEBUG) console.error(`[ladder] total_in_pro=${inPro} unlocks_at=${labelled}`);
+    expect(brokenTotals, 'row-total contract:\n  ' + brokenTotals.join('\n  ')).toEqual([]);
+    expect(labelled, 'no trimmed list carried a rung label — the contract check is vacuous').toBeGreaterThanOrEqual(ROW_LABEL_FLOOR);
+    expect(inPro, 'every labelled trimmed list carries the documented total').toBeGreaterThanOrEqual(labelled);
     if (process.env.LADDER_DEBUG) console.error(`[ladder] withData=${withData.size} graded=${graded.size}`);
     // Non-vacuity: the guard only means something where Pro sees data and a
     // lower rung sees less of it. Floors measured 2026-09-29 (see the PR).
