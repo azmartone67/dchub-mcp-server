@@ -127,6 +127,7 @@ import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
 import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList as _grokToolsList,
          isGrokRequest as _isGrokRequest, isGrokOauthRequest as _isGrokOauthRequest,
          installGrokResultCap as _installGrokResultCap,
+         grokServedCount as _grokServedCount, grokInstructions as _grokInstructions,
          GROK_OAUTH_CHALLENGE, GROK_OAUTH_MESSAGE } from './lib/grok-profile.mjs';
 // G4 (2026-09-27 Grok audit): 7-day, time-boxed log of what a Grok request
 // carries (header NAMES, UA, clientInfo, session behaviour) — lib/grok-ident-log.mjs.
@@ -3096,7 +3097,7 @@ export { MCP_PACKS, PACK_SPINE };
 // adjacent to createServer() where its own anchored guard reads it.
 export function _INSTR_TAIL_PACK(def) {
   if (!def) return '';
-  const n = packToolNames(def).length;
+  const n = def.compact ? _grokServedCount(_CATALOG_TOOL_NAMES) : packToolNames(def).length;
   return `\n\nENDPOINT SCOPE — this connection is /mcp/${def.pack}, which lists ${n} DC Hub tools chosen for this use case rather than the full catalog. This is a LISTING scope, not a permission scope: your key's entitlements are unchanged and tools/call still accepts any DC Hub tool by name. Call discover_tools to see what else exists, or connect to https://dchub.cloud/mcp for the complete catalog.`;
 }
 
@@ -11656,7 +11657,14 @@ const _toolParamKeys = (name) => _TOOL_PARAM_KEYS.get(name) || null;
 // mcp-server.json — the manifest sync-tools-manifest.mjs keeps == tools/list — so it
 // can never drift again. Falls back to 49 if the file can't be read.
 let CANONICAL_TOOL_COUNT = 49;
-try { CANONICAL_TOOL_COUNT = JSON.parse(readFileSync(new URL('./mcp-server.json', import.meta.url), 'utf8')).tools.length || CANONICAL_TOOL_COUNT; } catch { /* keep default */ }
+// The catalog's tool names, from the same manifest. /mcp/grok counts what it
+// serves against it (lib/grok-profile.mjs grokServedCount).
+let _CATALOG_TOOL_NAMES = new Set();
+try {
+  const _mt = JSON.parse(readFileSync(new URL('./mcp-server.json', import.meta.url), 'utf8')).tools;
+  CANONICAL_TOOL_COUNT = _mt.length || CANONICAL_TOOL_COUNT;
+  _CATALOG_TOOL_NAMES = new Set(_mt.map((t) => (t && typeof t === 'object' ? t.name : t)));
+} catch { /* keep default */ }
 
 // ── r-error-legibility (2026-07-02): validate enum-ish args (iso) BEFORE the
 // tier gate so an invalid value returns a helpful, self-correcting error
@@ -19362,7 +19370,7 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
-function createServer(descOverrides, instructionsTail) {
+function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
     // `instructions` is composed at module scope from canonical/mcp_facts.json
@@ -19373,7 +19381,12 @@ function createServer(descOverrides, instructionsTail) {
     // Capacity Source (2026-09-14): the CAPACITY SOURCE sentence gains a live
     // clause only while the cached summary reports live listings; otherwise
     // _capacityInstructions returns _INSTRUCTIONS itself, byte for byte.
-    instructions: _capacityInstructions(_INSTRUCTIONS) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
+    // /mcp/grok (2026-09-29): instructionsRewrite restates the lead tool count
+    // as the count that path serves (lib/grok-profile.mjs grokInstructions).
+    // Every other path passes none, so their text is unchanged byte for byte.
+    instructions: ((typeof instructionsRewrite === 'function')
+      ? instructionsRewrite(_capacityInstructions(_INSTRUCTIONS))
+      : _capacityInstructions(_INSTRUCTIONS)) + ((typeof instructionsTail === 'string') ? instructionsTail : ''),
   });
   const S = z.string().optional();
   const N = z.number().optional();
@@ -25437,6 +25450,16 @@ app.post(MCP_PATHS, async (req, res) => {
       _ensureDescRefresher();
       let _descOverrides = null;
       try { _descOverrides = _platformOverrides(platform); } catch (_) {}
+      // /mcp/grok: the lead sentence states the count this path lists, not the
+      // full catalog's (owner, 2026-09-29). No other path passes a rewrite.
+      let _instrRewrite;
+      try {
+        const _p = _pathPack(req);
+        if (_p && _p.compact) {
+          const _served = _grokServedCount(_CATALOG_TOOL_NAMES);
+          _instrRewrite = (t) => _grokInstructions(t, { served: _served, total: CANONICAL_TOOL_COUNT });
+        }
+      } catch (_) { _instrRewrite = undefined; }
       // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
       // say so IN-BAND in this session's instructions. Map read only — no
       // backend call in the init hot path (r-tuner-warmcache rule); the key is
@@ -25457,7 +25480,7 @@ app.post(MCP_PATHS, async (req, res) => {
           _instrTail += _instrTailInvalidKey(_authChannel, platform);
         }
       } catch (_) { /* additive */ }
-      const mcpServer = createServer(_descOverrides, _instrTail);
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite);
       await mcpServer.connect(transport);
 
       return ctx.run({
