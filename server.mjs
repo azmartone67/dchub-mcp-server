@@ -141,7 +141,8 @@ import { continuationHumanText as _continuationHumanText,
          buildContinueUrl as _buildContinueUrl,
          continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
 // The upgrade prompt names what THIS answer hid and the lowest rung that opens it.
-import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor, lowestRung as _lowestRung } from './lib/upgrade-missed.mjs';
+import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor, lowestRung as _lowestRung,
+         relayMissedClause as _relayMissedClause } from './lib/upgrade-missed.mjs';
 // Paywall response contract (growth audit item c) + Grok G3: lib/paywall-contract.mjs.
 import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallContract,
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
@@ -1068,7 +1069,7 @@ export function _unlockMoreDataEnvelope(a) {
 // names the doctrine that the AGENT leads ITS OWN final answer with this line;
 // it never meant the line had to lead our envelope.
 const HUMAN_FIRST_MARKER = '→ **For your human:**';
-function buildHumanFirstLine(url, specifics) {
+function buildHumanFirstLine(url, specifics, missedClause) {
   if (!url || typeof url !== 'string') return '';
   // Honesty (2026-08-15): no invented duration and no unlock-on-open promise —
   // this line rides ALL four gated branches, and on the metered-wall /
@@ -1089,7 +1090,16 @@ function buildHumanFirstLine(url, specifics) {
   // byte-for-byte the sentence that shipped before. A degraded line is a smaller
   // loss than a confident wrong one.
   const _what = (typeof specifics === 'string' && specifics) ? specifics : null;
-  const _lead = _what
+  // ★ r-relay-names-missed (2026-09-29, owner-approved; frz-claude-relay-wording
+  // lifted for this): when the call's gates say which fields THIS response
+  // stripped and the lowest plan that returns them (lib/upgrade-missed.mjs
+  // relayMissedClause, from _missedUpgradeFor), the line names both. The row
+  // count (`specifics`, the treatment arm) still leads when the arm has one.
+  // No clause → exactly the line that shipped before.
+  const _missed = (typeof missedClause === 'string' && missedClause) ? missedClause : null;
+  const _lead = _missed
+    ? (' ' + (_what ? _what + '; ' : '') + _missed + ' — open ' + url + ' to see what your agent found.')
+    : _what
     ? (' ' + _what + ' — open ' + url + ' to see it and unlock.')
     : (' open ' + url + ' — see what your agent found and how to unlock it.');
   return HUMAN_FIRST_MARKER + _lead + '\n'
@@ -1273,12 +1283,73 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
     // to the sentence rather than to which tools return arrays.
     // Any failure yields the generic line, never a wrong number.
     let _specific = null;
-    try { _specific = _continuationArmFor(gatedPayload, sessionId).text; }
-    catch (_e2) { _specific = null; }
-    const tail = buildHumanFirstLine(humanUrl, _specific);
+    let _arm = null;
+    try { _arm = _continuationArmFor(gatedPayload, sessionId); _specific = _arm.text; }
+    catch (_e2) { _specific = null; _arm = null; }
+    // r-relay-names-missed: what THIS response hid and the lowest plan that
+    // returns it, from the gates this call applied (same evidence as the
+    // upgrade prompt). When it names the fields, the treatment clause keeps
+    // only its row count so no field is named twice; the arm is not re-drawn.
+    const _payload = (gatedPayload && typeof gatedPayload === 'object') ? gatedPayload : null;
+    const _missedClause = _relayClauseFor(_payload);
+    const tail = buildHumanFirstLine(humanUrl, _relaySpecific(_specific, _arm, _missedClause), _missedClause);
     if (!tail) return _deduped;
+    // A gate that runs after this (_gateToolNumerics) can strip more; it
+    // rebuilds this line from the same parts (_refreshRelayLine).
+    try {
+      const c = getCtx();
+      if (c && typeof c === 'object') {
+        c._relayLine = { url: humanUrl, specific: _specific, locked: (_arm && _arm.locked) || null,
+                         line: tail.split('\n')[0] };
+      }
+    } catch (_e5) { /* never break a response */ }
     return _deduped.replace(/\s*$/, '') + '\n\n' + tail;
   } catch (_e) { return _body; }   // prose-only helper — never break a response
+}
+
+// ── r-relay-names-missed (2026-09-29, owner-approved) ─────────────────────────
+// The relay line names the fields THIS response stripped and the lowest plan
+// that returns them. Evidence is strict (a marker counts only when a gate
+// logged nulling a real figure under that key) so the line never names a field
+// this answer did not have. When it names fields, the treatment arm's clause
+// keeps only its row count, so no field is named twice; the arm is not re-drawn.
+function _relayClauseFor(payload) {
+  try { return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true })); }
+  catch (_) { return null; }
+}
+export function _relaySpecific(specific, arm, clause) {
+  if (!clause || !specific || !arm || !arm.locked) return specific;
+  try { return _continuationHumanText({ ...arm.locked, fields: [] }); } catch (_) { return null; }
+}
+// After a later gate stripped more of the response: rebuild the line composed
+// earlier in this call from the final payload. Same url, same arm; only the
+// clause can change. No line composed, or nothing new to say → unchanged.
+export function _refreshRelayLine(result) {
+  try {
+    const c = getCtx();
+    const parts = c && c._relayLine;
+    if (!parts || !result || !Array.isArray(result.content)) return result;
+    let payload = (result.structuredContent && typeof result.structuredContent === 'object'
+      && !Array.isArray(result.structuredContent)) ? result.structuredContent : null;
+    if (!payload) {
+      const t = result.content[0] && result.content[0].text;
+      const sp = typeof t === 'string' ? _splitLeadingJson(t) : null;
+      payload = sp && sp.json && typeof sp.json === 'object' ? sp.json : null;
+    }
+    const clause = _relayClauseFor(payload);
+    if (!clause) return result;
+    const line = buildHumanFirstLine(parts.url, _relaySpecific(parts.specific, { locked: parts.locked }, clause), clause).split('\n')[0];
+    if (line === parts.line) return result;
+    let hit = false;
+    const content = result.content.map((b) => {
+      if (!b || b.type !== 'text' || typeof b.text !== 'string' || !b.text.includes(parts.line)) return b;
+      hit = true;
+      return { ...b, text: b.text.split(parts.line).join(line) };
+    });
+    if (!hit) return result;
+    c._relayLine = { ...parts, line };
+    return { ...result, content };
+  } catch (_) { return result; }   // the line is never worth a response
 }
 
 // ── r-optin-ask (2026-09-24): the email opt-in ask on the live agent path ────
@@ -9140,7 +9211,7 @@ function _muState() {
   return c._mu;
 }
 function _muReset(tool) {
-  try { const c = getCtx(); if (c && typeof c === 'object') c._mu = { gates: new Set(), masked: [], tool: tool || '' }; } catch (_) {}
+  try { const c = getCtx(); if (c && typeof c === 'object') { c._mu = { gates: new Set(), masked: [], tool: tool || '' }; c._relayLine = null; } } catch (_) {}
 }
 function _noteGate(id) {
   try { const st = _muState(); if (st) st.gates.add(String(id)); } catch (_) { /* never break a gate */ }
@@ -9193,6 +9264,7 @@ const _GATE_OPENS = {
                    || _retirementPackOpens(s.tier, s.credits),
   unpaid_read:   (s) => !_isUnpaidSeat(s.tier, s.credits),// _dealsForCaller / scoreboard
   lp:            (s) => _lpSeatFull(s),                   // Land & Power (_lpAccessFor)
+  free_numerics: (s) => !_isUnpaidSeat(s.tier, s.credits),// _gateToolNumerics (a pack balance or a paid tier)
 };
 function _gateOpensFn(id) {
   if (_GATE_OPENS[id]) return _GATE_OPENS[id];
@@ -9201,7 +9273,7 @@ function _gateOpensFn(id) {
   return m[1] === 'tier_gate' ? (s) => _tierGateOpensForSeat(m[2], s) : (s) => _anonTrimOpensForSeat(m[2], s);
 }
 // { missed, rung, what, how, text } for the answer being built, or null.
-export function _missedUpgradeFor(payload, extraGates) {
+export function _missedUpgradeFor(payload, extraGates, opts) {
   try {
     const c = getCtx() || {};
     const st = c._mu || { gates: new Set(), masked: [] };
@@ -9210,7 +9282,8 @@ export function _missedUpgradeFor(payload, extraGates) {
     const opens = [...ids].map(_gateOpensFn);
     if (opens.some((f) => !f)) return null;
     const floor = _rungFloor({ keyed: !!c.api_key, tier: c.tier, credits: c._credits_seen });
-    return _missedUpgrade({ payload, maskedLog: st.masked, opens, floor, tool: st.tool || '' });
+    return _missedUpgrade({ payload, maskedLog: st.masked, opens, floor, tool: st.tool || '',
+      strict: !!(opts && opts.strict) });
   } catch (_) { return null; }
 }
 // The one link for a rung, bound like every other checkout link here.
@@ -9296,6 +9369,7 @@ function _nullFreeFigures(row) {
       const next = v.map((r) => _stripReasonNumerics(r, true));
       if (next.some((r, i) => r !== v[i])) { out[k] = next; changed = true; }
     } else if (_FREE_NUMERIC_KEY_RE.test(k) && !_FREE_NUMERIC_KEEP_RE.test(k) && _isFigure(v)) {
+      _noteMaskedKey(k, v);   // r-relay-names-missed
       out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
     } else if (k === 'value' && typeof v === 'string') {
       // rank_markets' display string keeps only its free words (_freeRankValue)
@@ -9410,11 +9484,20 @@ export async function _gateToolNumerics(result, name, c) {
   if (!_FREE_NUMERIC_TIERS.has(t)) return result;
   try { if (result[_EXACT_LOCATION_CALL] === true) return result; } catch (_) { /* unreadable marker */ }
   let gated;
+  // r-relay-names-missed: the shape logs each figure it nulls; a pack balance
+  // keeps the full result, so its log entries are taken back below.
+  let _logMark = -1;
+  try { const _st = _muState(); _logMark = _st ? _st.masked.length : -1; } catch (_) { _logMark = -1; }
   try { gated = _rewriteResultJson(result, shape); } catch (_) { return result; }
   if (gated === result) return result;              // nothing to withhold
   let credits = 0;
   try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
-  return credits > 0 ? result : gated;              // a failed balance read withholds
+  if (credits > 0) {
+    try { const _st = _muState(); if (_st && _logMark >= 0) _st.masked.length = _logMark; } catch (_) {}
+    return result;
+  }
+  _noteGate('free_numerics');                       // r-relay-names-missed
+  return gated;                                     // a failed balance read withholds
 }
 
 // r-anon-facility-allowlist (2026-09-21): a keyed free/identified caller's
@@ -9888,6 +9971,7 @@ function trimForTrial(parsed, toolName) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
     } else if (_gatesHeadroom(k)) {
       _noteWithheld(k, v);
+      _noteMaskedKey(k, v);                   // r-relay-names-missed: only a real figure is logged
       out[k] = null;                          // grid decision-layer field → Pro
       out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
     } else if (_gatesDepth(k)) {
@@ -9896,11 +9980,13 @@ function trimForTrial(parsed, toolName) {
       // AVOID and only the number a decision is made on is withheld.
       const _band = _scoreBand(v);
       _noteWithheld(k, v);
+      _noteMaskedKey(k, v);
       out[k] = null;
       out[`_${k}_in_pro`] = true;
       if (_band) out[`${k}_band`] = _band;
     } else if (_DCPI_ISO_PAID_KEYS.has(k)) {
       _noteWithheld(k, v);
+      _noteMaskedKey(k, v);
       out[k] = null;                          // DCPI aggregate the backend keeps paid
       out[`_${k}_in_pro`] = true;
     } else if (Array.isArray(v) && v.length > TRIAL_PREVIEW_ROWS) {
@@ -11092,8 +11178,11 @@ function _stampEntityCb(toolName, fn) {
     //   site_evaluation_handoff built below is built from the coarsened payload.
     //   It reads c.tier after the handler ran, so a paid lift inside the call
     //   counts. See _gateToolLocation.
-    const r = await _gateToolNumerics(
-      await _gateToolLocation(await fn(args, extra), toolName, getCtx()), toolName, getCtx());
+    const _pre = await _gateToolLocation(await fn(args, extra), toolName, getCtx());
+    let r = await _gateToolNumerics(_pre, toolName, getCtx());
+    // r-relay-names-missed: the numerics gate stripped more than the relay line,
+    // composed inside fn, knew about; name the final set.
+    if (r !== _pre) r = _refreshRelayLine(r);
     try {
       if (r && Array.isArray(r.content)) {
         const sc = (r.structuredContent && typeof r.structuredContent === 'object'
