@@ -139,6 +139,8 @@ import { continuationHumanText as _continuationHumanText,
          buildContinuation as _buildContinuation,
          buildContinueUrl as _buildContinueUrl,
          continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
+// The upgrade prompt names what THIS answer hid and the lowest rung that opens it.
+import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor } from './lib/upgrade-missed.mjs';
 // Paywall response contract (growth audit item c) + Grok G3: lib/paywall-contract.mjs.
 import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallContract,
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
@@ -721,9 +723,15 @@ export function _paywallContractStep(result, name) {
       url = (r && r.url) || '';
     }
     if (!url) return result;   // no signing secret: no relay to lead with, leave it as it was
-    const offer = _paywallOffer(name, c);
+    // r-missed-upgrade: when this call's gates say what the answer hid, the offer
+    // is the lowest rung that returns it (a free-key rung keeps the default offer).
+    // A free-key rung is not an offer here (the contract never asks for a key on a
+    // hosted client, spec rule 8), so that case keeps the old copy entirely.
+    const _mu = _missedUpgradeFor(sc);
+    const missed = (_mu && (_mu.rung === 'pack' || _mu.rung === 'developer' || _mu.rung === 'pro')) ? _mu : null;
+    const offer = missed ? missed.rung : _paywallOffer(name, c);
     return _applyPaywallContract(result, name, {
-      arm, offer, relayUrl: _pcTagUrl(url, arm),
+      arm, offer, relayUrl: _pcTagUrl(url, arm), missed,
       // platform collapses Claude Desktop, Code and claude.ai to 'claude'; the raw
       // clientInfo name tells claude.ai (hosted) apart.
       hosted: _pcHosted((c.platform || '') + ' ' + (c.client_name_raw || '')),
@@ -2183,6 +2191,7 @@ export function _maskGasEconomicsBelowPro(out) {
   if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
   o.tier_masked = { tier_required: 'pro', fields: masked,
     note: 'Numeric gas prices and the full $/MWh table are Pro-tier values, the same rule the REST API applies.' };
+  _noteGate('gas_pro');
   return o;
 }
 export function _maskGasIntelligenceAnonymous(out) {
@@ -2207,16 +2216,25 @@ export function _maskGasIntelligenceAnonymous(out) {
     masked.push('headline');
   }
   if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
-  if (masked.length) o.tier_masked = { tier_required: 'identified', fields: masked,
-    note: 'Gas-to-grid $/MWh and the basis and delivered gas prices need any DC Hub key (claim_free_key is free), the same rule the REST API applies.' };
+  if (masked.length) {
+    o.tier_masked = { tier_required: 'identified', fields: masked,
+      note: 'Gas-to-grid $/MWh and the basis and delivered gas prices need any DC Hub key (claim_free_key is free), the same rule the REST API applies.' };
+    _noteGate('any_key');
+  }
   return o;
+}
+// The pure core of _callerIsProOrAbove: every tier but the ambiguous 'paid',
+// which needs the key's real plan. Shared with the upgrade prompt's rung check
+// (gate 'gas_pro'), so the rung it names is the rule this mask applies.
+export function _tierIsProOrAbove(t) {
+  const s = String(t || 'free').toLowerCase();
+  return s === 'enterprise' || s === 'internal' || _isUnambiguousProOrAbove(s);
 }
 async function _callerIsProOrAbove() {
   let c = {};
   try { c = getCtx() || {}; } catch (_) { c = {}; }
   const t = String(c.tier || 'free').toLowerCase();
-  if (t === 'enterprise' || t === 'internal') return true;
-  if (_isUnambiguousProOrAbove(t)) return true;
+  if (_tierIsProOrAbove(t)) return true;
   if (t === 'paid') return _paidKeyIsProOrAbove(c.api_key);
   return false;
 }
@@ -2263,7 +2281,8 @@ export function _maskRetirementHeadroom(d, sid) {
     for (let i = 0; i < 3; i += 1) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
     return 0;
   });
-  return {
+  _noteGate('retirement_mw');   // r-missed-upgrade
+  const out = {
     ...d, data: rows, total_retiring_mw: null,
     _gated: true, _preview_only: true, _locked_fields: [...RETIREMENT_MW_LOCKED],
     _total_available: rows.length,
@@ -2276,6 +2295,11 @@ export function _maskRetirementHeadroom(d, sid) {
       next_tool: 'unlock_more_data',
     },
   };
+  // r-missed-upgrade: the message names what this answer hid and the rung that
+  // returns it, from the gate just applied; outside a call ctx the old copy stays.
+  const mu = _missedUpgradeFor(out);
+  if (mu) out._upgrade.message = mu.text + ' Call unlock_more_data for the one-click link.';
+  return out;
 }
 
 export function _subRefLandsOnKey(apiKey) {
@@ -6765,9 +6789,20 @@ export async function _lpAccessFor(c, tier) {
   if (c && (c.api_key || c.session_id)) {
     let cr = { credits: 0, lp_grandfathered: false };
     try { cr = await _getCredits(c); } catch (_) {}
-    if ((cr.credits || 0) > 0 && cr.lp_grandfathered === true) return 'full';
+    if (_lpGrandfatheredPack(cr)) return 'full';
   }
   return (c && c.api_key) ? 'preview' : 'wall';
+}
+// A pack paid before the Land & Power cutover still opens it; one bought now does not.
+function _lpGrandfatheredPack(cr) {
+  return !!cr && (cr.credits || 0) > 0 && cr.lp_grandfathered === true;
+}
+// _lpAccessFor for a rung seat (the upgrade prompt's rung check): a plan tier on
+// the seat is literal, never the ambiguous 'paid', and a purchase made now is
+// never grandfathered.
+export function _lpSeatFull(seat) {
+  return _isUnambiguousProOrAbove(seat && seat.tier)
+    || _lpGrandfatheredPack({ credits: seat && seat.credits, lp_grandfathered: !!(seat && seat.lp_grandfathered) });
 }
 
 // What a preview keeps. Counts: a key naming a count, or a radius count such
@@ -6833,7 +6868,9 @@ export function _lpPreviewPayload(v, key = '', withheld = undefined) {
   }
   if (typeof v === 'number') {
     if (_LP_COORD_KEY.test(key)) return Math.round(v * 100) / 100;
-    return (_LP_COUNT_KEY.test(key) || _LP_ECHO_KEY.test(key)) ? v : null;
+    if (_LP_COUNT_KEY.test(key) || _LP_ECHO_KEY.test(key)) return v;
+    _noteMaskedKey(key, v);   // r-missed-upgrade
+    return null;
   }
   if (typeof v === 'string') {
     if (!/\d/.test(v) || _LP_KEEP_STR.test(key)) return v;
@@ -6877,6 +6914,7 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
   try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
   if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
   const preview = _lpPreviewPayload(parsed);
+  _noteGate('lp');
   if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed)));
   if (name === 'compare_sites') {
     // The pick is made from the scores, so it is Pro with them.
@@ -6890,6 +6928,9 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
       + 'report link is null here. Verdicts, bands, names and counts are the preview.',
     upgrade_url: _lpProLink(),
   };
+  // r-missed-upgrade: name the figures this preview hid and the rung that returns them.
+  const _mu = _missedUpgradeFor(envelope);
+  if (_mu) envelope._preview_note = _mu.text + ' Verdicts, bands, names and counts are the preview.';
   return { content: [{ type: 'text', text: JSON.stringify(envelope) }], structuredContent: envelope };
 }
 
@@ -8920,6 +8961,101 @@ function _noteWithheld(key, value) {
     c.withheld_teaser = { key: String(key), value };
   } catch (_) { /* never break a gate */ }
 }
+// ── r-missed-upgrade (2026-09-29, owner-approved): the upgrade prompt names what
+// THIS answer hid and the lowest rung that opens it ─────────────────────────
+// lib/upgrade-missed.mjs builds the two sentences; this is the evidence it is
+// built from. Per tool call (reset at trackedTool entry), in the request ctx:
+//   gates  — the id of every gate that masked this answer, recorded by the gate
+//            itself at the moment it masks. Each id maps to a SEAT predicate in
+//            _GATE_OPENS that calls the very function the gate used, so the rung
+//            named can never be a rung the gate would still mask.
+//   masked — keys a gate nulled while they held a real figure (never inferred
+//            from a null in the output: a null has more than one cause).
+// A gate this table does not know → no rung → the caller keeps its old wording.
+function _muState() {
+  const c = getCtx();
+  if (!c || typeof c !== 'object') return null;
+  if (!c._mu) c._mu = { gates: new Set(), masked: [] };
+  return c._mu;
+}
+function _muReset(tool) {
+  try { const c = getCtx(); if (c && typeof c === 'object') c._mu = { gates: new Set(), masked: [], tool: tool || '' }; } catch (_) {}
+}
+function _noteGate(id) {
+  try { const st = _muState(); if (st) st.gates.add(String(id)); } catch (_) { /* never break a gate */ }
+}
+function _noteMaskedKey(key, value) {
+  try {
+    if (!_isFigure(value)) return;
+    const st = _muState();
+    const k = String(key || '');
+    if (st && k && !st.masked.includes(k) && st.masked.length < 64) st.masked.push(k);
+  } catch (_) { /* never break a gate */ }
+}
+// applyTierGate's view of a tier for one tool — the r-starterdev-parity rule the
+// call site applies: Starter/Developer are paid-class except on Pro-only tools.
+export function _gateTierFor(tier, tool) {
+  const g = _nodeTier(tier);
+  return ((g === 'developer' || g === 'starter') && !PRO_ONLY_TOOLS.has(tool)) ? 'paid' : g;
+}
+// The tier gate + the pack's credit cascade, exactly as trackedTool runs them.
+// A capped taste (trial_taste / paid_taste) or a masked pass-through is not open:
+// it is the preview this prompt rides on.
+export function _tierGateOpensForSeat(tool, seat) {
+  const gt = _gateTierFor(seat.tier, tool);
+  const g = applyTierGate(tool, {}, gt, !!seat.keyed, false,
+    _isUnambiguousProOrAbove(seat.tier) ? true : undefined);
+  if (g && g.allowed && !g.trial_taste && !g.paid_taste && !g.masked && !g.capped) return true;
+  return (PAID_ONLY_TOOLS.has(tool) || DEPTH_TEASE_TOOLS.has(tool))
+    && !(gt === 'paid' || gt === 'enterprise')
+    && Number(seat.credits) >= _creditCost(tool);
+}
+// The keyless trim lifts for any key, EXCEPT where a keyed-free gate takes over:
+// the facility-field mask, the depth tease and the free-numerics gate each hold a
+// free key to a preview too, and each opens for a pack balance or a paid tier.
+export function _anonTrimOpensForSeat(tool, seat) {
+  if (!seat.keyed) return false;
+  if (_isUnpaidSeat(seat.tier, seat.credits)
+      && (KEYED_FACILITY_MASK.has(tool) || DEPTH_TEASE_TOOLS.has(tool) || !!_FREE_NUMERIC_SHAPES[tool])) return false;
+  return true;
+}
+const _GATE_OPENS = {
+  any_key:       (s) => !!s.keyed,                        // _maskGasIntelligenceAnonymous
+  gas_pro:       (s) => _tierIsProOrAbove(s.tier),        // _maskGasEconomicsBelowPro
+  retirement_mw: (s) => _retirementMwFull(s.tier),        // _maskRetirementHeadroom
+  unpaid_read:   (s) => !_isUnpaidSeat(s.tier, s.credits),// _dealsForCaller / scoreboard
+  lp:            (s) => _lpSeatFull(s),                   // Land & Power (_lpAccessFor)
+};
+function _gateOpensFn(id) {
+  if (_GATE_OPENS[id]) return _GATE_OPENS[id];
+  const m = /^(tier_gate|anon_trim):([a-z0-9_]+)$/.exec(String(id));
+  if (!m) return null;
+  return m[1] === 'tier_gate' ? (s) => _tierGateOpensForSeat(m[2], s) : (s) => _anonTrimOpensForSeat(m[2], s);
+}
+// { missed, rung, what, how, text } for the answer being built, or null.
+export function _missedUpgradeFor(payload, extraGates) {
+  try {
+    const c = getCtx() || {};
+    const st = c._mu || { gates: new Set(), masked: [] };
+    const ids = new Set([...st.gates, ...(extraGates || [])]);
+    if (!ids.size) return null;
+    const opens = [...ids].map(_gateOpensFn);
+    if (opens.some((f) => !f)) return null;
+    const floor = _rungFloor({ keyed: !!c.api_key, tier: c.tier, credits: c._credits_seen });
+    return _missedUpgrade({ payload, maskedLog: st.masked, opens, floor, tool: st.tool || '' });
+  } catch (_) { return null; }
+}
+// The one link for a rung, bound like every other checkout link here.
+function _missedRungLink(rung, toolName, sessionId) {
+  try {
+    const r = _unlockRungs(toolName, 'free', sessionId);
+    if (rung === 'pack') return r.pack || null;
+    if (rung === 'developer') return r.developer || null;
+    if (rung === 'pro') return r.pro || null;
+  } catch (_) {}
+  return null;
+}
+
 export function _teaserLabel(key) {
   const t = String(key || '').replace(/^_+|_+$/g, '').replace(/_in_pro$/, '')
     .replace(/_/g, ' ').trim().toLowerCase();
@@ -9561,6 +9697,7 @@ function trimForTrial(parsed, toolName) {
       out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
       out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
     } else if (_isMetricKey(k) && !_keepTyped.has(k) && typeof v === 'number') {
+      _noteMaskedKey(k, v);                   // r-missed-upgrade: a figure this trim hid
       out[k] = null;                          // gated metric → null (was a promo STRING
                                               // that broke numeric typing for agents)
     } else if (_isMetricKey(k) && typeof v === 'object' && v !== null) {
@@ -9823,7 +9960,10 @@ async function _getCredits(c) {
   if (!id) return { credits: 0, had_pack: false, lp_grandfathered: false };
   const now = Date.now();
   const cached = _creditCache.get(id);
-  if (cached && (now - cached.ts) < (cached.credits > 0 ? _CREDIT_TTL_MS : _CREDIT_ZERO_TTL_MS)) return { credits: cached.credits, had_pack: cached.had_pack, lp_grandfathered: cached.lp_grandfathered === true };
+  if (cached && (now - cached.ts) < (cached.credits > 0 ? _CREDIT_TTL_MS : _CREDIT_ZERO_TTL_MS)) {
+    try { if (c && typeof c === 'object') c._credits_seen = cached.credits; } catch (_) {}
+    return { credits: cached.credits, had_pack: cached.had_pack, lp_grandfathered: cached.lp_grandfathered === true };
+  }
   let credits = 0, had_pack = false, lp_grandfathered = false;
   try {
     // r-credits-timeout (2026-07-03): this lookup sits on the hot path of every
@@ -9841,6 +9981,7 @@ async function _getCredits(c) {
   } catch (_) {}
   _creditCache.set(id, { credits, had_pack, lp_grandfathered, ts: now });
   if (_creditCache.size > 20000) _creditCache.clear();
+  try { if (c && typeof c === 'object') c._credits_seen = credits; } catch (_) {}
   return { credits, had_pack, lp_grandfathered };
 }
 function _burnCredits(c, tool, cost) {
@@ -9899,7 +10040,7 @@ const TRIAL_HEADER_OVERRIDES = {
 // fragment and reached no server — and both functions that took it assigned it
 // to a `_developer` const that nothing has read since r-data-first rewrote this
 // copy. A dead parameter carrying a live-looking URL is how that URL comes back.
-function trialHeader(toolName, sessionId, gapClause) {
+function trialHeader(toolName, sessionId, gapClause, missed) {
   const override = TRIAL_HEADER_OVERRIDES[toolName];
   if (override) return override(sessionId);
   // r56-conv (2026-05-31): surface the NO-EMAIL claim path on the most-hit
@@ -9953,6 +10094,27 @@ function trialHeader(toolName, sessionId, gapClause) {
   // lines saying the same thing (📦 "3 of 5 results shown" then 🔒 "free-tier
   // preview of rank_markets") — ~200 characters of pure duplication ahead of
   // nothing. Folded into a single sentence.
+  // ★ r-missed-upgrade (2026-09-29): when this call's gates and markers say what
+  // the preview hid (`missed`, from _missedUpgradeFor), the line names it and the
+  // lowest rung that returns it. The pack rung keeps the two-rung ladder
+  // (r-dev-rung) because the pack IS the lowest rung there and _rungsText leads
+  // with it; a higher rung gets that rung's one link, and the pack is not offered
+  // where it would not return what was hidden. No `missed` → the old line.
+  if (missed && missed.what && missed.how) {
+    const _free = ' Or call `claim_free_key` (one call, no email) for a durable free-tier key.\n';
+    if (missed.rung === 'pack') {
+      return '🔒 **' + missed.what + '** The payer checks out in one click: '
+        + _rungsText(toolName, 'free', sessionId) + _unlockClause + '.' + _free;
+    }
+    if (missed.rung === 'free_key') {
+      return '🔒 **' + missed.what + '** ' + missed.how + '. For full depth the payer checks out in one click: '
+        + _rungsText(toolName, 'free', sessionId) + _unlockClause + '.\n';
+    }
+    const _link = _missedRungLink(missed.rung, toolName, sessionId);
+    if (_link) {
+      return '🔒 **' + missed.what + '** ' + missed.how + ' → ' + _link + _unlockClause + '.' + _free;
+    }
+  }
   const _lead = gapClause
     ? '🔒 **Free tier: ' + gapClause + '.** Full set + every premium tool: '
     : '🔒 **Free-tier preview of `' + toolName + '`.** Full results: ';
@@ -10955,11 +11117,15 @@ export function withFreshness(result, toolName) {
 // cascade uses; it reports 0 when the read fails, which counts as unpaid).
 // Every other tier keeps the response it got before.
 const _UNPAID_READ_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+export function _isUnpaidSeat(tier, credits) {
+  const t = String(tier || '').trim().toLowerCase();
+  return _UNPAID_READ_TIERS.has(t) && !(Number(credits) > 0);
+}
 export async function _isUnpaidRead(c) {
   const t = String((c && c.tier) || '').trim().toLowerCase();
   if (!_UNPAID_READ_TIERS.has(t)) return false;
   const { credits } = await _getCredits(c || {});
-  return !(Number(credits) > 0);
+  return _isUnpaidSeat(t, credits);
 }
 
 // list_transactions — /api/v1/deals gives an unpaid caller each deal with
@@ -10982,8 +11148,11 @@ export async function _dealsForCaller(d, c) {
   for (const k of ['transactions', 'data']) if (Array.isArray(d[k])) out[k] = d[k].map(mask);
   out.tier = 'free';
   out._locked_fields = [..._DEAL_PAID_FIELDS];
-  out._upgrade_cta = 'Free preview: deal $ values and MW are withheld. They come with a paid plan '
-    + 'or the $10 pack — call unlock_more_data.';
+  _noteGate('unpaid_read');   // r-missed-upgrade
+  const _mu = _missedUpgradeFor(out);
+  out._upgrade_cta = _mu ? _mu.text + ' Call unlock_more_data for the one-click link.'
+    : 'Free preview: deal $ values and MW are withheld. They come with a paid plan '
+      + 'or the $10 pack — call unlock_more_data.';
   return out;
 }
 
@@ -15720,6 +15889,7 @@ function trackedTool(srv, name, description, schema, handler) {
     // credential must never reach a backend query string, a call digest, or a log.
     const _mppArgs = mppTakeArgSignal(args);
     const c = getCtx();
+    _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
     const t0 = Date.now();
     let status = 'ok';
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
@@ -15872,9 +16042,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // wall and depth-tease all treat them correctly; leave them as-is on PRO_ONLY tools
       // so those still hit the Pro upgrade wall (PRO_ONLY is a subset of PAID_ONLY, so
       // applyTierGate below blocks them for the un-normalized 'developer'/'starter' tier).
-      if ((_gateTier === 'developer' || _gateTier === 'starter') && !PRO_ONLY_TOOLS.has(name)) {
-        _gateTier = 'paid';
-      }
+      _gateTier = _gateTierFor(_gateTier, name);   // Starter/Developer paid-class off the Pro-only set
       // r-monthly-quota (2026-08-08, DARK): the monthly CALL wall — the gateway
       // consumer the backend's phase-2 decision (PR #2289) was written for and
       // never got. Placed BEFORE applyTierGate on purpose: a monthly quota
@@ -16623,12 +16791,15 @@ function trackedTool(srv, name, description, schema, handler) {
             // r-site-headline: when analyze_site returned a REAL headline, reframe
             // the CTA to affirm the answer + upsell the DEPTH (full breakdown + PDF),
             // NOT the generic "your answer may be incomplete or wrong" header.
+            // r-missed-upgrade: this preview is the tier gate's; name what it hid.
+            _noteGate('tier_gate:' + name);
+            const _missedUp = (!_siteHeadlineObj && _previewObj) ? _missedUpgradeFor(_previewObj) : null;
             const _upgradeHeader = _siteHeadlineObj
               ? siteHeadlineHeader(name, _sid)
               // r-data-first: the count rides INSIDE this line now (one trailing
               // CTA, not two), so _gapLine is no longer prepended at the compose
               // site below. The site-headline branch never had a count anyway.
-              : trialHeader(name, _sid, _gapClause);
+              : trialHeader(name, _sid, _gapClause, _missedUp);
             // r51 (2026-05-26): mark trial_preview as isError=true. The
             // blocked_paid_only branch already does this (r50) but ~95%
             // of paywall hits land HERE — anon + free-tier users get
@@ -17313,10 +17484,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                                             citation: _normalizeCitation('According to DC Hub (dchub.cloud)') } };
             }
             const _sid = c.session_id || 'no-session';
+            // r-missed-upgrade: name what this keyless answer hid and the rung that
+            // returns ALL of it (a handler mask beneath this trim can need more
+            // than a free key: retirement MW is Developer, gas prices are Pro).
+            _noteGate('anon_trim:' + name);
+            const _missedUp = _missedUpgradeFor(trimmed);
             // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL.
             trimmed._upgrade = {
               tier:        'anonymous',
-              message:     'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
+              message:     _missedUp
+                ? _missedUp.text + (_missedUp.rung === 'free_key'
+                  ? ' Call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.'
+                  : ' Call unlock_more_data for the one-click link.')
+                : 'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
               // r86-reach: the live anon _upgrade pointed only at redeem/Stripe (browser steps a
               // headless agent can't follow). Surface the NATIVE claim_free_key tool + persist as a
               // structured next_tool so an arriving agent has a one-call in-protocol path to a key it

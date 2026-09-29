@@ -48,7 +48,7 @@ describe('composed the way the gated trial path composes it', () => {
   });
 
   it('the call site still feeds trialHeader through composeHumanCta with the relay url', () => {
-    expect(SRC).toMatch(/: trialHeader\(name, _sid, _gapClause\);/);
+    expect(SRC).toMatch(/: trialHeader\(name, _sid, _gapClause, _missedUp\);/);
     expect(SRC).toMatch(/composeHumanCta\(_humanUrlB, phase9L_clean_preview\(_upgradeHeader, _trialText\)/);
   });
 });

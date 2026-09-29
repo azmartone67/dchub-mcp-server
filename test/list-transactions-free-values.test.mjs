@@ -179,7 +179,11 @@ function expectFreePreview(out, label) {
     });
     expect(body.tier, `${label} ${where}: a free preview still says tier "paid"`).toBe('free');
     expect(body._locked_fields, `${label} ${where}: _locked_fields`).toEqual(['value', 'value_display', 'mw']);
-    expect(String(body._upgrade_cta || ''), `${label} ${where}: _upgrade_cta`).toContain('deal $ values and MW are withheld');
+    // r-missed-upgrade (2026-09-29): the CTA names what this answer hid and the
+    // lowest rung that returns it (the pack: a live balance is a paying read).
+    const cta = String(body._upgrade_cta || '');
+    expect(cta, `${label} ${where}: _upgrade_cta`).toMatch(/^This answer hid deal values and MW\./);
+    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('They come with the $10 pack');
   }
   for (const needle of EXACT_NEEDLES) {
     expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);
