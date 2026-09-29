@@ -145,8 +145,10 @@ describe('the committed snapshot keeps founding out of served copy', () => {
   it('no founding price in canonical/tier_limits.json, and no "Founding" in the plans line', async () => {
     const snap = JSON.parse(readFileSync(join(ROOT, 'canonical/tier_limits.json'), 'utf8'));
     expect(snap.price_usd_month.founding).toBeUndefined();
-    const { _paidPlansLine, _priceLabel } = await import('../lib/tier-canon.mjs');
-    expect(_priceLabel('founding')).toBeNull();
-    expect(_paidPlansLine()).not.toMatch(/founding/i);
+    // ★2026-10-02: _priceLabel / _paidPlansLine are retired (no monthly price
+    // in served copy); the ladder check and the one plans line remain.
+    const { _paidPlansOutputLine, _planOnLadder } = await import('../lib/tier-canon.mjs');
+    expect(_planOnLadder('founding')).toBe(false);
+    expect(_paidPlansOutputLine()).not.toMatch(/founding/i);
   });
 });
