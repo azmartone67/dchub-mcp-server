@@ -247,6 +247,7 @@ test/resolution-gap.test.mjs
 test/result-shaping.test.mjs
 test/retention-email-ask.test.mjs
 test/retired-claims.test.mjs
+test/retirement-headroom-mw-paid.test.mjs
 test/return-affordance-anon.test.mjs
 test/routing-hint.test.mjs
 test/save-site-coords.test.mjs
