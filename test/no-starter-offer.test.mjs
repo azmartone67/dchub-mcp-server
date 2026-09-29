@@ -259,7 +259,9 @@ describe('what every client reads before it calls anything', () => {
     const { json } = await post({ 'mcp-session-id': s.sid }, { jsonrpc: '2.0', id: 9, method: 'tools/list' });
     const tool = (JSON.parse(json).result?.tools || []).find((t) => t.name === 'unlock_more_data');
     expect(tool, 'tools/list has no unlock_more_data').toBeTruthy();
-    expect(tool.description).toContain('Developer');
+    // ★2026-10-02: the description names no plan price any more (owner rule
+    // 09-27); the non-vacuity anchor is the plans line it points at instead.
+    expect(tool.description).toContain('Paid plans: https://dchub.cloud/pricing');
     expect(starterOffers(tool)).toEqual([]);
   });
 });
