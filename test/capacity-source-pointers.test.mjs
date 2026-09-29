@@ -20,7 +20,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import * as L from '../lib/capacity-source-summary.mjs';
 import { pasteLine, attachCapacity } from '../scripts/ecosystem-sync.mjs';
-import { CAPACITY_BLURB } from '../lib/capacity-source-summary.mjs';
+import { CAPACITY_BLURB, CAPACITY_LIVE_POINTER, capacityInventoryViolations } from '../lib/capacity-source-summary.mjs';
 
 const BASE = 'http://127.0.0.1:1';
 const SUMMARY = '/api/v1/listings/summary';
@@ -592,21 +592,15 @@ describe('session instructions', () => {
     await withSummary(LIVE);
     const client = await connect(S.createServer(null, ' TAIL'));
     const ins = client.getInstructions();
-    expect(ins).toContain(`each listing stamped with when it was last updated (live now: ${CLAUSE}).`);
-    expect(ins.replace(` (live now: ${CLAUSE})`, '')).toBe(`${S._INSTRUCTIONS} TAIL`);
+    expect(ins).toContain(`each listing stamped with when it was last updated (${L.CAPACITY_INSTR_LIVE_CLAUSE}).`);
+    expect(ins.replace(` (${L.CAPACITY_INSTR_LIVE_CLAUSE})`, '')).toBe(`${S._INSTRUCTIONS} TAIL`);
+    // ★2026-09-29: the clause names where the numbers are, never the numbers.
+    expect(ins).not.toContain(CLAUSE);
+    expect(capacityInventoryViolations(ins)).toEqual([]);
     const countTokens = (s) => (s.match(/\d[\d,+]*\s*[-_ ]?\s*tools\b/gi) || []).length;
     expect(countTokens(ins)).toBe(countTokens(S._INSTRUCTIONS));
   });
 
-  it('the clause reads as one number set, pluralised and capped', () => {
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(LIVE))).toBe(CLAUSE);
-    const one = { ...LIVE, live_count: 1, total_mw: 1250.5, markets: [market('Ashburn', 'VA', 1, 1250.5)] };
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(one))).toBe('1 live listing, 1,250.5 MW across Ashburn, updated 2026-09-20');
-    const many = { ...LIVE, live_count: 9, markets: ['A', 'B', 'C', 'D', 'E'].map((m, i) => market(m, 'TX', 1, 10 * (5 - i))) };
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(many)))
-      .toBe('9 live listings, 120 MW across A, B, C and 2 more markets, updated 2026-09-20');
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(ZERO_WITH_MARKETS))).toBeNull();
-  });
 });
 
 // ── 4. planner routing ───────────────────────────────────────────────────────
@@ -755,20 +749,24 @@ describe('ecosystem-sync paste line', () => {
     });
   }
 
-  it('live: the line names the capability, the tool, the page and the listings', () => {
+  it('live: the line names the capability, the tool, the page and the live summary', () => {
     const ssot = attachCapacity({ ...SSOT }, { ok: true, status: 200, text: JSON.stringify(LIVE) });
     expect(pasteLine(ssot)).toBe(
-      BASE_LINE.replace(' Remote MCP:', ` ${CAPACITY_BLURB} Live now: ${CLAUSE}. Remote MCP:`));
+      BASE_LINE.replace(' Remote MCP:', ` ${CAPACITY_BLURB} ${CAPACITY_LIVE_POINTER} Remote MCP:`));
   });
 
-  // ★2026-09-16. The clause alone read "Capacity Source: 2 live listings,
-  // 41.2 MW across Dallas-Fort Worth, updated 2026-09-16." — an inventory, and
-  // nothing a reader could act on. A directory listing has to carry the way IN:
-  // the tool for an agent, the page for a human.
-  it('live: the reader is given a way in, not only a count', () => {
+  // ★2026-09-16 the line gained a way IN (tool + page) beside the inventory.
+  // ★2026-09-29 the inventory itself left: the paste line is COPIED into
+  // listings and a public issue, and each copy froze that day's count, MW,
+  // markets and date. The live clause is what the line must never carry.
+  it('live: the reader is given a way in, and no inventory', () => {
     const line = pasteLine(attachCapacity({ ...SSOT }, { ok: true, status: 200, text: JSON.stringify(LIVE) }));
     expect(line).toContain('source_capacity');
-    expect(line).toContain('dchub.cloud/listings');
+    expect(line).toContain('https://dchub.cloud/listings');
+    expect(line).toContain('https://dchub.cloud/api/v1/listings/summary');
+    expect(line).not.toContain(CLAUSE);
+    expect(line).not.toContain('Live now');
+    expect(capacityInventoryViolations(line)).toEqual([]);
   });
 
   // The backend builds the same copy for the white-glove lane from its own
@@ -829,9 +827,9 @@ describe('kill switch: DCHUB_CAPACITY_POINTERS=off', () => {
 // pointer was silent exactly where a buyer was standing.
 describe('metro aliases: a leading token matches, a lookalike does not', () => {
   const SUM = () => L.normalizeCapacitySummary({
-    ok: true, program_status: 'live', live_count: 2, total_mw: 41.2,
+    ok: true, program_status: 'live', live_count: 2, total_mw: 40,
     latest_updated_at: '2026-09-16T00:02:41+00:00', generated_at: '2026-09-16T05:47:48+00:00',
-    markets: [market('Dallas-Fort Worth', 'TX', 2, 41.2, ['powered_shell', 'colocation'])],
+    markets: [market('Dallas-Fort Worth', 'TX', 2, 40, ['powered_shell', 'colocation'])],
     delivery_types: { powered_shell: 1, colocation: 1 },
   });
   const names = (markets) => L.matchCapacityMarkets(SUM(), { markets }).map((m) => m.market);
