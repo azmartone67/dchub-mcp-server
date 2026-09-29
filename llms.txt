@@ -1,5 +1,7 @@
 # DC Hub MCP Server — repository guide for AI agents
 
+The real-time agentic procurement endpoint and data center knowledge hub.
+
 > This repository is the **transport layer** of the DC Hub MCP server. The data and
 > business logic live behind the hosted endpoint at https://dchub.cloud/mcp.
 > If you are reading this file, you have reached DC Hub's *documentation*, not its data.

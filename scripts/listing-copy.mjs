@@ -7,7 +7,9 @@
 // auto-sync) pastes or pushes FROM it; nothing writes a listing from memory.
 //
 // Fields:
-//   short       one-sentence tagline
+//   tagline     the owner-approved DC Hub tagline (2026-09-29), exact wording,
+//               no superlative ever added. TAGLINE below is the pinned value.
+//   short       one-sentence summary
 //   long        the Long description. Byte-equal to scripts/smithery_description.txt
 //               (trimmed), which smithery-freshness.yml pushes to Smithery, so the
 //               two cannot drift. test/listing-copy.test.mjs enforces it.
@@ -39,8 +41,18 @@ export const GLAMA_MAX = 400;
 export const PRICE_LINE = '$10 one-time pack of 1,000 API credits';
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
-export const TEXT_FIELDS = ['short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
+export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
+
+/** The owner-approved tagline, character for character (Jonathan, 2026-09-29).
+ *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
+export const TAGLINE = 'The real-time agentic procurement endpoint and data center knowledge hub.';
+
+/** Words that may never be bolted onto the tagline ("the only", "first", ...). */
+export const TAGLINE_SUPERLATIVE = /\b(?:the only|only|first|on the planet|world'?s|largest|leading|best|number one|premier|ultimate)\b|#1/i;
+
+/** Where the Capacity Source sentence starts inside `long` (owner, 2026-09-29). */
+export const CAPACITY_SENTENCE_ANCHOR = 'Capacity Source adds';
 
 export const endpointsLine = (n) => `${n} MCP tools at ${MCP_URL} plus a REST API at ${REST_URL}`;
 
@@ -89,11 +101,21 @@ const norm = (s) => String(s ?? '')
 export const FINGERPRINT_CHARS = 80;
 
 /** The strings a live listing must contain (any one) to count as showing the
- *  current copy: a normalised prefix of `short`, `glama_400` and `long`. */
+ *  current copy: a normalised prefix of `short`, `glama_400` and `long`, and
+ *  (2026-09-29) of the ones a listing may LEAD with instead: `tagline`, the
+ *  Capacity Source sentence at the end of `long`, and `capacity_blurb`. Grok
+ *  rewrites directory listings to open with the tagline + the Capacity Source
+ *  line; on the old prefix-only set those read as drift while current.
+ *  A fingerprint match is only half the verdict: the read-back still runs
+ *  copyRuleViolations() on the whole text, so a tagline-led listing that also
+ *  carries a count or a monthly price is still drift. */
 export function copyFingerprints(copy) {
   if (!copy) return [];
-  return [...new Set(['short', 'glama_400', 'long']
-    .map((k) => norm(copy[k]).slice(0, FINGERPRINT_CHARS))
+  const long = String(copy.long ?? '');
+  const at = long.indexOf(CAPACITY_SENTENCE_ANCHOR);
+  const capacitySentence = at >= 0 ? long.slice(at) : '';
+  return [...new Set([copy.short, copy.glama_400, copy.long, copy.tagline, capacitySentence, copy.capacity_blurb]
+    .map((v) => norm(v).slice(0, FINGERPRINT_CHARS))
     .filter((s) => s.length >= 40))];
 }
 
