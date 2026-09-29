@@ -72,7 +72,7 @@ const SURFACES = [
 // is the rule, not an anonymous 50/day claim.
 const FREE_TIER_RULE = "Anonymous: previews + 2 full answers per tool per day. "
   + "Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers "
-  + "per tool per day). Developer $49: 500/day.";
+  + "per tool per day). Paid plans: dchub.cloud/pricing.";
 const CLAIM = /([\d,]+)\s*calls?\/day/gi;
 const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|no key needed/i;
 const num = (s) => Number(String(s).replace(/,/g, ""));
@@ -275,4 +275,17 @@ describe("registry manifests offer no Starter plan", () => {
       expect(m && m[0], `${f} still offers Starter: ${m && m[0]}`).toBeFalsy();
     });
   }
+});
+
+// ★2026-09-28 (owner rule 09-27): the sentence names no plan price. The MCP
+// composes its own copy (lib/tier-canon.mjs _freeTierRuleText, served as
+// structuredContent.free_tier_rule on claim_free_key and bind_email) from the
+// tier snapshot, so it can drift from the pin above on its own.
+describe("the composed free-tier rule", () => {
+  it("is the published sentence verbatim and states no price", async () => {
+    const { _freeTierRuleText } = await import("../lib/tier-canon.mjs");
+    expect(_freeTierRuleText()).toBe(FREE_TIER_RULE);
+    expect(FREE_TIER_RULE.endsWith(" Paid plans: dchub.cloud/pricing.")).toBe(true);
+    expect(FREE_TIER_RULE).not.toMatch(/\$/);
+  });
 });
