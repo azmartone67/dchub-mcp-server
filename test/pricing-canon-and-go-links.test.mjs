@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  PLAN_PRICE, FOUNDING_URL, PRO_URL, _priceLabel, _paidPlansLine, _keyBoundSubUrl,
+  PLAN_PRICE, FOUNDING_URL, PRO_URL, _planOnLadder, _paidPlansOutputLine, _keyBoundSubUrl,
   _keyBoundPackUrl, _keyBoundUpgradeUrl, _keyBoundTiers, _goUrl, _ctxALS,
 } from '../server.mjs';
 
@@ -61,11 +61,13 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
   it('the snapshot prices Pro at 99 and PLAN_PRICE mirrors the snapshot', () => {
     expect(SNAP.price_usd_month.pro).toBe(99);
     expect(PLAN_PRICE).toEqual(SNAP.price_usd_month);
-    expect(_priceLabel('pro')).toBe('$' + SNAP.price_usd_month.pro + '/mo');
+    // The canon still carries the price (backend-owned data); no served copy
+    // renders it (★2026-10-02: _priceLabel retired). The rung is on the ladder.
+    expect(_planOnLadder('pro')).toBe(true);
   });
   it('founding is retired as a RUNG — no price, so no copy can quote one', () => {
     expect(SNAP.price_usd_month.founding).toBeUndefined();
-    expect(_priceLabel('founding')).toBe(null);
+    expect(_planOnLadder('founding')).toBe(false);
     // ★ The LINK survives on purpose: 10 existing founding subscriptions and
     // every founding /go link already in the wild still have to resolve and
     // still have to attribute. Retiring the offer is not deleting the SKU.
@@ -82,10 +84,12 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
     expect(m[1]).toContain('metered_url: METERED_URL');
     expect(m[1]).not.toMatch(/_usd_month|PLAN_PRICE|_rungNumPrice|_priceLabel/);
   });
-  it('the paid-plans line offers Developer and Pro, and never mentions Founding', () => {
-    const line = _paidPlansLine();
-    expect(line).toContain('Developer $' + SNAP.price_usd_month.developer + '/mo');
-    expect(line).toContain('Pro $' + SNAP.price_usd_month.pro + '/mo');
+  it('the paid-plans line points at the pricing page, states no monthly price, and never mentions Founding', () => {
+    // ★2026-10-02: was _paidPlansLine() ("Developer $49/mo · Pro $99/mo"),
+    // retired with the /mcp tools/list byte freeze (owner rule 09-27).
+    const line = _paidPlansOutputLine();
+    expect(line).toBe('Paid plans: https://dchub.cloud/pricing');
+    expect(line).not.toMatch(/\$\d/);
     expect(line).not.toMatch(/founding/i);
     expect(line).not.toMatch(/seats last/i);
   });

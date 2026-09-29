@@ -21,16 +21,20 @@
 // _priceLabel( call site may come back, and the sweep below calls EVERY /mcp
 // tool in six caller contexts and fails on any monthly price in the output.
 //
-// SCOPE: tools/list (the unlock_more_data description) and the /mcp
-// initialize instructions still carry "$49/mo"; they are byte-frozen until
-// 2026-10-02T00:00Z and move in the stacked 10-02 PR, which extends this guard
-// to them. The sweep therefore reads tools/call output only.
+// ★2026-10-02 catalog batch (the /mcp tools/list + instructions byte freeze
+// ended 2026-10-02T00:00Z): the unlock_more_data DESCRIPTION ("Also Developer
+// $49/mo · Pro $99/mo.") and the /mcp initialize instructions ("— or Developer
+// $49/mo") now read _paidPlansOutputLine(), and _priceLabel() / _paidPlansLine()
+// are retired from lib/tier-canon.mjs. The guard now covers every surface an
+// agent reads: tools/call output (the sweep), tools/list and initialize on
+// every profile path, and the committed manifests the registries mirror.
 //
 // Hard-gate qualified: real server on 127.0.0.1 against a local stub, network
 // fenced, no disk writes.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { _paidPlansLine, _paidPlansOutputLine, PRICING_URL } from '../lib/tier-canon.mjs';
+import * as TC from '../lib/tier-canon.mjs';
+import { _paidPlansOutputLine, PRICING_URL } from '../lib/tier-canon.mjs';
 import { startHarness, fenceNetwork, GUESS_ARGS, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 const MONTHLY = /\$\s?\d[\d,]*(?:\.\d+)?\s*(?:\/\s*(?:mo|month)\b|per month|a month)/i;
@@ -41,10 +45,13 @@ const CODE = SRC.split('\n').map((l, i) => [i + 1, l])
   .filter(([, l]) => !/^\s*(\/\/|\/\*|\* )/.test(l))
   .map(([n, l]) => [n, l.replace(/\s\/\/.*$/, '')]);
 
-// 27 code lines on 2026-09-28; 1 after the 10-01 relay batch — the /mcp
-// initialize instructions (_INSTR_TAIL), byte-frozen until 2026-10-02 and moved
-// by the stacked 10-02 PR. Every runtime (tools/call) site is gone.
-const PRICE_LABEL_SITES_CEILING = 1;
+// 27 code lines on 2026-09-28; 1 after the 10-01 relay batch (the frozen
+// instructions); 0 after the 10-02 catalog batch, and the helper is retired.
+const PRICE_LABEL_SITES_CEILING = 0;
+// Every path that serves a tools/list or an initialize. /mcp/chatgpt is frozen
+// for the OpenAI review (frz-chatgpt-toolset) and untouched here — it is READ,
+// so a monthly price arriving there fails too.
+const PROFILE_PATHS = ['/mcp', '/mcp/anthropic', '/mcp/claude', '/mcp/chatgpt', '/mcp/registry', '/mcp/grok'];
 // The fake backend PLANTS this sentence in every data response (it is backend
 // data passed through, not a string this server writes). The sweep strips it
 // and a control asserts it really is present, so the strip hides nothing else.
@@ -62,16 +69,27 @@ describe('the output line', () => {
     expect(_paidPlansOutputLine()).not.toMatch(MONTHLY);
   });
 
-  it('CONTROL: the description variant still carries the monthly prices (so the pattern can fail)', () => {
-    expect(_paidPlansLine()).toMatch(MONTHLY);
+  it('CONTROL: the pattern fires on the forms that shipped (so a clean read means absent)', () => {
+    for (const x of ['Developer $49/mo · Pro $99/mo', '— or Developer $49/mo', 'on DC Hub Pro, $99/mo with',
+      '"upgrade_price":"$99/mo"', '$49 per month', '$99 / month']) expect(x, x).toMatch(MONTHLY);
+    for (const x of ['$10 one-time pack of 1,000 API credits', '$0.50 per call', '$0.50/call']) expect(x, x).not.toMatch(MONTHLY);
+  });
+
+  it('_priceLabel and _paidPlansLine are retired: nothing can render "$N/mo" from the canon', () => {
+    expect(TC._priceLabel).toBeUndefined();
+    expect(TC._paidPlansLine).toBeUndefined();
+    expect(SRC).not.toMatch(/_priceLabel\b|_paidPlansLine\b/);
   });
 });
 
-describe('_paidPlansLine is description-only', () => {
-  it('server.mjs calls it exactly once, inside the unlock_more_data description', () => {
-    const calls = CODE.filter(([, l]) => /_paidPlansLine\(\)/.test(l));
-    expect(calls.map(([n]) => n)).toHaveLength(1);
-    expect(calls[0][1]).toContain("Unlock DC Hub\\'s full depth.");
+describe('the plans line in server.mjs', () => {
+  it('the unlock_more_data description and the /mcp instructions read the output line', () => {
+    const desc = CODE.filter(([, l]) => l.includes("Unlock DC Hub\\'s full depth."));
+    expect(desc).toHaveLength(1);
+    expect(desc[0][1]).toContain("no subscription). ' + _paidPlansOutputLine() + '.");
+    const instr = CODE.filter(([, l]) => /^const _INSTR_TAIL = /.test(l));
+    expect(instr).toHaveLength(1);
+    expect(instr[0][1]).toContain("' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay");
   });
 
   it('the upgrade_instructions both read the output line', () => {
@@ -79,16 +97,14 @@ describe('_paidPlansLine is description-only', () => {
     expect(lines).toHaveLength(2);
     for (const [, l] of lines) {
       expect(l).toContain('_paidPlansOutputLine()');
-      expect(l).not.toContain('_paidPlansLine()');
     }
   });
 
   // Ratchet, not a fix: the frozen relay copy still prices through _priceLabel.
   // A NEW runtime call site must fail here; removing one lowers the ceiling.
-  it('runtime _priceLabel( call sites in server.mjs: only the frozen instructions line is left', () => {
+  it('no _priceLabel( call site in server.mjs code', () => {
     const sites = CODE.filter(([, l]) => /_priceLabel\(/.test(l));
-    expect(sites.length).toBeLessThanOrEqual(PRICE_LABEL_SITES_CEILING);
-    for (const [n, l] of sites) expect(l, `server.mjs:${n}`).toMatch(/^const _INSTR_TAIL = /);
+    expect(sites.map(([n]) => n)).toHaveLength(PRICE_LABEL_SITES_CEILING);
   });
 
   it('_subRungText names a plan without pricing it (and still drops a rung the canon does not carry)', () => {
@@ -98,7 +114,7 @@ describe('_paidPlansLine is description-only', () => {
   });
 });
 
-describe('tool OUTPUT on the _paidPlansLine path', () => {
+describe('tool OUTPUT on the auto-mint path', () => {
   it.each(['get_grid_intelligence', 'get_market_intel', 'rank_markets'])(
     '%s auto-mint upgrade_instructions: pricing link, no $49/mo or $99/mo', async (tool) => {
       const prev = process.env.MCP_ENVELOPE_COLLAPSE;
@@ -171,12 +187,53 @@ describe('tools/call OUTPUT: no monthly price on any /mcp tool', () => {
   });
 });
 
-describe('tools/list did not move', () => {
-  it('/mcp unlock_more_data description is byte-identical to the committed manifest (still quotes the plans line)', async () => {
+// ── tools/list + initialize: every profile path ─────────────────────────────
+describe('tools/list and initialize: no monthly price on any profile path', () => {
+  it.each(PROFILE_PATHS)('%s tools/list', async (p) => {
+    const r = await H.list(p);
+    expect(r.status, p).toBe(200);
+    const tools = r.msg?.result?.tools || [];
+    expect(tools.length, `${p}: empty tools/list — nothing was checked`).toBeGreaterThan(10);
+    const bad = tools.filter((t) => MONTHLY.test(JSON.stringify(t)))
+      .map((t) => `${t.name}: …${JSON.stringify(t).match(MONTHLY)[0]}`);
+    expect(bad, p).toEqual([]);
+    expect(r.body).not.toMatch(MONTHLY);
+  });
+
+  it.each(PROFILE_PATHS)('%s initialize instructions', async (p) => {
+    const r = await H.init(p);
+    const instr = r.msg?.result?.instructions;
+    expect(typeof instr, `${p}: no instructions — nothing was checked`).toBe('string');
+    expect(instr.length).toBeGreaterThan(100);
+    expect(instr.match(MONTHLY), p).toBeNull();
+    expect(r.body).not.toMatch(MONTHLY);
+  });
+
+  it('/mcp unlock_more_data description: the plans line, and it matches the committed manifest', async () => {
     const tools = (await H.list('/mcp')).msg.result.tools;
     const live = tools.find((t) => t.name === 'unlock_more_data').description;
+    expect(live).toContain('no subscription). Paid plans: https://dchub.cloud/pricing.');
+    expect(live).toContain('$10 one-time = 1,000 API credits');
     const committed = MANIFEST.tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toBe(committed);
-    expect(live).toContain('Also ' + _paidPlansLine() + '.');
+  });
+
+  it('/mcp instructions keep the $10 pack and point at the pricing page', async () => {
+    const instr = (await H.init('/mcp')).msg.result.instructions;
+    expect(instr).toContain('💳 $10 one-time = 1,000 API credits');
+    expect(instr).toContain('; Paid plans: https://dchub.cloud/pricing) to relay to your human');
+  });
+});
+
+// ── the committed manifests the registries and packs mirror ─────────────────
+describe('committed tool manifests: no monthly price', () => {
+  const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
+  const PACKS = ['deals', 'fiber', 'gas', 'grid', 'site', 'siting', 'deepresearch']
+    .flatMap((n) => [`integrations/packs/${n}.json`, `integrations/packs/${n}.managed-agent.json`]);
+  it.each(['toolspec.json', 'mcp-server.json', 'dxt/manifest.json', ...PACKS])('%s', (f) => {
+    let txt;
+    try { txt = read(f); } catch { return; }   // a pack that is not emitted today
+    expect(txt.length).toBeGreaterThan(50);
+    expect(txt.match(new RegExp(MONTHLY.source, 'gi')) || [], f).toEqual([]);
   });
 });
