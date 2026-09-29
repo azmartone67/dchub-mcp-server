@@ -47,6 +47,7 @@ test/claim-gate-refuses-crawlers.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
 test/claude-directory-auth.test.mjs
+test/claude-directory-capacity-source.test.mjs
 test/claude-directory-catalog.test.mjs
 test/claude-directory-probe.test.mjs
 test/claude-directory-readout.test.mjs
