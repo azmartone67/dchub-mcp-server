@@ -34,8 +34,11 @@ FIND = ("dchub", "dc hub")  # presence signals (case-insensitive)
 TARGETS = [
     {"name": "mcp.directory",        "type": "directory", "url": "https://mcp.directory/best-mcp-servers",                    "action": "submit (suggest-a-server) + pitch #2"},
     {"name": "Cursor Directory",     "type": "directory", "url": "https://cursor.directory/mcp",                              "action": "cursor.directory submission (live=47 tools)"},
-    {"name": "Cline marketplace",    "type": "directory", "url": "https://github.com/cline/mcp-marketplace/issues/1668",      "action": "bump issue #1668 → cline-1668-bump-comment.md"},
-    {"name": "Continue.dev hub",     "type": "directory", "url": "https://hub.continue.dev",                                  "action": "publish a dchub mcpServers block"},
+    # 2026-09-29: #1668 was closed as a duplicate of #1823, the one live submission.
+    {"name": "Cline marketplace",    "type": "directory", "url": "https://github.com/cline/mcp-marketplace/issues/1823",      "action": "pending review on #1823 — do not open another issue"},
+    # Continue.dev hub RETIRED 2026-09-29: hub.continue.dev does not resolve
+    # (Continue was acquired by Cursor). Continue still works via a config
+    # pointing at https://dchub.cloud/mcp; there is no directory to publish to.
     {"name": "Developers Digest",    "type": "roundup",   "url": "https://www.developersdigest.tech/best/mcp-servers",        "action": "pitch #1 → roundup-pitches.md"},
     {"name": "K2view",               "type": "roundup",   "url": "https://www.k2view.com/blog/awesome-mcp-servers",           "action": "pitch #3"},
     {"name": "MCPBundles",           "type": "roundup",   "url": "https://www.mcpbundles.com/blog/best-mcp-servers",          "action": "pitch #4"},

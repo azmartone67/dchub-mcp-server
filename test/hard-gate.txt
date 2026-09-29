@@ -176,6 +176,7 @@ test/mpp-receipt-replay.test.mjs
 test/mpp-undercap.test.mjs
 test/named-absence.test.mjs
 test/named-constraint-routing.test.mjs
+test/no-dxt-so-links.test.mjs
 test/no-live-dcgi-claims.test.mjs
 test/no-push-to-protected-main.test.mjs
 test/no-sell-on-no-data-invariant.test.mjs

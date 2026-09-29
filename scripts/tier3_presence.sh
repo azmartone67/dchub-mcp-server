@@ -120,7 +120,6 @@ Repo stars right now: **$STARS**  (each star lifts Glama maintenance score + unb
    Name: DC Hub — Data Center & Energy Intelligence · URL: https://dchub.cloud/mcp · CC-BY-4.0.
 6. 🐙 GitHub MCP Registry — if no reply in ~1 week, send github-registry-followup-email.txt to partnerships@github.com
 7. 🖱 Cursor Directory refresh — if your entry shows a stale tool count, update via cursor.directory submission (live = 47).
-8. 🔌 Continue.dev hub — publish a DC Hub mcpServers block at https://hub.continue.dev (account + block YAML).
 
 All drafts are in: $OUT
 EOF
