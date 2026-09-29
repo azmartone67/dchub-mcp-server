@@ -25450,6 +25450,16 @@ app.post(MCP_PATHS, async (req, res) => {
       _ensureDescRefresher();
       let _descOverrides = null;
       try { _descOverrides = _platformOverrides(platform); } catch (_) {}
+      // /mcp/grok: the lead sentence states the count this path lists, not the
+      // full catalog's (owner, 2026-09-29). No other path passes a rewrite.
+      let _instrRewrite;
+      try {
+        const _p = _pathPack(req);
+        if (_p && _p.compact) {
+          const _served = _grokServedCount(_CATALOG_TOOL_NAMES);
+          _instrRewrite = (t) => _grokInstructions(t, { served: _served, total: CANONICAL_TOOL_COUNT });
+        }
+      } catch (_) { _instrRewrite = undefined; }
       // r-held-key (2026-09-02): keyless session, fingerprint holds a key →
       // say so IN-BAND in this session's instructions. Map read only — no
       // backend call in the init hot path (r-tuner-warmcache rule); the key is
@@ -25470,16 +25480,6 @@ app.post(MCP_PATHS, async (req, res) => {
           _instrTail += _instrTailInvalidKey(_authChannel, platform);
         }
       } catch (_) { /* additive */ }
-      // /mcp/grok: the lead sentence states the count this path lists, not the
-      // full catalog's (owner, 2026-09-29). No other path passes a rewrite.
-      let _instrRewrite;
-      try {
-        const _p = _pathPack(req);
-        if (_p && _p.compact) {
-          const _served = _grokServedCount(_CATALOG_TOOL_NAMES);
-          _instrRewrite = (t) => _grokInstructions(t, { served: _served, total: CANONICAL_TOOL_COUNT });
-        }
-      } catch (_) { _instrRewrite = undefined; }
       const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite);
       await mcpServer.connect(transport);
 

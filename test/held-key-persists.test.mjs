@@ -127,7 +127,7 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     expect(remember).toBeGreaterThan(mint);
   });
   it('a keyless initialize gets the held key in-band, a keyed one never does', () => {
-    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail);', 'per-session createServer');
+    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite);', 'per-session createServer');
     const window = SRC.slice(Math.max(0, i - 900), i);
     expect(window).toContain('if (!apiKey) {');
     expect(window).toContain('_instrTail = _INSTR_TAIL_HELD(_held.key)');
@@ -135,6 +135,8 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     // 2026-09-14 the base passes through _capacityInstructions first (it
     // splices a Capacity Source live clause inside a sentence, and returns the
     // base unchanged while no listings are live); the tail contract is the same.
-    expect(SRC).toMatch(/instructions: _capacityInstructions\(_INSTRUCTIONS\) \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
+    // Since 2026-09-29 /mcp/grok may rewrite the BASE's lead tool count
+    // (instructionsRewrite); the tail is still appended after it, unrewritten.
+    expect(SRC).toMatch(/: _capacityInstructions\(_INSTRUCTIONS\)\) \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
   });
 });
