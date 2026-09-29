@@ -15,6 +15,8 @@
 //   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
 //   price_line  exactly PRICE_LINE
 //   endpoints   exactly endpointsLine(tool_count)
+//   capacity_blurb  the Capacity Source paste line (owner, 2026-09-29): count-free,
+//               price-free, and it names source_capacity and dchub.cloud/listings
 //   updated_at  YYYY-MM-DD of the last copy edit
 //
 // COPY RULES (owner-approved 2026-09-28). No field may state:
@@ -37,8 +39,8 @@ export const GLAMA_MAX = 400;
 export const PRICE_LINE = '$10 one-time pack of 1,000 API credits';
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'updated_at'];
-export const TEXT_FIELDS = ['short', 'long', 'glama_400', 'price_line', 'endpoints'];
+export const FIELDS = ['short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
+export const TEXT_FIELDS = ['short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
 
 export const endpointsLine = (n) => `${n} MCP tools at ${MCP_URL} plus a REST API at ${REST_URL}`;
 

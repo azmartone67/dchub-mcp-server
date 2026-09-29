@@ -7,7 +7,7 @@
 // fix starts with one file that an auto-sync can read, and rules it cannot break.
 //
 // This test pins:
-//   - the schema (exactly the seven fields)
+//   - the schema (exactly the eight fields; capacity_blurb added 2026-09-29)
 //   - the copy rules on every text field: no facility count, no monthly price,
 //     no "$10 unlocks full answers", no "seven layers"
 //   - glama_400 is at most 400 characters
@@ -69,6 +69,10 @@ describe('schema', () => {
 describe('copy rules', () => {
   it.each(TEXT_FIELDS)('%s breaks no copy rule', (k) => {
     expect(copyRuleViolations(COPY[k])).toEqual([]);
+  });
+
+  it('glama_400 is unchanged by the Capacity Source copy (owner, 2026-09-29)', () => {
+    expect(COPY.glama_400).not.toMatch(/Capacity Source/);
   });
 
   it('glama_400 is at most 400 characters', () => {
@@ -153,6 +157,30 @@ describe('the Smithery description cannot drift from it', () => {
 
   it('short is the opening of long', () => {
     expect(COPY.long.startsWith(COPY.short)).toBe(true);
+  });
+
+  // Owner request 2026-09-29: the Capacity Source line rides at the end of
+  // `long` (so Smithery carries it too), worded exactly as given.
+  it('long ends with the Capacity Source marketplace sentence', () => {
+    expect(COPY.long.endsWith(' Capacity Source adds a free capacity marketplace: operators list '
+      + 'data-center capacity at https://dchub.cloud/listings, and agents search it by size and '
+      + 'location with source_capacity, then request an introduction with request_capacity_intro.'))
+      .toBe(true);
+  });
+});
+
+describe('capacity_blurb', () => {
+  it('is exactly the owner-given line (2026-09-29)', () => {
+    expect(COPY.capacity_blurb).toBe('Capacity Source by DC Hub: operators and brokers list available '
+      + 'data-center capacity free; buyers and AI agents source it by size (kW or MW) and location with '
+      + 'the source_capacity MCP tool or at https://dchub.cloud/listings. Contacts are shared only if '
+      + 'the provider accepts.');
+  });
+
+  it('carries no number beyond the kW/MW units, no off-market wording and no superlative', () => {
+    expect(COPY.capacity_blurb).not.toMatch(/\d/);
+    expect(COPY.capacity_blurb).not.toMatch(/off[- ]market|not publicly marketed/i);
+    expect(COPY.capacity_blurb).not.toMatch(/\bonly (?:one|source)\b|\bthe (?:first|largest|best)\b/i);
   });
 });
 
