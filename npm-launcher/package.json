@@ -1,6 +1,6 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.12.22",
+  "version": "2.12.23",
   "description": "DC Hub MCP server launcher: live data-center, power-grid, fiber and site-selection intelligence for AI agents (global data-center facility map, corroborated count pending; 92 tools). Connects any stdio MCP client to the hosted server at https://dchub.cloud/mcp.",
   "type": "module",
   "bin": {

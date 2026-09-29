@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
+import { registryRemotes } from '../lib/registry-remotes.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -650,6 +651,19 @@ const names = new Set(tools.map((t) => t.name));
     // the fence below asks its question about the tree --fix would produce,
     // rather than reporting "bump me" one run later than the count drift.
     meta.toolCount = COUNT;
+  }
+  // ★2026-09-28 — `remotes` is GENERATED from lib/registry-remotes.mjs (the
+  // allowlist of served profile paths the official registry advertises). Healed
+  // in memory in both modes like toolCount, so a remotes change reaches the
+  // version fence below and --fix bumps the patch — a new remote under an
+  // already-published version would be refused as a duplicate and never land.
+  {
+    const want = registryRemotes();
+    if (JSON.stringify(sj.remotes) !== JSON.stringify(want)) {
+      problems.push(`${SJ} remotes ${JSON.stringify((sj.remotes || []).map((r) => r.url))} `
+        + `!= lib/registry-remotes.mjs ${JSON.stringify(want.map((r) => r.url))}`);
+      sj.remotes = want;
+    }
   }
   // Heal the canon quantities ONCE, then treat the version as a pure parameter.
   // Rendering twice (before and after a bump) would run applyQuantities twice and

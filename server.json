@@ -27,7 +27,7 @@
       ]
     }
   ],
-  "version": "2.12.22",
+  "version": "2.12.23",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -36,6 +36,14 @@
     {
       "type": "streamable-http",
       "url": "https://dchub.cloud/mcp/registry"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://dchub.cloud/mcp/claude"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://dchub.cloud/mcp/grok"
     }
   ],
   "_meta": {

@@ -96,6 +96,10 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         // ★2026-09-26: and this one (the canon floor rule). Same failure
                         // mode: missing, every floor control dies on the import.
                         'scripts/canon-floor.mjs',
+                        // ★2026-09-28: and this (server.json `remotes` allowlist). Same
+                        // failure mode, and it pulls lib/claude-directory.mjs +
+                        // lib/grok-profile.mjs in behind it.
+                        'lib/registry-remotes.mjs',
                         // The shipped bundle the dchub.dxt guard compares against.
                         'dchub.dxt',
                         // ★2026-08-30: the release-asset guard and the workflow it runs
