@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
-  _goUrl, _ctxALS, PRO_URL, _priceLabel, _callsPerDay, composeHumanCta,
+  _goUrl, _ctxALS, PRO_URL, _callsPerDay, composeHumanCta,
   buildHumanRelay, _rungsText, trialHeader, buildDepthTease,
 } from '../server.mjs';
 
@@ -130,12 +130,13 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       expect(fields(go[0], GO).parts).toEqual(['metered', SID]);
       expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
       expect(text).toContain('**$10 one-time = 1,000 API credits**');
-      expect(text).toContain('**Developer ' + _priceLabel('developer') + '**');
+      expect(text).toContain('**Developer**');
+      expect(text).not.toMatch(/\$\d+\s*\/\s*mo/);
       expect(text).toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
       // Pro is not the agent default: a tool Developer opens never names it.
-      expect(text).not.toContain('**Pro ');
+      expect(text).not.toContain('**Pro**');
       expect(text.indexOf('$10 one-time')).toBeLessThan(text.indexOf(go[0]));
-      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**Developer '));
+      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**Developer**'));
     });
   });
 
@@ -169,7 +170,7 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
         expect(go, tool).toHaveLength(2);
         expect(fields(go[0], GO).parts, tool).toEqual(['metered', SID]);
         expect(fields(go[1], GO).parts, tool).toEqual(['pro', SID]);
-        expect(text, tool).toContain('**Pro ' + _priceLabel('pro') + '**');
+        expect(text, tool).toContain('**Pro**');
         expect(text, tool).not.toContain('Developer');
       });
     }
@@ -189,19 +190,19 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
     };
     for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
       const u = await upgrade(tool);
-      expect(u.message, tool).toContain('or Pro ' + _priceLabel('pro') + '.');
+      expect(u.message, tool).toContain('or a Pro subscription.');
       expect(u.message, tool).not.toContain('Developer');
       expect(u.pro_url, tool).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
     }
     // Control: a tool Developer opens still names Developer, and gets no pro_url.
     const u = await upgrade('get_pipeline');
-    expect(u.message).toContain('or Developer ' + _priceLabel('developer') + '.');
+    expect(u.message).toContain('or a Developer subscription.');
     expect(u.pro_url).toBeUndefined();
   });
 
   it('r-pro-only-sku: the free over-cap wall names Pro on a Pro-only tool', () => {
     // The over-cap wall is built inline in the tools/call handler; pin the branch.
-    expect(SRC).toContain("(also ⚡ ${_proOnlyTool(name) ? 'Pro ' + _priceLabel('pro') + ', which opens \\`' + name + '\\`'");
+    expect(SRC).toContain("(also ⚡ ${_proOnlyTool(name) ? 'Pro, which opens \\`' + name + '\\`'");
   });
 
   it('clean platform (ChatGPT/OpenAI): the $10 rung stays the informational /upgrade/h page', () => {

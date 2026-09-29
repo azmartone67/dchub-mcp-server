@@ -16,7 +16,7 @@
 //   4. no checkout link repeats, and the MPP option follows the human ask.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
-import { _unlockMoreDataEnvelope, _ctxALS, HUMAN_FIRST_MARKER, _priceLabel } from '../server.mjs';
+import { _unlockMoreDataEnvelope, _ctxALS, HUMAN_FIRST_MARKER } from '../server.mjs';
 
 const SECRET = 'test-internal-key-not-a-real-secret';
 const SID = '2bb6536d-b1d4-44b4-94a8-e89ba266e782';
@@ -63,11 +63,14 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(fields(links[0], GO)).toEqual(['metered', SID]);
     expect(fields(links[1], GO)).toEqual(['developer', SID]);
     expect(fields(links[2], GO)).toEqual(['pro', SID]);
-    // Agent rungs ($10, $49) are named before the $99 one.
+    // Agent rungs ($10, Developer) are named before Pro. ★2026-10: the plans
+    // are named, never priced (owner rule 09-27) — no monthly price on the line.
     const at = (s) => first.indexOf(s);
     expect(at('$10 one-time')).toBeGreaterThanOrEqual(0);
-    expect(at('$10 one-time')).toBeLessThan(at('**Developer ' + _priceLabel('developer') + '**'));
-    expect(at('**Developer ' + _priceLabel('developer') + '**')).toBeLessThan(at('**Pro ' + _priceLabel('pro') + '**'));
+    expect(at('**Developer**')).toBeGreaterThan(-1);
+    expect(at('$10 one-time')).toBeLessThan(at('**Developer**'));
+    expect(at('**Developer**')).toBeLessThan(at('**Pro**'));
+    expect(first).not.toMatch(/\$\d+\s*\/\s*mo/);
     // Nothing links out ahead of the ask.
     expect(text.search(LINK_RE)).toBe(first.search(LINK_RE));
   });
