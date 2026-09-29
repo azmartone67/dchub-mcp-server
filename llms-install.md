@@ -114,16 +114,11 @@ Claude Code CLI with a key:
 claude mcp add dchub --transport http --header "X-API-Key: YOUR_KEY_HERE" https://dchub.cloud/mcp
 ```
 
-### Limits by tier
+### Limits and plans
 
-| Tier | Price | Calls/day |
-|------|-------|-----------|
-| Anonymous | free | 5 |
-| Free key (`claim_free_key`, no email) | free | 10 |
-| Free key with an email bound (`bind_email`) | free | 50 |
-| Developer | see https://dchub.cloud/pricing | 500 |
-| Pro | see https://dchub.cloud/pricing | 2,000 |
-| Enterprise | custom | 100,000 |
+The free tier is the rule quoted above, verbatim from canon (`free_tier` at
+https://dchub.cloud/api/v1/canon/phrases). This file carries no plan table:
+plans, limits and prices live at https://dchub.cloud/pricing.
 
 A $10 one-time pack of 1,000 API credits (no subscription) is available at https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i.
 
@@ -138,12 +133,19 @@ curl -s -D - -X POST https://dchub.cloud/mcp \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}'
 
-# 2) using the Mcp-Session-Id from step 1, list tools (expect 70)
+# 2) using the Mcp-Session-Id from step 1, confirm initialization
 curl -s -X POST https://dchub.cloud/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'Mcp-Session-Id: <SESSION_ID_FROM_STEP_1>' \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+# 3) list the tools (the count matches "Tools exposed" above)
+curl -s -X POST https://dchub.cloud/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Session-Id: <SESSION_ID_FROM_STEP_1>' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 ```
 
 A healthy server card is also published at
