@@ -170,7 +170,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _paidPlansOutputLine, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
@@ -722,7 +722,7 @@ export function _paywallContractStep(result, name) {
     if (!url) return result;   // no signing secret: no relay to lead with, leave it as it was
     const offer = _paywallOffer(name, c);
     return _applyPaywallContract(result, name, {
-      arm, offer, relayUrl: _pcTagUrl(url, arm), proPrice: _priceLabel('pro'),
+      arm, offer, relayUrl: _pcTagUrl(url, arm),
       // platform collapses Claude Desktop, Code and claude.ai to 'claude'; the raw
       // clientInfo name tells claude.ai (hosted) apart.
       hosted: _pcHosted((c.platform || '') + ' ' + (c.client_name_raw || '')),
@@ -832,12 +832,14 @@ function _unlockUrl(toolName, sessionId) {
 // One subscription rung, priced from the tier canon. A rung the canon cannot
 // price, or whose link was not minted, is dropped — never guessed.
 function _subRungText(plan, url, what) {
-  const label = _priceLabel(plan);
-  if (!url || !label) return '';
+  // ★2026-10 (owner rule 09-27): the rung is named, never priced — the only
+  // price DC Hub states is the $10 pack. A rung the canon does not carry is
+  // still dropped (the ladder check), and a link that was not minted too.
+  if (!url || !_planOnLadder(plan)) return '';
   const perDay = _callsPerDay(plan);
   const detail = [Number.isFinite(perDay) ? perDay.toLocaleString('en-US') + ' calls/day' : '', what]
     .filter(Boolean).join(', ');
-  return '**' + (plan === 'pro' ? 'Pro' : 'Developer') + ' ' + label + '**'
+  return '**' + (plan === 'pro' ? 'Pro' : 'Developer') + '**'
     + (detail ? ' (' + detail + ')' : '') + ' → ' + url;
 }
 const _PACK_RUNG = '**$10 one-time = 1,000 API credits**, credits don’t expire → ';
@@ -971,8 +973,8 @@ export function _unlockMoreDataEnvelope(a) {
                         best_for: 'autonomous agents (no card-holder in the loop)',
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
         { id: 'credits',   label: '$10 one-time — 1,000 API credits', best_for: 'one screen at full depth; credits don’t expire, no subscription', checkout_url: credits },
-        { id: 'developer', label: _priceLabel('developer'), calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer },
-        { id: 'pro',       label: _priceLabel('pro'),       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro },
+        { id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer },
+        { id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro },
       ],
       free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
       what_unlocks: 'Full grid intelligence (all ISOs/grids, not 1), full fiber depth, every premium tool, complete result sets (not partial previews), and higher rate limits.',
@@ -3597,7 +3599,7 @@ function _hiClaimLine(name, claim, from, devUrl) {
   return '\n\u{1F4A1} **`' + name + '` ×' + claim.count + from + ' — this is a live siting workflow, ' +
     'the kind DC Hub Developer/Enterprise is built for.** Ask your human for their email + an OK to ' +
     'follow up, then call `bind_email` (marketing_opt_in=true): a DC Hub analyst sends the full `' + name +
-    '` workup + a Developer trial (' + _callsPerDay('developer') + ' calls/day). Self-serve upgrade (' + _priceLabel('developer') + '): ' + devUrl + '\n';
+    '` workup + a Developer trial (' + _callsPerDay('developer') + ' calls/day). Self-serve Developer upgrade: ' + devUrl + '\n';
 }
 const VARIANT_COPY = {
   // 2026-07-11 (claim-variant audit): Claude.ai/desktop are HEADER-LESS hosts —
@@ -3609,7 +3611,7 @@ const VARIANT_COPY = {
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so SHOW YOUR HUMAN THIS LINK VERBATIM and ask them ' +
     'to open it — one click, email only, free 7-day/50-call trial key: ' + claim.claim_url +
-    ' — Self-serve upgrade (' + _priceLabel('developer') + '): ' + devUrl + '\n',
+    ' — Self-serve Developer upgrade: ' + devUrl + '\n',
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
   chatgpt: (name, claim, devUrl) => _hiClaimLine(name, claim, ' from ChatGPT', devUrl),
@@ -3798,7 +3800,7 @@ async function buildHighIntentClaimBlock(claim, name) {
       '). Highest-value next step: ask your human for their email AND explicit OK to be '
       + 'contacted, then call bind_email {email, marketing_opt_in:true} — DC Hub follows up '
       + 'with the full ' + name + ' workup + a Developer trial (' + _callsPerDay('developer') + ' calls/day). Self-serve: '
-      + 'high_intent_developer_url (' + _priceLabel('developer') + ') or high_intent_enterprise_url (Enterprise data '
+      + 'high_intent_developer_url (Developer) or high_intent_enterprise_url (Enterprise data '
       + 'licensing, priced on that page). Only bind an email your human explicitly provided — never invent one.',
   };
   return { text, sc };
@@ -6852,18 +6854,17 @@ function _lpProLink() {
 
 export function _lpWallResult(name, headline = null) {
   const url = _lpProLink();
-  const price = _priceLabel('pro');
   const payload = {
     error: 'pro_required', tool: name, _gated: true, _wall: true, required_plan: 'pro',
     ..._pcLpHeadlineFields(headline),
     message: `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
       + 'returns no data: no verdict, score or figure. A free key opens the preview '
       + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
-    upgrade_url: url, upgrade_price: price, next_tool: 'claim_free_key',
+    upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
     content: [{ type: 'text', text: '🔒 **`' + name + '` is Land & Power, which is Pro.** No data without a key. '
-      + 'Get Pro ' + price + ' → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
+      + 'Get Pro → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
       + 'verdicts and bands, no scores or figures.' }],
     isError: _wallIsError(),
     structuredContent: payload,
@@ -6886,7 +6887,7 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
     _gated: true, _preview_only: true, required_plan: 'pro',
     _preview_note: 'Land & Power details are Pro: every score, MW, distance, price and '
       + 'report link is null here. Verdicts, bands, names and counts are the preview.',
-    upgrade_url: _lpProLink(), upgrade_price: _priceLabel('pro'),
+    upgrade_url: _lpProLink(),
   };
   return { content: [{ type: 'text', text: JSON.stringify(envelope) }], structuredContent: envelope };
 }
@@ -7074,7 +7075,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
   // this tool — Pro for a Pro-only tool (get_grid_intelligence, get_fiber_intel sit
   // in DEPTH_TEASE_TOOLS), Developer otherwise. This wall offered Developer on both.
   const _proOnly = _proOnlyTool(name);
-  const _subName = _proOnly ? 'Pro ' + _priceLabel('pro') : 'Developer ' + _priceLabel('developer');
+  const _subName = _proOnly ? 'a Pro subscription' : 'a Developer subscription';
   teased._upgrade = {
     tier:    _isKeyed ? (tier || 'free') : 'anonymous',
     locked:  'full_depth',
@@ -7108,9 +7109,9 @@ export async function buildDepthTease(name, result, ctx, tier) {
     teased._upgrade.upgrade_this_key_url   = _tiers.pro || _tiers.developer;
     teased._upgrade.upgrade_this_key_pitch =
       (_tiers.pro
-        ? 'Upgrade THIS key in place — Pro ' + _priceLabel('pro') + ' (everything), or Developer '
-          + _priceLabel('developer') + ' (' + _callsPerDay('developer') + ' calls/day), no key swap: the instant your '
-        : 'Upgrade THIS key in place — Developer ' + _priceLabel('developer') + ' (' + _callsPerDay('developer') + ' calls/day), no key swap: the instant your ')
+        ? 'Upgrade THIS key in place — Pro (everything), or Developer'
+          + ' (' + _callsPerDay('developer') + ' calls/day), no key swap: the instant your '
+        : 'Upgrade THIS key in place — Developer (' + _callsPerDay('developer') + ' calls/day), no key swap: the instant your ')
       + 'human pays, this same key unlocks and you just call `' + name + '` again (no reconnect, no re-config).';
     teased._upgrade.upgrade_this_key_tiers = _tiers;
     // Key-bound PACK (move #3 step 2): 1,000 API credits bound to THIS key-hash via
@@ -7126,8 +7127,8 @@ export async function buildDepthTease(name, result, ctx, tier) {
       + 'pay once and this same key keeps returning full data, per call; the cheapest durable way to pay.';
     teased._upgrade.message += ' — Or bind a paid upgrade to THIS key (no swap, no reconnect): '
       + '💳 $10 one-time = 1,000 API credits → ' + _packKeyUrl
-      + (_tiers.pro ? '  ·  or Pro ' + _priceLabel('pro') + ' (everything) → ' + _tiers.pro : '')
-      + '  ·  or Developer ' + _priceLabel('developer') + ' → ' + _tiers.developer
+      + (_tiers.pro ? '  ·  or Pro (everything) → ' + _tiers.pro : '')
+      + '  ·  or Developer → ' + _tiers.developer
       + ' (the moment your human pays, this same key is served in full).';
   }
   // 2026-06-29 web/direct experiment: every depth-teased preview also offers a
@@ -7143,7 +7144,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
     teased._upgrade.map_url = mapHref(name);
     // 2026-09-22 (owner): the Land & Power map opens at Pro and nothing below
     // it, so Developer is offered for this tool's own uncapped data only.
-    teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Uncapped \`${name}\` opens with Developer (${_priceLabel('developer')}) → ${_devUrl}. The full Land & Power map is Pro (${_priceLabel('pro')}) → ${_subCheckoutUrl(PRO_URL + promoParam(), _sid)}.`;
+    teased._upgrade.map_relay = `Tell your human: see this on the live map → ${mapHref(name)}. Uncapped \`${name}\` opens with Developer → ${_devUrl}. The full Land & Power map is Pro → ${_subCheckoutUrl(PRO_URL + promoParam(), _sid)}.`;
   }
   // x402 (2026-06-20): on the flagship tools, ADDITIVELY advertise the
   // agent-autonomous pay-per-call rail — a wallet-funded agent pays USDC for
@@ -8373,9 +8374,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
       : 'Have the human open upgrade_url and complete checkout (' + _paidPlansOutputLine() + '): ' + _afterPayClause(_sid, name) + '. The trial key itself is not upgraded; DC Hub emails the paid key to the payer.',
     // r-price-canon: every number here is read from canonical/tier_limits.json.
     // founding leads while the rung exists (MEASURED: it is the plan that sells).
-    pricing:                   { ...(Number.isFinite(PLAN_PRICE.founding) ? { founding_usd_month: PLAN_PRICE.founding } : {}),
-                                 developer_usd_month: _rungNumPrice('developer'), pro_usd_month: _rungNumPrice('pro'),
-                                 metered_url: METERED_URL },
+    // ★2026-10 (owner rule 09-27): no monthly plan price in output, numeric
+    // included (developer_usd_month / pro_usd_month are gone) — the pack is
+    // the only price DC Hub states; upgrade_instructions carries the plans line.
+    pricing:                   { metered_url: METERED_URL },
   };
   return { text, sc };
 }
@@ -9880,7 +9882,7 @@ const TRIAL_HEADER_OVERRIDES = {
       '',
       '⚡ **Free, one call, no email — do this first:** call the `claim_free_key` tool now → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the free depth. **Save the key to your MCP config** so every future session reuses it.',
       `💳 **Want full premium depth** (facility detail, pipelines, operator landscape)? Your human pays in one click and THIS session is served in full: ${_rungsText('get_market_intel', 'free', sessionId)}`,
-      `→ Prefer a flat plan? **[Developer ${_priceLabel('developer')}](${_developer})** · [free dev key by email](${redeem})`,
+      `→ Prefer a flat plan? **[Developer](${_developer})** · [free dev key by email](${redeem})`,
       '',
       '🧭 **Want the decision, not just the metric?** On this same free taste, call `get_market_dcpi_rank` (BUILD / CAUTION / AVOID verdict for a market) or `rank_markets` (a ranked shortlist) — the decision layer that makes the upgrade worth it.',
       '',
@@ -16129,7 +16131,7 @@ function trackedTool(srv, name, description, schema, handler) {
               tier: 'credits_depleted',
               message: "You're out of pack credits. Top up $10 for 1,000 more API calls "
                      + "(one-time, no subscription, instant) — or subscribe: Developer "
-                     + _priceLabel('developer') + " (" + _callsPerDay('developer') + " calls/day). "
+                     + "(" + _callsPerDay('developer') + " calls/day). "
                      + "Call `unlock_more_data` for a one-click link.",
               next_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sid),
@@ -16815,7 +16817,7 @@ function trackedTool(srv, name, description, schema, handler) {
                         ? { next_session: _NEXT_SESSION } : {}),
                     taste_bounded: _boundedTaste.bounded,   // r-fiber-taste-cap: true when a >120KB payload was depth-teased
                     tool: name,
-                    ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map; the full map is Pro (${_priceLabel('pro')}).` } : {}),
+                    ...(MAP_TOOLS.has(name) ? { map_url: mapHref(name), map_cta: `This \`${name}\` data is live on DC Hub's Land & Power map; the full map is Pro.` } : {}),
                     ...(_grokTaste && typeof _remainingFull === 'number' ? { remaining_full_today: _remainingFull } : {}),
                     ..._autoMintSC,   // upgrade CTA + key-bound pair-code link (the human handoff)
                     ..._hiSC,
@@ -17319,7 +17321,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API credits (no subscription) — the cheapest way to pay per call.',
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
               ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
-                              pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
+                              pro_hint: 'Pro — everything (the plan most humans choose).' } : {}),
               ...promoSC(),
             };
             return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
@@ -17438,15 +17440,15 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // works per-call (credit cascade serves PRO_ONLY full for pack holders),
                 // and NO bind_email (binding cannot lift the paid cap).
                 message: _paidTaste
-                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Full depth per call now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ ${_proOnlyTool(name) ? 'Pro ' + _priceLabel('pro') + ', which opens \`' + name + '\`' : 'Developer ' + _priceLabel('developer') + ' = ' + _callsPerDay('developer') + ' calls/day'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Full depth per call now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ ${_proOnlyTool(name) ? 'Pro, which opens \`' + name + '\`' : 'Developer = ' + _callsPerDay('developer') + ' calls/day'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
                 credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to pay for full depth per call right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
                 upgrade_url: _unlockUrl(name, _sid),
                 developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
                 ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
-                                pro_hint: 'Pro ' + _priceLabel('pro') + ' — everything (the plan most humans choose).' } : {}),
+                                pro_hint: 'Pro — everything (the plan most humans choose).' } : {}),
                 ...promoSC(),
               };
               // r-fresh-zero (2026-07-01): this response hands out a checkout link —
@@ -17513,7 +17515,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // follow-up for unbound callers.
                 { type: 'text', text: _paidTaste
                   ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
-                    '⚡ **Unlimited full `' + name + '` depth is Pro (' + _priceLabel('pro') + '):** ' + (PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)) +
+                    '⚡ **Unlimited full `' + name + '` depth is Pro:** ' + (PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)) +
                     ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
                     _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
                   : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
@@ -17627,7 +17629,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               _bteased._upgrade = {
                 tier: _btPaid ? String(_gateTier) : 'trial',
                 message: _btPaid
-                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro (${_priceLabel('pro')}) → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
                   : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. The complete dataset is paid per call: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
@@ -23251,7 +23253,7 @@ function createServer(descOverrides, instructionsTail) {
         // who explicitly confirmed — routed through the suppression/unsubscribe-
         // compliant marketing choke-point. Pairs with the email-bind above.
         '📬 **Or let us remind you — ONE call.** If your human shares an email and wants a weekly *“what changed in the markets you queried”* digest, call `subscribe_digest` with {email}. We email a one-click confirm link (double opt-in) — they only get the digest after confirming, and every email has one-click unsubscribe. (This is the nudge that pulls your agent back when the data moves.)\n\n' +
-        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market) — Developer ' + _priceLabel('developer') + ', ' + _callsPerDay('developer') + '/day: ' + _subCheckoutUrl(DEVELOPER_URL + promoParam(), '');
+        'Want DC Hub to monitor *for* you? `save_site` your candidates, then `set_site_alert` on each to get an EMAIL when its DCPI / capacity / nearby-facilities move (or `set_market_alert` for a whole market) — Developer, ' + _callsPerDay('developer') + '/day: ' + _subCheckoutUrl(DEVELOPER_URL + promoParam(), '');
       return {
         content: [{ type: 'text', text }],
         structuredContent: {

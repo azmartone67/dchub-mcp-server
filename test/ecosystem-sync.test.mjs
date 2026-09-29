@@ -573,11 +573,15 @@ describe('Glama <head> card: meta / og / JSON-LD are read, not only the body', (
 });
 
 describe('the #410 issue body never prints a banned price itself', () => {
-  it('the paste-line header states the $99 price without quoting a banned figure', () => {
+  // ★2026-10 (owner rule 09-27): the header used to say "Pro is $99/mo"; the
+  // only public price is the $10 pack, so it now names that and no monthly price.
+  it('the paste-line header names only the $10 pack, no monthly price, and no banned figure', () => {
     const results = [{ key: 'mcphive', kind: 'manual', label: 'MCP Hive', fix: 'f', verdict: { state: 'drift', reasons: ['says 88 tools (live 90)'] } }];
     const body = renderIssue({ ssot: SSOT, results, stuck: ['mcphive'], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
     const header = body.split('\n').find((l) => l.startsWith('Paste-ready line'));
-    expect(header).toContain('Pro is $99/mo');
+    expect(header).toContain('$10 one-time pack of 1,000 API credits');
+    expect(header).not.toMatch(/\$\s?\d[\d,]*(?:\.\d+)?\s*(?:\/\s*(?:mo|month)\b|per month|a month)/i);
+    expect(body).not.toMatch(/\$\s?\d[\d,]*(?:\.\d+)?\s*(?:\/\s*(?:mo|month)\b|per month|a month)/i);
     expect(bannedClaims(header)).toEqual([]);
     expect(bannedClaims(body)).toEqual([]);
   });

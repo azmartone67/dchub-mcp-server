@@ -195,7 +195,8 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     const said = tellLine(r.text);
     expect(said, r.text.slice(0, 400)).toBeTruthy();
     expect(said).toMatch(/^DC Hub rates this site CAUTION overall, with gas pipeline access as the weakest factor\./);
-    expect(said).toMatch(/\. The full breakdown \(power, gas, fiber, market and risk scores, nearby substations and power cost\) is on DC Hub Pro, \$99\/mo with a 7-day free trial: https:/);
+    expect(said).toMatch(/\. The full breakdown \(power, gas, fiber, market and risk scores, nearby substations and power cost\) is on DC Hub Pro with a 7-day free trial: https:/);
+    expect(said).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(said).not.toMatch(/\$10|credits/);
     expect(ctaUrls(r.body)).toHaveLength(1);
     // Whole-number needles match inside tokens and timestamps (memory: whole-
@@ -296,7 +297,7 @@ describe('pure helpers', () => {
     for (const tool of ['analyze_site', 'compare_sites', 'get_grid_intelligence', 'get_fiber_intel', 'search_facilities', 'get_dchub_recommendation', 'rank_markets']) {
       for (const completeness of variants) {
         for (const offer of ['pack', 'pro']) {
-          const s = PC.humanText({ tool, completeness, offer, proPrice: '$99/mo', url, remaining: 0 });
+          const s = PC.humanText({ tool, completeness, offer, url, remaining: 0 });
           expect(s.endsWith(': ' + url)).toBe(true);
           expect(s.length - url.length - 2, s).toBeLessThanOrEqual(PC.HUMAN_TEXT_MAX);
           expect(s).not.toMatch(/unlock|DO NOT|VERBATIM|your human|\*\*/i);

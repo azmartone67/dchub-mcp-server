@@ -71,19 +71,16 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
     // still have to attribute. Retiring the offer is not deleting the SKU.
     expect(typeof FOUNDING_URL).toBe('string');
   });
-  it('the published pricing envelope drops founding_usd_month entirely', () => {
-    // server.mjs spreads founding_usd_month in only when the rung has a finite
-    // price. With founding retired that spread must contribute NOTHING — the
-    // field disappears rather than publishing null, which would read to an
-    // agent as "a founding tier exists, price unknown".
+  it('the auto-mint pricing envelope publishes no monthly price (founding, developer or pro)', () => {
+    // ★2026-10 relay batch (owner rule 09-27): this envelope carried
+    // { developer_usd_month: 49, pro_usd_month: 99 } — a monthly price in tool
+    // output, just numeric. The only price DC Hub states is the $10 pack, so
+    // the block keeps the pack link and nothing priced per month.
     expect(Number.isFinite(PLAN_PRICE.founding)).toBe(false);
-    const envelope = {
-      ...(Number.isFinite(PLAN_PRICE.founding) ? { founding_usd_month: PLAN_PRICE.founding } : {}),
-      developer_usd_month: PLAN_PRICE.developer,
-      pro_usd_month: PLAN_PRICE.pro,
-    };
-    expect(envelope).toEqual({ developer_usd_month: 49, pro_usd_month: 99 });
-    expect('founding_usd_month' in envelope).toBe(false);
+    const m = SRC.match(/\n\s+pricing:\s+\{([^}]*)\},/);
+    expect(m, 'auto-mint pricing: block not found — this check would read nothing').toBeTruthy();
+    expect(m[1]).toContain('metered_url: METERED_URL');
+    expect(m[1]).not.toMatch(/_usd_month|PLAN_PRICE|_rungNumPrice|_priceLabel/);
   });
   it('the paid-plans line offers Developer and Pro, and never mentions Founding', () => {
     const line = _paidPlansLine();
@@ -100,7 +97,7 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
     expect(bad.map((l) => l.trim().slice(0, 100))).toEqual([]);
   });
   it('the checkout ladder offers pro and no longer offers founding', () => {
-    expect(SRC).toMatch(/\{ id: 'pro', +label: _priceLabel\('pro'\)/);
+    expect(SRC).toMatch(/\{ id: 'pro', +label: 'Pro subscription'/);
     expect(SRC).not.toMatch(/id: 'founding'/);
     // r-gated-cta-tokenized (2026-09-18): this used to pin the free-tier
     // nudge's link as a BARE https://dchub.cloud/pricing. That was the single

@@ -75,7 +75,8 @@ describe('the $10 pack is never called an unlock', () => {
   it('_rungsText on a Pro-only tool: pack rung, then Pro — and no unlock word', () => {
     const r = withCtx({ session_id: SID }, () => _rungsText('get_grid_intelligence', 'free', SID));
     expect(r).toContain('$10 one-time = 1,000 API credits');
-    expect(r).toContain('Pro $99/mo');
+    expect(r).toContain('**Pro**');
+    expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(r).not.toMatch(UNLOCK);
   });
 

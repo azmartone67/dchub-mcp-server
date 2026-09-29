@@ -20,7 +20,7 @@
 //
 // Qualifies for the hard gate: pure functions over AsyncLocalStorage, no network.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { _ctxALS, _freeRungLine, siteHeadlineHeader, _priceLabel } from '../server.mjs';
+import { _ctxALS, _freeRungLine, siteHeadlineHeader } from '../server.mjs';
 
 const SID = '1aa6536d-b1d4-24b4-74a8-e89ba266e781';
 const KEY = 'dch_live_testkey_not_real';
@@ -84,7 +84,7 @@ describe('siteHeadlineHeader — the order an agent reads', () => {
     const h = withCtx({ session_id: SID }, () => siteHeadlineHeader('analyze_site', SID));
     const free = h.indexOf('claim_free_key');
     const pack = h.indexOf('$10 one-time');
-    const pro = h.indexOf('**Pro ' + _priceLabel('pro') + '**');
+    const pro = h.indexOf('**Pro**');
     expect(pack, 'the $10 rung vanished').toBeGreaterThan(-1);
     expect(pro, 'the Pro rung vanished').toBeGreaterThan(-1);
     expect(free).toBeLessThan(pack);
