@@ -54,6 +54,31 @@ const OUT = path.join(ROOT, 'canonical', 'tool_maturity.json');
 const COVERAGE_URL = 'https://dchub.cloud/api/v1/canon/coverage';
 const BENCH_URL = 'https://dchub.cloud/api/v1/reports/canonical-benchmarks';
 
+// ★2026-09-29 HELD WHILE /mcp IS BYTE-FROZEN (frz-claude-relay-wording).
+// server.mjs serves this snapshot on tools/list (the per-tool annotations AND
+// the maturity basis, which carries snapshot_retrieved_at), and
+// test/claude-directory-catalog.test.mjs requires /mcp tools/list to be
+// byte-identical to origin/main until 2026-10-02T00:00Z. So every rewrite here
+// fails the hard gate, and daily-manifest-sync's verify step then refuses to
+// push the WHOLE heal: measured 2026-09-28, runs 36431329208 (only this file
+// changed: capture_evidence.last_successful_execution 09-21 -> 09-28, plus
+// retrieved_at) and 36497724727 both failed on exactly that test. Until the
+// freeze ends the snapshot is held and the run says what it would have
+// changed; the hold lifts itself at the same instant the byte comparison
+// retires (test/tool-maturity-held-during-mcp-freeze.test.mjs pins the two
+// dates together).
+export const MCP_BYTE_FREEZE_ENDS = '2026-10-02T00:00:00Z';
+export const heldByMcpByteFreeze = (now = Date.now()) => now < Date.parse(MCP_BYTE_FREEZE_ENDS);
+
+/** 'same' | 'held' | 'write' for a freshly built snapshot. PURE.
+ *  Compares everything EXCEPT retrieved_at (see main()). */
+export function writeDecision(prev, snap, now = Date.now()) {
+  const stripped = (o) => { if (!o) return null; const c = { ...o }; delete c.retrieved_at; return JSON.stringify(c); };
+  if (prev && stripped(prev) === stripped(snap)) return 'same';
+  if (prev && heldByMcpByteFreeze(now)) return 'held';
+  return 'write';
+}
+
 const UA = { 'User-Agent': 'dchub-mcp-maturity-refresh/1.0', 'Accept': 'application/json' };
 
 async function getJson(url) {
@@ -190,9 +215,17 @@ async function main() {
   // did not change turns a freshness date into noise, and a date that moves
   // when nothing moved is how "last updated" claims stop meaning anything.
   const prev = (() => { try { return JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch { return null; } })();
-  const stripped = (o) => { if (!o) return null; const c = { ...o }; delete c.retrieved_at; return JSON.stringify(c); };
-  if (prev && stripped(prev) === stripped(snap)) {
+  const verdict = writeDecision(prev, snap);
+  if (verdict === 'same') {
     console.log(`maturity refresh: ✓ snapshot already matches the owners (contract_hash ${snap.contract_hash}) — not rewriting`);
+    return;
+  }
+  if (verdict === 'held') {
+    const moved = Object.keys(snap).filter((k) => k !== 'retrieved_at'
+      && JSON.stringify(prev[k]) !== JSON.stringify(snap[k]));
+    console.log(`::notice::maturity refresh: HELD — the owners moved (${moved.join(', ') || 'shape'}; contract_hash `
+      + `${prev.contract_hash} -> ${snap.contract_hash}), but /mcp tools/list serves this snapshot and is byte-frozen `
+      + `until ${MCP_BYTE_FREEZE_ENDS} (frz-claude-relay-wording). Not rewriting; the first run after that date writes it.`);
     return;
   }
 
