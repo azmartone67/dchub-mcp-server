@@ -17,7 +17,8 @@
 //   - `long` is byte-equal to scripts/smithery_description.txt, so the file
 //     Smithery is pushed from and this one cannot drift
 //   - the heal engine and the daily job own the file, so a tool-count move heals it
-// Offline: reads committed files only.
+// HARD GATE (test/hard-gate.txt): qualifies because it is offline and reads
+// committed files only.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
