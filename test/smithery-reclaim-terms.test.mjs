@@ -74,7 +74,9 @@ function pyList(name) {
 // are named here, exactly, so the drop is a recorded decision rather than a
 // silent one: any FURTHER RECLAIM term dropped still fails, and re-adding one
 // of these fails too until it is removed from this list.
-const DROPPED_BY_OWNER_0928 = ['energy', 'natural gas', 'hyperscale', 'electricity'];
+// 2026-09-29 — owner re-added `electricity` (Smithery rank #1 -> #23 after the
+// 09-28 copy, measured by ~/dchub-smithery-watch/rank100.py). It is fenced again.
+const DROPPED_BY_OWNER_0928 = ['energy', 'natural gas', 'hyperscale'];
 
 describe('smithery canonical description keeps the terms we reclaim with it', () => {
   it('every RECLAIM term appears in the canonical description (except the owner-dropped set)', () => {
