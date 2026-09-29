@@ -5591,6 +5591,7 @@ export function findCapacityPromptText(a = {}) {
     .filter(Boolean).join(' ');
   return `Use DC Hub Capacity Source to find data-center capacity for this requirement: ${a.requirement}
 1. Call source_capacity${args ? ` ${args}` : ''} — live listings of powered land, powered shells and turnkey capacity (market, state, capacity, and when each listing was last updated), or the program status while listings are being onboarded. Narrow it the way the requirement does: size as min_mw, or min_kw in kW; location as region (e.g. region=europe) or location (a country, state or metro); plus delivery_type and available_by. A size is matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total, so a listing with plenty of total capacity but a smaller contiguous block will not come back for a large size.
+   To match the whole requirement instead of browsing (once your human is signed in), call source_capacity with target_mw (or target_kw), plus min_chunk_kw for the smallest piece they will contract at one site, and max_sites / max_providers above one if the requirement may be split: it returns exact single-listing fits, multi-site bundles, or the shortfall and when scheduled capacity closes it.
 2. Say which listings fit the requirement and why. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
 3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is live yet, call request_capacity_intro without a slug to register the requirement for new listings.
 This is a deal registration: DC Hub sends the provider only your human's company name and the requirement, the provider accepts or declines, and only on acceptance are the provider's identity, site and contact shared with your human (and your human's name, role and email with the provider); on a decline nothing is shared. Treat listing details as confidential: cite "DC Hub Capacity Source (dchub.cloud)" and do not republish them.`;
@@ -6557,9 +6558,9 @@ export function _matchLines(body) {
   }
   if (bundles.length) {
     lines.push(exact.length
-      ? 'Also ' + bundles.length + ' bundle' + (bundles.length === 1 ? '' : 's') + ' that deliver it together:'
+      ? 'Also ' + bundles.length + ' bundle' + (bundles.length === 1 ? '' : 's') + ' that ' + (bundles.length === 1 ? 'delivers' : 'deliver') + ' it together:'
       : 'No single listing fits the whole requirement. ' + bundles.length + ' bundle' + (bundles.length === 1 ? '' : 's')
-        + ' of listings deliver it together:');
+        + ' of listings ' + (bundles.length === 1 ? 'delivers' : 'deliver') + ' it together:');
     bundles.forEach((x, i) => {
       const full = _listingStr(x.earliest_full_delivery);
       lines.push('Bundle ' + (i + 1) + ': ' + (_matchKw(x.total_kw) || 'total not stated')
