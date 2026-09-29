@@ -145,7 +145,10 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     const r = await callAs('claude-ai', 'search_facilities', { provider: 'STACK', city: 'Portland' });
     const said = tellLine(r.text);
     expect(said, r.text.slice(0, 400)).toBeTruthy();
-    expect(said).toMatch(/^I got \d+ of \d+ matching facilities from DC Hub\./);
+    // r-missed-upgrade (2026-09-29): the sentence names what this keyless answer
+    // hid, and the offer is the lowest rung that returns it — the pack, because
+    // a free key still gets the facility-field mask on this tool.
+    expect(said).toMatch(/^This answer hid .+, and \d+ more facilities\. The full answer is \$10 one-time/);
     expect(said).toContain('$10 one-time');
     const urls = ctaUrls(r.body);
     expect(urls, JSON.stringify(urls)).toHaveLength(1);
