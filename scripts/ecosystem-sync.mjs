@@ -1016,7 +1016,7 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
   if (manual.length) {
     out.push('| listing | what it says now | what fixes it |', '|---|---|---|');
     for (const r of manual) out.push(line(r));
-    out.push('', 'Paste-ready line, generated from the single source (Pro is $99/mo; quote no other Pro price and no launch offer):', '', '```', pasteLine(ssot), '```');
+    out.push('', 'Paste-ready line, generated from the single source. It names no price; if a listing must state one, the only public price is the $10 one-time pack of 1,000 API credits (no monthly plan price, no launch offer):', '', '```', pasteLine(ssot), '```');
     out.push('', 'For an open PR on a curated list, update THAT PR in place. A second PR reads as a duplicate to those bots.');
   } else {
     out.push('Nothing. Every listing a person has to edit matches the live source.');
