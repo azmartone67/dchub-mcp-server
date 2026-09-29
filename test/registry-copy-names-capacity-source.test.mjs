@@ -110,7 +110,10 @@ describe('the manifests the registries ingest', () => {
     // #436 spent the 100-char schema cap on this; a later edit reclaiming
     // those characters for something else would silently un-publish the
     // capability from PulseMCP, Glama and mcp.so, which all mirror it.
-    expect(SERVER_JSON.description).toMatch(/off-market/i);
+    // 2026-09-29 owner: "capacity to buy or lease" replaces "off-market" on
+    // every public surface until public listings exist.
+    expect(SERVER_JSON.description).toMatch(/capacity to buy or lease/i);
+    expect(SERVER_JSON.description).not.toMatch(/off-market|not publicly marketed/i);
     expect(SERVER_JSON.description).toMatch(/capacity/i);
   });
 

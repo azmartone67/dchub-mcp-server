@@ -91,7 +91,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **NEPA filings** for upcoming federal energy + data center projects
 - **Tax incentives** by state with eligibility details
 - **Market intelligence** — 300+ markets scored daily with DCPI BUILD/CAUTION/AVOID verdicts, plus facilities tracked across 170+ countries
-- **Capacity Source** — off-market and available capacity to buy or lease (powered land, powered shells, turnkey, colocation), searchable by size in kW or MW and by location
+- **Capacity Source** — data-center capacity to buy or lease (powered land, powered shells, turnkey, colocation), searchable by size in kW or MW and by location
 
 **92 MCP tools** across facility search, market intel, grid + interconnection, renewable-energy, site analysis, deals, fiber routing, and infrastructure. [Full tool list →](https://dchub.cloud/integrations/mcp)
 
@@ -129,7 +129,7 @@ Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), 
 
 ## Capacity Source — capacity to buy or lease
 
-Everything above answers *where to build*. **[Capacity Source](https://dchub.cloud/listings)** answers *what is available now*: off-market and available data center capacity — powered land, powered shells, turnkey capacity and colocation — including sites that are not publicly marketed, for enterprise and agent-led procurement.
+Everything above answers *where to build*. **[Capacity Source](https://dchub.cloud/listings)** answers *what is available now*: data center capacity to buy or lease — powered land, powered shells, turnkey capacity and colocation — for enterprise and agent-led procurement. Operators and brokers list capacity free at [dchub.cloud/listings](https://dchub.cloud/listings#list-capacity).
 
 **Searchable by size and by location.** `source_capacity` takes a size — `min_kw` in kW, or `min_mw` in MW — and a location:
 

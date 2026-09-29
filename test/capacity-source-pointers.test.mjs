@@ -777,7 +777,7 @@ describe('ecosystem-sync paste line', () => {
   // this fails until you change both.
   it('the blurb is byte-identical to the backend literal, and count-free', () => {
     expect(CAPACITY_BLURB).toBe(
-      'Capacity Source: powered land/shell/turnkey incl. off-market listings '
+      'Capacity Source: powered land/shell/turnkey capacity to buy or lease '
       + 'via source_capacity; browse dchub.cloud/listings.');
     expect(CAPACITY_BLURB).not.toMatch(/\d/);
   });

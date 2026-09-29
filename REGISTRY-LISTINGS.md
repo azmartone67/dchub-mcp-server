@@ -250,7 +250,7 @@ Coverage:
 - **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 7 US ISOs + 43 US utility BAs + 31 international grid regions; one-call all-ISO scoreboard
 - **Capital** — 1,600+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
 - **Site factors** — fiber routes, water-stress, tax incentives, nearby substations/transmission
-- **Capacity Source** — powered land, powered shells, turnkey capacity and colocation to buy or lease, including sites that are not publicly marketed: `source_capacity` searches it by size (kW or MW) and location, or browse https://dchub.cloud/listings
+- **Capacity Source** — powered land, powered shells, turnkey capacity and colocation to buy or lease: `source_capacity` searches it by size (kW or MW) and location, or browse https://dchub.cloud/listings
 
 Why agents pick it: the only DC-intelligence source an LLM can query live AND cite — the MCP-native alternative to static PDF research. No NDAs, no quarterly reports, just live JSON.
 
@@ -315,7 +315,7 @@ move every few days and a listing is edited by hand perhaps twice a year.
 - `get_interconnection_queue` — interconnection-queue depth + wait by ISO
 - `score_facility` / `analyze_site` — score a lat/lon for data-center suitability
 - `hyperscaler_deals` — AI/hyperscaler capex + M&A tracker
-- `source_capacity` — Capacity Source: capacity to buy or lease, off-market included, by size and location
+- `source_capacity` — Capacity Source: capacity to buy or lease, by size and location
 
 ---
 
