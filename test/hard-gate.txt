@@ -249,6 +249,7 @@ test/scoreboard-freshness.test.mjs
 test/selection-triggers.test.mjs
 test/server-json-route.test.mjs
 test/session-release-covers-every-map.test.mjs
+test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
 test/smithery-canon-guard.test.mjs
 test/smithery-credential-fallback.test.mjs
