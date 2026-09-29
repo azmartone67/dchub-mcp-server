@@ -7,7 +7,7 @@
 // fix starts with one file that an auto-sync can read, and rules it cannot break.
 //
 // This test pins:
-//   - the schema (exactly the eight fields; capacity_blurb added 2026-09-29)
+//   - the schema (exactly the nine fields; capacity_blurb and tagline added 2026-09-29)
 //   - the copy rules on every text field: no facility count, no monthly price,
 //     no "$10 unlocks full answers", no "seven layers"
 //   - glama_400 is at most 400 characters
@@ -166,6 +166,18 @@ describe('the Smithery description cannot drift from it', () => {
       + 'data-center capacity at https://dchub.cloud/listings, and agents search it by size and '
       + 'location with source_capacity, then request an introduction with request_capacity_intro.'))
       .toBe(true);
+  });
+});
+
+describe('tagline', () => {
+  it('is exactly the owner-given line (2026-09-29)', () => {
+    expect(COPY.tagline).toBe('The real-time agentic procurement endpoint and data center knowledge hub.');
+  });
+
+  it('fits a directory tagline slot, carries no digit and no superlative', () => {
+    expect(COPY.tagline.length).toBeLessThanOrEqual(160);
+    expect(COPY.tagline).not.toMatch(/\d/);
+    expect(COPY.tagline).not.toMatch(/\bonly\b|\bfirst\b|\bon the planet\b|\bbest\b|\blargest\b/i);
   });
 });
 

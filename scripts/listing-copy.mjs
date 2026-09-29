@@ -8,6 +8,8 @@
 //
 // Fields:
 //   short       one-sentence tagline
+//   tagline     the owner's exact tagline (2026-09-29); directories that show a
+//               tagline (MCP Hive, MCP Market, ...) lead with it before `long`
 //   long        the Long description. Byte-equal to scripts/smithery_description.txt
 //               (trimmed), which smithery-freshness.yml pushes to Smithery, so the
 //               two cannot drift. test/listing-copy.test.mjs enforces it.
@@ -39,8 +41,8 @@ export const GLAMA_MAX = 400;
 export const PRICE_LINE = '$10 one-time pack of 1,000 API credits';
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
-export const TEXT_FIELDS = ['short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
+export const FIELDS = ['short', 'tagline', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
+export const TEXT_FIELDS = ['short', 'tagline', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
 
 export const endpointsLine = (n) => `${n} MCP tools at ${MCP_URL} plus a REST API at ${REST_URL}`;
 
