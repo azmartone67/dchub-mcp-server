@@ -170,7 +170,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _priceLabel, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansLine, _paidPlansOutputLine, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
@@ -8309,8 +8309,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     upgrade_url:               upgradeUrl,
     upgrade_model:             _upgradeOnKey ? 'go_c_key_bound' : 'go_c_session_bound',
     upgrade_instructions:      _upgradeOnKey
-      ? 'Have the human open upgrade_url and complete checkout (' + _paidPlansLine() + '). The X-API-Key on this call auto-upgrades to the paid tier in place — no key swap. Then call the tool again.'
-      : 'Have the human open upgrade_url and complete checkout (' + _paidPlansLine() + '): ' + _afterPayClause(_sid, name) + '. The trial key itself is not upgraded; DC Hub emails the paid key to the payer.',
+      ? 'Have the human open upgrade_url and complete checkout (' + _paidPlansOutputLine() + '). The X-API-Key on this call auto-upgrades to the paid tier in place — no key swap. Then call the tool again.'
+      : 'Have the human open upgrade_url and complete checkout (' + _paidPlansOutputLine() + '): ' + _afterPayClause(_sid, name) + '. The trial key itself is not upgraded; DC Hub emails the paid key to the payer.',
     // r-price-canon: every number here is read from canonical/tier_limits.json.
     // founding leads while the rung exists (MEASURED: it is the plan that sells).
     pricing:                   { ...(Number.isFinite(PLAN_PRICE.founding) ? { founding_usd_month: PLAN_PRICE.founding } : {}),
