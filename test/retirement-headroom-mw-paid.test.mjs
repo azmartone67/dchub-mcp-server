@@ -45,6 +45,7 @@ const leaks = (hay, needle) => new RegExp(`(?<![0-9A-Za-z_.])${needle.replace(/\
 
 let S, PORT, httpServer, stub;
 const targetSeen = [];
+const burnSeen = [];
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -69,6 +70,11 @@ beforeAll(async () => {
       if (url.pathname === '/api/v1/mcp/credits/balance') {
         const key = url.searchParams.get('key') || '';
         res.end(JSON.stringify({ credits: key === K_PACK ? 900 : 0, had_pack: key === K_PACK }));
+        return;
+      }
+      if (url.pathname === '/api/v1/mcp/credits/burn') {
+        burnSeen.push(await readBody(req));
+        res.end('{}');
         return;
       }
       if (url.pathname === '/api/v1/retirement-headroom') {
@@ -173,8 +179,19 @@ describe('be#5886 parity — get_retirement_headroom MW is Developer+', () => {
     expect(out.sc._ignored_params && out.sc._ignored_params.target_mw).toContain('paid filter');
   });
 
-  it('an identified key holding a $10 pack balance: still masked (the pack does not open this)', async () => {
-    expectMasked(await retirement(K_PACK), 'pack');
+  // ladder stage 1 (owner 2026-09-29): the $10 pack is Developer depth paid per
+  // call, so a pack balance opens the MW here and the call burns its credits. REST
+  // (be#5886) still masks it for a pack — a backend follow-up.
+  it('an identified key holding a $10 pack balance: every MW figure, target_mw passed through, credits burned', async () => {
+    burnSeen.length = 0;
+    const out = await retirement(K_PACK, { target_mw: 400, horizon_months: 18 });
+    expect(targetSeen).toEqual(['400']);
+    const b = out.sc || {};
+    expect(b.data, 'pack: rows differ from the backend payload').toEqual(ROWS);
+    expect(b.total_retiring_mw).toBe(TOTAL);
+    expect(b._gated).toBeUndefined();
+    for (let i = 0; i < 50 && !burnSeen.length; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(burnSeen.map((x) => x.tool)).toEqual(['get_retirement_headroom']);
   });
 
   it('starter: masked (Starter is below Developer)', async () => {

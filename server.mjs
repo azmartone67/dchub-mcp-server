@@ -140,7 +140,7 @@ import { continuationHumanText as _continuationHumanText,
          buildContinueUrl as _buildContinueUrl,
          continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
 // The upgrade prompt names what THIS answer hid and the lowest rung that opens it.
-import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor } from './lib/upgrade-missed.mjs';
+import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor, lowestRung as _lowestRung } from './lib/upgrade-missed.mjs';
 // Paywall response contract (growth audit item c) + Grok G3: lib/paywall-contract.mjs.
 import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallContract,
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
@@ -694,9 +694,11 @@ function _paywallContractOn(c) {
 // Land & Power sells Pro (owner 2026-09-22, reaffirmed 2026-09-28): the $10 pack
 // does not open it. So does a Pro-only tool for a caller who already pays for a
 // lower plan. Everything else leads with the $10 pack.
+// ★ ladder stage 1 (owner 2026-09-29): the pack opens no Pro-only tool for ANY
+// caller now (see _packOpensTool), so every Pro-only tool offers Pro.
 function _paywallOffer(name, c) {
   if (LP_TOOLS.has(name)) return 'pro';
-  if (PRO_ONLY_TOOLS.has(name) && _tierRank((c && c.tier) || 'free') >= _tierRank('starter')) return 'pro';
+  if (PRO_ONLY_TOOLS.has(name)) return 'pro';
   return 'pack';
 }
 const _OWN_TELL_TOOLS = new Set(['claim_free_key', 'bind_email', 'recover_my_key']);
@@ -857,8 +859,19 @@ const _PACK_RUNG = '**$10 one-time = 1,000 API credits**, credits don’t expire
 // is Pro-only (r-dev-rung). Both links ride ONE line, so it survives
 // _dropRepeatCheckoutUrls (first checkout-bearing LINE wins) as the response's
 // single payment ask.
+//
+// ★ ladder stage 1 (owner 2026-09-29): on a Pro-only tool the pack is NOT offered.
+// The pack is Developer depth per call and no longer opens a Pro tool, so "$10 …
+// for the full `get_dchub_recommendation`" would sell something that does not
+// open it (the r62b-conv false promise). Pro is the one rung there. If no Pro
+// link could be minted the old two-rung line stands, so a wall is never left
+// without a payable link.
 function _rungsText(toolName, tier, sessionId) {
   const r = _unlockRungs(toolName, tier, sessionId);
+  if (_proOnlyTool(toolName)) {
+    const proOnly = _subRungText('pro', r.pro, 'Pro-only tools');
+    if (proOnly) return proOnly;
+  }
   const sub = _proOnlyTool(toolName)
     ? _subRungText('pro', r.pro, 'Pro-only tools')
     : _subRungText('developer', r.developer, 'full depth for agents, cancel anytime');
@@ -869,12 +882,32 @@ function _rungsText(toolName, tier, sessionId) {
 
 // The whole ladder on ONE line, agent rungs first: unlock_more_data's answer.
 // Pro is named last, as the human screener's plan, never as the agent default.
-function _ladderText(toolName, tier, sessionId) {
+//
+// ★ ladder stage 1 (owner 2026-09-29): tier-aware. It used to return the same
+// ladder on every seat, so a Developer key was offered Developer and the pack
+// (tier audit 2026-09-29, §3.9). `offer` (from _unlockOfferFor) drops every rung
+// at or below the caller's own; omitted, the whole ladder (the old line).
+function _ladderText(toolName, tier, sessionId, offer) {
+  const o = offer || { pack: true, developer: true, pro: true };
   const r = _unlockRungs(toolName, tier, sessionId);
-  const dev = _subRungText('developer', r.developer, 'full depth for agents, cancel anytime');
-  const pro = _subRungText('pro', r.pro, 'Pro-only tools + site-grade coordinates');
+  const dev = o.developer ? _subRungText('developer', r.developer, 'full depth for agents, cancel anytime') : '';
+  const pro = o.pro ? _subRungText('pro', r.pro, 'Pro-only tools + site-grade coordinates') : '';
+  if (!o.pack) {
+    const parts = [dev, pro].filter(Boolean);
+    return parts.join(' · or ');
+  }
   return _PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')' + (dev ? ' · or ' + dev : '')
     + (pro ? ' · for a human screening sites: ' + pro : '');
+}
+// Which rungs are ABOVE this caller (lib/upgrade-missed rungFloor, the same floor
+// the missed-upgrade prompt uses): a pack holder or a grandfathered Starter key is
+// past the pack, a Developer key is past Developer, Pro and above are past all.
+// 'paid' is read as Developer (its documented floor), so it is still offered Pro.
+export function _unlockOfferFor(c) {
+  const cc = c || {};
+  const floor = _rungFloor({ keyed: !!cc.api_key, tier: cc.tier, credits: cc._credits_seen });
+  // RUNGS: 0 free_key · 1 pack · 2 developer · 3 pro
+  return { pack: floor <= 1, developer: floor <= 2, pro: floor <= 3 };
 }
 
 export function _unlockMoreDataEnvelope(a) {
@@ -937,10 +970,15 @@ export function _unlockMoreDataEnvelope(a) {
   // line (Starter + Developer) that sat below the ask: Starter is not on
   // /pricing, and a second line carrying checkout links is exactly what
   // _dropRepeatCheckoutUrls deletes, so Developer could vanish in transit.
-  const human_message =
-    HUMAN_FIRST_MARKER + ' ' + _ladderText('unlock_more_data', _tier, _sid) + '\n' +
+  const _offer = _unlockOfferFor(_ctx);
+  const _ladder = _ladderText('unlock_more_data', _tier, _sid, _offer);
+  const human_message = !_ladder
+    ? '✅ **This key already holds every DC Hub rung** — every tool, including the Pro-only ones, is served in full. Nothing to unlock.'
+    : HUMAN_FIRST_MARKER + ' ' + _ladder + '\n' +
     '🔓 **I can unlock full DC Hub data for you.** I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
-    '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*';
+    (_offer.pack
+      ? '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*'
+      : '');
   const _mppOn = mppEnabled();
   const text =
     human_message + '\n\n' +
@@ -976,17 +1014,20 @@ export function _unlockMoreDataEnvelope(a) {
       recommended: _mppOn ? 'mpp' : 'credits',
       // r-dev-rung: the default SUBSCRIPTION for an agent is Developer. Pro is
       // the human screener's plan (Pro-only tools, site-grade coordinates).
-      recommended_subscription: 'developer',
+      recommended_subscription: _offer.developer ? 'developer' : (_offer.pro ? 'pro' : null),
       plans: [
         ...(_mppOn ? [{ id: 'mpp', label: '$0.50 per call — pay yourself, no human, no account',
                         best_for: 'autonomous agents (no card-holder in the loop)',
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
-        { id: 'credits',   label: '$10 one-time — 1,000 API credits', best_for: 'one screen at full depth; credits don’t expire, no subscription', checkout_url: credits },
-        { id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer },
-        { id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro },
+        // ladder stage 1: only the rungs above this caller (_unlockOfferFor).
+        ...(_offer.pack ? [{ id: 'credits',   label: '$10 one-time — 1,000 API credits', best_for: 'one screen at full depth on every tool outside the Pro-only set; credits don’t expire, no subscription', checkout_url: credits }] : []),
+        ...(_offer.developer ? [{ id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer }] : []),
+        ...(_offer.pro ? [{ id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro }] : []),
       ],
       free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
-      what_unlocks: 'Full grid intelligence (all ISOs/grids, not 1), full fiber depth, every premium tool, complete result sets (not partial previews), and higher rate limits.',
+      // ladder stage 1: the pack and Developer open everything outside the Pro-only
+      // set; only Pro opens that set. "every premium tool" was true of no rung below Pro.
+      what_unlocks: 'The $10 pack or Developer: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the Pro-only set; Developer adds higher rate limits. Pro adds the Pro-only tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
       binds_to_session: !!_sid,
       // r-anon-attrib (2026-08-26): was hardcoded `true` while binds_to_session
       // was correctly !!_sid — so the ONE class that could not get a
@@ -2259,6 +2300,12 @@ export const RETIREMENT_MW_LOCKED = ['data[].generator.capacity_mw',
 export const RETIREMENT_DEFAULT_TARGET_MW = 50;   // the backend's DEFAULT_TARGET_MW
 export function _retirementMwFull(tier) {
   return _RETIREMENT_MW_FULL_TIERS.has(String(tier || '').trim().toLowerCase());
+}
+// ladder stage 1: an unpaid seat holding a pack balance that covers the call.
+export function _retirementPackOpens(tier, credits) {
+  const t = String(tier || '').trim().toLowerCase();
+  return ['', 'anonymous', 'anon', 'free', 'identified', 'trial'].includes(t)
+    && Number(credits) >= _creditCost('get_retirement_headroom');
 }
 // Mirrors routes/retirement_headroom.py _mask: MW nulled (never 0), keys kept,
 // rows ordered by date then name (not by the MW they hide), and the REST tease
@@ -6391,9 +6438,17 @@ const SITE_HEADLINE_TOOLS = new Set([
 // CANNOT unlock it (it's Pro). The agent obeyed, retried into a hard paywall,
 // and gave up. We use this set to tell the truth: the trial key unlocks the
 // IDENTIFIED toolset NOW; the deep Pro brief needs Pro/metered.
+//
+// ★ ladder stage 1 (owner 2026-09-29, one reason per rung): get_grid_intelligence
+// and get_fiber_intel LEFT this set. Developer (and every paid plan above it)
+// gets both full and unlimited; the $10 pack keeps them full per call. What is
+// left is the decision layer: Land & Power (LP_TOOLS), get_dchub_recommendation,
+// export (GeoJSON is Pro in the backend) and get_gas_economics prices (its own
+// mask, _maskGasEconomicsBelowPro). Nothing in this set opens through the pack's
+// credit path any more (see the r-pack5 cascade in trackedTool).
 const PRO_ONLY_TOOLS = new Set([
-  'analyze_site', 'compare_sites', 'get_grid_intelligence',
-  'get_fiber_intel', 'get_dchub_recommendation', 'generate_site_analysis',
+  'analyze_site', 'compare_sites',
+  'get_dchub_recommendation', 'generate_site_analysis',
   // 2026-06-06 agent moat: bulk export stays PRO. r-free-shortlist + r-free-alerts
   // (2026-06-24): save_site/list_saved_sites AND set_site_alert/set_market_alert are
   // now FREE-with-a-key — the persist + monitor retention loop. The spam-relay guard
@@ -6424,6 +6479,20 @@ export const HARD_WALL_HEADLINES = Object.freeze([
 ]);
 export const isHardWallText = (t) =>
   HARD_WALL_HEADLINES.some((h) => String(t || '').includes(h));
+
+// ★ ladder stage 1 (owner 2026-09-29): Starter is no longer sold, and an existing
+// Starter key keeps exactly what it had. On these two tools that was the 10/day
+// full-answer allowance (r-paidtaste), not the unlimited depth Developer now gets,
+// so Starter alone stays un-normalized on them and keeps reaching that branch.
+export const STARTER_TASTE_TOOLS = new Set(['get_grid_intelligence', 'get_fiber_intel']);
+// r-starterdev-parity, in ONE place: a Starter/Developer key is paid-class on
+// every tool except the Pro-only set, and (Starter only) the grandfathered pair.
+// Every call site that folds 'developer'/'starter' into 'paid' asks this.
+export function _normalizesToPaid(g, tool) {
+  if (g === 'developer') return !PRO_ONLY_TOOLS.has(tool);
+  if (g === 'starter') return !PRO_ONLY_TOOLS.has(tool) && !STARTER_TASTE_TOOLS.has(tool);
+  return false;
+}
 
 export function isFreeWithEmailTool(name) {
   return PAID_ONLY_TOOLS.has(name) && !PRO_ONLY_TOOLS.has(name);
@@ -6934,6 +7003,42 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
   return { content: [{ type: 'text', text: JSON.stringify(envelope) }], structuredContent: envelope };
 }
 
+// ── ladder stage 1 (owner 2026-09-29): a paid plan on a Pro-only tool gets a PREVIEW ──
+// Starter and Developer used to get `## 🔒 … is a Pro tool` and NO data on
+// get_dchub_recommendation, while a free key got the 3-row preview: paying less
+// got more (tier audit 2026-09-29, inversion 2). A Developer or grandfathered
+// Starter key now gets the same trimmed preview a free key gets (trimForTrial:
+// top TRIAL_PREVIEW_ROWS rows, figures nulled), and ONE rung named: Pro, the only
+// rung that opens the tool. Never the pack (it does not open Pro tools) and never
+// the caller's own plan. Land & Power never reaches this: _lpAccessFor answers
+// it earlier.
+export function _paidPlanProPreview(name, result, planWord, sessionId) {
+  let parsed = null;
+  try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) { parsed = null; }
+  if (!parsed || typeof parsed !== 'object') return null;
+  _noteGate('tier_gate:' + name);
+  const preview = trimForTrial(parsed, name);
+  const plan = String(planWord || '').toLowerCase() === 'starter' ? 'Starter' : 'Developer';
+  const proUrl = _missedRungLink('pro', name, sessionId || '') || null;
+  const mu = _missedUpgradeFor(preview);
+  const lead = (mu && mu.rung === 'pro') ? mu.what + ' ' : '';
+  const line = '\n\n🔒 **`' + name + '` is a Pro tool.** ' + lead + 'On ' + plan
+    + ' this is the same preview a free key gets'
+    + (proUrl ? '; the full answer comes with DC Hub Pro → ' + proUrl : '; the full answer comes with DC Hub Pro')
+    + '. ' + plan + ' keeps its own depth on every tool outside the Pro-only set.';
+  const envelope = (Array.isArray(preview) || !preview || typeof preview !== 'object')
+    ? { data: preview } : preview;
+  const sc = {
+    ...envelope, _gated: true, _preview_only: true, required_plan: 'pro', tool: name,
+    ...(proUrl ? { upgrade_url: proUrl } : {}),
+  };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(preview) + line }],
+    isError: PREVIEW_ISERROR,
+    structuredContent: sc,
+  };
+}
+
 const X402_TOOLS = new Set(['get_grid_intelligence', 'get_fiber_intel',
   'analyze_site', 'compare_sites', 'generate_site_analysis']);
 const X402_PRICE = {
@@ -7114,8 +7219,9 @@ export async function buildDepthTease(name, result, ctx, tier) {
   // addressable free pool, so the cheapest on-ramp belongs first.
   const _pack = _packCheckoutUrl(_sid);
   // r-pro-only-sku (2026-09-24): the subscription named here is the one that OPENS
-  // this tool — Pro for a Pro-only tool (get_grid_intelligence, get_fiber_intel sit
-  // in DEPTH_TEASE_TOOLS), Developer otherwise. This wall offered Developer on both.
+  // this tool — Pro for a Pro-only tool, Developer otherwise. Ladder stage 1
+  // (2026-09-29): get_grid_intelligence / get_fiber_intel left PRO_ONLY_TOOLS, so
+  // every DEPTH_TEASE_TOOLS member now names Developer (test/go-sid-and-two-rungs).
   const _proOnly = _proOnlyTool(name);
   const _subName = _proOnly ? 'a Pro subscription' : 'a Developer subscription';
   teased._upgrade = {
@@ -7271,6 +7377,10 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProO
   if (tier === 'paid' && PRO_ONLY_TOOLS.has(toolName) && confirmedProOrAbove !== true) {
     tier = 'developer';
   }
+  // ladder stage 1: the same Starter/Developer fold every call site applies
+  // (_normalizesToPaid), so a caller handing this the raw plan word gets the
+  // answer trackedTool would serve, not a stale Pro-only reading.
+  if (_normalizesToPaid(tier, toolName)) tier = 'paid';
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
   // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
   // after validate_trial_key() confirms a live, unexpired row in
@@ -7309,7 +7419,12 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProO
   // PAID_DAILY_FULL_CAP; unlimited full depth on the pair stays Pro. The
   // non-Pro ALWAYS_PARTIAL tools never reach this (normalized to 'paid' →
   // short-circuited above), so this fires ONLY on the flagship pair.
-  if ((tier === 'starter' || tier === 'developer') && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+  //
+  // ★ ladder stage 1 (owner 2026-09-29): Developer no longer lands here — the pair
+  // left PRO_ONLY_TOOLS, so the call site folds Developer into 'paid' (full,
+  // unlimited). Only a grandfathered Starter key keeps this allowance, because
+  // Starter is not sold any more and an existing one keeps what it bought.
+  if (tier === 'starter' && hasApiKey && STARTER_TASTE_TOOLS.has(toolName)) {
     return { allowed: true, params, trial_taste: true, paid_taste: true };
   }
   // r46-conversion: keyed-free users get the 5 demand-tools through —
@@ -8992,11 +9107,17 @@ function _noteMaskedKey(key, value) {
     if (st && k && !st.masked.includes(k) && st.masked.length < 64) st.masked.push(k);
   } catch (_) { /* never break a gate */ }
 }
+// The pack's credit cascade serves a gated tool in full for a credit balance —
+// every gated tool except the Pro-only set (ladder stage 1, owner 2026-09-29:
+// the pack is Developer depth per call, no Pro tools).
+export function _packOpensTool(tool) {
+  return (PAID_ONLY_TOOLS.has(tool) || DEPTH_TEASE_TOOLS.has(tool)) && !PRO_ONLY_TOOLS.has(tool);
+}
 // applyTierGate's view of a tier for one tool — the r-starterdev-parity rule the
 // call site applies: Starter/Developer are paid-class except on Pro-only tools.
 export function _gateTierFor(tier, tool) {
   const g = _nodeTier(tier);
-  return ((g === 'developer' || g === 'starter') && !PRO_ONLY_TOOLS.has(tool)) ? 'paid' : g;
+  return _normalizesToPaid(g, tool) ? 'paid' : g;
 }
 // The tier gate + the pack's credit cascade, exactly as trackedTool runs them.
 // A capped taste (trial_taste / paid_taste) or a masked pass-through is not open:
@@ -9006,7 +9127,7 @@ export function _tierGateOpensForSeat(tool, seat) {
   const g = applyTierGate(tool, {}, gt, !!seat.keyed, false,
     _isUnambiguousProOrAbove(seat.tier) ? true : undefined);
   if (g && g.allowed && !g.trial_taste && !g.paid_taste && !g.masked && !g.capped) return true;
-  return (PAID_ONLY_TOOLS.has(tool) || DEPTH_TEASE_TOOLS.has(tool))
+  return _packOpensTool(tool)
     && !(gt === 'paid' || gt === 'enterprise')
     && Number(seat.credits) >= _creditCost(tool);
 }
@@ -9022,7 +9143,8 @@ export function _anonTrimOpensForSeat(tool, seat) {
 const _GATE_OPENS = {
   any_key:       (s) => !!s.keyed,                        // _maskGasIntelligenceAnonymous
   gas_pro:       (s) => _tierIsProOrAbove(s.tier),        // _maskGasEconomicsBelowPro
-  retirement_mw: (s) => _retirementMwFull(s.tier),        // _maskRetirementHeadroom
+  retirement_mw: (s) => _retirementMwFull(s.tier)         // _maskRetirementHeadroom
+                   || _retirementPackOpens(s.tier, s.credits),
   unpaid_read:   (s) => !_isUnpaidSeat(s.tier, s.credits),// _dealsForCaller / scoreboard
   lp:            (s) => _lpSeatFull(s),                   // Land & Power (_lpAccessFor)
 };
@@ -9113,7 +9235,7 @@ export function _postRelayTeaser(result, ctx, post = callAPIWrite) {
 }
 
 const _FREE_NUMERIC_KEY_RE = /(^|_)score$|^composite_score|^overall_score|time_to_power|_months$|kwh|cents|(^|_)mw$|_mw_/i;
-const _FREE_NUMERIC_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_band$|_note$|_basis$|_count$|_count_\d+d$|^rank$)/i;
+const _FREE_NUMERIC_KEEP_RE = /(_in_pro$|_total_in_(?:pro|developer|free)$|^_|_band$|_note$|_basis$|_count$|_count_\d+d$|^rank$)/i;
 function _isFigure(v) {
   if (typeof v === 'number') return Number.isFinite(v);
   return typeof v === 'string' && /^\s*-?\d[\d,]*(\.\d+)?\s*$/.test(v);
@@ -9316,7 +9438,7 @@ const _DEPTH_ID_KEYS = new Set(['queue_id', 'project_name', 'project_number',
                                 'queue_position', 'interconnection_request_id']);
 // Never gate a field whose job is to SAY something is gated, or the coarse
 // band that replaces the number. `_score_basis` is the methodology sentence.
-const _DEPTH_KEEP_RE = /(_in_pro$|_total_in_pro$|^_|_note$|_basis$|_band$|_preview$)/i;
+const _DEPTH_KEEP_RE = /(_in_pro$|_total_in_(?:pro|developer|free)$|^_|_note$|_basis$|_band$|_preview$)/i;
 
 function _gatesDepth(k) {
   if (!DEPTH_GATE) return false;
@@ -9644,6 +9766,51 @@ const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retr
 // both names are DCPI-specific, so no other tool's field is exempted.
 const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance']);
 
+
+// ── ladder stage 1 (owner 2026-09-29): `_<k>_total_in_<set>` names the real rung ──
+// trimForTrial stamped every trimmed list's full length as `_<k>_total_in_pro`,
+// yet a free key, the $10 pack or Developer opens most of those rows (tier audit
+// 2026-09-29, §3.9). The suffix is now the SET whose lowest rung returns the rows:
+//   free       a free key returns them (the keyless trim on a free-full tool)
+//   developer  the $10 pack or Developer returns them
+//   pro        only Pro returns them
+// The rung is the lowest (lib/upgrade-missed RUNGS, above the caller's own) whose
+// seat gets every ROW of this tool: _rowsOpenForSeat. Rows only — a free key that
+// gets every facility row with MW masked opens the rows, so the count is 'free'.
+// No tool, or anything unexpected → 'pro' (the old label).
+export const ROWS_TOTAL_SETS = Object.freeze(['free', 'developer', 'pro']);
+export const ROWS_TOTAL_KEY_RE = /^_(.+)_total_in_(free|developer|pro)$/;
+// Does a seat get every row of `tool`? Keyless never (the keyless trim). Keyed:
+// the pack's credit cascade opens it; otherwise the tier gate must let the call
+// through un-trimmed — a capped taste (trial_taste / paid_taste) is a preview
+// once spent, and the depth tease trims rows for an unpaid seat. A facility mask
+// or a limit clamp keeps the rows (fields / page size are not the row set).
+export function _rowsOpenForSeat(tool, seat) {
+  if (!seat || !seat.keyed) return false;
+  const gt = _gateTierFor(seat.tier, tool);
+  const paidish = gt === 'paid' || gt === 'enterprise';
+  if (!paidish && _packOpensTool(tool) && Number(seat.credits) >= _creditCost(tool)) return true;
+  const g = applyTierGate(tool, {}, gt, true, false, _isUnambiguousProOrAbove(seat.tier) ? true : undefined);
+  if (!g || !g.allowed || g.trial_taste || g.paid_taste) return false;
+  if (!paidish && DEPTH_TEASE_TOOLS.has(tool) && _isUnpaidSeat(seat.tier, seat.credits)) return false;
+  return true;
+}
+export function _rowsTotalSet(toolName) {
+  try {
+    const tool = String(toolName || '');
+    if (!tool) return 'pro';
+    let c = {};
+    try { c = getCtx() || {}; } catch (_) { c = {}; }
+    const keyed = !!c.api_key;
+    const opens = [(s) => _rowsOpenForSeat(tool, s)];
+    const floor = _rungFloor({ keyed, tier: c.tier, credits: c._credits_seen });
+    const rung = _lowestRung({ opens, floor });
+    if (rung === 'free_key') return 'free';
+    if (rung === 'pack' || rung === 'developer') return 'developer';
+    return 'pro';
+  } catch (_) { return 'pro'; }
+}
+
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
   // execute_plan: every step already ran as a real tools/call at the caller's
@@ -9695,7 +9862,9 @@ function trimForTrial(parsed, toolName) {
       // the load-bearing honesty contract: it is the FULL length, never the
       // shown length, so an agent can always compute what it is missing.
       out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
-      out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
+      // ladder stage 1: the suffix names the lowest rung's SET that returns these
+      // rows (free / developer / pro), no longer "pro" whatever opens them.
+      out[`_${k}_total_in_${_rowsTotalSet(toolName)}`] = v.length;   // honest total in a side field agents can read
     } else if (_isMetricKey(k) && !_keepTyped.has(k) && typeof v === 'number') {
       _noteMaskedKey(k, v);                   // r-missed-upgrade: a figure this trim hid
       out[k] = null;                          // gated metric → null (was a promo STRING
@@ -9729,9 +9898,9 @@ function trimForTrial(parsed, toolName) {
   }
   if (typeof out.note === 'string'
       && /showing\s+\d+\s+of\s+\d+/i.test(out.note)
-      && Object.keys(out).some((k) => k.endsWith('_total_in_pro'))) {
+      && Object.keys(out).some((k) => ROWS_TOTAL_KEY_RE.test(k))) {
     out.note = 'Free tier preview — up to ' + TRIAL_PREVIEW_ROWS + ' rows shown per '
-      + 'list; each list\'s full length is in its _<field>_total_in_pro sibling. '
+      + 'list; each list\'s full length is in its _<field>_total_in_' + _rowsTotalSet(toolName) + ' sibling. '
       + 'Call claim_free_key (no email) for the free tier, or unlock_more_data '
       + 'for full results.';
   }
@@ -13225,7 +13394,7 @@ export const _PLAN_CLASSES = [
       { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
-    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Starter and up get the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
+    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
@@ -13291,7 +13460,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom lists retiring generators below Developer too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below Developer, and below Developer target_mw is held at 50 — the same rule as the REST API. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below Developer too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below Developer, and below Developer target_mw is held at 50; a $10 credit pack opens them per call, as Developer depth. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set; get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "compare Phoenix vs Columbus" fell to unknown —
@@ -13343,7 +13512,7 @@ export const _PLAN_CLASSES = [
       { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Starter and up get the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -13386,7 +13555,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a $10 credit pack. get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer, unlimited. get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
@@ -13412,7 +13581,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -13578,7 +13747,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.',
         rejected_because: 'No single deal/market was named — the verdict overlay comes bundled in deal_autopsy anyway.' },
     ],
-    coverage_notes: 'hyperscaler_deals and list_transactions: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
+    coverage_notes: 'hyperscaler_deals and list_transactions: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
   {
     // r-planner-v5.4 (2026-07-26): CROSS-DOMAIN fiber + power. Live battery:
@@ -13628,7 +13797,7 @@ export const _PLAN_CLASSES = [
       { tool: 'analyze_site', when: 'You have coordinates and want every factor for that one site in a single call.',
         rejected_because: 'The question was market-wide overlap, not a single-site multi-factor read.' },
     ],
-    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a $10 credit pack. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
+    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
   },
   {
     id: 'fiber', recipe: null,
@@ -13655,7 +13824,7 @@ export const _PLAN_CLASSES = [
       { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a $10 credit pack. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer, unlimited. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -13682,7 +13851,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; a $10 credit pack or Starter and up get the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Starter and up get the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below Pro (Developer included).',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below Pro (Developer included).',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
@@ -16067,7 +16236,7 @@ function trackedTool(srv, name, description, schema, handler) {
             if (await _liftKeyTier(c, _q.tier)) {
               _gateTier = _nodeTier(c.tier);
               tier = c.tier;
-              if ((_gateTier === 'developer' || _gateTier === 'starter') && !PRO_ONLY_TOOLS.has(name)) _gateTier = 'paid';
+              if (_normalizesToPaid(_gateTier, name)) _gateTier = 'paid';
             }
           } catch (_) { /* never block a tool call on the lift */ }
         }
@@ -16240,8 +16409,10 @@ function trackedTool(srv, name, description, schema, handler) {
         };
       }
       // Land & Power (owner, 2026-09-22): only Pro opens the details (LP_TOOLS).
+      let _lpOpened = false;   // _lpAccessFor said 'full' (Pro, or a pre-cutover pack)
       if (LP_TOOLS.has(name)) {
         const _lpAccess = await _lpAccessFor(c, tier);
+        if (_lpAccess === 'full') _lpOpened = true;
         // Paywall contract (spec rule 7): in a contract arm the anonymous wall
         // carries the free headline the tool description promises — the verdict
         // band and the NAME of the weakest factor, no score or figure — and the
@@ -16281,7 +16452,15 @@ function trackedTool(srv, name, description, schema, handler) {
       // caller — free-tool calls never touch the credit path. Cached per identity
       // (first gated call/session pays one lookup, then cached) + fail-open: any
       // error → 0 credits → falls through to the existing teaser/free-taste path.
-      if ((PAID_ONLY_TOOLS.has(name) || DEPTH_TEASE_TOOLS.has(name)) &&
+      // ★ ladder stage 1 (owner 2026-09-29): the pack is Developer depth paid per
+      // call, so it never opens a PRO_ONLY_TOOLS member (get_dchub_recommendation
+      // was the one this cascade still opened), except the grandfathered Land &
+      // Power pack below. Those fall through to the preview
+      // a free key gets. _packOpensTool is the one predicate; the upgrade prompt's
+      // rung check (_tierGateOpensForSeat) asks it too.
+      // A pack bought before the Land & Power cutover still opens Land & Power
+      // (_lpGrandfatheredPack, owner 2026-09-22) — that grandfathering is kept.
+      if ((_packOpensTool(name) || (_lpOpened && PAID_ONLY_TOOLS.has(name))) &&
           !(_gateTier === 'paid' || _gateTier === 'enterprise')) {
         const _cost = _creditCost(name);
         let _ci = { credits: 0, had_pack: false };
@@ -16564,6 +16743,16 @@ function trackedTool(srv, name, description, schema, handler) {
         };
       }
       if (!gate.allowed) {
+        // ladder stage 1: a Developer / grandfathered Starter key on a Pro-only tool
+        // (get_dchub_recommendation — Land & Power answered above) gets the free
+        // key's preview plus one Pro line, not a data-less wall.
+        if ((_gateTier === 'developer' || _gateTier === 'starter') && c.api_key
+            && PRO_ONLY_TOOLS.has(name) && PAID_ONLY_TOOLS.has(name) && !LP_TOOLS.has(name)) {
+          const _pr = _noDataGuard(await handler(gate.params || args));
+          if (_pr && _pr.isError === true) return _pr;   // an error is not a preview
+          const _pp = _paidPlanProPreview(name, _pr, _gateTier, c.session_id);
+          if (_pp) { status = 'plan_pro_preview'; return _pp; }
+        }
         // Trial mode: free user + paid tool + first call from this session → ALLOW once with footer
         if ((_gateTier === 'free' || _gateTier === 'identified') && PAID_ONLY_TOOLS.has(name)) { // free-class parity: identified keys get the same always-preview as anon (r-identified)
           // r42s (2026-05-26): for the 5 highest-demand tools, ALWAYS
@@ -16699,7 +16888,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 recordSessionUpgrade(c.platform, _newTier);
                 // r-paid-lift: the gate's vocabulary, not the plan name (see _nodeTier).
                 _gateTier = _nodeTier(_newTier);
-                if (_gateTier === 'developer' && !PRO_ONLY_TOOLS.has(name)) _gateTier = 'paid';
+                if (_normalizesToPaid(_gateTier, name)) _gateTier = 'paid';
                 // r-tier-collapse-fix (2026-09-23): _newTier is one of the four literal
                 // words checked above, never the ambiguous 'paid' — so when _gateTier
                 // reads 'paid' here it can only be _nodeTier's pro/founding normalization,
@@ -17223,9 +17412,7 @@ Your key is not email-bound yet, and that — not money — is what is holding \
 
 You're on **${_planName}** — \`${name}\` is one of the Pro-only tools, so it opens on Pro.
 
-\u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, ${_subRefLandsOnKey(c.api_key) ? 'this key' : 'this session'} is served in full — just call \`${name}\` again.
-
-${_planName} still covers every other tool at full depth.`
+\u{1F464} **Tell your human:** for the full \`${name}\` — ${_rungsText(name, tier || 'free', c.session_id)}. The moment they pay, ${_subRefLandsOnKey(c.api_key) ? 'this key' : 'this session'} is served in full — just call \`${name}\` again.`
           : `## \u{1F512} \`${name}\` needs full access
 
 You're on **free tier** — \`${name}\` returns its full result on a paid plan.
@@ -17574,9 +17761,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 of: _cap,
                 remaining_today: _mtRemaining,
                 note: _paidTaste
+                  // ladder stage 1: only a grandfathered Starter key is metered here;
+                  // unlimited depth on the pair is Developer now, not Pro.
                   ? 'Full-fidelity answer ' + _mtCall + ' of the ' + _cap
-                    + ' included with your plan today on this Pro-depth tool. '
-                    + 'Unlimited full `' + name + '` depth is Pro — call '
+                    + ' included with your plan today on this tool. '
+                    + 'Unlimited full `' + name + '` depth comes with DC Hub Developer — call '
                     + 'unlock_more_data for one-click links.'
                   : 'Full-fidelity trial answer ' + _mtCall + ' of ' + _cap
                     + ' today — keep or summarize these results for your human. '
@@ -17624,11 +17813,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // callers — and NO claim_free_key here: it re-mints another capped trial
                 // and cannot unlock depth, so it was a false promise on this surface.
                 // r-paidtaste (2026-08-01): a Starter/Developer over-cap is a PAYING
-                // customer — honest plan label, Pro is the upgrade, the $10 pack still
-                // works per-call (credit cascade serves PRO_ONLY full for pack holders),
-                // and NO bind_email (binding cannot lift the paid cap).
+                // customer — honest plan label, and NO bind_email (binding cannot lift
+                // the paid cap). Ladder stage 1: only a grandfathered Starter key gets
+                // here; unlimited depth on the pair is Developer, and the $10 pack
+                // still serves it full per call (the pair is not Pro-only any more).
                 message: _paidTaste
-                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth is Pro → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth comes with DC Hub Developer → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
                   : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Full depth per call now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Call \`unlock_more_data\` for one-click links (also ⚡ ${_proOnlyTool(name) ? 'Pro, which opens \`' + name + '\`' : 'Developer = ' + _callsPerDay('developer') + ' calls/day'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
@@ -17703,7 +17893,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // follow-up for unbound callers.
                 { type: 'text', text: _paidTaste
                   ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
-                    '⚡ **Unlimited full `' + name + '` depth is Pro:** ' + (PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)) +
+                    '⚡ **Unlimited full `' + name + '` depth comes with DC Hub Developer:** ' + (DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)) +
                     ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
                     _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
                   : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
@@ -17809,7 +17999,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             const _btPaid = gate.paid_taste === true;
             if (_bteased && typeof _bteased === 'object') {
               _bteased._taste_bounded = true;
-              if (_btPaid) { _bteased._full_in_pro = true; } else { _bteased._full_in_developer = true; }
+              // ladder stage 1: only a grandfathered Starter key tastes here now, and
+              // the full answer is Developer's (unlimited), not Pro's.
+              _bteased._full_in_developer = true;
               // r-taste-cta (2026-07-12): this trimmed >120KB taste carried NO upgrade
               // ask, while every other trim path (over-cap, depth-tease) does — the
               // biggest funnel hole for get_fiber_intel, whose full payload ALWAYS
@@ -17817,7 +18009,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               _bteased._upgrade = {
                 tier: _btPaid ? String(_gateTier) : 'trial',
                 message: _btPaid
-                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset is Pro → ${PRO_URL ? _subCheckoutUrl(PRO_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset comes with DC Hub Developer → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Call \`unlock_more_data\` for one-click links.`
                   : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. The complete dataset is paid per call: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — call \`unlock_more_data\` for one-click links. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
@@ -21350,13 +21542,27 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       // each unit's MW back out of which rows come and go.
       let _c = {};
       try { _c = getCtx() || {}; } catch (_) { _c = {}; }
-      const _full = _retirementMwFull(_c.tier);
+      let _full = _retirementMwFull(_c.tier);
+      // ★ ladder stage 1 (owner 2026-09-29): the $10 pack is Developer depth paid
+      // per call, so a pack balance on an unpaid seat opens the MW here too and
+      // burns the call's credits (_retirementPackOpens). REST still masks it for a
+      // pack (be#5886 pack_opens=False) — a backend follow-up, listed in the PR.
+      let _packPaid = false;
+      if (!_full && _UNPAID_READ_TIERS.has(String(_c.tier || '').trim().toLowerCase())
+          && (_c.api_key || _c.session_id)) {
+        let _cr = { credits: 0 };
+        try { _cr = await _getCredits(_c); } catch (_) { _cr = { credits: 0 }; }
+        if (_retirementPackOpens(_c.tier, _cr.credits)) { _full = true; _packPaid = true; }
+      }
       let _args = a, _ignored = false;
       if (!_full && a && a.target_mw != null && Number(a.target_mw) !== RETIREMENT_DEFAULT_TARGET_MW) {
         _args = { ...a, target_mw: RETIREMENT_DEFAULT_TARGET_MW };
         _ignored = true;
       }
       let data = await callAPI('/api/v1/retirement-headroom', _args);
+      if (_packPaid && data && typeof data === 'object' && Array.isArray(data.data)) {
+        _burnCredits(_c, 'get_retirement_headroom', _creditCost('get_retirement_headroom'));
+      }
       if (!_full) {
         data = _maskRetirementHeadroom(data, _c.session_id);
         if (_ignored && data && data._gated) {

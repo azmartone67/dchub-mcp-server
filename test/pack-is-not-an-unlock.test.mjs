@@ -72,10 +72,20 @@ describe('the $10 pack is never called an unlock', () => {
     });
   }
 
-  it('_rungsText on a Pro-only tool: pack rung, then Pro — and no unlock word', () => {
+  // ladder stage 1 (2026-09-29): get_grid_intelligence left the Pro-only set, so its
+  // ask is pack then Developer; a Pro-only tool's ask is Pro alone (no pack rung).
+  it('_rungsText on get_grid_intelligence: pack rung, then Developer — and no unlock word', () => {
     const r = withCtx({ session_id: SID }, () => _rungsText('get_grid_intelligence', 'free', SID));
     expect(r).toContain('$10 one-time = 1,000 API credits');
+    expect(r).toContain('**Developer**');
+    expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);
+    expect(r).not.toMatch(UNLOCK);
+  });
+
+  it('_rungsText on a Pro-only tool: Pro alone — no pack rung, no unlock word', () => {
+    const r = withCtx({ session_id: SID }, () => _rungsText('compare_sites', 'free', SID));
     expect(r).toContain('**Pro**');
+    expect(r).not.toContain('$10 one-time');
     expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(r).not.toMatch(UNLOCK);
   });

@@ -93,7 +93,7 @@ describe('rank_markets typed preview', () => {
   it('the ROW COUNT and result_count gates are untouched by this change', () => {
     const out = trimForTrial(payload(), 'rank_markets');
     expect(out.result_count).toBeNull();              // would contradict rows shown
-    expect(out._results_total_in_pro).toBe(6);        // honest total survives
+    expect(out._results_total_in_developer).toBe(6);  // honest total survives (ladder stage 1: named for the pack / Developer set)
     expect(out.results.length).toBeLessThan(6);
     expect(out.results.length).toBe(TRIAL_PREVIEW_ROWS);
   });

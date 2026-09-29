@@ -82,7 +82,7 @@ describe('get_interconnection_queue: the queue total is not withheld from its ow
   it('the array trim still applies, with an honest total beside it', () => {
     const out = trimForTrial(snapshot(), 'get_interconnection_queue');
     expect(out.by_iso).toHaveLength(TRIAL_PREVIEW_ROWS);
-    expect(out._by_iso_total_in_pro).toBe(10);
+    expect(out._by_iso_total_in_developer).toBe(10);   // ladder stage 1: the pack / Developer set opens these rows
   });
 
   // ★ Scope. `total` is a genuine paywalled aggregate on other surfaces, and

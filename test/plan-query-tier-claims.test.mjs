@@ -88,13 +88,21 @@ const PHRASES = [
   { id: 'any-key-full',
     re: /with no key a trimmed preview \(3 rows, project names and MW withheld\); any key, a free one included, gets the full survivor set/,
     fresh: m(P, F, F, F, F, F), spent: m(P, F, F, F, F, F), threeRowPreview: true },
-  { id: 'pack-or-starter-full',
-    re: /no key or a free key gets a trimmed preview; a \$10 credit pack or Starter and up get the full answer/,
+  // ladder stage 1 (2026-09-29): Starter is not sold, so the notes name Developer.
+  // A grandfathered Starter key still gets these in full (the seat below).
+  { id: 'pack-or-developer-full',
+    re: /no key or a free key gets a trimmed preview; a \$10 credit pack or Developer and up get the full answer(?!, unlimited)/,
     fresh: m(P, P, F, F, F, F), spent: m(P, P, F, F, F, F) },
-  { id: 'allowance-then-starter-full',
-    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Starter and up get the full answer/,
+  { id: 'allowance-then-developer-full',
+    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Developer and up get the full answer(?!, unlimited)/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, F, F, F, F) },
-  { id: 'allowance-then-pro-full',
+  // ladder stage 1: grid/fiber intel are unlimited at Developer (and per call on
+  // the pack). A grandfathered Starter key keeps its old daily allowance (spent → P).
+  { id: 'allowance-then-developer-unlimited',
+    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Developer and up get the full answer, unlimited/,
+    fresh: m(P, F, F, F, F, F), spent: m(P, P, F, P, F, F) },
+  // The pre-stage-1 wording, kept KNOWN so re-inserting it is driven and fails.
+  { id: 'legacy-allowance-then-pro-full',
     re: /with no key a trimmed preview; a free key, Starter and Developer get a daily allowance of full answers, then previews; unlimited full depth is Pro or a \$10 credit pack/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, F, P, P, F) },
   // The wording this file replaced. Kept as a KNOWN phrase so re-inserting it
@@ -109,7 +117,7 @@ const PHRASES = [
   // Not about one tool: the free-key call quota, rendered from canon.
   { id: 'free-key-quota', re: /Call quota on a free key: [^.]*\./, untooled: true },
   { id: 'retirement-mw-below-developer',
-    re: /lists retiring generators below Developer too, but its MW figures \([^)]*\) are null below Developer, and below Developer target_mw is held at 50/,
+    re: /lists retiring generators below Developer too, but its MW figures \([^)]*\) are null below Developer, and below Developer target_mw is held at 50; a \$10 credit pack opens them per call, as Developer depth/,
     retirement_mw: true },
 ];
 
@@ -363,13 +371,13 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
     }
   }, 60000);
 
-  it('get_retirement_headroom MW null and target held at 50 below Developer', async () => {
+  it('get_retirement_headroom MW null and target held at 50 below Developer, the pack excepted', async () => {
     const { claims } = extractClaims();
     const cs = claims.filter((c) => c.ph.retirement_mw);
     expect(cs.map((c) => c.tool)).toEqual(['get_retirement_headroom']);
     for (const [seat, key] of SEATS) {
       const out = await call('get_retirement_headroom', key);
-      const paid = seat === 'developer' || seat === 'pro';
+      const paid = seat === 'developer' || seat === 'pro' || seat === 'pack';   // ladder stage 1: pack = Developer depth
       expect(out.text.includes('812.4'), `${seat}: MW shown?`).toBe(paid);
       expect(out.query.join(' ').includes(`target_mw=${paid ? 200 : 50}`), `${seat}: target_mw sent ${out.query}`).toBe(true);
     }

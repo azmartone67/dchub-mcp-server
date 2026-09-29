@@ -124,22 +124,21 @@ describe('_paidKeyIsProOrAbove — resolves the real plan behind an ambiguous "p
 });
 
 describe('applyTierGate end-to-end via _paidKeyIsProOrAbove — a PRO_ONLY_TOOLS member', () => {
-  // get_grid_intelligence: PRO_ONLY_TOOLS, deliberately NOT in LP_TOOLS, so this
-  // exercises applyTierGate's own fix in isolation from _lpAccessFor's.
-  it('a Developer purchase whose key collapsed to "paid" gets the capped taste, not full access', async () => {
+  // get_dchub_recommendation: PRO_ONLY_TOOLS, deliberately NOT in LP_TOOLS, so this
+  // exercises applyTierGate's own fix in isolation from _lpAccessFor's. (Ladder stage
+  // 1, 2026-09-29: get_grid_intelligence, the old subject, is a Developer tool now.)
+  it('a Developer purchase whose key collapsed to "paid" is refused the Pro-only tool, not given full access', async () => {
     planFor['dch_live_tcf_gi_dev'] = 'developer';
     const confirmed = await S._paidKeyIsProOrAbove('dch_live_tcf_gi_dev');
-    const gate = S.applyTierGate('get_grid_intelligence', {}, 'paid', true, false, confirmed);
-    expect(gate.allowed).toBe(true);
-    expect(gate.trial_taste).toBe(true);
-    expect(gate.paid_taste).toBe(true);
+    const gate = S.applyTierGate('get_dchub_recommendation', {}, 'paid', true, false, confirmed);
+    expect(gate.allowed).toBe(false);   // the call site serves the free key's preview
     // Not the unconditional-bypass shape a real Pro/enterprise caller gets.
     expect(gate).not.toEqual({ allowed: true, params: {} });
   });
   it('a genuine Pro purchase whose key ALSO reads "paid" still gets full access', async () => {
     planFor['dch_live_tcf_gi_pro'] = 'pro';
     const confirmed = await S._paidKeyIsProOrAbove('dch_live_tcf_gi_pro');
-    const gate = S.applyTierGate('get_grid_intelligence', {}, 'paid', true, false, confirmed);
+    const gate = S.applyTierGate('get_dchub_recommendation', {}, 'paid', true, false, confirmed);
     expect(gate).toEqual({ allowed: true, params: {} });
   });
 });

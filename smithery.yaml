@@ -207,8 +207,6 @@ pricing:
 gated_tools:
   - analyze_site
   - compare_sites
-  - get_grid_intelligence
-  - get_fiber_intel
   - get_dchub_recommendation
   - generate_site_analysis
   - export_dataset

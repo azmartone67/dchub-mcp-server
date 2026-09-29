@@ -163,20 +163,22 @@ describe('applyTierGate — tier access', () => {
   // 'developer' tier gets a few lines down (the r-paidtaste capped taste with a
   // key, a hard block without one) — never a blanket bypass.
   it('UNCONFIRMED paid on a Pro-only tool is treated exactly like a literal developer tier', () => {
-    const paidUnconfirmed = applyTierGate('get_grid_intelligence', {}, 'paid', false, false);
-    const devLiteral = applyTierGate('get_grid_intelligence', {}, 'developer', false, false);
+    // ladder stage 1 (2026-09-29): get_grid_intelligence left PRO_ONLY_TOOLS, so the
+    // Pro-only subject here is get_dchub_recommendation, which Developer does not open.
+    const paidUnconfirmed = applyTierGate('get_dchub_recommendation', {}, 'paid', false, false);
+    const devLiteral = applyTierGate('get_dchub_recommendation', {}, 'developer', false, false);
     expect(paidUnconfirmed).toEqual(devLiteral);
     expect(paidUnconfirmed.allowed).toBe(false);   // no key: same wall a developer with no key gets
 
-    const paidUnconfirmedKeyed = applyTierGate('get_grid_intelligence', {}, 'paid', true, false);
-    const devLiteralKeyed = applyTierGate('get_grid_intelligence', {}, 'developer', true, false);
+    const paidUnconfirmedKeyed = applyTierGate('get_dchub_recommendation', {}, 'paid', true, false);
+    const devLiteralKeyed = applyTierGate('get_dchub_recommendation', {}, 'developer', true, false);
     expect(paidUnconfirmedKeyed).toEqual(devLiteralKeyed);
-    expect(paidUnconfirmedKeyed.allowed).toBe(true);          // capped taste, not a hard wall
-    expect(paidUnconfirmedKeyed.trial_taste).toBe(true);
-    expect(paidUnconfirmedKeyed.paid_taste).toBe(true);
+    expect(paidUnconfirmedKeyed.allowed).toBe(false);   // the call site serves the free key's preview
     // ★ THE BUG, pinned directly: this must NOT be the unconditional full-access
     // shape a genuinely-confirmed paid/enterprise caller gets.
     expect(paidUnconfirmedKeyed).not.toEqual({ allowed: true, params: {} });
+    // ...and on grid intel, now a Developer tool, an unconfirmed 'paid' IS full.
+    expect(applyTierGate('get_grid_intelligence', {}, 'paid', true, false)).toEqual({ allowed: true, params: {} });
   });
   it('an unconfirmed paid tier is unaffected on tools that are NOT Pro-only', () => {
     // get_grid_data is PAID_ONLY but not PRO_ONLY (see FREE_FULL_TOOLS block below) —
@@ -215,14 +217,15 @@ describe('applyTierGate — tier access', () => {
   // taste on the flagship pair — before this, a paying key got ZERO full
   // answers ever on grid/fiber while anonymous callers got a daily full cap
   // (paying < anonymous, the inversion the 2026-08-01 audit measured).
-  it('starter/developer keys get the capped paid taste on the Pro-only flagship pair', () => {
-    for (const tier of ['starter', 'developer']) {
-      for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
-        const g = applyTierGate(tool, {}, tier, true, false);
-        expect(g.allowed).toBe(true);
-        expect(g.trial_taste).toBe(true);
-        expect(g.paid_taste).toBe(true);
-      }
+  // ladder stage 1 (owner 2026-09-29): Developer is full and unlimited on the pair;
+  // only a grandfathered Starter key keeps the capped paid taste it bought.
+  it('a Starter key keeps the capped paid taste on grid/fiber intel; Developer gets full', () => {
+    for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
+      const g = applyTierGate(tool, {}, 'starter', true, false);
+      expect(g.allowed).toBe(true);
+      expect(g.trial_taste).toBe(true);
+      expect(g.paid_taste).toBe(true);
+      expect(applyTierGate(tool, {}, 'developer', true, false)).toEqual({ allowed: true, params: {} });
     }
   });
   it('starter/developer stay WALLED on the deep Pro-only tools (owner: no full Pro access)', () => {

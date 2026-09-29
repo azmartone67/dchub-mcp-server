@@ -80,15 +80,15 @@ describe('siteHeadlineHeader — the order an agent reads', () => {
     expect(h).toContain('Tell your human');
   });
 
-  it('keeps the whole ladder — free, then $10, then Pro — in that order', () => {
+  // ladder stage 1 (owner 2026-09-29): analyze_site is Pro-only and the $10 pack
+  // opens no Pro-only tool, so the ladder here is free, then Pro — no $10 rung.
+  it('keeps the ladder that opens the tool — free, then Pro, and no $10 rung', () => {
     const h = withCtx({ session_id: SID }, () => siteHeadlineHeader('analyze_site', SID));
     const free = h.indexOf('claim_free_key');
-    const pack = h.indexOf('$10 one-time');
     const pro = h.indexOf('**Pro**');
-    expect(pack, 'the $10 rung vanished').toBeGreaterThan(-1);
     expect(pro, 'the Pro rung vanished').toBeGreaterThan(-1);
-    expect(free).toBeLessThan(pack);
-    expect(pack).toBeLessThan(pro);
+    expect(h, 'the pack does not open a Pro-only tool').not.toContain('$10 one-time');
+    expect(free).toBeLessThan(pro);
   });
 
   it('still names exactly one human ask', () => {

@@ -261,9 +261,12 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
   });
   family({
     tool: 'get_retirement_headroom', args: { target_mw: 50, horizon_months: 18 }, backend: RETIRE,
-    seats: ['nokey', 'free', 'pack', 'starter'],
+    // ladder stage 1 (2026-09-29): the $10 pack is Developer depth per call and opens
+    // the MW, so it is the lowest rung below Developer; a pack holder sees it all
+    // (no prompt). A grandfathered Starter key is past the pack: Developer.
+    seats: ['nokey', 'free', 'starter'],
     keysOf: (p) => [...withheldKeys(RETIRE, p)],
-    expectRung: { nokey: 'developer', free: 'developer', pack: 'developer', starter: 'developer' },
+    expectRung: { nokey: 'pack', free: 'pack', starter: 'developer' },
   });
   family({
     tool: 'get_gas_economics', args: { market: 'dallas' }, backend: { ...GAS_PRICING, ...GAS_G2G },
