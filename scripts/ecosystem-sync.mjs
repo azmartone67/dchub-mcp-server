@@ -49,6 +49,19 @@
 //             Nobody is asked to email a directory (prospecting brief,
 //             2026-09-15).
 //
+// ★2026-09-28 READ-BACK OF THE COPY, NOT ONLY THE NUMBERS. On 09-28 Glama,
+// LobeHub, PulseMCP and mcpservers.org were taken as "updated" while they still
+// showed old copy. judge() only ever looked for known-bad TOKENS (a stale tool
+// count, a facility floor, $299/$199/Founding), so a listing still carrying
+// "Pro ($99/mo)", "seven layers" or last month's blurb, with no stale number
+// in it, landed under "In sync". A third-party listing (SINKS[k].copy) is now
+// in_sync only when the text READ BACK from its live page or API contains the
+// current canonical/listing-copy.json copy (a normalised prefix of short,
+// glama_400 or long) and breaks none of the copy rules (scripts/listing-copy.mjs).
+// If the description could not be read back, it is not in sync. With no
+// listing-copy file the copy is reported UNVERIFIED in the issue and nothing
+// says a listing's copy is current.
+//
 // THREE STATES, never two: in_sync / drift / unreadable. A 403, a timeout, or
 // a page that does not carry our identity is UNREADABLE. It is never counted
 // as drift and never as clean.
@@ -61,6 +74,8 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decide, sourceMarker } from './refresh-canon-phrases.mjs';
 import { FLOOR_TOLERANCE, ghWarning, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE, FACILITY_COUNT_PENDING_STATUS } from './canon-floor.mjs';
+import { LISTING_COPY_PATH, loadListingCopy, copyFingerprints, showsCurrentCopy, copyRuleViolations }
+  from './listing-copy.mjs';
 import { CAPACITY_SUMMARY_PATH, capacityPasteClause, capacityPointersEnabled, capacitySummaryFromHttp, isCapacityLive }
   from '../lib/capacity-source-summary.mjs';
 
@@ -127,6 +142,9 @@ const CONFIRM_DELAY_MS = Number(process.env.ECOSYSTEM_CONFIRM_DELAY_MS || 40000)
 //                asks a person for anything. Its fix text says what was measured
 //       ours   — a DC Hub surface; fixed in a repo or the worker, never by
 //                prospecting
+// copy: true — a third-party listing that carries our DESCRIPTION. Its reader
+//              returns `copyText` (the description as read back), and judge()
+//              holds it to canonical/listing-copy.json.
 export const SINKS = {
   official: { label: 'Official MCP registry', kind: 'push', scope: 'core',
     fix: 'registry-refresh.yml publishes server.json; dispatched automatically when the registry is behind' },
@@ -154,32 +172,32 @@ export const SINKS = {
     fix: 'daily-manifest-sync heals README.md; dispatched automatically when canon moves' },
   gh_description: { label: 'GitHub repo description', kind: 'ours', scope: 'core',
     fix: 'daily-manifest-sync pushes canonical/github_description.txt' },
-  glama_connector: { label: 'Glama connector', kind: 'pull', scope: 'full',
+  glama_connector: { label: 'Glama connector', kind: 'pull', scope: 'full', copy: true,
     url: 'https://glama.ai/mcp/connectors/cloud.dchub/mcp-server',
     fix: 'mirrors the official registry and re-tests the live server on Glama\'s own clock' },
-  glama_server: { label: 'Glama server listing', kind: 'watch', scope: 'full',
+  glama_server: { label: 'Glama server listing', kind: 'watch', scope: 'full', copy: true,
     url: 'https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server',
     fix: 'verify-only. Glama re-syncs the repo and rebuilds on its own clock (a new count took ~27h to appear on 2026-09-12), and no API can trigger it' },
-  pulsemcp: { label: 'PulseMCP', kind: 'watch', scope: 'full',
+  pulsemcp: { label: 'PulseMCP', kind: 'watch', scope: 'full', copy: true,
     url: 'https://www.pulsemcp.com/servers/dchub',
     fix: 'verify-only. PulseMCP writes this blurb itself, and the listing has no claim or edit control' },
-  mcpservers_org: { label: 'mcpservers.org card', kind: 'watch', scope: 'full',
+  mcpservers_org: { label: 'mcpservers.org card', kind: 'watch', scope: 'full', copy: true,
     url: 'https://mcpservers.org/servers/azmartone67/dchub-mcp-server', slug: 'azmartone67/dchub-mcp-server',
     fix: 'verify-only. The card is the description mcpservers.org stored when the listing was made: the record has never been updated, and its Request update control changed nothing after 2026-07-27. The page body below it is our README' },
   glama_duplicate: { label: 'Glama duplicate connector', kind: 'watch', scope: 'full',
     url: 'https://glama.ai/mcp/connectors/cloud.dchub/dc-hub-data-center-intelligence-mcp-server',
     fix: 'verify-only. A Glama-native copy of cloud.dchub/mcp-server, deprecated 2026-09-05 (Glama offers no deletion). Its frozen AI review still quotes a retired tool count. In sync means it is still deprecated' },
-  lobehub: { label: 'LobeHub', kind: 'manual', scope: 'full',
+  lobehub: { label: 'LobeHub', kind: 'manual', scope: 'full', copy: true,
     url: 'https://market.lobehub.com/api/v1/plugins/azmartone67-dchub-mcp-server',
     page: 'https://market.lobehub.com/s/plugins/azmartone67-dchub-mcp-server',
     fix: 'claimed listing that still validates an old version. Owner republishes it on LobeHub Market' },
-  mcphive: { label: 'MCP Hive', kind: 'manual', scope: 'full',
+  mcphive: { label: 'MCP Hive', kind: 'manual', scope: 'full', copy: true,
     url: 'https://mcp-hive.com/explore?provider=0f32e358-d410-4e19-9e77-e6dd91150386',
     fix: 'provider-authored description. Edit it in the mcp-hive.com provider dashboard' },
-  mcp_so: { label: 'mcp.so', kind: 'watch', scope: 'full',
+  mcp_so: { label: 'mcp.so', kind: 'watch', scope: 'full', copy: true,
     url: 'https://mcp.so/servers/dchub-mcp-server',
     fix: 'verify-only. mcp.so\'s edit form refuses published listings (owner, 2026-09-24), its GitHub repo has been unmaintained since 2025-03, and mcp.so support was asked to fix it on 2026-09-25' },
-  mcp_so_secondary: { label: 'mcp.so (second listing)', kind: 'watch', scope: 'full',
+  mcp_so_secondary: { label: 'mcp.so (second listing)', kind: 'watch', scope: 'full', copy: true,
     url: 'https://mcp.so/servers/dchub-backend',
     fix: 'verify-only. Same form. mcp.so support was asked on 2026-09-25 to merge it into the primary listing' },
 };
@@ -257,6 +275,12 @@ export function jsonLdText(html) {
 /** What a hosted page states about us in its <head>: meta card + JSON-LD. */
 export function headText(html) {
   return `${metaCardText(html)}\n${jsonLdText(html)}`.trim();
+}
+
+/** The description a directory page publishes for us: its <head> card when it
+ *  has one, else the visible page. Used only for the copy read-back. */
+export function listingCard(html) {
+  return headText(html) || visibleText(html);
 }
 
 const FLOOR_RE = /\b(\d{1,3}(?:,\d{3})+|\d{1,3}(?:\.\d)?\s?[kK])\+\s+(?:(?:distinct|discovered|verified|tracked|mapped|global)\s+)?(?:data[- ]cent(?:er|re)\s+)?(?:facilit(?:y|ies)|data[- ]cent(?:er|re)s)\b/g;
@@ -408,6 +432,7 @@ export function observeMcpServers(html, ssot, slug) {
     banned: bannedClaims(rec.description),
     extra: live == null ? [] : toolClaims(rec.description).filter((n) => n !== live).map((n) => `card says ${n} tools (live ${live})`),
     info: `record ${rec.updatedAt ? `updated ${rec.updatedAt}` : 'never updated'}; repo last seen ${rec.repoPushedAt || 'unknown'}`,
+    copyText: rec.description,
   };
 }
 
@@ -497,7 +522,7 @@ export function repoDrift({ snapshot, canon, serverJson, liveTools }) {
  *  conservative floor on a hosted surface is returned in `notes`, never dropped.
  *  (2026-09-27: facility floors no longer produce notes — any one is drift.
  *  `kind` is kept in the signature for callers and future per-kind rules.) */
-export function judge(obs, ssot, { kind } = {}) {
+export function judge(obs, ssot, { kind, copy = false } = {}) {
   if (!obs || obs.read !== true) return { state: 'unreadable', reasons: [obs?.error || 'not read'] };
   const reasons = [];
   const notes = [];
@@ -518,9 +543,30 @@ export function judge(obs, ssot, { kind } = {}) {
   }
   if (obs.banned?.length) reasons.push(`banned pricing copy: ${obs.banned.join(', ')}`);
   for (const r of obs.extra || []) reasons.push(r);
+  reasons.push(...copyReasons(obs, ssot, { copy }));
   const verdict = { state: reasons.length ? 'drift' : 'in_sync', reasons };
   if (notes.length) verdict.notes = notes;
   return verdict;
+}
+
+/** Why a listing's description, as READ BACK, is not the current copy.
+ *  Only for a `copy` sink, and only when the single source carries listing-copy
+ *  fingerprints: no source means UNVERIFIED (reported in the issue), never a
+ *  green. Facility counts are left to the floors check above. */
+export function copyReasons(obs, ssot, { copy = false } = {}) {
+  if (!copy || !ssot?.copyFingerprints?.length) return [];
+  if (typeof obs?.copyText !== 'string' || !obs.copyText.trim()) {
+    return ['its description could not be read back, so the copy is unverified'];
+  }
+  const out = [];
+  const broken = copyRuleViolations(obs.copyText).filter((v) => v.rule !== 'facility_count');
+  if (broken.length) {
+    out.push(`breaks the copy rules: ${[...new Set(broken.map((v) => `"${v.match.trim()}" (${v.why})`))].join('; ')}`);
+  }
+  if (!showsCurrentCopy(obs.copyText, ssot.copyFingerprints)) {
+    out.push(`read-back does not show the current ${LISTING_COPY_PATH} copy`);
+  }
+  return out;
 }
 
 const ageMin = (run, now) => (run?.created_at ? (now - Date.parse(run.created_at)) / 60000 : Infinity);
@@ -850,6 +896,10 @@ export function observeGlama(html) {
     toolClaims: toolClaims(metaCardText(html)),
     extra: badge == null ? ['no "Available Tools" badge: Glama has not introspected a build'] : [],
     info: rel ? `newest Glama release ${rel.version} at ${rel.at} (Glama's own counter)` : '',
+    // The listing's description as Glama publishes it: the <head> card. The
+    // body also renders every tool description, and those are the served
+    // tools/list text, not listing copy.
+    copyText: headText(html),
   };
 }
 
@@ -870,7 +920,18 @@ async function readPulse() {
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   const text = visibleText(r.text);
   if (!/cloud\.dchub\/mcp-server|DC Hub/.test(text)) return { read: false, error: 'no DC Hub identity (bot wall?)' };
-  return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text) };
+  return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text), copyText: listingCard(r.text) };
+}
+
+/** LobeHub's description plus its overview. ★2026-09-28: `overview` is an
+ *  OBJECT ({ readme: "..." }), so the old `${j.overview}` read the literal
+ *  "[object Object]": the README LobeHub renders (still "Starter ($9/mo)" and
+ *  "Pro ($99/mo)" on 09-29) was never judged, and the listing read as in sync. */
+export function lobeProse(j) {
+  const ov = j?.overview;
+  const overview = typeof ov === 'string' ? ov
+    : (ov && typeof ov === 'object' ? (typeof ov.readme === 'string' ? ov.readme : JSON.stringify(ov)) : '');
+  return `${j?.description || ''}\n${overview}`;
 }
 
 async function readLobe() {
@@ -879,7 +940,7 @@ async function readLobe() {
   let j;
   try { j = JSON.parse(r.text); } catch { return { read: false, error: 'not JSON' }; }
   if (!IDENTITY_RE.test(String(j.identifier || j.name || ''))) return { read: false, error: 'record is not ours' };
-  const prose = `${j.description || ''}\n${j.overview || ''}`;
+  const prose = lobeProse(j);
   return {
     read: true,
     tools: Number.isInteger(j.toolsCount) ? j.toolsCount : null,
@@ -887,6 +948,7 @@ async function readLobe() {
     floors: facilityFloors(`${prose}\n${JSON.stringify(j.tools || [])}`),
     toolClaims: toolClaims(prose),
     banned: bannedClaims(prose),
+    copyText: prose,
   };
 }
 
@@ -897,7 +959,7 @@ async function readHive() {
   if (!item) return { read: false, error: 'DC Hub is not in the provider page item list' };
   return {
     read: true, floors: facilityFloors(item.description), toolClaims: toolClaims(item.description),
-    banned: bannedClaims(item.description),
+    banned: bannedClaims(item.description), copyText: item.description,
   };
 }
 
@@ -906,7 +968,7 @@ async function readMcpSo(key) {
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   const text = visibleText(r.text);
   if (!IDENTITY_RE.test(text)) return { read: false, error: 'no DC Hub identity on the page' };
-  return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text) };
+  return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text), copyText: listingCard(r.text) };
 }
 
 /** Our open listing PRs on other people's curated lists. Prospecting babysits
@@ -1009,7 +1071,11 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
   if (manual.length) {
     out.push('| listing | what it says now | what fixes it |', '|---|---|---|');
     for (const r of manual) out.push(line(r));
-    out.push('', 'Paste-ready line, generated from the single source (Pro is $99/mo; quote no other Pro price and no launch offer):', '', '```', pasteLine(ssot), '```');
+    if (ssot.listingCopy?.glama_400) {
+      out.push('', `Paste-ready copy from \`${LISTING_COPY_PATH}\` (glama_400; use \`long\` where a directory takes more). A listing counts as updated only once a sweep READS this text back from its live page:`, '', '```', ssot.listingCopy.glama_400, '```');
+    } else {
+      out.push('', `Paste-ready line, generated from the single source (no monthly price and no launch offer; ${LISTING_COPY_PATH} is missing):`, '', '```', pasteLine(ssot), '```');
+    }
     out.push('', 'For an open PR on a curated list, update THAT PR in place. A second PR reads as a duplicate to those bots.');
   } else {
     out.push('Nothing. Every listing a person has to edit matches the live source.');
@@ -1041,7 +1107,12 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
   }
   const ok = results.filter((r) => r.verdict.state === 'in_sync')
     .map((r) => (r.verdict.notes?.length ? `${r.label} (${esc(r.verdict.notes.join('; '))})` : r.label));
-  if (ok.length) out.push('', `### In sync\n${ok.join(' · ')}`);
+  if (ok.length) {
+    const how = ssot.copyFingerprints?.length
+      ? `Read back this sweep: numbers match, and every third-party listing here shows the current \`${LISTING_COPY_PATH}\` copy.`
+      : `Numbers only: \`${LISTING_COPY_PATH}\` was not available, so no listing's COPY was verified.`;
+    out.push('', `### In sync\n_${how}_\n\n${ok.join(' · ')}`);
+  }
   out.push('', '### Lanes this cycle');
   for (const [lane, p] of Object.entries(plan)) {
     out.push(`- **${WORKFLOWS[lane]}**: ${p.dispatch ? 'DISPATCHED' : 'held'}. ${esc(p.why)}`);
@@ -1113,6 +1184,12 @@ async function main() {
     notes: [],
   };
   attachCapacity(ssot, capR);
+  const listingCopy = loadListingCopy(ROOT);
+  ssot.copyFingerprints = copyFingerprints(listingCopy);
+  ssot.listingCopy = listingCopy;
+  if (!ssot.copyFingerprints.length) {
+    ssot.notes.push(`${LISTING_COPY_PATH} is missing or empty: listing COPY is UNVERIFIED this cycle. "In sync" below means only that no stale number or banned price was found.`);
+  }
   if (!canonR.read) ssot.notes.push(`canon not usable: ${canonR.error}. Floors are UNMEASURED this cycle, so no heal is planned from them (facility floors are still judged: the count is withdrawn, whatever canon says).`);
   if (!liveR.read) ssot.notes.push(`live tools/list unreadable: ${liveR.error}. Tool counts are UNMEASURED this cycle.`);
   if (canonR.read && liveR.read && canonR.canon.tools !== liveR.count) {
@@ -1156,7 +1233,7 @@ async function main() {
     return {
       key: k, label: SINKS[k].label, kind: SINKS[k].kind, fix: SINKS[k].fix,
       url: SINKS[k].page || SINKS[k].url || (SINKS[k].path ? `${ORIGIN}${SINKS[k].path}` : null),
-      obs, verdict: judge(obs, ssot, { kind: SINKS[k].kind }),
+      obs, verdict: judge(obs, ssot, { kind: SINKS[k].kind, copy: !!SINKS[k].copy }),
     };
   };
   let results = await Promise.all(keys.map(observe));
@@ -1202,7 +1279,7 @@ async function main() {
   });
 
   // 4. escalate
-  const changeTimes = [official?.obs?.publishedAt, snapshot?.retrieved_at].map((t) => Date.parse(t || '')).filter(Number.isFinite);
+  const changeTimes = [official?.obs?.publishedAt, snapshot?.retrieved_at, listingCopy?.updated_at].map((t) => Date.parse(t || '')).filter(Number.isFinite);
   const hoursSinceChange = changeTimes.length ? (Date.now() - Math.max(...changeTimes)) / 3600000 : null;
   const stuck = scope === 'full' ? stuckKeys(results, { hoursSinceChange }) : [];
   const issue = scope === 'full' ? await readIssue() : null;
@@ -1214,7 +1291,7 @@ async function main() {
   const oursDrift = drift.filter((r) => r.kind === 'ours');
   const generatedAt = started.toISOString().replace(/\.\d+Z$/, 'Z');
   const report = {
-    generated_at: generatedAt, scope, ssot, hours_since_change: hoursSinceChange,
+    generated_at: generatedAt, scope, ssot: { ...ssot, listingCopy: undefined }, hours_since_change: hoursSinceChange,
     heal_drift: healDrift, registry_behind: registryBehind, plan,
     stuck, newly_stuck: fresh, run_context_error: ctx.error || null,
     results: results.map((r) => ({ key: r.key, label: r.label, kind: r.kind, state: r.verdict.state, reasons: r.verdict.reasons, info: r.obs?.info || '' })),
