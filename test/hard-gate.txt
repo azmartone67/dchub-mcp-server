@@ -205,6 +205,7 @@ test/paywall-output-no-monthly-price.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/place-name-iso.test.mjs
+test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
