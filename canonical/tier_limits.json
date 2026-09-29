@@ -1,5 +1,5 @@
 {
-  "_comment": "DERIVED \u2014 do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs",
+  "_comment": "DERIVED — do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs",
   "source": "/api/v1/tiers",
   "calls_per_day": {
     "identified": 50,
