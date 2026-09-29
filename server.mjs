@@ -157,6 +157,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
+import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
 import { dropVerificationCounts as _dropVerificationCounts } from './lib/verification-counts.mjs';
@@ -10476,6 +10477,9 @@ const _ENTITY_MAP = {
   get_gas_intelligence: 'gas', get_gas_index: 'gas', get_gas_economics: 'gas',
   list_transactions: 'deal', hyperscaler_deals: 'deal', deal_autopsy: 'deal',
   analyze_site: 'site', compare_sites: 'site', site_selection_canvas: 'site',
+  // site-envelope (2026-09-28): was absent, so the gated path stamped the
+  // tool NAME, which is not a value of the DCHubEnvelope _entity enum.
+  get_composite_site_score: 'site',
   generate_site_analysis: 'site', save_site: 'site', list_saved_sites: 'site',
   get_dchub_recommendation: 'site', get_news: 'news', get_energy_prices: 'energy',
   get_renewable_energy: 'energy', get_tax_incentives: 'incentives', get_water_risk: 'risk',
@@ -17780,12 +17784,18 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   // `Tell the user:` line is already there. It only ever prepends one line, and
   // leaves failure envelopes alone, so the flag's verdict cannot change.
   // Inert unless DCHUB_RETURN_NUDGE is on.
-  }, async (args, extra) => _flagUpstreamError(await _returnNudgeStep(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  // ★ _stampSiteEnvelope sits directly inside _flagUpstreamError, after every
+  //   step that builds structuredContent: analyze_site, get_composite_site_score
+  //   and get_water_risk leave with the DCHubEnvelope (_entity + ok), and any
+  //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
+  //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
+  //   test/site-envelope-contract.test.mjs.
+  }, async (args, extra) => _flagUpstreamError(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name),
-       name, args, _outSchema), name), name));
+       name, args, _outSchema), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
