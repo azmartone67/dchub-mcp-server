@@ -47,3 +47,31 @@ describe('mintAutoTrial forwards its caller', () => {
     expect('X-DCHub-Client-IP' in calls[0].headers).toBe(false);
   });
 });
+
+// r-internal-no-mint (2026-09-29): a keyless 'dchub-internal' sweep minted a
+// trial key per gated call (2,843/day on one caller). Our harnesses mint none.
+describe('mintAutoTrial skips our own harnesses', () => {
+  afterEach(() => { delete process.env.DCHUB_MINT_SKIP_INTERNAL; });
+
+  it('does not call /keys/auto-mint for platform dchub-internal', async () => {
+    const calls = capture();
+    const out = await _ctxALS.run(
+      { client_ip: '198.51.100.7', user_agent: '', platform: 'dchub-internal', session_id: 'ae307eab' },
+      () => mintAutoTrial('get_water_risk'));
+    expect(out).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('still mints for a real platform', async () => {
+    const calls = capture();
+    await _ctxALS.run({ client_ip: '198.51.100.7', platform: 'cursor' }, () => mintAutoTrial('get_water_risk'));
+    expect(calls).toHaveLength(1);
+  });
+
+  it('kill switch DCHUB_MINT_SKIP_INTERNAL=0 restores the mint', async () => {
+    process.env.DCHUB_MINT_SKIP_INTERNAL = '0';
+    const calls = capture();
+    await _ctxALS.run({ platform: 'dchub-internal' }, () => mintAutoTrial('get_water_risk'));
+    expect(calls).toHaveLength(1);
+  });
+});
