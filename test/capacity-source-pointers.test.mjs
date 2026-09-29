@@ -592,21 +592,15 @@ describe('session instructions', () => {
     await withSummary(LIVE);
     const client = await connect(S.createServer(null, ' TAIL'));
     const ins = client.getInstructions();
-    expect(ins).toContain(`each listing stamped with when it was last updated (live now: ${CLAUSE}).`);
-    expect(ins.replace(` (live now: ${CLAUSE})`, '')).toBe(`${S._INSTRUCTIONS} TAIL`);
+    expect(ins).toContain(`each listing stamped with when it was last updated (${L.CAPACITY_INSTR_LIVE_CLAUSE}).`);
+    expect(ins.replace(` (${L.CAPACITY_INSTR_LIVE_CLAUSE})`, '')).toBe(`${S._INSTRUCTIONS} TAIL`);
+    // ★2026-09-29: the clause names where the numbers are, never the numbers.
+    expect(ins).not.toContain(CLAUSE);
+    expect(capacityInventoryViolations(ins)).toEqual([]);
     const countTokens = (s) => (s.match(/\d[\d,+]*\s*[-_ ]?\s*tools\b/gi) || []).length;
     expect(countTokens(ins)).toBe(countTokens(S._INSTRUCTIONS));
   });
 
-  it('the clause reads as one number set, pluralised and capped', () => {
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(LIVE))).toBe(CLAUSE);
-    const one = { ...LIVE, live_count: 1, total_mw: 1250.5, markets: [market('Ashburn', 'VA', 1, 1250.5)] };
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(one))).toBe('1 live listing, 1,250.5 MW across Ashburn, updated 2026-09-20');
-    const many = { ...LIVE, live_count: 9, markets: ['A', 'B', 'C', 'D', 'E'].map((m, i) => market(m, 'TX', 1, 10 * (5 - i))) };
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(many)))
-      .toBe('9 live listings, 120 MW across A, B, C and 2 more markets, updated 2026-09-20');
-    expect(L.capacityLiveClause(L.normalizeCapacitySummary(ZERO_WITH_MARKETS))).toBeNull();
-  });
 });
 
 // ── 4. planner routing ───────────────────────────────────────────────────────
