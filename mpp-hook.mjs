@@ -67,9 +67,9 @@ export const MPP_ARG_KEYS = Object.freeze([MPP_ARG_PAY, MPP_ARG_CRED]);
 export function mppArgShape() {
   return {
     [MPP_ARG_PAY]: z.boolean().optional().describe(
-      'Autonomous payment (Stripe MPP), step 1: set true to receive a signed $0.50 payment challenge for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.'),
+      'Autonomous payment (Stripe MPP), step 1: set true to receive a signed per-call payment challenge (the challenge states the amount) for this call instead of the free preview. No money moves — a challenge is a price quote. Humans never set this, so it does not affect the normal free/trial funnel.'),
     [MPP_ARG_CRED]: z.string().optional().describe(
-      'Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay $0.50 for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.'),
+      'Autonomous payment (Stripe MPP), step 2: the Shared Payment Token you minted for challenges[0]. Set it here to pay that challenge for this single call and receive the full result — no API key, no subscription, no human. One payment covers one call.'),
   };
 }
 
