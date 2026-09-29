@@ -316,6 +316,7 @@ jobs:
                  integrations/langchain/dchub_tools.py \
                  integrations/llamaindex/dchub_tools.py \
                  canonical/github_description.txt canonical/tier_limits.json \
+                 canonical/listing-copy.json \
                  integrations/packs/deals.json integrations/packs/deals.managed-agent.json \
                  integrations/packs/deepresearch.json integrations/packs/deepresearch.managed-agent.json \
                  integrations/packs/fiber.json integrations/packs/fiber.managed-agent.json \

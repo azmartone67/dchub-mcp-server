@@ -916,6 +916,10 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  'docs/contextual-triggers.md',   // ★2026-09-01: was in NO list; "70 live tools" since 07-08
                  'docs/distribution-targets.md', 'docs/canonical-workflows.md',
                  'scripts/smithery_description.txt', 'dxt/manifest.json',
+                 // ★2026-09-28: the directory listing-copy source of truth
+                 // (canonical/listing-copy.json). Its `long` must equal
+                 // smithery_description.txt, so both heal in the same pass.
+                 'canonical/listing-copy.json',
                  // ★2026-09-26: the Cursor Marketplace manifest. Its description is
                  // the listing copy Cursor reviews, and it sat at "91 tools" since
                  // it landed on 09-13 (#416) because no loop scanned it.
@@ -950,6 +954,23 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
       .replace(/\b(\d+)((?: live| MCP| read-only)*) tools\b/g, (s, n, adj) => (Number(n) > 20 ? `${COUNT}${adj || ''} tools` : s))
       .replace(/badge\/tools-(\d+)/g, (s, n) => (Number(n) > 20 ? `badge/tools-${COUNT}` : s))
       .replace(/(Tools exposed:\*{0,2} )(\d+)/g, (s, pre, n) => (Number(n) > 20 ? `${pre}${COUNT}` : s))));
+  }
+}
+
+// ---- canonical/listing-copy.json tool_count --------------------------------
+// ★2026-09-28: the loop above heals the "N MCP tools" PROSE in this file; the
+// numeric `tool_count` field is not prose, so it is healed here. Anchored on
+// the one `"tool_count": N` line; a missing anchor is a PROBLEM, never a no-op.
+{
+  const LC = 'canonical/listing-copy.json';
+  const lc = readCur(LC);
+  const LCRX = /^(  "tool_count": )(\d+)(,?)$/m;
+  const lm = LCRX.exec(lc);
+  if (!lm) {
+    problems.push(`${LC}: \`"tool_count": N\` line NOT FOUND — re-anchor this heal`);
+  } else if (Number(lm[2]) !== COUNT) {
+    problems.push(`${LC} tool_count ${lm[2]} != ${COUNT}`);
+    if (FIX) pend(LC, lc.replace(LCRX, `$1${COUNT}$3`));
   }
 }
 
