@@ -10,6 +10,8 @@
 // never been seen is unverified: the 2026-08-16 Glama check asserted on a field
 // that was empty for every server on earth and stayed red for five days.
 // =============================================================================
+import { copyRuleViolations, copyFingerprints, loadListingCopy, LISTING_COPY_PATH } from '../scripts/listing-copy.mjs';
+import { readFileSync as readSrc } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import {
@@ -18,7 +20,7 @@ import {
   hiveItem, packCodes, usableCanon, repoDrift, judge, gate, planActions, stuckKeys,
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
-  metaCardText, jsonLdText, headText, observeGlama,
+  metaCardText, jsonLdText, headText, observeGlama, copyReasons, listingCard, lobeProse,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
@@ -573,12 +575,130 @@ describe('Glama <head> card: meta / og / JSON-LD are read, not only the body', (
 });
 
 describe('the #410 issue body never prints a banned price itself', () => {
-  it('the paste-line header states the $99 price without quoting a banned figure', () => {
+  // ★2026-09-28: the header used to say "Pro is $99/mo". The copy rules now
+  // ban every monthly price on listing copy, so the header quotes none.
+  it('the paste-line header quotes no price at all, banned or monthly', () => {
     const results = [{ key: 'mcphive', kind: 'manual', label: 'MCP Hive', fix: 'f', verdict: { state: 'drift', reasons: ['says 88 tools (live 90)'] } }];
     const body = renderIssue({ ssot: SSOT, results, stuck: ['mcphive'], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
     const header = body.split('\n').find((l) => l.startsWith('Paste-ready line'));
-    expect(header).toContain('Pro is $99/mo');
+    expect(header).toBeTruthy();
+    expect(copyRuleViolations(header)).toEqual([]);
     expect(bannedClaims(header)).toEqual([]);
     expect(bannedClaims(body)).toEqual([]);
+  });
+});
+
+// ★2026-09-28 (#410). Glama, LobeHub, PulseMCP and mcpservers.org were taken
+// as "updated" while they still showed old copy. judge() only looked for stale
+// NUMBERS and $299/$199/Founding, so a listing with no stale number in it was
+// "In sync" whatever its description said: LobeHub's overview still read
+// "Starter ($9/mo) ... Pro ($99/mo)" when this lane marked it ok at 02:32Z on
+// 09-29. A copy listing is now in sync only when the READ-BACK shows the
+// current canonical/listing-copy.json text and breaks no copy rule.
+describe('a listing is in sync only when the read-back shows the current listing copy', () => {
+  const COPY = loadListingCopy();
+  const LIVE = { ...SSOT, tools: 92, copyFingerprints: copyFingerprints(COPY), listingCopy: COPY };
+  const opts = { kind: 'manual', copy: true };
+  const OLD_LOBE = 'DC Hub MCP server. **Starter ($9/mo):** 200 calls/day. **Pro ($99/mo):** 2,000 calls/day. '
+    + '$10 unlocks full answers across seven layers of infrastructure.';
+
+  it('the committed listing copy is there to compare against', () => {
+    expect(COPY).toBeTruthy();
+    expect(LIVE.copyFingerprints.length).toBeGreaterThan(0);
+  });
+
+  it('REGRESSION 09-28: old copy with no stale number used to read as in sync', () => {
+    const obs = { read: true, tools: 92, floors: [], toolClaims: [], banned: bannedClaims(OLD_LOBE), copyText: OLD_LOBE };
+    // Before: numbers only (no listing copy in the source) -> green.
+    expect(judge(obs, { ...SSOT, tools: 92 }, opts).state).toBe('in_sync');
+    // Now: the read-back is held to the listing copy -> drift, and it says why.
+    const v = judge(obs, LIVE, opts);
+    expect(v.state).toBe('drift');
+    const why = v.reasons.join(' | ');
+    expect(why).toContain(`does not show the current ${LISTING_COPY_PATH} copy`);
+    expect(why).toMatch(/\$9\/mo/);
+    expect(why).toMatch(/unlocks full answers/);
+    expect(why).toMatch(/seven layers/i);
+  });
+
+  it('a listing whose read-back carries the current copy is in sync', () => {
+    for (const field of ['short', 'glama_400', 'long']) {
+      const text = `Some directory chrome. ${COPY[field]} More chrome.`;
+      expect(judge({ read: true, tools: 92, copyText: text }, LIVE, opts), field).toEqual({ state: 'in_sync', reasons: [] });
+    }
+  });
+
+  it('the current copy PLUS a leftover monthly price is still drift', () => {
+    const v = judge({ read: true, tools: 92, copyText: `${COPY.glama_400} Pro $99/mo.` }, LIVE, opts);
+    expect(v.state).toBe('drift');
+    expect(v.reasons.join(' ')).toMatch(/breaks the copy rules/);
+  });
+
+  it('a description that could not be read back is never in sync', () => {
+    expect(judge({ read: true, tools: 92 }, LIVE, opts).reasons)
+      .toEqual(['its description could not be read back, so the copy is unverified']);
+    expect(judge({ read: true, tools: 92, copyText: '  ' }, LIVE, opts).state).toBe('drift');
+  });
+
+  it('sinks that are not listings (ours, push, PRs) are not held to it', () => {
+    expect(judge({ read: true, tools: 92 }, LIVE, { kind: 'ours' })).toEqual({ state: 'in_sync', reasons: [] });
+    expect(copyReasons({ read: true }, LIVE, { copy: false })).toEqual([]);
+  });
+
+  it('with no listing-copy source nothing is checked, and the issue says the copy is unverified', () => {
+    expect(copyReasons({ read: true, copyText: OLD_LOBE }, { ...SSOT, copyFingerprints: [] }, { copy: true })).toEqual([]);
+    const results = [{ key: 'lobehub', kind: 'manual', label: 'LobeHub', fix: 'f', verdict: { state: 'in_sync', reasons: [] } }];
+    const body = renderIssue({ ssot: { ...SSOT, copyFingerprints: [] }, results, stuck: [], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    expect(body).toMatch(/Numbers only: .*no listing's COPY was verified/);
+  });
+
+  it('with the source, the issue pastes glama_400 and quotes no monthly price', () => {
+    const results = [{ key: 'lobehub', kind: 'manual', label: 'LobeHub', fix: 'f', verdict: { state: 'drift', reasons: ['x'] } },
+      { key: 'mcphive', kind: 'manual', label: 'MCP Hive', fix: 'f', verdict: { state: 'in_sync', reasons: [] } }];
+    const body = renderIssue({ ssot: LIVE, results, stuck: ['lobehub'], plan: planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW }), generatedAt: 't', scope: 'full' });
+    expect(body).toContain(COPY.glama_400);
+    expect(body).toContain('counts as updated only once a sweep READS this text back');
+    expect(body).toMatch(/every third-party listing here shows the current/);
+    expect(copyRuleViolations(body).filter((v) => v.rule !== 'facility_count')).toEqual([]);
+  });
+
+  it('Glama: the copy is read from the <head> card, not from rendered tool descriptions', () => {
+    const head = (d) => `<head><meta name="description" content="${d}"></head>`;
+    const body = '<body><h2>Available Tools</h2><span>92<!-- --> tools</span>'
+      + '<p>unlock_more_data: Cheapest start $10 one-time. Also Developer $49/mo · Pro $99/mo.</p>cloud.dchub dchub</body>';
+    const good = observeGlama(head(COPY.glama_400) + body);
+    expect(good.copyText).toContain(COPY.glama_400.slice(0, 60));
+    expect(judge(good, LIVE, { kind: 'pull', copy: true })).toEqual({ state: 'in_sync', reasons: [] });
+    const stale = observeGlama(head('DC Hub: live data-center data for AI agents.') + body);
+    expect(judge(stale, LIVE, { kind: 'pull', copy: true }).state).toBe('drift');
+  });
+
+  it('listingCard falls back to the visible page when there is no head card', () => {
+    expect(listingCard('<p>DC Hub blurb</p>')).toBe('DC Hub blurb');
+  });
+
+  it('every listing named in the 09-28 report is a copy sink, and main() passes the flag', () => {
+    for (const k of ['glama_connector', 'glama_server', 'lobehub', 'pulsemcp', 'mcpservers_org', 'mcphive', 'mcp_so', 'mcp_so_secondary']) {
+      expect(SINKS[k].copy, k).toBe(true);
+    }
+    for (const k of ['official', 'smithery', 'readme', 'glama_duplicate']) expect(SINKS[k].copy, k).toBeFalsy();
+    const src = readSrc(new URL('../scripts/ecosystem-sync.mjs', import.meta.url), 'utf8');
+    expect(src).toMatch(/judge\(obs, ssot, \{ kind: SINKS\[k\]\.kind, copy: !!SINKS\[k\]\.copy \}\)/);
+    expect(src).toMatch(/ssot\.copyFingerprints = copyFingerprints\(listingCopy\)/);
+  });
+});
+
+describe('LobeHub: the overview is read, not stringified', () => {
+  it('reads overview.readme (the shape market.lobehub.com serves)', () => {
+    const j = { description: 'DC Hub desc', overview: { readme: '# DC Hub\n- **Pro ($99/mo):** 2,000 calls/day' } };
+    const prose = lobeProse(j);
+    expect(prose).not.toContain('[object Object]');
+    expect(prose).toContain('Pro ($99/mo)');
+    expect(copyRuleViolations(prose).map((v) => v.rule)).toContain('monthly_price');
+  });
+
+  it('still reads a string overview, and a missing one', () => {
+    expect(lobeProse({ description: 'a', overview: 'b' })).toBe('a\nb');
+    expect(lobeProse({ description: 'a' })).toBe('a\n');
   });
 });
