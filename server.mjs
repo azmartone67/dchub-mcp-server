@@ -2221,6 +2221,60 @@ function _callerIsKeyed() {
   try { return !!(getCtx() || {}).api_key; } catch (_) { return false; }
 }
 
+// ★2026-09-29 — get_retirement_headroom MW IS DEVELOPER+, THE SAME RULE AS REST.
+// dchub-backend#5886 made /api/v1/retirement-headroom answer everyone below
+// Developer (anonymous, free, identified, trial, starter, AND a $10-pack holder:
+// pack_opens=False, the Stranded Power Map is sold to a plan only) with every row
+// but the MW figures null. It answers THIS server's X-Internal-Key in full, so the
+// mask has to happen here. Before this, only the anonymous trim (_isMetricKey)
+// caught it; a free KEY got every capacity_mw / competing_mw / total_retiring_mw.
+// Full = c.tier at Developer or above. c.tier (not the gate tier, which folds
+// starter into 'paid') keeps Starter below; 'paid' is only ever Developer/Pro/
+// Founding, so it opens. 'metered' (the pack) and any unknown tier stay masked.
+const _RETIREMENT_MW_FULL_TIERS = new Set(['developer', 'paid', 'pro', 'founding', 'team',
+  'enterprise', 'research_seed', 'admin', 'internal']);
+export const RETIREMENT_MW_LOCKED = ['data[].generator.capacity_mw',
+  'data[].queue_pressure.competing_mw', 'total_retiring_mw'];
+export const RETIREMENT_DEFAULT_TARGET_MW = 50;   // the backend's DEFAULT_TARGET_MW
+export function _retirementMwFull(tier) {
+  return _RETIREMENT_MW_FULL_TIERS.has(String(tier || '').trim().toLowerCase());
+}
+// Mirrors routes/retirement_headroom.py _mask: MW nulled (never 0), keys kept,
+// rows ordered by date then name (not by the MW they hide), and the REST tease
+// envelope keys. An error body (no data array) passes through untouched.
+export function _maskRetirementHeadroom(d, sid) {
+  if (!d || typeof d !== 'object' || Array.isArray(d) || !Array.isArray(d.data)) return d;
+  const rows = d.data.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const row = { ...item };
+    if (row.generator && typeof row.generator === 'object') row.generator = { ...row.generator, capacity_mw: null };
+    if (row.queue_pressure && typeof row.queue_pressure === 'object') row.queue_pressure = { ...row.queue_pressure, competing_mw: null };
+    return row;
+  });
+  const _k = (r) => {
+    const g = (r && r.generator) || {};
+    return [String(g.retirement_date || ''), String(g.name || ''), String(g.generator_id || '')];
+  };
+  rows.sort((a, b) => {
+    const x = _k(a), y = _k(b);
+    for (let i = 0; i < 3; i += 1) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+    return 0;
+  });
+  return {
+    ...d, data: rows, total_retiring_mw: null,
+    _gated: true, _preview_only: true, _locked_fields: [...RETIREMENT_MW_LOCKED],
+    _total_available: rows.length,
+    _upgrade: {
+      tier_required: 'developer',
+      message: 'Preview: every retiring generator, date, fuel, substation distance and queue project count is here; '
+        + 'the MW figures are Developer and above, the same rule as the REST API. '
+        + 'The $10 pack does not open them. Call unlock_more_data for the one-click Developer link.',
+      developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), sid),
+      next_tool: 'unlock_more_data',
+    },
+  };
+}
+
 export function _subRefLandsOnKey(apiKey) {
   return !!apiKey && !/^dch_trial_/.test(String(apiKey));
 }
@@ -13058,7 +13112,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_interconnection_queue', when: 'You want the ISO-level queued-GW aggregate, not size-filtered survivors.',
         rejected_because: 'A capacity search wants filterable survivors at your MW floor (get_refined_queue), not the ISO total.' },
     ],
-    coverage_notes: 'get_retirement_headroom + get_refined_queue are depth-teased below Developer tier (top rows + count free); get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
+    coverage_notes: 'get_retirement_headroom lists retiring generators below Developer too, but its MW figures (capacity_mw, queue_pressure.competing_mw, total_retiring_mw) are null below Developer, and below Developer target_mw is held at 50 — the same rule as the REST API. get_refined_queue is depth-teased below Developer tier (top rows + count free); get_market_dcpi_rank is free-tier friendly. region_iso for the retirement/queue reads must be a US ISO (ERCOT/PJM/MISO/CAISO/SPP/NYISO/ISONE) — if the intent names a metro not an ISO, resolve the metro to its ISO first (e.g. Dallas→ERCOT, Columbus→PJM). The get_hosting_capacity step is CONDITIONAL and appears only where a utility publishes DRAW-side headroom (Ameren Illinois, AEP Ohio & I&M, Central Hudson = load; Avista = transmission bus) — 18 utilities total, Northeast/Mid-Atlantic/Midwest, not nationwide; it is free + full at every tier. Published feeder capacities are single-digit to ~27 MW and the rows are GIS vertices, so read distinct_feeders, never the row count.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "compare Phoenix vs Columbus" fell to unknown —
@@ -21096,7 +21150,25 @@ function createServer(descOverrides, instructionsTail) {
       fuel_filter: S.describe("Optional filter for retiring fuel categories, substring-matched (e.g., 'Coal', 'Natural Gas', 'Petroleum')."),
       limit: LIMIT },
     async (a) => {
-      const data = await callAPI('/api/v1/retirement-headroom', a);
+      // be#5886 parity: below Developer the MW is null (see _maskRetirementHeadroom),
+      // and target_mw is pinned to the default so sweeping the MW filter cannot read
+      // each unit's MW back out of which rows come and go.
+      let _c = {};
+      try { _c = getCtx() || {}; } catch (_) { _c = {}; }
+      const _full = _retirementMwFull(_c.tier);
+      let _args = a, _ignored = false;
+      if (!_full && a && a.target_mw != null && Number(a.target_mw) !== RETIREMENT_DEFAULT_TARGET_MW) {
+        _args = { ...a, target_mw: RETIREMENT_DEFAULT_TARGET_MW };
+        _ignored = true;
+      }
+      let data = await callAPI('/api/v1/retirement-headroom', _args);
+      if (!_full) {
+        data = _maskRetirementHeadroom(data, _c.session_id);
+        if (_ignored && data && data._gated) {
+          data = { ...data, _ignored_params: { target_mw: 'a MW threshold is a paid filter; this preview uses the default '
+            + RETIREMENT_DEFAULT_TARGET_MW } };
+        }
+      }
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
