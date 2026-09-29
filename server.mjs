@@ -9432,7 +9432,17 @@ const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retr
 // `vacancy_percent` for the one question this block exists to answer — "how
 // much is 1 MW in LA" — while the web page answers it. Exact key, not a
 // pattern: no other tool's field is exempted by this.
-const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing']);
+// r-dcpi-confidence (2026-09-28): every DCPI score now carries
+// `dcpi_confidence` (level + value from how many live input layers answered,
+// how much of the score's input is live vs modeled, and how old the score
+// is) and `dcpi_provenance` (live / modeled / broker inputs in plain words,
+// as_of, method version) — dchub-backend feat/dcpi-confidence-provenance. The
+// backend stamps both AFTER its own masking, for every tier: they describe
+// the data behind a score and carry no score figure. Without this exemption
+// the anon trim nulls basis.input_count (_count$) and cuts the input lists to
+// 3 rows, so a free caller reads a half-true provenance. Exact keys only;
+// both names are DCPI-specific, so no other tool's field is exempted.
+const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance']);
 
 function trimForTrial(parsed, toolName) {
   if (parsed === null || parsed === undefined) return parsed;
@@ -17832,7 +17842,9 @@ const _PROJECTION_PRESETS = {
     'power_cost_cents_kwh', 'fiber_provider_count', 'as_of'],
   // The canvas/rank row shape, for the ranking tools.
   market_summary: ['market', 'slug', 'state', 'iso', 'verdict', 'composite_score',
-    'excess_power_score', 'constraint_score', 'time_to_power_months', 'dcpi_url'],
+    'excess_power_score', 'constraint_score', 'time_to_power_months', 'dcpi_url',
+    // r-dcpi-confidence: a projected score keeps its confidence and provenance.
+    'dcpi_confidence', 'dcpi_provenance'],
   identity_only: ['id', 'site_id', 'slug', 'market_slug', 'name', 'market'],
 };
 
