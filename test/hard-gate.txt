@@ -264,6 +264,7 @@ test/routing-hint.test.mjs
 test/save-site-coords.test.mjs
 test/schema-dialect-neutral.test.mjs
 test/schema-optionality.test.mjs
+test/scoreboard-feed-timeout.test.mjs
 test/scoreboard-freshness.test.mjs
 test/selection-triggers.test.mjs
 test/server-json-route.test.mjs
