@@ -7182,8 +7182,9 @@ export async function _withWallUserLine(result, name, opts = {}) {
     const longUrl = opts.longUrl || _wallOfferLink(name, offer, c.session_id || '');
     if (!longUrl) return result;
     const link = await _shortRelayLink(longUrl, name);
+    const _d = decodeGoToken(longUrl);
     return withUserLine(result, { tool: name, offer, link, headline: opts.headline || null,
-                                  keepBody: opts.keepBody !== false });
+                                  keepBody: opts.keepBody !== false, plan: _d ? _d.plan : '' });
   } catch (_) { return result; }
 }
 

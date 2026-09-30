@@ -210,3 +210,26 @@ describe('should-mint-claim carries the copy version', () => {
   });
   function getSid() { return 'sess-wall-user-line-claim-' + (++seatN); }
 });
+
+describe('the other walls', () => {
+  it('paid_only (Pro-only tool, keyless): person\'s line first, same-plan long link folded into it', async () => {
+    const r = await call('get_dchub_recommendation', {}, seat());
+    expect(r.structuredContent.error).toBe('paid_only');
+    const line = firstLine(r);
+    expect(line).toContain(SHORT);
+    expect(line).toContain('DC Hub Pro');
+    expect(line).not.toMatch(/\$\d|unlock/i);
+    expect(r.structuredContent.user_message).toBe(line);
+    expect(r.structuredContent.copy_version).toBe('v11');
+    expect(r.content[0].text).not.toMatch(/go\/c\/[A-Za-z0-9._-]*\.[0-9a-f]{32}/);   // no second pro ask
+    expect(r.isError).toBe(true);   // default transport unchanged
+  });
+
+  it('a tool that needs a bound email, not a payment, keeps its bind_email wall unchanged', async () => {
+    const r = await call('list_transactions', {}, seat());
+    expect(r.structuredContent.error).toBe('paid_only');
+    expect(r.content[0].text).toMatch(/^## .*needs a free key, not a payment/);
+    expect(r.structuredContent.user_message).toBeUndefined();
+    expect(shortPosts.length).toBe(0);
+  });
+});
