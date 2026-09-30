@@ -308,6 +308,7 @@ test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-exits.test.mjs
 test/wall-transport.test.mjs
+test/wall-user-line.test.mjs
 test/web-bot-auth-python.test.mjs
 test/web-bot-auth.test.mjs
 test/write-tool-annotation-accuracy.test.mjs

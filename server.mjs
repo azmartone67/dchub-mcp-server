@@ -175,6 +175,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
+import { WALL_COPY_VERSION, SHORT_LINK_RE, decodeGoToken, withUserLine } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
@@ -704,7 +705,37 @@ function _paywallOffer(name, c) {
   return 'pack';
 }
 const _OWN_TELL_TOOLS = new Set(['claim_free_key', 'bind_email', 'recover_my_key']);
+// r-wall-user-line (2026-09-30): the contract rewrites a gated result's content wholesale
+// ("Tell the user: ..." + a long /upgrade/h relay), which for Grok (arm 'grok', always on)
+// and the v2 arm would have replaced the v11 person's line the wall just put first. The
+// v11 line stays first; the contract's own ask line is dropped (one human ask per
+// response), and everything else the contract did (commerce stripped, agent_hints,
+// completeness, isError) stands.
 export function _paywallContractStep(result, name) {
+  const out = _paywallContractStepInner(result, name);
+  try {
+    const sc0 = result && result.structuredContent;
+    if (out === result || !sc0 || sc0.copy_version !== WALL_COPY_VERSION
+        || sc0.show_to_user !== true || typeof sc0.user_message !== 'string') return out;
+    const line = sc0.user_message;
+    const first = out.content && out.content[0];
+    const t = (first && first.type === 'text' && typeof first.text === 'string') ? first.text : '';
+    if (t.startsWith(line)) return out;
+    const rest = t.replace(/^Tell the user: "[^\n]*"\n?/, '').replace(/^\n+/, '');
+    const content = out.content.slice();
+    content[0] = { type: 'text', text: line + (rest ? '\n\n' + rest : '') };
+    const sc = { ...(out.structuredContent || {}), user_message: line, show_to_user: true,
+                 copy_version: WALL_COPY_VERSION };
+    // One human ask per response: the contract's own relay link (/upgrade/h) gives way to
+    // the link in the person's line, so the response carries a single checkout URL.
+    const _lm = /https:\/\/\S+?(?= — )/.exec(line);
+    if (sc.for_your_human && typeof sc.for_your_human === 'object') {
+      sc.for_your_human = { ...sc.for_your_human, text: line, ...(_lm ? { url: _lm[0] } : {}) };
+    }
+    return { ...out, content, structuredContent: sc };
+  } catch (_) { return out; }
+}
+function _paywallContractStepInner(result, name) {
   try {
     const c = getCtx() || {};
     const arm = _paywallArmFor(c);
@@ -3671,6 +3702,9 @@ export async function shouldMintClaim(sessionId, toolName) {
     // the A/B window, directory profiles, bots) sends nothing.
     const _arm = _paywallArmFor(c);
     if (_arm) url.searchParams.set('pc', _arm);
+    // r-wall-user-line (2026-09-30): the wall copy this session is shown, stamped first-wins on
+    // mcp_high_intent_sessions.copy_version (dchub-backend#6017) beside paywall_arm.
+    url.searchParams.set('cv', WALL_COPY_VERSION);
     const resp = await fetch(url.toString(), {
       method: 'GET',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Accept': 'application/json' },
@@ -7093,6 +7127,76 @@ export function _lpWallResult(name, headline = null) {
     isError: _wallIsError(),
     structuredContent: payload,
   };
+}
+
+// ── r-wall-user-line (2026-09-30, copy_version v11) ─────────────────────────────
+// The short link a PERSON sees: dchub.cloud/u/<code>, minted by dchub-backend#6017
+// (POST /api/v1/relay/short). Its plan/ref/sid come from decoding the long /go/c link
+// this server already built, so a /u click is the same attributed click one hop later.
+// FAIL-OPEN: a timeout, non-2xx, kill switch (DCHUB_WALL_SHORT_LINK=0), no internal key
+// or an answer that is not a /u/<6 chars> URL returns the LONG link (logged). It can
+// degrade to less pretty, never to unpayable. ~1.5 s cap: this runs on wall time.
+const _SHORT_LINK_CACHE = new Map();
+const _SHORT_LINK_CACHE_MAX = 2000;
+export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_SHORT_LINK || ''))) return longUrl;
+    const f = decodeGoToken(longUrl);
+    if (!f || !INTERNAL_KEY) return longUrl;
+    const hit = _SHORT_LINK_CACHE.get(longUrl);
+    if (hit) return hit;
+    let host = '';
+    try { host = (getCtx() && getCtx().platform) || ''; } catch (_) {}
+    const resp = await fetchImpl(new URL('/api/v1/relay/short', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'X-Internal-Key': INTERNAL_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ plan: f.plan, ref: f.ref, sid: f.sid, tool: tool || '', host,
+                             copy_version: WALL_COPY_VERSION }),
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!resp.ok) { console.error('[wall-short-link] backend status', resp.status); return longUrl; }
+    const data = await resp.json();
+    if (!data || data.ok !== true || !SHORT_LINK_RE.test(String(data.url || ''))) {
+      console.error('[wall-short-link] unusable answer'); return longUrl;
+    }
+    if (_SHORT_LINK_CACHE.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_CACHE.clear();
+    _SHORT_LINK_CACHE.set(longUrl, data.url);
+    return data.url;
+  } catch (err) {
+    console.error('[wall-short-link] failed:', err && err.message);
+    return longUrl;
+  }
+}
+
+// The checkout link for what really opens this tool (see _paywallOffer): Pro for Land &
+// Power and Pro-only tools, the $10 pack otherwise.
+function _wallOfferLink(name, offer, sid) {
+  return offer === 'pro' ? _subCheckoutUrl(PRO_URL + promoParam(), sid) : _packCheckoutUrl(sid);
+}
+
+// Puts the person's line first on a wall result. Any failure returns the wall unchanged.
+export async function _withWallUserLine(result, name, opts = {}) {
+  try {
+    const c = getCtx() || {};
+    const offer = opts.offer || _paywallOffer(name, c);
+    const longUrl = opts.longUrl || _wallOfferLink(name, offer, c.session_id || '');
+    if (!longUrl) return result;
+    const link = await _shortRelayLink(longUrl, name);
+    return withUserLine(result, { tool: name, offer, link, headline: opts.headline || null,
+                                  keepBody: opts.keepBody !== false });
+  } catch (_) { return result; }
+}
+
+// The Land & Power wall with the person's line first. _lpWallResult stays as the old
+// fence (tests and the DCHUB_WALL_SHORT_LINK=0 path); this only rewrites it.
+export async function _lpWallResultV11(name, headline = null) {
+  const base = _lpWallResult(name, headline);
+  const longUrl = base.structuredContent.upgrade_url;
+  const out = await _withWallUserLine(base, name, { offer: 'pro', longUrl, headline, keepBody: false });
+  if (out === base) return base;
+  const link = out.structuredContent.user_message.match(/https:\/\/\S+?(?= — )/);
+  if (link) out.structuredContent.upgrade_url = link[0];
+  return out;
 }
 
 export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
@@ -16523,7 +16627,7 @@ function trackedTool(srv, name, description, schema, handler) {
           + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
           + "identified callers are not subject to this wall. For full depth now, call `unlock_more_data` "
           + "($10 one-time = 1,000 API credits, no subscription).";
-        return {
+        return await _withWallUserLine({
           content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
           isError: _wallIsError(),
           structuredContent: _collapseEnvelope(_dedupeAliasKeys({
@@ -16543,7 +16647,7 @@ function trackedTool(srv, name, description, schema, handler) {
             signup_url: SIGNUP_URL,
             upgrade_url: _unlockUrl(name, _sidw),
           })),
-        };
+        }, name, { offer: 'pack' });
       }
       // Land & Power (owner, 2026-09-22): only Pro opens the details (LP_TOOLS).
       let _lpOpened = false;   // _lpAccessFor said 'full' (Pro, or a pre-cutover pack)
@@ -16565,7 +16669,7 @@ function trackedTool(srv, name, description, schema, handler) {
               _hl = _pcLpHeadline(name, JSON.parse(_raw?.content?.[0]?.text || ''));
             } catch (_) { _hl = null; }
           }
-          return _lpWallResult(name, _hl);
+          return await _lpWallResultV11(name, _hl);
         }
         if (_lpAccess === 'preview') {
           status = 'lp_preview';
@@ -16670,7 +16774,7 @@ function trackedTool(srv, name, description, schema, handler) {
           // r-human-first (2026-08-15): paywall response — the ONE human relay
           // link leads the prose; the $10 CTA follows, never precedes.
           const _pwxM = buildPaywallExtras(name, 'free');
-          return {
+          return await _withWallUserLine({
             content: [{ type: 'text', text: composeHumanCta(
               _pwxM && _pwxM.for_your_human && _pwxM.for_your_human.url,
               '🔒 **You’ve used DC Hub’s free grid & fiber allowance** — heavy `' + name +
@@ -16688,7 +16792,7 @@ function trackedTool(srv, name, description, schema, handler) {
               ..._pwxM,
               ...promoSC(),
             },
-          };
+          }, name, { offer: 'pack' });
         }
       }
       // r-mpp (2026-06-21): MPP per-call rail — DARK unless MPP_ENABLED=1 +
@@ -17673,7 +17777,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         const _humanUrlC = (_hiClaim2 && _hiClaim2.human_url)
           || (_autoMintSC2.for_your_human && _autoMintSC2.for_your_human.url)
           || (_pwx2 && _pwx2.for_your_human && _pwx2.for_your_human.url) || null;
-        return {
+        const _paidOnlyWall = {
           content: [{ type: 'text', text: composeHumanCta(_humanUrlC, (_isKeyed ? _mdKeyed : _mdAnon) + _autoMintText2 + _hiText2 + promoText()) }],
           isError: _wallIsError(),   // r-wall-transport: carries for_your_human
           structuredContent: _collapseEnvelope(_dedupeAliasKeys({
@@ -17688,6 +17792,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     ..._hiSC2,       /* 2026-06-07: present only when count>=3 high-intent */
           })),
         };
+        // r-wall-user-line: a tool that needs a bound email, not a payment, has no price
+        // line to give a person; its wall keeps the bind_email copy as it was.
+        return _freeWithEmail ? _paidOnlyWall : await _withWallUserLine(_paidOnlyWall, name);
       }
       const result = _noDataGuard(await handler(gate.params || args));
       // An error answer is returned as the tool built it. The over-cap and
