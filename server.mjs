@@ -19402,6 +19402,13 @@ function _scrubCommerce(result) {
 // stale entry is served IMMEDIATELY while ONE background rebuild (single-flight
 // via `refreshing`) refreshes it; only a truly cold process (no entry at all)
 // builds inline, and concurrent cold callers share that one in-flight build.
+// Per-feed cap for the international snapshot fetches. callAPI's default is 30s
+// and the build waits on the slowest feed, so one slow feed (KPX 5-25s) set the
+// whole tool's wall clock (max 31.7s on 2026-09-29). A feed that misses the cap
+// degrades to its own error row (fail-soft, already handled) instead of
+// stalling the tool. 12s sits under the 15s transport abort and above the
+// ENTSO-E cold fan-out (11.6s measured).
+const _SCOREBOARD_FEED_TIMEOUT_MS = 12_000;
 const _SCOREBOARD_CACHE = { at: 0, out: null, obj: null, refreshing: null };
 
 // ── r-promres (2026-07-18): shared fetch cache for the reference RESOURCES ──
@@ -20742,18 +20749,18 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       // behavior as the old inline build, and the data is caller-independent.
       const _rebuild = async () => {
         const _softErr = (e) => ({ error: String(e).slice(0, 120) });
-        const _p_uk  = callAPI('/api/v1/iso/uk/snapshot', {}).catch(_softErr);
-        const _p_au  = callAPI('/api/v1/iso/au/snapshot', {}).catch(_softErr);
-        const _p_tw  = callAPI('/api/v1/iso/tw/snapshot', {}).catch(_softErr);
-        const _p_eu  = callAPI('/api/v1/iso/eu/snapshot', {}).catch(_softErr);
+        const _p_uk  = callAPI('/api/v1/iso/uk/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
+        const _p_au  = callAPI('/api/v1/iso/au/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
+        const _p_tw  = callAPI('/api/v1/iso/tw/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
+        const _p_eu  = callAPI('/api/v1/iso/eu/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
         // r-intl-0711: JP/KR/BR rank full-mix; SG is partial (demand + price).
         // KR note: the backend's KPX fetch takes 14-18s from US egress —
         // callAPI's 30s default timeout tolerates it; when KPX is stale the
         // row degrades to its error state (fail-soft, never faked).
-        const _p_jp  = callAPI('/api/v1/iso/jp/snapshot', {}).catch(_softErr);
-        const _p_kr  = callAPI('/api/v1/iso/kr/snapshot', {}).catch(_softErr);
-        const _p_br  = callAPI('/api/v1/iso/br/snapshot', {}).catch(_softErr);
-        const _p_sg  = callAPI('/api/v1/iso/sg/snapshot', {}).catch(_softErr);
+        const _p_jp  = callAPI('/api/v1/iso/jp/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
+        const _p_kr  = callAPI('/api/v1/iso/kr/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
+        const _p_br  = callAPI('/api/v1/iso/br/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
+        const _p_sg  = callAPI('/api/v1/iso/sg/snapshot', {}, { timeout: _SCOREBOARD_FEED_TIMEOUT_MS }).catch(_softErr);
         const _p_cmp = callAPI('/api/v1/dcpi/iso-comparison').catch(() => null);
         const _p_q   = callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }).catch(() => null);
         const _p_gas = callAPI('/api/v1/gas/eu/snapshot').catch(() => null);
