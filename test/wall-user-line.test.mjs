@@ -232,4 +232,18 @@ describe('the other walls', () => {
     expect(r.structuredContent.user_message).toBeUndefined();
     expect(shortPosts.length).toBe(0);
   });
+
+  it('metered_over_threshold (keyed free, flagged by the backend): line first, pack as API capacity', async () => {
+    const r = await call('get_grid_intelligence', {}, seat({
+      tier: 'free', api_key: 'dch_live_metered_wall', metered_enforce: true }));
+    expect(r.structuredContent.error).toBe('metered_over_threshold');
+    const line = firstLine(r);
+    expect(line).toContain(SHORT);
+    expect(line).toContain('$10 one-time');
+    expect(line).toMatch(/usage capacity/);
+    expect(line).not.toMatch(/unlock/i);
+    expect(r.structuredContent.user_message).toBe(line);
+    expect(r.structuredContent.copy_version).toBe('v11');
+    expect(shortPosts[0].body.plan).toBe('metered');
+  });
 });
