@@ -136,7 +136,10 @@ const ctaUrls = (s) => [...new Set((s.match(CTA) || []).map((u) => u.replace(/[.
 const tellLine = (text) => {
   const first = text.split('\n')[0];
   const m = /^Tell the user: "(.*)"$/.exec(first);
-  return m ? m[1] : null;
+  if (m) return m[1];
+  // copy v11 (2026-09-30): a Land & Power wall leads with the person's own line
+  // (lib/wall-user-line.mjs), which replaces the contract's "Tell the user" ask.
+  return / your user can open https:\/\//.test(first) ? first : null;
 };
 
 describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', () => {
@@ -197,8 +200,9 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
     expect(said, r.text.slice(0, 400)).toBeTruthy();
-    expect(said).toMatch(/^DC Hub rates this site CAUTION overall, with gas pipeline access as the weakest factor\./);
-    expect(said).toMatch(/\. The full breakdown \(power, gas, fiber, market and risk scores, nearby substations and power cost\) is on DC Hub Pro with a 7-day free trial: https:/);
+    // copy v11: the band only (owner 2026-09-30) — the weakest factor stays in
+    // structuredContent.limiting_factor below, not in the line a person reads.
+    expect(said).toMatch(/^DC Hub rates this site CAUTION overall\. For the full site analysis, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
     expect(said).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(said).not.toMatch(/\$10|credits/);
     expect(ctaUrls(r.body)).toHaveLength(1);
@@ -220,8 +224,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     const r = await callAs('claude-ai', 'compare_sites', { locations: '33.45,-112.07;39.04,-77.48' });
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
-    expect(said).toMatch(/^DC Hub rates site 1 CAUTION, site 2 CAUTION\./);
-    expect(said).toMatch(/DC Hub Pro/);
+    expect(said).toMatch(/^DC Hub rates site 1 CAUTION, site 2 CAUTION\. For the full site comparison, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
     expect(ctaUrls(r.body)).toHaveLength(1);
   });
 });
