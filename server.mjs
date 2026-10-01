@@ -24176,10 +24176,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         if (!path) return _listingInvalidSlug('source_capacity', a.slug);
         return _listingsToolResult('source_capacity', await callAPI(path, {}, { withStatus: true }));
       }
+      // The GPU filters exist in the schema only when the flag is on, so they are read from
+      // `gpu`, which is empty otherwise (no handler reads an undeclared argument).
+      const gpu = _CAPACITY_GPU_ON ? a : {};
       const r = await callAPI('/api/v1/listings',
         { market: a.market, state: a.state, min_mw: a.min_mw, min_kw: a.min_kw, region: a.region,
           location: a.location, delivery_type: a.delivery_type, available_by: a.available_by,
-          gpu_model: a.gpu_model, min_gpus: a.min_gpus, offer_type: a.offer_type, limit: a.limit },
+          gpu_model: gpu.gpu_model, min_gpus: gpu.min_gpus, offer_type: gpu.offer_type, limit: a.limit },
         { withStatus: true });
       return _listingsToolResult('source_capacity', r);
     });
