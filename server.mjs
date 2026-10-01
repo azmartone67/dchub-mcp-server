@@ -2893,7 +2893,15 @@ const _SOURCE_PLATFORM = (() => {
 // the excluded bucket. It never returns a brand, so a third party who discovers
 // the path can at worst exclude ITSELF from counts we publish — the conservative
 // direction for a number we stand behind.
-const MCP_SELF_PATHS = new Map([['/mcp/analyst', 'dchub-analyst']]);
+// 2026-10-01: '/mcp/hub-grok-bot' — OUR Grok Bot's own sessions (the weekday hand-off proof test and the
+// X/LinkedIn posting routines calling grid/DCPI tools). They reach this server through xAI's hosted
+// connector: UA 'grok-connectors-manager/0.1.0' and clientInfo.name 'connectors-manager' are byte-identical
+// to a REAL Grok user's (measured on 10 relay sessions, 09-30..10-01), so no name, UA or IP rule can tell
+// them apart and the 10 landed in relay_minted as demand. The URL we configure the bot with is the one
+// channel we own, exactly as for the analyst. The tag can only be 'dchub-*', never a brand. ★ The TAG must not
+// contain 'grok': detectPlatformFromInit runs the known-platform check on the header BEFORE the internal
+// vocabulary, so 'dchub-grok-bot' would resolve to the real 'grok' platform instead of the excluded bucket.
+const MCP_SELF_PATHS = new Map([['/mcp/analyst', 'dchub-analyst'], ['/mcp/hub-grok-bot', 'dchub-operator-bot']]);
 // Every path this server answers MCP on. '/mcp' stays the canonical, published
 // one; the rest are our own first-party surfaces, tagged above.
 // ── r-source-path (2026-09-04): WHERE an agent came from, as a separate axis ──
