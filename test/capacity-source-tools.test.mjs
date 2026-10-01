@@ -1101,17 +1101,22 @@ describe('source_capacity — search by size and location', () => {
     expect(ok.ok, ok.issues).toBe(true);
   });
 
+  it('advertises no GPU filter while CAPACITY_GPU_COMPUTE is off', () => {
+    const props = Object.keys(TOOLS[READ].inputSchema.shape || {});
+    for (const k of ['gpu_model', 'min_gpus', 'offer_type']) expect(props).not.toContain(k);
+  });
+
   it('the description example maps as written, and nothing unasked is sent', async () => {
     responder = () => json(200, LIST_FILTERED);
     await call(READ, { min_kw: 500, region: 'europe' });
     expect(new URL(listingCalls()[0].url).search).toBe('?min_kw=500&region=europe');
   });
 
-  it('delivery_type takes exactly the four backend values; anything else is refused by the schema', async () => {
+  it('delivery_type takes exactly the four public values (gpu_compute is flagged off); anything else is refused by the schema', async () => {
     for (const v of ['land', 'powered_shell', 'turnkey', 'colocation']) {
       expect((await TOOLS[READ].inputSchema.safeParseAsync({ delivery_type: v })).success, v).toBe(true);
     }
-    for (const v of ['powered shell', 'hyperscale', '']) {
+    for (const v of ['powered shell', 'hyperscale', '', 'gpu_compute']) {
       expect((await TOOLS[READ].inputSchema.safeParseAsync({ delivery_type: v })).success, v).toBe(false);
     }
   });
@@ -1659,5 +1664,14 @@ describe('browse-path access block → next_steps', () => {
     const wall = (await call(READ, { slug: TEASER.slug })).structuredContent;
     expect(wall.next_steps).toEqual(['claim_free_key', 'bind_email', READ]);
     expect(wall.identity_note).toMatch(/OAuth/);
+  });
+});
+
+describe('GPU requirement fields', () => {
+  it('sends gpu_model and gpu_count in the requirement, and nothing when unset', async () => {
+    const { _listingIntroBody } = await import('../server.mjs');
+    const b = _listingIntroBody({ name: 'A', company: 'B', gpu_model: 'H200', gpu_count: 512, accept_terms: true });
+    expect(b.requirement).toEqual({ gpu_model: 'H200', gpu_count: 512 });
+    expect(_listingIntroBody({ name: 'A', company: 'B' }).requirement).toBeUndefined();
   });
 });

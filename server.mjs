@@ -6079,6 +6079,9 @@ export function _listingIntroBody(args, { termsVersion = null, client = null } =
     const v = _listingStr(a[k]);
     if (v) requirement[k] = v;
   }
+  const gpuModel = _listingStr(a.gpu_model);
+  if (gpuModel) requirement.gpu_model = gpuModel;
+  if (typeof a.gpu_count === 'number' && Number.isFinite(a.gpu_count)) requirement.gpu_count = a.gpu_count;
   const body = { name: _listingStr(a.name), company: _listingStr(a.company) };
   const role = _listingStr(a.role);
   if (role) body.role = role;
@@ -24139,11 +24142,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // backend's message. Both are FREE_FULL (the wall is server-side); only the
   // deal registration is a write. Contract fixtures: test/capacity-source-tools.test.mjs.
   //
+  // 2026-10-01: gpu_compute (backend dchub-backend#6093). The GPU filters and
+  // requirement fields are advertised only when CAPACITY_GPU_COMPUTE=on, so
+  // tools/list stays byte-identical until the first gpu_compute listing is live
+  // (no GPU wording before then — owner rule). The handlers pass the values
+  // through either way; the backend ignores what is unset.
   // 2026-09-15 (deal registration): source_capacity passes min_kw, region,
   // location, delivery_type and available_by to GET /api/v1/listings beside
   // market, state and min_mw, and request_capacity_intro sends capacity_kw,
   // regions and countries in the requirement. Both pass the values through
   // unchanged; the backend contract for them ships in parallel.
+  const _CAPACITY_GPU_ON = String(process.env.CAPACITY_GPU_COMPUTE || '').toLowerCase() === 'on';
   trackedTool(srv, 'source_capacity',
     'Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
     { slug: ID.describe('One listing: its slug or numeric id exactly as items[].slug / items[].id return it. Omit to browse teaser cards'),
@@ -24153,8 +24162,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       min_kw: N.describe('Browse filter: the size your human needs, in kW (min_mw is the same filter in MW). Matched against what a listing can ACTUALLY deliver, not just its headline total: contiguous_kw is the largest single contiguous block available and min_contract_kw the smallest chunk the provider will contract, so a listing answers only when this size fits the block it declares — a site with a big total but a small contiguous block is not a hit, and a big site willing to contract small chunks is. A listing that declares neither is matched on its total.'),
       region: S.describe('Browse filter: comma-separated regions from north_america, latin_america, europe, asia_pacific and middle_east_africa; the aliases emea, apac, latam and americas also work, e.g. "europe" or "emea, apac"'),
       location: S.describe('Browse filter: comma-separated free text matched against each listing\'s region, country, state and metro, e.g. "Germany" or "Texas, Phoenix"'),
-      delivery_type: z.enum(['land', 'powered_shell', 'turnkey', 'colocation']).optional().describe('Browse filter: how the capacity is delivered: land, powered_shell, turnkey or colocation'),
+      delivery_type: z.enum(_CAPACITY_GPU_ON ? ['land', 'powered_shell', 'turnkey', 'colocation', 'gpu_compute'] : ['land', 'powered_shell', 'turnkey', 'colocation']).optional().describe(_CAPACITY_GPU_ON ? 'Browse filter: how the capacity is delivered: land, powered_shell, turnkey, colocation or gpu_compute' : 'Browse filter: how the capacity is delivered: land, powered_shell, turnkey or colocation'),
       available_by: S.describe('Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD'),
+      ..._CAPACITY_GPU_ON ? {
+        gpu_model: S.describe('Browse filter, gpu_compute listings: GPU model, e.g. H100, H200, B200, GB200, MI300X'),
+        min_gpus: N.describe('Browse filter, gpu_compute listings: at least this many GPUs available'),
+        offer_type: S.describe('Browse filter, gpu_compute listings: reserved, on_demand or spot'),
+      } : {},
       limit: LIMIT },
     async (a) => {
       if (a.slug !== undefined && a.slug !== null && String(a.slug).trim() !== '') {
@@ -24162,9 +24176,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         if (!path) return _listingInvalidSlug('source_capacity', a.slug);
         return _listingsToolResult('source_capacity', await callAPI(path, {}, { withStatus: true }));
       }
+      // The GPU filters exist in the schema only when the flag is on, so they are read from
+      // `gpu`, which is empty otherwise (no handler reads an undeclared argument).
+      const gpu = _CAPACITY_GPU_ON ? a : {};
       const r = await callAPI('/api/v1/listings',
         { market: a.market, state: a.state, min_mw: a.min_mw, min_kw: a.min_kw, region: a.region,
-          location: a.location, delivery_type: a.delivery_type, available_by: a.available_by, limit: a.limit },
+          location: a.location, delivery_type: a.delivery_type, available_by: a.available_by,
+          gpu_model: gpu.gpu_model, min_gpus: gpu.min_gpus, offer_type: gpu.offer_type, limit: a.limit },
         { withStatus: true });
       return _listingsToolResult('source_capacity', r);
     });
@@ -24181,6 +24199,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       states: S.describe('Comma-separated US states of interest, e.g. "TX, AZ"'),
       regions: S.describe('Comma-separated regions of interest from north_america, latin_america, europe, asia_pacific and middle_east_africa (aliases emea, apac, latam, americas), e.g. "europe, apac"'),
       countries: S.describe('Comma-separated countries of interest, e.g. "Germany, Netherlands"'),
+      ..._CAPACITY_GPU_ON ? {
+        gpu_model: S.describe('GPU model needed, for a GPU compute requirement, e.g. H200'),
+        gpu_count: N.describe('Number of GPUs needed, for a GPU compute requirement'),
+      } : {},
       timeline: S.describe('When the capacity is needed, e.g. a quarter and year'),
       use_case: S.describe('What the capacity is for, e.g. "AI inference"'),
       notes: S.describe('Anything else the provider should know about the requirement. It travels with the requirement, so leave out anything that identifies your human'),
