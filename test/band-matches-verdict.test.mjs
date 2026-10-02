@@ -25,10 +25,23 @@
 //   * NO gating change: every masked number is still null + `_<k>_in_pro`;
 //   * a site composite with no verdict on the row keeps the site 70/45 band.
 //
-// Pure functions, no network.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+// Pure functions; the only socket is a 127.0.0.1 stub for server.mjs startup.
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import http from 'node:http';
 
-const ENV = ['DCHUB_DEPTH_GATE', 'DCHUB_GRID_HEADROOM_TIER'];
+// Importing server.mjs fires its startup fetches at DCHUB_API_BASE, so the
+// hard gate needs a loopback stub there (it refuses any connect off 127.0.0.1).
+let stub, stubBase;
+beforeAll(async () => {
+  stub = http.createServer((req, res) => {
+    res.writeHead(404, { 'content-type': 'application/json' }); res.end('{}');
+  });
+  await new Promise((r) => stub.listen(0, '127.0.0.1', r));
+  stubBase = `http://127.0.0.1:${stub.address().port}`;
+});
+afterAll(() => stub && stub.close());
+
+const ENV = ['DCHUB_DEPTH_GATE', 'DCHUB_GRID_HEADROOM_TIER', 'DCHUB_API_BASE'];
 let saved;
 beforeEach(() => { saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]])); });
 afterEach(() => {
@@ -40,6 +53,7 @@ afterEach(() => {
 async function load() {
   delete process.env.DCHUB_DEPTH_GATE;           // production default: gate ON
   process.env.DCHUB_GRID_HEADROOM_TIER = '1';
+  process.env.DCHUB_API_BASE = stubBase;
   return import('../server.mjs?bandverdict=' + Math.random());
 }
 
