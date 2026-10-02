@@ -9897,6 +9897,42 @@ const _TYPED_PREVIEW_FIELDS = {
 };
 const _NO_TYPED_PREVIEW = new Set();
 
+// ── RAG-1 (Grok, 2026-10-02): a retrieval envelope is not a siting answer ──
+// semantic_search / search_intelligence return `score` = 0-1 RELEVANCE, not a
+// 0-100 DCPI score. The generic depth gate matched `^score$`, nulled it and
+// stamped `score_band` from the DCPI bands, so every keyless hit (48 of 48 on
+// Grok's 16-query probe) read "AVOID". The number bought nothing either: the
+// hit's own `cosine` sits beside it unmasked.
+// `corpus` is the list of corpora searched — request metadata, not rows. The
+// row trim cut it 10 → 3, which drove "7 more rows" in the upgrade line and
+// "3 of 10 shown" in the citation while the real gap was results 3 of 8.
+// Tool-scoped, like _TYPED_PREVIEW_FIELDS: `score` stays gated everywhere else.
+export const RETRIEVAL_TOOLS = new Set(['semantic_search', 'search_intelligence']);
+const _RETRIEVAL_PASSTHROUGH_KEYS = new Set(['score', 'corpus']);
+// The backend's PUBLIC_CORPORA in the public names /api/v1/rag/search answers
+// with (routes/brain_rag.py _PUBLIC_CORPUS_OUT). The tool descriptions list
+// these; test/retrieval-envelope.test.mjs pins the two together.
+export const RETRIEVAL_PUBLIC_CORPORA = Object.freeze([
+  'news_articles', 'deals', 'facilities', 'market_narratives', 'press_releases',
+  'announcements', 'permitting_intel', 'construction_permits', 'tax_incentives',
+  'capacity_pipeline']);
+// search_intelligence short names → the corpus names /api/v1/rag/search takes.
+export const _INTEL_CORPUS_MAP = Object.freeze({
+  news: 'news_articles', news_articles: 'news_articles',
+  deals: 'deals', deal: 'deals',
+  facilities: 'discovered_facilities', facility: 'discovered_facilities',
+  discovered_facilities: 'discovered_facilities',
+  market_narratives: 'market_narratives', markets: 'market_narratives',
+  market: 'market_narratives', narratives: 'market_narratives',
+  press: 'press_releases', press_releases: 'press_releases',
+  announcements: 'announcements', announcement: 'announcements',
+  permitting: 'permitting_intel', permitting_intel: 'permitting_intel',
+  permits: 'construction_permits', permit: 'construction_permits',
+  construction_permits: 'construction_permits',
+  incentives: 'tax_incentives', tax_incentives: 'tax_incentives',
+  pipeline: 'capacity_pipeline', capacity_pipeline: 'capacity_pipeline',
+});
+
 // ── r-score-count-sorts (2026-09-24): `score` IS free on the two count sorts ──
 // r-score-is-mw keeps `score` null on the free tiers because on most sorts it
 // is MW or the DCPI composite. On two sorts it is neither. Measured live on
@@ -10140,6 +10176,8 @@ function trimForTrial(parsed, toolName) {
   for (const [k, v] of Object.entries(parsed)) {
     if (_NEVER_CUT_KEY_RE.test(k) || _PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                             // never-cut: byte-identical
+    } else if (RETRIEVAL_TOOLS.has(toolName) && _RETRIEVAL_PASSTHROUGH_KEYS.has(k)) {
+      out[k] = v;                             // RAG-1: relevance score + corpus list
     } else if (k === 'verdict_reasons' && Array.isArray(v)) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
     } else if (_gatesHeadroom(k)) {
@@ -21521,9 +21559,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // facilities via the RAG layer (Cohere embeddings + pgvector). For fuzzy /
   // conceptual queries that keyword filters miss. Free — an agent magnet.
   trackedTool(srv, 'semantic_search',
-    'Use for CONCEPTUAL / fuzzy questions where keyword filters fall short — semantic (meaning-based) retrieval across DC Hub\'s industry news, M&A deals, the global facility map, and per-market DCPI deep-dive analysis narratives, ranked by relevance with citable source fields (news url/title, deal parties/value, facility name/location, deep-dive market/url). Examples: "what is happening with behind-the-meter gas for AI data centers?", "deals involving nuclear power for hyperscalers", "why is Northern Virginia constrained?" — semantic_search q="behind-the-meter gas for AI data centers". Params: q (required, natural-language query); corpus (optional CSV subset of news_articles,deals,discovered_facilities,market_narratives; default all); k (1-15, default 8). Returns {results:[{source_table, kind, text, score, cite:{…}}]}. Complements the exact-filter tools (get_news / list_transactions / search_facilities) with relevance ranking; for a full token-budgeted market briefing use get_market_context. Cite "DC Hub (dchub.cloud)".',
+    'Use for CONCEPTUAL / fuzzy questions where keyword filters fall short — semantic (meaning-based) retrieval across DC Hub\'s industry news, M&A deals, the global facility map, per-market DCPI deep-dive narratives, press releases, announcements, permitting intel, construction permits, tax incentives and the capacity pipeline, ranked by relevance with citable source fields (news url/title, deal parties/value, facility name/location, deep-dive market/url). Examples: "what is happening with behind-the-meter gas for AI data centers?", "deals involving nuclear power for hyperscalers", "why is Northern Virginia constrained?" — semantic_search q="behind-the-meter gas for AI data centers". Params: q (required, natural-language query); corpus (optional CSV subset of news_articles,deals,facilities,market_narratives,press_releases,announcements,permitting_intel,construction_permits,tax_incentives,capacity_pipeline; default all); k (1-15, default 8). Returns {results:[{source_table, kind, text, score, cite:{…}}]}; score is 0-1 relevance, not a DCPI score. Complements the exact-filter tools (get_news / list_transactions / search_facilities) with relevance ranking; for a full token-budgeted market briefing use get_market_context. Cite "DC Hub (dchub.cloud)".',
     { q: S.describe('Natural-language query (required), e.g. "grids opening up for AI load in the Southeast"'),
       query: S.describe('Alias for q — the same natural-language query; send exactly one of q/query'),
+      // Frozen on the reviewed /mcp/chatgpt catalog (test/chatgpt-toolset-frozen); the
+      // tool description above lists all ten corpora.
       corpus: S.describe('Optional CSV of corpora: news_articles, deals, discovered_facilities, market_narratives (default: all)'),
       k: N.describe('Number of results, 1-15 (default 8)') },
     async (a) => {
@@ -21545,21 +21585,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
 
   // 2026-07-03: search_intelligence — the agent-friendly alias over the same RAG
   // layer as semantic_search, but with the {query, corpus, limit} shape and the
-  // human-friendly corpus names (news|deals|facilities|market_narratives) that
+  // human-friendly corpus names (_INTEL_CORPUS_MAP, module scope) that
   // most agents reach for. Maps those to the backend corpus tables and forwards
   // the session X-API-Key (callAPI does this) so tiered results hydrate per key.
-  const _INTEL_CORPUS_MAP = {
-    news: 'news_articles', news_articles: 'news_articles',
-    deals: 'deals', deal: 'deals',
-    facilities: 'discovered_facilities', facility: 'discovered_facilities',
-    discovered_facilities: 'discovered_facilities',
-    market_narratives: 'market_narratives', markets: 'market_narratives',
-    market: 'market_narratives', narratives: 'market_narratives',
-  };
   trackedTool(srv, 'search_intelligence',
-    'Semantic (meaning-based) search over DC Hub\'s live intelligence corpus — industry news, M&A deals, discovered facilities and per-market DCPI analysis narratives — returning the most relevant records with citable source fields. This is the agent-friendly alias over the SAME retrieval layer as semantic_search: same results, different call shape. It takes `query` plus human-readable corpus names (news | deals | facilities | market_narratives); semantic_search takes `q` plus the raw table names. Call ONE of them, not both. Params: query (required, natural language); corpus (optional CSV of the four names above, default all); limit (1-15, default 8). BEHAVIOUR: read-only — it writes nothing, and repeat calls with the same arguments return the same records. ACCESS: works with no key, but anonymous results come back as a TRIMMED PREVIEW; the session X-API-Key hydrates full depth per key, and the free tier is capped per day (call claim_free_key once — no email — if you do not hold a key). Do NOT use when you can filter exactly: search_facilities for structured facility filters, get_news for date/keyword news, list_transactions for deal filters — those match fields and return complete sets, where this ranks by meaning and returns a top-N.',
+    'Semantic (meaning-based) search over DC Hub\'s live intelligence corpus — industry news, M&A deals, discovered facilities, per-market DCPI narratives, press releases, announcements, permitting intel, construction permits, tax incentives and the capacity pipeline — returning the most relevant records with citable source fields. This is the agent-friendly alias over the SAME retrieval layer as semantic_search: same results, different call shape. It takes `query` plus short corpus names (news | deals | facilities | market_narratives | press | announcements | permitting | permits | incentives | pipeline); semantic_search takes `q` plus the full corpus names. Call ONE of them, not both. Params: query (required, natural language); corpus (optional CSV of the names above, default all); limit (1-15, default 8). BEHAVIOUR: read-only — it writes nothing, and repeat calls with the same arguments return the same records. ACCESS: works with no key, but anonymous results come back as a TRIMMED PREVIEW; the session X-API-Key hydrates full depth per key, and the free tier is capped per day (call claim_free_key once — no email — if you do not hold a key). Do NOT use when you can filter exactly: search_facilities for structured facility filters, get_news for date/keyword news, list_transactions for deal filters — those match fields and return complete sets, where this ranks by meaning and returns a top-N.',
     { query: S.describe('Natural-language query (required), e.g. "grids opening up for AI load in the Southeast"'),
       q: S.describe('Alias for query'),
+      // Frozen on the reviewed /mcp/chatgpt catalog (test/chatgpt-toolset-frozen); the
+      // tool description above names the other short names.
       corpus: S.describe('Optional corpus to restrict to: news | deals | facilities | market_narratives. CSV of several is allowed; default searches all.'),
       limit: N.describe('Max results to return, 1-15 (default 8)') },
     async (a) => {
