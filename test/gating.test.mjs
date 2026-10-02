@@ -282,9 +282,14 @@ describe('shapeGridIntelligence — non-empty per-ISO payload (regression guard:
       market_count: 71, build_count: 1, latest_computed_at: '2026-06-13T01:25:38Z' },
     { iso: 'ERCOT', iso_name: 'ERCOT', avg_constraint: 40, market_count: 20, build_count: 1 },
   ] };
+  // r-queue-kinds (2026-10-02): rows in the shape the snapshot serves since
+  // backend #6174 (queued_generation_gw + basis per row). PJM's generation row
+  // carries no data-center share (live: null), so none is published.
   const QSNAP = { by_iso: [
-    { iso: 'ERCOT', queued_load_total_gw: 426.9, queued_load_dc_share_pct: 0.0, as_of: '2026-06-12' },
-    { iso: 'PJM',   queued_load_total_gw: 172.6, queued_load_dc_share_pct: 3.4, as_of: '2026-06-12' },
+    { iso: 'ERCOT', queued_generation_gw: 454.5, queued_load_total_gw: 474.0,
+      queued_load_total_gw_basis: 'large_load', queued_load_dc_share_pct: 90.0, as_of: '2026-06-12' },
+    { iso: 'PJM',   queued_generation_gw: 172.6, queued_load_total_gw: 172.6,
+      queued_load_total_gw_basis: 'generation_queue', queued_load_dc_share_pct: null, as_of: '2026-06-12' },
   ] };
 
   it('assembles the documented data fields for a (keyed) PJM call — not an empty wrapper', () => {
@@ -304,7 +309,8 @@ describe('shapeGridIntelligence — non-empty per-ISO payload (regression guard:
     expect(out.build_rate_pct).toBeCloseTo(1.4, 1);          // 1/71
     // live interconnection queue (matched to the RIGHT iso, not the first row)
     expect(out.queue_depth_gw).toBe(172.6);
-    expect(out.data_center_share_pct).toBe(3.4);
+    expect(out.queue_depth_basis).toBe('generation_queue');
+    expect(out.data_center_share_pct).toBe(null);
     // ed328ee (honest freshness): last_updated now reflects the EIA telemetry
     // hour; the DCPI compute time moved to its own dcpi_computed_at field.
     expect(out.dcpi_computed_at).toBe('2026-06-13T01:25:38Z');
