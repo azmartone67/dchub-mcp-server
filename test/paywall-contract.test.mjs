@@ -200,9 +200,10 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
     expect(said, r.text.slice(0, 400)).toBeTruthy();
-    // copy v11: the band only (owner 2026-09-30) — the weakest factor stays in
+    // copy v11: the band (owner 2026-09-30) plus ONE measured count (MCP-1: nearby.substations_50km, a
+    // count the free preview keeps) — never a score. The weakest factor stays in
     // structuredContent.limiting_factor below, not in the line a person reads.
-    expect(said).toMatch(/^DC Hub rates this site CAUTION overall\. For the full site analysis, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
+    expect(said).toMatch(/^DC Hub rates this site CAUTION overall; 12 substations within 50 km\. For the full site analysis, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
     expect(said).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(said).not.toMatch(/\$10|credits/);
     expect(ctaUrls(r.body)).toHaveLength(1);
