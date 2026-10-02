@@ -24,13 +24,8 @@ export const EXEMPT = {
   'lib/chatgpt-directory.mjs': { why: 'frz-chatgpt-toolset (OpenAI review)' },
   'test/fixtures/chatgpt-toolset.frozen.json': { why: 'frz-chatgpt-toolset snapshot' },
   'test/fixtures/chatgpt-directory.pre-claude.mjs': { why: 'pre-claude snapshot fixture' },
-  // frz-claude-relay-wording: /mcp instructions + tools/list stay byte-identical
-  // until the 2026-10-01 readout. The manifests below are generated from server.mjs.
-  'server.mjs': { why: 'frz-claude-relay-wording (instructions, tool descriptions)', until: '2026-10-02' },
-  'toolspec.json': { why: 'generated from server.mjs tool descriptions', until: '2026-10-02' },
-  'mcp-server.json': { why: 'generated from server.mjs tool descriptions', until: '2026-10-02' },
-  'integrations/packs/gas.json': { why: 'generated from server.mjs tool descriptions', until: '2026-10-02' },
-  'integrations/packs/siting.json': { why: 'generated from server.mjs tool descriptions', until: '2026-10-02' },
+  // (frz-claude-relay-wording exemptions for server.mjs, toolspec.json, mcp-server.json and
+  // the packs expired 2026-10-02 and those files were renamed.)
   // History: these quote text that was served or scraped at the time.
   'scripts/registry_monitor.py': { why: 'self-test case quoting external registry copy' },
   'test/no-live-dcgi-claims.test.mjs': { why: 'comment quoting what was served until 2026-08-30' },

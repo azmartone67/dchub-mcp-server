@@ -44,7 +44,7 @@
     },
     {
       "name": "site_selection_canvas",
-      "description": "Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the DC Hub Power Index. Answers \"where should I build 100 MW in Texas by 2028\". Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow."
+      "description": "Guided end-to-end data-center site selection. Give a capacity target + geography + deadline and get a ranked shortlist of US markets (DCPI verdict, excess-power headroom, time-to-power, ISO) — and, with a paid key, the synthesis decision layer: the #1 pick, the why, a build sequence, and risk flags. One find->rank->shortlist->verdict call over the Data Center Power Index. Answers \"where should I build 100 MW in Texas by 2028\". Try: site_selection_canvas capacity_mw=100 region=TX max_months=24. Do NOT use for a single known parcel (use analyze_site) or an open-ended where-should-I-build question (use get_dchub_recommendation); this runs the full find to rank to shortlist to verdict flow."
     },
     {
       "name": "get_market_intel",
