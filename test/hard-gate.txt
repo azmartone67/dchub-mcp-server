@@ -108,6 +108,7 @@ test/front-door-nudge.test.mjs
 test/front-door-routing-descriptions.test.mjs
 test/full-cap-enforce.test.mjs
 test/funnel-invariants.test.mjs
+test/gas-hosting-no-hardcoded-figures.test.mjs
 test/gas-tier-mask.test.mjs
 test/gated-first-link-is-upgrade-h.test.mjs
 test/gated-text-carries-human-link.test.mjs
