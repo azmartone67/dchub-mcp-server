@@ -1100,6 +1100,8 @@ export function _unlockMoreDataEnvelope(a) {
 // names the doctrine that the AGENT leads ITS OWN final answer with this line;
 // it never meant the line had to lead our envelope.
 const HUMAN_FIRST_MARKER = '→ **For your human:**';
+// r-gated-text-human-link: free-class tools whose keyless trim still ends with the relay line.
+const _ANON_TRIM_RELAY_TOOLS = new Set(['get_market_dcpi_rank']);
 function buildHumanFirstLine(url, specifics, missedClause) {
   if (!url || typeof url !== 'string') return '';
   // Honesty (2026-08-15): no invented duration and no unlock-on-open promise —
@@ -17955,7 +17957,31 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                               pro_hint: 'Pro — everything (the plan most humans choose).' } : {}),
               ...promoSC(),
             };
-            return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+            // r-gated-text-human-link (2026-10-01): Grok read this keyless trim as
+            // having no human line (get_market_dcpi_rank on a generic client): the
+            // text block was bare JSON whose `_upgrade` carried raw checkout
+            // URLs only. Append the SAME single relay line every other gated text
+            // path ends with, through composeHumanCta, so it keeps the one-ask
+            // dedupe and the data-first order (the line TRAILS the JSON; placement
+            // is not touched). The /upgrade/h token is the per-request memo, so
+            // it is the one structuredContent would carry. No relay secret ->
+            // no URL -> the text is exactly what it was.
+            // Scope: the gated tools (paid / metered) and the decision tool the
+            // finding named. The other free keyless trims keep their own
+            // `_upgrade` block and stay bare JSON, as measured and pinned
+            // (relay-line-names-missed: search_facilities adds no line).
+            let _anonRelay = null;
+            if (_ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_accessTagFor(name).access)) {
+              try { _anonRelay = buildHumanRelay(name, tier, _sid) || null; } catch (_) {}
+            }
+            if (!_anonRelay || !_anonRelay.url) {
+              return { content: [{ type: 'text', text: JSON.stringify(trimmed) }] };
+            }
+            // JSON + a trailing line no longer parses as JSON, and the stamper
+            // below derives structuredContent FROM the text, so the payload must
+            // ride structuredContent explicitly (same as the over-cap branch).
+            return { content: [{ type: 'text', text: composeHumanCta(_anonRelay.url, JSON.stringify(trimmed), trimmed, _sid) }],
+                     structuredContent: { ...trimmed, for_your_human: _anonRelay } };
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
       }
