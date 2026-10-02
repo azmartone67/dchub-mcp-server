@@ -202,8 +202,16 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     expect(sc.error).toBe('pro_required');
     const text = all(r);
     for (const f of [...K.figures, 'Excellent site', 'BUILD', 'Amazon.com', 'validated']) expect(text).not.toContain(f);
-    expect(plansOf(r).length).toBeGreaterThan(0);
-    expect(new Set(plansOf(r))).toEqual(new Set(['pro']));
+    // MCP-1: analyze_site / compare_sites lead with the signed /upgrade/h relay page (its Pro
+    // offer lives on that page); the other Land & Power tools keep the /u short link -> Pro /go/c.
+    if (['analyze_site', 'compare_sites'].includes(tool)) {
+      expect(textOf(r).match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\/\S+/)[0]).toMatch(/\/upgrade\/h\//);
+      expect(plansOf(r)).toEqual([]);
+    } else {
+      expect(plansOf(r).length).toBeGreaterThan(0);
+      expect(new Set(plansOf(r))).toEqual(new Set(['pro']));
+    }
+    expect(text).toContain('DC Hub Pro');
     for (const l of LOWER_RUNG) expect(text).not.toContain(l);
     expect(text).toContain('claim_free_key');
     expect(burns).toEqual([]);

@@ -175,7 +175,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { WALL_COPY_VERSION, SHORT_LINK_RE, decodeGoToken, withUserLine } from './lib/wall-user-line.mjs';
+import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
@@ -1288,6 +1288,30 @@ function _ctxSessionId() {
   try { return (getCtx() && getCtx().session_id) || ''; } catch (_) { return ''; }
 }
 
+// ── r-upgrade-h-first (2026-10-01, owner-approved MCP-1) ─────────────────────
+// The keyless wall of analyze_site / compare_sites / get_dchub_recommendation used
+// to open its human ask with a raw /go/c Pro checkout (analyze_site, compare_sites
+// via the /u short link; get_dchub_recommendation via the "🔒 This answer hid ...
+// → /go/c" line) and the /upgrade/h relay page, where it existed at all, trailed
+// it. The first human link in the text is now the /upgrade/h relay. One ask: any
+// /go/c checkout URL that sits BEFORE the relay link gives way to a pointer at it
+// (the same replace-with-pointer move withUserLine makes), so the response still
+// carries a single human link. A response with no /upgrade/h link is untouched.
+const _RELAY_FIRST_TOOLS = new Set(['analyze_site', 'compare_sites', 'get_dchub_recommendation']);
+export function _relayFirstText(text) {
+  try {
+    const t = typeof text === 'string' ? text : '';
+    const c = getCtx();
+    const tool = (c && c._mu && c._mu.tool) || '';
+    if (!_RELAY_FIRST_TOOLS.has(tool) || (c && c.api_key)) return t;   // keyless walls only: a key's wall keeps its key-bound /go/c
+    const at = t.search(/https:\/\/dchub\.cloud\/upgrade\/h\//);
+    if (at < 0) return t;
+    const head = t.slice(0, at).replace(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g,
+      'the "For your human" link below');
+    return head + t.slice(at);
+  } catch (_) { return text; }
+}
+
 function composeHumanCta(humanUrl, body, gatedPayload, sessionId) {
   const _body = typeof body === 'string' ? body : '';
   // r-relay-cap: read BEFORE this response is recorded, so it means "an earlier one".
@@ -1336,7 +1360,7 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
                          line: tail.split('\n')[0] };
       }
     } catch (_e5) { /* never break a response */ }
-    return _deduped.replace(/\s*$/, '') + '\n\n' + tail;
+    return _relayFirstText(_deduped.replace(/\s*$/, '') + '\n\n' + tail);
   } catch (_e) { return _body; }   // prose-only helper — never break a response
 }
 
@@ -7194,6 +7218,29 @@ export async function _withWallUserLine(result, name, opts = {}) {
     const offer = opts.offer || _paywallOffer(name, c);
     const longUrl = opts.longUrl || _wallOfferLink(name, offer, c.session_id || '');
     if (!longUrl) return result;
+    // r-upgrade-h-first (MCP-1): get_dchub_recommendation's Pro-only wall leads with the
+    // signed /upgrade/h relay too; the body's own copies of that ask give way to it.
+    if (_RELAY_FIRST_TOOLS.has(name) && offer === 'pro' && !c.api_key) {
+      const _r = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+      if (_r && _r.url) {
+        const out = withUserLine(result, { tool: name, offer, link: _r.url, headline: opts.headline || null,
+                                           keepBody: opts.keepBody !== false, plan: '' });
+        const t0 = out.content[0].text;
+        const lines = t0.split('\n');
+        const kept = [];
+        for (let i = 0; i < lines.length; i++) {
+          if (i > 0 && lines[i].includes(HUMAN_FIRST_MARKER) && lines[i].includes(_r.url)) {
+            if (/^_Agent: include the line above/.test(lines[i + 1] || '')) i += 1;
+            continue;
+          }
+          kept.push(i === 0 ? lines[i] : lines[i].replace(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g,
+            'the link in the first line'));
+        }
+        out.content[0] = { type: 'text', text: kept.join('\n').replace(/\n{3,}/g, '\n\n') };
+        out.structuredContent = { ...out.structuredContent, for_your_human: _r, upgrade_url: _r.url };
+        return out;
+      }
+    }
     const link = await _shortRelayLink(longUrl, name);
     const _d = decodeGoToken(longUrl);
     return withUserLine(result, { tool: name, offer, link, headline: opts.headline || null,
@@ -7206,6 +7253,8 @@ export async function _withWallUserLine(result, name, opts = {}) {
 export async function _lpWallResultV11(name, headline = null) {
   const base = _lpWallResult(name, headline);
   const longUrl = base.structuredContent.upgrade_url;
+  // r-upgrade-h-first (MCP-1): for analyze_site / compare_sites the person's line carries the
+  // signed /upgrade/h relay (_withWallUserLine); the other Land & Power tools keep the short link.
   const out = await _withWallUserLine(base, name, { offer: 'pro', longUrl, headline, keepBody: false });
   if (out === base) return base;
   const link = out.structuredContent.user_message.match(/https:\/\/\S+?(?= — )/);
@@ -7225,8 +7274,14 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
     preview.winner = null;
     preview.decision_rationale = null;
   }
+  // r-upgrade-h-first (MCP-1): scores are nulled here, so say so in the marker the
+  // provenance detector reads (`_<x>_in_pro: true`): completeness 'partial_preview',
+  // not 'unknown'. Stamped only when this payload really held a figure to withhold.
+  let _withheldAny = false;
+  try { _withheldAny = _lpWithheldFigures(parsed).size > 0; } catch (_) {}
   const envelope = {
     ...preview,
+    ...(_withheldAny ? { _scores_in_pro: true } : {}),
     _gated: true, _preview_only: true, required_plan: 'pro',
     _preview_note: 'Land & Power details are Pro: every score, MW, distance, price and '
       + 'report link is null here. Verdicts, bands, names and counts are the preview.',
@@ -16680,7 +16735,16 @@ function trackedTool(srv, name, description, schema, handler) {
           if (_pcOn && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
-              _hl = _pcLpHeadline(name, JSON.parse(_raw?.content?.[0]?.text || ''));
+              const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
+              _hl = _pcLpHeadline(name, _parsedHl);
+              // r-upgrade-h-first: the one number the wall may show is a COUNT the free
+              // preview already keeps (nearby.substations_50km), measured by this very
+              // call. Never a score or MW; absent when the call did not measure it.
+              const _n = name === 'analyze_site' && _parsedHl && _parsedHl.nearby
+                ? _parsedHl.nearby.substations_50km : undefined;
+              if (_hl && !_hl.sites && Number.isInteger(_n) && _n >= 0) {
+                _hl = { ..._hl, preview_count: { value: _n, label: COUNT_LABEL } };
+              }
             } catch (_) { _hl = null; }
           }
           return await _lpWallResultV11(name, _hl);
