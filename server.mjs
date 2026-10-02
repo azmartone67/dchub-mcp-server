@@ -9722,7 +9722,7 @@ async function _freeFacilityRows(parsed, name, c) {
 const GRID_HEADROOM_TIER = ['1', 'true', 'on', 'yes'].includes(
   String(process.env.DCHUB_GRID_HEADROOM_TIER || '').trim().toLowerCase());
 const _HEADROOM_GATE_KEYS = new Set(['headroom', 'data_center_load']);
-const _HEADROOM_GATE_RE = /(^headroom|_headroom|time_to_power|_months$|operating_margin_mw|operating_reserve_mw|committed_capacity_mw|forward_load_mw|queue_depth_gw)/i;
+const _HEADROOM_GATE_RE = /(^headroom|_headroom|time_to_power|_months$|operating_margin_mw|operating_reserve_mw|committed_capacity_mw|forward_load_mw|queue_depth_gw|connections_queue_gw)/i;
 // ── r-depth-gate (2026-09-17): the DECISION layer is the product ─────────
 //
 // MEASURED the day this shipped, anonymous, live on https://dchub.cloud/mcp:
@@ -11751,6 +11751,7 @@ export function _gridRegionUnresolved(out) {
     && out.demand_mw == null
     && out.constraint_score == null
     && out.queue_depth_gw == null
+    && out.connections_queue_gw == null
     && Object.keys(out.generation_mix_mw || {}).length === 0;
 }
 
@@ -11774,6 +11775,83 @@ export function _gridRegionFailureKind(gi) {
   const e = gi && typeof gi === 'object' ? gi.error : undefined;
   if (typeof e === 'string' && /^API (400|404|422)$/.test(e)) return 'not_covered';
   return 'transient';
+}
+
+// ── r-queue-kinds (2026-10-02): what each queue figure on a snapshot row IS ──
+// /api/v1/interconnection-queue/snapshot by_iso rows carry the load-NAMED
+// column queued_load_total_gw, which means a different thing per ISO:
+//   PJM MISO SPP CAISO NYISO ISO-NE  generation_queue        GENERATION queue
+//   ERCOT                            large_load              large-load (demand)
+//                                                            queue, ~474 GW; its
+//                                                            generation queue
+//                                                            (454.5 GW) is
+//                                                            queued_generation_gw
+//   NESO IESO AESO                   mixed_connection_queue  generation AND demand
+// Backend #6174 serves queued_generation_gw + queued_load_total_gw_basis per row
+// and deprecates queued_load_total_gw on generation rows (removed after
+// 2026-11-15). This mirrors dchub-backend util/queue_kinds.py split_queue_row
+// (same vocabulary, same rules) so no reader here sums or compares two kinds:
+// generation_gw never falls back to the load-named column on a large-load or
+// mixed row. Pure; exported for test/grid-queue-by-kind.test.mjs.
+const _QUEUE_TOTAL_BASIS = {
+  ERCOT: 'large_load', PJM: 'generation_queue', MISO: 'generation_queue', SPP: 'generation_queue',
+  CAISO: 'generation_queue', NYISO: 'generation_queue', ISONE: 'generation_queue',
+  NESO: 'mixed_connection_queue', IESO: 'mixed_connection_queue', AESO: 'mixed_connection_queue',
+};
+export function _splitQueueRow(row) {
+  const r = (row && typeof row === 'object') ? row : {};
+  const f = (v) => {
+    if (v == null || typeof v === 'boolean' || v === '') return null;
+    const n = Number(v); return Number.isFinite(n) ? n : null;
+  };
+  const isoKey = String(r.iso || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const basis = r.queued_load_total_gw_basis || _QUEUE_TOTAL_BASIS[isoKey] || 'unclassified';
+  const stored = f(r.queued_load_total_gw);
+  const second = f(r.queued_load_data_center_gw);
+  const gen = f(r.queued_generation_gw);
+  const out = { basis, generation_gw: null, large_load_gw: null, dc_load_gw: null,
+                dc_share_pct: null, connections_gw: null };
+  if (basis === 'generation_queue') {
+    out.generation_gw = gen != null ? gen : stored;
+  } else if (basis === 'large_load') {
+    out.generation_gw = gen;
+    out.large_load_gw = stored;
+    out.dc_load_gw = second;
+    // ERCOT's published data-center share OF ITS LARGE-LOAD queue.
+    out.dc_share_pct = f(r.queued_load_dc_share_pct);
+  } else if (basis === 'mixed_connection_queue') {
+    // The row's queued_load_dc_share_pct here is the DEMAND share of a mixed
+    // connections queue (all demand projects, not data centres only), so it is
+    // deliberately not surfaced as a data-center share.
+    out.connections_gw = stored;
+  }
+  return out;
+}
+
+// r-queue-kinds (2026-10-02): get_grid_scoreboard's per-grid queue block.
+// It published queued_gw = queued_load_total_gw, which is ERCOT's 474 GW
+// LARGE-LOAD queue beside six ISOs' generation queues, and dc_share_pct 0 (the
+// scoreboard's parse-to-0 of null) on ISOs that publish no data-center share.
+// Now one named figure per kind: generation_queue_gw on every US ISO (ERCOT
+// 454.5), ERCOT's large-load queue and its data-center share under their own
+// names, and the NESO/IESO/AESO mixed connections queue under its own name.
+// Returns null when the row carries none of them. Pure; exported for tests.
+export function _scoreboardQueueBlock(q) {
+  if (!q || typeof q !== 'object') return null;
+  const k = _splitQueueRow(q);
+  if (k.generation_gw == null && k.large_load_gw == null && k.connections_gw == null) return null;
+  const iq = { basis: k.basis };
+  if (k.generation_gw != null) iq.generation_queue_gw = k.generation_gw;
+  if (k.large_load_gw != null) iq.large_load_queue_gw = k.large_load_gw;
+  if (k.dc_share_pct != null) iq.large_load_data_center_share_pct = k.dc_share_pct;
+  if (k.connections_gw != null) iq.connections_queue_gw = k.connections_gw;
+  iq.as_of = q.as_of || null;
+  iq.note = k.basis === 'mixed_connection_queue'
+    ? 'Connections queue: generation AND demand projects in one figure; not comparable with US generation queues.'
+    : 'Live generation interconnection-queue depth (GW of requested generation; DC Hub iso-queue ingest).'
+      + (k.large_load_gw != null ? ' large_load_queue_gw is a separate demand (large-load) queue; never add it to the generation queue.' : '')
+      + ' Pair renewable_share + queue depth for "greenest AND most buildable".';
+  return iq;
 }
 
 function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
@@ -11812,6 +11890,7 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
   // (3) live interconnection-queue row (US ISOs)
   const qrows = (qsnap && Array.isArray(qsnap.by_iso)) ? qsnap.by_iso : [];
   const q = qrows.find((r) => norm(r.iso) === norm(ISO)) || null;
+  const qk = q ? _splitQueueRow(q) : null;
   const buildRate = (row && row.market_count) ? Math.round((row.build_count / row.market_count) * 1000) / 10 : null;
   // ROBUSTNESS (2026-06-19): freshness must reflect the actual EIA TELEMETRY
   // hour (UTC), not the DCPI compute time — else withFreshness claims "live" off
@@ -11848,8 +11927,14 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     curtailment_pct:          row ? _n(row.avg_curtailment_pct)       : null,
     reserve_margin_pct:       row ? _n(row.avg_reserve_margin_pct)    : null,
     retail_price_cents_kwh:   row ? _n(row.avg_kwh_cents)             : null,
-    queue_depth_gw:           q   ? _n(q.queued_load_total_gw)        : null,
-    data_center_share_pct:    q   ? _n(q.queued_load_dc_share_pct)    : null,
+    // r-queue-kinds (2026-10-02): the GENERATION interconnection queue on every
+    // US ISO, ERCOT included (454.5 GW generation, not its 474 GW large-load
+    // queue, which is data_center_load below). Was q.queued_load_total_gw,
+    // which put ERCOT's demand queue beside six ISOs' generation queues.
+    queue_depth_gw:           qk  ? qk.generation_gw                  : null,
+    queue_depth_basis:        qk && qk.basis !== 'unclassified' ? qk.basis : null,
+    // ERCOT only: its published data-center share of the LARGE-LOAD queue.
+    data_center_share_pct:    qk  ? qk.dc_share_pct                   : null,
     stranded_capacity_mw:     row ? _n(row.total_stranded_capacity_mw): null,
     grid_emergencies_30d:     row ? _n(row.sum_emergency_30d)         : null,
     market_count:             row ? _n(row.market_count)              : null,
@@ -11890,8 +11975,14 @@ function shapeGridIntelligence(ISO, gi, cmp, qsnap) {
     data_center_load:         (gi && !gi.error && gi.data_center_load) ? gi.data_center_load : null,
     headroom:                 (gi && !gi.error && gi.headroom) ? gi.headroom : null,
     headroom_preview:         (gi && !gi.error && gi.headroom_preview) ? gi.headroom_preview : null,
-    _scores_note: 'constraint_score, excess_power_score and build_rate_pct are Data Center Power Index (DCPI) aggregates, scored 0-100, across the ISO markets, not MW. queue_depth_gw is the live interconnection-queue load total. demand_24h is the trailing-24h hourly demand curve; peak_mw/min_mw/load_factor summarize it. data_center_load (ERCOT) is the queued large-load total. headroom_preview, when present, is an ESTIMATE that may NOT be region-specific (see its note) — do not cite as exact substation headroom; full per-substation available-MW is Pro-gated (use get_grid_data or analyze_site).',
+    _scores_note: 'constraint_score, excess_power_score and build_rate_pct are Data Center Power Index (DCPI) aggregates, scored 0-100, across the ISO markets, not MW. queue_depth_gw is the live GENERATION interconnection-queue total (GW of requested generation, ERCOT included; not load); connections_queue_gw (NESO/IESO/AESO only) is a mixed generation + demand connections queue and is not comparable with it; queue_depth_basis names which one this row carries. data_center_share_pct (ERCOT only) is the data-center share of the ERCOT large-load queue, not of the generation queue. demand_24h is the trailing-24h hourly demand curve; peak_mw/min_mw/load_factor summarize it. data_center_load (ERCOT) is the queued large-load total. headroom_preview, when present, is an ESTIMATE that may NOT be region-specific (see its note) — do not cite as exact substation headroom; full per-substation available-MW is Pro-gated (use get_grid_data or analyze_site).',
   };
+  // r-queue-kinds: NESO/IESO/AESO only — one connections queue holding
+  // generation AND demand projects, never comparable with queue_depth_gw.
+  // Emitted only on those rows, so a US row's key set (and so its trimmed
+  // shape, _<k>_in_pro markers included) is unchanged. Gated exactly as
+  // queue_depth_gw is: _isMetricKey `_gw$` and _HEADROOM_GATE_RE.
+  if (qk && qk.connections_gw != null) out.connections_queue_gw = qk.connections_gw;
   const haveGrid = !!(gi && !gi.error && (out.demand_mw != null || out.generation_mix_pct));
   if (!haveGrid && !row && !q) {
     out._warning = `No live feed for "${ISO}". Supported: the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (SOCO, DUK, FPL, AZPS, NEVP, PGE, SCL, LDWP, GCPD, PSCO, TVA). For GB/EU/Taiwan/Australia use get_grid_scoreboard.`;
@@ -13250,9 +13341,15 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         note: _oStr('How the all-ISO rollup was assembled and where to get the full per-ISO list'),
       }),
     ]).nullable().optional().describe('SHAPE DEPENDS ON THE CALL: with iso= this is an ARRAY of queued generation projects (largest / most recent first); with iso omitted it is the all-ISO SUMMARY OBJECT {total, tracked, by_iso_count, top, note} — per-project rows are not returned for the all-ISO snapshot. Check the type before indexing.'),
-    queued_load_total_gw: _oNum('Total queued GENERATION capacity in this ISO, GW'),
-    queued_load_data_center_gw: _oNum('ERCOT only: large-load (data-center-driven) queue, GW — null for ISOs that publish no comparable feed'),
-    queued_load_dc_share_pct: _oNum('ERCOT only: data-center share of queued load, %'),
+    // r-queue-kinds (2026-10-02): queued_load_total_gw was described as the
+    // GENERATION total for every ISO; on ERCOT it is the large-load (demand)
+    // queue and on NESO/IESO/AESO a mixed connections queue. Read
+    // queued_load_total_gw_basis before using it.
+    queued_generation_gw: _oNum('Generation interconnection queue in this ISO, GW (US ISOs; ERCOT\'s generation queue, not its large-load queue). null on NESO/IESO/AESO'),
+    queued_load_total_gw: _oNum('Meaning depends on queued_load_total_gw_basis: generation_queue = the generation queue (deprecated alias of queued_generation_gw, removed after 2026-11-15); large_load = ERCOT\'s large-load (demand) queue; mixed_connection_queue = NESO/IESO/AESO connections queue (generation AND demand). GW'),
+    queued_load_total_gw_basis: _oStr('What queued_load_total_gw measures on this row: generation_queue | large_load | mixed_connection_queue'),
+    queued_load_data_center_gw: _oNum('ERCOT: data-center load DERIVED as ~90% of the large-load queue, GW. NESO/IESO/AESO: demand projects in the connections queue (all demand, not data centres only). null elsewhere'),
+    queued_load_dc_share_pct: _oNum('ERCOT: data-center share of the large-load queue, %. NESO/IESO/AESO: demand share of the connections queue, %. null elsewhere'),
     top_subregions: _oAny('Provenance / sub-region breakdown for the large-load figure (ERCOT)'),
     new_applications_q_gw: _oNum('New queue applications in the latest period, GW (when published)'),
     new_applications_period: _oStr('Period the new-applications figure covers'),
@@ -21337,18 +21434,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           const _qn = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
           const _qByIso = {};
           for (const r of _qrows) { if (r && r.iso) _qByIso[_qn(r.iso)] = r; }
+          // r-queue-kinds (2026-10-02): one named figure per queue KIND — see
+          // _scoreboardQueueBlock.
+          const _qv = (v) => { if (v == null) return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
           for (const g of grids) {
             const q = g && g.iso && _qByIso[_qn(g.iso)];
-            if (q && _num(q.queued_load_total_gw) != null) {
-              g.interconnection_queue = {
-                queued_gw:    _num(q.queued_load_total_gw),
-                dc_share_pct: _num(q.queued_load_dc_share_pct),
-                as_of:        q.as_of || null,
-                note: 'Live ISO interconnection-queue depth (DC Hub iso-queue ingest). Pair renewable_share + queue depth for "greenest AND most buildable".',
-              };
-            }
+            const iq = q ? _scoreboardQueueBlock(q) : null;
+            if (iq) g.interconnection_queue = iq;
           }
-          if (_qsnap && _qsnap.totals) usQueueGw = _num(_qsnap.totals.queued_load_gw);
+          // US-only generation total (backend #6195). Read the new key; the
+          // deprecated totals.queued_load_gw is not read.
+          if (_qsnap && _qsnap.totals) usQueueGw = _qv(_qsnap.totals.queued_generation_gw);
         } catch (_e) { /* queue enrichment best-effort */ }
 
         // r70 (2026-06-03): surface the live EU gas-transmission context (ENTSOG)
