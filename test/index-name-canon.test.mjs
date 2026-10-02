@@ -32,9 +32,9 @@ export const EXEMPT = {
   'test/asset-quantities-heal-registry-copy.test.mjs': { why: 'comment quoting a registry listing' },
 };
 
-export function legacyHits(files, today = new Date().toISOString().slice(0, 10)) {
+export function legacyHits(files, today = new Date().toISOString().slice(0, 10), exempt = EXEMPT) {
   return files.filter((f) => {
-    const ex = EXEMPT[f];
+    const ex = exempt[f];
     return !ex || (ex.until && today >= ex.until);
   });
 }
@@ -56,8 +56,9 @@ describe('idx-name-canon: the retired "DC Hub … Index" names stay retired', ()
 
   it('CONTROL: an unexempted file is reported, and a dated exemption expires', () => {
     expect(legacyHits(['README.md'])).toEqual(['README.md']);
-    expect(legacyHits(['server.mjs'], '2026-10-01')).toEqual([]);
-    expect(legacyHits(['server.mjs'], '2026-10-02')).toEqual(['server.mjs']);
+    const dated = { 'x.mjs': { why: 'control', until: '2026-10-02' } };
+    expect(legacyHits(['x.mjs'], '2026-10-01', dated)).toEqual([]);
+    expect(legacyHits(['x.mjs'], '2026-10-02', dated)).toEqual(['x.mjs']);
   });
 
   it('CONTROL: the pattern matches the retired forms and not the canon ones', () => {
