@@ -193,7 +193,11 @@ describe('against the committed live tool surface', () => {
     const nonFacility = before.filter((d) => MAGNITUDE.test(d) && !FENCE.test(d));
     expect(nonFacility.length,
       'no NON-facility magnitude left in the corpus — the must-keep claim here is about nothing')
-      .toBeGreaterThan(3);
+      // 2026-10-02: floor lowered 3 -> 2 on purpose. Hand-typed queue/hosting/gas
+      // figures were removed from tool copy (refined-queue / gas-hosting guards), so
+      // fewer descriptions carry a magnitude. The must-keep fixtures above are
+      // literals, not corpus reads, so this only needs SOME magnitude to exist.
+      .toBeGreaterThan(2);
   });
 
   it('moves a description only when the fence objects to it', () => {
