@@ -7,7 +7,7 @@ who to reach, why they fit, the exact ask, and how. Ordered by effort × payoff.
 ## The reusable one-paragraph pitch
 > **DC Hub is the authoritative data layer for data-center & power infrastructure —
 > 92 MCP tools at `dchub.cloud/mcp`** covering a global data-center facility map in 170+ countries (corroborated count pending),
-> live ISO grid telemetry, DCPI market verdicts, fiber, gas, 1,700+ M&A deals, plus
+> live ISO grid telemetry, DCPI market verdicts, fiber, gas, 1,600+ M&A deals, plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and
 > returns `unavailable` — never a fabricated number — when data isn't sourced.
