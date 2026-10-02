@@ -5366,6 +5366,28 @@ export function _upstreamError(status, text) {
 }
 
 // ── Backend API helper: forwards user's API key when present ───────────────
+// QA marker (2026-10-02, dchub-backend#6184). Our own QA sessions self-identify
+// with clientInfo.name "dchub-qa-readonly" or a User-Agent ending "(... -
+// exclude)", but callAPI reaches the backend under THIS server's identity, so
+// the backend's miss capture (agentic_master_shell.capture_query_miss) never
+// sees either and records the QA probe's unanswered questions as agent demand.
+// Forward the marker as a header instead. The backend honours it only next to
+// a valid X-Internal-Key, which every callAPI request already carries.
+// UA is read per request where the ctx has it; clientInfo.name arrives at
+// initialize and is carried in client_name_raw (session meta, or the stateless
+// recall), so either signal alone is enough.
+export const QA_MARKER_HEADER = 'X-DCHub-QA';
+export function _isQaCaller(c) {
+  if (!c) return false;
+  const name = String(c.client_name_raw || '').toLowerCase();
+  const ua = String(c.user_agent || c.client_ua || '').toLowerCase();
+  return name.includes('dchub-qa-readonly')
+    || ua.includes('dchub-qa-readonly') || ua.includes('- exclude)');
+}
+// Test seam: the header builders, driven inside _ctxALS.run by
+// test/qa-marker-forward.test.mjs.
+export { callAPI as _callAPIForTest, callAPIWrite as _callAPIWriteForTest };
+
 async function callAPI(path, params = {}, opts = {}) {
   const url = new URL(path, API_BASE);
   for (const [k, v] of Object.entries(params)) {
@@ -5380,6 +5402,7 @@ async function callAPI(path, params = {}, opts = {}) {
   if (c.api_key)  headers['X-API-Key']      = c.api_key;
   if (c.platform) headers['X-MCP-Platform'] = c.platform;
   if (c.session_id) headers['X-MCP-Session'] = c.session_id;
+  if (_isQaCaller(c)) headers[QA_MARKER_HEADER] = '1';
   // r70 (2026-06-03): {internal:true} callers present a dchub- User-Agent so the
   // backend's server-to-server bypass (main.py:2465 phase19b_grid_intelligence —
   // _is_internal is UA/IP-based, NOT X-Internal-Key-based) returns UNGATED data.
@@ -5639,6 +5662,7 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   if (c.api_key)    headers['X-API-Key']     = c.api_key;
   if (c.platform)   headers['X-MCP-Platform'] = c.platform;
   if (c.session_id) headers['X-MCP-Session']  = c.session_id;
+  if (_isQaCaller(c)) headers[QA_MARKER_HEADER] = '1';
   // r-durable-key (2026-07-06): forward the REAL caller IP on writes so the
   // backend's /keys/claim dedupe ( metadata->>'ip', flask_mcp_endpoints.py )
   // keys on the actual agent — not this MCP server's shared proxy egress, which
