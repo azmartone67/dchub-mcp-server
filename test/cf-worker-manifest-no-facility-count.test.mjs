@@ -116,7 +116,7 @@ const MUST_KEEP = [
   ['why_dchub (the assets half)', '330,000+ mapped power/grid/gas/fiber assets'],
   ['get_global_power', '182,000+ geolocated units across 170+ countries'],
   ['get_hosting_capacity', '278,799 published records across 18 utilities'],
-  ['get_refined_queue', 'the US ISO interconnection queue (~5,300 projects, 7 ISOs, ~1,744 GW)'],
+  ['get_refined_queue', 'the US ISO interconnection queue'],
   ['get_gas_index', 'scored ~0 for every state (122 -> 17,571 segments now counted)'],
   ['unlock_more_data', 'Cheapest start: $10 one-time = 1,000 API credits (no subscription)'],
   ['claim_free_key', '2,586 redemptions from only 169 distinct agents'],
