@@ -235,7 +235,10 @@ describe('the Claude-connector 401 challenge carries a human line', () => {
     expect(err.message.startsWith('Authorization required — sign in to DC Hub to continue.')).toBe(true);
     expect(err.message).toContain(S.HUMAN_FIRST_MARKER);
     expect(err.message).toContain(S.CHALLENGE_CONNECT_URL);
-    expect(err.message).toMatch(/VERBATIM/);
+    // F7 (owner 2026-10-03): no VERBATIM follower in the text; the line rides as data.
+    expect(err.message).not.toMatch(/VERBATIM/);
+    expect(err.data.show_to_user).toBe(true);
+    expect(err.data.user_message).toContain(S.CHALLENGE_CONNECT_URL);
     expect(err.data.for_your_human.url).toBe(S.CHALLENGE_CONNECT_URL);
     expect(S.CHALLENGE_CONNECT_URL).toBe('https://dchub.cloud/connect?ref=mcp_challenge');
   });
