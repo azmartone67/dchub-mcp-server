@@ -72,6 +72,13 @@ const OPTIONAL_PRICED = new Set(['founding', 'team']);
 // null with no unit is still a degraded read. An older backend that still
 // sends an anonymous calls_per_day is accepted as-is, so the merge order of
 // the two repos does not matter.
+// ★ B1 (D4, owner 2026-10-03; backend merge on/after 2026-10-19): the free
+// key becomes a renewing DAILY allowance with no call count:
+//   free       {calls: null, period: 'day', full_answers_per_tool_per_day: 2}
+// A null call count with period 'day' is valid ONLY when the full answers per
+// tool name the unit; otherwise it is still a degraded read and bails. Before
+// this, that shape bailed outright and would have frozen the snapshot at
+// "10 calls to try" the day the backend published the daily allowance.
 const PERIODS = new Set([null, 'day', 'lifetime', 'month']);
 const out = {};
 const allowance = {};
@@ -82,12 +89,14 @@ for (const t of PUBLIC_TIERS) {
   if (a !== undefined) {
     const calls = a && a.calls;
     const period = a ? (a.period === undefined ? null : a.period) : undefined;
+    const full = a && a.full_answers_per_tool_per_day;
+    const dailyFullOnly = calls === null && period === 'day'
+      && Number.isSafeInteger(full) && full > 0;   // B1 free key
     if (!a || typeof a !== 'object' || !PERIODS.has(period)
         || !(calls === null || (Number.isSafeInteger(calls) && calls > 0))
-        || (calls === null) !== (period === null)) {
+        || ((calls === null) !== (period === null) && !dailyFullOnly)) {
       bail(`'${t}'.allowance is malformed: ${JSON.stringify(a)}`);
     }
-    const full = a.full_answers_per_tool_per_day;
     allowance[t] = {
       calls, period,
       ...(Number.isSafeInteger(full) && full > 0 ? { full_answers_per_tool_per_day: full } : {}),
@@ -95,6 +104,7 @@ for (const t of PUBLIC_TIERS) {
   }
   const n = row.calls_per_day;
   if (n === null && allowance[t] && allowance[t].period !== 'day') continue;
+  if (n === null && allowance[t] && allowance[t].calls === null) continue;   // B1 free key
   // A zero or negative allowance is never a real published tier; treat it as a
   // degraded read rather than writing "0 calls/day" onto every surface.
   if (!Number.isSafeInteger(n) || n <= 0) bail(`'${t}'.calls_per_day is ${JSON.stringify(n)}`);

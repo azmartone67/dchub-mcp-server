@@ -106,6 +106,23 @@ describe('refresh-tier-limits — the free-tier rule shape', () => {
     expect((await run()).wrote).toBe(false);
   });
 
+  // B1 (D4, owner 2026-10-03; backend merge on/after 2026-10-19).
+  it('B1: accepts the free key as a daily allowance with no call count', async () => {
+    payload = tiers({ free: { calls_per_day: null, allowance: { calls: null, period: 'day', previews: true, full_answers_per_tool_per_day: 2 } } });
+    const r = await run();
+    expect(r.wrote, r.stdout).toBe(true);
+    expect(r.snap.allowance.free).toEqual({ calls: null, period: 'day', full_answers_per_tool_per_day: 2 });
+    expect(r.snap.calls_per_day.free).toBeUndefined();
+    expect(r.snap.price_usd_month.pro).toBe(99);
+  });
+
+  it('B1 FAIL-CLOSED: a daily free allowance that names no full-answer unit', async () => {
+    payload = tiers({ free: { calls_per_day: null, allowance: { calls: null, period: 'day', full_answers_per_tool_per_day: null } } });
+    expect((await run()).wrote).toBe(false);
+    payload = tiers({ free: { calls_per_day: null, allowance: { calls: null, period: 'day', full_answers_per_tool_per_day: 0 } } });
+    expect((await run()).wrote).toBe(false);
+  });
+
   it('FAIL-CLOSED: the per-day ladder still may not invert', async () => {
     payload = tiers({ developer: { calls_per_day: 40, allowance: { calls: 40, period: 'day' } } });
     const r = await run();
@@ -114,6 +131,10 @@ describe('refresh-tier-limits — the free-tier rule shape', () => {
   });
 });
 
+// TODO(10-19 rebase, B1): once the backend publishes the daily free key and
+// the daily sync refreshes canonical/tier_limits.json, this block must assert
+// allowance.free == {calls: null, period: 'day', full_answers_per_tool_per_day: 2}
+// and FREE_TIER.free_calls_per_day == 'n/a' instead of the lifetime figures.
 describe('the committed snapshot carries the rule', () => {
   it('anonymous has no call count; free is 10 in total; the frozen copy still reads 10', async () => {
     const snap = JSON.parse(readFileSync(join(ROOT, 'canonical/tier_limits.json'), 'utf8'));
