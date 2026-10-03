@@ -10113,7 +10113,13 @@ function _isFigure(v) {
   return typeof v === 'string' && /^\s*-?\d[\d,]*(\.\d+)?\s*$/.test(v);
 }
 // One row or object: every figure under a gated key goes, and nothing else.
-function _nullFreeFigures(row) {
+// P0-5 (owner D2, 2026-10-03): a key is never worse than no key. This keyed
+// free mask leaves exactly what the keyless trim (trimForTrial) leaves: the
+// free DCPI composite (_dcpiCompositeFree), and the BAND beside every masked
+// score (_bandForMaskedScore, the same function). `deep` walks the whole
+// forecast block: its projections carry the same sub-scores, one level down,
+// which the keyless trim already reached and this mask did not.
+function _nullFreeFigures(row, toolName = '', inRate = false, deep = false) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return { value: row, changed: false };
   let changed = false;
   const out = { ...row };
@@ -10121,15 +10127,22 @@ function _nullFreeFigures(row) {
     if (k === 'verdict_reasons' && Array.isArray(v)) {
       const next = v.map((r) => _stripReasonNumerics(r, true));
       if (next.some((r, i) => r !== v[i])) { out[k] = next; changed = true; }
+    } else if (_dcpiCompositeFree(toolName, k, row, inRate)) {
+      const _b = _bandForMaskedScore(k, v, row, toolName, inRate);
+      if (_b && row[`${k}_band`] == null) { out[`${k}_band`] = _b; changed = true; }
     } else if (_FREE_NUMERIC_KEY_RE.test(k) && !_FREE_NUMERIC_KEEP_RE.test(k) && _isFigure(v)) {
       _noteMaskedKey(k, v);   // r-relay-names-missed
       out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
+      if (_gatesDepth(k) && row[`${k}_band`] == null) {
+        const _b = _bandForMaskedScore(k, Number(v), row, toolName, inRate);
+        if (_b) out[`${k}_band`] = _b;
+      }
     } else if (k === 'value' && typeof v === 'string') {
       // rank_markets' display string keeps only its free words (_freeRankValue)
       const next = _freeRankValue(v);
       if (next !== v) { out[k] = next; changed = true; }
-    } else if (v && typeof v === 'object' && !Array.isArray(v) && k === 'forecast') {
-      const inner = _nullFreeFigures(v);
+    } else if (v && typeof v === 'object' && !Array.isArray(v) && (deep || k === 'forecast')) {
+      const inner = _nullFreeFigures(v, toolName, inRate || _RATE_CONTAINER_RE.test(k), true);
       if (inner.changed) { out[k] = inner.value; changed = true; }
     }
   }
@@ -10181,7 +10194,7 @@ function _stripRankValues(payload) {
   }
   return res;
 }
-function _nullFreeRows(payload, keys) {
+function _nullFreeRows(payload, keys, toolName = '') {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { value: payload, changed: false };
   let changed = false;
   const out = { ...payload };
@@ -10190,7 +10203,7 @@ function _nullFreeRows(payload, keys) {
     const holder = b ? payload[a] : payload;
     const rows = holder && holder[b || a];
     if (!Array.isArray(rows)) continue;
-    const next = rows.map((r) => _nullFreeFigures(r));
+    const next = rows.map((r) => _nullFreeFigures(r, toolName));
     if (!next.some((n) => n.changed)) continue;
     changed = true;
     if (b) out[a] = { ...payload[a], [b]: next.map((n) => n.value) };
@@ -10199,12 +10212,12 @@ function _nullFreeRows(payload, keys) {
   return { value: out, changed };
 }
 const _FREE_NUMERIC_SHAPES = {
-  site_selection_canvas: (p) => _nullFreeRows(p, ['shortlist', 'empty_result.excluded_top']),
+  site_selection_canvas: (p) => _nullFreeRows(p, ['shortlist', 'empty_result.excluded_top'], 'site_selection_canvas'),
   rank_markets: (p) => {
-    const g = _nullFreeRows(p, _RANK_ROW_KEYS);
+    const g = _nullFreeRows(p, _RANK_ROW_KEYS, 'rank_markets');
     return g.changed ? { value: _publishCountSortScores(p, g.value), changed: true } : g;
   },
-  get_market_dcpi_rank: (p) => _nullFreeFigures(p),
+  get_market_dcpi_rank: (p) => _nullFreeFigures(p, 'get_market_dcpi_rank'),
 };
 const _FREE_NUMERIC_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
 // Both channels of a tool result, or the SAME object when nothing changed.
@@ -10420,6 +10433,32 @@ export function _bandForMaskedScore(k, v, row, toolName, inRateContainer) {
   }
   if (_UNSCALED_SCORE_TOOLS.has(toolName) && lk === 'score') return null;
   return _scoreBand(v);
+}
+
+// ── P0-3 (owner D2, 2026-10-03): the DCPI composite is free on every surface ──
+// The verdict AND the composite are free: /markets/<slug> HTML prints the
+// composite, the CM-5 CC BY dataset publishes it keyless, and the backend's
+// DCPI_FREE_FIELDS (routes/dcpi.py) now returns it on /api/v1/dcpi/scores,
+// /scores/<slug> and /markets/<slug>.json. The SUB-scores (excess-power,
+// constraint, time-to-power), queue wait, kWh, narrative and forecast stay paid.
+// Scoped to the DCPI market tools and to a row that carries a DCPI verdict, so
+// analyze_site's SITE composite (a different number) stays gated, as does
+// rank_markets' best_overall `score` (not a DCPI composite; no verdict on it).
+// On rank_markets criteria=ai_ready, `score` IS the canonical composite
+// (routes/mcp_tier1_tools.py _rank_markets_ai_ready → derive_composite_score).
+const _DCPI_COMPOSITE_FREE_KEYS = Object.freeze({
+  get_market_dcpi_rank: new Set(['composite_score']),
+  rank_markets: new Set(['composite_score', 'score']),
+});
+export function _dcpiCompositeFree(toolName, k, row, inRateContainer) {
+  if (inRateContainer) return false;
+  const keys = _DCPI_COMPOSITE_FREE_KEYS[toolName];
+  if (!keys || !keys.has(String(k).toLowerCase())) return false;
+  // A market row's own published verdict, not a forecast projection's
+  // implied_verdict: the forecast stays paid.
+  if (!row || typeof row !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(row, 'verdict')
+      || Object.prototype.hasOwnProperty.call(row, 'dcpi_verdict');
 }
 
 function _gatesHeadroom(k) {
@@ -10846,6 +10885,12 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       _noteMaskedKey(k, v);                   // r-relay-names-missed: only a real figure is logged
       out[k] = null;                          // grid decision-layer field → Pro
       out[`_${k}_in_pro`] = true;             // honest marker: headroom/time-to-power is paid
+    } else if (_dcpiCompositeFree(toolName, k, parsed, _inRate)) {
+      // P0-3: the DCPI composite is free; its band (the row's verdict) rides
+      // beside it exactly as it did while the number was masked.
+      out[k] = v;
+      const _band = _bandForMaskedScore(k, v, parsed, toolName, _inRate);
+      if (_band && parsed[`${k}_band`] == null) out[`${k}_band`] = _band;
     } else if (_gatesDepth(k)) {
       // r-depth-gate: the siting DECISION field → Pro. A gated score leaves
       // its BAND behind, so the free answer still says BUILD / CAUTION /
@@ -10874,6 +10919,14 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       // instructions name it), so it stays, byte-for-byte, on every trimmed list.
       // Which rung actually returns these rows rides beside it: free / developer / pro.
       out[`_${k}_total_unlocks_at`] = _rowsTotalSet(toolName);
+    } else if (toolName === 'get_market_dcpi_rank' && typeof v === 'string' && _isFigure(v)
+               && _FREE_NUMERIC_KEY_RE.test(k) && !_FREE_NUMERIC_KEEP_RE.test(k)) {
+      // P0-3: the backend sends avg_kwh_cents as a STRING ("13.024"), which the
+      // number-only branch below never nulls. Measured live 2026-10-03, keyless
+      // phoenix. kWh stays paid (owner D2), so a numeric string goes too.
+      _noteMaskedKey(k, v);
+      out[k] = null;
+      out[`_${k}_in_pro`] = true;
     } else if (_isMetricKey(k) && !_keepTyped.has(k) && typeof v === 'number') {
       _noteMaskedKey(k, v);                   // r-missed-upgrade: a figure this trim hid
       out[k] = null;                          // gated metric → null (was a promo STRING

@@ -123,7 +123,9 @@ const CASES = {
   },
   get_market_dcpi_rank: {
     args: { market_slug: 'dallas' },
-    figures: ['10.309', '55.1', '48.2', '51.3', '26.4'],
+    // 51.3 is the composite: free since P0-3 (owner D2, 2026-10-03), pinned
+    // in test/dcpi-composite-free.test.mjs; the sub-scores and kWh stay withheld.
+    figures: ['10.309', '55.1', '48.2', '26.4'],
     rows: (p) => [p],
     kept: (p) => [p.market_slug, p.verdict, p.emergency_count_30d],
     keptWant: ['dallas', 'CAUTION', 0],

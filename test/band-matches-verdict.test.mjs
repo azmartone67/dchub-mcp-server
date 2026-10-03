@@ -134,10 +134,14 @@ describe('get_market_dcpi_rank — the band beside a masked score is the verdict
     expect(contradictions(out)).toEqual([]);
   });
 
-  it('★ no gating change: every number is still withheld and says so', async () => {
+  it('★ no gating change: every sub-score is still withheld and says so', async () => {
     const { trimForTrial } = await load();
-    const out = trimForTrial(phoenix(), 'get_market_dcpi_rank');
-    for (const k of ['composite_score', 'constraint_score', 'excess_power_score', 'quality_score']) {
+    const src = phoenix();
+    const out = trimForTrial(src, 'get_market_dcpi_rank');
+    // P0-3 (owner D2, 2026-10-03): the composite is free beside the verdict
+    expect(out.composite_score).toBe(src.composite_score);
+    expect(out).not.toHaveProperty('_composite_score_in_pro');
+    for (const k of ['constraint_score', 'excess_power_score', 'quality_score']) {
       expect(out[k], `${k} leaked`).toBeNull();
       expect(out[`_${k}_in_pro`], `${k} lost its marker`).toBe(true);
     }
