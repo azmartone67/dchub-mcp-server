@@ -45,12 +45,14 @@ describe('dcpi_confidence / dcpi_provenance survive the free-tier trims', () => 
     expect(t.other2.modeled_inputs.length).toBeLessThan(4);
   });
 
-  it('get_market_dcpi_rank anon trim: both blocks byte-identical, score still gated', () => {
+  it('get_market_dcpi_rank anon trim: both blocks byte-identical, sub-scores still gated', () => {
     const t = trimForTrial(scoreRow(), 'get_market_dcpi_rank');
     expect(t.dcpi_confidence).toEqual(conf());
     expect(t.dcpi_provenance).toEqual(prov());
     expect(t.excess_power_score).toBeNull();
-    expect(t.composite_score).toBeNull();
+    // P0-3 (owner D2, 2026-10-03): the composite is free; pinned in
+    // test/key-never-worse-than-anon.test.mjs
+    expect(t.composite_score).toBe(scoreRow().composite_score);
   });
 
   it('rank_markets anon trim: every kept row keeps both blocks', () => {
