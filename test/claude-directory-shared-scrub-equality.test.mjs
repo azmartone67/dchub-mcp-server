@@ -30,11 +30,49 @@ describe('the exported surface is unchanged', () => {
   });
 });
 
+// The ONE sanctioned divergence from the frozen copy: inputs added on /mcp after
+// the 1.0.0 submission are held off this profile (NEW.DIRECTORY_HELD_INPUTS), so
+// the reviewed catalog stays frozen. The frozen copy predates them, so it is
+// given the same server output with exactly those inputs removed; every other
+// byte must still match.
+function withoutHeld(result) {
+  const held = NEW.DIRECTORY_HELD_INPUTS || {};
+  return { ...result, tools: (result.tools || []).map((t) => {
+    const h = held[t.name];
+    if (!h || !t.inputSchema || !t.inputSchema.properties) return t;
+    const properties = Object.fromEntries(Object.entries(t.inputSchema.properties).filter(([k]) => !h.includes(k)));
+    return { ...t, inputSchema: { ...t.inputSchema, properties } };
+  }) };
+}
+function rawWithoutHeld(raw) {
+  return raw.replace(/^data: (.*)$/m, (_, json) => {
+    const msg = JSON.parse(json);
+    return 'data: ' + JSON.stringify(msg.result ? { ...msg, result: withoutHeld(msg.result) } : msg);
+  });
+}
+
 describe('real server output through both modules', () => {
+  it('held inputs are served on /mcp and withheld from the profile', async () => {
+    const list = await H.list('/mcp');
+    const held = Object.entries(NEW.DIRECTORY_HELD_INPUTS || {});
+    expect(held.length).toBeGreaterThan(0);
+    const served = NEW.directoryToolsList(list.msg.result).tools;
+    for (const [name, keys] of held) {
+      const canon = list.msg.result.tools.find((t) => t.name === name);
+      const prof = served.find((t) => t.name === name);
+      expect(canon, name).toBeTruthy();
+      expect(prof, name).toBeTruthy();
+      for (const k of keys) {
+        expect(Object.keys(canon.inputSchema.properties), `${name}.${k} on /mcp`).toContain(k);
+        expect(Object.keys(prof.inputSchema.properties), `${name}.${k} on the profile`).not.toContain(k);
+      }
+    }
+  });
+
   it('tools/list and initialize from /mcp', async () => {
     const list = await H.list('/mcp');
-    expect(NEW.transformDirectoryBody(list.raw, 'tools/list', null)).toBe(OLD.transformDirectoryBody(list.raw, 'tools/list', null));
-    expect(NEW.directoryToolsList(list.msg.result)).toEqual(OLD.directoryToolsList(list.msg.result));
+    expect(NEW.transformDirectoryBody(list.raw, 'tools/list', null)).toBe(OLD.transformDirectoryBody(rawWithoutHeld(list.raw), 'tools/list', null));
+    expect(NEW.directoryToolsList(list.msg.result)).toEqual(OLD.directoryToolsList(withoutHeld(list.msg.result)));
     const init = await H.init('/mcp');
     expect(NEW.transformDirectoryBody(init.raw, 'initialize', null)).toBe(OLD.transformDirectoryBody(init.raw, 'initialize', null));
   });
