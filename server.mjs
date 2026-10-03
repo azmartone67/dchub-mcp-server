@@ -7818,11 +7818,34 @@ export async function _lpWallResultV11(name, headline = null) {
   return out;
 }
 
+// CM-4b (owner 2026-10-03): on analyze_site's nearest_substations block a free
+// key sees distance + kV band; hifld_id, name and exact kV are Pro. This is
+// the ONE carve-out from the Land & Power preview's "every distance null"
+// rule, so the block is cut to its free fields here and kept out of the
+// generic masker: left to it, names (no digit) would pass and the distances
+// and bands (digits) would be nulled, the exact inverse of the decision.
+// Paid keys are REMOVED, not nulled (null means "we do not hold it"), and
+// named in locked_fields. hifld_id is paid because it is the public HIFLD
+// asset id: free, it would join straight back to the name and exact kV.
+export const SUBSTATION_PAID_FIELDS = ['hifld_id', 'name', 'max_kv'];
+export function _substationFreeView(block) {
+  if (!block || typeof block !== 'object' || !Array.isArray(block.substations)) return block ?? null;
+  const rows = block.substations.map((r) => {
+    const o = {};
+    for (const [k, v] of Object.entries(r || {})) if (!SUBSTATION_PAID_FIELDS.includes(k)) o[k] = v;
+    return o;
+  });
+  return { ...block, substations: rows, locked_fields: [...SUBSTATION_PAID_FIELDS] };
+}
+
 export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
   let parsed = null;
   try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
   if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
+  const _subsFree = Object.prototype.hasOwnProperty.call(parsed, 'nearest_substations')
+    ? _substationFreeView(parsed.nearest_substations) : undefined;
   const preview = _lpPreviewPayload(parsed);
+  if (_subsFree !== undefined) preview.nearest_substations = _subsFree;
   _noteGate('lp');
   if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed)));
   if (name === 'compare_sites') {
