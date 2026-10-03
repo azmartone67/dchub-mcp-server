@@ -19677,12 +19677,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_guideAuthWall(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)),
-       name, args, _outSchema), name), name), name, args), name));
+       name, args, _outSchema), name), name), name, args), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -20654,6 +20654,69 @@ export function _noDataGuard(result) {
 // ★ A served preview is NOT an error and must never come through here — that
 // is the r51/Grok distinction, and the isError !== undefined guard is what
 // enforces it structurally rather than by convention.
+// ★ A5 tier-gating (owner 2026-10-03): a backend 401/402/403 that reached the
+// caller as a bare passthrough. Measured live 2026-10-03, keyless:
+//   list_standing_intents -> {"error":"API 401","detail":"api_key_required"}
+//   export_dataset        -> {"error":"API 402","detail":"upgrade_required"}
+// No next step, so an agent ends the task. This adds a plain sentence, the
+// tool that moves the caller forward, the A2 tier class and the plan, beside
+// the existing keys. `error` and `detail` stay, so _flagUpstreamError still
+// sets isError exactly as before. No link of any kind is added: the next_tool
+// (claim_free_key / bind_email / unlock_more_data) returns the caller's own.
+// A body that already carries a gated envelope is left alone.
+const _AUTH_WALL_RE = /^API 40[123]$/;
+const _GATED_ENVELOPE_KEYS = ['next_tool', 'next_steps', '_upgrade', 'upgrade', '_wall', 'wall',
+  'required_plan', 'tier_required', 'unlock', 'for_your_human'];
+const _PLAN_FOR_TIER = { pro: 'pro', developer_for_full: 'developer', email: 'identified', free_key: 'free' };
+const _PLAN_LABEL = { pro: 'Pro', developer: 'Developer' };
+export function _authWallGuidance(toolName, status, detail, keyed) {
+  const tierRequired = _tierRequiredFor(toolName);
+  const d = String(detail || '').toLowerCase();
+  // No key: the first step is always a free key. A key on an email-class tool,
+  // or a 401 naming identity: bind the email. Otherwise it is a plan.
+  let next;
+  if (tierRequired === 'email' || status === 401 || /identity|email|bind/.test(d)) {
+    next = keyed ? 'bind_email' : 'claim_free_key';
+  } else {
+    next = 'unlock_more_data';
+  }
+  const plan = _PLAN_FOR_TIER[tierRequired]
+    || (next === 'unlock_more_data' ? 'developer' : next === 'bind_email' ? 'identified' : 'free');
+  const t = String(toolName || 'This tool');
+  const message = next === 'claim_free_key'
+    ? `${t} needs a free DC Hub key. Call claim_free_key (no email, one call), then call ${t} again.`
+    : next === 'bind_email'
+      ? `${t} needs a free key with a bound email. Call bind_email with your human's email (no payment), then call ${t} again.`
+      : `${t} needs the ${_PLAN_LABEL[plan] || plan} plan. Call unlock_more_data for the upgrade options to show your human.`;
+  return { message, next_tool: next, tier_required: tierRequired, required_plan: plan };
+}
+export function _guideAuthWall(result, toolName) {
+  try {
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object'
+                && !Array.isArray(result.structuredContent)) ? result.structuredContent : null;
+    const c0 = result.content[0];
+    let body = null;
+    if (c0 && typeof c0.text === 'string' && c0.text.trimStart()[0] === '{') {
+      try { body = JSON.parse(c0.text); } catch (_) { body = null; }
+    }
+    const src = (body && typeof body === 'object' && !Array.isArray(body)) ? body : sc;
+    if (!src || typeof src.error !== 'string' || !_AUTH_WALL_RE.test(src.error)) return result;
+    if (_GATED_ENVELOPE_KEYS.some((k) => src[k] !== undefined)) return result;
+    let keyed = false;
+    try { keyed = !!(getCtx() && getCtx().api_key); } catch (_) { keyed = false; }
+    const g = _authWallGuidance(toolName, Number(src.error.slice(4)), src.detail, keyed);
+    const out = { ...result };
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      out.content = [{ ...c0, text: JSON.stringify({ ...body, ...g }) }, ...result.content.slice(1)];
+    }
+    if (sc) out.structuredContent = { ...sc, ...g };
+    return out;
+  } catch (_) {
+    return result;   // guidance is additive; never fail a response over it
+  }
+}
+
 export function _flagUpstreamError(result, toolName) {
   try {
     // Never override an explicit decision — see SCOPE above.
