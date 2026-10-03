@@ -7820,11 +7820,14 @@ export async function _lpWallResultV11(name, headline = null) {
 
 // CM-4 (owner 2026-10-03, superseding CM-4b's "free = distance + kV band"):
 // analyze_site's nearest_substations is Pro and up. Below Pro the block is
-// LOCKED: how many substations the search found (a count, which the LP
+// LOCKED: how many substations lie in the radius (a count, which the LP
 // preview keeps), the radius and coverage, and the locked fields. No row,
 // distance, band, name or id. The upgrade relay is the envelope's
 // upgrade_url (_lpProLink). The block is replaced before the generic masker
 // runs: left to it, names (no digit) would pass through.
+// The count is the backend block's substations_in_radius (every HIFLD row in
+// the radius), never the row list's length: the rows stop at 5, so a length
+// read 5 at every US point. Absent or non-numeric → null (unknown).
 export const SUBSTATION_ROW_FIELDS = ['hifld_id', 'name', 'max_kv', 'distance_km', 'kv_band',
   'source', 'as_of', 'basis_class'];
 // P0-1 (owner D5, 2026-10-03): the one line for substation detail. Developer is
@@ -7855,7 +7858,8 @@ export function _substationLockedView(block) {
   if (!block || typeof block !== 'object') return block ?? null;
   return {
     locked: true, required_plan: SUBSTATION_DETAIL_MIN_TIER,
-    substations_in_radius: Array.isArray(block.substations) ? block.substations.length : 0,
+    substations_in_radius: Number.isFinite(block.substations_in_radius)
+      ? block.substations_in_radius : null,
     search_radius_km: block.search_radius_km ?? null,
     coverage: block.coverage ?? null,
     locked_fields: [...SUBSTATION_ROW_FIELDS],
