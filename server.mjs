@@ -12410,7 +12410,39 @@ function _withProvenance(result, toolName) {
   }
 }
 
+// G-4 (2026-10-03): PeeringDB data is NOT ours to license. PeeringDB's AUP
+// bars bulk redistribution and commercial use without permission, so a
+// CC-BY-4.0 stamp on a PeeringDB-derived answer is an over-claim (the same
+// class as the facility-inventory over-claim #261 retired). Every licence
+// string the citation chain stamps on these tools' responses (in-payload
+// _source/_cite, the footer, the citation object, the provenance mirror) is
+// rewritten after the chain runs, so no stamping path can reintroduce it.
+export const PEERINGDB_TOOLS = new Set(['get_peering_intel']);
+export const PEERINGDB_LICENSE =
+  'PeeringDB data, not CC-BY. Subject to the PeeringDB Acceptable Use Policy; see https://dchub.cloud/data-sources';
+export function _relicensePeeringDB(result) {
+  try {
+    if (!result || typeof result !== 'object') return result;
+    const fix = (t) => (typeof t === 'string' ? t.split('CC-BY-4.0').join(PEERINGDB_LICENSE) : t);
+    const out = { ...result };
+    if (Array.isArray(result.content)) {
+      out.content = result.content.map((it) => (it && typeof it.text === 'string' ? { ...it, text: fix(it.text) } : it));
+    }
+    if (result.structuredContent && typeof result.structuredContent === 'object') {
+      out.structuredContent = JSON.parse(fix(JSON.stringify(result.structuredContent)));
+    }
+    return out;
+  } catch (_) {
+    return result;
+  }
+}
+
 function withCitation(result, toolName) {
+  const out = _withCitationCore(result, toolName);
+  return PEERINGDB_TOOLS.has(toolName) ? _relicensePeeringDB(out) : out;
+}
+
+function _withCitationCore(result, toolName) {
   try {
     // Entity-type stamp (any branch below): additive, keeps existing keys.
     if (result && result.structuredContent && typeof result.structuredContent === 'object'
@@ -24042,7 +24074,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
     });
 
   trackedTool(srv, 'get_peering_intel',
-    'Internet-exchange (IX/IXP) and peering density for a site, from PeeringDB. Pass lat+lon for the PEERING PROFILE around that point: facilities_nearby, a 0-100 score with its level, total_ix_presence, total_networks, and top_facilities each with ix_count and net_count — e.g. Ashburn comes back with 61 IX presences and 903 networks across the nearby sites, led by Equinix DC1-DC15 at 516 networks. Omit coordinates for the IXP directory (name, name_long, city, country, net_count, fac_count, media, protocols, policy/tech contacts). This is the layer that answers "can I actually reach networks cheaply from here", which fiber route geometry does not: a site can sit on dense fiber and still be far from any exchange. The score is a DERIVED convenience over PeeringDB counts, not a DC Hub-sourced grade — cite the underlying counts (facilities, IX presence, networks) rather than the score when it is load-bearing. Records are PeeringDB\'s, refreshed on read. Answers "how good is peering at this Ashburn site" and "which internet exchanges serve the Dallas market". Try: get_peering_intel lat=39.04 lon=-77.48 — or get_peering_intel (no args) for the IXP directory. Do NOT use for fiber route geometry (get_fiber_intel), near-net carrier distance at a parcel (get_fiber_readiness), metro fiber depth (get_metro_fiber), or subsea landings (get_subsea_cables).',
+    'Internet-exchange (IX/IXP) and peering density for a site, from PeeringDB. Pass lat+lon for the PEERING PROFILE around that point: facilities_nearby, a 0-100 score with its level, total_ix_presence, total_networks, and top_facilities each with ix_count and net_count — e.g. Ashburn comes back with 61 IX presences and 903 networks across the nearby sites, led by Equinix DC1-DC15 at 516 networks. Omit coordinates for the IXP directory (name, name_long, city, country, net_count, fac_count, media, protocols). This is the layer that answers "can I actually reach networks cheaply from here", which fiber route geometry does not: a site can sit on dense fiber and still be far from any exchange. The score is a DERIVED convenience over PeeringDB counts, not a DC Hub-sourced grade — cite the underlying counts (facilities, IX presence, networks) rather than the score when it is load-bearing. Records are PeeringDB\'s, refreshed on read. Answers "how good is peering at this Ashburn site" and "which internet exchanges serve the Dallas market". Try: get_peering_intel lat=39.04 lon=-77.48 — or get_peering_intel (no args) for the IXP directory. Do NOT use for fiber route geometry (get_fiber_intel), near-net carrier distance at a parcel (get_fiber_readiness), metro fiber depth (get_metro_fiber), or subsea landings (get_subsea_cables).',
     { lat: N.describe('Latitude of the site, e.g. 39.04 — with lon, returns the peering profile around it; omit both for the IXP directory'),
       lon: N.describe('Longitude of the site, e.g. -77.48'),
       ...COORD_ALIASES,
@@ -25706,7 +25738,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
      '# DC Hub indices\n\n**DCPI — Data Center Power Index** (0-100, per market): a verdict-aware composite of the excess-power score, grid constraint, time-to-power, and market fundamentals -> a BUILD / CAUTION / AVOID verdict. Higher = more build-ready power.\n\n**DCGI — Data Center Gas Index** — withdrawn 2026-08-08, restored 2026-08-30 (see /api/v1/dcgi/methodology `corrections`; pre-withdrawal scores are not comparable). The composite score and its GAS-ADVANTAGED / ADEQUATE / GAS-CONSTRAINED verdict are no longer published: two of its three terms were measurably wrong (a dead interstate-share term and a hardcoded cost constant for nine states). `get_gas_index` returns an `unavailable_reason`; gas coverage is the sourced inputs — pipeline and operator presence with live Henry Hub — via `get_gas_intelligence`. Do not quote a cached DCGI figure.\n\nDCPI updates from live feeds. Quote scores with attribution to DC Hub (CC-BY-4.0).');
   _R('data-sources', 'dchub://data-sources', 'DC Hub data sources',
      'Provenance of the underlying datasets.',
-     '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nAll DC Hub-published figures are CC-BY-4.0.');
+     '# DC Hub data sources\n\n- EIA hourly RTO data (grid demand / fuel mix)\n- HIFLD substation + transmission database\n- OpenStreetMap (infrastructure geometry)\n- PeeringDB (fiber / IX; PeeringDB terms, not CC-BY)\n- regulations.gov NEPA filings\n- USGS, EPA eGRID, FEMA NRI (water / climate / emissions)\n- DC Hub proprietary facility + M&A + news pipeline\n\nDC Hub-derived figures (DCPI, grid/site analysis) are CC-BY-4.0. Third-party layers keep their upstream terms (PeeringDB data is not CC-BY); see https://dchub.cloud/data-sources.');
   _R('coverage', 'dchub://coverage', 'DC Hub grid + market coverage',
      'ISOs/grids and market coverage.',
      '# DC Hub coverage\n\n**Grids (live):** the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (e.g. Atlanta/SOCO, Carolinas/DUK, Florida/FPL, Phoenix/AZPS, Las Vegas/NEVP, Portland/PGE) via get_grid_intelligence; the global scoreboard (get_grid_scoreboard) adds GB (NESO), 24 EU ENTSO-E bidding zones, Taiwan (Taipower), Japan (OCCTO), South Korea (KPX) and Brazil (ONS) ranked full-mix, with Australia (AEMO) and Singapore (EMA) live partial. (Hydro-Québec, AESO, and Nord Pool are modeled DCPI baselines, not live telemetry.)\n\n**Markets:** 300+ scored by DCPI worldwide. **Facilities:** global map across 170+ countries; corroborated count pending.\n\n**Infrastructure:** 330,000+ mapped assets — 134k substations, 94k transmission lines, 58k fiber routes, 33k gas pipeline segments, 13k US power plants, 710+ subsea cables and 1,900+ cable landings; separately 182k global power generating units across ALL statuses (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), plus worldwide gas/oil pipelines, LNG & coal-mine methane (Global Energy Monitor, CC-BY).\n\nSource: DC Hub (dchub.cloud), CC-BY-4.0.');

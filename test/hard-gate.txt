@@ -223,6 +223,7 @@ test/paywall-contract.test.mjs
 test/paywall-extras-attribution.test.mjs
 test/paywall-output-no-monthly-price.test.mjs
 test/pc-arm-tag-visible-link.test.mjs
+test/peeringdb-licence-g4.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/place-name-iso.test.mjs
