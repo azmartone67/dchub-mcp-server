@@ -258,7 +258,7 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
 
 ## Pricing line (paste wherever a form asks for pricing)
-Free tier, no signup — Anonymous: previews + 2 full answers per tool per day. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. $10 one-time pack of 1,000 API credits — no subscription. Developer, Pro and
+Free tier, no signup — Anonymous: previews, no key needed. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. $10 one-time pack of 1,000 API credits — no subscription. Developer, Pro and
 Enterprise plans: see https://dchub.cloud/pricing
 
 > Keep this block in sync with `tier_registry.py` in dchub-backend, which is
@@ -415,7 +415,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 >
 > Built for agents answering power, siting and capacity questions: pull live **interconnection-queue** depth, wait times and per-ISO BUILD/CAUTION/AVOID verdicts across 7 US ISOs + 43 US utility BAs + 31 international grid regions; track the **construction capacity pipeline** plus the AI Compute Capacity Index; rank 300+ markets by the DCPI power index; search the global data-center facility map across 170+ countries (corroborated count pending); score any lat/lon for buildability; compare US + European + GB + Taiwan + Japan + Korea + Brazil grids live (fuel mix, renewables, carbon, demand); and reach hyperscaler $1B+ deals, 1,700+ tracked M&A, gas-vs-grid economics, fiber routes, water-stress & tax incentives. **Capacity Source** adds the supply side: powered land, powered shells, turnkey capacity and colocation to buy or lease — off-market listings included — searched by size and location with `source_capacity`, browsable at https://dchub.cloud/listings.
 >
-> Free to start with no key (previews + 2 full answers per tool per day; limits at https://dchub.cloud/pricing). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
+> Free to start with no key (previews; limits at https://dchub.cloud/pricing). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
 **Try it:** `get_interconnection_queue iso=PJM` · `get_power_pipeline` (construction pipeline) · `get_grid_scoreboard` · `get_market_dcpi_rank market=northern-virginia`
 
 ### Glama — audience: quality-graded directory (rich copy lifts the grade)

@@ -4524,8 +4524,8 @@ export async function checkMonthlyQuota(api_key, tier) {
 
 // ── r-daily-quota (2026-09-27): the published per-DAY allowance for keys ────
 //
-// The rule DC Hub publishes (canon `free_tier`): anonymous = previews + 2 full
-// answers per tool per day; a free key with no email = 10 trial calls in total;
+// The rule DC Hub publishes (canon `free_tier`): anonymous = previews, no key
+// needed (A1, 2026-10-03); a free key with no email = 10 trial calls in total;
 // with an email bound = 50 calls/day; Developer = 500 calls/day. The first two
 // were enforced; the per-DAY half for keyed callers was not — email-bound keys
 // had only the 1,500/month wall, so "50/day" was a sentence, not a limit.
@@ -20957,11 +20957,25 @@ function _overlayCanonPhrases(facts) {
   return out;
 }
 
+// A1 (owner D1, 2026-10-03): the published free-tier rule (canon phrase
+// `free_tier`, dchub-backend ai_surface_canon.PINNED['free_tier_rule']) closes
+// the instructions, so an agent reads the same sentence /llms.txt, /pricing and
+// /ai print. Composed from lib/tier-canon.mjs; '' when a rung is missing. It
+// precedes the scope section, which must end the instructions. The
+// directory profiles (/mcp/chatgpt, /mcp/claude, /mcp/core) serve their own
+// instruction strings, so it does not reach them.
+export const _INSTR_FREE_TIER = (() => {
+  const r = _freeTierRuleText();
+  return r ? ' FREE TIER (the published rule, quote it verbatim): ' + r : '';
+})();
 export const _INSTRUCTIONS = (() => {
   let facts = null;
   try { facts = JSON.parse(readFileSync(new URL('./canonical/mcp_facts.json', import.meta.url), 'utf8')); } catch { /* soft — gate falls through to figure-less prose */ }
   // OUTREACH_LEAD goes first: clients truncate long instructions (lib/agent-outreach.mjs).
-  return OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _composeScopeSection(_TAXONOMY);
+  // A1: the free-tier rule sits before the scope section, which must stay last
+  // (test/problem-taxonomy.test.mjs).
+  return OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _INSTR_FREE_TIER
+    + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Tool registrations (all wrapped) ─────────────────────────────

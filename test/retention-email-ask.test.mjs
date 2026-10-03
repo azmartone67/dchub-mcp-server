@@ -195,7 +195,7 @@ describe('claim_free_key success leads with the email ask', () => {
     expect(r.sc.free_calls_total).toBe(10);
     expect(r.sc.daily_limit_with_email).toBe(50);
     expect(r.sc.full_answers_per_tool_per_day_with_email).toBe(10);
-    expect(r.sc.free_tier_rule).toBe('Anonymous: previews + 2 full answers per tool per day. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.');
+    expect(r.sc.free_tier_rule).toBe('Anonymous: previews, no key needed. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.');
     expect(r.text).not.toMatch(/Free tier = 10 calls\/day/);
   });
 

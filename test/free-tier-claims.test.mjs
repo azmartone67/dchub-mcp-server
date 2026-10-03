@@ -23,8 +23,8 @@ import { dirname, join } from "node:path";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
 // ★2026-09-27 (free-tier rule, owner decision D2): the snapshot's calls_per_day
-// carries only PER-DAY rungs. Anonymous has no call count (previews + 2 full
-// answers per tool per day) and the free key is 10 calls IN TOTAL — both now
+// carries only PER-DAY rungs. Anonymous has no call count (previews, no key
+// needed; A1 2026-10-03) and the free key is 10 calls IN TOTAL — both now
 // live in `allowance`. CANON is the rung set a published number may name: the
 // per-day rungs plus the free key's allowance count (10 is still the free rung;
 // what is stale is the "/day" some frozen copy puts after it).
@@ -70,7 +70,7 @@ const SURFACES = [
 // dchub-backend ai_surface_canon.PINNED['free_tier_rule']). A surface quoting it
 // whole names "Anonymous:" and "50 calls/day" in one sentence by design — that
 // is the rule, not an anonymous 50/day claim.
-const FREE_TIER_RULE = "Anonymous: previews + 2 full answers per tool per day. "
+const FREE_TIER_RULE = "Anonymous: previews, no key needed. "
   + "Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers "
   + "per tool per day). Paid plans: dchub.cloud/pricing.";
 const CLAIM = /([\d,]+)\s*calls?\/day/gi;
@@ -104,7 +104,7 @@ describe("published calls/day claims", () => {
   it("surfaces quote the published rule verbatim (and the exemption is not vacuous)", () => {
     const quoted = claims().filter((c) => c.inRule);
     expect(new Set(quoted.map((c) => c.file))).toEqual(
-      new Set(["llms-install.md", "integrations/README.md"]));
+      new Set(["llms-install.md", "integrations/README.md", "mcp-server.json"]));
     expect(quoted.every((c) => c.n === 50)).toBe(true);
   });
 
@@ -181,11 +181,11 @@ describe("smithery.yaml pricing block matches the ladder label-by-label", () => 
   });
 
   // ★2026-09-27 owner decision D2: the anonymous row states the rule
-  // ("previews + 2 full answers per tool per day") and the free-key row states
+  // ("previews, no key needed") and the free-key row states
   // "10 calls to try" — neither is a calls/day rung, so they are checked by the
   // rule's words. Every other row still carries its canonical calls/day rung.
   const RULE = {
-    anonymous: /previews \+ 2 full answers per tool per day/i,
+    anonymous: /previews, no key/i,
     free: /10 calls to try/i,
   };
   for (const r of rows.filter((x) => RULE[x.tier])) {

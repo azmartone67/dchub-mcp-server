@@ -66,7 +66,7 @@ const OPTIONAL_PRICED = new Set(['founding', 'team']);
 // ★ 2026-09-27 — THE FREE-TIER RULE (owner decision D2). The backend now
 // publishes each tier's allowance IN ITS OWN UNIT (`allowance`: calls + period)
 // and a null calls_per_day for the two tiers that have no per-day count:
-//   anonymous  previews + 2 full answers per tool per day  (calls null)
+//   anonymous  previews, no key needed  (calls null)
 //   free       10 calls IN TOTAL                            (period 'lifetime')
 // Those two may be null here ONLY when `allowance` names a non-daily unit; a
 // null with no unit is still a degraded read. An older backend that still
