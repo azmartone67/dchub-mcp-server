@@ -9785,6 +9785,87 @@ function _scoreBand(n) {
   return 'AVOID';
 }
 
+// ── r-band-is-the-verdict (2026-10-02, owner report) ─────────────────────
+// get_market_dcpi_rank phoenix, anonymous, live: verdict CAUTION beside
+// composite_score_band AVOID. _scoreBand's 70/45 cut is the SITE scale
+// (site_planner composite → verdict, analyze_site). It is not how a DCPI
+// market is banded, and stamping it on every masked `*_score` contradicted
+// the published verdict three ways:
+//   * composite_score is a RANKING number — excess·0.60 + (100−constraint)·0.30
+//     + ttp·0.10, then × the verdict multiplier (CAUTION 0.85, AVOID 0.60).
+//     It has no band of its own; a CAUTION market's composite sits in the 30s-
+//     40s, so _scoreBand called it AVOID. Its band IS the row's verdict.
+//   * constraint_score is INVERTED (higher = more constrained; /dcpi paints
+//     ≥70 red). _scoreBand painted a BUILD market's constraint 40 "AVOID".
+//   * excess_power_score's floors are 65 / 50 (util/dcpi_method.py
+//     VERDICT_BANDS), not 70 / 45.
+// So: a composite next to a DCPI verdict takes THAT verdict (single source,
+// read from the row the backend sent), and the two verdict inputs take the
+// verdict's own floors/ceilings — the bands the backend's verdict_reasons
+// already name (EXCESS_POWER_MEETS_BUILD_FLOOR, CONSTRAINT_WITHIN_BUILD_CEILING).
+// The verdict is BUILD iff both inputs clear BUILD, CAUTION iff both clear
+// CAUTION, so an input band can never sit BELOW a base verdict.
+// Mirrors util/dcpi_method.py VERDICT_BANDS (served at /api/v1/dcpi/methodology
+// verdict.bands); test/band-matches-verdict.test.mjs pins the numbers.
+export const DCPI_VERDICT_BANDS = Object.freeze([
+  Object.freeze({ verdict: 'BUILD',   excess_min: 65.0, constraint_max: 50.0 }),
+  Object.freeze({ verdict: 'CAUTION', excess_min: 50.0, constraint_max: 70.0 }),
+]);
+const DCPI_VERDICT_FALLBACK = 'AVOID';
+const _DCPI_VERDICTS = new Set(['BUILD', 'CAUTION', 'AVOID', 'LOW_SIGNAL']);
+// The keys a row carries its published verdict under, per surface:
+// get_market_dcpi_rank / site_selection_canvas `verdict`, rank_markets
+// criteria=ai_ready `dcpi_verdict`, the forecast projection `implied_verdict`.
+const _ROW_VERDICT_KEYS = ['verdict', 'dcpi_verdict', 'implied_verdict'];
+// A composite/ranking score whose only legitimate band is the row's verdict.
+const _COMPOSITE_BAND_KEY_RE = /^(composite_score|score|overall_score|dcpi_score)$/i;
+// Not a siting score at all: market_power_scores.quality_score is the
+// publish gate's data-quality grade (published = quality_score >= 60).
+const _NO_SITING_BAND_KEYS = new Set(['quality_score']);
+// Ranking scores that are not on a 0-100 scale. rank_markets best_overall is
+// "0.4×total_mw + 50×operators + 20×facilities" (its own score_basis says "not
+// a 0-100 scale"); _scoreBand read Ashburn's as BUILD while /dcpi/ashburn's
+// verdict is AVOID. Only a DCPI verdict on the row may band it.
+const _UNSCALED_SCORE_TOOLS = new Set(['rank_markets']);
+// Containers whose numbers are RATES (score points per day), not scores.
+const _RATE_CONTAINER_RE = /(^|_)trend(_|$)|per_day$|_delta$|_slope$/i;
+
+function _rowVerdict(row) {
+  if (!row || typeof row !== 'object') return { present: false, value: null };
+  for (const vk of _ROW_VERDICT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(row, vk)) {
+      const v = typeof row[vk] === 'string' ? row[vk].trim().toUpperCase() : null;
+      return { present: true, value: _DCPI_VERDICTS.has(v) ? v : null };
+    }
+  }
+  return { present: false, value: null };
+}
+
+function _dcpiInputBand(kind, n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  for (const b of DCPI_VERDICT_BANDS) {
+    if (kind === 'excess' ? n >= b.excess_min : n <= b.constraint_max) return b.verdict;
+  }
+  return DCPI_VERDICT_FALLBACK;
+}
+
+// The band left behind when the depth gate masks `k` on `row`. null = no band
+// (the `_<k>_in_pro` marker still says the number exists and is withheld).
+export function _bandForMaskedScore(k, v, row, toolName, inRateContainer) {
+  if (inRateContainer) return null;
+  const lk = String(k).toLowerCase();
+  if (_NO_SITING_BAND_KEYS.has(lk)) return null;
+  if (lk === 'excess_power_score') return _dcpiInputBand('excess', v);
+  if (lk === 'constraint_score') return _dcpiInputBand('constraint', v);
+  const rv = _rowVerdict(row);
+  if (_COMPOSITE_BAND_KEY_RE.test(lk) && rv.present) {
+    // The row says what it is: its band is its verdict, or nothing.
+    return typeof v === 'number' && Number.isFinite(v) ? rv.value : null;
+  }
+  if (_UNSCALED_SCORE_TOOLS.has(toolName) && lk === 'score') return null;
+  return _scoreBand(v);
+}
+
 function _gatesHeadroom(k) {
   if (!GRID_HEADROOM_TIER) return false;
   const lk = String(k).toLowerCase();
@@ -10173,7 +10254,7 @@ export function _rowsTotalSet(toolName) {
   } catch (_) { return 'pro'; }
 }
 
-function trimForTrial(parsed, toolName) {
+function trimForTrial(parsed, toolName, _inRate = false) {
   if (parsed === null || parsed === undefined) return parsed;
   // execute_plan: every step already ran as a real tools/call at the caller's
   // tier, so its own preview is in place. Trimming the envelope again cut
@@ -10191,9 +10272,9 @@ function trimForTrial(parsed, toolName) {
       // upgrade CTA already lives once in the nudge header (applyTrialGuardIfFree);
       // interleaving it into the array made agents echo promo to end users AND
       // broke array typing for downstream parsers.
-      return parsed.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
+      return parsed.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName, _inRate));
     }
-    return parsed.map((_r) => trimForTrial(_r, toolName));
+    return parsed.map((_r) => trimForTrial(_r, toolName, _inRate));
   }
   if (typeof parsed !== 'object') return parsed;
   const out = {};
@@ -10213,7 +10294,10 @@ function trimForTrial(parsed, toolName) {
       // r-depth-gate: the siting DECISION field → Pro. A gated score leaves
       // its BAND behind, so the free answer still says BUILD / CAUTION /
       // AVOID and only the number a decision is made on is withheld.
-      const _band = _scoreBand(v);
+      // r-band-is-the-verdict: the band beside a masked DCPI score is the
+      // row's verdict (composite) or the verdict's own bands (its inputs) —
+      // never a second, contradicting 70/45 cut. See _bandForMaskedScore.
+      const _band = _bandForMaskedScore(k, v, parsed, toolName, _inRate);
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);
       out[k] = null;
@@ -10228,7 +10312,7 @@ function trimForTrial(parsed, toolName) {
       // clean — no inline _gated promo object. The _total_in_pro sibling stays
       // the load-bearing honesty contract: it is the FULL length, never the
       // shown length, so an agent can always compute what it is missing.
-      out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName));
+      out[k] = v.slice(0, TRIAL_PREVIEW_ROWS).map((_r) => trimForTrial(_r, toolName, _inRate));
       out[`_${k}_total_in_pro`] = v.length;   // honest total in a side field agents can read
       // ladder stage 1: `_<k>_total_in_pro` is a DOCUMENTED contract (the initialize
       // instructions name it), so it stays, byte-for-byte, on every trimmed list.
@@ -10240,9 +10324,9 @@ function trimForTrial(parsed, toolName) {
                                               // that broke numeric typing for agents)
     } else if (_isMetricKey(k) && typeof v === 'object' && v !== null) {
       // stats:{}, by_quarter:{}, etc. — recurse but mask scalars inside
-      out[k] = trimForTrial(v, toolName);
+      out[k] = trimForTrial(v, toolName, _inRate || _RATE_CONTAINER_RE.test(k));
     } else if (typeof v === 'object' && v !== null) {
-      out[k] = trimForTrial(v, toolName);
+      out[k] = trimForTrial(v, toolName, _inRate || _RATE_CONTAINER_RE.test(k));
     } else {
       out[k] = v;
     }

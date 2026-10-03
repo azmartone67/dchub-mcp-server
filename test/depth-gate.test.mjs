@@ -127,7 +127,11 @@ describe('the gate leaves a reason behind', () => {
     const branch = SRC.slice(i, i + 700);
     expect(branch).toContain('out[k] = null;');
     expect(branch).toContain('_in_pro`] = true;');
-    expect(branch).toContain('_scoreBand(v)');
+    // r-band-is-the-verdict (2026-10-02): the band is the row's DCPI verdict /
+    // the verdict's own input bands, not a second 70/45 cut — see
+    // test/band-matches-verdict.test.mjs for the behaviour.
+    expect(branch).toContain('_bandForMaskedScore(k, v, parsed, toolName');
+    expect(branch).not.toContain('_scoreBand(v)');
   });
 
   it('★ the headline SENTENCE does not leak what the field gates', () => {
