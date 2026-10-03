@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { _freeKeyAllowanceText, FREE_TIER } from '../lib/tier-canon.mjs';
+import { _freeKeyAllowanceText, _freeKeyOfferText, FREE_TIER } from '../lib/tier-canon.mjs';
 
 const SRC = readFileSync(fileURLToPath(new URL('../server.mjs', import.meta.url)), 'utf8');
 const FROZEN_DESCRIPTION_STARTS = [
@@ -36,7 +36,10 @@ describe('free-key allowance in runtime messages', () => {
 
   it('the helper states the published rule from canon', () => {
     const t = _freeKeyAllowanceText();
-    expect(t).toBe(FREE_TIER.free_calls_per_day + ' calls to try, ' + FREE_TIER.identified_calls_per_day + '/day with an email');
+    // B1 (D4, live 2026-10-03): the free key's clause follows the published
+    // allowance shape (lib/tier-canon _freeKeyOfferText), daily now.
+    expect(t).toBe(_freeKeyOfferText() + ', ' + FREE_TIER.identified_calls_per_day + '/day with an email');
+    expect(t).toBe('previews plus 2 full answers per tool per day, 50/day with an email');
     expect(t).not.toMatch(/calls\/day/);
     expect(t).not.toMatch(/undefined|n\/a|NaN/);
   });

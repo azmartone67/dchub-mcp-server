@@ -31,8 +31,12 @@ describe('funnel invariants (peace 2026-07-05)', () => {
     expect(src).toMatch(/daily_limit:\s*\(r && r\.email_captured === true\) \? _rungNum\('identified'\) : null/);
     expect(src).toMatch(/free_calls_total: _rungNum\('free'\)/);
     expect(src).not.toMatch(/r\.daily_limit : 25\b/);
-    const { _rungNum } = await import('../lib/tier-canon.mjs');
-    expect(_rungNum('free')).toBe(10);
+    // B1 (D4): no free call total any more, so free_calls_total is not emitted
+    // while the snapshot is daily (claim_free_key reads _freeKeyIsDaily).
+    expect(src).toMatch(/_freeKeyIsDaily\(\)\) \? \{\} : \{ free_calls_total: _rungNum\('free'\) \}/);
+    const { _rungNum, _freeKeyIsDaily } = await import('../lib/tier-canon.mjs');
+    expect(_freeKeyIsDaily()).toBe(true);
+    expect(_rungNum('free')).toBeNull();
   });
 
   it('unlock_more_data makes MPP first-class (recommended + plan entry)', () => {

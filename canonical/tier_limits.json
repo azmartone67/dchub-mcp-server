@@ -11,12 +11,12 @@
   "allowance": {
     "anonymous": {
       "calls": null,
-      "period": null,
-      "full_answers_per_tool_per_day": 2
+      "period": null
     },
     "free": {
-      "calls": 10,
-      "period": "lifetime"
+      "calls": null,
+      "period": "day",
+      "full_answers_per_tool_per_day": 2
     },
     "identified": {
       "calls": 50,

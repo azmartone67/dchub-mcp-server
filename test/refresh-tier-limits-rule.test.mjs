@@ -131,26 +131,27 @@ describe('refresh-tier-limits — the free-tier rule shape', () => {
   });
 });
 
-// TODO(10-19 rebase, B1): once the backend publishes the daily free key and
-// the daily sync refreshes canonical/tier_limits.json, this block must assert
-// allowance.free == {calls: null, period: 'day', full_answers_per_tool_per_day: 2}
-// and FREE_TIER.free_calls_per_day == 'n/a' instead of the lifetime figures.
+// B1 (D4, live 2026-10-03): the backend publishes the free key as a daily
+// allowance and A1 publishes anonymous with no full answers; the snapshot
+// carries both, and the free-key copy reads the daily sentence from it.
 describe('the committed snapshot carries the rule', () => {
-  it('anonymous has no call count; free is 10 in total; the frozen copy still reads 10', async () => {
+  it('anonymous: previews only; free: a daily allowance with no call total', async () => {
     const snap = JSON.parse(readFileSync(join(ROOT, 'canonical/tier_limits.json'), 'utf8'));
     expect(snap.calls_per_day.anonymous).toBeUndefined();
-    expect(snap.allowance.anonymous).toMatchObject({ calls: null, full_answers_per_tool_per_day: 2 });
-    expect(snap.allowance.free).toMatchObject({ calls: 10, period: 'lifetime' });
+    expect(snap.allowance.anonymous).toEqual({ calls: null, period: null });
+    expect(snap.allowance.free).toEqual({ calls: null, period: 'day', full_answers_per_tool_per_day: 2 });
+    expect(snap.calls_per_day.free).toBeUndefined();
     expect(snap.calls_per_day.identified).toBe(50);
     expect(snap.calls_per_day.developer).toBe(500);
-    // Tool descriptions interpolate these; they must not move (tools/list and
-    // the /mcp/chatgpt catalog are byte-frozen).
-    const { FREE_TIER, _rungNum } = await import('../lib/tier-canon.mjs');
-    expect(FREE_TIER.free_calls_per_day).toBe(10);
-    expect(FREE_TIER.unbound_calls_total).toBe(10);
+    const { FREE_TIER, _rungNum, _freeKeyIsDaily, _freeTierRuleText } = await import('../lib/tier-canon.mjs');
+    expect(_freeKeyIsDaily()).toBe(true);
+    expect(FREE_TIER.free_calls_per_day).toBe('n/a');      // no total, and no copy reads it
     expect(FREE_TIER.identified_calls_per_day).toBe(50);
-    expect(_rungNum('free')).toBe(10);
+    expect(_rungNum('free')).toBeNull();
     expect(_rungNum('anonymous')).toBeNull();
+    expect(_freeTierRuleText()).toBe('Anonymous: previews, no key needed. Free key: previews plus 2 full '
+      + 'answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). '
+      + 'Paid plans: dchub.cloud/pricing.');
     expect(existsSync(join(ROOT, 'scripts/refresh-tier-limits.mjs'))).toBe(true);
   });
 });
