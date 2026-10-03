@@ -7457,12 +7457,59 @@ const METERED_ENFORCE_TOOLS = new Set([
 // token into a shared list would misattribute every other caller's click. So
 // the static tag is attributed, and `upgrade_relay` tells the agent where the
 // tokenized link actually comes from: the gated RESULT, minted per call.
-function _accessTagFor(name) {
-  const access = PAID_ONLY_TOOLS.has(name) ? 'paid'
+// ★ A2 tier-gating (owner 2026-10-03): the tools that only answer with a key
+// (keyless calls get 401 api_key_required / auth_required). These are the
+// key-only reads and writes measured keyless on 2026-09-24 and listed in
+// lib/chatgpt-directory.mjs DIRECTORY_REMOVED; test/tier-required-tag.test.mjs
+// pins this set as a subset of that one so the two cannot drift.
+export const KEY_REQUIRED_TOOLS = new Set([
+  'save_site', 'list_saved_sites', 'set_site_alert', 'set_market_alert',
+  'save_to_shortlist', 'get_shortlist', 'set_shortlist_alert', 'suggest_reallocation',
+  'register_standing_intent', 'list_standing_intents', 'delete_standing_intent',
+]);
+
+// The lowest seat that gets this tool's full answer, from the SAME sets the
+// live gate enforces (never a per-tool table). First match wins:
+//   pro                 PRO_ONLY_TOOLS or LP_TOOLS
+//   email               isFreeWithEmailTool (a free key with a bound email)
+//   developer_for_full  ALWAYS_PARTIAL_PREVIEW / DEPTH_TEASE_TOOLS: a preview
+//                       below Developer, full depth on Developer and up
+//   free_key            KEY_REQUIRED_TOOLS: any key, no plan
+//   anonymous           everything else
+export function _tierRequiredFor(name) {
+  const n = String(name || '');
+  if (PRO_ONLY_TOOLS.has(n) || LP_TOOLS.has(n)) return 'pro';
+  if (isFreeWithEmailTool(n)) return 'email';
+  if (ALWAYS_PARTIAL_PREVIEW.has(n) || DEPTH_TEASE_TOOLS.has(n)) return 'developer_for_full';
+  if (KEY_REQUIRED_TOOLS.has(n)) return 'free_key';
+  return 'anonymous';
+}
+// One plain sentence per class. No prices, no plan counts.
+export const FREE_ANSWER_BY_TIER = Object.freeze({
+  pro: 'Keyless: no data. A free key: a preview where the tool has one (verdicts, bands, counts). Scores, figures and exports are on the Pro plan.',
+  email: 'Keyless: a trimmed preview. A free key with a bound email (bind_email) opens full answers within the daily allowance.',
+  developer_for_full: 'Keyless and free keys: a trimmed preview (top rows). Full depth is on the Developer plan and up, or a credit pack.',
+  free_key: 'Needs a free key (claim_free_key). No paid plan required.',
+  anonymous: 'Works keyless. Some keyless results are trimmed; a free key (claim_free_key) raises the allowance.',
+});
+
+// The class the live paywall and the URL shape below key on. Kept separate
+// from the advertised `access` so relabelling a tool (A2) moves no runtime
+// branch and no pricing_url / connect_url value (pricing A/B 10-04..10-18).
+export function _accessGateClass(name) {
+  return PAID_ONLY_TOOLS.has(name) ? 'paid'
     : METERED_ENFORCE_TOOLS.has(name) ? 'metered'
     : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
+}
+
+function _accessTagFor(name) {
+  const gateClass = _accessGateClass(name);
+  const tierRequired = _tierRequiredFor(name);
+  // A2: a Pro tool reads `paid` even where the paywall class above does not
+  // (export_dataset, get_composite_site_score were advertised free_preview).
+  const access = tierRequired === 'pro' ? 'paid' : gateClass;
   const q = encodeURIComponent(name || '');
-  const gated = (access === 'paid' || access === 'metered');
+  const gated = (gateClass === 'paid' || gateClass === 'metered');
   // ★ r-no-bare-wall (2026-09-19): the 09-16 fix above routed the 28 GATED
   // tools through /pricing/upgrade and left the other 63 on
   // `/pricing?ref=mcp-tools-list&tool=…`. That is attributed, but it is still
@@ -7483,7 +7530,7 @@ function _accessTagFor(name) {
   // search_facilities (free_preview, anonymous) returned four /go/c/<token>
   // checkout links IN ITS RESULT. Tokenized, session-bound, minted per call —
   // never frozen into this shared list.
-  const tag = { access };
+  const tag = { access, tier_required: tierRequired, free_answer: FREE_ANSWER_BY_TIER[tierRequired] };
   if (!gated) {
     tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
   } else {
@@ -19069,7 +19116,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // `_upgrade` block and stay bare JSON, as measured and pinned
             // (relay-line-names-missed: search_facilities adds no line).
             let _anonRelay = null;
-            if (_ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_accessTagFor(name).access)) {
+            if (_ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_accessGateClass(name))) {
               try { _anonRelay = buildHumanRelay(name, tier, _sid) || null; } catch (_) {}
             }
             if (!_anonRelay || !_anonRelay.url) {

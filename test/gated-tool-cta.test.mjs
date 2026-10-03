@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { _accessTagFor } from '../server.mjs';
+import { _accessTagFor, _accessGateClass } from '../server.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'server.mjs'), 'utf8');
@@ -112,7 +112,11 @@ describe('the gated-tool CTA', () => {
     const names = ALL_TOOL_NAMES;
     for (const name of names) {
       const tag = _accessTagFor(name);
-      const gated = tag.access === 'paid' || tag.access === 'metered';
+      // The destination follows the PAYWALL class, not the advertised access:
+      // A2 (2026-10-03) relabelled two Pro tools paid without moving their
+      // link (pricing A/B 10-04..10-18), see test/tier-required-tag.test.mjs.
+      const gc = _accessGateClass(name);
+      const gated = gc === 'paid' || gc === 'metered';
       expect(Boolean(tag.pricing_url), `${name} (${tag.access}): pricing_url presence`)
         .toBe(gated);
       expect(Boolean(tag.connect_url), `${name} (${tag.access}): connect_url presence`)
