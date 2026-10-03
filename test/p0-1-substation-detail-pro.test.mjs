@@ -38,7 +38,11 @@ describe('P0-1 substation detail is Pro in the MCP preview', () => {
     expect(p.nearby.substations_50km).toBe(212);
     expect(p.fiber.top_carriers).toEqual(['Zayo', 'Lumen']);
     expect(p.hosting_capacity.feeders[0].utility).toBe('APS');
-    expect(p.nearest_substations.locked).toBe(true);
+    // B2 (merge on/after 2026-10-19): below Pro the block is the free view
+    // (distance band + kV band), still with no name, id or exact kV; the CM-4
+    // lock returns under DCHUB_B2_SITE_HEADLINE=0.
+    expect(p.nearest_substations.tier_required).toBe(SUBSTATION_DETAIL_MIN_TIER);
+    expect(p.nearest_substations.substations).toEqual([{ distance_band: 'within 5 km', kv_band: '500 kV+' }]);
   });
 
   it('compare_sites: every site\'s nearest substation is stripped too', () => {

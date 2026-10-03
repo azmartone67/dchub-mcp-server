@@ -244,8 +244,13 @@ describe('the one-number preview (MCP-1)', () => {
   });
 
   it('no measurement, no number: a wall whose gate measured nothing keeps the existing line', async () => {
-    const r = await call('analyze_site', LOC, seat());        // cursor: no contract arm, handler not run
-    expect(firstLine(r)).toMatch(/^For the full site analysis, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
+    // B2 (merge on/after 2026-10-19) runs analyze_site's keyless headline on every arm; its
+    // kill switch DCHUB_B2_SITE_HEADLINE=0 is the "handler not run" wall this pins.
+    process.env.DCHUB_B2_SITE_HEADLINE = '0';
+    try {
+      const r = await call('analyze_site', LOC, seat());      // cursor: no contract arm, handler not run
+      expect(firstLine(r)).toMatch(/^For the full site analysis, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
+    } finally { delete process.env.DCHUB_B2_SITE_HEADLINE; }
   });
 
   it('userLineText ignores a malformed or foreign count (only an integer with the module\'s own label)', async () => {

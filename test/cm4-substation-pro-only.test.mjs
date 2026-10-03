@@ -1,8 +1,17 @@
 // CM-4 (owner 2026-10-03, superseding CM-4b): analyze_site's
 // nearest_substations is Pro and up; below Pro it is locked (a count, no
 // rows). Feeder MW and distances keep the Land & Power preview rule (null).
-import { describe, it, expect } from 'vitest';
+//
+// B2 (owner 2026-10-03; merge on/after 2026-10-19) replaces the lock below Pro
+// with the free view (distance band + kV band; test/b2-analyze-site-keyless-
+// headline.test.mjs). This file pins the lock under B2's kill switch,
+// DCHUB_B2_SITE_HEADLINE=0, which restores it.
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { _lpPreviewResult, _substationLockedView, SUBSTATION_ROW_FIELDS } from '../server.mjs';
+
+let _prevB2;
+beforeAll(() => { _prevB2 = process.env.DCHUB_B2_SITE_HEADLINE; process.env.DCHUB_B2_SITE_HEADLINE = '0'; });
+afterAll(() => { if (_prevB2 === undefined) delete process.env.DCHUB_B2_SITE_HEADLINE; else process.env.DCHUB_B2_SITE_HEADLINE = _prevB2; });
 
 const ROW = { hifld_id: '107655', name: 'HOLCOMBE', max_kv: 138, distance_km: 2.3,
   kv_band: '115-229 kV', source: 'HIFLD Electric Substations', as_of: '2021-02-01',

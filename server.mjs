@@ -148,7 +148,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
          tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
-         lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields } from './lib/paywall-contract.mjs';
+         lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -7645,12 +7645,29 @@ function _lpProLink() {
 
 export function _lpWallResult(name, headline = null) {
   const url = _lpProLink();
+  // B2 (owner 2026-10-03; merge on/after 2026-10-19): analyze_site's keyless
+  // answer is a headline on every arm: the verdict band, the NAME of the
+  // weakest factor and counts. No score, factor band, MW, distance or
+  // substation name.
+  const _b2 = name === 'analyze_site' && !!(headline && headline.verdict && !headline.sites);
   const payload = {
     error: 'pro_required', tool: name, _gated: true, _wall: true, required_plan: 'pro',
     ..._pcLpHeadlineFields(headline),
-    message: `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
-      + 'returns no data: no verdict, score or figure. A free key opens the preview '
-      + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
+    ...(_b2 ? {
+      // Keyless gets the band only: interpretation_label can be finer than the
+      // three verdict bands, so it is a key's (the preview keeps it).
+      interpretation_label: undefined,
+      limiting_factor: { factor: headline.weakest_factor,
+                         note: 'The weakest factor is named free; factor bands come with a free key, scores with Pro.' },
+      ...(headline.site_counts ? { site_counts: headline.site_counts } : {}),
+    } : {}),
+    message: _b2
+      ? '`analyze_site` without a key returns the verdict band, the weakest factor and counts. '
+        + 'A free key adds factor bands and substation distance bands: call `claim_free_key`. '
+        + 'Scores and figures are Pro.'
+      : `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
+        + 'returns no data: no verdict, score or figure. A free key opens the preview '
+        + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
     upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
@@ -7813,6 +7830,14 @@ export async function _lpWallResultV11(name, headline = null) {
   // signed /upgrade/h relay (_withWallUserLine); the other Land & Power tools keep the short link.
   const out = await _withWallUserLine(base, name, { offer: 'pro', longUrl, headline, keepBody: false });
   if (out === base) return base;
+  // B2: a text-only client must see the weakest factor too, not just the band.
+  const _wf = name === 'analyze_site' && headline && !headline.sites && headline.verdict
+    ? _b2WeakestFactorLine(headline) : '';
+  if (_wf && out.content && out.content[0] && typeof out.content[0].text === 'string') {
+    const t = out.content[0].text;
+    const i = t.indexOf('\n\n');
+    out.content[0] = { type: 'text', text: i < 0 ? t + '\n\n' + _wf : t.slice(0, i) + '\n\n' + _wf + t.slice(i) };
+  }
   const link = out.structuredContent.user_message.match(/https:\/\/\S+?(?= — )/);
   if (link) out.structuredContent.upgrade_url = link[0];
   return out;
@@ -7867,14 +7892,104 @@ export function _substationLockedView(block) {
   };
 }
 
+// ── B2: analyze_site keyless headline + free substation view ──────────────────
+// Owner 2026-10-03 (APPROVED-AFTER-10-18; merge on/after 2026-10-19).
+//   * no key: verdict band, the NAME of the weakest factor, counts. On every
+//     arm now, not only the paywall-contract arms (still rate-limited by
+//     _coreHeadlineAllowed; past it, the plain wall).
+//   * a key below Pro: the Land & Power preview plus factor_bands
+//     (BUILD/CAUTION/AVOID per factor) and nearest_substations as distance
+//     band + kV band. Name, HIFLD id, exact kV and exact distance are Pro
+//     (the P0-1 rule, SUBSTATION_DETAIL_MIN_TIER = pro; D5).
+//   * compare_sites, generate_site_analysis, get_composite_site_score and
+//     get_dchub_recommendation are unchanged (D6 remainder: NO, 17:05Z).
+// Kill switch: DCHUB_B2_SITE_HEADLINE=0 restores the pre-B2 wall and CM-4 lock.
+export function _b2KeylessHeadlineOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_B2_SITE_HEADLINE || ''));
+}
+// The counts the anonymous headline may carry: integers the backend's own
+// below-Pro preview (_site_score_preview) already publishes. Nothing else.
+const _B2_COUNT_KEYS = ['facilities_100km', 'substations_50km', 'gas_pipelines_50km',
+  'power_plants_80km', 'fiber_carriers_in_state'];
+export function _b2SiteCounts(parsed) {
+  const n = (parsed && parsed.nearby && typeof parsed.nearby === 'object') ? parsed.nearby : {};
+  const out = {};
+  for (const k of _B2_COUNT_KEYS) if (Number.isInteger(n[k]) && n[k] >= 0) out[k] = n[k];
+  return Object.keys(out).length ? out : null;
+}
+export function _b2FactorBands(parsed) {
+  const s = (parsed && parsed.scores && typeof parsed.scores === 'object') ? parsed.scores : null;
+  if (!s) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(s)) {
+    const b = _pcScoreBand(typeof v === 'number' ? v : NaN);
+    if (b) out[k] = b;
+  }
+  return Object.keys(out).length ? out : null;
+}
+function _b2WeakestFactorLine(h) {
+  return h && h.weakest_factor
+    ? 'Free headline: verdict ' + h.verdict + ', weakest factor ' + h.weakest_factor
+      + '. Scores and figures are Pro.'
+    : '';
+}
+// The distance bands dchub-backend routes/substation_band_producer.py
+// publishes (band_for_km, _BANDS). Mirrored, not imported: that module is
+// Python. TODO(10-19 rebase, P0-1): if P0-1 exposes the band on the REST
+// row, read it from there and drop this mirror.
+const _SUB_DISTANCE_BANDS = [[1.0, 'within 1 km'], [5.0, 'within 5 km'],
+                             [10.0, 'within 10 km'], [25.0, 'within 25 km']];
+export function _substationDistanceBand(km) {
+  if (typeof km !== 'number' || !Number.isFinite(km) || km < 0) return null;
+  for (const [edge, label] of _SUB_DISTANCE_BANDS) if (km <= edge) return label;
+  return 'over 25 km';
+}
+// P0-2's read-time fixture filter, mirrored as a second line: dchub-backend
+// util/substation_filters.is_fixture_row (be#6282, merged 2026-10-03) already
+// drops these rows in util/substation_detail before they reach this server.
+// Same rule: name ^test_sub_ (case-insensitive) or a diagnostics source;
+// hifld_id is checked as well.
+const _FIXTURE_SUB_RE = /^test_sub_/i;
+const _FIXTURE_SOURCES = new Set(['diagnostic', 'diagnostics', 'diag', 'test', 'fixture']);
+export function _isFixtureSubstation(r) {
+  if (!r || typeof r !== 'object') return false;
+  return _FIXTURE_SUB_RE.test(String(r.name || '').trim()) || _FIXTURE_SUB_RE.test(String(r.hifld_id || '').trim())
+    || _FIXTURE_SOURCES.has(String(r.source || '').trim().toLowerCase());
+}
+// Removed, never nulled (null means "we do not hold it"), and named.
+export const SUBSTATION_PRO_FIELDS = ['hifld_id', 'name', 'max_kv', 'distance_km'];
+export function _substationFreeViewB2(block) {
+  if (!block || typeof block !== 'object' || !Array.isArray(block.substations)) return block ?? null;
+  const rows = block.substations.filter((r) => !_isFixtureSubstation(r)).map((r) => {
+    const o = { distance_band: _substationDistanceBand(r && r.distance_km), kv_band: (r && r.kv_band) || null };
+    for (const k of ['source', 'as_of', 'basis_class']) if (r && r[k] !== undefined) o[k] = r[k];
+    return o;
+  });
+  const out = { substations: rows, substations_in_radius: rows.length,
+    search_radius_km: block.search_radius_km ?? null, coverage: block.coverage ?? null,
+    locked_fields: [...SUBSTATION_PRO_FIELDS], tier_required: SUBSTATION_DETAIL_MIN_TIER,
+    required_plan: SUBSTATION_DETAIL_MIN_TIER,
+    note: 'Substation names, exact voltage, exact distance and HIFLD id are on the Pro plan: dchub.cloud/pricing' };
+  if (block.note && rows.length === 0) out.note_coverage = block.note;
+  return out;
+}
+
 export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
   let parsed = null;
   try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
   if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
+  // B2 (merge on/after 2026-10-19): below Pro, analyze_site's substations are
+  // the free view (distance band + kV band), not the CM-4 lock.
+  const _subsView = _b2KeylessHeadlineOn() ? _substationFreeViewB2 : _substationLockedView;
   const _subsFree = Object.prototype.hasOwnProperty.call(parsed, 'nearest_substations')
-    ? _substationLockedView(parsed.nearest_substations) : undefined;
+    ? _subsView(parsed.nearest_substations) : undefined;
+  // P0-1 (mcp#702): no substation name or exact kV anywhere else in the preview.
   const preview = _stripSubstationDetail(_lpPreviewPayload(parsed));
   if (_subsFree !== undefined) preview.nearest_substations = _subsFree;
+  if (name === 'analyze_site' && _b2KeylessHeadlineOn()) {
+    const _fb = _b2FactorBands(parsed);
+    if (_fb) preview.factor_bands = _fb;
+  }
   _noteGate('lp');
   if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed)));
   if (name === 'compare_sites') {
@@ -17627,7 +17742,9 @@ function trackedTool(srv, name, description, schema, handler) {
         if (_lpAccess === 'wall') {
           status = 'lp_wall';
           let _hl = null;
-          if (_pcOn && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+          // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
+          const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
+          if ((_pcOn || _b2) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
               const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
@@ -17639,6 +17756,10 @@ function trackedTool(srv, name, description, schema, handler) {
                 ? _parsedHl.nearby.substations_50km : undefined;
               if (_hl && !_hl.sites && Number.isInteger(_n) && _n >= 0) {
                 _hl = { ..._hl, preview_count: { value: _n, label: COUNT_LABEL } };
+              }
+              if (_b2 && _hl && !_hl.sites) {
+                const _sc = _b2SiteCounts(_parsedHl);
+                if (_sc) _hl = { ..._hl, site_counts: _sc };
               }
             } catch (_) { _hl = null; }
           }
@@ -23537,7 +23658,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx())) }] },
       'find_sites'));
 
-  trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Scores need Pro: a free key gets verdict bands and factor names, keyless at most the verdict band and weakest factor. Ex: "Score 33.45,-112.07 for 100 MW."',
+  trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and weakest factor; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: "Score 33.45,-112.07 for 100 MW."',
     { candidate_id: S.describe('PREFERRED for queue survivors: a cand_… id from get_refined_queue — coordinates come from the FROZEN mint (lat/lon args are ignored; zero transcription drift; expired ids fail closed with candidate_expired). See dchub.cloud/docs/candidate-lifecycle'),
       lat: N.describe('Site latitude in decimal degrees (-90 to 90; required unless candidate_id or location given), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180; required unless candidate_id or location given), e.g. -112.07'),

@@ -201,7 +201,15 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     expect(sc._wall).toBe(true);
     expect(sc.error).toBe('pro_required');
     const text = all(r);
-    for (const f of [...K.figures, 'Excellent site', 'BUILD', 'Amazon.com', 'validated']) expect(text).not.toContain(f);
+    // B2 (owner 2026-10-03; merge on/after 2026-10-19): keyless analyze_site
+    // carries its headline, the verdict BAND (and the weakest factor's name and
+    // counts; test/b2-analyze-site-keyless-headline.test.mjs). Still no figure,
+    // no finer label, no carrier name. Every other Land & Power tool: no band.
+    const _b2 = tool === 'analyze_site';
+    if (_b2) expect(sc.verdict).toBe('BUILD');
+    for (const f of [...K.figures, 'Excellent site', ...(_b2 ? [] : ['BUILD']), 'Amazon.com', 'validated']) {
+      expect(text).not.toContain(f);
+    }
     // MCP-1: analyze_site / compare_sites lead with the signed /upgrade/h relay page (its Pro
     // offer lives on that page); the other Land & Power tools keep the /u short link -> Pro /go/c.
     if (['analyze_site', 'compare_sites'].includes(tool)) {
