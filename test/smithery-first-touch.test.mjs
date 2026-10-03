@@ -27,12 +27,14 @@ describe('smithery.yaml install config', () => {
 
   it('states the anonymous rule in the owner\'s words (D2, 2026-09-27)', () => {
     // Owner decision D2: ONE free-tier sentence on every surface — "Anonymous:
-    // previews, no key needed. Free key: 10 calls to try.
+    // previews, no key needed. Free key: previews plus 2 full answers per tool per day (B1).
     // Add an email: 50 calls/day (up to 10 full answers per tool per day)."
     // The retired "5 calls/day anonymous, 10/day with a free key" must not
     // come back.
     expect(YAML).toMatch(/anonymous tier: previews, no key\s+needed/);
-    expect(YAML).toMatch(/10 calls to try/);
+    expect(YAML).toMatch(/previews plus 2 full answers per tool per day/);
+    // (the owner-only top-level description may still say "10 calls to try"
+    // until the owner updates the live Smithery listing copy)
     // The top-level `description:` is the frozen Smithery listing copy (it is
     // mirrored from the live listing and changed only by the owner), so the
     // retired wording is asserted absent from everything ELSE in the file.

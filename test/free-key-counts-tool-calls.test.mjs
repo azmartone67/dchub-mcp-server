@@ -36,6 +36,9 @@ let hops = [];
 let validateTier = 'free';
 let plainReject = false;
 let bound = false;   // the key has an email bound → no lifetime gate, no per-call count
+// B1 (D4, live 2026-10-03): the backend no longer refuses an unbound key for its
+// count. true models the pre-B1 / kill-switch backend (the /mcp/chatgpt tests).
+let lifetimeGate = true;
 const HINT = `This DC Hub key used its ${ALLOWANCE} free unbound calls.`;
 
 function backendValidate(body) {
@@ -50,6 +53,7 @@ function backendValidate(body) {
   }
   let gated;
   if (count) { used += 1; gated = used > ALLOWANCE; } else { gated = used + 1 > ALLOWANCE; }
+  if (!lifetimeGate) gated = false;
   if (gated) return { valid: false, tier: 'free', reason: 'bind_email_required', upgrade_hint: HINT };
   return { valid: true, tier: 'free', email: null, developer_id: 7, counts_tool_calls: true };
 }
@@ -148,29 +152,25 @@ const refused = (sc) => (sc.identity || {}).credential_refused || null;
 const counted = () => hops.filter((h) => h.count).length;
 const Q = { query: 'Ashburn', limit: 25 };
 
-describe('/mcp stateless — the 10th tool call is full, the 11th falls back (one cache window)', () => {
+describe('/mcp stateless — one counted hop per tool call (B1: no lifetime refusal)', () => {
   it('CONTROL: a keyed free call is served deeper than an anonymous one', async () => {
     const keyed = await call('/mcp', 'search_facilities', Q);
     const anon = await call('/mcp', 'search_facilities', Q, { key: null });
     expect(rowCount(keyed.sc, keyed.text)).toBeGreaterThan(rowCount(anon.sc, anon.text));
   }, 60_000);
 
-  it('calls 1..10 full, call 11 is the preview the 11th validation always served', async () => {
-    const anon = await call('/mcp', 'search_facilities', Q, { key: null });
-    const anonRows = rowCount(anon.sc, anon.text);
-    for (let i = 1; i <= ALLOWANCE; i++) {
-      const { sc, text } = await call('/mcp', 'search_facilities', Q);
-      expect(refused(sc), `call ${i}`).toBeNull();
-      expect(rowCount(sc, text), `call ${i}`).toBeGreaterThan(anonRows);
-    }
-    expect(used).toBe(ALLOWANCE);
-    const eleventh = await call('/mcp', 'search_facilities', Q);
-    expect(refused(eleventh.sc)).toBe('bind_email_required');
-    expect(rowCount(eleventh.sc, eleventh.text)).toBe(anonRows);
-    // and the refusal is cached: the 12th resolves refused at the request level
-    const twelfth = await call('/mcp', 'search_facilities', Q);
-    expect(refused(twelfth.sc)).toBe('bind_email_required');
-    expect(rowCount(twelfth.sc, twelfth.text)).toBe(anonRows);
+  it('B1: calls 1..12 all served keyed, each counted once (no lifetime refusal)', async () => {
+    lifetimeGate = false;
+    try {
+      const anon = await call('/mcp', 'search_facilities', Q, { key: null });
+      const anonRows = rowCount(anon.sc, anon.text);
+      for (let i = 1; i <= ALLOWANCE + 2; i++) {
+        const { sc, text } = await call('/mcp', 'search_facilities', Q);
+        expect(refused(sc), `call ${i}`).toBeNull();
+        expect(rowCount(sc, text), `call ${i}`).toBeGreaterThan(anonRows);
+      }
+      expect(used).toBe(ALLOWANCE + 2);   // the usage record still counts every call
+    } finally { lifetimeGate = true; }
   }, 120_000);
 
   it('exactly one counted hop per tool call; resolves spend nothing', async () => {
@@ -194,29 +194,20 @@ describe('/mcp stateless — the 10th tool call is full, the 11th falls back (on
   }, 60_000);
 });
 
-describe('/mcp stateful session — the same boundary, though the session validated once', () => {
-  it('calls 1..10 full, call 11 falls back', async () => {
-    const anon = await call('/mcp', 'search_facilities', Q, { key: null });
-    const anonRows = rowCount(anon.sc, anon.text);
-    const sid = await openSession();
-    expect(used).toBe(0);                                // initialize is not a call
-    for (let i = 1; i <= ALLOWANCE; i++) {
-      const { sc, text } = await call('/mcp', 'search_facilities', Q, { sid });
-      expect(refused(sc), `call ${i}`).toBeNull();
-      expect(rowCount(sc, text), `call ${i}`).toBeGreaterThan(anonRows);
-    }
-    const eleventh = await call('/mcp', 'search_facilities', Q, { sid });
-    expect(refused(eleventh.sc)).toBe('bind_email_required');
-    expect(rowCount(eleventh.sc, eleventh.text)).toBe(anonRows);
-    // the session still holds the key; it stays refused on every later call…
-    const twelfth = await call('/mcp', 'search_facilities', Q, { sid });
-    expect(refused(twelfth.sc)).toBe('bind_email_required');
-    expect(rowCount(twelfth.sc, twelfth.text)).toBe(anonRows);
-    // …until the key is bound, which lifts it on the very next call
-    bound = true;
-    const afterBind = await call('/mcp', 'search_facilities', Q, { sid });
-    expect(refused(afterBind.sc)).toBeNull();
-    expect(rowCount(afterBind.sc, afterBind.text)).toBeGreaterThan(anonRows);
+describe('/mcp stateful session — the same, though the session validated once', () => {
+  it('B1: in a session too, calls 1..12 all served keyed', async () => {
+    lifetimeGate = false;
+    try {
+      const anon = await call('/mcp', 'search_facilities', Q, { key: null });
+      const anonRows = rowCount(anon.sc, anon.text);
+      const sid = await openSession();
+      expect(used).toBe(0);                                // initialize is not a call
+      for (let i = 1; i <= ALLOWANCE + 2; i++) {
+        const { sc, text } = await call('/mcp', 'search_facilities', Q, { sid });
+        expect(refused(sc), `call ${i}`).toBeNull();
+        expect(rowCount(sc, text), `call ${i}`).toBeGreaterThan(anonRows);
+      }
+    } finally { lifetimeGate = true; }
   }, 120_000);
 
   it('a key refused for a reason that is not a counting gate is left alone (as before)', async () => {
