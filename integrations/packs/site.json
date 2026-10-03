@@ -28,7 +28,7 @@
     },
     {
       "name": "get_market_dcpi_rank",
-      "description": "DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth."
+      "description": "DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score are free; numeric sub-scores and the narrative are on paid plans or a credit pack."
     },
     {
       "name": "get_market_context",

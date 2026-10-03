@@ -16,7 +16,7 @@
   "tools": [
     {
       "name": "get_grid_intelligence",
-      "description": "Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market's grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Free callers get a few full briefs a day, then a trimmed preview; unlimited needs a paid key. Ex: \"PJM headroom for 200 MW?\""
+      "description": "Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market's grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. With a free key, a few full briefs a day; keyless gets a trimmed preview. Unlimited needs a paid key. Ex: \"PJM headroom for 200 MW?\""
     },
     {
       "name": "get_grid_data",

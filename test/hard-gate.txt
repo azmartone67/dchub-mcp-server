@@ -311,6 +311,7 @@ test/substations-heal-from-canon.test.mjs
 test/summarize-citation.test.mjs
 test/testimonials-resource.test.mjs
 test/tier-collapse-fix.test.mjs
+test/tier-descriptions-match-gate.test.mjs
 test/tier-required-tag.test.mjs
 test/tier-vocabulary.test.mjs
 test/time-to-power-one-name.test.mjs
