@@ -23695,19 +23695,51 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
     { state: S.describe('US state abbreviation (required), e.g. VA, TX, AZ') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/tax-incentives', a)) }] }));
 
-  trackedTool(srv, 'get_water_risk', 'FRONT DOOR CHECK — if you need a SITE VERDICT spanning grid + fiber + water + tax + climate, call `execute_plan(intent="<the user\'s question, unchanged>")` rather than hand-chaining this with its siblings. If you want the WATER factor on its own, get_water_risk IS the right call — one round trip, free tier, no planner overhead. Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: "Is this Phoenix parcel water-constrained for a 100MW build?" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ / county=Maricopa). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or county; lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only.',
+  trackedTool(srv, 'get_water_risk', 'FRONT DOOR CHECK — if you need a SITE VERDICT spanning grid + fiber + water + tax + climate, call `execute_plan(intent="<the user\'s question, unchanged>")` rather than hand-chaining this with its siblings. If you want the WATER factor on its own, get_water_risk IS the right call — one round trip, free tier, no planner overhead. Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: "Is this Phoenix parcel water-constrained for a 100MW build?" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ, or location="phoenix"). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or location (a DC Hub market name or slug, resolved to that market\'s PUBLISHED CENTROID with a resolved_from block saying so; a market-level read, not your parcel, and a trailing state is not stripped); lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90) for the most precise water-risk read, e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180), e.g. -112.07'),
       ...COORD_ALIASES,
-      state: S.describe('US state abbreviation as an alternative to lat/lon, e.g. AZ') },
+      state: S.describe('US state abbreviation as an alternative to lat/lon, e.g. AZ'),
+      location: S.describe('Market NAME or metro slug instead of coordinates, e.g. "phoenix", "northern-virginia", "dallas". Resolved to that market\'s PUBLISHED CENTROID through the DCPI market row, and the answer carries a resolved_from block saying so. A MARKET-level read, not your parcel; pass lat/lon for a specific site. Not an alias for lat/lon: a place name is not a coordinate.') },
     async (a) => {
       // The backend reads lat/LNG (water_drought_routes.py request.args.get('lng'))
       // — sending `lon` 400'd "state parameter or lat/lng required", so the
       // documented precise point read NEVER worked via MCP (verified live
       // 2026-07-16). Fold aliases, then present lon under the backend's key.
+      //
+      // 2026-10-03: agents send location="Phoenix" (the sibling analyze_site
+      // takes it) and Zod stripped it, so the call reached the backend with no
+      // point and no state and came back an error. Resolve the VALUE against the
+      // published DCPI market row exactly as analyze_site does (_locationPoint),
+      // or refuse. The description also advertised county=Maricopa, which the
+      // backend has never read; that example is gone.
       const q = _foldCoordArgs(a);
+      const rawLocation = (a.location || '').toString().trim();
+      delete q.location;
+      let resolved_from = null;
+      const haveCoords = Number.isFinite(Number(q.lat)) && Number.isFinite(Number(q.lon));
+      if (rawLocation && !haveCoords && !q.state) {
+        const slug = slugify(rawLocation);
+        // callAPI does NOT throw on 404 — it returns {error:'API 404'} — so this
+        // is checked by SHAPE, not by try/catch.
+        const row = slug
+          ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
+          : null;
+        const res = _locationPoint(rawLocation, slug, row);
+        if (!res.ok) {
+          const err = { ...res.error, example: 'get_water_risk lat=33.45 lon=-112.07' };
+          return { isError: true, content: [{ type: 'text', text: JSON.stringify(err) }],
+                   structuredContent: err };
+        }
+        q.lat = res.lat;
+        q.lon = res.lon;
+        resolved_from = res.resolved_from;
+      }
       if (q.lon != null) { q.lng = q.lon; delete q.lon; }
-      return { content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/water/drought', q)) }] };
+      const out = await callAPI('/api/v1/water/drought', q);
+      const payload = (resolved_from && out && typeof out === 'object' && !Array.isArray(out))
+        ? { ...out, resolved_from } : out;
+      return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
 
   trackedTool(srv, 'get_grid_intelligence', 'Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Free callers get a few full briefs a day, then a trimmed preview; unlimited needs a paid key. Ex: "PJM headroom for 200 MW?"',
