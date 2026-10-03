@@ -354,9 +354,16 @@ describe('gated / preview responses declare their own partiality', () => {
 
 // ── 5. it must never break a response ─────────────────────────────────────
 describe('fail-soft: attribution never damages a tool result', () => {
-  it('passes an error result through untouched', () => {
+  // CM-1 (2026-10-03): an error result now gains structuredContent.provenance
+  // (test/provenance-basis-class-every-tool.test.mjs). What must not change is
+  // the error itself: isError and the content[] text stay as they were.
+  it('leaves an error result\'s isError and content untouched', () => {
     const err = { isError: true, content: [{ type: 'text', text: 'boom' }] };
-    expect(stampEnvelopeAttribution(err, {})).toBe(err);
+    const out = stampEnvelopeAttribution(err, {});
+    expect(out.isError).toBe(true);
+    expect(out.content).toEqual([{ type: 'text', text: 'boom' }]);
+    expect(out.structuredContent.error).toBe('boom');
+    expect(out.structuredContent.provenance.basis_class).toBe('unknown');
   });
 
   it('leaves non-JSON content intact', () => {

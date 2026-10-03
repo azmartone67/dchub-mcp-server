@@ -154,7 +154,10 @@ describe('keyless analyze_site wall (Land & Power)', () => {
   it('F5: a failed, junk, slow or switched-off mint ships the long relay link exactly as before', async () => {
     const norm = (r) => JSON.stringify(r)
       .replace(new RegExp(RELAY.source, 'g'), 'RELAY')
-      .replace(/sess-wall-user-line-\d+/g, 'SID');
+      .replace(/sess-wall-user-line-\d+/g, 'SID')
+      // CM-1: the wall is an isError result and now carries provenance, whose
+      // retrieved_at is the serve time of each call, so it differs by design.
+      .replace(/"retrieved_at":"[^"]*"/g, '"retrieved_at":"T"');
     process.env.DCHUB_RELAY_SHORT_LINK = '0';            // the pre-F5 path: never asks the backend
     const before = await call('analyze_site', LOC, seat());
     expect(relayPosts.length).toBe(0);
