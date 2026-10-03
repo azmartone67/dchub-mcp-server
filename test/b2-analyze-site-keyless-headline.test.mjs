@@ -209,6 +209,10 @@ describe('B2 helpers', () => {
     expect(S._isFixtureSubstation({ name: 'TEST_SUB_diag' })).toBe(true);
     expect(S._isFixtureSubstation({ hifld_id: 'test_sub_xyz', name: 'X' })).toBe(true);
     expect(S._isFixtureSubstation({ name: 'HOLCOMBE' })).toBe(false);
+    // the backend's rule (util/substation_filters, be#6282): exact diagnostics sources
+    expect(S._isFixtureSubstation({ name: 'X', source: ' Diagnostic ' })).toBe(true);
+    expect(S._isFixtureSubstation({ name: 'test_subway' })).toBe(false);
+    expect(S._isFixtureSubstation({ name: 'X', source: 'HIFLD Electric Substations' })).toBe(false);
   });
 });
 

@@ -7940,15 +7940,17 @@ export function _substationDistanceBand(km) {
   for (const [edge, label] of _SUB_DISTANCE_BANDS) if (km <= edge) return label;
   return 'over 25 km';
 }
-// P0-2's read-time fixture filter (test_sub_* rows), applied here too.
-// TODO(10-19 rebase, P0-2): once the backend filters these at read time
-// (util/substation_filters.exclude_fixture_rows), keep this as a second line
-// or drop it; the test below must stay green either way.
+// P0-2's read-time fixture filter, mirrored as a second line: dchub-backend
+// util/substation_filters.is_fixture_row (be#6282, merged 2026-10-03) already
+// drops these rows in util/substation_detail before they reach this server.
+// Same rule: name ^test_sub_ (case-insensitive) or a diagnostics source;
+// hifld_id is checked as well.
 const _FIXTURE_SUB_RE = /^test_sub_/i;
+const _FIXTURE_SOURCES = new Set(['diagnostic', 'diagnostics', 'diag', 'test', 'fixture']);
 export function _isFixtureSubstation(r) {
   if (!r || typeof r !== 'object') return false;
-  return _FIXTURE_SUB_RE.test(String(r.name || '')) || _FIXTURE_SUB_RE.test(String(r.hifld_id || ''))
-    || /diagnostic/i.test(String(r.source || ''));
+  return _FIXTURE_SUB_RE.test(String(r.name || '').trim()) || _FIXTURE_SUB_RE.test(String(r.hifld_id || '').trim())
+    || _FIXTURE_SOURCES.has(String(r.source || '').trim().toLowerCase());
 }
 // Removed, never nulled (null means "we do not hold it"), and named.
 export const SUBSTATION_PRO_FIELDS = ['hifld_id', 'name', 'max_kv', 'distance_km'];
