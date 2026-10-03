@@ -54,6 +54,14 @@ on:
   repository_dispatch:
     types: [refresh-listings]
   workflow_dispatch:
+    inputs:
+      # 2026-10-03 (CM-6, owner-approved): mark every cloud.dchub/mcp-server
+      # version the registry still reports active but NOT isLatest as
+      # deprecated. Off unless a human ticks it on a manual run.
+      deprecate_superseded:
+        description: 'Deprecate superseded registry versions (status deprecated only, never deleted)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -171,3 +179,56 @@ jobs:
           else
             echo "::warning::publish did not confirm success — review the log above."
           fi
+
+      # ★2026-10-03 (CM-6): superseded versions stayed `active` (14 of them,
+      # 2.12.10-2.12.23, measured that day), so a reader that ignores isLatest
+      # could pick any of them. Manual and opt-in: runs only on a dispatch with
+      # deprecate_superseded ticked. `deprecated` ONLY, one version at a time:
+      # never `deleted` and never --all-versions (REGISTRY-LISTINGS.md: deleting
+      # is irreversible and outward-facing). The isLatest entry is never touched.
+      # Pinned by test/registry-deprecate-superseded.test.mjs.
+      - name: Deprecate superseded registry versions (manual, opt-in)
+        if: github.event_name == 'workflow_dispatch' && inputs.deprecate_superseded == true
+        env:
+          REG_NAME: cloud.dchub/mcp-server
+        run: |
+          set -euo pipefail
+          if [ ! -x ./mcp-publisher ]; then
+            curl -sL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz | tar xz mcp-publisher
+          fi
+          if [ -z "${MCP_REGISTRY_DNS_KEY:-}" ]; then
+            echo "::error::MCP_REGISTRY_DNS_KEY is not set; cloud.dchub needs DNS auth. Nothing deprecated."; exit 1
+          fi
+          ./mcp-publisher login dns --domain dchub.cloud --private-key "$MCP_REGISTRY_DNS_KEY" >/dev/null 2>&1 \
+            || { echo "::error::DNS login failed. Nothing deprecated."; exit 1; }
+          list_versions() {  # $1 = jq-free python filter mode: superseded | active
+            python3 - "$1" <<'PY'
+          import json, sys, urllib.parse, urllib.request
+          mode, name = sys.argv[1], "cloud.dchub/mcp-server"
+          base = "https://registry.modelcontextprotocol.io/v0.1/servers?search=cloud.dchub&limit=100"
+          cursor, out = None, []
+          while True:
+              url = base + ("&cursor=" + urllib.parse.quote(cursor) if cursor else "")
+              d = json.load(urllib.request.urlopen(url, timeout=30))
+              for s in d.get("servers", []):
+                  sv = s.get("server", {})
+                  m = s.get("_meta", {}).get("io.modelcontextprotocol.registry/official", {})
+                  if sv.get("name") != name or m.get("status") != "active":
+                      continue
+                  if mode == "active" or not m.get("isLatest"):
+                      out.append(sv["version"])
+              cursor = (d.get("metadata") or {}).get("nextCursor")
+              if not cursor:
+                  break
+          print("\n".join(out))
+          PY
+          }
+          VERS=$(list_versions superseded)
+          echo "superseded active versions: $(echo "$VERS" | grep -c . || true)"
+          for v in $VERS; do
+            echo "deprecating $REG_NAME $v"
+            ./mcp-publisher status --status deprecated "$REG_NAME" "$v"
+          done
+          LEFT=$(list_versions active)
+          echo "active after: $(echo "$LEFT" | tr '\n' ' ')"
+          [ "$(echo "$LEFT" | grep -c .)" = "1" ] || { echo "::error::expected exactly 1 active version (isLatest)"; exit 1; }
