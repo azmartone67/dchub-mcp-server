@@ -157,6 +157,7 @@ test/invalid-bearer.test.mjs
 test/invalid-key-anon.test.mjs
 test/invalid-key-visible.test.mjs
 test/invalid-param-hint.test.mjs
+test/keyless-wall-grok-audit.test.mjs
 test/ladder-stage1.test.mjs
 test/late-key.test.mjs
 test/leaf-catchment.test.mjs

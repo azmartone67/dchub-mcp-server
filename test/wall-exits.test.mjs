@@ -74,8 +74,8 @@ describe('relay render directive (r-relay-render)', () => {
     // take — it can emit it with zero construction.
     expect(fn).toContain('markdown:');
     // r-grok-relay-label (2026-09-24): the label comes from _relayLinkLabel
-    // (per client); the link is still '[label](' + _url + ')'.
-    expect(fn).toMatch(/markdown: _relayLinkLabel\(\) \+ '\(' \+ _url \+ '\)'/);
+    // (per client, and per tool since F10 2026-10-02); the link is still '[label](' + _url + ')'.
+    expect(fn).toMatch(/markdown: _relayLinkLabel\(undefined, toolName\) \+ '\(' \+ _url \+ '\)'/);
     expect(SRC).toMatch(/GROK_RELAY_LABEL = '\[[^\]]+\]';/);
     expect(SRC).toContain(": '[🔓 Open DC Hub — see what I found]';");
   });
