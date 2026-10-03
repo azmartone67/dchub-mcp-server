@@ -179,7 +179,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine } from './lib/wall-user-line.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
@@ -4565,6 +4565,7 @@ export function _dailyQuotaOver(q, c) {
 }
 
 // ── r-free-key-per-call (2026-09-27): "Free key: 10 calls to try" = TOOL CALLS ──
+// (B1, D4: that lifetime allowance is retired; see _freeKeyCountGates below.)
 //
 // The free key's lifetime allowance lives in the backend (validate_calls on an
 // unbound dch_live_ key, call_count on a dch_trial_ key) and used to be spent by
@@ -4591,8 +4592,23 @@ export function _dailyQuotaOver(q, c) {
 //   claim_free_key, recover_my_key, unlock_more_data…) are neither counted nor
 //   refused, so the way out of the gate is never behind it.
 // ★ Indeterminate (timeout / 5xx) serves keyed, as validateKey's fail-soft does.
-const _FREE_KEY_COUNT_GATES = new Set(['bind_email_required', 'daily_cap_unbound', 'daily_cap']);
-export async function _freeKeyCallRefusal(c, toolName) {
+// ★ B1 (D4, owner 2026-10-03; merge on/after 2026-10-19): the free key's
+//   LIFETIME gate is retired at its source — dchub-backend's /keys/validate
+//   and validate_trial_key no longer refuse an unbound key for its count
+//   (DCHUB_FREE_KEY_LIFETIME_GATE=1 there restores it). The free key is a
+//   renewing daily allowance: previews plus TRIAL_DAILY_FULL_CAP full answers
+//   per tool per day, enforced by the trial_taste cap below, not here. So
+//   once the snapshot publishes the daily allowance (_freeKeyIsDaily), the
+//   lifetime refusal is not a counting gate this function re-asks per call;
+//   the daily caps (daily_cap_unbound / daily_cap) still are. Under the
+//   backend kill switch the snapshot says 'lifetime' again and the old
+//   behaviour returns with it. The function keeps its name and call site.
+const _FREE_KEY_DAILY_GATES = ['daily_cap_unbound', 'daily_cap'];
+export function _freeKeyCountGates(daily = _freeKeyIsDaily()) {
+  return new Set(daily ? _FREE_KEY_DAILY_GATES : ['bind_email_required', ..._FREE_KEY_DAILY_GATES]);
+}
+export async function _freeKeyCallRefusal(c, toolName, daily = _freeKeyIsDaily()) {
+  const _gates = _freeKeyCountGates(daily);
   if (!c || !c.api_key) return null;
   if (c.profile === DIRECTORY_PROFILE || c.profile === CORE_PROFILE) return null;
   if (QUOTA_EXEMPT_TOOLS.has(toolName)) return null;
@@ -4605,11 +4621,15 @@ export async function _freeKeyCallRefusal(c, toolName) {
   // keeps it refused in a stateful session, and lifts the refusal on the very
   // next call once the key is bound. A key refused for any other reason was
   // never this gate's to touch.
-  const _gateRefusal = v && v.key_rejected === true && _FREE_KEY_COUNT_GATES.has(v.reason);
+  const _gateRefusal = v && v.key_rejected === true && _gates.has(v.reason);
   if (!v || !(v.counts_tool_calls === true || _gateRefusal)) return null;
   let r = null;
   try { r = await _validateKeyUncached(c.api_key, { count: true }); } catch (_) { r = null; }
   if (!r || _effectiveCallerKey(c.api_key, r) !== null) return null;
+  // B1: a daily-allowance key is never refused for the retired lifetime count
+  // here, whatever an un-migrated backend answers; that backend's own
+  // request-level refusal is the only place it can still bite.
+  if (daily && r.reason === 'bind_email_required') return null;
   return r;
 }
 
@@ -20465,7 +20485,7 @@ export function _keyStatus(ctxLike) {
   if (!src || src === 'none') return null;
   if (c.auth_unverified) return 'unverified';
   if (c.auth_refused) {
-    return _FREE_KEY_COUNT_GATES.has(c.auth_refused) ? 'restricted' : 'invalid';
+    return _freeKeyCountGates(false).has(c.auth_refused) ? 'restricted' : 'invalid';   // label only: every counting reason, B1 or not
   }
   // No 'valid'. A key that was not refused is not thereby proven good: a
   // session whose initialize validate was indeterminate serves the same key
@@ -24956,7 +24976,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // existed but was only a curl buried in the paywall text → agents
   // summarized it away. Not in PAID_ONLY_TOOLS, so anonymous callers reach it.
   trackedTool(srv, 'claim_free_key',
-    'Call when the user wants more DC Hub access than keyless allows or asks for a key; no key is needed to start. Mints a free key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). Free key: ' + FREE_TIER.free_calls_per_day + ' calls to try. Add an email: ' + FREE_TIER.identified_calls_per_day + ' calls/day. Ask the user for an email first; pass it only if they typed it (makes the key recoverable). Save and reuse the key (lost one: recover_my_key); don\'t re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: "Set me up with a DC Hub key."',
+    'Call when the user wants more DC Hub access than keyless allows or asks for a key; no key is needed to start. Mints a free key and returns it plus connect_url, a connector URL with the key embedded (the only thing hosted chat clients keep). Free key: ' + _freeKeyOfferText() + '. Add an email: ' + FREE_TIER.identified_calls_per_day + ' calls/day. Ask the user for an email first; pass it only if they typed it (makes the key recoverable). Save and reuse the key (lost one: recover_my_key); don\'t re-mint. Then ask the real question (execute_plan for multi-step). If a call was answered with a sign-in challenge (401 WWW-Authenticate), prefer signing in: that identity persists, but a human must finish it in a browser. No challenge (Claude Code, Cursor, most agents) means OAuth is not available to you and the key is right. Ex: "Set me up with a DC Hub key."',
     { client_name: S.describe('Your agent/app name for attribution, e.g. "Claude Desktop" or "acme-siting-bot"'),
       email: S.describe("Optional owner email to make the key recoverable across sessions; use only an address your human explicitly gave") },
     async (a) => {
@@ -25270,7 +25290,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           // how many calls it has in total; a key claimed with an email (the
           // backend reports email_captured) is on the bound rung.
           daily_limit:             (r && r.email_captured === true) ? _rungNum('identified') : null,
-          ...((r && r.email_captured === true) ? {} : { free_calls_total: _rungNum('free') }),
+          // B1 (D4, owner 2026-10-03; merge on/after 2026-10-19): once the free
+          // key is published as a renewing daily allowance (_freeKeyIsDaily,
+          // read from the /api/v1/tiers snapshot) it has no call total, so
+          // free_calls_total is not emitted. daily_full_answers_per_tool is the
+          // per-tool full-answer cap this server ENFORCES for this key today
+          // (TRIAL_DAILY_FULL_CAP unbound, IDENTIFIED_DAILY_FULL_CAP bound).
+          ...(((r && r.email_captured === true) || _freeKeyIsDaily()) ? {} : { free_calls_total: _rungNum('free') }),
+          daily_full_answers_per_tool: (r && r.email_captured === true)
+            ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP,
           daily_limit_with_email:  _rungNum('identified'),
           full_answers_per_tool_per_day_with_email: _fullAnswersPerToolPerDay('identified'),
           free_tier_rule:          _freeTierRuleText(),
@@ -25337,7 +25365,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // marketing without explicit opt-in (default OFF).
   trackedTool(srv, 'bind_email',
     '★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). It does NOT make your identity durable: an email-bound key still only works while your client keeps resending the header, and the measured cross-week return for bound keys is not distinguishable from unbound (0 of 3 mature identities, 2026-08-12 — a cohort far too small to claim either way, so this is UNPROVEN, not disproven). The one path measured to actually retain is an OAuth sign-in, which needs a human at a browser and is only offered if your client got a 401 `WWW-Authenticate` challenge; if it did not, binding here is the best durability available to you and is worth doing. ' +
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets ' + FREE_TIER.unbound_calls_total + ' free calls total, then results drop to previews until it\'s bound; binding restores the FREE tier at ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets ' + _unboundKeyLadderText() + '; binding restores the FREE tier at ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
     { email: Sreq.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
@@ -25605,7 +25633,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API credits (' + _creditRuleText() + '; no subscription). ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + FREE_TIER.free_calls_per_day + ' calls to try, ' + FREE_TIER.identified_calls_per_day + '/day with an email)? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API credits (' + _creditRuleText() + '; no subscription). ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => _unlockMoreDataEnvelope(a));
 

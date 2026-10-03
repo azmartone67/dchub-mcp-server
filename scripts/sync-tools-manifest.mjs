@@ -75,6 +75,10 @@ const DESC_SCOPE = {
   PLAN_PRICE:     _TC ? _TC.PLAN_PRICE : undefined,
   _paidPlansOutputLine: _TC ? _TC._paidPlansOutputLine : undefined,
   _callsPerDay:   _TC ? _TC._callsPerDay : undefined,
+  // B1 (D4): the free-key clauses, shape-driven from the same snapshot.
+  _freeKeyOfferText:     _TC ? _TC._freeKeyOfferText : undefined,
+  _freeKeyAllowanceText: _TC ? _TC._freeKeyAllowanceText : undefined,
+  _unboundKeyLadderText: _TC ? _TC._unboundKeyLadderText : undefined,
   // operator knob (env), mirrored from server.mjs with the same default
   TRIAL_DAILY_FULL_CAP: Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10)),
 };
