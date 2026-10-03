@@ -728,7 +728,12 @@ export function _paywallContractStep(result, name) {
     const sc0 = result && result.structuredContent;
     if (out === result || !sc0 || sc0.copy_version !== WALL_COPY_VERSION
         || sc0.show_to_user !== true || typeof sc0.user_message !== 'string') return out;
-    const line = sc0.user_message;
+    // F2 (Grok audit; owner shipped 10-03): the line's /upgrade/h link carries the arm too, whatever path put
+    // it there; tagRelayUrl is idempotent, so a line _withWallUserLine already tagged is unchanged.
+    let _arm = null;
+    try { _arm = _paywallArmFor(getCtx() || {}); } catch (_) { _arm = null; }
+    const line = sc0.user_message.replace(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s"')\]]+?(?= — |\s|$)/g,
+      (u) => _pcTagUrl(u, _arm));
     const first = out.content && out.content[0];
     const t = (first && first.type === 'text' && typeof first.text === 'string') ? first.text : '';
     if (t.startsWith(line)) return out;
@@ -7287,15 +7292,24 @@ export async function _withWallUserLine(result, name, opts = {}) {
     // r-upgrade-h-first (MCP-1): get_dchub_recommendation's Pro-only wall leads with the
     // signed /upgrade/h relay too; the body's own copies of that ask give way to it.
     if (_RELAY_FIRST_TOOLS.has(name) && offer === 'pro' && !c.api_key) {
-      const _r = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
-      if (_r && _r.url) {
+      const _r0 = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+      if (_r0 && _r0.url) {
+        // r-arm-tag-on-the-seen-link (Grok audit F2; owner shipped it 2026-10-03, A/B window restarted):
+        // the person's line is the link people click, so it carries the paywall-contract arm
+        // (?pc=<arm>) the /upgrade/h opens are split by. Before, only the contract's own relay
+        // URL was tagged, and _paywallContractStep then swapped that for this untagged one.
+        // No arm (contract off, directory profiles, bots): tagRelayUrl returns the URL
+        // unchanged, byte-identical to before.
+        const _tagged = _pcTagUrl(_r0.url, _paywallArmFor(c));
+        const _r = _tagged === _r0.url ? _r0
+          : { ..._r0, url: _tagged, markdown: _relayLinkLabel(undefined, name) + '(' + _tagged + ')' };
         const out = withUserLine(result, { tool: name, offer, link: _r.url, headline: opts.headline || null,
                                            keepBody: opts.keepBody !== false, plan: '' });
         const t0 = out.content[0].text;
         const lines = t0.split('\n');
         const kept = [];
         for (let i = 0; i < lines.length; i++) {
-          if (i > 0 && lines[i].includes(HUMAN_FIRST_MARKER) && lines[i].includes(_r.url)) {
+          if (i > 0 && lines[i].includes(HUMAN_FIRST_MARKER) && lines[i].includes(_r0.url)) {
             if (/^_Agent: include the line above/.test(lines[i + 1] || '')) i += 1;
             continue;
           }
