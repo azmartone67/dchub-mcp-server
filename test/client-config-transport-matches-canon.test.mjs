@@ -88,6 +88,26 @@ const FENCE = "```";
 // still scanned. `does not flag its own probes` below pins this.
 const SKIP = /^(sdk|node_modules|test)\//;
 
+// ★ AGENT PLUGINS mcp.json (2026-10-03, Kiro power). The Agent Plugins 1.0.0
+// schema (https://agent-plugins.org/schemas/1.0.0/mcp.schema.json, the format
+// Kiro powers use) is a CLOSED union: a remote server entry MUST say
+// `"type": "streamable-http"` (or the legacy `"sse"`), and `"http"` or a bare
+// `url` is schema-invalid. For that one file shape `streamable-http` IS the
+// working client value, the way Continue.dev's transport object is above. The
+// exemption is keyed on the parsed JSON declaring that exact `$schema`, not on
+// a path, so a file that does not declare it is scanned as before. The probes
+// at the bottom pin both halves.
+const AGENT_PLUGINS_MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
+
+function isAgentPluginsMcpConfig(text) {
+  try {
+    const doc = JSON.parse(text);
+    return !!doc && typeof doc === "object" && doc.$schema === AGENT_PLUGINS_MCP_SCHEMA;
+  } catch {
+    return false;
+  }
+}
+
 function trackedFiles() {
   return execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" })
     .split("\n")
@@ -107,12 +127,14 @@ function windowHasMarker(lines, i) {
 function violationsIn(files) {
   const bad = [];
   for (const f of files) {
-    let lines;
+    let text;
     try {
-      lines = readFileSync(join(ROOT, f), "utf8").split("\n");
+      text = readFileSync(join(ROOT, f), "utf8");
     } catch {
       continue;
     }
+    if (isAgentPluginsMcpConfig(text)) continue;
+    const lines = text.split("\n");
     lines.forEach((line, i) => {
       if (FORBIDDEN_CLI.test(line)) {
         bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 120)}`);
@@ -281,5 +303,36 @@ describe("no client config in this repo names streamable-http", () => {
     // ...and a FENCE-BLIND backward window would have found the marker.
     const blind = lines.slice(Math.max(0, hit - CFG_WINDOW), hit + 1).join("\n");
     expect(CFG_MARKERS.some((m) => blind.includes(m))).toBe(true);
+  });
+
+  // ★ AGENT PLUGINS probes. The exemption must cover exactly a JSON document
+  // that declares the Agent Plugins mcp.json $schema, and nothing else.
+  it("exempts an Agent Plugins mcp.json, which the schema requires to say streamable-http", () => {
+    const ap = JSON.stringify({
+      $schema: AGENT_PLUGINS_MCP_SCHEMA,
+      mcpServers: { dchub: { type: "streamable-http", url: "https://dchub.cloud/mcp" } },
+    }, null, 2);
+    expect(isAgentPluginsMcpConfig(ap)).toBe(true);
+    // ...and the committed Kiro power is one, so the exemption is what clears it.
+    expect(isAgentPluginsMcpConfig(
+      readFileSync(join(ROOT, "kiro-power/mcp.json"), "utf8"))).toBe(true);
+  });
+
+  it("does not exempt the same block without the Agent Plugins $schema", () => {
+    const plain = JSON.stringify({
+      mcpServers: { dchub: { type: "streamable-http", url: "https://dchub.cloud/mcp" } },
+    }, null, 2);
+    expect(isAgentPluginsMcpConfig(plain)).toBe(false);
+    const other = JSON.stringify({
+      $schema: "https://example.com/other.schema.json",
+      mcpServers: { dchub: { type: "streamable-http" } },
+    }, null, 2);
+    expect(isAgentPluginsMcpConfig(other)).toBe(false);
+    // A markdown doc quoting the $schema is not a JSON document and stays scanned.
+    expect(isAgentPluginsMcpConfig(
+      "```json\n{ \"$schema\": \"" + AGENT_PLUGINS_MCP_SCHEMA + "\" }\n```")).toBe(false);
+    const lines = plain.split("\n");
+    const hit = lines.findIndex((l) => FORBIDDEN.test(l));
+    expect(windowHasMarker(lines, hit)).toBe(true);
   });
 });
