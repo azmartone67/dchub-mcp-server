@@ -28,7 +28,7 @@
     },
     {
       "name": "compare_sites",
-      "description": "Call when the user has 2-4 candidate locations and asks which is best for a data center. Pass locations as \"lat,lon;lat,lon\" and optional capacity_mw. Returns each site's analyze_site scores side by side plus a recommended winner and why. Scores need Pro; a free key gets each site's verdict band without figures; keyless gets at most each site's band. Ex: \"Phoenix vs Ashburn for 50 MW?\""
+      "description": "Call when the user has 2-4 candidate locations and asks which is best for a data center. Pass locations as \"lat,lon;lat,lon\" and optional capacity_mw. Returns each site's analyze_site scores side by side plus a recommended winner and why. Keyless returns no site data; a free key gets each site's verdict band without figures; scores and figures are Pro. Ex: \"Phoenix vs Ashburn for 50 MW?\""
     },
     {
       "name": "rank_sites",

@@ -21848,7 +21848,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // verdict + 0-100 composite_score + per-component breakdown.
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
-    'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth.',
+    'DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score are free; numeric sub-scores and the narrative are on paid plans or a credit pack.',
     { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});
@@ -23914,7 +23914,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       }, { timeout: 60000 })) }] }, 'generate_site_analysis', null);
     });
 
-  trackedTool(srv, 'compare_sites', 'Call when the user has 2-4 candidate locations and asks which is best for a data center. Pass locations as "lat,lon;lat,lon" and optional capacity_mw. Returns each site\'s analyze_site scores side by side plus a recommended winner and why. Scores need Pro; a free key gets each site\'s verdict band without figures; keyless gets at most each site\'s band. Ex: "Phoenix vs Ashburn for 50 MW?"',
+  trackedTool(srv, 'compare_sites', 'Call when the user has 2-4 candidate locations and asks which is best for a data center. Pass locations as "lat,lon;lat,lon" and optional capacity_mw. Returns each site\'s analyze_site scores side by side plus a recommended winner and why. Keyless returns no site data; a free key gets each site\'s verdict band without figures; scores and figures are Pro. Ex: "Phoenix vs Ashburn for 50 MW?"',
     { locations: S.describe('Semicolon-separated list of 2-4 "lat,lon" pairs to compare, e.g. "33.45,-112.07;39.04,-77.48"'),
       // r-coord-aliases (2026-07-16): the handler's `sites` array fallback was
       // DEAD — zod silently stripped the undeclared key, so the "common LLM
@@ -24112,7 +24112,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
 
-  trackedTool(srv, 'get_grid_intelligence', 'Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Free callers get a few full briefs a day, then a trimmed preview; unlimited needs a paid key. Ex: "PJM headroom for 200 MW?"',
+  trackedTool(srv, 'get_grid_intelligence', 'Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market\'s grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. With a free key, a few full briefs a day; keyless gets a trimmed preview. Unlimited needs a paid key. Ex: "PJM headroom for 200 MW?"',
     { region_id: S.describe('Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id="PJM-DOM" for live Ashburn / Northern Virginia zone load + real-time LMP (the world\'s #1 DC market, invisible in EIA)'),
       iso: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
       region: S.describe('Alias for region_id — the ISO/RTO or balancing-authority code'),
