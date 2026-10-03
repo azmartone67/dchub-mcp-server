@@ -6,7 +6,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 
 - **Server URL:** `https://dchub.cloud/mcp`
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
-- **Auth:** none required for the free anonymous tier (previews + 2 full answers per tool per day). For higher limits,
+- **Auth:** none required for the free anonymous tier (previews, no key needed). For higher limits,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
 - **Tools exposed:** 92 (facility search, market intelligence, grid + interconnection,
   site analysis + board-ready site-risk scoring, M&A deals, infrastructure).
@@ -92,7 +92,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key (higher limits)
 
-The free tier: Anonymous: previews + 2 full answers per tool per day. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. To raise limits, get a free key
+The free tier: Anonymous: previews, no key needed. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 
@@ -155,7 +155,7 @@ A healthy server card is also published at
 
 - **No tools appear:** make sure the entry uses a `url` (remote), not a `command`. DC Hub
   is not an npm/stdio server — there is no local process to spawn.
-- **429 / rate-limited:** you have hit the free-tier limit (Anonymous: previews + 2 full answers per tool per day. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.) Add an `X-API-Key` header
+- **429 / rate-limited:** you have hit the free-tier limit (Anonymous: previews, no key needed. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.) Add an `X-API-Key` header
   (free at https://dchub.cloud/signup) with an email bound for 50/day, or a paid tier for more.
 - **Transport type:** if your client supports it, prefer `streamableHttp` /
   `streamable-http`. Older clients can use plain `http`.

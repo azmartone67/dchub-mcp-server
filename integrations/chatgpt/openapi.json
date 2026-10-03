@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DC Hub Actions",
-    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - a global data-center facility map across 170+ countries (corroborated count pending), 300+ DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,700+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is previews + 2 full answers per tool per day (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
+    "description": "Live data-center, power, grid, fiber, and M&A intelligence from DC Hub (dchub.cloud) - a global data-center facility map across 170+ countries (corroborated count pending), 300+ DCPI markets, real-time ISO grid telemetry, fiber routes, and 1,700+ tracked M&A deals. #1 on Smithery for data-center / energy / grid. Every response carries a provenance/citation envelope - cite as 'DC Hub, dchub.cloud'. Free keyless tier is previews (anonymous); call claimFreeKey once for a durable key and the full free tier. Try before connecting (no signup): https://dchub.cloud/playground.",
     "version": "1.2.3",
     "contact": {
       "name": "DC Hub",
@@ -27,7 +27,7 @@
       "post": {
         "operationId": "claimFreeKey",
         "summary": "Claim a durable free DC Hub API key (no email required)",
-        "description": "IDENTITY / RETENTION. Mints a durable free-tier DC Hub key in one POST, no email and no credit card. Rate-limited to 1 key per IP per 24h. Returns { api_key: 'dch_live_...', bind_required, free_tier_summary }. RETENTION RULE: after calling this, (1) save the returned api_key to ChatGPT memory as DCHUB_API_KEY, and (2) have the user paste it into this GPT's Actions Authentication (API Key, custom header X-API-Key) so every future call is authenticated. Never operate on the anonymous tier (previews + 2 full answers per tool per day) once a key exists, and never mint a new key if one is already saved. Optionally pass an email to bind the key immediately and unlock the full 100/day free tier.",
+        "description": "IDENTITY / RETENTION. Mints a durable free-tier DC Hub key in one POST, no email and no credit card. Rate-limited to 1 key per IP per 24h. Returns { api_key: 'dch_live_...', bind_required, free_tier_summary }. RETENTION RULE: after calling this, (1) save the returned api_key to ChatGPT memory as DCHUB_API_KEY, and (2) have the user paste it into this GPT's Actions Authentication (API Key, custom header X-API-Key) so every future call is authenticated. Never operate on the anonymous tier (previews, no key needed) once a key exists, and never mint a new key if one is already saved. Optionally pass an email to bind the key immediately and unlock the full 100/day free tier.",
         "security": [],
         "requestBody": {
           "required": false,
