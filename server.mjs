@@ -11927,6 +11927,24 @@ function _entityType(name) { return _ENTITY_MAP[name] || (name || 'record'); }
 // PR ships as a pure no-op until the operator opts in.
 const QUOTA_HINT = ['1', 'true', 'on', 'yes'].includes(
   String(process.env.DCHUB_QUOTA_HINT || '').trim().toLowerCase());
+// ★ A4 tier-gating (owner 2026-10-03): ONE tier vocabulary in responses.
+//   anonymous   no key reached DC Hub
+//   free        a key with no bound email (claimed or trial)
+//   identified  a key with a bound email
+//   <plan>      starter / developer / pro / founding / enterprise / paid, as the key carries it
+// Display only: the gate keeps reading c.tier. quota.tier and identity.tier
+// labelled an anonymous caller 'free' because the anonymous ctx carries
+// tier 'free'; this reads the credential instead.
+const _FREE_CLASS_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+export function _canonicalTier(ctxLike, hasDurableKey) {
+  const c = ctxLike || {};
+  const keyed = hasDurableKey === undefined ? !!c.api_key : !!hasDurableKey;
+  const t = String(c.tier || '').trim().toLowerCase();
+  if (!_FREE_CLASS_TIERS.has(t)) return t;            // a plan name
+  if (!keyed) return 'anonymous';
+  return (t === 'identified' || c.email) ? 'identified' : 'free';
+}
+
 function _buildQuotaHint(toolName) {
   try {
     const c = getCtx();
@@ -11948,7 +11966,7 @@ function _buildQuotaHint(toolName) {
       // `(c && c.tier) || 'free'` labelled an UNBOUND ANONYMOUS caller 'free'
       // while _upgrade.tier in the SAME envelope said 'anonymous'. Two tiers,
       // one response, and the one the agent reads first was the wrong one.
-      tier: (c && c.tier) || (_durable ? 'free' : 'anonymous'),
+      tier: _canonicalTier(c, _durable),
       resets_at: 'next 00:00 UTC',
     };
     if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
@@ -20040,7 +20058,9 @@ export function _identitySource(ctxLike) {
   const c = ctxLike || {};
   const src = c.auth_source;
   if (!src) return null;                        // not a /mcp request path
-  const out = { credential_source: src, tier: c.tier || 'free' };
+  // A credential that arrived and was not refused is a key, whatever ctx holds.
+  const out = { credential_source: src,
+                tier: _canonicalTier(c, !!c.api_key || (src !== 'none' && !c.auth_refused)) };
   // Absent unless a known gateway self-identified — see _connectionShape.
   const conn = _connectionShape(c.platform);
   if (conn) out.connection = conn;
@@ -24095,16 +24115,25 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       fields: z.union([z.array(z.string()), z.string()]).optional().describe('Return ONLY these row fields (array or comma string) — a token diet. The response envelope (citation, provenance, as_of, coverage, request_interpretation, the human relay line) is NEVER projected away; a projection narrows ROWS only.'),
       projection: z.enum(['siting_summary', 'market_summary', 'identity_only']).optional().describe('Named field preset, cheaper to send than a field list: market_summary (ranking rows), siting_summary (site/point rows), identity_only (ids + names).'),
     },
-    async (a) => ({
-      content: [{ type: 'text',
-        text: JSON.stringify(_applyProjection(await callAPI('/api/v1/mcp/tools/rank_markets', {
-          criteria:        a.criteria        || 'best_overall',
-          region:          a.region          || 'us',
-          limit:           a.limit           || 10,
-          min_capacity_mw: a.min_capacity_mw || 0,
-        }), _resolveProjection(a.fields, a.projection)))
-      }]
-    }));
+    async (a) => {
+      const d = await callAPI('/api/v1/mcp/tools/rank_markets', {
+        criteria:        a.criteria        || 'best_overall',
+        region:          a.region          || 'us',
+        limit:           a.limit           || 10,
+        min_capacity_mw: a.min_capacity_mw || 0,
+      });
+      // A4 (2026-10-03): the backend body carries a descriptive tier:"developer"
+      // (mcp_tier1_tools.py, "nothing reads it"), so every caller, anonymous
+      // included, was told it sat on Developer. The key stays; it now names the
+      // caller's own tier in the A4 vocabulary.
+      if (d && typeof d === 'object' && !Array.isArray(d) && Object.prototype.hasOwnProperty.call(d, 'tier')) {
+        let _c = null;
+        try { _c = getCtx(); } catch (_) { _c = null; }
+        d.tier = _canonicalTier(_c);
+      }
+      return { content: [{ type: 'text',
+        text: JSON.stringify(_applyProjection(d, _resolveProjection(a.fields, a.projection))) }] };
+    });
 
   trackedTool(srv, 'find_alternatives',
     'Use when a user likes ONE specific facility and wants similar nearby options to consider instead ("what else looks like this?"). Example: "Find alternatives to the Ashburn QTS campus for about 50MW." — find_alternatives facility_id=<id>. Params: facility_id or name (the target, required); optional capacity_mw, radius_km, limit. Returns: ranked alternatives, each with similarity_score, match_reasons, and key_differences versus the target. Do NOT use to score one site (use score_facility or analyze_site) or to compare a known short-list head-to-head (use compare_sites); this DISCOVERS candidates from a single seed facility.',

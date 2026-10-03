@@ -232,7 +232,9 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
     it('valid key: served keyed, identity names the channel and nothing else', async () => {
       const got = await call(GOOD);
       expect(got.rows).toBe(ROWS.length);
-      expect(got.identity).toEqual({ credential_source: channel, tier: 'free' });
+      // A4 (2026-10-03): GOOD validates with an email, so it is an
+      // email-bound key and reads `identified` in the response vocabulary.
+      expect(got.identity).toEqual({ credential_source: channel, tier: 'identified' });
     });
 
     it('200 + bind_email_required: still served anonymously, and identity says the key was refused', async () => {
@@ -292,7 +294,7 @@ describe('r-auth-refused — identity says so when a presented key was REFUSED',
     // This path DOES re-validate (the presented key differs from the session's),
     // so r-auth-unverified reports it.
     expect(got.identity).toEqual({
-      credential_source: 'header', tier: 'free',
+      credential_source: 'header', tier: 'identified',   // served on GOOD, email-bound (A4)
       credential_unverified: true,
       means: expect.stringContaining('could NOT be checked'),
       key_status: 'unverified',   // G6
