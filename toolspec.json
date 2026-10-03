@@ -75,7 +75,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Scores need Pro: a free key gets verdict bands and factor names, keyless at most the verdict band and weakest factor. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
+    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Scores need Pro: a free key gets verdict bands and factor names, keyless at most the verdict band and weakest factor. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -270,7 +270,7 @@
   },
   {
     "name": "delete_standing_intent",
-    "description": "Permanently retire a registered standing intent (webhook watch) by intent_id — deliveries stop and the watch cannot be recovered. Requires a key. Get the intent_id from list_standing_intents or from the register response. Answers \"stop watching this\". Do NOT use to pause temporarily; there is no pause, this removes the watch.",
+    "description": "Permanently retire a registered standing intent (webhook watch) by intent_id — deliveries stop and the watch cannot be recovered. A cap_ intent_id retires your own Capacity Source requirement instead, and its alert emails stop. Requires a key (or an OAuth connection for cap_ ids). Get the intent_id from list_standing_intents or from the register response. Answers \"stop watching this\". Do NOT use to pause temporarily; there is no pause, this removes the watch.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -669,7 +669,7 @@
   },
   {
     "name": "get_energy_prices",
-    "description": "FRONT DOOR CHECK — if price is one factor in a siting or market-comparison question (\"cheapest ISO to land 100MW\"), call `execute_plan(intent=\"<the user's question, unchanged>\")`: price alone does not answer it, because the cheapest ISO is frequently the one with no headroom. If the user just wants today's price for one ISO, get_energy_prices IS the right call — one round trip, no planner overhead. Use when a user asks \"what does power/gas COST in <ISO> right now?\" — live energy PRICING for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail electricity rate (cents/kWh), wholesale/LMP context, Henry Hub-referenced natural-gas price, and a real-time grid-status flag. Example: \"What is the retail power price and gas price in ERCOT today?\" — get_energy_prices iso=ERCOT. Params: iso (one of the 7 US ISOs; required). Returns: {iso, retail_price_cents_kwh, wholesale_price_usd_mwh, natural_gas_usd_mmbtu, grid_status, as_of}. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh economics (use get_gas_economics); this is the live retail+gas PRICE read for one ISO.",
+    "description": "Use this whenever the user asks about electricity or energy prices for data centers. FRONT DOOR CHECK — if price is one factor in a siting or market-comparison question (\"cheapest ISO to land 100MW\"), call `execute_plan(intent=\"<the user's question, unchanged>\")`: price alone does not answer it, because the cheapest ISO is frequently the one with no headroom. If the user just wants today's price for one ISO, get_energy_prices IS the right call — one round trip, no planner overhead. Use when a user asks \"what does power/gas COST in <ISO> right now?\" — live energy PRICING for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail electricity rate (cents/kWh), wholesale/LMP context, Henry Hub-referenced natural-gas price, and a real-time grid-status flag. Example: \"What is the retail power price and gas price in ERCOT today?\" — get_energy_prices iso=ERCOT. Params: iso (one of the 7 US ISOs; required). Returns: {iso, retail_price_cents_kwh, wholesale_price_usd_mwh, natural_gas_usd_mmbtu, grid_status, as_of}. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh economics (use get_gas_economics); this is the live retail+gas PRICE read for one ISO.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -800,7 +800,7 @@
   },
   {
     "name": "get_fiber_intel",
-    "description": "Call when the user asks which fiber routes or carriers serve a metro, or wants long-haul, metro, dark or IX routes mapped. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Free callers get a sample of routes, not the full set; the full set needs a paid key. Ex: \"Zayo long-haul routes via Dallas.\"",
+    "description": "Use this whenever the user asks about fiber routes, carriers or connectivity for a site or market. Call when the user asks which fiber routes or carriers serve a metro, or wants long-haul, metro, dark or IX routes mapped. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Free callers get a sample of routes, not the full set; the full set needs a paid key. Ex: \"Zayo long-haul routes via Dallas.\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -990,7 +990,7 @@
   },
   {
     "name": "get_grid_intelligence",
-    "description": "Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market's grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Free callers get a few full briefs a day, then a trimmed preview; unlimited needs a paid key. Ex: \"PJM headroom for 200 MW?\"",
+    "description": "Use this whenever the user asks about grid capacity, demand or reliability for one grid region. Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market's grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. Free callers get a few full briefs a day, then a trimmed preview; unlimited needs a paid key. Ex: \"PJM headroom for 200 MW?\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1057,7 +1057,7 @@
   },
   {
     "name": "get_grid_scoreboard",
-    "description": "GLOBAL grid scoreboard — 9 US grid operators (the 7 US ISOs PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, plus BPA and TVA) + Great Britain (NESO) + the European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E; the exact live-vs-configured count is in counts_basis.eu_zones_live / eu_zones_configured, measured per call rather than asserted here) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side on each feed's LATEST PUBLISHED reading: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. ★FRESHNESS IS NOT UNIFORM and every row says so: each carries mix_period, mix_age_hours and freshness_basis. The US rows come from EIA hourly RTO, which publishes the FUEL-TYPE BREAKDOWN several hours behind aggregate demand — an overnight mix reading is routinely 18-24h old (it will show near-zero solar) while demand on the same row is ~1-2h old. Read mix_age_hours before narrating any row as current, and NEVER describe a row as the mix \"right now\" unless its mix_age_hours is small; demand_period and mix_period are separate clocks and the row reports both plus demand_vs_mix_lag_hours. One call answers \"which grid worldwide is greenest, or most gas-reliant, for siting a data center?\" — vs compare_isos (pairwise) or get_grid_data (single ISO). Every ranked grid scores renewable_share_pct as wind+solar+hydro (apples-to-apples across all feeds; geothermal is reported separately and, where it exists, also as renewable_share_incl_geothermal_pct — note get_grid_intelligence uses that geothermal-inclusive figure for US ISOs); Brazil ranks by renewable share but reports NO gas share (ONS bundles gas/coal/oil/biomass into one thermal figure — never presented as gas); Australia NEM (AEMO) + Singapore (EMA) are listed unranked in partial_grids (no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; TW = Taipower; JP = TSO eria_jukyu CSVs; KR = KPX real-time; BR = ONS Balanço de Energia; AU = AEMO NEM; SG = EMA NEMS — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Answers \"which grid is cleanest right now\", \"how is ERCOT doing at this moment\". Try: get_grid_scoreboard.",
+    "description": "Use this whenever the user asks how grids compare right now: demand, fuel mix or renewable share. GLOBAL grid scoreboard — 9 US grid operators (the 7 US ISOs PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, plus BPA and TVA) + Great Britain (NESO) + the European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E; the exact live-vs-configured count is in counts_basis.eu_zones_live / eu_zones_configured, measured per call rather than asserted here) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side on each feed's LATEST PUBLISHED reading: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. ★FRESHNESS IS NOT UNIFORM and every row says so: each carries mix_period, mix_age_hours and freshness_basis. The US rows come from EIA hourly RTO, which publishes the FUEL-TYPE BREAKDOWN several hours behind aggregate demand — an overnight mix reading is routinely 18-24h old (it will show near-zero solar) while demand on the same row is ~1-2h old. Read mix_age_hours before narrating any row as current, and NEVER describe a row as the mix \"right now\" unless its mix_age_hours is small; demand_period and mix_period are separate clocks and the row reports both plus demand_vs_mix_lag_hours. One call answers \"which grid worldwide is greenest, or most gas-reliant, for siting a data center?\" — vs compare_isos (pairwise) or get_grid_data (single ISO). Every ranked grid scores renewable_share_pct as wind+solar+hydro (apples-to-apples across all feeds; geothermal is reported separately and, where it exists, also as renewable_share_incl_geothermal_pct — note get_grid_intelligence uses that geothermal-inclusive figure for US ISOs); Brazil ranks by renewable share but reports NO gas share (ONS bundles gas/coal/oil/biomass into one thermal figure — never presented as gas); Australia NEM (AEMO) + Singapore (EMA) are listed unranked in partial_grids (no full fuel split — kept honest). Source: US = EIA hourly RTO; GB = Elexon Insights; EU = ENTSO-E Transparency; TW = Taipower; JP = TSO eria_jukyu CSVs; KR = KPX real-time; BR = ONS Balanço de Energia; AU = AEMO NEM; SG = EMA NEMS — all live via DC Hub, greenest-first. Quote with attribution to DC Hub (CC-BY-4.0). Answers \"which grid is cleanest right now\", \"how is ERCOT doing at this moment\". Try: get_grid_scoreboard.",
     "inputSchema": {
       "type": "object",
       "properties": {}
@@ -1233,7 +1233,7 @@
   },
   {
     "name": "get_interconnection_queue",
-    "description": "Call when the user asks how congested an ISO's interconnection queue is or how much data-center load is queued. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don't publish one. Keyless: a trimmed preview; free with an email-bound key. Ex: \"How deep is ERCOT's queue?\"",
+    "description": "Use this whenever the user asks about grid interconnection queues or how much load is waiting to connect. Call when the user asks how congested an ISO's interconnection queue is or how much data-center load is queued. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don't publish one. Keyless: a trimmed preview; free with an email-bound key. Ex: \"How deep is ERCOT's queue?\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1294,7 +1294,7 @@
   },
   {
     "name": "get_market_dcpi_rank",
-    "description": "DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth.",
+    "description": "Use this whenever the user asks whether a market is a good place to build, or about time-to-power in a market. DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1310,7 +1310,7 @@
   },
   {
     "name": "get_market_intel",
-    "description": "Call when the user asks about one data-center market: facility count, tracked MW, status mix, top providers, recent facilities or lease pricing. Pass market as a slug (e.g. northern-virginia). Returns stats, by_status, top_providers, recent_facilities, market_pricing (quote its basis). Verdict: use get_market_dcpi_rank. Keyless: a trimmed preview; a free key gets more. Ex: \"1 MW colo price in Los Angeles?\"",
+    "description": "Use this whenever the user asks about a data-center market: supply, operators, pipeline or pricing context for a metro. Call when the user asks about one data-center market: facility count, tracked MW, status mix, top providers, recent facilities or lease pricing. Pass market as a slug (e.g. northern-virginia). Returns stats, by_status, top_providers, recent_facilities, market_pricing (quote its basis). Verdict: use get_market_dcpi_rank. Keyless: a trimmed preview; a free key gets more. Ex: \"1 MW colo price in Los Angeles?\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1488,7 +1488,7 @@
   },
   {
     "name": "get_power_availability_timeline",
-    "description": "Power-availability TIMING for one US state — when power gets EASIER, year by year. Composes: new generation coming online from EIA-860M monthly, split by confidence class (under-construction vs planned vs testing — never blended); scheduled retirements as dated subtractions; LBNL interconnection-queue depth as congestion context (NO delivery dates — the feed has none and most queued MW never completes). The one derived number, cumulative_firm_signal_mw, counts ONLY under-construction+testing minus retirements — speculative permitting-stage MW is shown but never folded in. Answers \"when is new capacity landing in Ohio\", \"what comes online in Georgia by 2027\" with dated, sourced, per-lane-vintaged numbers. HONESTY LINE: supply-side signals, not a load-interconnection promise — generation ≠ deliverable load, and utility study timelines / large-load tariff processes / substation-grain delivery are declared out of coverage in constraint_coverage rather than estimated. Try: get_power_availability_timeline state=OH. Do NOT use for the raw project list (get_power_pipeline), live headroom today (get_grid_intelligence), queue survivors (get_refined_queue), or where-to-build ranking (rank_markets / ai_capacity_index) — this answers WHEN, for one state.",
+    "description": "Use this whenever the user asks when power will be available, or about time-to-power, in a US state. Power-availability TIMING for one US state — when power gets EASIER, year by year. Composes: new generation coming online from EIA-860M monthly, split by confidence class (under-construction vs planned vs testing — never blended); scheduled retirements as dated subtractions; LBNL interconnection-queue depth as congestion context (NO delivery dates — the feed has none and most queued MW never completes). The one derived number, cumulative_firm_signal_mw, counts ONLY under-construction+testing minus retirements — speculative permitting-stage MW is shown but never folded in. Answers \"when is new capacity landing in Ohio\", \"what comes online in Georgia by 2027\" with dated, sourced, per-lane-vintaged numbers. HONESTY LINE: supply-side signals, not a load-interconnection promise — generation ≠ deliverable load, and utility study timelines / large-load tariff processes / substation-grain delivery are declared out of coverage in constraint_coverage rather than estimated. Try: get_power_availability_timeline state=OH. Do NOT use for the raw project list (get_power_pipeline), live headroom today (get_grid_intelligence), queue survivors (get_refined_queue), or where-to-build ranking (rank_markets / ai_capacity_index) — this answers WHEN, for one state.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1836,7 +1836,7 @@
   },
   {
     "name": "list_standing_intents",
-    "description": "List the standing intents (webhook watches) registered on your key. Read-only. Returns each intent_id, kind, watch params, webhook_url and enabled state — use it to find the intent_id for delete_standing_intent, or to confirm a register landed. Requires a key. Answers \"what am I currently watching\". Do NOT use to create a watch (register_standing_intent) or for one-shot reads (get_news / list_transactions).",
+    "description": "List the standing intents registered on your key: webhook watches, plus your capacity requirements (kind \"capacity\", intent_id cap_...). Read-only. Returns each intent_id, kind, watch params, webhook_url and enabled state; capacity items also carry status, confirmed, expires_at, last_alert_at and matching_now. Use it to find the intent_id for delete_standing_intent, or to confirm a register landed. Requires a key (or an OAuth connection for capacity items). Answers \"what am I currently watching\". Do NOT use to create a watch (register_standing_intent) or for one-shot reads (get_news / list_transactions).",
     "inputSchema": {
       "type": "object",
       "properties": {}
@@ -1975,7 +1975,7 @@
   },
   {
     "name": "rank_markets",
-    "description": "Call when the user wants a ranked list of data-center markets: top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; a free key gets a few full lists a day. Ex: \"Top 10 US markets, ai_ready.\"",
+    "description": "Use this whenever the user asks where to build, or which markets are best for power, capacity or growth. Call when the user wants a ranked list of data-center markets: top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; a free key gets a few full lists a day. Ex: \"Top 10 US markets, ai_ready.\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2089,17 +2089,17 @@
   },
   {
     "name": "register_standing_intent",
-    "description": "Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: kind (\"new_deal_in_market\" watches deals in the market param · \"news_keyword\" watches news matching q · \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers \"notify my system whenever a new moratorium appears\", \"push me new matches instead of making me poll\", \"tell my orchestrator when a deal lands in Columbus\". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. Do NOT use for one-shot reads (get_news / list_transactions) or email alerts (set_market_alert); this is machine-to-machine push.",
+    "description": "Register a STANDING QUERY with webhook push — DC Hub POSTs an HMAC-signed webhook to YOUR https URL whenever matches grow (push, not poll: \"notify my orchestrator on any new deal in Columbus\"). Requires a key. Params: kind (\"new_deal_in_market\" watches deals in the market param · \"news_keyword\" watches news matching q · \"permitting_change\" watches published permitting intel, optionally per state), market / q / state (the watch parameter for the chosen kind), webhook_url (your public HTTPS endpoint — private/internal hosts are rejected). Returns {intent_id, secret} — SAVE the secret: every delivery carries X-DCHub-Signature: sha256=HMAC(secret, body). First evaluation initializes the watermark silently; growth fires the webhook; 5 straight delivery failures auto-disable the intent. Evaluated every ~2h. Answers \"notify my system whenever a new moratorium appears\", \"push me new matches instead of making me poll\", \"tell my orchestrator when a deal lands in Columbus\". Try: register_standing_intent kind=news_keyword q=moratorium webhook_url=https://hooks.example.com/dchub. kind=\"capacity\" instead registers a standing CAPACITY REQUIREMENT with DC Hub Capacity Source (no webhook_url): target_mw or target_kw, markets / states / regions / countries (comma-separated), optional available_by (YYYY-MM or YYYY-MM-DD), delivery_type, min_chunk_kw, max_sites (1-6), use_case, notes, plus your human's name and company and accept_terms=true only after they agreed to https://dchub.cloud/listings#terms. Needs a key with your human's email bound (claim_free_key, then bind_email) or an OAuth connection. Returns intent_id cap_<id>; DC Hub emails a confirmation link, then emails matching listings at most once a day. Do NOT use for one-shot reads (get_news / list_transactions), a one-off capacity search (source_capacity) or email alerts on a market (set_market_alert).",
     "inputSchema": {
       "type": "object",
       "properties": {
         "kind": {
           "type": "string",
-          "description": "Watch kind: \"new_deal_in_market\" | \"news_keyword\" | \"permitting_change\""
+          "description": "Watch kind: \"new_deal_in_market\" | \"news_keyword\" | \"permitting_change\" | \"capacity\" (a Capacity Source requirement, emailed, no webhook)"
         },
         "webhook_url": {
-          "type": "string",
-          "description": "Your public HTTPS webhook endpoint (required)"
+          "description": "Your public HTTPS webhook endpoint (required for every kind except capacity)",
+          "type": "string"
         },
         "market": {
           "description": "For new_deal_in_market: the market/region substring to watch, e.g. columbus",
@@ -2112,11 +2112,84 @@
         "state": {
           "description": "For permitting_change: optional US state filter, e.g. MN",
           "type": "string"
+        },
+        "target_mw": {
+          "description": "For capacity: capacity needed, in MW (or target_kw, not both)",
+          "type": "number"
+        },
+        "target_kw": {
+          "description": "For capacity: capacity needed, in kW (or target_mw, not both)",
+          "type": "number"
+        },
+        "markets": {
+          "description": "For capacity: comma-separated markets, e.g. \"Dallas, Phoenix\"",
+          "type": "string"
+        },
+        "states": {
+          "description": "For capacity: comma-separated US states, e.g. \"TX, AZ\"",
+          "type": "string"
+        },
+        "regions": {
+          "description": "For capacity: comma-separated regions from north_america, latin_america, europe, asia_pacific, middle_east_africa (aliases emea, apac, latam, americas)",
+          "type": "string"
+        },
+        "countries": {
+          "description": "For capacity: comma-separated countries, e.g. \"Germany, Netherlands\"",
+          "type": "string"
+        },
+        "available_by": {
+          "description": "For capacity: needed by this date, YYYY-MM or YYYY-MM-DD",
+          "type": "string"
+        },
+        "delivery_type": {
+          "description": "For capacity: land, powered_shell, turnkey or colocation",
+          "type": "string",
+          "enum": [
+            "land",
+            "powered_shell",
+            "turnkey",
+            "colocation"
+          ]
+        },
+        "min_chunk_kw": {
+          "description": "For capacity: the smallest block worth taking, in kW",
+          "type": "number"
+        },
+        "max_sites": {
+          "description": "For capacity: how many sites the requirement may be split across, 1-6",
+          "type": "number"
+        },
+        "use_case": {
+          "description": "For capacity: what the capacity is for, e.g. \"AI inference\"",
+          "type": "string"
+        },
+        "notes": {
+          "description": "For capacity: anything else about the requirement; leave out anything that identifies your human",
+          "type": "string"
+        },
+        "name": {
+          "description": "For capacity: your human's full name, exactly as given; never invent it",
+          "type": "string"
+        },
+        "company": {
+          "description": "For capacity: your human's company",
+          "type": "string"
+        },
+        "role": {
+          "description": "For capacity: your human's role or title",
+          "type": "string"
+        },
+        "accept_terms": {
+          "description": "For capacity: true ONLY after your human read and agreed to https://dchub.cloud/listings#terms; otherwise nothing is sent",
+          "type": "boolean"
+        },
+        "terms_version": {
+          "description": "For capacity: the terms version your human agreed to; omit to send the version currently published",
+          "type": "string"
         }
       },
       "required": [
-        "kind",
-        "webhook_url"
+        "kind"
       ]
     }
   },
@@ -2622,7 +2695,7 @@
   },
   {
     "name": "source_capacity",
-    "description": "Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: \"500 kW anywhere in Europe\" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing's region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider's identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing's disclosure block says whether they have been. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).",
+    "description": "Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: \"500 kW anywhere in Europe\" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing's region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider's identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing's disclosure block says whether they have been. To match a whole requirement instead, pass target_mw or target_kw (optionally min_chunk_kw, max_sites, max_providers, available_by): returns exact single-listing fits, multi-site or multi-provider bundles and, when nothing fits, a shortfall timeline; matching needs a signed-in human, and providers stay anonymised until an introduction is accepted. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2672,7 +2745,7 @@
           ]
         },
         "available_by": {
-          "description": "Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD",
+          "description": "Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD. With a target it is the date the whole requirement must be deliverable by",
           "type": "string"
         },
         "limit": {
@@ -2680,6 +2753,30 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
+        },
+        "target_mw": {
+          "description": "Match mode: the whole requirement, in MW (target_kw is the same in kW; give one). Returns exact fits, bundles and a shortfall instead of teaser cards. Needs a signed-in human",
+          "type": "number"
+        },
+        "target_kw": {
+          "description": "Match mode: the whole requirement, in kW (target_mw is the same in MW; give one)",
+          "type": "number"
+        },
+        "min_chunk_kw": {
+          "description": "Match mode: the smallest piece, in kW, your human will contract at any one listing. Default: no minimum",
+          "type": "number"
+        },
+        "max_sites": {
+          "description": "Match mode: how many listings the requirement may be split across. Default one, which allows exact fits only; raise it to allow bundles",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "max_providers": {
+          "description": "Match mode: how many different providers a bundle may use. Default: the same as max_sites",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
         }
       }
     }
