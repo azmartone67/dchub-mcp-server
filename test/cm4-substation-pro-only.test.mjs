@@ -1,8 +1,8 @@
-// CM-4b (owner 2026-10-03): analyze_site's nearest_substations on a free key
-// is distance + kV band; hifld_id, name and exact kV are Pro. Feeder MW and
-// distances keep the Land & Power preview rule (null).
+// CM-4 (owner 2026-10-03, superseding CM-4b): analyze_site's
+// nearest_substations is Pro and up; below Pro it is locked (a count, no
+// rows). Feeder MW and distances keep the Land & Power preview rule (null).
 import { describe, it, expect } from 'vitest';
-import { _lpPreviewResult, _substationFreeView, SUBSTATION_PAID_FIELDS } from '../server.mjs';
+import { _lpPreviewResult, _substationLockedView, SUBSTATION_ROW_FIELDS } from '../server.mjs';
 
 const ROW = { hifld_id: '107655', name: 'HOLCOMBE', max_kv: 138, distance_km: 2.3,
   kv_band: '115-229 kV', source: 'HIFLD Electric Substations', as_of: '2021-02-01',
@@ -18,14 +18,16 @@ const FULL = {
 const preview = () => _lpPreviewResult('analyze_site',
   { content: [{ type: 'text', text: JSON.stringify(FULL) }] }, false).structuredContent;
 
-describe('CM-4b substation free view', () => {
-  it('keeps distance and kV band, removes the paid keys, names them', () => {
-    const subs = preview().nearest_substations;
-    expect(subs.substations).toHaveLength(2);
-    expect(subs.substations[0]).toEqual({ distance_km: 2.3, kv_band: '115-229 kV',
-      source: 'HIFLD Electric Substations', as_of: '2021-02-01', basis_class: 'published' });
-    expect(subs.locked_fields).toEqual(SUBSTATION_PAID_FIELDS);
-    expect(JSON.stringify(subs)).not.toMatch(/HOLCOMBE|107655/);
+describe('CM-4 substations are Pro only', () => {
+  it('below Pro the block is locked: a count and the locked fields, no row data', () => {
+    const p = preview();
+    const subs = p.nearest_substations;
+    expect(subs).toEqual({ locked: true, required_plan: 'pro', substations_in_radius: 2,
+      search_radius_km: 50, coverage: 'HIFLD (United States and territories) only',
+      locked_fields: SUBSTATION_ROW_FIELDS,
+      note: expect.stringContaining('is Pro') });
+    expect(JSON.stringify(subs)).not.toMatch(/HOLCOMBE|107655|2\.3|115-229/);
+    expect(p.upgrade_url).toBeTruthy();
   });
 
   it('leaves feeder MW and distance under the LP rule (null), labels kept', () => {
@@ -37,7 +39,7 @@ describe('CM-4b substation free view', () => {
   });
 
   it('a failed block stays null, an absent one stays absent', () => {
-    expect(_substationFreeView(null)).toBeNull();
+    expect(_substationLockedView(null)).toBeNull();
     const none = _lpPreviewResult('analyze_site',
       { content: [{ type: 'text', text: JSON.stringify({ success: true }) }] }, false).structuredContent;
     expect('nearest_substations' in none).toBe(false);
