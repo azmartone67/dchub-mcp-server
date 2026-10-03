@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { _accessTagFor } from '../server.mjs';
+import { _accessTagFor, _legacyAccessFor } from '../server.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = fs.readFileSync(path.join(ROOT, 'server.mjs'), 'utf8');
@@ -112,7 +112,11 @@ describe('the gated-tool CTA', () => {
     const names = ALL_TOOL_NAMES;
     for (const name of names) {
       const tag = _accessTagFor(name);
-      const gated = tag.access === 'paid' || tag.access === 'metered';
+      // A2 (2026-10-03): the destination follows the RUNTIME gate class. The
+      // `access` label now reads paid for Pro tools the gate still serves as
+      // free_preview (export_dataset, get_composite_site_score), and their
+      // connect_url must not move during the pricing A/B.
+      const gated = ['paid', 'metered'].includes(_legacyAccessFor(name));
       expect(Boolean(tag.pricing_url), `${name} (${tag.access}): pricing_url presence`)
         .toBe(gated);
       expect(Boolean(tag.connect_url), `${name} (${tag.access}): connect_url presence`)

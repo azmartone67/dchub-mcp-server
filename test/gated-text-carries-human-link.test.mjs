@@ -91,7 +91,9 @@ beforeAll(async () => {
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = httpServer.address().port;
   GATED = SPEC.map((t) => t.name).filter((n) =>
-    ['paid', 'metered'].includes(S._accessTagFor(n).access) || NAMED.includes(n));
+    // A2 (2026-10-03): the runtime gate class, not the `access` label (which
+    // now reads paid for Pro tools the gate still serves as free_preview).
+    ['paid', 'metered'].includes(S._legacyAccessFor(n)) || NAMED.includes(n));
 });
 
 afterAll(async () => {

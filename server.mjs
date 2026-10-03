@@ -7490,7 +7490,7 @@ export function _tierRequiredFor(name) {
 }
 // A2: one plain sentence per class. No prices (pricing lives at /pricing).
 export const FREE_ANSWER_BY_TIER = Object.freeze({
-  pro: 'Full results are on the Pro plan (dchub.cloud/pricing); below Pro this tool returns a preview or a guided wall.',
+  pro: 'Full results are on the Pro plan; below Pro this tool returns a preview or a guided wall.',
   email: 'Free with an email: call claim_free_key, then bind_email, for the full answer; keyless gets a preview.',
   developer_for_full: 'Keyless and free keys get a trimmed preview; the full answer is on paid plans or a credit pack.',
   free_key: 'Needs a free key (claim_free_key, no email) because it reads or writes your saved work.',
