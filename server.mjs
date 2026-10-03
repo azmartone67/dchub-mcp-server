@@ -7827,10 +7827,34 @@ export async function _lpWallResultV11(name, headline = null) {
 // runs: left to it, names (no digit) would pass through.
 export const SUBSTATION_ROW_FIELDS = ['hifld_id', 'name', 'max_kv', 'distance_km', 'kv_band',
   'source', 'as_of', 'basis_class'];
+// P0-1 (owner D5, 2026-10-03): the one line for substation detail. Developer is
+// below it. Mirrors dchub-backend util/substation_detail.SUBSTATION_DETAIL_MIN_TIER.
+export const SUBSTATION_DETAIL_MIN_TIER = 'pro';
+// The identifying fields of one substation. Below the line they are REMOVED from
+// any object that describes a substation (key names "substation"), not nulled.
+export const SUBSTATION_DETAIL_FIELDS = ['name', 'hifld_id', 'max_voltage_kv', 'max_kv',
+  'voltage_kv', 'capacity_mva', 'owner', 'operator'];
+const _SUBSTATION_KEY = /substation/i;
+// The LP preview keeps every `name` (a facility or carrier name is the preview),
+// so a nearest substation's name rode through it: analyze_site's
+// nearest.hv_substation.name reached free keys (test_sub_xyz at 33.45,-112.07,
+// 2026-10-03). Walks the preview and drops the detail fields from every object
+// held under a substation key. The CM-4 locked view (nearest_substations) has
+// none of them, so it is unchanged.
+export function _stripSubstationDetail(v, underSubstation = false) {
+  if (Array.isArray(v)) return v.map((x) => _stripSubstationDetail(x, underSubstation));
+  if (!v || typeof v !== 'object') return v;
+  const out = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (underSubstation && SUBSTATION_DETAIL_FIELDS.includes(k)) continue;
+    out[k] = _stripSubstationDetail(x, underSubstation || _SUBSTATION_KEY.test(k));
+  }
+  return out;
+}
 export function _substationLockedView(block) {
   if (!block || typeof block !== 'object') return block ?? null;
   return {
-    locked: true, required_plan: 'pro',
+    locked: true, required_plan: SUBSTATION_DETAIL_MIN_TIER,
     substations_in_radius: Array.isArray(block.substations) ? block.substations.length : 0,
     search_radius_km: block.search_radius_km ?? null,
     coverage: block.coverage ?? null,
@@ -7845,7 +7869,7 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
   if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
   const _subsFree = Object.prototype.hasOwnProperty.call(parsed, 'nearest_substations')
     ? _substationLockedView(parsed.nearest_substations) : undefined;
-  const preview = _lpPreviewPayload(parsed);
+  const preview = _stripSubstationDetail(_lpPreviewPayload(parsed));
   if (_subsFree !== undefined) preview.nearest_substations = _subsFree;
   _noteGate('lp');
   if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed)));
