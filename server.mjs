@@ -162,6 +162,9 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
+// Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
+// next_ask + dated cite_as on every result, next_ask follow-through telemetry.
+import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack } from './lib/agent-outreach.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -16671,6 +16674,22 @@ export function _normalizeCohort(v) {
   return /^[a-z0-9._-]+$/.test(s) ? s : null;
 }
 
+// Agent outreach (owner 2026-10-03): next_ask + dated cite_as on every successful
+// result, and the suggestion remembered per session so the NEXT call's telemetry
+// can carry _via_next_ask. Directory profiles keep cite_as but get no next_ask:
+// they serve an allowlisted subset, so the suggested tool may not exist there.
+// Fail-soft: any throw returns the result untouched.
+function _outreachStep(result, name, args) {
+  try {
+    const c = getCtx() || {};
+    const directory = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE;
+    const out = stampOutreach(result, name, args, { nextAsk: !directory });
+    const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
+    if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool);
+    return out;
+  } catch (_e) { return result; }
+}
+
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
   // ── r-mpp-arg-channel (2026-08-17): DECLARE the payment params ─────────────
@@ -16704,7 +16723,9 @@ function trackedTool(srv, name, description, schema, handler) {
   // are state-mutating → readOnlyHint:false + destructiveHint:false.
   // Per-platform override (ai_platform_tool_tuner) when present; else generic.
   const _ov = _activeDescOverrides && _activeDescOverrides[name];
-  const _desc = (typeof _ov === 'string' && _ov.trim()) ? _ov : description;
+  // Agent outreach: ten topic front doors open with a routing line (lib/agent-outreach.mjs).
+  // Directory profiles serve their own reviewed descriptions, so they never see it.
+  const _desc = withRoutingLine(name, (typeof _ov === 'string' && _ov.trim()) ? _ov : description);
   // ChatGPT Apps directory requires ALL FOUR hints on every tool. openWorldHint is
   // false for the closed DC Hub corpus and true for OPEN_WORLD_TOOLS; destructiveHint
   // is false unless the tool is named in DESTRUCTIVE_TOOLS. Both are per-tool sets
@@ -18891,7 +18912,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       trackToolCall({
         timestamp:   new Date().toISOString(),
         tool:        name,
-        params:      args,
+        params:      paramsForTrack(args, c.session_id, name),  // + _via_next_ask when this call took the last next_ask
         platform:    c.platform || 'unknown',
         client_name: c.client_name_raw || c.platform || null,  // r78
         api_key:     c.api_key || null,
@@ -18972,18 +18993,23 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   // `Tell the user:` line is already there. It only ever prepends one line, and
   // leaves failure envelopes alone, so the flag's verdict cannot change.
   // Inert unless DCHUB_RETURN_NUDGE is on.
+  // ★ _outreachStep (agent outreach, 2026-10-03) sits directly inside
+  //   _flagUpstreamError, around _stampSiteEnvelope: every step that builds
+  //   structuredContent and citation has run, so its cite_as reads the final
+  //   citation. It skips isError/error envelopes, so the flag's verdict cannot
+  //   change. lib/agent-outreach.mjs, test/agent-outreach.test.mjs.
   // ★ _stampSiteEnvelope sits directly inside _flagUpstreamError, after every
   //   step that builds structuredContent: analyze_site, get_composite_site_score
   //   and get_water_risk leave with the DCHubEnvelope (_entity + ok), and any
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)),
-       name, args, _outSchema), name), name), name));
+       name, args, _outSchema), name), name), name, args), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -20451,7 +20477,8 @@ function _overlayCanonPhrases(facts) {
 export const _INSTRUCTIONS = (() => {
   let facts = null;
   try { facts = JSON.parse(readFileSync(new URL('./canonical/mcp_facts.json', import.meta.url), 'utf8')); } catch { /* soft — gate falls through to figure-less prose */ }
-  return _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _composeScopeSection(_TAXONOMY);
+  // OUTREACH_LEAD goes first: clients truncate long instructions (lib/agent-outreach.mjs).
+  return OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Tool registrations (all wrapped) ─────────────────────────────

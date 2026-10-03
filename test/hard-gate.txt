@@ -1,5 +1,7 @@
 test/404-is-not-a-sales-opportunity.test.mjs
 test/agent-beat.test.mjs
+test/agent-outreach-e2e.test.mjs
+test/agent-outreach.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-site-location.test.mjs
 test/anchor-contract.test.mjs
