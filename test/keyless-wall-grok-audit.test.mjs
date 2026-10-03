@@ -168,14 +168,13 @@ describe('F6: a keyless gated preview carries exactly one checkout URL', () => {
     });
   }
 
-  it('the queue preview keeps data first and the person\'s line trailing, with its directive', async () => {
+  it('the queue preview keeps data first and the person\'s line trailing', async () => {
     const r = await call('get_interconnection_queue', { iso: 'PJM' }, seat({ tier: 'free' }));
     const t = r.content[0].text;
     expect(t.trimStart().startsWith('{')).toBe(true);
     const line = t.indexOf('→ **For your human:**');
     expect(line).toBeGreaterThan(t.indexOf('This answer hid'));
     expect(t.slice(line)).toMatch(RELAY);
-    expect(t).toContain('_Agent: include the line above VERBATIM');
     // the rungs still name both plans; they point at the one link
     expect(t).toMatch(/\$10 one-time = 1,000 API credits\*\*, credits don’t expire → the "For your human" link below/);
     expect(t).toMatch(/\*\*Developer\*\* \([^)]*\) → the "For your human" link below/);
