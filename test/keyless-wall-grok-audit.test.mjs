@@ -98,7 +98,9 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
 
   it('the Grok markdown links the same URL the person\'s line and for_your_human.url carry', async () => {
     const r = await call('analyze_site', LOC, seat(GROK));
-    const seen = r.content[0].text.match(RELAY)[0];
+    // F5: the person's link is the /u short link to the relay (the long relay when the mint fails).
+    const seen = r.content[0].text.match(new RegExp('https://dchub\\.cloud/u/[2-9a-hj-km-np-z]{6}|' + RELAY.source))[0];
+    expect(seen).toBe('https://dchub.cloud/u/abc234');
     const fyh = r.structuredContent.for_your_human;
     expect(fyh.url).toBe(seen);
     expect(fyh.markdown).toBe(S.GROK_RELAY_LABEL_PRO + '(' + seen + ')');

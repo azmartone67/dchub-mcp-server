@@ -7,7 +7,7 @@
 // WITHOUT ?pc=grok. The contract tagged its own relay, then _paywallContractStep replaced it with
 // the untagged link from the person's line, so Grok's relay opens could not be split by arm.
 // Real registered handlers under a real caller seat; only the backend is stubbed.
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { isGatedResult } from '../lib/paywall-contract.mjs';
 
 const BASE = 'https://backend.pc-arm-tag-visible-link.test';
@@ -33,16 +33,21 @@ const RETIRE = { _entity: 'retirement_headroom_results', ok: true, total_retirin
     queue_pressure: { competing_mw: 4417.3, competing_projects: 12 } },
   { generator: { name: 'Alpha', generator_id: '2', capacity_mw: 377.9, retirement_date: '2026-12-31', fuel_category: 'Gas' },
     queue_pressure: { competing_mw: 2963.8, competing_projects: 9 } }] };
+const mintBodies = [];
 const json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
 
 beforeAll(async () => {
   prevInternal = process.env.DCHUB_INTERNAL_KEY;
   process.env.DCHUB_INTERNAL_KEY = 'pc-arm-tag-visible-link-internal-key';
   realFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input && input.url ? input.url : input);
     let p = ''; try { p = new URL(url).pathname; } catch { /* not a URL */ }
-    if (p === '/api/v1/relay/short') return json({ ok: true, code: 'abc234', url: 'https://dchub.cloud/u/abc234' });
+    if (p === '/api/v1/relay/short') {
+      // F5: the relay-first line shortens the relay; remember what was sent for shortening.
+      try { mintBodies.push(JSON.parse(String((input && input.body) || (init && init.body) || '{}'))); } catch { /* not JSON */ }
+      return json({ ok: true, code: 'abc234', url: 'https://dchub.cloud/u/abc234' });
+    }
     if (p === '/api/site-score') return json(SITE);
     if (p === '/api/v1/interconnection-queue/by-iso') return json(structuredClone(QUEUE));
     if (p === '/api/v1/deals') return json(structuredClone(DEALS));
@@ -64,7 +69,12 @@ afterAll(() => {
 beforeEach(() => {
   S.keyCache.clear();
   delete process.env.DCHUB_PAYWALL_CONTRACT; delete process.env.DCHUB_PAYWALL_CONTRACT_GROK;
+  // These pin the arm tag on the LONG relay. F5 (short /u link) is switched off here and
+  // covered by the 'F2 + F5' case below and test/wall-user-line.test.mjs.
+  process.env.DCHUB_RELAY_SHORT_LINK = '0';
+  mintBodies.length = 0;
 });
+afterEach(() => { delete process.env.DCHUB_RELAY_SHORT_LINK; });
 
 let seatN = 0;
 const seat = (extra = {}) => ({
@@ -140,5 +150,16 @@ describe('F2: the arm tag rides the link people see', () => {
     expect(fyh.markdown).toBe('[🔓 Open DC Hub — see what I found](' + seen + ')');
     expect(fyh.render).toBe('verbatim_link_required');
   });
-});
 
+  it('F2 + F5: the short /u link wraps the TAGGED relay, so the arm rides inside the /u target', async () => {
+    delete process.env.DCHUB_RELAY_SHORT_LINK;
+    const r = await call('analyze_site', LOC, seat(GROK));
+    const first = r.content[0].text.split('\n')[0];
+    expect(first).toContain('https://dchub.cloud/u/abc234');
+    expect(first).not.toMatch(RELAY);
+    expect(r.structuredContent.for_your_human.url).toBe('https://dchub.cloud/u/abc234');
+    const relayMint = mintBodies.find((b) => b && b.relay_url);
+    expect(relayMint, 'the relay was sent for shortening').toBeTruthy();
+    expect(relayMint.relay_url).toMatch(/\/upgrade\/h\/[^?]+\?(?:.*&)?pc=grok$/);
+  });
+});

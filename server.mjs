@@ -7316,6 +7316,46 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
   }
 }
 
+// ── F5 (Grok audit, 2026-10-02): the relay-first wall's /upgrade/h link, shortened ──
+// The keyless relay-first wall (analyze_site, compare_sites, get_dchub_recommendation)
+// quotes the signed /upgrade/h/<token> relay page, ~110 characters. Agents mangle it (a
+// trailing '.', ')', truncation): 0 real-UA opens of minted relay links in 7 days. The same
+// backend mint (dchub-backend relay_short_link, POST /api/v1/relay/short {relay_url}) now
+// takes a relay URL; /u/<code> 302s to that exact URL, query string included, and the
+// /upgrade/h GET it lands on logs the open. FAIL-OPEN to the long link, byte for byte: kill
+// switch (DCHUB_WALL_SHORT_LINK=0 or DCHUB_RELAY_SHORT_LINK=0), no internal key, non-2xx,
+// junk answer or the ~300 ms budget running out. Copy, offer, arm and link count are untouched.
+const _RELAY_SHORT_TIMEOUT_MS = 300;
+const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&]{1,200})?$/;
+export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_SHORT_LINK || ''))
+        || /^(0|false|no|off)$/i.test(String(process.env.DCHUB_RELAY_SHORT_LINK || ''))) return relayUrl;
+    if (!INTERNAL_KEY || !_RELAY_LONG_RE.test(String(relayUrl || ''))) return relayUrl;
+    const hit = _SHORT_LINK_CACHE.get(relayUrl);
+    if (hit) return hit;
+    let host = '';
+    try { host = (getCtx() && getCtx().platform) || ''; } catch (_) {}
+    const resp = await fetchImpl(new URL('/api/v1/relay/short', API_BASE).toString(), {
+      method: 'POST',
+      headers: { 'X-Internal-Key': INTERNAL_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ relay_url: relayUrl, tool: tool || '', host, copy_version: WALL_COPY_VERSION }),
+      signal: AbortSignal.timeout(_RELAY_SHORT_TIMEOUT_MS),
+    });
+    if (!resp.ok) { console.error('[wall-relay-short] backend status', resp.status); return relayUrl; }
+    const data = await resp.json();
+    if (!data || data.ok !== true || !SHORT_LINK_RE.test(String(data.url || ''))) {
+      console.error('[wall-relay-short] unusable answer'); return relayUrl;
+    }
+    if (_SHORT_LINK_CACHE.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_CACHE.clear();
+    _SHORT_LINK_CACHE.set(relayUrl, data.url);
+    return data.url;
+  } catch (err) {
+    console.error('[wall-relay-short] failed:', err && err.message);
+    return relayUrl;
+  }
+}
+
 // The checkout link for what really opens this tool (see _paywallOffer): Pro for Land &
 // Power and Pro-only tools, the $10 pack otherwise.
 function _wallOfferLink(name, offer, sid) {
@@ -7343,21 +7383,32 @@ export async function _withWallUserLine(result, name, opts = {}) {
         const _tagged = _pcTagUrl(_r0.url, _paywallArmFor(c));
         const _r = _tagged === _r0.url ? _r0
           : { ..._r0, url: _tagged, markdown: _relayLinkLabel(undefined, name) + '(' + _tagged + ')' };
-        const out = withUserLine(result, { tool: name, offer, link: _r.url, headline: opts.headline || null,
+        // F5: the person's line carries dchub.cloud/u/<code>, which 302s to the exact TAGGED
+        // relay URL (the arm rides inside the /u target); the long link, unchanged, when the
+        // mint fails.
+        const _link = await _shortRelayPageLink(_r.url, name);
+        const _fyh = _link === _r.url ? _r
+          : { ..._r, url: _link, markdown: String(_r.markdown || '').split(_r.url).join(_link) };
+        const out = withUserLine(result, { tool: name, offer, link: _link, headline: opts.headline || null,
                                            keepBody: opts.keepBody !== false, plan: '' });
         const t0 = out.content[0].text;
         const lines = t0.split('\n');
         const kept = [];
         for (let i = 0; i < lines.length; i++) {
-          if (i > 0 && lines[i].includes(HUMAN_FIRST_MARKER) && lines[i].includes(_r0.url)) {
+          if (i > 0 && lines[i].includes(HUMAN_FIRST_MARKER)
+              && (lines[i].includes(_r0.url) || lines[i].includes(_r.url) || lines[i].includes(_link))) {
             if (/^_Agent: include the line above/.test(lines[i + 1] || '')) i += 1;
             continue;
           }
           kept.push(i === 0 ? lines[i] : lines[i].replace(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g,
             'the link in the first line'));
         }
-        out.content[0] = { type: 'text', text: kept.join('\n').replace(/\n{3,}/g, '\n\n') };
-        out.structuredContent = { ...out.structuredContent, for_your_human: _r, upgrade_url: _r.url };
+        // F5: a copy of the long relay left in the body becomes the same short link, so the
+        // response still carries one link, written one way.
+        const _txt = kept.join('\n').replace(/\n{3,}/g, '\n\n');
+        out.content[0] = { type: 'text', text: _link === _r.url ? _txt
+          : _txt.split(_r.url).join(_link).split(_r0.url).join(_link) };
+        out.structuredContent = { ...out.structuredContent, for_your_human: _fyh, upgrade_url: _link };
         return out;
       }
     }

@@ -17,6 +17,11 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 const BASE = 'https://backend.wall-user-line.test';
 const SHORT = 'https://dchub.cloud/u/abc234';
+// F5: the relay-first wall's /upgrade/h link, shortened by the same backend mint ({relay_url}).
+const RELAY_SHORT = 'https://dchub.cloud/u/hre234';
+const RELAY_SHORT_RE = /^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/;
+let relayMode = 'ok';           // ok | http500 | junk | throw | slow
+const relayPosts = [];          // { headers, body, signal }
 // MCP-1: the Land & Power keyless wall's link is the signed /upgrade/h relay page.
 const RELAY = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/;
 let S, TOOLS, realFetch, prevInternal;
@@ -39,6 +44,19 @@ beforeAll(async () => {
   globalThis.fetch = async (input, init) => {
     const url = String(input && input.url ? input.url : input);
     let p = ''; try { p = new URL(url).pathname; } catch { /* not a URL */ }
+    if (p === '/api/v1/relay/short' && JSON.parse(init.body).relay_url !== undefined) {
+      relayPosts.push({ headers: init.headers, body: JSON.parse(init.body), signal: init.signal });
+      if (relayMode === 'throw') throw new Error('boom');
+      if (relayMode === 'http500') return json({ ok: false }, 503);
+      if (relayMode === 'junk') return json({ ok: true, url: 'https://evil.example/u/hre234' });
+      if (relayMode === 'slow') {
+        return new Promise((resolve, reject) => {
+          const t = setTimeout(() => resolve(json({ ok: true, code: 'hre234', url: RELAY_SHORT })), 2000);
+          init.signal.addEventListener('abort', () => { clearTimeout(t); reject(init.signal.reason); });
+        });
+      }
+      return json({ ok: true, code: 'hre234', url: RELAY_SHORT });
+    }
     if (p === '/api/v1/relay/short') {
       shortPosts.push({ headers: init.headers, body: JSON.parse(init.body) });
       if (shortMode === 'throw') throw new Error('boom');
@@ -60,10 +78,11 @@ afterAll(() => {
   globalThis.fetch = realFetch;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
   delete process.env.DCHUB_WALL_ISERROR; delete process.env.DCHUB_WALL_SUCCESS_PLATFORMS;
-  delete process.env.DCHUB_WALL_SHORT_LINK;
+  delete process.env.DCHUB_WALL_SHORT_LINK; delete process.env.DCHUB_RELAY_SHORT_LINK;
 });
 beforeEach(() => {
   shortMode = 'ok'; shortPosts.length = 0; claimUrls.length = 0; S.keyCache.clear();
+  relayMode = 'ok'; relayPosts.length = 0; delete process.env.DCHUB_RELAY_SHORT_LINK;
   delete process.env.DCHUB_WALL_ISERROR; delete process.env.DCHUB_WALL_SUCCESS_PLATFORMS;
   delete process.env.DCHUB_WALL_SHORT_LINK;
 });
@@ -83,28 +102,33 @@ const firstLine = (r) => r.content[0].text.split('\n')[0];
 const LOC = { lat: 39.0412345, lon: -77.4845678, state: 'VA' };
 
 describe('keyless analyze_site wall (Land & Power)', () => {
-  it('leads with the person\'s line: /upgrade/h relay link, Pro named, no price, no unlock', async () => {
+  it('leads with the person\'s line: /u short link to the /upgrade/h relay, Pro named, no price, no unlock', async () => {
     const r = await call('analyze_site', LOC, seat());
     const sc = r.structuredContent;
     expect(sc._wall).toBe(true);
     expect(sc.error).toBe('pro_required');
     const line = firstLine(r);
-    expect(line).toMatch(RELAY);
+    expect(line).toContain(RELAY_SHORT);
+    expect(line).not.toMatch(RELAY);
     expect(line).toContain('DC Hub Pro');
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(sc.user_message).toBe(line);
     expect(sc.show_to_user).toBe(true);
     expect(sc.copy_version).toBe('v11');
-    const href = line.match(RELAY)[0];
+    const href = line.match(/https:\/\/\S+?(?= — )/)[0];
+    expect(href).toMatch(RELAY_SHORT_RE);                          // Grok F5 test
     expect(sc.upgrade_url || sc.upgrade.upgrade_url).toBe(href);   // a later step nests it under upgrade
-    expect(sc.for_your_human.url).toBe(href);                      // one token in both channels
-    // nothing a person could see carries the base64 token
+    expect(sc.for_your_human.url).toBe(href);                      // one link in both channels
+    expect(sc.for_your_human.markdown).toContain(href);
+    expect(sc.for_your_human.markdown).not.toMatch(RELAY);
+    // nothing a person could see carries a base64 token
     expect(r.content[0].text).not.toContain('/go/c/');
+    expect(r.content[0].text).not.toMatch(RELAY);
   });
 
   it('lists claim_free_key AFTER the user line, as the free-preview-first alternative', async () => {
     const t = (await call('analyze_site', LOC, seat())).content[0].text;
-    expect(t.indexOf('claim_free_key')).toBeGreaterThan(t.search(RELAY));
+    expect(t.indexOf('claim_free_key')).toBeGreaterThan(t.indexOf(RELAY_SHORT));
     expect(t).toMatch(/prefers a free preview first/);
     expect(t.split('\n')[0]).not.toContain('claim_free_key');
   });
@@ -115,9 +139,39 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     for (const f of ['83.7', '88.1', '71.3', '95.4', '60.6', '72.2', '39.0412345']) expect(all).not.toContain(f);
   });
 
-  it('mints no /u short link on the relay path (the relay token is the ask)', async () => {
-    await call('analyze_site', LOC, seat());
-    expect(shortPosts.length).toBe(0);
+  it('F5: mints the /u link for the EXACT signed relay URL, with the internal key and a <=300 ms budget', async () => {
+    const r = await call('analyze_site', LOC, seat());
+    expect(shortPosts.length).toBe(0);                  // no checkout short link on the relay path
+    expect(relayPosts.length).toBe(1);
+    const { headers, body, signal } = relayPosts[0];
+    expect(headers['X-Internal-Key']).toBe('wall-user-line-test-internal-key');
+    expect(body.relay_url).toMatch(new RegExp('^' + RELAY.source + '$'));
+    expect(body).toMatchObject({ tool: 'analyze_site', host: 'cursor', copy_version: 'v11' });
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(firstLine(r)).toContain(RELAY_SHORT);
+  });
+
+  it('F5: a failed, junk, slow or switched-off mint ships the long relay link exactly as before', async () => {
+    const norm = (r) => JSON.stringify(r)
+      .replace(new RegExp(RELAY.source, 'g'), 'RELAY')
+      .replace(/sess-wall-user-line-\d+/g, 'SID');
+    process.env.DCHUB_RELAY_SHORT_LINK = '0';            // the pre-F5 path: never asks the backend
+    const before = await call('analyze_site', LOC, seat());
+    expect(relayPosts.length).toBe(0);
+    delete process.env.DCHUB_RELAY_SHORT_LINK;
+    expect(firstLine(before)).toMatch(RELAY);
+    expect(before.structuredContent.for_your_human.url).toBe(firstLine(before).match(RELAY)[0]);
+    for (const mode of ['http500', 'junk', 'throw', 'slow']) {
+      relayMode = mode; relayPosts.length = 0;
+      const t0 = Date.now();
+      const r = await call('analyze_site', LOC, seat());
+      expect(Date.now() - t0, mode).toBeLessThan(1500);
+      expect(relayPosts.length, mode).toBe(1);
+      expect(norm(r), mode).toBe(norm(before));
+      const href = firstLine(r).match(RELAY)[0];
+      expect(relayPosts[0].body.relay_url, mode).toBe(href);
+      expect(r.structuredContent.for_your_human.url, mode).toBe(href);
+    }
   });
 
   it('with no relay minted (DCHUB_HUMAN_RELAY=0) it falls back to the short link, then the long /go/c link', async () => {
@@ -151,7 +205,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     process.env.DCHUB_WALL_ISERROR = '0';
     const r = await call('analyze_site', LOC, seat());
     expect(r.isError).toBe(false);
-    expect(firstLine(r)).toMatch(RELAY);
+    expect(firstLine(r)).toContain(RELAY_SHORT);
     delete process.env.DCHUB_WALL_ISERROR;
     process.env.DCHUB_WALL_SUCCESS_PLATFORMS = 'cursor';
     expect((await call('analyze_site', LOC, seat())).isError).toBe(false);
@@ -162,7 +216,7 @@ describe('a contract-arm caller (Grok) keeps the same first line', () => {
   it('the paywall contract does not replace the v11 line, and does not stack a second ask', async () => {
     const r = await call('analyze_site', LOC, seat({ platform: 'grok', client_name_raw: 'grok' }));
     const line = firstLine(r);
-    expect(line).toMatch(RELAY);
+    expect(line).toContain(RELAY_SHORT);
     expect(line).toContain('DC Hub Pro');
     expect(line).toMatch(/rates this site \w+ overall/);      // the verdict band, no figure
     expect(r.structuredContent.user_message).toBe(line);
@@ -170,6 +224,7 @@ describe('a contract-arm caller (Grok) keeps the same first line', () => {
     expect(r.structuredContent.copy_version).toBe('v11');
     expect(r.structuredContent.paywall_contract).toBe('grok');
     expect(r.content[0].text).not.toContain('Tell the user:');
+    expect(r.structuredContent.for_your_human.url).toBe(RELAY_SHORT);
     // one human link in the text, and it is the relay inside the v11 line
     expect(r.content[0].text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\//g)).toHaveLength(1);
     for (const f of ['83.7', '88.1', '71.3', '95.4']) expect(JSON.stringify(r)).not.toContain(f);
@@ -217,12 +272,26 @@ describe('the offer is truthful per tool', () => {
       expect(line, name).toContain('DC Hub Pro');
       expect(line, name).not.toMatch(/\$\d|credit|unlock/i);
       if (['analyze_site', 'compare_sites', 'get_dchub_recommendation'].includes(name)) {
-        expect(line, name).toMatch(RELAY);        // MCP-1: relay page, no short link minted
+        expect(line, name).toContain(RELAY_SHORT);   // MCP-1 relay page, behind its F5 /u link
         expect(shortPosts.length, name).toBe(0);
       } else {
         expect(shortPosts[0].body.plan, name).toBe('pro');
       }
     }
+  });
+
+  it('F5: a long relay copy left in the body is written as the same /u link (one link, one spelling)', async () => {
+    await S._ctxALS.run(seat(), async () => {
+      relayMode = 'http500';                                  // learn this request's relay URL
+      const r0 = await wall('analyze_site');
+      const long = firstLine(r0).match(RELAY)[0];
+      relayMode = 'ok';
+      const r = await S._withWallUserLine({ content: [{ type: 'text', text: 'body\nsee ' + long + ' for more' }],
+                                            structuredContent: { _wall: true } }, 'analyze_site');
+      expect(firstLine(r)).toContain(RELAY_SHORT);
+      expect(r.content[0].text).not.toContain(long);
+      expect(r.content[0].text).toContain('see ' + RELAY_SHORT + ' for more');
+    });
   });
 
   it('a pack-class tool describes the $10 pack as API capacity, never as an unlock', async () => {
@@ -258,7 +327,8 @@ describe('the other walls', () => {
     const r = await call('get_dchub_recommendation', {}, seat());
     expect(r.structuredContent.error).toBe('paid_only');
     const line = firstLine(r);
-    expect(line).toMatch(RELAY);   // MCP-1: the Pro-only wall leads with the /upgrade/h relay
+    expect(line).toContain(RELAY_SHORT);   // MCP-1: the Pro-only wall leads with the /upgrade/h relay (F5: via /u)
+    expect(r.structuredContent.for_your_human.url).toBe(RELAY_SHORT);
     expect(line).toContain('DC Hub Pro');
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
