@@ -5594,6 +5594,7 @@ export function findCapacityPromptText(a = {}) {
     .filter(Boolean).join(' ');
   return `Use DC Hub Capacity Source to find data-center capacity for this requirement: ${a.requirement}
 1. Call source_capacity${args ? ` ${args}` : ''} — live listings of powered land, powered shells and turnkey capacity (market, state, capacity, and when each listing was last updated), or the program status while listings are being onboarded. Narrow it the way the requirement does: size as min_mw, or min_kw in kW; location as region (e.g. region=europe) or location (a country, state or metro); plus delivery_type and available_by. A size is matched against what each listing can actually deliver — contiguous_kw, the largest single contiguous block available, and min_contract_kw, the smallest chunk the provider will contract — not just its headline total, so a listing with plenty of total capacity but a smaller contiguous block will not come back for a large size.
+   To match the whole requirement instead of browsing (once your human is signed in), call source_capacity with target_mw (or target_kw), plus min_chunk_kw for the smallest piece they will contract at one site, and max_sites / max_providers above one if the requirement may be split: it returns exact single-listing fits, multi-site bundles, or the shortfall and when scheduled capacity closes it.
 2. Say which listings fit the requirement and why. To open one, call source_capacity slug=<that listing's slug>; the first time, accept_capacity_terms records your human's acceptance of the introduction terms, so call it only after they agree.
 3. When they want in, call request_capacity_intro with that slug to register a deal. If nothing fits or nothing is live yet, call request_capacity_intro without a slug to register the requirement for new listings.
 This is a deal registration: DC Hub sends the provider only your human's company name and the requirement, the provider accepts or declines, and only on acceptance are the provider's identity, site and contact shared with your human (and your human's name, role and email with the provider); on a decline nothing is shared. Treat listing details as confidential: cite "DC Hub Capacity Source (dchub.cloud)" and do not republish them.`;
@@ -6263,16 +6264,84 @@ function _listingNextSteps(tool, status, body) {
       ? unlock.mcp_steps.filter((s) => typeof s === 'string' && /^[a-z_]+$/.test(s)) : [];
     return withTool(fromBackend.length ? fromBackend : _LISTING_401_STEPS.sign_in_required);
   }
-  if (status === 403) return withTool(['unlock_more_data']);
+  if (status === 403) {
+    // 2026-09-28 (capacity matching): three 403s are NOT a plan wall, and
+    // sending the agent to unlock_more_data for them sends it to a checkout
+    // that cannot help. account_review is a person at DC Hub (nothing to call),
+    // self_intro_not_allowed means pick a different listing.
+    const reason = _listingReason(body);
+    if (reason === 'account_review') return [];
+    if (reason === 'self_intro_not_allowed') return ['source_capacity'];
+    return withTool(['unlock_more_data']);
+  }
   return [tool];
 }
 
-function _listingNextStepsNote(tool, status, body, steps) {
+// The reason a wall or error names: the body's own `reason`, else the access
+// block's, else the error code (a 403 self_intro_not_allowed carries both).
+function _listingReason(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const r = (typeof b.reason === 'string' && b.reason)
+    || (b.access && typeof b.access.reason === 'string' && b.access.reason)
+    || (typeof b.error === 'string' && b.error) || '';
+  return r;
+}
+
+// "on 2026-10-01" from an ISO timestamp, or '' when there is none to quote.
+function _listingDay(v) {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : '';
+}
+
+function _listingNextStepsNote(tool, status, body, steps, opts = {}) {
+  const reason = _listingReason(body);
   if (status === 401) {
-    return 'This wall is identity, not payment. Call ' + steps.join(', then ') + '. Bind only an email your human explicitly gives you.';
+    const base = 'This wall is identity, not payment. Call ' + steps.join(', then ') + '. Bind only an email your human explicitly gives you.';
+    // Matching is walled; browsing is not. Say so, or an agent that hit the
+    // wall on a target_mw call concludes the whole catalogue is closed.
+    return opts.match
+      ? base + ' Matching a requirement (target_mw or target_kw) needs an identified caller; browsing source_capacity without a target stays open to anyone.'
+      : base;
+  }
+  if (status === 403 && reason === 'intro_quota_exhausted') {
+    const q = body.quota && body.quota.intro_requests && typeof body.quota.intro_requests === 'object'
+      ? body.quota.intro_requests : {};
+    const limit = Number.isInteger(q.limit) && q.limit > 0 ? q.limit : null;
+    const reset = _listingDay(body.reset_at) || _listingDay(q.resets_at);
+    return 'The free plan\'s introduction requests for this month are used'
+      + (limit ? ' (' + limit + ' per calendar month, UTC)' : '') + ', so nothing was sent.'
+      + (reset ? ' The allowance resets on ' + reset + '.' : ' The allowance resets at the start of next month (UTC).')
+      + ' For more introductions now, unlock_more_data returns the paid options to relay (Developer and above have unlimited introductions); then call ' + tool + ' again.'
+      + ' Registering a standing requirement (request_capacity_intro without a slug) stays free.';
+  }
+  if (status === 403 && reason === 'account_review') {
+    const unlock = body.access && body.access.unlock && typeof body.access.unlock === 'object' ? body.access.unlock : {};
+    const contact = typeof unlock.contact === 'string' && unlock.contact ? unlock.contact : 'DC Hub support';
+    return 'This account is under review for Capacity Source access; a person at DC Hub completes it, so there is no tool to call and retrying will not help.'
+      + ' Teaser browsing (source_capacity without a slug or target) stays open. Tell your human to email ' + contact + ' to complete the review.';
+  }
+  if (status === 403 && reason === 'self_intro_not_allowed') {
+    return 'This account shares a domain with the listing\'s provider, so it cannot register a deal on its own listing; nothing was sent.'
+      + ' Call source_capacity for other listings, or request_capacity_intro without a slug to register the requirement.';
   }
   if (status === 403) {
     return 'This listing needs a higher plan than this caller has. unlock_more_data returns the options to relay; then call ' + tool + ' again.';
+  }
+  if (status === 429) {
+    const wait = body.retry_after_s != null && Number.isFinite(Number(body.retry_after_s)) ? Number(body.retry_after_s) : null;
+    if (reason === 'parameter_sweep') {
+      return 'Too many different sizes were asked for in a short time, which reads as mapping the inventory rather than sourcing a requirement.'
+        + (wait != null ? ' Wait ' + wait + 's, then' : ' Wait a few minutes, then') + ' call ' + tool
+        + ' once with the size your human actually needs. Do not step through sizes.';
+    }
+    if (reason === 'review_required') {
+      const unlock = body.access && body.access.unlock && typeof body.access.unlock === 'object' ? body.access.unlock : {};
+      const contact = typeof unlock.contact === 'string' && unlock.contact ? unlock.contact : 'DC Hub support';
+      return 'This account reached today\'s Capacity Source review threshold and DC Hub has been notified. Do not retry today;'
+        + ' if your human needs more today, they can email ' + contact + '.';
+    }
+    return 'Too many requests.' + (wait != null ? ' Retry once after ' + wait + 's.' : ' Retry once after a short backoff.')
+      + ' Do not loop on ' + tool + '.';
   }
   if (status === 409) {
     const ver = body.terms && typeof body.terms.version === 'string' ? body.terms.version : null;
@@ -6352,9 +6421,230 @@ function _listingBrowseAccess(tool, body) {
   return { next_steps, next_steps_note };
 }
 
+// ── capacity matching: source_capacity with a target (2026-09-28) ────────────
+// POST /api/v1/listings/match (dchub-backend routes/exclusive_listings.py,
+// util/capacity_matcher.py) answers a WHOLE requirement: `exact` listings that
+// deliver it alone (at most five), `bundles` of listings that deliver it
+// together (at most three; only when max_sites allows more than one), and,
+// when neither exists, `shortfall` — the most reachable now and when scheduled
+// capacity closes the gap. It is identified-only and rate/harvest limited on
+// the backend; this side sends the requirement and renders the answer.
+//
+// ★ NO PROVIDER NAMES. The backend labels providers "Provider A", "Provider
+//   B"… per response and never sends a name, site or contact. The text below
+//   renders only allow-listed leg fields, and _matchScrub drops identity keys
+//   from the JSON as well, so a backend regression cannot leak one through
+//   this tool.
+export const MATCH_API = '/api/v1/listings/match';
+const _MATCH_IDENTITY_KEYS = ['provider', 'provider_name', 'operator', 'operator_name', 'contact',
+  'site', 'address', 'latitude', 'longitude', 'substation', 'title'];
+
+// The request body, in the backend's shape. Only what the caller sent; the
+// browse-only filters (min_mw, min_kw, limit) do not belong to a match.
+export function _matchBody(a) {
+  const x = a || {};
+  const out = {};
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  for (const k of ['target_mw', 'target_kw', 'min_chunk_kw', 'max_sites', 'max_providers']) {
+    const v = num(x[k]);
+    if (v !== undefined) out[k] = v;
+  }
+  for (const k of ['available_by', 'market', 'state', 'region', 'location', 'delivery_type']) {
+    const v = _listingStr(x[k]);
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
+// A target is present when either size is a number. Zero or a negative still
+// goes to /match, whose 400 names the rule, rather than silently browsing.
+export function _matchWanted(a) {
+  const x = a || {};
+  return [x.target_mw, x.target_kw].some((v) => typeof v === 'number' && Number.isFinite(v));
+}
+
+function _matchScrubLeg(leg) {
+  if (!leg || typeof leg !== 'object' || Array.isArray(leg)) return leg;
+  const out = { ...leg };
+  for (const k of _MATCH_IDENTITY_KEYS) delete out[k];
+  return out;
+}
+
+export function _matchScrub(body) {
+  const b = { ...body };
+  const legs = (arr) => (Array.isArray(arr) ? arr.map(_matchScrubLeg) : arr);
+  if (Array.isArray(b.exact)) b.exact = legs(b.exact);
+  if (Array.isArray(b.bundles)) {
+    b.bundles = b.bundles.map((x) => (x && typeof x === 'object' && !Array.isArray(x) ? { ...x, legs: legs(x.legs) } : x));
+  }
+  if (b.shortfall && typeof b.shortfall === 'object' && !Array.isArray(b.shortfall)) {
+    b.shortfall = { ...b.shortfall, legs: legs(b.shortfall.legs) };
+  }
+  return b;
+}
+
+const _matchKw = (v) => { const n = _listingNonNeg(v); return n === null ? '' : _listingQty(n) + ' kW'; };
+const _matchSize = (v) => {
+  const n = _listingNonNeg(v);
+  return n === null ? '' : _listingQty(n) + ' kW' + (n >= 1000 ? ' (' + _listingQty(n / 1000) + ' MW)' : '');
+};
+const _matchWhere = (leg) => [leg.market, leg.state, leg.country].map(_listingStr).filter(Boolean).join(', ');
+const _matchListing = (leg) => _listingStr(leg && leg.listing);
+
+function _matchLegLine(leg) {
+  const slug = _matchListing(leg);
+  const where = _matchWhere(leg);
+  const when = _listingStr(leg.available_from);
+  const label = _listingStr(leg.provider_label);
+  return '  - ' + (slug || _listingStr(leg.ref) || 'listing') + ': ' + (_matchKw(leg.kw) || 'kW not stated')
+    + (where ? ' in ' + where : '')
+    + (when ? ', available from ' + when : ', no availability date listed')
+    + (label ? ' [' + label + ']' : '');
+}
+
+// Every listing the answer names, in order of first appearance, with each
+// place it appears: the per-listing view an agent turns into introductions.
+function _matchByListing(body) {
+  const order = [];
+  const by = new Map();
+  const add = (leg, where) => {
+    const slug = _matchListing(leg);
+    if (!slug) return;
+    if (!by.has(slug)) { by.set(slug, { leg, uses: [] }); order.push(slug); }
+    by.get(slug).uses.push(where + ' ' + (_matchKw(leg.kw) || 'kW not stated')
+      + (_listingStr(leg.available_from) ? ' from ' + _listingStr(leg.available_from) : ''));
+  };
+  (Array.isArray(body.exact) ? body.exact : []).forEach((l) => add(l, 'exact fit'));
+  (Array.isArray(body.bundles) ? body.bundles : []).forEach((b, i) =>
+    (b && Array.isArray(b.legs) ? b.legs : []).forEach((l) => add(l, 'bundle ' + (i + 1) + ' leg')));
+  const sf = body.shortfall && Array.isArray(body.shortfall.legs) ? body.shortfall.legs : [];
+  sf.forEach((l) => add(l, 'partial (shortfall) leg'));
+  return order.map((slug) => ({ slug, ...by.get(slug) }));
+}
+
+function _matchQuotaLine(body) {
+  const q = body.quota && body.quota.intro_requests;
+  if (!q || typeof q !== 'object') return '';
+  if (q.unlimited === true) return 'Introduction requests: unlimited on this plan.';
+  const limit = Number.isInteger(q.limit) ? q.limit : null;
+  const remaining = Number.isInteger(q.remaining) ? q.remaining : null;
+  const reset = _listingDay(q.resets_at);
+  if (limit === null) return '';
+  if (remaining === null) {
+    return 'Introduction requests: ' + limit + ' per month on the free plan (remaining could not be read)'
+      + (reset ? '; resets ' + reset : '') + '.';
+  }
+  return 'Introduction requests: ' + remaining + ' of ' + limit + ' left this month on the free plan'
+    + (reset ? ' (resets ' + reset + ')' : '') + '.'
+    + (remaining === 0 ? ' More now: unlimited from Developer up (unlock_more_data); a standing requirement stays free.' : '');
+}
+
+// The rendered lines for a 2xx match body.
+export function _matchLines(body) {
+  const b = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  const req = b.request && typeof b.request === 'object' ? b.request : {};
+  const exact = Array.isArray(b.exact) ? b.exact : [];
+  const bundles = Array.isArray(b.bundles) ? b.bundles.filter((x) => x && Array.isArray(x.legs)) : [];
+  const sf = b.shortfall && typeof b.shortfall === 'object' && !Array.isArray(b.shortfall) ? b.shortfall : null;
+  const lines = [];
+  const target = _matchSize(req.target_kw) || _matchSize(sf && sf.target_kw);
+  const terms = [];
+  if (_listingNonNeg(req.min_chunk_kw)) terms.push('chunks of at least ' + _matchKw(req.min_chunk_kw));
+  if (Number.isInteger(req.max_sites)) terms.push('up to ' + req.max_sites + ' site' + (req.max_sites === 1 ? '' : 's'));
+  if (Number.isInteger(req.max_providers)) terms.push('up to ' + req.max_providers + ' provider' + (req.max_providers === 1 ? '' : 's'));
+  if (_listingStr(req.available_by)) terms.push('available by ' + _listingStr(req.available_by));
+  lines.push('Capacity match for ' + (target || 'the requirement') + (terms.length ? ' (' + terms.join(', ') + ')' : '') + ':');
+
+  if (exact.length) {
+    lines.push('Single-listing fits (' + exact.length + '): each delivers the whole requirement alone.');
+    exact.forEach((l) => lines.push(_matchLegLine(l)));
+  }
+  if (bundles.length) {
+    lines.push(exact.length
+      ? 'Also ' + bundles.length + ' bundle' + (bundles.length === 1 ? '' : 's') + ' that ' + (bundles.length === 1 ? 'delivers' : 'deliver') + ' it together:'
+      : 'No single listing fits the whole requirement. ' + bundles.length + ' bundle' + (bundles.length === 1 ? '' : 's')
+        + ' of listings ' + (bundles.length === 1 ? 'delivers' : 'deliver') + ' it together:');
+    bundles.forEach((x, i) => {
+      const full = _listingStr(x.earliest_full_delivery);
+      lines.push('Bundle ' + (i + 1) + ': ' + (_matchKw(x.total_kw) || 'total not stated')
+        + (Number.isInteger(x.sites) ? ' across ' + x.sites + ' site' + (x.sites === 1 ? '' : 's') : '')
+        + (Number.isInteger(x.providers) ? ' from ' + x.providers + ' provider' + (x.providers === 1 ? '' : 's') : '')
+        + (full ? ', fully delivered by ' + full : ', full delivery date not listed for every leg'));
+      x.legs.forEach((l) => lines.push(_matchLegLine(l)));
+    });
+  }
+  if (sf) {
+    lines.push('No listing or bundle delivers ' + (target || 'the requirement') + ' within these limits.');
+    lines.push('Shortfall: best reachable now ' + (_matchKw(sf.best_kw) || '0 kW') + ' of ' + (_matchKw(sf.target_kw) || target)
+      + (_listingNonNeg(sf.kw_short) !== null ? ' (' + _matchKw(sf.kw_short) + ' short)' : '')
+      + (Number.isInteger(sf.sites) && sf.sites ? ' across ' + sf.sites + ' site' + (sf.sites === 1 ? '' : 's') : '') + '.');
+    (Array.isArray(sf.legs) ? sf.legs : []).forEach((l) => lines.push(_matchLegLine(l)));
+    const tl = Array.isArray(sf.timeline) ? sf.timeline : [];
+    if (tl.length) {
+      lines.push('Scheduled capacity over time:');
+      tl.forEach((t) => lines.push('  - ' + _listingStr(t.date) + ': ' + (_matchKw(t.deliverable_kw) || '?')
+        + ' deliverable' + (t.meets_target === true ? ' — meets the target' : '')));
+    }
+    lines.push(_listingStr(sf.closes_at)
+      ? 'Scheduled capacity closes the gap by ' + _listingStr(sf.closes_at) + '.'
+      : 'No scheduled capacity in the current listings closes the gap.');
+    if (req.max_sites === 1 || req.max_sites === undefined) {
+      lines.push('Bundles were not considered: pass max_sites (and max_providers) above one to allow a multi-site answer.');
+    }
+    lines.push('To be told when matching capacity opens, register the requirement with request_capacity_intro without a slug.');
+  }
+  if (!exact.length && !bundles.length && !sf) lines.push('No listing matched.');
+
+  const listings = _matchByListing(b);
+  if (listings.length) {
+    lines.push('By listing (next step for each):');
+    listings.forEach(({ slug, leg, uses }) => {
+      const where = _matchWhere(leg);
+      lines.push('- ' + slug + (where ? ' (' + where + ')' : '') + ': ' + uses.join('; ')
+        + '. Next: request_capacity_intro slug="' + slug + '".');
+    });
+    if (bundles.length) lines.push('A bundle needs one introduction per listing in it.');
+  }
+  const quota = _matchQuotaLine(b);
+  if (quota) lines.push(quota);
+  lines.push('Providers are shown as labels that mean something only inside this answer; identity, site and contact are released only after a provider accepts an introduction.');
+  return lines;
+}
+
+// Map the /match response onto the tool result. 2xx renders the match; every
+// wall and error goes through the same mapping the rest of the tool uses, with
+// the match-specific identity wording.
+export function _matchToolResult(r) {
+  const tool = 'source_capacity';
+  const status = r && Number.isInteger(r.http_status) ? r.http_status : 0;
+  const body = r && r.body && typeof r.body === 'object' && !Array.isArray(r.body) ? r.body : null;
+  if (status >= 200 && status < 300 && body && (Array.isArray(body.exact) || Array.isArray(body.bundles) || 'shortfall' in body)) {
+    const scrubbed = _matchScrub(body);
+    const slugs = _matchByListing(scrubbed).map((x) => x.slug);
+    const q = scrubbed.quota && scrubbed.quota.intro_requests;
+    const limited = q && typeof q === 'object' && q.unlimited !== true && Number.isInteger(q.remaining);
+    const bundleNeeds = Array.isArray(scrubbed.bundles) && scrubbed.bundles.length
+      ? Math.min(...scrubbed.bundles.map((x) => (x && Array.isArray(x.legs) ? new Set(x.legs.map(_matchListing)).size : 0)))
+      : 0;
+    let note;
+    if (slugs.length) {
+      note = 'To proceed on a listing, call request_capacity_intro with that listing\'s slug (it asks for your human\'s name, company and agreement to the introduction terms). A bundle needs one introduction per listing.';
+      if (limited && bundleNeeds > q.remaining) {
+        note += ' The smallest bundle needs ' + bundleNeeds + ' introductions and this free account has ' + q.remaining
+          + ' left this month; more introductions need a paid plan (unlock_more_data).';
+      }
+    } else {
+      note = 'Nothing fits yet. request_capacity_intro without a slug registers the requirement so DC Hub can email your human when matching capacity opens.';
+    }
+    const payload = { ...scrubbed, next_steps: ['request_capacity_intro'], next_steps_note: note };
+    return _listingResult(payload, {}, _matchLines(scrubbed));
+  }
+  return _listingsToolResult(tool, r, { match: true });
+}
+
 // Map a {withStatus:true} response onto the tool result. See the block comment
 // at the top of this section for why walls are NOT errors here.
-export function _listingsToolResult(tool, r) {
+export function _listingsToolResult(tool, r, opts = {}) {
   if (!r || typeof r !== 'object' || !Number.isInteger(r.http_status) || r.http_status <= 0) {
     const payload = {
       ok: false,
@@ -6398,7 +6688,7 @@ export function _listingsToolResult(tool, r) {
   if (_LISTING_WALL_STATUSES.has(status)) {
     const next_steps = _listingNextSteps(tool, status, body);
     const payload = { ...body, http_status: status, next_steps,
-                      next_steps_note: _listingNextStepsNote(tool, status, body, next_steps) };
+                      next_steps_note: _listingNextStepsNote(tool, status, body, next_steps, opts) };
     if (status === 401) payload.identity_note = LISTING_OAUTH_NOTE;
     return _listingResult(payload, { isError: false });
   }
@@ -6412,6 +6702,7 @@ export function _listingsToolResult(tool, r) {
     : transient ? 'The listings service is temporarily unavailable. Retry after a short backoff.'
       : 'The listings service rejected the request.');
   const payload = { ...body, http_status: status };
+  if (status === 429) payload.next_steps_note = _listingNextStepsNote(tool, 429, body, [], opts);
   if (!payload._error_mitigation) {
     payload._error_mitigation = {
       error_code: (typeof body.error === 'string' && body.error)
@@ -24656,7 +24947,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // unchanged; the backend contract for them ships in parallel.
   const _CAPACITY_GPU_ON = String(process.env.CAPACITY_GPU_COMPUTE || '').toLowerCase() === 'on';
   trackedTool(srv, 'source_capacity',
-    'Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
+    'Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro). Example: "500 kW anywhere in Europe" → min_kw=500, region=europe. Size is min_kw (in kW) or min_mw (in MW), and it is matched against what a listing can ACTUALLY deliver rather than against its headline total: `contiguous_kw` is the largest single contiguous block available and `min_contract_kw` the smallest chunk the provider will contract, so a colocation with a large total but a small contiguous block does NOT answer a large search, while a large site willing to contract small chunks does; a listing that declares neither is matched on its total. Location is region (a region key or alias) or location (free text matched against each listing\'s region, country, state and metro); market, state, delivery_type and available_by narrow further. Listings are powered land, powered shells, turnkey capacity and colocation to buy or lease, for enterprise and agent-led procurement. Returns listing cards (market, region, capacity — with contiguous_kw and min_contract_kw wherever a listing declares them — status and when each listing was last updated) to any caller, plus the filters applied and the program status (live, or upcoming while the first listings are onboarded). Pass slug for one listing: a signed-in human who has accepted the introduction terms sees its specs (signed in means a key with an email bound via claim_free_key then bind_email, or an OAuth connection; accept_capacity_terms records the acceptance the first time); others get the card and the unlock steps. The provider\'s identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits, and the listing\'s disclosure block says whether they have been. To match a whole requirement instead, pass target_mw or target_kw (optionally min_chunk_kw, max_sites, max_providers, available_by): returns exact single-listing fits, multi-site or multi-provider bundles and, when nothing fits, a shortfall timeline; matching needs a signed-in human, and providers stay anonymised until an introduction is accepted. Do NOT use for the public facility directory (use search_facilities) or for completed M&A (use list_transactions).',
     { slug: ID.describe('One listing: its slug or numeric id exactly as items[].slug / items[].id return it. Omit to browse teaser cards'),
       market: S.describe('Browse filter: market name as it appears on a listing, e.g. "Dallas"'),
       state: S.describe('Browse filter: two-letter US state, e.g. "TX"'),
@@ -24665,18 +24956,32 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       region: S.describe('Browse filter: comma-separated regions from north_america, latin_america, europe, asia_pacific and middle_east_africa; the aliases emea, apac, latam and americas also work, e.g. "europe" or "emea, apac"'),
       location: S.describe('Browse filter: comma-separated free text matched against each listing\'s region, country, state and metro, e.g. "Germany" or "Texas, Phoenix"'),
       delivery_type: z.enum(_CAPACITY_GPU_ON ? ['land', 'powered_shell', 'turnkey', 'colocation', 'gpu_compute'] : ['land', 'powered_shell', 'turnkey', 'colocation']).optional().describe(_CAPACITY_GPU_ON ? 'Browse filter: how the capacity is delivered: land, powered_shell, turnkey, colocation or gpu_compute' : 'Browse filter: how the capacity is delivered: land, powered_shell, turnkey or colocation'),
-      available_by: S.describe('Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD'),
+      available_by: S.describe('Browse filter: only listings available by this date, as YYYY-MM or YYYY-MM-DD. With a target it is the date the whole requirement must be deliverable by'),
       ..._CAPACITY_GPU_ON ? {
         gpu_model: S.describe('Browse filter, gpu_compute listings: GPU model, e.g. H100, H200, B200, GB200, MI300X'),
         min_gpus: N.describe('Browse filter, gpu_compute listings: at least this many GPUs available'),
         offer_type: S.describe('Browse filter, gpu_compute listings: reserved, on_demand or spot'),
       } : {},
-      limit: LIMIT },
+      limit: LIMIT,
+      // 2026-09-28 (capacity matching): a target switches the call from the
+      // browse feed to POST /api/v1/listings/match. Without one, nothing below
+      // changes. See _matchToolResult.
+      target_mw: N.describe('Match mode: the whole requirement, in MW (target_kw is the same in kW; give one). Returns exact fits, bundles and a shortfall instead of teaser cards. Needs a signed-in human'),
+      target_kw: N.describe('Match mode: the whole requirement, in kW (target_mw is the same in MW; give one)'),
+      min_chunk_kw: N.describe('Match mode: the smallest piece, in kW, your human will contract at any one listing. Default: no minimum'),
+      max_sites: z.number().int().min(1).max(6).optional().describe('Match mode: how many listings the requirement may be split across. Default one, which allows exact fits only; raise it to allow bundles'),
+      max_providers: z.number().int().min(1).max(6).optional().describe('Match mode: how many different providers a bundle may use. Default: the same as max_sites') },
     async (a) => {
       if (a.slug !== undefined && a.slug !== null && String(a.slug).trim() !== '') {
         const path = _listingPath(a.slug);
         if (!path) return _listingInvalidSlug('source_capacity', a.slug);
         return _listingsToolResult('source_capacity', await callAPI(path, {}, { withStatus: true }));
+      }
+      // Identity rides on callAPIWrite exactly as it does for
+      // request_capacity_intro (X-API-Key, X-MCP-Session, X-MCP-Platform,
+      // X-Forwarded-For), so the backend matches for the real caller.
+      if (_matchWanted(a)) {
+        return _matchToolResult(await callAPIWrite(MATCH_API, _matchBody(a), { withStatus: true }));
       }
       // The GPU filters exist in the schema only when the flag is on, so they are read from
       // `gpu`, which is empty otherwise (no handler reads an undeclared argument).
