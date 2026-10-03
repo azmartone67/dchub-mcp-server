@@ -256,6 +256,23 @@ describe('arms and the default', () => {
     expect(PC.paywallContractArm({ identity: 'x', env: { DCHUB_PAYWALL_CONTRACT_GROK: '0' }, platform: 'grok' })).toBeNull();
   });
 
+  it('the window restarted 2026-10-04 for 14 days: the void 09-29 window assigns nobody', () => {
+    // 2026-09-29 window VOID (owner 10-03): visible links carried no ?pc, so every arm
+    // landed on the control relay page.
+    expect(PC.PAYWALL_CONTRACT_AB_START).toBe('2026-10-04T00:00:00Z');
+    expect(PC.PAYWALL_CONTRACT_AB_DAYS).toBe(14);
+    const w = PC.abWindow({});
+    expect(new Date(w.start).toISOString()).toBe('2026-10-04T00:00:00.000Z');
+    expect(new Date(w.end).toISOString()).toBe('2026-10-18T00:00:00.000Z');
+    const env = { DCHUB_PAYWALL_CONTRACT: 'ab' };
+    const arm = (iso) => PC.paywallContractArm({ identity: 'ip:198.51.100.7', env, now: Date.parse(iso) });
+    expect(arm('2026-10-02T12:00:00Z')).toBeNull();               // inside the void window
+    expect(arm('2026-10-03T23:59:59Z')).toBeNull();
+    expect(['v1', 'v2']).toContain(arm('2026-10-04T00:00:00Z'));   // first second of the restart
+    expect(['v1', 'v2']).toContain(arm('2026-10-17T23:59:59Z'));
+    expect(arm('2026-10-18T00:00:00Z')).toBeNull();               // end is exclusive
+  });
+
   it('the control arm keeps its bytes but tags its relay links ?pc=v1', () => {
     const url = 'https://dchub.cloud/upgrade/h/abc_DEF-1.' + 'a'.repeat(32);
     const r = { content: [{ type: 'text', text: 'x ' + url }], structuredContent: { for_your_human: { url: url + '?offer=pro_trial_7d' } } };

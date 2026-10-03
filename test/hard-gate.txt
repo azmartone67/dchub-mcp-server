@@ -314,6 +314,7 @@ test/unverified-listing-marker.test.mjs
 test/upgrade-names-what-you-missed.test.mjs
 test/upstream-error-contract.test.mjs
 test/upstream-error-iserror.test.mjs
+test/verbatim-follower-is-data.test.mjs
 test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
