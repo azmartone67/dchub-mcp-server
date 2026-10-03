@@ -90,8 +90,11 @@ beforeAll(async () => {
   process.env.DCHUB_INTERNAL_KEY = SECRET;
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = httpServer.address().port;
+  // The paywall class the relay branch in trackedTool keys on (A2 split it
+  // from the advertised `access`, which now also reads paid for Pro tools the
+  // paywall does not gate, e.g. export_dataset).
   GATED = SPEC.map((t) => t.name).filter((n) =>
-    ['paid', 'metered'].includes(S._accessTagFor(n).access) || NAMED.includes(n));
+    ['paid', 'metered'].includes(S._accessGateClass(n)) || NAMED.includes(n));
 });
 
 afterAll(async () => {
