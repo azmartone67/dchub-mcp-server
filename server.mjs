@@ -7457,12 +7457,55 @@ const METERED_ENFORCE_TOOLS = new Set([
 // token into a shared list would misattribute every other caller's click. So
 // the static tag is attributed, and `upgrade_relay` tells the agent where the
 // tokenized link actually comes from: the gated RESULT, minted per call.
-function _accessTagFor(name) {
-  const access = PAID_ONLY_TOOLS.has(name) ? 'paid'
+// A2 (2026-10-03): the legacy four-way class. It still decides the URL in the
+// tag (connect_url vs pricing_url, unchanged during the pricing A/B) and the
+// anonymous relay branch in trackedTool, so neither moves.
+function _legacyAccessFor(name) {
+  return PAID_ONLY_TOOLS.has(name) ? 'paid'
     : METERED_ENFORCE_TOOLS.has(name) ? 'metered'
     : FREE_FULL_TOOLS.has(name) ? 'free' : 'free_preview';
+}
+// A2: tools that read or write the caller's own saved work. Each one answers a
+// keyless call with auth_required (see its description), so the lowest seat
+// that can use it is a free key. Not a gate: the backend enforces the key.
+export const KEY_REQUIRED_STATE_TOOLS = new Set([
+  'save_site', 'list_saved_sites', 'set_site_alert', 'set_market_alert',
+  'save_to_shortlist', 'get_shortlist', 'set_shortlist_alert',
+  'register_standing_intent', 'list_standing_intents', 'delete_standing_intent',
+]);
+// A2: the lowest seat that gets this tool's full answer, derived from the sets
+// the gates enforce (never typed per tool). Order matters: Pro beats email,
+// email beats the paid depth tease.
+//   pro                 PRO_ONLY_TOOLS or LP_TOOLS (Land and Power is Pro)
+//   email               isFreeWithEmailTool (paid-only, not Pro: a bound key)
+//   developer_for_full  ALWAYS_PARTIAL_PREVIEW or DEPTH_TEASE_TOOLS
+//   free_key            KEY_REQUIRED_STATE_TOOLS
+//   anonymous           everything else
+export function _tierRequiredFor(name) {
+  if (PRO_ONLY_TOOLS.has(name) || LP_TOOLS.has(name)) return 'pro';
+  if (isFreeWithEmailTool(name)) return 'email';
+  if (ALWAYS_PARTIAL_PREVIEW.has(name) || DEPTH_TEASE_TOOLS.has(name)) return 'developer_for_full';
+  if (KEY_REQUIRED_STATE_TOOLS.has(name)) return 'free_key';
+  return 'anonymous';
+}
+// A2: one plain sentence per class. No prices (pricing lives at /pricing).
+export const FREE_ANSWER_BY_TIER = Object.freeze({
+  pro: 'Full results are on the Pro plan (dchub.cloud/pricing); below Pro this tool returns a preview or a guided wall.',
+  email: 'Free with an email: call claim_free_key, then bind_email, for the full answer; keyless gets a preview.',
+  developer_for_full: 'Keyless and free keys get a trimmed preview; the full answer is on paid plans or a credit pack.',
+  free_key: 'Needs a free key (claim_free_key, no email) because it reads or writes your saved work.',
+  anonymous: 'Works keyless: no key needed.',
+});
+function _accessTagFor(name) {
+  const legacy = _legacyAccessFor(name);
+  const tier_required = _tierRequiredFor(name);
+  // A2: a Pro-required tool reads `paid` even where the legacy class called it
+  // free_preview (export_dataset, get_composite_site_score). The URL below
+  // still follows the legacy class, so connect_url/pricing_url values do not
+  // change during the pricing A/B.
+  const access = (tier_required === 'pro' && legacy !== 'paid' && legacy !== 'metered') ? 'paid' : legacy;
   const q = encodeURIComponent(name || '');
-  const gated = (access === 'paid' || access === 'metered');
+  const gated = (legacy === 'paid' || legacy === 'metered');
   // ★ r-no-bare-wall (2026-09-19): the 09-16 fix above routed the 28 GATED
   // tools through /pricing/upgrade and left the other 63 on
   // `/pricing?ref=mcp-tools-list&tool=…`. That is attributed, but it is still
@@ -7483,7 +7526,7 @@ function _accessTagFor(name) {
   // search_facilities (free_preview, anonymous) returned four /go/c/<token>
   // checkout links IN ITS RESULT. Tokenized, session-bound, minted per call —
   // never frozen into this shared list.
-  const tag = { access };
+  const tag = { access, tier_required, free_answer: FREE_ANSWER_BY_TIER[tier_required] };
   if (!gated) {
     tag.connect_url = `https://dchub.cloud/connect?ref=mcp-tools-list&tool=${q}`;
   } else {
@@ -19069,7 +19112,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // `_upgrade` block and stay bare JSON, as measured and pinned
             // (relay-line-names-missed: search_facilities adds no line).
             let _anonRelay = null;
-            if (_ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_accessTagFor(name).access)) {
+            if (_ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_legacyAccessFor(name))) {
               try { _anonRelay = buildHumanRelay(name, tier, _sid) || null; } catch (_) {}
             }
             if (!_anonRelay || !_anonRelay.url) {
@@ -27805,7 +27848,7 @@ export { _buildToolsListResult };
 // r-gated-cta (2026-09-16): exported so test/gated-tool-cta.test.mjs can assert
 // the ONE derivation both tools/list paths use. Unexported, the guard would
 // have to re-type the ladder, which is how a second source of truth starts.
-export { _accessTagFor, METERED_ENFORCE_TOOLS };
+export { _accessTagFor, _legacyAccessFor, METERED_ENFORCE_TOOLS };
 // r-tuner-kimi-driftgate (2026-07-18): the platform-detection maps + the
 // tuned-description fetch list are exported so test/platform-desc-sync.test.mjs
 // can assert the 3-list sync (this drift has now shipped twice — the 07-11 wave
