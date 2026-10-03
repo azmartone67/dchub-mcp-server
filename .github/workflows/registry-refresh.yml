@@ -201,25 +201,37 @@ jobs:
           fi
           ./mcp-publisher login dns --domain dchub.cloud --private-key "$MCP_REGISTRY_DNS_KEY" >/dev/null 2>&1 \
             || { echo "::error::DNS login failed. Nothing deprecated."; exit 1; }
-          list_versions() {  # $1 = jq-free python filter mode: superseded | active
+          # The search list is a STALE index: on 2026-10-03 it still showed all 14
+          # versions active minutes after every status call had succeeded, while
+          # each per-version read already said deprecated. So the list only
+          # nominates candidates; every decision and the post-check read
+          # /versions/<v> (and /versions/latest) directly.
+          list_versions() {  # $1 = superseded | active  (per-version truth)
             python3 - "$1" <<'PY'
           import json, sys, urllib.parse, urllib.request
           mode, name = sys.argv[1], "cloud.dchub/mcp-server"
-          base = "https://registry.modelcontextprotocol.io/v0.1/servers?search=cloud.dchub&limit=100"
-          cursor, out = None, []
+          api = "https://registry.modelcontextprotocol.io/v0.1/servers"
+          one = lambda v: json.load(urllib.request.urlopen(
+              api + "/" + urllib.parse.quote(name, safe="") + "/versions/" + v, timeout=30))
+          meta = lambda d: d.get("_meta", {}).get("io.modelcontextprotocol.registry/official", {})
+          cursor, seen = None, []
           while True:
-              url = base + ("&cursor=" + urllib.parse.quote(cursor) if cursor else "")
+              url = api + "?search=cloud.dchub&limit=100" + ("&cursor=" + urllib.parse.quote(cursor) if cursor else "")
               d = json.load(urllib.request.urlopen(url, timeout=30))
-              for s in d.get("servers", []):
-                  sv = s.get("server", {})
-                  m = s.get("_meta", {}).get("io.modelcontextprotocol.registry/official", {})
-                  if sv.get("name") != name or m.get("status") != "active":
-                      continue
-                  if mode == "active" or not m.get("isLatest"):
-                      out.append(sv["version"])
+              seen += [s["server"]["version"] for s in d.get("servers", []) if s.get("server", {}).get("name") == name]
               cursor = (d.get("metadata") or {}).get("nextCursor")
               if not cursor:
                   break
+          latest = meta(one("latest"))
+          out = []
+          for v in sorted(set(seen)):
+              m = meta(one(v))
+              if m.get("status") != "active":
+                  continue
+              if mode == "active" or not m.get("isLatest"):
+                  out.append(v)
+          if mode == "active" and latest.get("status") != "active":
+              out.append("LATEST-NOT-ACTIVE")
           print("\n".join(out))
           PY
           }
@@ -230,5 +242,5 @@ jobs:
             ./mcp-publisher status --status deprecated "$REG_NAME" "$v"
           done
           LEFT=$(list_versions active)
-          echo "active after: $(echo "$LEFT" | tr '\n' ' ')"
+          echo "active after (per-version reads): $(echo "$LEFT" | tr '\n' ' ')"
           [ "$(echo "$LEFT" | grep -c .)" = "1" ] || { echo "::error::expected exactly 1 active version (isLatest)"; exit 1; }
