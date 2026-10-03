@@ -10,6 +10,7 @@ const ROW = { hifld_id: '107655', name: 'HOLCOMBE', max_kv: 138, distance_km: 2.
 const FULL = {
   success: true, overall_score: 81.2,
   nearest_substations: { substations: [ROW, { ...ROW, hifld_id: '2', name: 'B', distance_km: 4.1 }],
+    substations_in_radius: 37,
     search_radius_km: 50, coverage: 'HIFLD (United States and territories) only' },
   hosting_capacity: { feeders: [{ utility: 'Dominion Energy Virginia', feeder_id: 'F1',
     available_mw: 3.0, distance_km: 1.2, capacity_type: 'load', as_of: '2026-08-01',
@@ -22,7 +23,7 @@ describe('CM-4 substations are Pro only', () => {
   it('below Pro the block is locked: a count and the locked fields, no row data', () => {
     const p = preview();
     const subs = p.nearest_substations;
-    expect(subs).toEqual({ locked: true, required_plan: 'pro', substations_in_radius: 2,
+    expect(subs).toEqual({ locked: true, required_plan: 'pro', substations_in_radius: 37,
       search_radius_km: 50, coverage: 'HIFLD (United States and territories) only',
       locked_fields: SUBSTATION_ROW_FIELDS,
       note: expect.stringContaining('is Pro') });
@@ -36,6 +37,16 @@ describe('CM-4 substations are Pro only', () => {
     expect(f.distance_km).toBeNull();
     expect(f.capacity_type).toBe('load');
     expect(f.utility).toBe('Dominion Energy Virginia');
+  });
+
+  it('the count is the radius count from the backend, never the capped row length', () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({ ...ROW, hifld_id: String(i) }));
+    expect(_substationLockedView({ substations: rows, substations_in_radius: 37 })
+      .substations_in_radius).toBe(37);
+    // a backend that did not send the count (or a failed count): unknown, not 5
+    expect(_substationLockedView({ substations: rows }).substations_in_radius).toBeNull();
+    expect(_substationLockedView({ substations: rows, substations_in_radius: null })
+      .substations_in_radius).toBeNull();
   });
 
   it('a failed block stays null, an absent one stays absent', () => {
