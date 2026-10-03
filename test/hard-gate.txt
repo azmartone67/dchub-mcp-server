@@ -60,7 +60,7 @@ test/claude-directory-search-plans-line.test.mjs
 test/claude-directory-shared-scrub-equality.test.mjs
 test/claude-passive-arrivals.test.mjs
 test/client-config-transport-matches-canon.test.mjs
-test/cm4-substation-free-view.test.mjs
+test/cm4-substation-pro-only.test.mjs
 test/comparison-symmetry.test.mjs
 test/composite-shell.test.mjs
 test/connect-query-key-reaches-track.test.mjs
