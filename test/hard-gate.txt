@@ -274,6 +274,7 @@ test/relay-cap-no-session.test.mjs
 test/relay-cap-one-human-line.test.mjs
 test/relay-line-names-missed.test.mjs
 test/relay-one-ask.test.mjs
+test/relay-only-text-json.test.mjs
 test/relay-teaser-post.test.mjs
 test/request-interpretation.test.mjs
 test/required-args.test.mjs
