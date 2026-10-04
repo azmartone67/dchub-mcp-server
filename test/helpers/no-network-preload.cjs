@@ -101,4 +101,6 @@ Object.defineProperty(net.Socket.prototype, 'connect', {
   },
 });
 
-write({ ev: 'loaded', worker: process.env.TINYPOOL_WORKER_ID !== undefined });
+// vitest <=4 forks carry TINYPOOL_WORKER_ID; vitest 5 spawns vitest/dist/workers/*.js
+// with no tinypool env, so recognise that entry script too.
+write({ ev: 'loaded', worker: process.env.TINYPOOL_WORKER_ID !== undefined || /[\\/]vitest[\\/]dist[\\/]workers[\\/]/.test(process.argv[1] || '') });
