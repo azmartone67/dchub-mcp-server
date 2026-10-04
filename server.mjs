@@ -149,7 +149,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
-import { lastFreeLine as _lastFreeLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
+import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -19502,10 +19502,18 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 _lf = _lastFreeLine({ tool: name, link: _packCheckoutUrl(c.session_id),
                                       perPack: 1000 / _creditCost(name) });   // 1,000 = _PACK_RUNG's credits
               }
+              // ★ r-day2-digest (2026-10-04, owner-approved; DCHUB_DAY2_DIGEST_ASK=0 kills it): the
+              // FIRST full grid/fiber answer of the day for a keyed free caller offers the free weekly
+              // digest (retention 2.0%: an agent will not return on its own, an inbox can bring the human).
+              // Never on the last free answer (that one carries the pack ask) and never on a paid taste.
+              if (!_lf && !_paidTaste && c.api_key && _mtCall === 1 && _mtRemaining > 0
+                  && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_DAY2_DIGEST_ASK || ''))) {
+                _lf = _day2DigestLine({ tool: name, what: name === 'get_grid_intelligence' ? _mtParsed.iso : (c._go_place || _mtParsed.metro) });
+              }
               if (_lf) {
                 _mtParsed.user_message = _lf.human;
                 _mtParsed.show_to_user = true;
-                _mtParsed.for_your_human = { text: _lf.human, url: _lf.human.slice(_lf.human.indexOf('https://')) };
+                _mtParsed.for_your_human = _lf.human.includes('https://') ? { text: _lf.human, url: _lf.human.slice(_lf.human.indexOf('https://')) } : { text: _lf.human };
               }
               result.content[0].text = JSON.stringify(_mtParsed);
               if (_lf) result.content = [...result.content, { type: 'text', text: _lf.agent + '\n\n' + HUMAN_FIRST_MARKER + ' ' + _lf.human }];
