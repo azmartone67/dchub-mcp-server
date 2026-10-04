@@ -71,8 +71,8 @@ const SURFACES = [
 // whole names "Anonymous:" and "50 calls/day" in one sentence by design — that
 // is the rule, not an anonymous 50/day claim.
 const FREE_TIER_RULE = "Anonymous: previews, no key needed. "
-  + "Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers "
-  + "per tool per day). Paid plans: dchub.cloud/pricing.";
+  + "Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day "
+  + "(up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.";
 const CLAIM = /([\d,]+)\s*calls?\/day/gi;
 const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|no key needed/i;
 const num = (s) => Number(String(s).replace(/,/g, ""));
@@ -186,7 +186,7 @@ describe("smithery.yaml pricing block matches the ladder label-by-label", () => 
   // rule's words. Every other row still carries its canonical calls/day rung.
   const RULE = {
     anonymous: /previews, no key/i,
-    free: /10 calls to try/i,
+    free: /previews plus 2 full answers per tool per day/i,   // B1 (D4)
   };
   for (const r of rows.filter((x) => RULE[x.tier])) {
     it(`${r.tier}: states the owner's free-tier rule, not a calls/day figure`, () => {
@@ -230,9 +230,11 @@ describe("server.mjs states no rung as a literal", () => {
   it("FREE_TIER mirrors the snapshot exactly", async () => {
     const { FREE_TIER } = await import("../lib/tier-canon.mjs");
     expect(FREE_TIER.anonymous_calls_per_day).toBe('n/a');   // no call count
-    expect(FREE_TIER.free_calls_per_day).toBe(CANON.free);
+    // B1 (D4): the free key has no call total, so its rung is 'n/a' and no
+    // copy reads it (copy reads _freeKeyOfferText instead).
+    expect(FREE_TIER.free_calls_per_day).toBe(CANON.free ?? 'n/a');
     expect(FREE_TIER.identified_calls_per_day).toBe(CANON.identified);
-    expect(FREE_TIER.unbound_calls_total).toBe(CANON.free);
+    expect(FREE_TIER.unbound_calls_total).toBe(CANON.free ?? 'n/a');
   });
 });
 
@@ -240,7 +242,9 @@ describe("the canon snapshot itself", () => {
   it("is a monotonic ladder", () => {
     // Anonymous sits off the call ladder (no call count); the free rung is
     // its allowance count, below the first per-day rung.
-    const order = ["free", "identified", "starter", "developer", "pro", "enterprise"];
+    // B1 (D4): a daily free key has no call count either, so it sits off too.
+    const order = [...(CANON.free === undefined ? [] : ["free"]),
+      "identified", "starter", "developer", "pro", "enterprise"];
     for (let i = 1; i < order.length; i++) {
       expect(CANON[order[i]]).toBeGreaterThanOrEqual(CANON[order[i - 1]]);
     }

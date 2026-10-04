@@ -188,14 +188,15 @@ describe('claim_free_key success leads with the email ask', () => {
     expect(r.result.isError).not.toBe(true);
   });
 
-  it('limits agree with the published free-tier rule: 10 to try, no daily limit until an email is bound', async () => {
+  it('limits agree with the published free-tier rule: daily full answers, no call total (B1)', async () => {
     const s = await session('/mcp', 'Claude Code');
     const r = await s.call('claim_free_key', { client_name: 'retention-test' });
     expect(r.sc.daily_limit).toBeNull();
-    expect(r.sc.free_calls_total).toBe(10);
+    expect(r.sc.free_calls_total).toBeUndefined();
+    expect(r.sc.daily_full_answers_per_tool).toBe(2);
     expect(r.sc.daily_limit_with_email).toBe(50);
     expect(r.sc.full_answers_per_tool_per_day_with_email).toBe(10);
-    expect(r.sc.free_tier_rule).toBe('Anonymous: previews, no key needed. Free key: 10 calls to try. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.');
+    expect(r.sc.free_tier_rule).toBe('Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.');
     expect(r.text).not.toMatch(/Free tier = 10 calls\/day/);
   });
 
