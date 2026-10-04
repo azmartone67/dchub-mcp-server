@@ -33,8 +33,7 @@ describe('smithery.yaml install config', () => {
     // come back.
     expect(YAML).toMatch(/anonymous tier: previews, no key\s+needed/);
     expect(YAML).toMatch(/previews plus 2 full answers per tool per day/);
-    // (the owner-only top-level description may still say "10 calls to try"
-    // until the owner updates the live Smithery listing copy)
+    expect(YAML).not.toMatch(/calls to try/);   // owner updated the description too (2026-10-04)
     // The top-level `description:` is the frozen Smithery listing copy (it is
     // mirrored from the live listing and changed only by the owner), so the
     // retired wording is asserted absent from everything ELSE in the file.
