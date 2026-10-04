@@ -1365,7 +1365,12 @@ export function _gridSellStep(result, name) {
       const place2 = place || (typeof sc.metro === 'string' ? sc.metro : '');
       agentLine = _fiberAgentLine(place2, !hasLine, wallLink);
       // The gate names what it hid when it measured it; otherwise say only what is true of a preview.
-      sentence = _fiberSellLine({ place: place2, hid: m ? m[1] : 'part of the full answer', url: buy });
+      const feats = Array.isArray(sc.features) ? sc.features : null;
+      sentence = _fiberSellLine({ place: place2, hid: m ? m[1] : 'part of the full answer', url: buy,
+        shown: feats ? feats.length : undefined,
+        total: typeof sc._features_total_in_pro === 'number' ? sc._features_total_in_pro : undefined,
+        truncated: sc._truncated === true,
+        geom: !!(feats && feats.some((f) => f && f.geometry && f.geometry._coordinates_total_in_pro != null)) });
       if (hasLine && !sentence) return result;
     }
     let wrote = false, swapped = false;

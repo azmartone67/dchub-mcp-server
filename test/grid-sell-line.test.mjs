@@ -3,7 +3,7 @@
 // arms, behind DCHUB_GRID_SELL_LINE; and r-go-tool: /go/c carries tool and arm
 // (DCHUB_GO_TOOL). Real registered handler, backend stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { gridSellLine, buyUrl, gridAgentLine, fiberAgentLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
+import { gridSellLine, buyUrl, gridAgentLine, fiberAgentLine, fiberSellLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
 
 const URL1 = 'https://dchub.cloud/upgrade/h/tok.sig';
 
@@ -46,6 +46,20 @@ describe('gridSellLine (pure)', () => {
       expect(l.indexOf(link)).toBe(l.lastIndexOf(link));
     }
     expect(gridAgentLine('ERCOT', 13, 'x', true, '')).not.toContain('go/c');
+  });
+  it('fiber sentence names what the preview cut, from the gate markers only', () => {
+    const u = 'https://dchub.cloud/upgrade/h/x.y?buy=1';
+    const s = fiberSellLine({ place: 'ashburn', hid: 'the total', url: u, shown: 3, total: 500, truncated: true, geom: true });
+    expect(s).toBe('This free DC Hub fiber preview of Ashburn shows 3 of at least 500 routes, each with its path cut short. '
+      + 'The full fiber answer returns all of them with complete route geometry, $10 one-time, one click, no subscription: ' + u);
+    expect(s).not.toMatch(/—|carrier|capacity/i);
+    expect(fiberSellLine({ place: 'ashburn', hid: 'x', url: u, shown: 3, total: 12, truncated: false, geom: false }))
+      .toContain('shows 3 of 12 routes. The full fiber answer returns all of them,');
+    expect(fiberSellLine({ place: 'ashburn', hid: 'x', url: u, shown: 3, total: 3, geom: true })).toContain('shows only some routes, each with its path cut short');
+    // No markers: the old sentence, unchanged.
+    expect(fiberSellLine({ place: 'ashburn', hid: 'the total', url: u }))
+      .toBe('This free DC Hub fiber preview of Ashburn hides the total. The full fiber answer is $10 one-time, one click, no subscription: ' + u);
+    expect(fiberSellLine({ place: 'ashburn', url: u })).toBeNull();
   });
   it('agent line: no free-allowance claim, no em dash', () => {
     const l = gridAgentLine('ERCOT', 13);
@@ -253,6 +267,14 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     expect(r.structuredContent.for_your_human.text).toBe(um);
     expect(t.trimEnd().endsWith('?buy=1')).toBe(true);
+  });
+  it('names the routes and geometry the gate cut when its markers are on the response', () => {
+    const feat = { type: 'Feature', geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1], [2, 2]], _coordinates_total_in_pro: 6 }, properties: {} };
+    const T = S._gridSellStep({ content: [{ type: 'text', text: '{}\n\n→ **For your human:** open https://dchub.cloud/upgrade/h/a.b to see what your agent found.\n\n' }],
+      structuredContent: { preview_is_partial: true, metro: 'ashburn', features: [feat, feat, feat], _features_total_in_pro: 500, _truncated: true,
+        for_your_human: { url: 'https://dchub.cloud/upgrade/h/a.b' } } }, 'get_fiber_intel');
+    expect(T.structuredContent.user_message).toBe('This free DC Hub fiber preview of Ashburn shows 3 of at least 500 routes, each with its path cut short. '
+      + 'The full fiber answer returns all of them with complete route geometry, $10 one-time, one click, no subscription: https://dchub.cloud/upgrade/h/a.b?buy=1');
   });
   it('when the gate names nothing it hid, the sentence says only that it is a preview', async () => {
     const T = S._gridSellStep({ content: [{ type: 'text', text: '{}\n\n→ **For your human:** open https://dchub.cloud/upgrade/h/a.b to see what your agent found.\n\n' }],
