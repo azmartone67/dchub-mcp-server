@@ -150,6 +150,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
+import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -1323,8 +1324,105 @@ function _swapUrl(v, from, to) {
 // A repeat call's header ends the text with no blank line after it, so accept either.
 const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*(?:\n\n|\n*$)/;
 const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them| and \d+ other fields?[.;]|\. The full answer)/;
+// ── r-paid-sell-line (2026-10-04, owner-approved; DCHUB_PAID_SELL_LINE, default OFF) ──
+// The grid sentence for the other keyless paid tools. get_market_intel, compare_isos and
+// rank_markets: the $10 pack opens them, so the sentence says $10 and links ?buy=1.
+// analyze_site and compare_sites: the pack does NOT open them (Land & Power is Pro), so the
+// sentence names Pro, no price, no ?buy=1. Every field named comes from the gate's own
+// markers (lib/paid-sell-line.mjs). Both A/B arms get the same sentence. Unset = old copy.
+const _PAID_HEADER_RE = /## 📊 Your agent just answered[\s\S]*?\n\n---\n\n/;
+function _paidSellOn() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_PAID_SELL_LINE || ''));
+}
+export function _paidSellStep(result, name) {
+  try {
+    const wall = _PRO_WALL_TOOLS.has(name);
+    if ((!wall && !_PAID_SELL_TOOLS.has(name)) || !_paidSellOn()) return result;
+    const c = getCtx();
+    if (c && c.api_key) return result;                 // keyless seats only
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
+    const fy = sc.for_your_human;
+    const textOf = result.content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
+    if (wall) {
+      const url = fy && typeof fy.url === 'string' && /^https:\/\/dchub\.cloud\//.test(fy.url) ? fy.url : '';
+      const sentence = sc._wall ? _proWallLine(name, url) : null;
+      if (!sentence) return result;
+      const WALL_RE = /^For the full site (?:analysis|comparison)[^\n]*(?:\n\n[^\n]*`claim_free_key`[^\n]*)?/m;
+      let wrote = false;
+      const content = result.content.map((b) => {
+        if (!b || b.type !== 'text' || typeof b.text !== 'string' || !WALL_RE.test(b.text)) return b;
+        wrote = true;
+        return { ...b, text: b.text.replace(WALL_RE, () => sentence) };
+      });
+      if (!wrote) return result;
+      return { ...result, content, structuredContent: { ...sc, user_message: sentence, show_to_user: true,
+        for_your_human: { ...fy, text: sentence } } };
+    }
+    if (!sc.preview_is_partial && !sc.trial_preview) return result;
+    const url = fy && typeof fy.url === 'string' && fy.url.includes('/upgrade/h/') ? fy.url : '';
+    if (!url) return result;
+    const buy = _gridBuyUrl(url);
+    const hasLine = textOf.includes(HUMAN_FIRST_MARKER) || /^Tell the user: "/m.test(textOf);
+    const headerRe = name === 'get_market_intel' ? _PAID_HEADER_RE : _FIBER_HEADER_RE;
+    const _hdr = headerRe.exec(textOf);
+    const wallLink = (_hdr && /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/.exec(_hdr[0]) || [''])[0];
+    const unlocked = sc.continuation && sc.continuation.gated && Array.isArray(sc.continuation.gated.fields_unlocked)
+      ? sc.continuation.gated.fields_unlocked : null;
+    let sentence = null;
+    if (name === 'get_market_intel') {
+      const m = _HID_RE.exec(textOf) || _HID_RE.exec(typeof sc.user_message === 'string' ? sc.user_message : '');
+      const mk = sc.market && typeof sc.market === 'object' ? sc.market : {};
+      sentence = _marketIntelSellLine({ market: (c && c._go_place) || mk.id || mk.name || '', hid: m ? _parseHidList(m[1]) : [],
+        providersTotal: sc._top_providers_total_in_pro, providersShown: Array.isArray(sc.top_providers) ? sc.top_providers.length : 3,
+        timeToPower: !!(sc.siting && sc.siting._time_to_power_in_pro === true), url: buy });
+    } else if (name === 'compare_isos') {
+      const cmp = sc.comparison && typeof sc.comparison === 'object' ? sc.comparison : {};
+      const keys = Object.keys(cmp);
+      sentence = _compareIsosSellLine({ isos: Array.isArray(sc.isos) && sc.isos.length ? sc.isos : keys,
+        perIso: keys.map((k) => cmp[k]), url: buy });
+    } else {
+      const rows = Array.isArray(sc.results) ? sc.results : [];
+      sentence = _rankMarketsSellLine({ criteria: sc.criteria, region: sc.region, total: sc._results_total_in_pro, shown: rows.length,
+        scoreHidden: rows.some((r) => r && r._score_in_pro === true), mwHidden: rows.some((r) => r && r._total_mw_in_pro === true), url: buy });
+    }
+    if (!sentence) return result;                      // nothing honest to name: keep the old line
+    const agentLine = _paidAgentLine(name, unlocked ? unlocked.length : 0, !hasLine, wallLink,
+      unlocked ? 'continuation.gated.fields_unlocked' : 'the _in_pro markers');
+    let wrote = false, swapped = false;
+    const content = result.content.map((b) => {
+      if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
+      let t = b.text;
+      if (headerRe.test(t)) {
+        t = t.replace(headerRe, () => agentLine + (name === 'get_market_intel' ? '\n\n---\n\n' : '\n\n'));
+        swapped = true;
+      }
+      const mark = t.indexOf(HUMAN_FIRST_MARKER);
+      if (mark >= 0) {
+        const eol = t.indexOf('\n', mark);
+        t = t.slice(0, mark) + HUMAN_FIRST_MARKER + ' ' + sentence + (eol >= 0 ? t.slice(eol) : '');
+        wrote = true;
+      } else if (/^Tell the user: "[^\n]*"/m.test(t)) {
+        t = t.replace(/^Tell the user: "[^\n]*"/m, () => 'Tell the user: "' + sentence + '"');
+        wrote = true;
+      }
+      return t === b.text ? b : { ...b, text: t };
+    });
+    if (!wrote && !swapped) return result;
+    let out = _swapUrl(sc, url, buy);
+    if (wrote) {
+      out = { ...out, user_message: sentence, show_to_user: true,
+              for_your_human: { ...out.for_your_human, text: sentence, url: buy } };
+      if (typeof out.for_your_human.markdown === 'string') {
+        out.for_your_human.markdown = out.for_your_human.markdown.replace(/\]\([^)]*\)$/, '](' + buy + ')');
+      }
+    }
+    return { ...result, content, structuredContent: out };
+  } catch (_) { return result; }
+}
 export function _gridSellStep(result, name) {
   try {
+    if (_PAID_SELL_TOOLS.has(name) || _PRO_WALL_TOOLS.has(name)) return _paidSellStep(result, name);
     const isGrid = name === 'get_grid_intelligence', isFiber = name === 'get_fiber_intel';
     if ((!isGrid && !isFiber) || !_gridSellOn()) return result;
     const c = getCtx();
