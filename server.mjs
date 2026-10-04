@@ -1650,8 +1650,16 @@ export function _relayFirstText(text) {
     if (c && c.api_key) return t;   // keyless only: a key's wall keeps its key-bound /go/c
     const at = t.search(/https:\/\/dchub\.cloud\/upgrade\/h\//);
     if (at < 0) return t;
+    // The body may be JSON, then "\n\n---\n\n", then prose. The quoted phrase may only
+    // land in prose: inside a JSON string it made the FIRST keyless call's content[0].text
+    // unparseable (same defect as _relayOnlyText). One checkout URL still holds
+    // (r-one-checkout-url), so JSON-body URLs are rewritten too, with a quote-free phrase.
+    const sep = t.indexOf('\n\n---\n\n');
+    let jsonEnd = sep;
+    if (jsonEnd < 0 && /^\s*[\[{]/.test(t)) { jsonEnd = t.indexOf('\n\n'); if (jsonEnd < 0) jsonEnd = t.length; }
     const head = t.slice(0, at).replace(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g,
-      'the "For your human" link below');
+      (u, off) => (jsonEnd >= 0 && off < jsonEnd) || sep < 0
+        ? 'the For your human link below' : 'the "For your human" link below');
     return head + t.slice(at);
   } catch (_) { return text; }
 }

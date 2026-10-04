@@ -20,3 +20,24 @@ describe('_relayOnlyText keeps the JSON body parseable', () => {
     expect(() => JSON.parse(out)).not.toThrow();
   });
 });
+
+describe('_relayFirstText keeps the JSON body parseable on the first keyless call', () => {
+  const H = 'https://dchub.cloud/upgrade/h/xyz';
+  it('rewrites JSON-body /go/c URLs with a quote-free phrase (separator form)', async () => {
+    const { _relayFirstText } = await import('../server.mjs');
+    const body = JSON.stringify({ credits_url: A, developer_url: B, pro_url: A });
+    const t = body + '\n\n---\n\nBuy ' + A + '\n\n→ **For your human:** ' + H;
+    const out = _relayFirstText(t);
+    const parsed = JSON.parse(out.split('\n\n---\n\n')[0]);
+    expect(parsed.developer_url).toBe('the For your human link below');
+    expect(out).toContain('Buy the "For your human" link below');
+    expect(out).toContain(H);
+  });
+  it('no separator: JSON line stays parseable, prose rewritten quote-free', async () => {
+    const { _relayFirstText } = await import('../server.mjs');
+    const t = JSON.stringify({ credits_url: A }) + '\n\nBuy ' + A + '\n\n→ **For your human:** ' + H;
+    const out = _relayFirstText(t);
+    expect(JSON.parse(out.split('\n\n')[0]).credits_url).toBe('the For your human link below');
+    expect(out).toContain('Buy the For your human link below');
+  });
+});
