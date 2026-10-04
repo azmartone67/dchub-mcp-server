@@ -58,7 +58,8 @@ describe('Land & Power descriptions match the keyless wall', () => {
       const d = descOf(name);
       expect(d.length, `${name} missing from tools/list`).toBeGreaterThan(50);
       if (keyless === 'wall') {
-        // B2 (2026-10-19) flips this: keyless then gets the verdict band.
+        // compare_sites stays walled (D6 remainder, owner 17:05Z: no keyless
+        // headline). If it ever opens one, the else branch makes the copy move too.
         expect(d, `${name} promises keyless data the wall withholds`).not.toMatch(KEYLESS_CLAIM);
         expect(d).toContain('Keyless returns no site data');
       } else {
