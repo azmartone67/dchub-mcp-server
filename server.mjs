@@ -149,6 +149,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
+import { gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -1234,6 +1235,83 @@ const _HUMAN_CTA_SIGNATURES = [
 // is created with the line's URL when the result had none). A result that already set
 // user_message (the v11 wall line) keeps it. Never fails a response.
 const _HUMAN_LINE_URL_RE = /https:\/\/[^\s)\]"'>]+/;
+
+// ── r-grid-sell-line (2026-10-03, owner-approved; DCHUB_GRID_SELL_LINE=0 kills it) ──
+// A keyless get_grid_intelligence preview carries ONE human sentence that names the
+// ISO, the verdict the preview did give and what it hid, with the $10 price, "one
+// click" and the relay link plus ?buy=1 (backend: straight to checkout, the open
+// still counted by arm). The same sentence on both A/B arms. Runs after the
+// contract and _humanLineToStructured, so whichever arm built the line, this one
+// replaces it: v1's "→ For your human:" line or v2's `Tell the user: "..."`.
+// Also replaces the 🔒 header for the keyless seat: its "Free full answers left
+// today: N" is false at an anonymous seat and its two "the For your human link
+// below" pointers named a rung that went to the same page. Keyed callers, errors
+// and anything that is not a gated grid preview are returned unchanged.
+const _GRID_HEADER_RE = /🔒 \*\*`get_grid_intelligence` returned a preview\*\*[\s\S]*?\n\n---\n\n/;
+function _gridSellOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GRID_SELL_LINE || ''));
+}
+function _swapUrl(v, from, to) {
+  if (typeof v === 'string') return v.split(from).join(to);
+  if (Array.isArray(v)) return v.map((x) => _swapUrl(x, from, to));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = _swapUrl(v[k], from, to);
+    return o;
+  }
+  return v;
+}
+export function _gridSellStep(result, name) {
+  try {
+    if (name !== 'get_grid_intelligence' || !_gridSellOn()) return result;
+    const c = getCtx();
+    if (c && c.api_key) return result;                 // keyless seats only
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
+    if (!sc.preview_is_partial && !sc.trial_preview) return result;
+    const fy = sc.for_your_human;
+    const url = fy && typeof fy.url === 'string' && fy.url.includes('/upgrade/h/') ? fy.url : '';
+    const iso = typeof sc.iso === 'string' ? sc.iso : '';
+    if (!url || !iso) return result;
+    const withheld = Object.keys(sc).filter((k) => k.startsWith('_') && k.endsWith('_in_pro') && sc[k] === true)
+      .map((k) => k.slice(1, -'_in_pro'.length));
+    const buy = _gridBuyUrl(url);
+    const sentence = _gridSellLine({
+      iso, withheld, url: buy,
+      bands: { constraint: sc.constraint_score_band, excess: sc.excess_power_score_band },
+    });
+    if (!sentence) return result;
+    const gated = sc.continuation && sc.continuation.gated && Array.isArray(sc.continuation.gated.fields_unlocked)
+      ? sc.continuation.gated.fields_unlocked.length : withheld.length;
+    const agentLine = _gridAgentLine(iso, gated);
+    let wrote = false;
+    const content = result.content.map((b) => {
+      if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
+      let t = b.text;
+      if (_GRID_HEADER_RE.test(t)) t = t.replace(_GRID_HEADER_RE, () => agentLine + '\n\n---\n\n');
+      // v1's person's line, or v2's Tell-the-user line: same sentence either way.
+      const mark = t.indexOf(HUMAN_FIRST_MARKER);
+      if (mark >= 0) {
+        const eol = t.indexOf('\n', mark);
+        t = t.slice(0, mark) + HUMAN_FIRST_MARKER + ' ' + sentence + (eol >= 0 ? t.slice(eol) : '');
+        wrote = true;
+      } else if (/^Tell the user: "[^\n]*"/m.test(t)) {
+        t = t.replace(/^Tell the user: "[^\n]*"/m, () => 'Tell the user: "' + sentence + '"');
+        wrote = true;
+      }
+      return t === b.text ? b : { ...b, text: t };
+    });
+    if (!wrote) return result;                         // no human line to replace: leave it be
+    let out = _swapUrl(sc, url, buy);
+    out = { ...out, user_message: sentence, show_to_user: true,
+            for_your_human: { ...out.for_your_human, text: sentence, url: buy } };
+    if (typeof out.for_your_human.markdown === 'string') {
+      out.for_your_human.markdown = out.for_your_human.markdown.replace(/\]\([^)]*\)$/, '](' + buy + ')');
+    }
+    return { ...result, content, structuredContent: out };
+  } catch (_) { return result; }                       // the line is never worth a response
+}
+
 export function _humanLineToStructured(result) {
   try {
     if (!result || !Array.isArray(result.content)) return result;
@@ -2286,6 +2364,22 @@ function _goSessionFor(sessionId) {
     return (s && s !== 'no-session' && _GO_SID_OK.test(s)) ? s : '';
   } catch (_) { return ''; }
 }
+// The tool the current call is running (set at the top of every registered
+// handler) and the caller's paywall arm, in the shapes the backend verifier keeps.
+export function _goToolMark(name, args) {
+  try { const c = getCtx(); if (c && typeof c === 'object') c._go_tool = name; } catch (_) { /* never break a call */ }
+  return args;
+}
+function _goToolArm() {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GO_TOOL || ''))) return { tool: '', arm: '' };
+    const c = getCtx();
+    const t = c && typeof c._go_tool === 'string' ? c._go_tool : '';
+    if (!/^[a-z0-9_]{1,64}$/.test(t)) return { tool: '', arm: '' };
+    const a = _paywallArmFor(c);
+    return { tool: t, arm: (a === 'v1' || a === 'v2' || a === 'grok') ? a : '' };
+  } catch (_) { return { tool: '', arm: '' }; }
+}
 function _goUrl(url, sessionId) {
   try {
     if (!url) return url;
@@ -2298,8 +2392,14 @@ function _goUrl(url, sessionId) {
     const r = /[?&]client_reference_id=([^&#]*)/.exec(url);
     const ref = r ? decodeURIComponent(r[1]) : '';
     const sid = _goSessionFor(sessionId);
-    const payload = Buffer.from(plan + '|' + ref + (sid && sid !== ref ? '|' + sid : ''))
-      .toString('base64url');
+    // ★ r-go-tool (2026-10-03, DCHUB_GO_TOOL=0 stops it): the click names the tool
+    // that walled the caller and its paywall arm, so a sale can be credited to a
+    // tool. Fields 4 and 5 of the payload, attribution only; the backend verifier
+    // (dchub-backend #6314) must be live first, an older one refuses five fields.
+    let raw = plan + '|' + ref + (sid && sid !== ref ? '|' + sid : '');
+    const { tool: _gt, arm: _ga } = _goToolArm();
+    if (_gt) raw = plan + '|' + ref + '|' + (sid || '') + '|' + _gt + (_ga ? '|' + _ga : '');
+    const payload = Buffer.from(raw).toString('base64url');
     const sig = createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32);
     return 'https://dchub.cloud/go/c/' + payload + '.' + sig;
   } catch (_) {
@@ -17476,6 +17576,9 @@ function trackedTool(srv, name, description, schema, handler) {
     ? { title: _toolTitle(name), readOnlyHint: false, destructiveHint: _destructive, idempotentHint: false, openWorldHint: _openWorld, ..._accessTag, ..._maturityTag }
     : { title: _toolTitle(name), readOnlyHint: true, destructiveHint: _destructive, idempotentHint: true, openWorldHint: _openWorld, ..._accessTag, ..._maturityTag };
   const _stamped = _stampEntityCb(name, async (args, extra) => {
+    // r-go-tool (2026-10-03): name the running tool on the call ctx before anything
+    // can mint a /go/c link (DCHUB_GO_TOOL gates the stamp itself, in _goUrl).
+    _goToolMark(name, args);
     // r-cohort: normalize the experiment tag on the ORIGINAL args object,
     // before the tier gate (which may hand the handler a spread COPY via
     // `gate.params || args`) and before any track call fires. Every
@@ -19729,11 +19832,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_guideAuthWall(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_guideAuthWall(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
-       { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)),
+       { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
        name, args, _outSchema), name), name), name, args), name), name));
 }
 
