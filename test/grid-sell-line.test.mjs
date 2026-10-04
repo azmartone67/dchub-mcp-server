@@ -60,6 +60,7 @@ beforeAll(async () => {
         excess_power_score: 60, avg_time_to_power_months: 30, queue_depth_gw: 120, retail_price_cents_kwh: 8.1,
         grid_emergencies_30d: 2, demand_mw: 70000, news: [{ title: 'x', url: 'https://n.example/1' }] });
     }
+    if (p.includes('fiber')) return json({ routes: [{ id: 'r1', carrier: 'X', miles: 10 }], total: 1, metro: 'ashburn' });
     return json({});
   };
   const prev = process.env.DCHUB_API_BASE;
@@ -170,5 +171,92 @@ describe('r-go-tool: /go/c carries tool and arm', () => {
     await grid(s);
     // the ctx the handler ran under now names the tool
     expect(s._go_tool).toBe('get_grid_intelligence');
+  });
+});
+
+// ── Grok's 10-04 verify round (fails 1 to 4) ─────────────────────────────────
+async function callTool(name, args, s) {
+  const T = TOOLS[name];
+  const parsed = await T.inputSchema.safeParseAsync(args);
+  return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
+}
+describe('repeat keyless grid call in one session (fail 1)', () => {
+  it('the later response drops the old header, and says so without a second human line', async () => {
+    const s = seat();
+    const r1 = await grid(s), r2 = await grid(s);
+    const t1 = text(r1), t2 = text(r2);
+    expect(t1).toContain('Show your user the next line unchanged');
+    for (const t of [t1, t2]) {
+      expect(t).not.toMatch(/Free full answers left today/);
+      expect(t).not.toContain('from earlier in this session');
+      expect(t).not.toMatch(/\*\*Developer\*\*/);
+    }
+    expect(t1).not.toContain('dchub.cloud/go/c/');
+    expect(t2).toContain('Your user was sent the full ask earlier in this session');
+    expect(t2).not.toContain('Show your user the next line');
+    expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(0);      // one human line per session stands
+    expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(1);           // ...and the wall keeps its one direct pointer
+    expect(r2.structuredContent.for_your_human.url).toMatch(/[?&]buy=1$/);
+  });
+});
+
+describe('the agent line and the list it points at match (fail 2)', () => {
+  it('names continuation.gated.fields_unlocked and its exact length', async () => {
+    const r = await grid(seat());
+    const f = r.structuredContent.continuation.gated.fields_unlocked;
+    const m = /(\d+) fields are withheld \(see ([^)]+)\)/.exec(text(r));
+    expect(m && m[2]).toBe('continuation.gated.fields_unlocked');
+    expect(Number(m[1])).toBe(f.length);
+  });
+});
+
+describe('a market-scoped grid call names the market (fail 3)', () => {
+  it('the sentence says whose grid it is; an iso-scoped call is unchanged', () => {
+    const base = { iso: 'PJM', withheld: ['constraint_score', 'queue_depth_gw'], url: 'https://dchub.cloud/upgrade/h/a.b?buy=1',
+      bands: { constraint: 'BUILD', excess: 'BUILD' } };
+    expect(gridSellLine({ ...base, market: 'ashburn' })).toMatch(/^DC Hub rates PJM \(the grid behind Ashburn\) BUILD for power/);
+    expect(gridSellLine({ ...base, market: 'northern-virginia' })).toContain('the grid behind Northern Virginia');
+    expect(gridSellLine({ ...base, market: 'PJM' })).toMatch(/^DC Hub rates PJM BUILD/);
+    expect(gridSellLine(base)).toMatch(/^DC Hub rates PJM BUILD/);
+    expect(gridSellLine({ ...base, market: 'x; DROP TABLE' })).toMatch(/^DC Hub rates PJM BUILD/);   // not a plain slug: ignored
+  });
+  it('the handler remembers the market the caller passed', async () => {
+    const s = seat();
+    await S._ctxALS.run(s, () => S._goToolMark('get_grid_intelligence', { market: 'ashburn' }));
+    expect(s._go_place).toBe('ashburn');
+    await S._ctxALS.run(s, () => S._goToolMark('get_fiber_intel', { metro: 'Northern Virginia' }));
+    expect(s._go_place).toBe('Northern Virginia');
+    await S._ctxALS.run(s, () => S._goToolMark('get_fiber_intel', { iso: 'PJM' }));
+    expect(s._go_place).toBe('');
+  });
+});
+
+describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => {
+  it('one grammatical sentence, no em dash, header swapped, ask last', async () => {
+    const s = seat();
+    await S._ctxALS.run(s, () => S._goToolMark('get_fiber_intel', { metro: 'ashburn' }));
+    const r = await callTool('get_fiber_intel', { metro: 'ashburn' }, s);
+    const t = text(r), um = r.structuredContent.user_message;
+    expect(um).toMatch(/^This free DC Hub fiber preview of Ashburn hides .+\. The full fiber answer is \$10 one-time, one click, no subscription: https:\/\/dchub\.cloud\/upgrade\/h\/\S+\?buy=1$/);
+    expect(um + t.slice(t.indexOf('get_fiber_intel returned'))).not.toMatch(/—/);
+    expect(t).not.toMatch(/the lowest plan that returns them|payer checks out|Developer|claim_free_key/);
+    expect(t).not.toContain('Next question to offer the user');
+    expect(t).toContain('get_fiber_intel returned a free preview of Ashburn');
+    expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
+    expect(r.structuredContent.for_your_human.text).toBe(um);
+    expect(t.trimEnd().endsWith('?buy=1')).toBe(true);
+  });
+  it('when the gate names nothing it hid, the sentence says only that it is a preview', async () => {
+    const T = S._gridSellStep({ content: [{ type: 'text', text: '{}\n\n→ **For your human:** open https://dchub.cloud/upgrade/h/a.b to see what your agent found.\n\n' }],
+      structuredContent: { preview_is_partial: true, metro: 'ashburn', for_your_human: { url: 'https://dchub.cloud/upgrade/h/a.b' } } }, 'get_fiber_intel');
+    expect(T.structuredContent.user_message).toBe('This free DC Hub fiber preview of Ashburn hides part of the full answer. The full fiber answer is $10 one-time, one click, no subscription: https://dchub.cloud/upgrade/h/a.b?buy=1');
+  });
+  it('kill switch DCHUB_GRID_SELL_LINE=0 restores the old fiber wall', async () => {
+    const off = env('DCHUB_GRID_SELL_LINE', '0');
+    try {
+      const t = text(await callTool('get_fiber_intel', { metro: 'ashburn' }, seat()));
+      expect(t).toMatch(/the lowest plan that returns them/);
+      expect(t).not.toContain('buy=1');
+    } finally { off(); }
   });
 });
