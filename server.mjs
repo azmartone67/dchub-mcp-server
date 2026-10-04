@@ -1307,7 +1307,7 @@ export function _gridDeclutterStep(result, name) {
 // today: N" is false at an anonymous seat and its two "the For your human link
 // below" pointers named a rung that went to the same page. Keyed callers, errors
 // and anything that is not a gated grid preview are returned unchanged.
-const _GRID_HEADER_RE = /🔒 \*\*`get_grid_intelligence` returned a preview\*\*[\s\S]*?\n\n---\n\n/;
+const _GRID_HEADER_RE = /🔒 \*\*`get_grid_intelligence` returned a preview\*\*[\s\S]*?\n\n---(?:\n\n|\n*$)/;
 function _gridSellOn() {
   return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GRID_SELL_LINE || ''));
 }
@@ -1330,7 +1330,10 @@ const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|
 // analyze_site and compare_sites: the pack does NOT open them (Land & Power is Pro), so the
 // sentence names Pro, no price, no ?buy=1. Every field named comes from the gate's own
 // markers (lib/paid-sell-line.mjs). Both A/B arms get the same sentence. Unset = old copy.
-const _PAID_HEADER_RE = /## 📊 Your agent just answered[\s\S]*?\n\n---\n\n/;
+// A repeat call ends the text on the closing --- with no blank line after it (fiber's pattern accepts that too).
+const _PAID_HEADER_RE = /## 📊 Your agent just answered[\s\S]*?\n\n---(?:\n\n|\n*$)/;
+// The closing rule and whatever followed it, kept exactly as found when the header is swapped.
+const _rule = (m) => { const t = /\n\n---\n*$/.exec(m); return t ? t[0] : '\n\n---\n\n'; };
 function _paidSellOn() {
   return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_PAID_SELL_LINE || ''));
 }
@@ -1394,7 +1397,7 @@ export function _paidSellStep(result, name) {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
       let t = b.text;
       if (headerRe.test(t)) {
-        t = t.replace(headerRe, () => agentLine + (name === 'get_market_intel' ? '\n\n---\n\n' : '\n\n'));
+        t = t.replace(headerRe, (m) => agentLine + (name === 'get_market_intel' ? _rule(m) : '\n\n'));
         swapped = true;
       }
       const mark = t.indexOf(HUMAN_FIRST_MARKER);
@@ -1476,7 +1479,7 @@ export function _gridSellStep(result, name) {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
       let t = b.text;
       if (headerRe.test(t)) {
-        t = t.replace(headerRe, () => agentLine + (isGrid ? '\n\n---\n\n' : '\n\n'));
+        t = t.replace(headerRe, (m) => agentLine + (isGrid ? _rule(m) : '\n\n'));
         swapped = true;
       }
       if (sentence) {

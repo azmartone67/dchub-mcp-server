@@ -81,6 +81,26 @@ describe('_paidSellStep on real-shape keyless responses', () => {
       expect(s).not.toMatch(/lease|asking|utilit/);
     } finally { restore(); }
   });
+  it('get_market_intel REPEAT (header ends on the closing rule, no human line) swaps the old block', () => {
+    const restore = env('1');
+    try {
+      const f = fx('get_market_intel');
+      const hdrEnd = f.text.indexOf('\n\n---\n\n→ **For your human:**');
+      expect(hdrEnd).toBeGreaterThan(0);
+      const wall = 'https://dchub.cloud/go/c/wall.tok';
+      const hdr = f.text.slice(0, hdrEnd).replaceAll('the "For your human" link below', wall);
+      for (const tail of ['\n\n---\n', '\n\n---']) {          // a repeat ends on --- with at most one newline
+        const r = { content: [{ type: 'text', text: hdr + tail }], structuredContent: f.sc };
+        const t = run(r, 'get_market_intel').content[0].text;
+        expect(t).not.toMatch(/1 of 300\+ markets|claim_free_key|Developer\*\*|Want the decision/);
+        expect(t).not.toContain('\u2014\u2014');
+        expect(t.includes('\u2014')).toBe(false);
+        expect(t).toContain(wall);
+        expect(t.trimEnd().endsWith('---')).toBe(true);        // the closing rule is kept exactly as found
+        expect(t.startsWith('{"fixture":"get_market_intel"}\n\n---\n\n')).toBe(true);
+      }
+    } finally { restore(); }
+  });
   it('a repeat call (no human line) gets the agent line ending in the wall /go/c link', () => {
     const restore = env('1');
     try {
