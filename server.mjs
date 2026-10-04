@@ -1236,6 +1236,65 @@ const _HUMAN_CTA_SIGNATURES = [
 // user_message (the v11 wall line) keeps it. Never fails a response.
 const _HUMAN_LINE_URL_RE = /https:\/\/[^\s)\]"'>]+/;
 
+// ── r-grid-declutter (2026-10-03, owner-approved; DCHUB_GRID_DECLUTTER=0 kills it) ──
+// A keyless gated get_grid_intelligence preview ends with the ask: no execute_plan
+// menu, no "Next question to offer the user" block (next_ask and starter_pack stay in
+// structuredContent), and each news item's URL once in the text, not three times
+// (citation and license.source_url point at `url`). The opt-in card is skipped in
+// _withOptinAsk under the same switch. structuredContent is not touched.
+function _gridDeclutterOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String((env && env.DCHUB_GRID_DECLUTTER) || ''));
+}
+const _NEXT_Q_RE = /Next question to offer the user: "[^"]*" \(DC Hub tool: [a-z_0-9]+\)\.\s*/g;
+const _RETRY_HINT_RE = /\(agent: after purchase retry the same call\. Multi-step question: execute_plan\.\)\s*/g;
+export function _gridDeclutterStep(result, name) {
+  try {
+    if (name !== 'get_grid_intelligence' || !_gridDeclutterOn()) return result;
+    const c = getCtx();
+    if (c && c.api_key) return result;
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || !Array.isArray(result.content)) return result;
+    if (!sc.preview_is_partial && !sc.trial_preview) return result;
+    const fy = sc.for_your_human;
+    if (!(fy && typeof fy.url === 'string' && fy.url.includes('/upgrade/h/'))) return result;
+    const out = [];
+    result.content.forEach((b, i) => {
+      if (!b || b.type !== 'text' || typeof b.text !== 'string') { out.push(b); return; }
+      if (i > 0 && b.text.startsWith('\u{1F9ED} **Next:**')) return;            // execute_plan menu
+      let t = b.text;
+      if (t.includes('Next question to offer the user') || t.includes('Multi-step question: execute_plan')) {
+        t = t.replace(_NEXT_Q_RE, '').replace(_RETRY_HINT_RE, '').replace(/\s+$/, '');
+        if (!t.trim()) return;
+      }
+      if (i === 0) {
+        // v1 starts with the JSON; v2 leads with its `Tell the user:` line and the JSON follows.
+        const at = t.search(/(^|\n)\{/);
+        const off = at < 0 ? 0 : (t[at] === '\n' ? at + 1 : at);
+        const sp0 = at < 0 ? null : _splitLeadingJson(t.slice(off));
+        const sp = sp0 ? { ...sp0, head: t.slice(0, off) + sp0.head } : null;
+        if (sp && sp.json && Array.isArray(sp.json.related_intel)) {
+          const j = { ...sp.json, related_intel: sp.json.related_intel.map((it) => {
+            if (!it || typeof it !== 'object') return it;
+            const o = { ...it };
+            const u = o.url || (o.license && o.license.url) || '';
+            if (typeof o.citation === 'string' && u) o.citation = o.citation.split(u).join('see url');
+            if (o.license && typeof o.license === 'object') {
+              const { source_url: _su, url: _lu, ...lic } = o.license;
+              const keep = { ...lic };
+              if (_su && _su !== o.url) keep.source_url = _su;     // a different link stays
+              if (_lu && _lu !== o.url) keep.url = _lu;
+              o.license = keep;
+            }
+            return o;
+          }) };
+          t = sp.head + JSON.stringify(j) + sp.rest;
+        }
+      }
+      out.push(t === b.text ? b : { ...b, text: t });
+    });
+    return { ...result, content: out };
+  } catch (_) { return result; }
+}
 // ── r-grid-sell-line (2026-10-03, owner-approved; DCHUB_GRID_SELL_LINE=0 kills it) ──
 // A keyless get_grid_intelligence preview carries ONE human sentence that names the
 // ISO, the verdict the preview did give and what it hid, with the $10 price, "one
@@ -1696,6 +1755,10 @@ export async function _fetchKeyedOptinCard(apiKey, toolName, fetchImpl = fetch) 
 export async function _withOptinAsk(result, toolName, ctx, env = process.env, fetchCard = _fetchKeyedOptinCard) {
   try {
     if (!optinCtaEnabled(env)) return result;
+    // r-grid-declutter (2026-10-03, owner: drop the opt-in card): a gated wall already
+    // carries one pack ask, and the opt-in is a second, free human link beside it.
+    // DCHUB_GRID_DECLUTTER=0 restores the card.
+    if (_gridDeclutterOn(env)) return result;
     if (!result || !Array.isArray(result.content) || !OPTIN_CTA_TOOLS.includes(toolName)) return result;
     const sc = result.structuredContent;
     if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
@@ -19832,12 +19895,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_guideAuthWall(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_guideAuthWall(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name, args), name), name));
+       name, args, _outSchema), name), name), name, args), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
