@@ -222,6 +222,7 @@ test/p0-1-substation-detail-pro.test.mjs
 test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
+test/paid-sell-line.test.mjs
 test/payload-diet.test.mjs
 test/paywall-contract.test.mjs
 test/paywall-extras-attribution.test.mjs
