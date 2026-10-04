@@ -1,0 +1,174 @@
+// grid-sell-line.test.mjs — keyless get_grid_intelligence: one ISO-specific human
+// sentence with a one-click link (owner-approved 2026-10-03), the same on both A/B
+// arms, behind DCHUB_GRID_SELL_LINE; and r-go-tool: /go/c carries tool and arm
+// (DCHUB_GO_TOOL). Real registered handler, backend stubbed.
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { gridSellLine, buyUrl, gridAgentLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
+
+const URL1 = 'https://dchub.cloud/upgrade/h/tok.sig';
+
+describe('gridSellLine (pure)', () => {
+  const ALL = ['queue_depth_gw', 'avg_time_to_power_months', 'constraint_score', 'excess_power_score',
+    'grid_emergencies_30d', 'retail_price_cents_kwh'];
+  it('equal bands: the brief sentence, no em dash, price, one click', () => {
+    const s = gridSellLine({ iso: 'ERCOT', bands: { constraint: 'BUILD', excess: 'BUILD' },
+      withheld: ALL.slice(0, 5), url: URL1 });
+    expect(s).toBe('DC Hub rates ERCOT BUILD for power, but this free preview hides queue depth, time to power, '
+      + 'the constraint and excess power scores and 30-day grid emergencies. The full ERCOT brief is $10 '
+      + 'one-time, one click, no subscription: ' + URL1);
+    expect(s).not.toMatch(/—|\/mo|facilit/i);
+  });
+  it('differing bands, and no bands', () => {
+    expect(gridSellLine({ iso: 'PJM', bands: { constraint: 'CAUTION', excess: 'BUILD' }, withheld: ALL, url: URL1 }))
+      .toMatch(/^DC Hub rates PJM CAUTION on constraint and BUILD on excess power, but this free preview hides /);
+    expect(gridSellLine({ iso: 'PJM', bands: {}, withheld: ALL, url: URL1 }))
+      .toMatch(/^This free DC Hub preview of PJM hides /);
+  });
+  it('names at most 5, fits 240 before the URL, and says nothing it did not measure', () => {
+    for (const w of [ALL, ALL.slice(0, 1), ['constraint_score'], ['excess_power_score', 'queue_depth_gw']]) {
+      const s = gridSellLine({ iso: 'MISO', bands: { constraint: 'BUILD', excess: 'BUILD' }, withheld: w, url: URL1 });
+      expect(s.slice(0, s.indexOf(URL1)).length).toBeLessThanOrEqual(GRID_SELL_MAX + 90);
+    }
+    expect(gridSellLine({ iso: 'ERCOT', withheld: ['demand_mw', 'nonsense'], url: URL1 })).toBeNull();
+    expect(gridSellLine({ iso: '', withheld: ALL, url: URL1 })).toBeNull();
+    expect(gridSellLine({ iso: 'ERCOT', withheld: ['constraint_score'], url: '' })).toBeNull();
+  });
+  it('buyUrl keeps ?pc and is idempotent', () => {
+    expect(buyUrl(URL1)).toBe(URL1 + '?buy=1');
+    expect(buyUrl(URL1 + '?pc=v2')).toBe(URL1 + '?pc=v2&buy=1');
+    expect(buyUrl(buyUrl(URL1))).toBe(URL1 + '?buy=1');
+    expect(buyUrl('https://dchub.cloud/go/c/x.y')).toBe('https://dchub.cloud/go/c/x.y');
+  });
+  it('agent line: no free-allowance claim, no em dash', () => {
+    const l = gridAgentLine('ERCOT', 13);
+    expect(l).toContain('13 fields are withheld');
+    expect(l).not.toMatch(/Free full answers left|—|bind_email|Developer/);
+  });
+});
+
+const BASE = 'https://backend.grid-sell.test';
+let S, TOOLS, realFetch, prevInternal;
+const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+beforeAll(async () => {
+  prevInternal = process.env.DCHUB_INTERNAL_KEY;
+  process.env.DCHUB_INTERNAL_KEY = 'grid-sell-test-internal-key';
+  realFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const p = new URL(String(input && input.url ? input.url : input)).pathname;
+    if (p.startsWith('/api/v1/grid/intelligence/')) {
+      return json({ iso: 'ERCOT', iso_name: 'ERCOT', fuel_mix: { gas: 40, wind: 30 }, constraint_score: 46.5,
+        excess_power_score: 60, avg_time_to_power_months: 30, queue_depth_gw: 120, retail_price_cents_kwh: 8.1,
+        grid_emergencies_30d: 2, demand_mw: 70000, news: [{ title: 'x', url: 'https://n.example/1' }] });
+    }
+    return json({});
+  };
+  const prev = process.env.DCHUB_API_BASE;
+  process.env.DCHUB_API_BASE = BASE;
+  S = await import('../server.mjs');
+  if (prev === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prev;
+  TOOLS = S.createServer()._registeredTools;
+}, 60_000);
+afterAll(() => {
+  globalThis.fetch = realFetch;
+  if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
+});
+
+let n = 0;
+const seat = (extra = {}) => ({ tier: 'free', platform: 'claude', client_name_raw: 'claude-ai',
+  client_ip: '203.0.113.' + (10 + (n % 200)), session_id: 'sess-grid-sell-' + (++n), ...extra });
+async function grid(s, args = { iso: 'ERCOT' }) {
+  const T = TOOLS.get_grid_intelligence;
+  const parsed = await T.inputSchema.safeParseAsync(args);
+  return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
+}
+const text = (r) => (r.content || []).map((c) => c.text || '').join('\n');
+const env = (k, v) => { const p = process.env[k]; if (v === undefined) delete process.env[k]; else process.env[k] = v; return () => { if (p === undefined) delete process.env[k]; else process.env[k] = p; }; };
+
+describe.each([['control v1 (arm off)', undefined], ['contract v2 (on)', 'on']])('keyless grid preview, %s', (_n, pc) => {
+  let restore; beforeEach(() => { restore = env('DCHUB_PAYWALL_CONTRACT', pc); });
+  afterAll(() => env('DCHUB_PAYWALL_CONTRACT', undefined));
+  it('one sentence naming the ISO and what it hid, ending in the ?buy=1 relay link', async () => {
+    try {
+      const r = await grid(seat());
+      const t = text(r), sc = r.structuredContent;
+      const s = sc.user_message;
+      expect(s).toMatch(/ERCOT/); expect(s).toContain('$10 one-time'); expect(s).toContain('one click');
+      expect(s).toMatch(/constraint/); expect(s).not.toMatch(/—/);
+      expect(s).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s]+[?&]buy=1$/);
+      expect(sc.for_your_human.text).toBe(s);
+      expect(sc.for_your_human.url).toBe(s.slice(s.indexOf('https://')));
+      expect(t).toContain(s);
+      // the old header's false/pointing claims are gone from the keyless seat
+      expect(t).not.toMatch(/Free full answers left today/);
+      expect(t).not.toContain('the "For your human" link below');
+      expect(t).not.toMatch(/\*\*Developer\*\*/);
+      // exactly one /upgrade/h link in the text, and no /go/c
+      expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
+      expect(t).not.toContain('dchub.cloud/go/c/');
+      expect(sc.preview_is_partial).toBe(true);        // still a gated preview, nothing unlocked
+    } finally { restore(); }
+  });
+  it('kill switch DCHUB_GRID_SELL_LINE=0: today\'s header and line come back', async () => {
+    const off = env('DCHUB_GRID_SELL_LINE', '0');
+    try {
+      const t = text(await grid(seat()));
+      expect(t).not.toContain('buy=1');
+      expect(t).not.toContain('30-day grid emergencies. The full');
+      if (!pc) expect(t).toMatch(/Free full answers left today: \d/);        // v1 header is back
+      else expect(t).toMatch(/^Tell the user: "This answer hid /);            // v2's own missed-lead copy
+    } finally { off(); restore(); }
+  });
+});
+
+describe('v2 value phrase no longer promises substation MW', () => {
+  it('names what the brief returns; the kill switch restores the old phrase', async () => {
+    const { valueLine } = await import('../lib/paywall-contract.mjs');
+    expect(valueLine('get_grid_intelligence', {})).toMatch(/queue depth, time to power/);
+    expect(valueLine('get_grid_intelligence', {})).not.toMatch(/substation/);
+    const off = env('DCHUB_GRID_SELL_LINE', '0');
+    try { expect(valueLine('get_grid_intelligence', {})).toBe('site-level available MW at nearby substations'); }
+    finally { off(); }
+  });
+});
+
+describe('keyed and unrelated calls are untouched', () => {
+  it('a keyed free seat keeps its own header', async () => {
+    const r = await grid(seat({ api_key: 'dch_live_gridsell_fixture' }));
+    expect(text(r)).not.toContain('buy=1');
+  });
+  it('a pure function returns other tools unchanged', () => {
+    const r = { content: [{ type: 'text', text: 'x' }], structuredContent: { iso: 'ERCOT' } };
+    expect(S._gridSellStep(r, 'rank_markets')).toBe(r);
+  });
+});
+
+describe('r-go-tool: /go/c carries tool and arm', () => {
+  const link = 'https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i?client_reference_id=sess-x-1';
+  const payload = (u) => Buffer.from(u.split('/go/c/')[1].split('.')[0], 'base64url').toString().split('|');
+  it('stamps tool and arm from the call context, and never without a tool', () => {
+    const run = (ctx, fn) => S._ctxALS.run(ctx, fn);
+    const off1 = env('DCHUB_PAYWALL_CONTRACT', 'on');
+    try {
+      const withTool = run({ ...seat(), _go_tool: 'get_grid_intelligence' }, () => S._goUrl(link, 'sess-x-1'));
+      const p = payload(withTool);
+      expect(p.slice(0, 5)).toEqual(['metered', 'sess-x-1', 'sess-x-1', 'get_grid_intelligence', 'v2']);
+      const none = run(seat(), () => S._goUrl(link, 'sess-x-1'));
+      expect(payload(none)).toEqual(['metered', 'sess-x-1']);   // the token it always was
+      const bad = run({ ...seat(), _go_tool: 'Not A Tool!' }, () => S._goUrl(link, 'sess-x-1'));
+      expect(payload(bad)).toEqual(['metered', 'sess-x-1']);
+    } finally { off1(); }
+  });
+  it('DCHUB_GO_TOOL=0 stops appending fields 4 and 5', () => {
+    const off = env('DCHUB_GO_TOOL', '0');
+    try {
+      const u = S._ctxALS.run({ ...seat(), _go_tool: 'get_grid_intelligence' }, () => S._goUrl(link, 'sess-x-1'));
+      expect(payload(u)).toEqual(['metered', 'sess-x-1']);
+    } finally { off(); }
+  });
+  it('the wrapper marks the running tool before the tool runs', async () => {
+    const s = seat();
+    await grid(s);
+    // the ctx the handler ran under now names the tool
+    expect(s._go_tool).toBe('get_grid_intelligence');
+  });
+});

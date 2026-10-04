@@ -134,6 +134,7 @@ test/grid-ba-coverage-note.test.mjs
 test/grid-queue-by-kind.test.mjs
 test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
+test/grid-sell-line.test.mjs
 test/grok-bot-self-path.test.mjs
 test/grok-ident-log.test.mjs
 test/grok-instructions-tool-count.test.mjs

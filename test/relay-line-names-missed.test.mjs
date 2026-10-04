@@ -155,7 +155,13 @@ const SEEN = {};
 describe('the relay line names what THIS response stripped and the gate\'s own rung', () => {
   for (const tool of ['rank_markets', 'get_grid_intelligence', 'get_market_intel']) {
     it(`${tool}: fields match what was stripped; the named plan returns them and the rung below does not`, async () => {
+      // The grid brief's keyless line is the grid sell line since 2026-10-03
+      // (test/grid-sell-line.test.mjs); this file keeps pinning the CLAUSE machinery,
+      // so that tool runs with DCHUB_GRID_SELL_LINE=0 here.
+      const _prevGrid = process.env.DCHUB_GRID_SELL_LINE;
+      if (tool === 'get_grid_intelligence') process.env.DCHUB_GRID_SELL_LINE = '0';
       const gated = await H.call('/mcp', tool, ARGS[tool]);
+      if (_prevGrid === undefined) delete process.env.DCHUB_GRID_SELL_LINE; else process.env.DCHUB_GRID_SELL_LINE = _prevGrid;
       const lines = relayLines(textOf(gated));
       expect(lines, 'exactly one relay line').toHaveLength(1);
       const line = lines[0];

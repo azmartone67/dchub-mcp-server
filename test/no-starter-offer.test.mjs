@@ -165,7 +165,11 @@ function fields(url, prefix) {
   const payload = token.slice(0, i);
   const sig = createHmac('sha256', SECRET).update(payload).digest('hex').slice(0, 32);
   expect(token.slice(i + 1)).toBe(sig);
-  return { payload, parts: Buffer.from(payload, 'base64url').toString().split('|') };
+  // r-go-tool (2026-10-03): fields 4 and 5 (tool, arm) are attribution only; the
+  // identity this file pins is plan|ref|sid, so the readout stops there.
+  const all = Buffer.from(payload, 'base64url').toString().split('|');
+  const parts = all.length > 3 ? all.slice(0, 3).filter((x, k) => k < 2 || (x !== '' && x !== all[1])) : all;
+  return { payload, parts, tool: all[3] || '', arm: all[4] || '' };
 }
 
 const STARTER_ID = '8x2dRa5sS0x75uteGuaZi0g';
