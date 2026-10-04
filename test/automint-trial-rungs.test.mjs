@@ -339,3 +339,40 @@ describe('hard gate: no network', () => {
     expect(sessionKeyHits, 'restoreSessionKey never asked the stub').toBeGreaterThan(0);
   });
 });
+
+// r-qa-no-mint (2026-10-04): a keyless QA sweep (UA "dchub-qa-readonly/0.1
+// (QA - exclude)" + X-DCHub-QA: 1) minted a trial key per call. Through the
+// real HTTP app: the QA marker header, or a QA user agent, skips the mint; a
+// normal caller still mints; DCHUB_MINT_SKIP_QA=0 restores the mint.
+describe('QA callers mint no trial key', () => {
+  it('X-DCHub-QA: 1 on a normal user agent: no mint', async () => {
+    const { h } = await session({ 'x-dc-client-ip': '198.51.100.41', 'user-agent': 'SomeAgent/1.0', 'x-dchub-qa': '1' });
+    const before = mintHits;
+    await call(h, ...GRID);
+    expect(mintHits - before, 'a QA-marked call reached /keys/auto-mint').toBe(0);
+  });
+
+  it('the QA user agent alone: no mint', async () => {
+    const { h } = await session({ 'x-dc-client-ip': '198.51.100.42', 'user-agent': 'dchub-qa-readonly/0.1 (QA - exclude)' });
+    const before = mintHits;
+    await call(h, ...GRID);
+    expect(mintHits - before).toBe(0);
+  });
+
+  it('CONTROL: the same call with neither still mints', async () => {
+    const { h } = await session({ 'x-dc-client-ip': '198.51.100.43', 'user-agent': 'SomeAgent/1.0' });
+    const before = mintHits;
+    await call(h, ...GRID);
+    expect(mintHits - before, 'the control did not reach the mint, so the QA cases prove nothing').toBe(1);
+  });
+
+  it('DCHUB_MINT_SKIP_QA=0 restores the mint for a QA-marked call', async () => {
+    process.env.DCHUB_MINT_SKIP_QA = '0';
+    try {
+      const { h } = await session({ 'x-dc-client-ip': '198.51.100.44', 'user-agent': 'SomeAgent/1.0', 'x-dchub-qa': '1' });
+      const before = mintHits;
+      await call(h, ...GRID);
+      expect(mintHits - before).toBe(1);
+    } finally { delete process.env.DCHUB_MINT_SKIP_QA; }
+  });
+});
