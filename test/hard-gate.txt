@@ -132,6 +132,7 @@ test/go-checkout-link.test.mjs
 test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
 test/grid-declutter.test.mjs
+test/grid-lastfree.test.mjs
 test/grid-queue-by-kind.test.mjs
 test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs

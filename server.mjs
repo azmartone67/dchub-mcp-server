@@ -149,7 +149,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
-import { gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
+import { lastFreeLine as _lastFreeLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -19434,7 +19434,24 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                     + (_bound ? '' : '; free: bind_email lifts your daily cap')
                     + ').',
               };
+              // ★ r-lastfree-ask (2026-10-03, owner-approved; DCHUB_LASTFREE_ASK=0 kills it):
+              // the LAST free full grid answer of the day, for a keyed free or identified
+              // caller (never paid_taste), carries one human line with the key-bound pack
+              // link, so the credits land on the key they already use. The answer and the
+              // caps are unchanged; the ask is added beside it.
+              let _lf = null;
+              if (!_paidTaste && c.api_key && _mtRemaining === 0 && name === 'get_grid_intelligence'
+                  && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_LASTFREE_ASK || ''))) {
+                _lf = _lastFreeLine({ tool: name, link: _packCheckoutUrl(c.session_id),
+                                      perPack: 1000 / _creditCost(name) });   // 1,000 = _PACK_RUNG's credits
+              }
+              if (_lf) {
+                _mtParsed.user_message = _lf.human;
+                _mtParsed.show_to_user = true;
+                _mtParsed.for_your_human = { text: _lf.human, url: _lf.human.slice(_lf.human.indexOf('https://')) };
+              }
               result.content[0].text = JSON.stringify(_mtParsed);
+              if (_lf) result.content = [...result.content, { type: 'text', text: _lf.agent + '\n\n' + HUMAN_FIRST_MARKER + ' ' + _lf.human }];
             }
           } catch (_e) { /* annotation must never break a full answer */ }
         }
