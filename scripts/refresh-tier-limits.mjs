@@ -72,7 +72,7 @@ const OPTIONAL_PRICED = new Set(['founding', 'team']);
 // null with no unit is still a degraded read. An older backend that still
 // sends an anonymous calls_per_day is accepted as-is, so the merge order of
 // the two repos does not matter.
-// ★ B1 (D4, owner 2026-10-03; backend merge on/after 2026-10-19): the free
+// ★ B1 (D4, owner 2026-10-03; backend live 2026-10-03 22:09Z): the free
 // key becomes a renewing DAILY allowance with no call count:
 //   free       {calls: null, period: 'day', full_answers_per_tool_per_day: 2}
 // A null call count with period 'day' is valid ONLY when the full answers per

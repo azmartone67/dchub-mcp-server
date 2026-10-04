@@ -1,6 +1,7 @@
 // b1-free-key-daily-allowance.test.mjs — B1 (D4, owner 2026-10-03)
 //
-// DO NOT MERGE BEFORE 2026-10-19 (pricing A/B 10-04..10-18).
+// Live since 2026-10-04T00:15Z: the owner kept B1 live, so it landed inside the
+// pricing A/B window (10-04..10-18). The readout segments on that time.
 //
 // The free key's "10 calls to try" (a lifetime count) becomes a renewing daily
 // allowance: previews plus TRIAL_DAILY_FULL_CAP full answers per tool per day.

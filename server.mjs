@@ -4592,7 +4592,7 @@ export function _dailyQuotaOver(q, c) {
 //   claim_free_key, recover_my_key, unlock_more_data…) are neither counted nor
 //   refused, so the way out of the gate is never behind it.
 // ★ Indeterminate (timeout / 5xx) serves keyed, as validateKey's fail-soft does.
-// ★ B1 (D4, owner 2026-10-03; merge on/after 2026-10-19): the free key's
+// ★ B1 (D4, owner 2026-10-03; live 2026-10-04 00:15Z): the free key's
 //   LIFETIME gate is retired at its source — dchub-backend's /keys/validate
 //   and validate_trial_key no longer refuse an unbound key for its count
 //   (DCHUB_FREE_KEY_LIFETIME_GATE=1 there restores it). The free key is a
@@ -25322,7 +25322,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           // how many calls it has in total; a key claimed with an email (the
           // backend reports email_captured) is on the bound rung.
           daily_limit:             (r && r.email_captured === true) ? _rungNum('identified') : null,
-          // B1 (D4, owner 2026-10-03; merge on/after 2026-10-19): once the free
+          // B1 (D4, owner 2026-10-03; live 2026-10-04 00:15Z): once the free
           // key is published as a renewing daily allowance (_freeKeyIsDaily,
           // read from the /api/v1/tiers snapshot) it has no call total, so
           // free_calls_total is not emitted. daily_full_answers_per_tool is the

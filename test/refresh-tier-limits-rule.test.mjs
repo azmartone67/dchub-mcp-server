@@ -106,7 +106,7 @@ describe('refresh-tier-limits — the free-tier rule shape', () => {
     expect((await run()).wrote).toBe(false);
   });
 
-  // B1 (D4, owner 2026-10-03; backend merge on/after 2026-10-19).
+  // B1 (D4, owner 2026-10-03; backend live 2026-10-03 22:09Z).
   it('B1: accepts the free key as a daily allowance with no call count', async () => {
     payload = tiers({ free: { calls_per_day: null, allowance: { calls: null, period: 'day', previews: true, full_answers_per_tool_per_day: 2 } } });
     const r = await run();
