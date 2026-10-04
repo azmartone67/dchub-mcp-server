@@ -260,3 +260,27 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     } finally { off(); }
   });
 });
+
+describe('a repeat get_fiber_intel call in one session (live finding 10-04)', () => {
+  it('swaps the header too: no Developer rung, no "earlier in this session" pointer, one direct link', async () => {
+    const s = seat();
+    for (const r of [await callTool('get_fiber_intel', { metro: 'ashburn' }, s), await callTool('get_fiber_intel', { metro: 'ashburn' }, s)]) {
+      const t = text(r);
+      expect(t).not.toMatch(/Developer|claim_free_key|from earlier in this session|payer checks out/);
+    }
+    const t2 = text(await callTool('get_fiber_intel', { metro: 'ashburn' }, s));
+    expect(t2).toContain('Your user was sent the full ask earlier in this session');
+    expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(1);
+    expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(0);
+  });
+  it('the header pattern matches with and without a trailing blank line', () => {
+    const step = (text) => S._gridSellStep({ content: [{ type: 'text', text }],
+      structuredContent: { preview_is_partial: true, metro: 'ashburn', for_your_human: { url: 'https://dchub.cloud/upgrade/h/a.b' } } }, 'get_fiber_intel');
+    const hdr = '🔒 **This answer hid the total, and 9 more routes.** The payer checks out in one click: x → https://dchub.cloud/go/c/AA.BB (y) · or **Developer** z. Or call `claim_free_key` (one call).';
+    for (const text of ['{}\n\n---\n\n' + hdr + '\n', '{}\n\n---\n\n' + hdr, '{}\n\n---\n\n' + hdr + '\n\nmore']) {
+      const out = text.includes('more') ? step(text) : step(text);
+      expect(out.content[0].text).not.toMatch(/Developer|claim_free_key/);
+      expect(out.content[0].text).toContain('https://dchub.cloud/go/c/AA.BB');
+    }
+  });
+});

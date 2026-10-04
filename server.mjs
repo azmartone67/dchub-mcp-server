@@ -1320,7 +1320,8 @@ function _swapUrl(v, from, to) {
   }
   return v;
 }
-const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*\n\n/;
+// A repeat call's header ends the text with no blank line after it, so accept either.
+const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*(?:\n\n|\n*$)/;
 const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them| and \d+ other fields?[.;]|\. The full answer)/;
 export function _gridSellStep(result, name) {
   try {
