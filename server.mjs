@@ -1569,9 +1569,18 @@ export function _relayOnlyText(text) {
     const t = typeof text === 'string' ? text : '';
     const c = getCtx();
     if (c && c.api_key) return t;
+    // The body is JSON, then "\n\n---\n\n", then prose. The replacement phrase carries
+    // double quotes, so it may only land in the prose: inside a JSON string it made
+    // content[0].text unparseable on every keyless repeat call. With no separator the
+    // text is all prose or all body, so use a quote-free phrase there.
+    const sep = t.indexOf('\n\n---\n\n');
     let n = 0;
-    return t.replace(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g,
-      (u) => (n++ === 0 ? u : 'the "For your human" link from earlier in this session'));
+    return t.replace(/https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/g, (u, off) => {
+      if (sep >= 0 && off < sep) return u;   // inside the JSON body: never touched
+      if (n++ === 0) return u;
+      return sep < 0 ? 'the For your human link from earlier in this session'
+        : 'the "For your human" link from earlier in this session';
+    });
   } catch (_) { return text; }
 }
 
