@@ -1,7 +1,7 @@
 {
   "name": "dchub",
   "displayName": "DC Hub",
-  "version": "2.12.24",
+  "version": "2.12.25",
   "description": "The real-time agentic procurement endpoint and data center knowledge hub. Live data center market, power/grid, energy and fiber intelligence for site selection — 92 tools.",
   "author": {
     "name": "Jonathan Martone",
