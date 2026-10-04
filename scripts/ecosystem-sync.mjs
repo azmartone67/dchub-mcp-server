@@ -280,10 +280,17 @@ export function facilityFloors(text) {
 
 const TOOL_CLAIM_RE = /\b(\d{2,3})\s+(?:live\s+)?(?:read-only\s+)?(?:MCP\s+)?tools\b/gi;
 
+// A figure the page attributes to someone else's copy of us ("mcp.so lists 79
+// tools (their copy; we serve 92)") is not a claim the page makes. /mcp-standing
+// prints it on purpose (backend routes/mcp_standing.py `_tools_cell`), so it must
+// not be read as our own stale total. Only the "(their copy" form is exempt.
+const THEIR_COPY_RE = /\b[\w.-]+\s+lists\s+\d{2,3}\s+tools\s*\(their copy[^)]*\)/gi;
+
 /** Every "N tools" a text states, as numbers. */
 export function toolClaims(text) {
   const out = new Set();
-  for (const m of String(text || '').matchAll(TOOL_CLAIM_RE)) out.add(Number(m[1]));
+  const own = String(text || '').replace(THEIR_COPY_RE, ' ');
+  for (const m of own.matchAll(TOOL_CLAIM_RE)) out.add(Number(m[1]));
   return [...out].sort((a, b) => a - b);
 }
 
