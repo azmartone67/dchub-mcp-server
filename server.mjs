@@ -4920,6 +4920,18 @@ export async function mintAutoTrial(tool_name) {
         + `ip=${c.client_ip || '-'} sid=${String(c.session_id || '').slice(0, 8)}`);
       return null;
     }
+    // r-qa-no-mint (2026-10-04): our QA probes mint nothing either. A keyless
+    // QA sweep (UA "dchub-qa-readonly/0.1 (QA - exclude)" + X-DCHub-QA: 1)
+    // called get_dchub_recommendation and each call minted a dch_trial_ key.
+    // Skips when the caller is a QA caller by UA / clientInfo (_isQaCaller) or
+    // sent the QA marker header. Kill switch: DCHUB_MINT_SKIP_QA=0.
+    if (c && (_isQaCaller(c) || c.qa_marker === true)
+        && (process.env.DCHUB_MINT_SKIP_QA || '1') !== '0') {
+      console.log(`[auto_mint] skipped qa tool=${tool_name || '-'} `
+        + `marker=${c.qa_marker === true ? 1 : 0} ua=${JSON.stringify(String(c.user_agent || '').slice(0, 80))} `
+        + `sid=${String(c.session_id || '').slice(0, 8)}`);
+      return null;
+    }
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
     if (tool_name) url.searchParams.set('tool', tool_name);
     const headers = {
@@ -27003,6 +27015,9 @@ app.post(MCP_PATHS, async (req, res) => {
       && _consumeClaudeLoopbackToken(_claudeLoopbackTok);
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
+    // The QA marker header (QA_MARKER_HEADER). Read for the trial-mint skip
+    // only: a caller that sends it merely declines a trial key for itself.
+    const _qaMarker = String(req.headers['x-dchub-qa'] || '').trim() === '1';
     // r-platform-header (2026-07-20): explicit platform attribution header —
     // X-MCP-Platform (the HF Space bridge already sends this) or X-Client-Source
     // (Gemini enterprise). Only a KNOWN-platform value is honored (see
@@ -27692,7 +27707,7 @@ app.post(MCP_PATHS, async (req, res) => {
         api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
         auth_source: _authChannel, auth_oauth: _bearerResolved, source: _pathSource(req),
         referer: req.headers.referer || req.headers.referrer || null,
-        user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+        user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
       }, async () => {
         await ephTransport.handleRequest(req, res, body);
       });
@@ -27755,7 +27770,7 @@ app.post(MCP_PATHS, async (req, res) => {
             // where the request came from (Claude / ChatGPT / Perplexity /
             // Cursor / Cline / Browser — bucketed by Flask v_paywall_attribution view).
             referer: req.headers.referer || req.headers.referrer || null,
-            user_agent: userAgent,
+            user_agent: userAgent, qa_marker: _qaMarker,
             // item-3 (real caller IP): persist the init-time XFF client IP so
             // every subsequent call in this session can stamp ip_address.
             client_ip: clientIp,
@@ -27828,7 +27843,7 @@ app.post(MCP_PATHS, async (req, res) => {
         source: _pathSource(req),   // r-source-path: rides EVERY request
         // r46: see sessionMeta.set above for rationale
         referer: req.headers.referer || req.headers.referrer || null,
-        user_agent: userAgent,
+        user_agent: userAgent, qa_marker: _qaMarker,
         // item-3 (real caller IP): the initialize call itself is a tracked tool
         // call (tools/list etc.) — stamp it with the real XFF client IP too.
         client_ip: clientIp,
@@ -27921,7 +27936,7 @@ app.post(MCP_PATHS, async (req, res) => {
         auth_source: _authChannel, auth_oauth: _bearerResolved,
         source: _pathSource(req),   // r-source-path: rides EVERY request
         referer: req.headers.referer || req.headers.referrer || null,
-        user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+        user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
       }, async () => {
         await ephTransport.handleRequest(req, res, body);
@@ -27994,7 +28009,7 @@ app.post(MCP_PATHS, async (req, res) => {
         // classifies the call as 'mcp'.
         client_name_raw: _recallClientName(sessionId),
         referer: req.headers.referer || req.headers.referrer || null,
-        user_agent: userAgent, client_ip: clientIp, x_payment: xPayment,
+        user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
       }, async () => {
         await ephTransport.handleRequest(req, res, body);

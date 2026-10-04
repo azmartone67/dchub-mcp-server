@@ -75,3 +75,28 @@ describe('mintAutoTrial skips our own harnesses', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+// r-qa-no-mint (2026-10-04): QA callers mint nothing (UA/clientInfo or the
+// X-DCHub-QA marker carried as ctx.qa_marker).
+describe('mintAutoTrial skips QA callers', () => {
+  afterEach(() => { delete process.env.DCHUB_MINT_SKIP_QA; });
+  it('qa_marker on the ctx: no backend call, null', async () => {
+    const calls = capture();
+    const out = await _ctxALS.run({ user_agent: 'SomeAgent/1.0', qa_marker: true, platform: 'claude' },
+      () => mintAutoTrial('get_grid_data'));
+    expect(out).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+  it('a QA user agent: no backend call, null', async () => {
+    const calls = capture();
+    const out = await _ctxALS.run({ user_agent: 'dchub-qa-readonly/0.1 (QA - exclude)' },
+      () => mintAutoTrial('get_grid_data'));
+    expect(out).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+  it('qa_marker false and a normal user agent: mints', async () => {
+    const calls = capture();
+    await _ctxALS.run({ user_agent: 'SomeAgent/1.0', qa_marker: false }, () => mintAutoTrial('get_grid_data'));
+    expect(calls).toHaveLength(1);
+  });
+});
