@@ -149,7 +149,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
-import { lastFreeLine as _lastFreeLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
+import { lastFreeLine as _lastFreeLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -1249,7 +1249,7 @@ const _NEXT_Q_RE = /Next question to offer the user: "[^"]*" \(DC Hub tool: [a-z
 const _RETRY_HINT_RE = /\(agent: after purchase retry the same call\. Multi-step question: execute_plan\.\)\s*/g;
 export function _gridDeclutterStep(result, name) {
   try {
-    if (name !== 'get_grid_intelligence' || !_gridDeclutterOn()) return result;
+    if ((name !== 'get_grid_intelligence' && name !== 'get_fiber_intel') || !_gridDeclutterOn()) return result;
     const c = getCtx();
     if (c && c.api_key) return result;
     const sc = result && result.structuredContent;
@@ -1320,9 +1320,12 @@ function _swapUrl(v, from, to) {
   }
   return v;
 }
+const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*\n\n/;
+const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them| and \d+ other fields?[.;]|\. The full answer)/;
 export function _gridSellStep(result, name) {
   try {
-    if (name !== 'get_grid_intelligence' || !_gridSellOn()) return result;
+    const isGrid = name === 'get_grid_intelligence', isFiber = name === 'get_fiber_intel';
+    if ((!isGrid && !isFiber) || !_gridSellOn()) return result;
     const c = getCtx();
     if (c && c.api_key) return result;                 // keyless seats only
     const sc = result && result.structuredContent;
@@ -1330,42 +1333,70 @@ export function _gridSellStep(result, name) {
     if (!sc.preview_is_partial && !sc.trial_preview) return result;
     const fy = sc.for_your_human;
     const url = fy && typeof fy.url === 'string' && fy.url.includes('/upgrade/h/') ? fy.url : '';
-    const iso = typeof sc.iso === 'string' ? sc.iso : '';
-    if (!url || !iso) return result;
-    const withheld = Object.keys(sc).filter((k) => k.startsWith('_') && k.endsWith('_in_pro') && sc[k] === true)
-      .map((k) => k.slice(1, -'_in_pro'.length));
+    if (!url) return result;
+    const place = (c && c._go_place) || '';
     const buy = _gridBuyUrl(url);
-    const sentence = _gridSellLine({
-      iso, withheld, url: buy,
-      bands: { constraint: sc.constraint_score_band, excess: sc.excess_power_score_band },
-    });
-    if (!sentence) return result;
-    const gated = sc.continuation && sc.continuation.gated && Array.isArray(sc.continuation.gated.fields_unlocked)
-      ? sc.continuation.gated.fields_unlocked.length : withheld.length;
-    const agentLine = _gridAgentLine(iso, gated);
-    let wrote = false;
+    const headerRe = isGrid ? _GRID_HEADER_RE : _FIBER_HEADER_RE;
+    const textOf = result.content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
+    // One human line per session (r-relay-cap): a later gated response arrives WITHOUT its
+    // line. It still gets the agent header swapped, pointing back at the line already sent.
+    const hasLine = textOf.includes(HUMAN_FIRST_MARKER) || /^Tell the user: "/m.test(textOf);
+    let sentence = null, agentLine = '';
+    // The wall's own direct-checkout pointer, kept on a repeat (r-relay-cap keeps one pointer).
+    const _hdr = headerRe.exec(textOf);
+    const wallLink = (_hdr && /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+/.exec(_hdr[0]) || [''])[0];
+    if (isGrid) {
+      const iso = typeof sc.iso === 'string' ? sc.iso : '';
+      if (!iso) return result;
+      const withheld = Object.keys(sc).filter((k) => k.startsWith('_') && k.endsWith('_in_pro') && sc[k] === true)
+        .map((k) => k.slice(1, -'_in_pro'.length));
+      const unlocked = sc.continuation && sc.continuation.gated && Array.isArray(sc.continuation.gated.fields_unlocked)
+        ? sc.continuation.gated.fields_unlocked : null;
+      // The count and the field list it points at are the same list.
+      agentLine = unlocked
+        ? _gridAgentLine(iso, unlocked.length, 'continuation.gated.fields_unlocked', !hasLine, wallLink)
+        : _gridAgentLine(iso, withheld.length, 'the _in_pro markers', !hasLine, wallLink);
+      sentence = _gridSellLine({ iso, withheld, url: buy, market: place,
+        bands: { constraint: sc.constraint_score_band, excess: sc.excess_power_score_band } });
+      if (hasLine && !sentence) return result;
+    } else {
+      const m = _HID_RE.exec(textOf) || _HID_RE.exec(typeof sc.user_message === 'string' ? sc.user_message : '');
+      const place2 = place || (typeof sc.metro === 'string' ? sc.metro : '');
+      agentLine = _fiberAgentLine(place2, !hasLine, wallLink);
+      // The gate names what it hid when it measured it; otherwise say only what is true of a preview.
+      sentence = _fiberSellLine({ place: place2, hid: m ? m[1] : 'part of the full answer', url: buy });
+      if (hasLine && !sentence) return result;
+    }
+    let wrote = false, swapped = false;
     const content = result.content.map((b) => {
       if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
       let t = b.text;
-      if (_GRID_HEADER_RE.test(t)) t = t.replace(_GRID_HEADER_RE, () => agentLine + '\n\n---\n\n');
-      // v1's person's line, or v2's Tell-the-user line: same sentence either way.
-      const mark = t.indexOf(HUMAN_FIRST_MARKER);
-      if (mark >= 0) {
-        const eol = t.indexOf('\n', mark);
-        t = t.slice(0, mark) + HUMAN_FIRST_MARKER + ' ' + sentence + (eol >= 0 ? t.slice(eol) : '');
-        wrote = true;
-      } else if (/^Tell the user: "[^\n]*"/m.test(t)) {
-        t = t.replace(/^Tell the user: "[^\n]*"/m, () => 'Tell the user: "' + sentence + '"');
-        wrote = true;
+      if (headerRe.test(t)) {
+        t = t.replace(headerRe, () => agentLine + (isGrid ? '\n\n---\n\n' : '\n\n'));
+        swapped = true;
+      }
+      if (sentence) {
+        // v1's person's line, or v2's Tell-the-user line: same sentence either way.
+        const mark = t.indexOf(HUMAN_FIRST_MARKER);
+        if (mark >= 0) {
+          const eol = t.indexOf('\n', mark);
+          t = t.slice(0, mark) + HUMAN_FIRST_MARKER + ' ' + sentence + (eol >= 0 ? t.slice(eol) : '');
+          wrote = true;
+        } else if (/^Tell the user: "[^\n]*"/m.test(t)) {
+          t = t.replace(/^Tell the user: "[^\n]*"/m, () => 'Tell the user: "' + sentence + '"');
+          wrote = true;
+        }
       }
       return t === b.text ? b : { ...b, text: t };
     });
-    if (!wrote) return result;                         // no human line to replace: leave it be
-    let out = _swapUrl(sc, url, buy);
-    out = { ...out, user_message: sentence, show_to_user: true,
-            for_your_human: { ...out.for_your_human, text: sentence, url: buy } };
-    if (typeof out.for_your_human.markdown === 'string') {
-      out.for_your_human.markdown = out.for_your_human.markdown.replace(/\]\([^)]*\)$/, '](' + buy + ')');
+    if (!wrote && !swapped) return result;             // nothing of ours to replace: leave it be
+    let out = _swapUrl(sc, url, buy);                  // every copy of the link carries ?buy=1
+    if (wrote) {
+      out = { ...out, user_message: sentence, show_to_user: true,
+              for_your_human: { ...out.for_your_human, text: sentence, url: buy } };
+      if (typeof out.for_your_human.markdown === 'string') {
+        out.for_your_human.markdown = out.for_your_human.markdown.replace(/\]\([^)]*\)$/, '](' + buy + ')');
+      }
     }
     return { ...result, content, structuredContent: out };
   } catch (_) { return result; }                       // the line is never worth a response
@@ -2430,7 +2461,15 @@ function _goSessionFor(sessionId) {
 // The tool the current call is running (set at the top of every registered
 // handler) and the caller's paywall arm, in the shapes the backend verifier keeps.
 export function _goToolMark(name, args) {
-  try { const c = getCtx(); if (c && typeof c === 'object') c._go_tool = name; } catch (_) { /* never break a call */ }
+  try {
+    const c = getCtx();
+    if (c && typeof c === 'object') {
+      c._go_tool = name;
+      // The place the caller asked about, for sell lines that name it (market / metro alias).
+      const pl = args && typeof args === 'object' ? (args.market || args.metro) : '';
+      c._go_place = (typeof pl === 'string' && /^[A-Za-z0-9][A-Za-z0-9 _-]{0,38}$/.test(pl.trim())) ? pl.trim() : '';
+    }
+  } catch (_) { /* never break a call */ }
   return args;
 }
 function _goToolArm() {
