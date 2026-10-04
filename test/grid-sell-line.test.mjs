@@ -3,7 +3,7 @@
 // arms, behind DCHUB_GRID_SELL_LINE; and r-go-tool: /go/c carries tool and arm
 // (DCHUB_GO_TOOL). Real registered handler, backend stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { gridSellLine, buyUrl, gridAgentLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
+import { gridSellLine, buyUrl, gridAgentLine, fiberAgentLine, GRID_SELL_MAX } from '../lib/grid-sell-line.mjs';
 
 const URL1 = 'https://dchub.cloud/upgrade/h/tok.sig';
 
@@ -38,6 +38,14 @@ describe('gridSellLine (pure)', () => {
     expect(buyUrl(URL1 + '?pc=v2')).toBe(URL1 + '?pc=v2&buy=1');
     expect(buyUrl(buyUrl(URL1))).toBe(URL1 + '?buy=1');
     expect(buyUrl('https://dchub.cloud/go/c/x.y')).toBe('https://dchub.cloud/go/c/x.y');
+  });
+  it('repeat lines end on the /go/c link, nothing glued after it', () => {
+    const link = 'https://dchub.cloud/go/c/abc.def0123';
+    for (const l of [gridAgentLine('ERCOT', 13, 'x', true, link), fiberAgentLine('Ashburn', true, link)]) {
+      expect(l.endsWith(link)).toBe(true);
+      expect(l.indexOf(link)).toBe(l.lastIndexOf(link));
+    }
+    expect(gridAgentLine('ERCOT', 13, 'x', true, '')).not.toContain('go/c');
   });
   it('agent line: no free-allowance claim, no em dash', () => {
     const l = gridAgentLine('ERCOT', 13);
