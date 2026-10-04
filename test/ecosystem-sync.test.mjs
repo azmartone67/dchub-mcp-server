@@ -586,3 +586,14 @@ describe('the #410 issue body never prints a banned price itself', () => {
     expect(bannedClaims(body)).toEqual([]);
   });
 });
+
+describe('toolClaims: a listing figure quoted as their copy', () => {
+  it('ignores a listing figure the page labels as their copy, not ours', () => {
+    const row = 'mcp.so lists 79 tools (their copy; we serve 92)';
+    expect(toolClaims(row)).toEqual([]);
+    expect(judge({ read: true, toolClaims: toolClaims(row) }, SSOT).reasons).toEqual([]);
+    // our own stale claim beside it is still caught; an unlabelled "lists" is not exempt
+    expect(toolClaims(`${row}. DC Hub serves 79 tools.`)).toEqual([79]);
+    expect(toolClaims('mcp.so lists 79 tools')).toEqual([79]);
+  });
+});
