@@ -23,7 +23,10 @@ import {
   _withOptinAsk, _fetchKeyedOptinCard, _optinCtaCard, _optinUrl, OPTIN_SOURCE, OPTIN_CTA_TOOLS, optinCtaEnabled,
 } from '../server.mjs';
 
-const ON = { OPTIN_CTA_ENABLED: 'true' };
+// DCHUB_GRID_DECLUTTER=0: since 2026-10-03 the card is dropped from every gated wall by default
+// (owner: the wall already carries one pack ask); these tests pin the card's own machinery, so
+// they run with that skip off. The default-skip is pinned at the end of this file.
+const ON = { OPTIN_CTA_ENABLED: 'true', DCHUB_GRID_DECLUTTER: '0' };
 const LIVE_ROUTE = 'https://dchub.cloud/api/v1/opt-in/request?';
 const KEY = 'dch_trial_WZuPC0WDAWSLhrxLeGJ1xlaDop8UlxHG';
 let _n = 0;
@@ -246,5 +249,13 @@ describe('wiring', () => {
     // side-effect-only pass; the opt-in step itself must still sit here, on the
     // result every return path has merged into.
     expect(src).toMatch(/_scrubCommerce\(_postRelayTeaser\(await _withOptinAsk\(_honestCallerTier\(_ensureStructured\(await _stamped\(args, extra\)\), getCtx\(\)\), name, getCtx\(\)\), getCtx\(\)\)\)/);
+  });
+});
+
+describe('fix 4 (2026-10-03): the card is dropped from a gated wall by default', () => {
+  it('flag on, DCHUB_GRID_DECLUTTER unset: no card, no text change', async () => {
+    const r = anonWall();
+    const out = await _withOptinAsk(r, 'get_grid_intelligence', anon(), { OPTIN_CTA_ENABLED: 'true' });
+    expect(out).toBe(r);
   });
 });
