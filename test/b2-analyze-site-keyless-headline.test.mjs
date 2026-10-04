@@ -227,3 +227,51 @@ describe('B2 description matches behaviour (flips A3)', () => {
     expect(r.structuredContent.verdict).toBeTruthy();   // the claim is true
   });
 });
+
+// The description follows the kill switch (owner turned B2 off 2026-10-03
+// ~23:23Z; the merged description still promised the keyless headline).
+describe('analyze_site description follows DCHUB_B2_SITE_HEADLINE', () => {
+  let prev;
+  beforeEach(() => { prev = process.env.DCHUB_B2_SITE_HEADLINE; });
+  afterAll(() => { if (prev === undefined) delete process.env.DCHUB_B2_SITE_HEADLINE; else process.env.DCHUB_B2_SITE_HEADLINE = prev; });
+  const restore = () => { if (prev === undefined) delete process.env.DCHUB_B2_SITE_HEADLINE; else process.env.DCHUB_B2_SITE_HEADLINE = prev; };
+
+  it('switch off: the description says keyless gets no site data, and keyless gets the wall', async () => {
+    process.env.DCHUB_B2_SITE_HEADLINE = '0';
+    try {
+      const tools = S.createServer()._registeredTools;
+      const d = tools.analyze_site.description;
+      expect(d).toContain(S.ANALYZE_SITE_ACCESS_PRE_B2);
+      expect(d).not.toContain(S.ANALYZE_SITE_ACCESS_B2);
+      expect(d).not.toMatch(/Keyless returns the verdict band/);
+      const T = tools.analyze_site;
+      const parsed = await T.inputSchema.safeParseAsync(LOC);
+      const r = await S._ctxALS.run(seat('free'), () => T.handler(parsed.data, { signal: new AbortController().signal }));
+      const sc = r.structuredContent || {};
+      expect(sc.verdict ?? null).toBeNull();
+      expect(sc.limiting_factor ?? null).toBeNull();
+      expect(all(r)).toMatch(/no data/i);
+    } finally { restore(); }
+  });
+
+  it('switch on (unset): the description carries the B2 sentence', () => {
+    delete process.env.DCHUB_B2_SITE_HEADLINE;
+    try {
+      const d = S.createServer()._registeredTools.analyze_site.description;
+      expect(d).toContain(S.ANALYZE_SITE_ACCESS_B2);
+      expect(d).not.toContain(S.ANALYZE_SITE_ACCESS_PRE_B2);
+    } finally { restore(); }
+  });
+
+  it('only analyze_site changes, and the source literal still carries the B2 sentence', () => {
+    process.env.DCHUB_B2_SITE_HEADLINE = '0';
+    let off;
+    try { off = S.createServer()._registeredTools; } finally { restore(); }
+    delete process.env.DCHUB_B2_SITE_HEADLINE;
+    let on;
+    try { on = S.createServer()._registeredTools; } finally { restore(); }
+    const changed = Object.keys(on).filter((k) => on[k].description !== off[k].description);
+    expect(changed).toEqual(['analyze_site']);
+    expect(Object.keys(on).length).toBe(Object.keys(off).length);
+  });
+});

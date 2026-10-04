@@ -8074,6 +8074,19 @@ export function _substationLockedView(block) {
 export function _b2KeylessHeadlineOn() {
   return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_B2_SITE_HEADLINE || ''));
 }
+// analyze_site's access sentence follows the B2 switch (owner turned B2 off on
+// 2026-10-03 ~23:23Z for the 10-04..10-18 A/B; mcp#707 had already changed the
+// description). With the switch off the gate is the pre-B2 wall and CM-4 lock,
+// so the description says so (A3's original sentence). The source literal keeps
+// the B2 sentence, so scripts/sync-tools-manifest.mjs still reads a literal.
+export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the verdict band and weakest factor; '
+  + 'a free key adds factor bands and substation distance bands; scores and figures are Pro.';
+export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns no site data; a free key returns '
+  + 'verdict bands, factor names and counts; scores and figures are Pro.';
+export function _descFollowsSwitches(name, description) {
+  if (name !== 'analyze_site' || typeof description !== 'string' || _b2KeylessHeadlineOn()) return description;
+  return description.split(ANALYZE_SITE_ACCESS_B2).join(ANALYZE_SITE_ACCESS_PRE_B2);
+}
 // The counts the anonymous headline may carry: integers the backend's own
 // below-Pro preview (_site_score_preview) already publishes. Nothing else.
 const _B2_COUNT_KEYS = ['facilities_100km', 'substations_50km', 'gas_pipelines_50km',
@@ -17542,6 +17555,8 @@ function trackedTool(srv, name, description, schema, handler) {
   // are state-mutating → readOnlyHint:false + destructiveHint:false.
   // Per-platform override (ai_platform_tool_tuner) when present; else generic.
   const _ov = _activeDescOverrides && _activeDescOverrides[name];
+  // A3 rule: a description never promises what the gate does not serve.
+  description = _descFollowsSwitches(name, description);
   // Agent outreach: ten topic front doors open with a routing line (lib/agent-outreach.mjs).
   // Directory profiles serve their own reviewed descriptions, so they never see it.
   const _desc = withRoutingLine(name, (typeof _ov === 'string' && _ov.trim()) ? _ov : description);
