@@ -1,6 +1,6 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.12.25",
+  "version": "2.12.26",
   "description": "DC Hub Intelligence MCP Server — Standalone Streamable HTTP",
   "type": "module",
   "main": "server.mjs",
@@ -13,7 +13,7 @@
     "prepare": "node scripts/install-hooks.mjs 2>/dev/null || exit 0"
   },
   "dependencies": {
-    "@hono/node-server": "^1.14.3",
+    "@hono/node-server": "^1.19.17",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "express": "^4.21.2",
     "jose": "^6.2.3",
@@ -23,6 +23,9 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "vitest": "^2.1.0"
+    "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }
