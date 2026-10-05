@@ -11414,8 +11414,44 @@ const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retr
 // Exact keys; no figure lives under any of them (the modelled fields are nulled by the
 // backend tease, not here).
 const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance',
-  'ercotqueue_provenance', 'ercotqueue', 'attribution']);
+  'ercotqueue_provenance', 'ercotqueue', 'attribution', 'freshness', 'large_load']);
+// DCHUB_QUEUE_MOAT (2026-10-05): `freshness` holds the per-ISO fresh/stale counts the anon trim
+// nulled (`_count$`), and `large_load` holds the dated, source-linked large-load figures DC Hub
+// already prints on /grid/large-load-queue. Neither is a paid field. Exact keys.
 
+
+// DCHUB_QUEUE_MOAT (default off): the backend large-load tracker (dated, source-linked rows,
+// /api/v1/large-load/tracker) as a `large_load` block: the newest row per metric, each with its
+// source_url and published_date. Additive; omitted when the switch is off, the ISO has no rows or the
+// backend is unreachable, so the tool never fails or slows on it.
+export function _queueMoatOn() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_QUEUE_MOAT || ''));
+}
+export function _largeLoadBlock(tracker) {
+  const rows = Array.isArray(tracker?.rows) ? tracker.rows : [];
+  if (!rows.length) return null;
+  const seen = new Set();
+  const latest = [];
+  for (const r of rows) {   // newest first from the backend
+    if (!r || !r.metric || seen.has(r.metric)) continue;
+    seen.add(r.metric);
+    latest.push({ metric: r.metric, value_mw: r.value_mw, as_of_date: r.as_of_date,
+      published_date: r.published_date, source_title: r.source_title, source_url: r.source_url,
+      basis: r.basis });
+  }
+  const out = { iso: tracker.iso || 'ERCOT', rows: latest, source: 'https://dchub.cloud/grid/large-load-queue' };
+  if (Array.isArray(tracker.attribution) && tracker.attribution.length) out.attribution = tracker.attribution;
+  return out;
+}
+export async function _withLargeLoad(data, iso) {
+  if (!_queueMoatOn() || !data || typeof data !== 'object' || Array.isArray(data)) return data;
+  if (iso && String(iso).toUpperCase() !== 'ERCOT') return data;   // only ERCOT has rows today
+  try {
+    const t = await callAPI('/api/v1/large-load/tracker', { iso: 'ERCOT' }, { internal: true, timeout: 4000 });
+    const block = _largeLoadBlock(t);
+    return block ? { ...data, large_load: block } : data;
+  } catch { return data; }
+}
 
 // ── ladder stage 1 (owner 2026-09-29): `_<k>_total_unlocks_at` names the real rung ──
 // trimForTrial stamps every trimmed list's full length as `_<k>_total_in_pro` (kept:
@@ -23540,7 +23576,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
     { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
-      const data = await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a);
+      const data = await _withLargeLoad(
+        await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a), a.iso);
       // r-structured (2026-06-19): structuredContent so agent clients get the
       // queue payload, not just the next_session envelope.
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
