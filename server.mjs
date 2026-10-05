@@ -1323,7 +1323,7 @@ function _swapUrl(v, from, to) {
 }
 // A repeat call's header ends the text with no blank line after it, so accept either.
 const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*(?:\n\n|\n*$)/;
-const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them| and \d+ other fields?[.;]|\. The full answer)/;
+const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
 // ── r-paid-sell-line (2026-10-04, owner-approved; DCHUB_PAID_SELL_LINE, default OFF) ──
 // The grid sentence for the other keyless paid tools. get_market_intel, compare_isos and
 // rank_markets: the $10 pack opens them, so the sentence says $10 and links ?buy=1.
@@ -1751,8 +1751,16 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
 // logged nulling a real figure under that key) so the line never names a field
 // this answer did not have. When it names fields, the treatment arm's clause
 // keeps only its row count, so no field is named twice; the arm is not re-drawn.
+// Tools whose relay clause never names the $10 pack as what returns the hidden fields
+// (Jonathan 2026-10-04, get_market_dcpi_rank: canon says the pack is API capacity only).
+const _PACK_NEUTRAL_RELAY_TOOLS = new Set(['get_market_dcpi_rank']);
 function _relayClauseFor(payload) {
-  try { return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true })); }
+  try {
+    let tool = '';
+    try { tool = String((getCtx() || {})._mu?.tool || ''); } catch (_) { tool = ''; }
+    return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true }),
+      { packNeutral: _PACK_NEUTRAL_RELAY_TOOLS.has(tool) });
+  }
   catch (_) { return null; }
 }
 export function _relaySpecific(specific, arm, clause) {
@@ -19498,7 +19506,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             trimmed._upgrade = {
               tier:        'anonymous',
               message:     _missedUp
-                ? _missedUp.text + (_missedUp.rung === 'free_key'
+                ? (_missedUp.rung === 'pack' && _PACK_NEUTRAL_RELAY_TOOLS.has(name)
+                  // Canon (Jonathan 2026-10-04): the $10 pack is never named as what returns the hidden fields.
+                  ? _missedUp.what + ' Call unlock_more_data for the link to the plans that return them.'
+                  : _missedUp.text) + (_missedUp.rung === 'pack' && _PACK_NEUTRAL_RELAY_TOOLS.has(name) ? '' : _missedUp.rung === 'free_key'
                   ? ' Call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.'
                   : ' Call unlock_more_data for the one-click link.')
                 : 'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
@@ -19540,7 +19551,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // JSON + a trailing line no longer parses as JSON, and the stamper
             // below derives structuredContent FROM the text, so the payload must
             // ride structuredContent explicitly (same as the over-cap branch).
-            return { content: [{ type: 'text', text: composeHumanCta(_anonRelay.url, JSON.stringify(trimmed), trimmed, _sid) }],
+            // The human line goes in its OWN content block: block 0 stays exactly the JSON an agent
+            // can json.loads (Grok 2026-10-04: get_market_dcpi_rank returned JSON + the line in one
+            // block). The composer may also touch the JSON (the relay-first URL rewrite), so split
+            // at the marker rather than assume the head equals JSON.stringify(trimmed).
+            const _composed = composeHumanCta(_anonRelay.url, JSON.stringify(trimmed), trimmed, _sid);
+            const _at = _composed.indexOf(HUMAN_FIRST_MARKER);
+            const _blocks = _at > 0
+              ? [{ type: 'text', text: _composed.slice(0, _at).replace(/\s+$/, '') },
+                 { type: 'text', text: _composed.slice(_at).replace(/\s+$/, '') }]
+              : [{ type: 'text', text: _composed }];
+            return { content: _blocks,
                      structuredContent: { ...trimmed, for_your_human: _anonRelay } };
           }
         } catch (_) { /* fall through to raw result on parse failure */ }
