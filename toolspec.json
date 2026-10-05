@@ -1581,6 +1581,10 @@
           "description": "Keep only survivors that carry lat/lng (~83% of the queue) — the ones with a ready site_evaluation_handoff you can pipe into analyze_site. Default false",
           "type": "boolean"
         },
+        "developer": {
+          "description": "ERCOT only: keep projects whose developer name contains this text (case-insensitive substring, e.g. 'tenaska'). Developer names come from ERCOTQueue (ercotqueue.com, Matt Prusak, CC BY 4.0) joined to ERCOT's own queue by INR; other ISOs carry no developer field, so they return no rows when this is set. Answers that use it carry an attribution block",
+          "type": "string"
+        },
         "limit": {
           "description": "Max results to return (1-500; default varies by tool)",
           "type": "integer",
