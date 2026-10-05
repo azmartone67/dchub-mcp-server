@@ -14723,6 +14723,7 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     queued_generation_gw: _oNum('Generation interconnection queue in this ISO, GW (US ISOs; ERCOT\'s generation queue, not its large-load queue). null on NESO/IESO/AESO'),
     queued_load_total_gw: _oNum('Meaning depends on queued_load_total_gw_basis: generation_queue = the generation queue (deprecated alias of queued_generation_gw, removed after 2026-11-15); large_load = ERCOT\'s large-load (demand) queue; mixed_connection_queue = NESO/IESO/AESO connections queue (generation AND demand). GW'),
     queued_load_total_gw_basis: _oStr('What queued_load_total_gw measures on this row: generation_queue | large_load | mixed_connection_queue'),
+    queued_generation_gw_basis_note: _oStr('What queued_generation_gw counts on this row: status filter and MW column, e.g. "Active only, summer MW". Present on the US generation-queue ISOs other than ERCOT; compare totals from other trackers only on the same basis'),
     queued_load_data_center_gw: _oNum('ERCOT: data-center load DERIVED as ~90% of the large-load queue, GW. NESO/IESO/AESO: demand projects in the connections queue (all demand, not data centres only). null elsewhere'),
     queued_load_dc_share_pct: _oNum('ERCOT: data-center share of the large-load queue, %. NESO/IESO/AESO: demand share of the connections queue, %. null elsewhere'),
     top_subregions: _oAny('Provenance / sub-region breakdown for the large-load figure (ERCOT)'),
