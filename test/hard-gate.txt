@@ -173,6 +173,7 @@ test/invalid-param-hint.test.mjs
 test/key-never-worse-than-anon.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/ladder-stage1.test.mjs
+test/large-load-passthrough.test.mjs
 test/late-key.test.mjs
 test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
