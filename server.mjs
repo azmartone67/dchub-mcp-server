@@ -11363,7 +11363,14 @@ const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retr
 // the anon trim nulls basis.input_count (_count$) and cuts the input lists to
 // 3 rows, so a free caller reads a half-true provenance. Exact keys only;
 // both names are DCPI-specific, so no other tool's field is exempted.
-const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance']);
+// G-1 (2026-10-04): attribution is never cut. ERCOTQueue's CC BY 4.0 licence needs the
+// credit to travel with its data, and the anon trim was cutting ercotqueue_provenance.fields
+// to 3 behind `_fields_total_in_pro`, a half-true credit. `attribution` is the
+// backend's never-trimmed credit array; `ercotqueue` is its rows_enriched + credit block.
+// Exact keys; no figure lives under any of them (the modelled fields are nulled by the
+// backend tease, not here).
+const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance',
+  'ercotqueue_provenance', 'ercotqueue', 'attribution']);
 
 
 // ── ladder stage 1 (owner 2026-09-29): `_<k>_total_unlocks_at` names the real rung ──
@@ -23464,6 +23471,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       status: S.describe("Queue status filter. Default 'active' = still progressing (excludes withdrawn/cancelled/suspended/in-commercial-operation) — cross-ISO safe (SPP labels live projects 'IA FULLY EXECUTED/ON SCHEDULE' not 'active'). Pass 'all' for every status, or a literal label to substring-match"),
       max_fiber_km: N.describe('Keep only survivors within N km of the nearest MAPPED long-haul fiber route endpoint — coarse backbone proximity from a sparse ~260-node dataset over a county-centroid origin, NOT last-mile fiber. Implies geocoded rows only'),
       geocoded_only: B.describe('Keep only survivors that carry lat/lng (~83% of the queue) — the ones with a ready site_evaluation_handoff you can pipe into analyze_site. Default false'),
+      developer: S.describe("ERCOT only: keep projects whose developer name contains this text (case-insensitive substring, e.g. 'tenaska'). Developer names come from ERCOTQueue (ercotqueue.com, Matt Prusak, CC BY 4.0) joined to ERCOT's own queue by INR; other ISOs carry no developer field, so they return no rows when this is set. Answers that use it carry an attribution block"),
       limit: LIMIT },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
