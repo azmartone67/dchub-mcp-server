@@ -1751,16 +1751,8 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
 // logged nulling a real figure under that key) so the line never names a field
 // this answer did not have. When it names fields, the treatment arm's clause
 // keeps only its row count, so no field is named twice; the arm is not re-drawn.
-// Tools whose relay clause never names the $10 pack as what returns the hidden fields
-// (Jonathan 2026-10-04, get_market_dcpi_rank: canon says the pack is API capacity only).
-const _PACK_NEUTRAL_RELAY_TOOLS = new Set(['get_market_dcpi_rank']);
 function _relayClauseFor(payload) {
-  try {
-    let tool = '';
-    try { tool = String((getCtx() || {})._mu?.tool || ''); } catch (_) { tool = ''; }
-    return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true }),
-      { packNeutral: _PACK_NEUTRAL_RELAY_TOOLS.has(tool) });
-  }
+  try { return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true })); }
   catch (_) { return null; }
 }
 export function _relaySpecific(specific, arm, clause) {
@@ -19506,10 +19498,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             trimmed._upgrade = {
               tier:        'anonymous',
               message:     _missedUp
-                ? (_missedUp.rung === 'pack' && _PACK_NEUTRAL_RELAY_TOOLS.has(name)
-                  // Canon (Jonathan 2026-10-04): the $10 pack is never named as what returns the hidden fields.
-                  ? _missedUp.what + ' Call unlock_more_data for the link to the plans that return them.'
-                  : _missedUp.text) + (_missedUp.rung === 'pack' && _PACK_NEUTRAL_RELAY_TOOLS.has(name) ? '' : _missedUp.rung === 'free_key'
+                ? _missedUp.text + (_missedUp.rung === 'free_key'
                   ? ' Call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.'
                   : ' Call unlock_more_data for the one-click link.')
                 : 'Anonymous tier — aggregate metrics masked. Unlock the full free tier in ONE MCP call: call the claim_free_key tool (no email), then SAVE the returned X-API-Key to your MCP config and reconnect.',
@@ -19519,10 +19508,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // keeps — the fix for the ~4.8-calls/IP one-shot leak (this is the path search_facilities
               // and the masked free tools actually emit; trialHeader/applyTrialGuardIfFree are other branches).
               next_tool:      'claim_free_key',
-              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting). Retrying with the key gives the FREE tier — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews. Complete depth is the $10 pack (1,000 API credits) — call unlock_more_data for the one-click link.',
+              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting). Retrying with the key gives the FREE tier — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews. Complete depth is on the paid plans (a $10 pack of 1,000 API credits covers usage capacity) — call unlock_more_data for the links.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
               credits_url: _packCheckoutUrl(_sid),
-              credits_hint: 'Want to pay now without the email step? $10 one-time = 1,000 API credits (no subscription) — the cheapest way to pay per call.',
+              credits_hint: 'Want API capacity now without the email step? $10 one-time = 1,000 API credits (no subscription), usage capacity only.',
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
               ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
                               pro_hint: 'Pro — everything (the plan most humans choose).' } : {}),

@@ -15,12 +15,12 @@ const env = (v) => { const p = process.env.DCHUB_PAID_SELL_LINE; if (v === undef
 describe('builders (pure)', () => {
   it('copy matches the handoff', () => {
     expect(marketIntelSellLine({ market: 'dallas', hid: parseHidList('coverage (%), rows total, total MW'), providersTotal: 10, timeToPower: true, url: U }))
-      .toBe('This free DC Hub preview of the Dallas market hides its total MW, time to power and 7 of the top 10 providers. The full Dallas market brief is $10 one-time, one click, no subscription: ' + U);
+      .toBe('This free DC Hub preview of the Dallas market hides its total MW, time to power and 7 of the top 10 providers. The plans that include the full Dallas market brief are on this page: ' + U);
     const all = { _avg_time_to_power_months_in_pro: true, _queue_depth_gw_in_pro: true, _headroom_in_pro: true, _constraint_score_in_pro: true, _excess_power_score_in_pro: true, _grid_emergencies_30d_in_pro: true };
     expect(compareIsosSellLine({ isos: ['PJM', 'ERCOT'], perIso: [all, all], url: U }))
-      .toBe("This free DC Hub comparison of PJM and ERCOT hides each grid's time to power, queue depth, headroom, the constraint and excess power scores and 30-day grid emergencies. The full comparison is $10 one-time, one click, no subscription: " + U);
+      .toBe("This free DC Hub comparison of PJM and ERCOT hides each grid's time to power, queue depth, headroom, the constraint and excess power scores and 30-day grid emergencies. The plans that include the full comparison are on this page: " + U);
     expect(rankMarketsSellLine({ criteria: 'best_overall', region: 'us', total: 10, shown: 3, scoreHidden: true, mwHidden: true, url: U }))
-      .toBe("This free DC Hub best overall ranking of US markets shows 3 of 10 and hides each market's score and total MW. The full ranking is $10 one-time, one click, no subscription: " + U);
+      .toBe("This free DC Hub best overall ranking of US markets shows 3 of 10 and hides each market's score and total MW. The plans that include the full ranking are on this page: " + U);
   });
   it('names only what the gate lists, stays under the bound, no em dash', () => {
     expect(marketIntelSellLine({ market: 'dallas', hid: [], providersTotal: 3, timeToPower: false, url: U })).toBeNull();
@@ -50,11 +50,11 @@ describe('_paidSellStep on real-shape keyless responses', () => {
     expect(run(r, 'rank_markets')).toBe(r);
   });
   describe.each(['get_market_intel', 'compare_isos', 'rank_markets'])('%s with the switch on', (name) => {
-    it('one $10 sentence, ?buy=1 last, old ladder gone, hid list from markers', () => {
+    it('one plans sentence, ?buy=1 last, old ladder gone, hid list from markers', () => {
       const restore = env('1');
       try {
         const r = run(mk(name), name), t = text(r), sc = r.structuredContent;
-        expect(sc.user_message).toMatch(/\$10 one-time, one click, no subscription: https:\/\/dchub\.cloud\/upgrade\/h\/fixture\.sig\?buy=1$/);
+        expect(sc.user_message).toMatch(/The plans that include the full [A-Za-z ]+ are on this page: https:\/\/dchub\.cloud\/upgrade\/h\/fixture\.sig\?buy=1$/);
         expect(before(sc.user_message).length).toBeLessThanOrEqual(GRID_SELL_MAX + 40);
         expect(sc.for_your_human.text).toBe(sc.user_message);
         expect(t).toContain(sc.user_message);
