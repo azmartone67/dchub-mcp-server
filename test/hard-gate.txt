@@ -76,6 +76,7 @@ test/coverage-counts-not-masked.test.mjs
 test/daily-quota-gateway.test.mjs
 test/dcpi-confidence-public.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
+test/dcpi-rank-human-line-own-block.test.mjs
 test/deal-desk-automint.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
