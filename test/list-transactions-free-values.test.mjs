@@ -183,7 +183,7 @@ function expectFreePreview(out, label) {
     // lowest rung that returns it (the pack: a live balance is a paying read).
     const cta = String(body._upgrade_cta || '');
     expect(cta, `${label} ${where}: _upgrade_cta`).toMatch(/^This answer hid deal values and MW\./);
-    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('They come with the $10 pack');
+    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('The plans that return them are listed behind the link');
   }
   for (const needle of EXACT_NEEDLES) {
     expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);

@@ -140,14 +140,14 @@ function strippedPaths(full, gated) {
 }
 const leaf = (p) => p.replace(/\[\d+\]/g, '').split('.').pop();
 function parseClause(line) {
-  const m = /this answer hid (.+); the lowest plan that returns them is (the \$10 pack|DC Hub Developer|DC Hub Pro|a free DC Hub key) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
+  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:DC Hub Developer|DC Hub Pro|a free DC Hub key)) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
   if (!m) return null;
   const parts = m[1].replace(/ and (?=[^,]*$)/, ', ').split(', ');
   let others = 0;
   if (/^\d+ other fields?$/.test(parts[parts.length - 1])) others = parseInt(parts.pop(), 10);
-  return { named: parts, others, plan: m[2], url: m[3] };
+  return { named: parts, others, plan: m[2].replace(/^the lowest plan that returns them is /, ''), url: m[3] };
 }
-const PLAN_RUNG = { 'a free DC Hub key': 'free_key', 'the $10 pack': 'pack', 'DC Hub Developer': 'developer', 'DC Hub Pro': 'pro' };
+const PLAN_RUNG = { 'a free DC Hub key': 'free_key', 'the plans that return them are on the page behind the link': 'pack', 'DC Hub Developer': 'developer', 'DC Hub Pro': 'pro' };
 const seatKey = (rung, tool) => ({ free_key: keyFor('FREE', tool), pack: keyFor('PACK', tool), developer: DEV_KEY, pro: PRO_KEY })[rung];
 
 // ── the four tools, keyless ──────────────────────────────────────────────────
@@ -247,7 +247,7 @@ describe('relayMissedClause', () => {
   const mu = (labels, rung) => ({ missed: { labels }, rung });
   it('names the fields and the rung, never a monthly price', () => {
     expect(relayMissedClause(mu(['MW', 'scores', 'lease rate'], 'pack')))
-      .toBe('this answer hid MW, scores and lease rate; the lowest plan that returns them is the $10 pack');
+      .toBe('this answer hid MW, scores and lease rate; the plans that return them are on the page behind the link');
     expect(relayMissedClause(mu(['MW'], 'developer'))).toBe('this answer hid MW; the lowest plan that returns them is DC Hub Developer');
     expect(relayMissedClause(mu(['gas prices'], 'pro'))).toBe('this answer hid gas prices; the lowest plan that returns them is DC Hub Pro');
     expect(relayPlanName('free_key')).toBe('a free DC Hub key');
@@ -266,7 +266,7 @@ describe('relayMissedClause', () => {
     const locked = { shown: 3, total: 10, field: 'results', fields: ['score'] };
     const full = 'your agent got 3 of 10 `results` rows here — DC Hub\'s paid layer has the other 7 rows (plus `score`)';
     expect(continuationHumanText(locked)).toBe(full);   // what the treatment arm sends today
-    expect(H.S._relaySpecific(full, { locked }, 'this answer hid scores; the lowest plan that returns them is the $10 pack'))
+    expect(H.S._relaySpecific(full, { locked }, 'this answer hid scores; the plans that return them are on the page behind the link'))
       .toBe('your agent got 3 of 10 `results` rows here — DC Hub\'s paid layer has the other 7 rows');
     expect(H.S._relaySpecific(full, { locked }, null)).toBe(full);
     expect(H.S._relaySpecific(null, { locked }, 'x')).toBeNull();          // control arm stays control
@@ -274,7 +274,7 @@ describe('relayMissedClause', () => {
 
   it('buildHumanFirstLine: with a clause it names it; without one it is byte-identical to before', () => {
     const url = 'https://dchub.cloud/upgrade/h/x.y';
-    const clause = 'this answer hid MW; the lowest plan that returns them is the $10 pack';
+    const clause = 'this answer hid MW; the plans that return them are on the page behind the link';
     expect(H.S.buildHumanFirstLine(url, null, clause).split('\n')[0])
       .toBe(`${MARKER} ${clause} — open ${url} to see what your agent found.`);
     expect(H.S.buildHumanFirstLine(url, 'your agent got 3 of 10 `results` rows here — DC Hub\'s paid layer has the other 7', clause).split('\n')[0])

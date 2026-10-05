@@ -122,8 +122,8 @@ async function call(name, args, s) {
 
 // ── reading the prompt ──────────────────────────────────────────────────────
 // Every "This answer hid …" sentence in the response (text and structured).
-const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(They come with the \$10 pack|They come with DC Hub Developer|They come with DC Hub Pro|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
-const RUNG_OF = { 'They come with the $10 pack': 'pack', 'They come with DC Hub Developer': 'developer',
+const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|They come with DC Hub Developer|They come with DC Hub Pro|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
+const RUNG_OF = { 'The plans that return them are listed behind the link': 'pack', 'They come with DC Hub Developer': 'developer',
   'They come with DC Hub Pro': 'pro', 'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
 function prompts(all) {
   const out = [];

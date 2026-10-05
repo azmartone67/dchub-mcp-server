@@ -67,7 +67,7 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
       expect(t).not.toContain('Next question to offer the user');
       expect(sc.optin_cta).toBeUndefined();
       if (pc) expect(sc.next_ask && sc.next_ask.tool).toBeTruthy();   // stays in structuredContent (v1's stub is error-flagged, so no outreach)
-      expect(sc.user_message).toMatch(/one click/);
+      expect(sc.user_message).toMatch(/plans that include the full/);
       const blocks = r.content.map((b) => b.text).filter((x) => !/^Cite as: /.test(x));
       expect(blocks[blocks.length - 1]).toContain(sc.user_message.slice(0, 40));   // the ask is the last block but a bare citation line
       expect(URL_COUNT(t, NEWS_URL)).toBe(1);                          // each news URL once
