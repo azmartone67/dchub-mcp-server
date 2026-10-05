@@ -8813,6 +8813,16 @@ export async function buildDepthTease(name, result, ctx, tier) {
   // content[0] (high-reach preview surface) and stamp the retention next_session
   // hook — both were bypassed on this dominant path. No paid data is leaked
   // (data shape unchanged: headline + top-N only).
+  // Context packs (get_market_context / get_iso_context): the depth tease is the ONLY gated
+  // envelope a keyless or free-key caller gets for them (the backend sends `_free_preview`,
+  // not `_upgrade`), and it carried no human link at all: keyless Phoenix 2026-10-05 returned
+  // tier free, gated sections and no for_your_human, and Claude told the user no unlock link
+  // was returned. Same signed /upgrade/h relay every other gated envelope carries, in the JSON
+  // both channels render. The tease's own _upgrade text is unchanged.
+  if (CONTEXT_PACK_TOOLS.has(name) && !teased.for_your_human) {
+    const _fyh = buildHumanRelay(name, tier || 'free', ctx.session_id);
+    if (_fyh) teased.for_your_human = _fyh;
+  }
   const _content = _embedSourceInContent0([{ type: 'text', text: JSON.stringify(teased) }]);
   return {
     content: _content,

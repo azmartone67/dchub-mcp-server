@@ -42,9 +42,9 @@ describe('get_market_context human link', () => {
     const r = await call(seat(1));
     expect(r.structuredContent.for_your_human.url).toMatch(RELAY);
   });
-  it('an ungated pack gets no relay', async () => {
+  it('an ungated pack (paid seat, no tease) gets no relay', async () => {
     backend = { market: 'phoenix', sections: [{ id: 'verdict', text: 'x' }] };
-    const r = await call(seat(2));
+    const r = await call({ ...seat(2), tier: 'paid', api_key: 'dch_live_' + 'p'.repeat(32) });
     expect(r.structuredContent.for_your_human).toBeUndefined();
   });
 });
