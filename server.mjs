@@ -1537,6 +1537,40 @@ export function _humanLineToStructured(result) {
     return { ...result, structuredContent: sc };
   } catch (_) { return result; }
 }
+// Every tool's block 0 must be JSON an agent can json.loads (Grok 2026-10-04: get_fiber_intel,
+// get_grid_intelligence, rank_markets, get_market_intel returned JSON + "---" + agent line +
+// the human line in ONE block; mcp#744 split it for get_market_dcpi_rank only). Final step on the
+// tool handler: when block 0 is a JSON value followed by prose, the prose moves to its own blocks:
+// the agent/header text, then the "For your human" line starting at its marker. Block 0 that
+// already parses, errors, and blocks with no JSON head are left alone. structuredContent untouched.
+export function _splitHumanBlock(result) {
+  try {
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    const b0 = result.content[0];
+    if (!b0 || b0.type !== 'text' || typeof b0.text !== 'string') return result;
+    const t = b0.text;
+    if (!/^\s*[{\[]/.test(t)) return result;
+    try { JSON.parse(t); return result; } catch (_) { /* has a tail, or is not JSON at all */ }
+    let head = null, at = -1;
+    for (const sep of ['\n\n---\n\n', '\n\n' + HUMAN_FIRST_MARKER, '\n\n\u{1F512}', '\n\n']) {
+      let from = 0;
+      for (;;) {
+        const i = t.indexOf(sep, from);
+        if (i < 0) break;
+        try { const v = JSON.parse(t.slice(0, i)); if (v !== null && typeof v === 'object') { head = t.slice(0, i); at = i; break; } } catch (_) { /* not the end of the JSON */ }
+        from = i + 1;
+      }
+      if (head !== null) break;
+    }
+    if (head === null) return result;
+    const tail = t.slice(at).replace(/^\s*---\s*/, '').replace(/\s+$/, '');
+    if (!tail) return result;
+    const m = tail.indexOf(HUMAN_FIRST_MARKER);
+    const parts = m > 0 ? [tail.slice(0, m).replace(/\s+$/, ''), tail.slice(m)] : [tail];
+    const blocks = [{ ...b0, text: head }, ...parts.filter(Boolean).map((x) => ({ type: 'text', text: x }))];
+    return { ...result, content: [...blocks, ...result.content.slice(1)] };
+  } catch (_) { return result; }
+}
 function _hasHumanCta(text) {
   const t = typeof text === 'string' ? text : '';
   return _HUMAN_CTA_SIGNATURES.some((sig) => t.includes(sig));
@@ -20150,12 +20184,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_jsonFirstBlock(_guideAuthWall(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name, args), name), name), name), name));
+       name, args, _outSchema), name), name), name, args), name), name), name), name)));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
