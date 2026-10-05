@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 const BASE = 'https://backend.dcpi-own-block.test';
-const SCORES = { ok: true, market: { slug: 'ashburn', name: 'Ashburn' }, verdict: 'BUILD',
+const SCORES = { ok: true, ghost_field: null, _ghost_field_in_pro: true, market: { slug: 'ashburn', name: 'Ashburn' }, verdict: 'BUILD',
   composite_score: 72.1, excess_power_score: 80.4, constraint_score: 31.2, quality_score: 88.0,
   avg_kwh_cents: '13.024', as_of: '2026-10-04', computed_at: '2026-10-04T12:00:00Z' };
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -66,5 +66,15 @@ describe('keyless get_market_dcpi_rank', () => {
     const line = r.content.find((b) => b.text.includes('→ **For your human:**')).text;
     expect(line, 'the line names what was hidden (control that the clause path ran)').toMatch(/this answer hid/);
     expect(line).toMatch(/the plans that return them are on the page behind the link|the lowest plan that returns them is DC Hub (Developer|Pro)|a free DC Hub key/);
+  });
+
+  it('the relay line and _upgrade.message name the same hidden fields (a marker with no figure behind it is counted by neither)', async () => {
+    const r = await call();
+    const msg = JSON.parse(r.content[0].text)._upgrade.message;
+    const line = r.content.find((b) => b.text.includes('→ **For your human:**')).text;
+    const hid = (t) => /this answer hid (.+?)(?:\.|;)/i.exec(t)[1];
+    expect(hid(msg)).toBe(hid(line));
+    expect(hid(msg)).not.toMatch(/ghost/);          // control: the figure-less marker was in the payload and is not named
+    expect(JSON.parse(r.content[0].text)._ghost_field_in_pro).toBe(true);
   });
 });

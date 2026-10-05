@@ -12682,6 +12682,26 @@ function _siteHandoff(co) {
   ];
 }
 
+// Keyless get_market_intel text was JSON + a trailer in ONE block, so json.loads(content[0].text)
+// failed (Grok 2026-10-04, char 8243). Same fix as #744: block 0 is exactly the JSON and the prose
+// that followed it (the agent header, the human line) rides in the blocks after it. Runs LAST, after
+// every step that reads the joined text; structuredContent is not touched. Scoped to the tools
+// listed; a response that is already pure JSON, or whose first block is not JSON, is returned as is.
+const _JSON_FIRST_BLOCK_TOOLS = new Set(['get_market_intel']);
+function _jsonFirstBlock(result, name) {
+  try {
+    if (!_JSON_FIRST_BLOCK_TOOLS.has(name) || !result || !Array.isArray(result.content)) return result;
+    const b0 = result.content[0];
+    if (!b0 || b0.type !== 'text' || typeof b0.text !== 'string') return result;
+    const sp = _splitLeadingJson(b0.text);
+    if (!sp) return result;
+    const tail = String(sp.rest || '').replace(/^\s*-{3,}\s*/, '').trim();
+    if (!tail) return result;
+    const raw = b0.text.slice(0, b0.text.length - sp.rest.length).trim();
+    return { ...result, content: [{ ...b0, text: raw }, { type: 'text', text: tail }, ...result.content.slice(1)] };
+  } catch (_) { return result; }
+}
+
 function _stampEntityCb(toolName, fn) {
   return async (args, extra) => {
     // ★ r-location-tier: the location gate runs HERE, on the handler's result,
@@ -19493,7 +19513,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // returns ALL of it (a handler mask beneath this trim can need more
             // than a free key: retirement MW is Developer, gas prices are Pro).
             _noteGate('anon_trim:' + name);
-            const _missedUp = _missedUpgradeFor(trimmed);
+            // Strict first, like the relay line: a marker with no logged figure behind it names a field
+            // this answer never had, so the two sentences must count the same fields (Grok 9:36 PM PT:
+            // relay said 7 other fields, this said 8). Non-strict only when strict has nothing.
+            const _missedUp = _missedUpgradeFor(trimmed, undefined, { strict: true }) || _missedUpgradeFor(trimmed);
             // Fix E (2026-06-06): client_reference_id=<session_id> on every Stripe URL.
             trimmed._upgrade = {
               tier:        'anonymous',
@@ -20127,12 +20150,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_guideAuthWall(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_jsonFirstBlock(_guideAuthWall(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx())),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name, args), name), name), name));
+       name, args, _outSchema), name), name), name, args), name), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
