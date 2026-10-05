@@ -23287,15 +23287,6 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       const d = await callAPI(`/api/v1/context/market/${encodeURIComponent(slug)}`, q, { internal: true });
       const out = (d && typeof d === 'object' && !Array.isArray(d)) ? d : { data: d };
       out.source = 'DC Hub — market context pack (dchub.cloud)';
-      // A gated pack (the backend's `_upgrade` / `upgrade` keys) is the high-intent
-      // moment and carried no human link at all: keyless Phoenix, 2026-10-05,
-      // tier free, gated sections, no for_your_human and no /upgrade/h. Same
-      // signed relay every other gated envelope carries, in the structured
-      // channel only; no body or checkout-URL text is added.
-      if ((out._upgrade || out.upgrade) && !out.for_your_human) {
-        const _fyh = buildHumanRelay('get_market_context', (getCtx() || {}).tier || 'free');
-        if (_fyh) out.for_your_human = _fyh;
-      }
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
