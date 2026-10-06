@@ -254,6 +254,7 @@ test/portfolio-nudge.test.mjs
 test/power-timeline-class.test.mjs
 test/pricing-canon-and-go-links.test.mjs
 test/pro-trial-offer.test.mjs
+test/pro-wall-stamp.test.mjs
 test/problem-taxonomy.test.mjs
 test/provenance-as-of-zones.test.mjs
 test/provenance-asof-headline-vs-oldest.test.mjs

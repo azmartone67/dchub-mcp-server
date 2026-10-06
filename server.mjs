@@ -8283,6 +8283,63 @@ export async function _withWallUserLine(result, name, opts = {}) {
 
 // The Land & Power wall with the person's line first. _lpWallResult stays as the old
 // fence (tests and the DCHUB_WALL_SHORT_LINK=0 path); this only rewrites it.
+// ── Pro wall stamp (Grok audit 2026-10-06, items 1-2) ───────────────────────────
+// A free-key or keyless call to a Pro-only tool can land in half a dozen preview/wall
+// branches (lp_wall, lp_preview, plan_pro_preview, depth tease, blocked_paid_only). Some
+// carried required_plan:'pro' and a human line, none carried the same machine-readable
+// wall marker, and the call log said lp_preview / ok-class statuses, so the funnel could
+// not count them. This runs once, on whatever the handler returned: when the result is a
+// gated Pro answer it adds _wall:true, user_message, agent_message and for_your_human, and
+// reports it so the call is logged as status 'pro_wall'. Full Pro answers are untouched
+// (no required_plan marker). No price in the copy.
+const _PRO_WALL_WHAT = {
+  analyze_site: 'the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost',
+  compare_sites: 'the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site',
+  get_dchub_recommendation: 'the full site recommendation with the scores behind it',
+  generate_site_analysis: 'the shareable Site Analysis report for this location',
+  export_dataset: 'the bulk dataset export',
+};
+export function proWallUserMessage(name, link) {
+  const what = _PRO_WALL_WHAT[name] || ('the full ' + name + ' answer');
+  return 'DC Hub Pro has ' + what + '. Start a 7-day Pro trial: ' + link;
+}
+export function proWallAgentMessage(name) {
+  return name + ' is a DC Hub Pro tool; this response is a preview. Show your human the link in for_your_human to start the 7-day Pro trial.';
+}
+export function _stampProWall(result, name, c) {
+  try {
+    if (!PRO_ONLY_TOOLS.has(name)) return { result, wall: false };
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return { result, wall: false };
+    const gated = sc.required_plan === 'pro' && (sc._gated || sc._preview_only || sc._wall || sc.tease || sc.trial_preview);
+    if (!gated) return { result, wall: false };
+    const fyh = (sc.for_your_human && typeof sc.for_your_human === 'object') ? sc.for_your_human : null;
+    let link = (fyh && fyh.url) || sc.upgrade_url || (sc.upgrade && sc.upgrade.pro_url) || '';
+    if (!link) {
+      try { const r = buildHumanRelay(name, (c && c.tier) || 'free', (c && c.session_id) || '', { offer: PRO_TRIAL_OFFER }); link = (r && r.url) || ''; } catch (_) {}
+    }
+    if (!link) link = 'https://dchub.cloud/pricing';
+    // Existing wall copy is kept (each arm's own line is pinned by its own tests); this only
+    // fills what is absent, so every gated Pro answer carries a non-null line for both readers.
+    const userMessage = (typeof sc.user_message === 'string' && sc.user_message.trim())
+      ? sc.user_message : proWallUserMessage(name, link);
+    const human = (fyh && fyh.url) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
+    const stamp = { _wall: true, required_plan: 'pro', user_message: userMessage,
+                    agent_message: proWallAgentMessage(name), for_your_human: human };
+    const nsc = { ...sc, ...stamp };
+    const out = { ...result, structuredContent: nsc };
+    // content[0] is JSON on most branches, JSON + prose on a few; re-render only the clean case.
+    try {
+      const t = result.content && result.content[0] && result.content[0].text;
+      const parsed = typeof t === 'string' ? JSON.parse(t) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        out.content = [{ ...result.content[0], text: JSON.stringify({ ...parsed, ...stamp }) }, ...result.content.slice(1)];
+      }
+    } catch (_) { /* prose-bearing branch: structuredContent carries the stamp */ }
+    return { result: out, wall: true };
+  } catch (_) { return { result, wall: false }; }
+}
+
 export async function _lpWallResultV11(name, headline = null) {
   const base = _lpWallResult(name, headline);
   const longUrl = base.structuredContent.upgrade_url;
@@ -18126,6 +18183,7 @@ function trackedTool(srv, name, description, schema, handler) {
       return _argErr;
     }
     try {
+    const _proWallRaw = await (async () => {
       let _gateTier = _nodeTier(tier);  // r41-session-upgrade may mutate this in-place
       // r-session-tier-bind (2026-07-22, flag DCHUB_SESSION_TIER_BIND, default on):
       // give an agent the IDENTIFIED TIER in-session right after claim_free_key — the
@@ -20214,6 +20272,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       //  returns above it. _honestCallerTier now wraps the registerTool
       //  callback, where every return path has merged.)
       return withReturnNudge(withCookbookHint(withFrontDoorNudge(_leanForClean(withCitation(withBindHint(_valued, name, c), name), name), name, c), name, c), name, c);
+    })();
+    const _pw = _stampProWall(_proWallRaw, name, c);
+    if (_pw.wall) status = 'pro_wall';
+    return _pw.result;
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
