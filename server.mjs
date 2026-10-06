@@ -2741,7 +2741,17 @@ const _SESSION_UPGRADE_TIERS = new Set(['developer', 'pro', 'founding', 'paid', 
 // skip the async disambiguation entirely when a tier already proves Pro-or-above on its own.
 function _isUnambiguousProOrAbove(t) {
   const s = String(t || '').toLowerCase();
-  return s !== 'paid' && _tierRank(s) >= _tierRank('pro');
+  return s !== 'paid' && _planIsProOrAbove(s);
+}
+// 'admin' is the backend's operator plan: resolve_effective_plan answers it for role=admin, so
+// validate-key's users_plan carries it for an operator's keys. _TIER_RANK does not rank it (rank
+// -1), which read as sub-Pro and denied the operator's own keys on every Pro-only gate. Handled by
+// name here, the way _RETIREMENT_MW_FULL_TIERS and _EXACT_LOCATION_UNRANKED_TIERS already do,
+// rather than ranked globally, which would move every other _tierRank caller.
+const _PRO_CLASS_UNRANKED_PLANS = new Set(['admin']);
+function _planIsProOrAbove(name) {
+  const s = String(name || '').toLowerCase();
+  return _PRO_CLASS_UNRANKED_PLANS.has(s) || _tierRank(s) >= _tierRank('pro');
 }
 // Resolves the ambiguity above via the ONE source that still carries the real plan name:
 // validate_key's tier_detail.users_plan, threaded through as .plan_tier (see
@@ -2759,7 +2769,7 @@ async function _paidKeyIsProOrAbove(apiKey) {
   if (!v || v.indeterminate === true) return true;
   const granular = String(v.plan_tier || '').toLowerCase();
   if (!granular) return false;
-  return _tierRank(granular) >= _tierRank('pro');
+  return _planIsProOrAbove(granular);
 }
 
 // r-durable-sub-key (2026-07-13): bind a keyed caller's SUBSCRIPTION checkout

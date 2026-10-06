@@ -298,6 +298,12 @@ describe('a real Developer/Pro key both validate as tier:"paid" — only the bac
     expect(all(r)).toContain(CASES.analyze_site.full);
     expect(head(r)?._gated).not.toBe(true);
   });
+  it('the operator\'s key (tier "paid", real plan "admin": role=admin) gets the full answer, not the preview', async () => {
+    planFor['dch_live_lp_paid_and_admin'] = 'admin';
+    const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_and_admin'));
+    expect(all(r)).toContain(CASES.analyze_site.full);
+    expect(head(r)?._gated).not.toBe(true);
+  });
   it('Founding\'s key (tier "paid", real plan "founding") also gets the full answer — founding bills $99, grants pro', async () => {
     planFor['dch_live_lp_paid_and_founding'] = 'founding';
     const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_and_founding'));
