@@ -268,6 +268,7 @@ describe('README install snippets carry the github-readme tag', () => {
   });
 
   it('the headline MCP link is tagged too', () => {
-    expect(README).toContain('MCP at [`https://dchub.cloud/mcp/github`](https://dchub.cloud/mcp/github)');
+    // 2026-10-06: no longer a clickable link (it returns raw JSON to a person); the tagged endpoint is still named.
+    expect(README).toContain('MCP endpoint `https://dchub.cloud/mcp/github`');
   });
 });
