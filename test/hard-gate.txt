@@ -255,6 +255,7 @@ test/pricing-canon-and-go-links.test.mjs
 test/pro-trial-offer.test.mjs
 test/problem-taxonomy.test.mjs
 test/provenance-as-of-zones.test.mjs
+test/provenance-asof-headline-vs-oldest.test.mjs
 test/provenance-basis-class-every-tool.test.mjs
 test/public-doors-banned-floors.test.mjs
 test/qa-marker-forward.test.mjs
