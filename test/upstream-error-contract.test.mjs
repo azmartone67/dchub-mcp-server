@@ -99,3 +99,58 @@ function readSrc() {
   // eslint-disable-next-line no-undef
   return require('node:fs').readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 }
+
+
+// ── guidance fields survive a 4xx (Grok 2026-10-06: the WECC explanation was dropped) ──────────
+describe('_upstreamError guidance passthrough', () => {
+  // The body get_retirement_headroom's backend sends for region_iso=WECC (be#6423).
+  const WECC = {
+    ok: false, _entity: 'error', error: "unknown region_iso 'WECC'", ignored: ['WECC'],
+    known: ['CAISO', 'ERCOT', 'ISONE', 'MISO', 'NYISO', 'PJM', 'SPP'],
+    also_accepted: 'any EIA balancing-authority code present in the retirement data',
+    balancing_authorities_in_data: ['MISO', 'PJM', 'TVA', 'SWPP', 'NYIS', 'CISO'],
+    note: 'WECC is an interconnection, not a balancing authority: pass the balancing-authority codes inside it, e.g. AZPS, SRP, WALC, PACE, BPAT.',
+  };
+  it('control: the old allowlist alone would have dropped every one of these', () => {
+    const out = _upstreamError(400, j(WECC));
+    expect(out.error).toBe('API 400');
+    expect(out.detail).toBe("unknown region_iso 'WECC'");
+  });
+  it('a 400 keeps note, known, ignored, also_accepted and balancing_authorities_in_data', () => {
+    const out = _upstreamError(400, j(WECC));
+    expect(out.note).toMatch(/interconnection, not a balancing authority/);
+    expect(out.known).toEqual(WECC.known);
+    expect(out.ignored).toEqual(['WECC']);
+    expect(out.also_accepted).toMatch(/balancing-authority code/);
+    expect(out.balancing_authorities_in_data).toEqual(WECC.balancing_authorities_in_data);
+  });
+  it('everything else the backend put in the body stays out (allowlist, not passthrough)', () => {
+    const out = _upstreamError(400, j({ ...WECC, trace: 'Traceback ...', internal_dsn: 'postgres://x', ok: false, _entity: 'error' }));
+    expect(JSON.stringify(out)).not.toMatch(/Traceback|postgres:\/\/|internal_dsn/);
+    expect(out._entity).toBeUndefined();
+  });
+  it('a 5xx body is not guidance and passes none of it', () => {
+    const out = _upstreamError(503, j(WECC));
+    for (const k of ['note', 'known', 'ignored', 'also_accepted', 'balancing_authorities_in_data']) expect(out[k], k).toBeUndefined();
+  });
+  it('is bounded: long strings are cut, arrays capped, non-scalar entries and objects dropped', () => {
+    const out = _upstreamError(400, j({
+      error: 'x', note: 'n'.repeat(5000),
+      balancing_authorities_in_data: Array.from({ length: 500 }, (_, i) => 'CODE' + i),
+      known: [{ a: 1 }, ['nested'], 'OK', 7], ignored: { not: 'a list' }, also_accepted: 12345,
+    }));
+    expect(out.note.length).toBe(600);
+    expect(out.balancing_authorities_in_data.length).toBe(100);
+    expect(out.known).toEqual(['OK', 7]);
+    expect(out.ignored).toBeUndefined();
+    expect(out.also_accepted).toBeUndefined();
+  });
+  it('the existing fields and the mitigation block are untouched by it', () => {
+    const out = _upstreamError(400, j({ ...WECC, hint: 'try AZPS', code: 'BAD_REGION' }));
+    expect(out.hint).toBe('try AZPS');
+    expect(out.code).toBe('BAD_REGION');
+    expect(out._error_mitigation.error_code).toBe('BAD_REGION');
+    expect(out._error_mitigation.deterministic_hint).toBe('try AZPS');
+  });
+});
+
