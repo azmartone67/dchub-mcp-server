@@ -177,7 +177,9 @@ export async function startHarness(opts = {}) {
     }
     if (p === '/api/v1/keys/validate') {
       const k = body && body.api_key;
-      if (k === PRO_KEY || k === OPAQUE_KEY) return send(200, { valid: true, tier: 'pro', developer_id: 'dev_claude_test', email: null });
+      if (k === PRO_KEY || k === OPAQUE_KEY) return send(200, { valid: true, tier: 'pro', developer_id: 'dev_claude_test', email: null,
+        // the real validate always carries the account's plan; null reads as no plan on record (fail-closed, 2026-10-05)
+        tier_detail: { users_plan: 'pro' } });
       return send(200, { valid: false, tier: 'free' });
     }
     if (p.startsWith('/api/v1/mcp/') || p.startsWith('/api/v1/sources/')) return send(200, { ok: true });

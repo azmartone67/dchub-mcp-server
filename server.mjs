@@ -2746,15 +2746,19 @@ function _isUnambiguousProOrAbove(t) {
 // Resolves the ambiguity above via the ONE source that still carries the real plan name:
 // validate_key's tier_detail.users_plan, threaded through as .plan_tier (see
 // _validateKeyUncached). Re-validates through the existing 5-min keyCache — cheap on the
-// hot path, since this key was just validated to reach a 'paid'-tier call at all. Fails
-// OPEN (grants) when the plan truly cannot be resolved, so an already-paid caller is never
-// left worse off than before this fix; only a POSITIVELY-confirmed sub-Pro plan denies.
+// hot path, since this key was just validated to reach a 'paid'-tier call at all.
+// P0-5 tail (owner 2026-10-05): it fails CLOSED when the backend ANSWERED and has no plan
+// on record (a paid mcp_dev_keys row whose email has no users row) — before, that read as
+// Pro with nothing behind it. Only a backend that could NOT answer (network error, 5xx,
+// timeout: validateKey returns indeterminate) still grants, so a blip never walls a caller
+// who is already paid. A POSITIVELY-confirmed sub-Pro plan denies, as before.
 async function _paidKeyIsProOrAbove(apiKey) {
   if (!apiKey) return false;
   let v = null;
   try { v = await validateKey(apiKey); } catch (_) { v = null; }
-  const granular = String((v && v.plan_tier) || '').toLowerCase();
-  if (!granular) return true;
+  if (!v || v.indeterminate === true) return true;
+  const granular = String(v.plan_tier || '').toLowerCase();
+  if (!granular) return false;
   return _tierRank(granular) >= _tierRank('pro');
 }
 

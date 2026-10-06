@@ -246,6 +246,7 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
   });
 
   it.each(['pro', 'enterprise'])('%s gets the full answer', async (tier) => {
+    planFor['dch_live_lp_' + tier] = tier;   // the account's plan is on record, as validate returns
     const r = await call(tool, K.args, seat(tier, 'dch_live_lp_' + tier));
     expect(all(r)).toContain(K.full);
     expect(head(r)?._gated).not.toBe(true);
@@ -303,11 +304,12 @@ describe('a real Developer/Pro key both validate as tier:"paid" — only the bac
     expect(all(r)).toContain(CASES.analyze_site.full);
     expect(head(r)?._gated).not.toBe(true);
   });
-  it('an unresolvable plan (no users.plan match) fails OPEN — never worse than pre-fix', async () => {
-    // No planFor entry: tier_detail.users_plan comes back null, same as an
-    // account with no users row at all (e.g. a comp key minted outside Stripe).
+  it('an unresolvable plan (no users row) fails CLOSED — a paid key with no plan on record is not Pro (2026-10-05)', async () => {
+    // No planFor entry: tier_detail.users_plan comes back null on a valid answer, same as an
+    // account with no users row at all (e.g. a comp key minted outside Stripe). Before
+    // 2026-10-05 this read as Pro. Operations: give the account a users row.
     const r = await call('analyze_site', LOC, seat('paid', 'dch_live_lp_paid_unresolvable'));
-    expect(all(r)).toContain(CASES.analyze_site.full);
-    expect(head(r)?._gated).not.toBe(true);
+    expect(all(r)).not.toContain(CASES.analyze_site.full);
+    expect(head(r)?._gated).toBe(true);
   });
 });

@@ -84,7 +84,8 @@ beforeAll(async () => {
         if (blipOnce.delete(key)) { res.statusCode = 503; res.end('{}'); return; }
         let out = { valid: false, tier: 'free' };
         if (LIVE_KEYS.has(key)) {
-          out = { valid: true, tier: paid.has(key) ? 'paid' : 'free', developer_id: 'dev_t', email: null };
+          out = { valid: true, tier: paid.has(key) ? 'paid' : 'free', developer_id: 'dev_t', email: null,
+                  ...(paid.has(key) ? { tier_detail: { users_plan: 'pro' } } : {}) };
         }
         if (key === K_TRIAL || key === K_TRIAL2) out = { valid: true, tier: 'free', developer_id: null, email: null, source: 'auto_trial' };
         res.end(JSON.stringify(out));
