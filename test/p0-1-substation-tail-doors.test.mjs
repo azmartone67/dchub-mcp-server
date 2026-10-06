@@ -3,9 +3,40 @@
 // get_hosting_capacity answered the substation question that analyze_site locks
 // below Pro. Measured keyless on 2026-10-05: anchor name + voltage_kv 750,
 // nearest_substations distance_km 0.2, feeder substation labels.
-import { describe, it, expect } from 'vitest';
-import { _kvBandOf, _lockFindSitesAnchors, _lockRetirementSubstations,
-  _lockHostingSubstations, _substationDetailOpen } from '../server.mjs';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
+// Hard-gate file: loopback only. _substationDetailOpen checks credits for a Pro or enterprise
+// caller, which fetches DCHUB_API_BASE/api/v1/mcp/credits/balance, and unstubbed that is the production
+// backend (smoke failed: "tried to reach dchub-backend-production.up.railway.app:443"). The
+// backend is faked here, before server.mjs loads, so no connection leaves the process.
+let _kvBandOf, _lockFindSitesAnchors, _lockRetirementSubstations, _lockHostingSubstations, _substationDetailOpen;
+let realFetch, prevBase, prevInternal;
+const stubbed = [];   // every backend path the stub answered
+beforeAll(async () => {
+  prevInternal = process.env.DCHUB_INTERNAL_KEY; process.env.DCHUB_INTERNAL_KEY = 'p0-1-substation-tail-key';
+  realFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const u = new URL(String(input && input.url ? input.url : input));
+    stubbed.push(u.pathname);
+    if (u.pathname === '/api/v1/mcp/credits/balance') {   // _lpAccessFor: a pre-cutover pack holder is let in
+      return new Response(JSON.stringify({ credits: 0, had_pack: false }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.pathname === '/api/v1/keys/validate') {
+      return new Response(JSON.stringify({ valid: true, tier: 'paid', plan_tier: 'pro' }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  prevBase = process.env.DCHUB_API_BASE; process.env.DCHUB_API_BASE = 'https://backend.p0-1-substation-tail.test';
+  const S = await import('../server.mjs');
+  if (prevBase === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prevBase;
+  ({ _kvBandOf, _lockFindSitesAnchors, _lockRetirementSubstations, _lockHostingSubstations, _substationDetailOpen } = S);
+}, 60_000);
+afterAll(() => {
+  globalThis.fetch = realFetch;
+  if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
+});
 
 const LEAK = /Fillmore|OSM-1467|Test Sub|Acme Power|APS/;
 
@@ -72,5 +103,8 @@ describe('who is above the line', () => {
     expect(await _substationDetailOpen({ tier: 'developer', api_key: 'k' })).toBe(false);
     expect(await _substationDetailOpen({ tier: 'pro', api_key: 'k' })).toBe(true);
     expect(await _substationDetailOpen({ tier: 'enterprise', api_key: 'k' })).toBe(true);
+    // control: the Pro/enterprise answers above reached the stubbed backend, so the stub is what
+    // kept them on loopback (not a code path that happens to skip the network)
+    expect(stubbed, 'the stub answered the credit-balance check').toContain('/api/v1/mcp/credits/balance');
   });
 });
