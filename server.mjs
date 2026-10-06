@@ -25667,7 +25667,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         claude_desktop: {
           label: 'Claude Desktop',
           file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
-          snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, transport: 'http', headers: { 'X-API-Key': key } } } }),
+          // ★ Grok audit 2026-10-06, item 4: this was a url + http-transport + headers entry, which
+          // claude_desktop_config.json does not run (stdio servers only). The launcher
+          // (npm-launcher, published as dchub-mcp-server) bridges stdio to the hosted server and
+          // reads DCHUB_API_KEY. The URL route lives in Settings → Connectors (connector_url).
+          snippet: JSON.stringify({ mcpServers: { dchub: { command: 'npx', args: ['-y', 'dchub-mcp-server'], env: { DCHUB_API_KEY: key } } } }),
+          connector_url: _cu,
+          note: 'claude_desktop_config.json runs local (stdio) servers only: a {"url": …} entry is not a valid server there and Claude Desktop can drop it. This snippet runs the dchub-mcp-server launcher over stdio (Node 18+) and carries your key in env. For the hosted URL instead, use Settings → Connectors → Add custom connector and paste connector_url.',
         },
         claude_code: {
           label: 'Claude Code (CLI — one command)',

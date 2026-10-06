@@ -258,7 +258,9 @@ describe('README install snippets carry the github-readme tag', () => {
   ].map((m) => m[1]);
 
   it('finds the snippets at all (non-vacuity)', () => {
-    expect(PASTE.length).toBeGreaterThanOrEqual(5);
+    // 5 before 2026-10-06: Claude Desktop's {"url"} entry (which claude_desktop_config.json cannot run) was
+    // the fifth. The stdio launcher snippet that replaced it is not a URL paste, so the floor is 4.
+    expect(PASTE.length).toBeGreaterThanOrEqual(4);
   });
 
   it('every pasteable URL resolves to github-readme', () => {
