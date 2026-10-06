@@ -26,10 +26,15 @@ describe('_stampProWall', () => {
     expect(JSON.parse(result.content[0].text)._wall).toBe(true);
     expect(JSON.stringify(sc)).not.toMatch(/\$\d/);
   });
-  it('keeps an existing user_message and for_your_human', () => {
-    const r = mk({ _gated: true, required_plan: 'pro', user_message: 'mine', for_your_human: { text: 't', url: 'https://u.test/1' } });
-    const sc = _stampProWall(r, 'analyze_site', {}).result.structuredContent;
-    expect(sc.user_message).toBe('mine'); expect(sc.for_your_human.url).toBe('https://u.test/1'); expect(sc._wall).toBe(true);
+  it('keeps a compliant user_message and for_your_human, replaces one that names neither Pro nor the trial', () => {
+    const good = 'DC Hub Pro has the report. Start a 7-day Pro trial: https://u.test/1';
+    const keep = _stampProWall(mk({ _gated: true, required_plan: 'pro', user_message: good,
+      for_your_human: { text: good, url: 'https://u.test/1' } }), 'analyze_site', {}).result.structuredContent;
+    expect(keep.user_message).toBe(good); expect(keep.for_your_human.text).toBe(good);
+    const fix = _stampProWall(mk({ _gated: true, required_plan: 'pro', user_message: 'open the link',
+      for_your_human: { text: 'see what I found', url: 'https://u.test/2' } }), 'analyze_site', {}).result.structuredContent;
+    expect(fix.user_message).toContain('DC Hub Pro'); expect(fix.user_message).toContain('7-day Pro trial: https://u.test/2');
+    expect(fix.for_your_human.url).toBe('https://u.test/2'); expect(fix.for_your_human.text).toBe(fix.user_message);
   });
   it('leaves a full Pro answer alone', () => {
     const r = mk({ ok: true, composite_score: 81 });
@@ -57,5 +62,24 @@ describe('_stampProWall', () => {
 describe('handler wiring', () => {
   it('logs the status pro_wall from the stamper', () => {
     expect(SRC).toMatch(/_stampProWall\(_proWallRaw, name, c\)[\s\S]{0,80}status = 'pro_wall'/);
+  });
+});
+
+describe('item 2: every Pro wall arm names DC Hub Pro and the 7-day trial, with no price', () => {
+  it('the person line, for each Pro-only tool', async () => {
+    const W = await import('../lib/wall-user-line.mjs');
+    for (const t of ['analyze_site', 'compare_sites', 'get_dchub_recommendation', 'generate_site_analysis', 'export_dataset']) {
+      const line = W.userLineText({ tool: t, offer: 'pro', link: 'https://dchub.cloud/u/abc234', headline: null });
+      expect(line, t).toContain('DC Hub Pro');
+      expect(line, t).toContain('7-day Pro trial: https://dchub.cloud/u/abc234');
+      expect(line, t).not.toMatch(/\$\d|unlock/i);
+    }
+  });
+  it('the relay link label on a Pro tool names Pro and the trial for Claude and Grok alike', async () => {
+    const S = await import('../server.mjs');
+    for (const p of ['claude', 'grok', 'chatgpt', '']) {
+      const l = S._relayLinkLabel(p, 'analyze_site');
+      expect(l, p).toContain('DC Hub Pro'); expect(l, p).toMatch(/7-day (free )?trial/); expect(l, p).not.toMatch(/\$\d/);
+    }
   });
 });
