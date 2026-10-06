@@ -96,6 +96,7 @@ import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mpp
 import './lib/web-bot-auth-preload.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
+import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog } from './lib/log-redact.mjs';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
@@ -4359,7 +4360,7 @@ function maybeUrlElicitClaim(claim, toolName) {
     if (!srv || !srv.server) return;
     const caps = srv.server.getClientCapabilities ? srv.server.getClientCapabilities() : null;
     if (!caps || !caps.elicitation) {
-      console.log(`[url-elicit] skip sid=${sid.slice(0, 8)} no-elicitation-cap platform=${platform}`);
+      console.log(`[url-elicit] skip sid=${_logId(sid)} no-elicitation-cap platform=${platform}`);
       return;
     }
     _urlElicitSent.add(sid);
@@ -4369,9 +4370,9 @@ function maybeUrlElicitClaim(claim, toolName) {
       url: claim.claim_url,
       message: `Unlock the full ${toolName} result on DC Hub — open this link to claim instant access (one click, no signup).`,
     }, { timeout: 120000 })
-      .then((r) => console.log(`[url-elicit] result sid=${sid.slice(0, 8)} tool=${toolName} platform=${platform} action=${(r && r.action) || '?'}`))
-      .catch((e) => console.log(`[url-elicit] failed sid=${sid.slice(0, 8)} tool=${toolName} platform=${platform}: ${String((e && e.message) || e).slice(0, 140)}`));
-    console.log(`[url-elicit] sent sid=${sid.slice(0, 8)} tool=${toolName} platform=${platform}`);
+      .then((r) => console.log(`[url-elicit] result sid=${_logId(sid)} tool=${toolName} platform=${platform} action=${(r && r.action) || '?'}`))
+      .catch((e) => console.log(`[url-elicit] failed sid=${_logId(sid)} tool=${toolName} platform=${platform}: ${String((e && e.message) || e).slice(0, 140)}`));
+    console.log(`[url-elicit] sent sid=${_logId(sid)} tool=${toolName} platform=${platform}`);
   } catch (e) {
     try { console.log(`[url-elicit] error: ${String((e && e.message) || e).slice(0, 140)}`); } catch (_) {}
   }
@@ -4631,7 +4632,7 @@ export async function _liftKeyTier(c, resolvedTier) {
   }
   try { recordSessionUpgrade(c.platform, v.tier); } catch (_) {}
   _dropQuotaCache(key);
-  console.log(`[paid-lift] key=${String(key).slice(0, 6)}… sid=${String(sid || '').slice(0, 8)} tier→${v.tier}`);
+  console.log(`[paid-lift] key=${_keyKind(key)} sid=${_logId(String(sid || ''))} tier→${v.tier}`);
   return v.tier;
 }
 
@@ -5217,7 +5218,7 @@ async function _mintDurableForPaidAgent(source) {
           _m.api_key = key; _m.tier = (r && r.tier) || 'free'; _m.auto_bound = true;
           sessionMeta.set(_sid, _m);
           recordSessionUpgrade(_m.platform, _m.tier);
-          console.log(`[paid-durable] ${source} → durable key bound to session ${String(_sid).slice(0, 8)}`);
+          console.log(`[paid-durable] ${source} → durable key bound to session ${_logId(String(_sid))}`);
         }
       }
     } catch (_) { /* non-fatal: the agent can still save the key manually */ }
@@ -5291,7 +5292,7 @@ function _autoBindTrialToSession(mint) {
     _ctx.tier     = _m.tier;
     _ctx.is_trial = _m.is_trial;
     try { recordSessionUpgrade(_m.platform, _m.tier); } catch (_) {}
-    console.log(`[auto_mint] trial auto-bound to session ${String(_sid).slice(0,8)} — full taste on next call, no reconnect`);
+    console.log(`[auto_mint] trial auto-bound to session ${_logId(String(_sid))} — full taste on next call, no reconnect`);
     return true;
   } catch (_e) { return false; }
 }
@@ -7375,7 +7376,7 @@ async function resolveWorkosBearer(token, opts) {
   // across replicas and restarts, so it is deliberately not used.)
   if (idn.created === true) _chStage('identity_created');
   _workosTokenCache.set(_cacheKey, out);
-  console.log(`[oauth] workos bearer → durable key ${idn.api_key.slice(0, 12)}… tier=${out.tier}`);
+  console.log(`[oauth] workos bearer → durable key ${_keyKind(idn.api_key)} tier=${out.tier}`);
   return out;
 }
 
@@ -17973,7 +17974,7 @@ function trackedTool(srv, name, description, schema, handler) {
     // The anonymous per-IP rate limit still applies there.
     if (c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE && _isScraperSession(c.session_id, name, !!c.api_key)) {
       status = 'blocked_scraper';
-      console.log(`[scraper-block] sid=${(c.session_id||'').slice(0,8)} tool=${name} platform=${c.platform||'?'} — pattern matched 5-tool sweep`);
+      console.log(`[scraper-block] sid=${_logId((c.session_id||''))} tool=${name} platform=${c.platform||'?'} — pattern matched 5-tool sweep`);
       // fire-and-forget telemetry, then return.
       trackToolCall({
         timestamp:   new Date().toISOString(),
@@ -18068,7 +18069,7 @@ function trackedTool(srv, name, description, schema, handler) {
               c.tier    = _m2.tier;
               _gateTier = _m2.tier;
               try { recordSessionUpgrade(c.platform, _m2.tier); } catch (_) {}
-              console.log(`[MCP] session-tier-bind sid=${String(_sid).slice(0, 8)} → ${_m2.tier} (early · all-tool · cross-replica)`);
+              console.log(`[MCP] session-tier-bind sid=${_logId(String(_sid))} → ${_m2.tier} (early · all-tool · cross-replica)`);
             } else if (_SESSION_UPGRADE_TIERS.has(_up) && _tierRank(_up) > _tierRank(_gateTier)) {
               _m2.tier  = _up;
               sessionMeta.set(_sid, _m2);
@@ -18076,7 +18077,7 @@ function trackedTool(srv, name, description, schema, handler) {
               _gateTier = _nodeTier(_up);
               tier      = _up;
               try { recordSessionUpgrade(c.platform, _up); } catch (_) {}
-              console.log(`[MCP] session-tier-bind sid=${String(_sid).slice(0, 8)} → ${_up} (session-bound purchase)`);
+              console.log(`[MCP] session-tier-bind sid=${_logId(String(_sid))} → ${_up} (session-bound purchase)`);
             } else {
               _m2.tierTriedAt = Date.now();     // throttle a miss for 60s (a mid-session claim is picked up next window)
               sessionMeta.set(_sid, _m2);
@@ -18762,7 +18763,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 c.tier    = _m.tier;
                 _gateTier = _m.tier;
                 try { recordSessionUpgrade(c.platform, _m.tier); } catch (_) {}
-                console.log(`[MCP] keystone session-bind sid=${String(_sid).slice(0,8)} → ${_m.tier} (durable claim, cross-replica)`);
+                console.log(`[MCP] keystone session-bind sid=${_logId(String(_sid))} → ${_m.tier} (durable claim, cross-replica)`);
                 // r-tier-collapse-fix (2026-09-23): _m.tier rides straight from
                 // tier_upgrade with no _nodeTier pass, so it CAN be the collapsed 'paid'
                 // — same disambiguation as the primary gate call above.
@@ -18800,7 +18801,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 const _m = sessionMeta.get(_sid);
                 _m.tier = _newTier;
                 sessionMeta.set(_sid, _m);
-                console.log(`[MCP] session_upgrade sid=${_sid.slice(0,8)} tier=free→${_newTier} (redeem detected)`);
+                console.log(`[MCP] session_upgrade sid=${_logId(_sid)} tier=free→${_newTier} (redeem detected)`);
                 recordSessionUpgrade(c.platform, _newTier);
                 // r-paid-lift: the gate's vocabulary, not the plan name (see _nodeTier).
                 _gateTier = _nodeTier(_newTier);
@@ -20106,7 +20107,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         const _r = err.result;
         return (_r && _r.isError === undefined) ? { ..._r, isError: true } : _r;
       }
-      console.error(`[tool-error] ${name}:`, (err && err.stack) || err);
+      console.error(`[tool-error] ${name}:`, _scrubLog((err && err.stack) || err));
       const _detail = String((err && err.message) || err || 'internal error').slice(0, 300);
       const _payload = {
         error: 'tool_execution_failed',
@@ -25682,7 +25683,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
             sessionMeta.set(_sid, _m);
             recordSessionUpgrade(_m.platform, _m.tier);
             _autoBound = true;
-            console.log(`[claim] auto-bound key to session ${String(_sid).slice(0,8)} — no reconnect needed`);
+            console.log(`[claim] auto-bound key to session ${_logId(String(_sid))} — no reconnect needed`);
           }
         }
       } catch (_e) { /* non-fatal: the agent can still reconnect with the key */ }
@@ -27005,7 +27006,7 @@ app.use(MCP_PATHS, (req, res, next) => {
     // outsider, and that distinction is the whole flip decision.
     _edgeKeyStats.last_missing_ua = String(req.headers['user-agent'] || '').slice(0, 200) || null;
     _edgeKeyNoteUa(req.headers['user-agent'], verdict);
-    console.warn(`[edge-key] ${verdict} on ${req.method} ${req.originalUrl} ua=${_edgeKeyStats.last_missing_ua} (observe mode; would 403 under DCHUB_EDGE_KEY_ENFORCE=1)`);
+    console.warn(`[edge-key] ${verdict} on ${req.method} ${req.path} ua=${_edgeKeyStats.last_missing_ua} (observe mode; would 403 under DCHUB_EDGE_KEY_ENFORCE=1)`);
     return next();
   }
 
@@ -27340,7 +27341,7 @@ app.post(MCP_PATHS, async (req, res) => {
         const _canon = Object.prototype.hasOwnProperty.call(TOOL_ALIASES, req.body.params.name)
           ? TOOL_ALIASES[req.body.params.name] : null;
         if (_canon) {
-          console.log(`[alias] ${req.body.params.name} → ${_canon} sid=${(sessionId || '').slice(0, 8)}`);
+          console.log(`[alias] ${req.body.params.name} → ${_canon} sid=${_logId((sessionId || ''))}`);
           req.body.params.name = _canon;
         }
       }
@@ -27359,7 +27360,7 @@ app.post(MCP_PATHS, async (req, res) => {
               && !Object.prototype.hasOwnProperty.call(_args, real)) {
             _args[real] = _args[guess];
             delete _args[guess];
-            console.log(`[argalias] ${req.body.params.name}.${guess} \u2192 ${real} sid=${(sessionId || '').slice(0, 8)}`);
+            console.log(`[argalias] ${req.body.params.name}.${guess} \u2192 ${real} sid=${_logId((sessionId || ''))}`);
           }
         }
       }
@@ -27863,7 +27864,7 @@ app.post(MCP_PATHS, async (req, res) => {
           + 'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
         _bumpChallengeIssued(_ibKey);                  // r-invalid-bearer-bound: spend one
         _chBump('invalid_bearer', req.body?.method);   // r-oauth-funnel: Map bump only
-        console.log(`[oauth] 401 invalid bearer (${String(_bearer).slice(0, 8)}… method=${req.body?.method}) — challenging via resource_metadata`);
+        console.log(`[oauth] 401 invalid bearer (${_logId(String(_bearer))}… method=${req.body?.method}) — challenging via resource_metadata`);
         return res.status(401).json({
           jsonrpc: '2.0',
           error: {
@@ -27935,7 +27936,7 @@ app.post(MCP_PATHS, async (req, res) => {
           if (_r.persist) {
             sessionMeta.set(sessionId, meta);
             try { recordSessionUpgrade(meta.platform, meta.tier); } catch (_) {}
-            console.log(`[late-key] sid=${String(sessionId).slice(0, 8)} adopted header key ${String(apiKey).slice(0, 6)}… tier=${meta.tier}`);
+            console.log(`[late-key] sid=${_logId(String(sessionId))} adopted header key ${_keyKind(apiKey)} tier=${meta.tier}`);
           }
         }
       }
@@ -28042,7 +28043,7 @@ app.post(MCP_PATHS, async (req, res) => {
           // qa-0704: mcpServer is initialized by the time this hook fires
           // (during handleRequest, after connect) — safe to capture here.
           sessionSrv.set(sid, mcpServer);
-          console.log(`[MCP] init sid=${sid.slice(0,8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0,6) + '…' : 'none'} active=${sessions.size}`);
+          console.log(`[MCP] init sid=${_logId(sid)} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'} active=${sessions.size}`);
         },
       });
       transport.onclose = () => {
@@ -28249,7 +28250,7 @@ app.post(MCP_PATHS, async (req, res) => {
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       const ephServer = createServer(_descOverrides);
       await ephServer.connect(ephTransport);
-      console.log(`[MCP] stateless tools/call sid=${(sessionId || '').slice(0, 8)} platform=${platform} tier=${tier} key=${apiKey ? apiKey.slice(0, 6) + '…' : 'none'}`);
+      console.log(`[MCP] stateless tools/call sid=${_logId((sessionId || ''))} platform=${platform} tier=${tier} key=${apiKey ? _keyKind(apiKey) : 'none'}`);
       // One-shot: no onclose / no Map insert (sessionIdGenerator: undefined → nothing
       // to clean up); GC reclaims both objects once the response is written.
       return ctx.run({
@@ -28300,7 +28301,7 @@ app.post(MCP_PATHS, async (req, res) => {
       id: body?.id || null,
     });
   } catch (err) {
-    console.error('[MCP] Error:', (err && err.stack) || err);
+    console.error('[MCP] Error:', _scrubLog((err && err.stack) || err));
     if (!res.headersSent) {
       // r-failsoft (2026-07-11): for a well-formed JSON-RPC REQUEST (it has an
       // id + method), answer IN-BAND — HTTP 200 with a JSON-RPC error object —
@@ -28368,7 +28369,7 @@ app.delete(MCP_PATHS, async (req, res) => {
     } catch (e) {
       // Logged, not fatal: the session is being torn down either way, and a
       // failed close must not cost the caller its response.
-      console.error(`[MCP] DELETE close failed sid=${sid.slice(0,8)}:`, (e && e.stack) || e);
+      console.error(`[MCP] DELETE close failed sid=${_logId(sid)}:`, _scrubLog((e && e.stack) || e));
     }
     _releaseSession(sid);   // ★all five maps — the list, not three of it
     // 200 even when close() threw: the session IS gone from this process, and
@@ -28407,10 +28408,10 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
   // this server is stateless per-request, so surviving beats mass-5xx. Loudly
   // logged so the offending path still gets found and fixed.
   process.on('unhandledRejection', (reason) => {
-    console.error('[unhandledRejection] kept alive:', (reason && reason.stack) || reason);
+    console.error('[unhandledRejection] kept alive:', _scrubLog((reason && reason.stack) || reason));
   });
   process.on('uncaughtException', (err) => {
-    console.error('[uncaughtException] kept alive:', (err && err.stack) || err);
+    console.error('[uncaughtException] kept alive:', _scrubLog((err && err.stack) || err));
   });
 
   const httpServer = app.listen(PORT, '0.0.0.0', () => {
