@@ -77,7 +77,7 @@ describe('relay render directive (r-relay-render)', () => {
     // (per client, and per tool since F10 2026-10-02); the link is still '[label](' + _url + ')'.
     expect(fn).toMatch(/markdown: _relayLinkLabel\(undefined, toolName\) \+ '\(' \+ _url \+ '\)'/);
     expect(SRC).toMatch(/GROK_RELAY_LABEL = '\[[^\]]+\]';/);
-    expect(SRC).toContain(": '[🔓 Open DC Hub — see what I found]';");
+    expect(SRC).toContain("(_toolSellsPro(tool) ? RELAY_LABEL_PRO : '[🔓 Open DC Hub — see what I found]');");
   });
 
   it('keeps message and url intact for existing consumers', () => {

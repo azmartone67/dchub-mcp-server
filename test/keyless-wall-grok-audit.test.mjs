@@ -121,7 +121,8 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
     }
     expect(S._relayLinkLabel('grok', 'get_interconnection_queue')).toBe(S.GROK_RELAY_LABEL);
     expect(S._relayLinkLabel('grok')).toBe(S.GROK_RELAY_LABEL);
-    expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[🔓 Open DC Hub — see what I found]');
+    expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[🔓 Start a 7-day DC Hub Pro trial]');
+    expect(S._relayLinkLabel('claude', 'get_facility')).toBe('[🔓 Open DC Hub — see what I found]');
   });
 });
 

@@ -181,7 +181,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine } from './lib/wall-user-line.mjs';
+import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
@@ -533,13 +533,16 @@ export const GROK_RELAY_LABEL = '[📊 Get the full DC Hub numbers behind this a
 // open (_paywallOffer sells Pro there). On those tools the label names Pro, unpriced
 // (owner rule 09-27: the only price DC Hub states is the $10 pack), with the trial the
 // contract's own offer line already names.
-export const GROK_RELAY_LABEL_PRO = '[📊 Get the full DC Hub analysis behind this answer — on DC Hub Pro, 7-day free trial]';
+export const GROK_RELAY_LABEL_PRO = '[📊 Get the full DC Hub analysis behind this answer — on DC Hub Pro, 7-day trial]';
 const _GROK_RELAY_PLATFORMS = new Set(['connectors-manager', 'grok']);
 function _toolSellsPro(tool) {
   if (!tool) return false;
   try { if (LP_TOOLS.has(tool)) return true; } catch (_) { /* declared below; read lazily */ }
   return _proOnlyTool(tool);
 }
+// ★ 2026-10-06 (Grok audit item 2): the default label on a Pro-only tool named neither
+// Pro nor the trial ("Open DC Hub — see what I found"); it now names both, unpriced.
+export const RELAY_LABEL_PRO = '[🔓 Start a 7-day DC Hub Pro trial]';
 export function _relayLinkLabel(platform, tool) {
   let p = platform;
   if (p === undefined) {
@@ -547,7 +550,7 @@ export function _relayLinkLabel(platform, tool) {
   }
   return _GROK_RELAY_PLATFORMS.has(String(p || '').trim().toLowerCase())
     ? (_toolSellsPro(tool) ? GROK_RELAY_LABEL_PRO : GROK_RELAY_LABEL)
-    : '[🔓 Open DC Hub — see what I found]';
+    : (_toolSellsPro(tool) ? RELAY_LABEL_PRO : '[🔓 Open DC Hub — see what I found]');
 }
 
 function buildHumanRelay(toolName, tier, sessionId, opts) {
@@ -750,7 +753,7 @@ export function _paywallContractStep(result, name) {
                  copy_version: WALL_COPY_VERSION };
     // One human ask per response: the contract's own relay link (/upgrade/h) gives way to
     // the link in the person's line, so the response carries a single checkout URL.
-    const _lm = /https:\/\/\S+?(?= — )/.exec(line);
+    const _lm = /https:\/\/\S+/.exec(line);
     if (sc.for_your_human && typeof sc.for_your_human === 'object') {
       const _md = sc.for_your_human.markdown;
       sc.for_your_human = { ...sc.for_your_human, text: line, ...(_lm ? { url: _lm[0] } : {}),
@@ -8276,16 +8279,8 @@ export async function _withWallUserLine(result, name, opts = {}) {
 // gated Pro answer it adds _wall:true, user_message, agent_message and for_your_human, and
 // reports it so the call is logged as status 'pro_wall'. Full Pro answers are untouched
 // (no required_plan marker). No price in the copy.
-const _PRO_WALL_WHAT = {
-  analyze_site: 'the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost',
-  compare_sites: 'the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site',
-  get_dchub_recommendation: 'the full site recommendation with the scores behind it',
-  generate_site_analysis: 'the shareable Site Analysis report for this location',
-  export_dataset: 'the bulk dataset export',
-};
 export function proWallUserMessage(name, link) {
-  const what = _PRO_WALL_WHAT[name] || ('the full ' + name + ' answer');
-  return 'DC Hub Pro has ' + what + '. Start a 7-day Pro trial: ' + link;
+  return 'DC Hub Pro has ' + proWhat(name) + '. Start a 7-day Pro trial: ' + link;
 }
 export function proWallAgentMessage(name) {
   return name + ' is a DC Hub Pro tool; this response is a preview. Show your human the link in for_your_human to start the 7-day Pro trial.';
@@ -8303,11 +8298,12 @@ export function _stampProWall(result, name, c) {
       try { const r = buildHumanRelay(name, (c && c.tier) || 'free', (c && c.session_id) || '', { offer: PRO_TRIAL_OFFER }); link = (r && r.url) || ''; } catch (_) {}
     }
     if (!link) link = 'https://dchub.cloud/pricing';
-    // Existing wall copy is kept (each arm's own line is pinned by its own tests); this only
-    // fills what is absent, so every gated Pro answer carries a non-null line for both readers.
-    const userMessage = (typeof sc.user_message === 'string' && sc.user_message.trim())
-      ? sc.user_message : proWallUserMessage(name, link);
-    const human = (fyh && fyh.url) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
+    // Existing wall copy is kept when it already names DC Hub Pro and the 7-day trial (each arm's
+    // own line is pinned by its own tests); anything else is replaced, so every gated Pro answer
+    // carries a compliant line for both readers (Grok audit 2026-10-06, item 2).
+    const _ok = (t) => typeof t === 'string' && t.includes('DC Hub Pro') && /7-day (Pro )?(free )?trial/.test(t);
+    const userMessage = _ok(sc.user_message) ? sc.user_message : proWallUserMessage(name, link);
+    const human = (fyh && fyh.url && _ok(fyh.text)) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
     const stamp = { _wall: true, required_plan: 'pro', user_message: userMessage,
                     agent_message: proWallAgentMessage(name), for_your_human: human };
     const nsc = { ...sc, ...stamp };
@@ -8339,7 +8335,7 @@ export async function _lpWallResultV11(name, headline = null) {
     const i = t.indexOf('\n\n');
     out.content[0] = { type: 'text', text: i < 0 ? t + '\n\n' + _wf : t.slice(0, i) + '\n\n' + _wf + t.slice(i) };
   }
-  const link = out.structuredContent.user_message.match(/https:\/\/\S+?(?= — )/);
+  const link = out.structuredContent.user_message.match(/https:\/\/\S+/);
   if (link) out.structuredContent.upgrade_url = link[0];
   return out;
 }
