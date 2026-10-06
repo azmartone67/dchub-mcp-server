@@ -5827,6 +5827,21 @@ function cacheKey(api_key, result) {
 //
 // severity vocabulary is the backend's, not a new one: parameter_adjustment /
 // transient_backoff / fatal (routes/error_mitigation.py::_REGISTRY).
+// Guidance fields a backend 4xx may carry beyond hint/suggestions. get_retirement_headroom's WECC 400 sends a
+// `note` (WECC is an interconnection, not a balancing authority), the `known` grid names, `ignored` tokens and
+// `balancing_authorities_in_data`; they were dropped here, so an agent saw only "unknown region_iso 'WECC'"
+// (Grok 2026-10-06, direct GET had them). An ALLOWLIST, never the whole body: a 4xx body can carry fields that
+// are not meant for the caller. 4xx only (a 5xx body is not guidance), and bounded.
+const _UPSTREAM_GUIDANCE_KEYS = ['note', 'known', 'also_accepted', 'ignored', 'balancing_authorities_in_data'];
+function _guidanceValue(v) {
+  if (typeof v === 'string') return v.length <= 600 ? v : v.slice(0, 600);
+  if (Array.isArray(v)) {
+    const items = v.filter((x) => typeof x === 'string' || typeof x === 'number')
+      .slice(0, 100).map((x) => (typeof x === 'string' ? x.slice(0, 80) : x));
+    return items.length ? items : undefined;
+  }
+  return undefined;
+}
 export function _upstreamError(status, text) {
   const out = { error: `API ${status}` };
   let body = null;
@@ -5840,6 +5855,12 @@ export function _upstreamError(status, text) {
   if (isObj) {
     for (const k of ['code', 'hint', 'suggestions', 'id', 'path']) {
       if (body[k] !== undefined) out[k] = body[k];
+    }
+    if (status >= 400 && status < 500) {
+      for (const k of _UPSTREAM_GUIDANCE_KEYS) {
+        const gv = body[k] !== undefined ? _guidanceValue(body[k]) : undefined;
+        if (gv !== undefined) out[k] = gv;
+      }
     }
   }
   const upstreamHint = isObj ? (body.hint || body.detail) : null;

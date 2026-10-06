@@ -305,6 +305,7 @@ test/retention-email-ask.test.mjs
 test/retired-claims.test.mjs
 test/retired-tool-names-public-docs.test.mjs
 test/retirement-headroom-mw-paid.test.mjs
+test/retirement-region-error-reaches-agent.test.mjs
 test/retrieval-envelope.test.mjs
 test/return-affordance-anon.test.mjs
 test/routing-hint.test.mjs
