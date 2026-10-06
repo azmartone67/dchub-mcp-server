@@ -110,6 +110,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
+         DIRECTORY_OAUTH_PATH, DIRECTORY_OAUTH_SOURCE, DIRECTORY_OAUTH_CHALLENGE, DIRECTORY_OAUTH_MESSAGE,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults } from './lib/chatgpt-directory.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
@@ -3538,7 +3539,7 @@ function _normPath(req) {
 // something (mintAutoTrial) can refuse on the directory surface.
 export function _pathProfile(req) {
   const p = _normPath(req);
-  if (p === DIRECTORY_PATH) return DIRECTORY_PROFILE;
+  if (p === DIRECTORY_PATH || p === DIRECTORY_OAUTH_PATH) return DIRECTORY_PROFILE;
   if (p === CLAUDE_PATH) return CLAUDE_PROFILE;   // r-claude-directory
   return null;
 }
@@ -3557,7 +3558,9 @@ export function _pathSelfTag(req) {
 // for any path that is not a declared registry path. Never returns a platform
 // and never feeds _resolvePlatform — see the separate-axis note above.
 export function _pathSource(req) {
-  return MCP_SOURCE_PATHS.get(_normPath(req)) || '';
+  const p = _normPath(req);
+  if (p === DIRECTORY_OAUTH_PATH) return DIRECTORY_OAUTH_SOURCE;   // ChatGPT OAuth (2026-10-06)
+  return MCP_SOURCE_PATHS.get(p) || '';
 }
 
 export { MCP_SOURCE_PATHS };
@@ -3786,6 +3789,9 @@ export const MCP_PATHS = [
   // allowlisted catalog and an outermost scrub of every response. See
   // _pathProfile and the directory prelude in app.post(MCP_PATHS).
   DIRECTORY_PATH,
+  // ChatGPT OAuth (2026-10-06): the same directory profile behind a sign-in
+  // challenge. See DIRECTORY_OAUTH_PATH in lib/chatgpt-directory.mjs.
+  DIRECTORY_OAUTH_PATH,
   // r-core-profile (2026-09-25): ten task-shaped read-only tools composed from
   // the canonical handlers. See lib/core-profile.mjs and _serveCore.
   CORE_PATH,
@@ -27769,6 +27775,24 @@ app.post(MCP_PATHS, async (req, res) => {
       return res.status(401).json({
         jsonrpc: '2.0',
         error: { code: -32001, message: GROK_OAUTH_MESSAGE },
+        id: (req.body && req.body.id) ?? null,
+      });
+    }
+    // ChatGPT OAuth (owner, 2026-10-06): the same opt-in pattern as G5 above, on
+    // /mcp/chatgpt/oauth. ChatGPT custom apps support only None or OAuth, so this
+    // is the one way a paid user's identity reaches the directory profile. Same
+    // rules: tools/list stays open, a present bearer goes through the normal
+    // validation, OAuth must be enabled, and the frozen /mcp/chatgpt is never
+    // challenged. Kill switch: DCHUB_CHATGPT_OAUTH_DISABLE=1.
+    if (!apiKey && _normPath(req) === DIRECTORY_OAUTH_PATH
+        && (req.body?.method === 'initialize' || req.body?.method === 'tools/call')
+        && _workosEnabled()
+        && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CHATGPT_OAUTH_DISABLE || ''))) {
+      res.set('WWW-Authenticate', DIRECTORY_OAUTH_CHALLENGE);
+      console.log(`[oauth] 401 challenge → ${DIRECTORY_OAUTH_PATH} (no credential, method=${req.body?.method})`);
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: DIRECTORY_OAUTH_MESSAGE },
         id: (req.body && req.body.id) ?? null,
       });
     }
