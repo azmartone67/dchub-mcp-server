@@ -166,6 +166,7 @@ import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS,
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
+import { composeGridProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack } from './lib/agent-outreach.mjs';
@@ -25022,6 +25023,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         callAPI(`/api/v1/grid/extended/${ISO}`, {}, { internal: true }),
       ]);
       const out = shapeGridIntelligence(ISO, gi, cmp, qsnap);
+      // G-2 (2026-10-06): name what this answer was composed from. The shaper rebuilds the
+      // payload from four upstreams and carried none of their provenance, so the caller read
+      // source "DC Hub". lib/grid-provenance.mjs; attached only when something contributed.
+      const _gridProv = composeGridProvenance(ISO, { gi, cmp, qsnap, ext });
+      if (_gridProv) out.provenance = _gridProv;
       // r-unknownregion (2026-08-29): an UNRECOGNISED region_id used to be
       // indistinguishable from a covered one with a quiet hour. `ISO` is just
       // the caller's string uppercased with non-alphanumerics stripped, and
