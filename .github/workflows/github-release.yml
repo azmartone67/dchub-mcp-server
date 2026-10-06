@@ -1,0 +1,140 @@
+# Cut a GitHub Release for every version that lands on main.
+#
+# ★2026-10-06. Glama (glama.ai/mcp/servers/azmartone67/dchub-mcp-server) reads
+# this repo's GitHub Releases for the listing's release data: on 2026-10-06 its
+# server record carried latestRelease 2.12.24 while main, npm and the official
+# registry were at 2.12.29, and its per-month release counts (Jun 3, Jul 1,
+# Aug 2, Sep 1, Oct 1) matched this repo's GitHub Releases exactly — not npm,
+# not the registry. Releases were only ever cut by hand (8 in total, none for
+# 2.12.25-2.12.29), so every version shipped without one looked missing there.
+#
+# TRIGGER: the same push-to-main-on-a-version-file event npm-publish.yml and
+# registry-refresh.yml use, for the same reason — version bumps land as merged
+# PRs, and a `release:` trigger would need a release to exist first.
+#
+# AUTH: GITHUB_TOKEN only (contents: write). No new secret.
+#
+# ★ A release created with GITHUB_TOKEN does NOT fire `release: published`
+# (GitHub suppresses workflow runs from GITHUB_TOKEN events), so
+# release-assets.yml would never attach dchub.dxt to these releases. This job
+# therefore runs the same guard (scripts/verify-release-bundle.mjs) and attaches
+# the bundle itself. A bundle that fails the guard is NOT attached: the release
+# is still created (it is what Glama reads) and the job then fails red.
+#
+# ★ Values reach the shell through env:, never by ${{ }} inside `run:`.
+name: github release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server.json'
+      - 'package.json'
+      - 'npm-launcher/package.json'
+      - '.github/workflows/github-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write          # create the tag + release, upload dchub.dxt
+
+concurrency:
+  group: github-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: GitHub Release for the version on main
+    runs-on: ubuntu-latest
+    # Tag the commit main actually holds — never a branch.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # Refuse to tag a version the publish surfaces disagree on.
+      - name: Version parity (server.json == package.json == npm-launcher)
+        id: ver
+        run: |
+          SERVER=$(node -p 'require("./server.json").version')
+          ROOT=$(node -p 'require("./package.json").version')
+          LAUNCHER=$(node -p 'require("./npm-launcher/package.json").version')
+          echo "server.json=$SERVER package.json=$ROOT npm-launcher=$LAUNCHER"
+          if [ "$LAUNCHER" != "$SERVER" ] || [ "$ROOT" != "$SERVER" ]; then
+            echo "::error::server.json ($SERVER), package.json ($ROOT) and npm-launcher/package.json ($LAUNCHER) disagree — not tagging."
+            exit 1
+          fi
+          TOOLS=$(node -p 'require("./server.json")._meta?.["io.modelcontextprotocol.registry/publisher-provided"]?.toolCount ?? ""')
+          echo "version=$SERVER" >> "$GITHUB_OUTPUT"
+          echo "tools=$TOOLS" >> "$GITHUB_OUTPUT"
+
+      # Idempotent: a version that already has a release is a no-op.
+      - name: Skip if this version already has a release
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "::notice::v$VERSION already has a GitHub Release — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Same guard release-assets.yml runs before its upload.
+      - name: Verify dchub.dxt is honest about this tag
+        id: dxt
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if node scripts/verify-release-bundle.mjs "v$VERSION"; then
+            echo "attach=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "attach=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create the release
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          TOOLS: ${{ steps.ver.outputs.tools }}
+          ATTACH: ${{ steps.dxt.outputs.attach }}
+          SHA: ${{ github.sha }}
+        run: |
+          TITLE="v$VERSION"
+          if [ -n "$TOOLS" ]; then TITLE="v$VERSION — $TOOLS tools"; fi
+          NOTES="Remote server: https://dchub.cloud/mcp · npm: dchub-mcp-server@$VERSION"
+          ASSETS=()
+          if [ "$ATTACH" = "true" ]; then ASSETS=(dchub.dxt); fi
+          gh release create "v$VERSION" "${ASSETS[@]}" \
+            --target "$SHA" \
+            --title "$TITLE" \
+            --notes "$NOTES" \
+            --generate-notes \
+            --latest
+
+      - name: Fail if dchub.dxt was withheld
+        if: steps.exists.outputs.skip == 'false' && steps.dxt.outputs.attach != 'true'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          echo "::error::v$VERSION was released WITHOUT dchub.dxt: the bundle failed scripts/verify-release-bundle.mjs (see the step above). Repack with node scripts/sync-tools-manifest.mjs --fix, then attach with: gh release upload v$VERSION dchub.dxt"
+          exit 1
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          SKIP: ${{ steps.exists.outputs.skip }}
+        run: |
+          if [ "$SKIP" = "true" ]; then
+            echo "### v$VERSION already has a GitHub Release — nothing created" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Created GitHub Release v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+            echo "https://github.com/${GITHUB_REPOSITORY}/releases/tag/v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          fi
