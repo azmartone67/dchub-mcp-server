@@ -45,11 +45,11 @@ beforeAll(async () => {
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
 describe('keyless Pro wall on the Land & Power tools', () => {
-  it('control: both tools were answered with the Pro wall (tracked as lp_wall)', () => {
+  it('control: both tools were answered with the Pro wall (tracked as pro_wall)', () => {
     for (const t of LP) {
       const rows = runs.keyless.tracks.filter((r) => r.body.tool === t);
       expect(rows.length, `${t}: tracked`).toBeGreaterThan(0);
-      expect(rows.map((r) => r.body.status), t).toContain('lp_wall');
+      expect(rows.map((r) => r.body.status), t).toContain('pro_wall');
     }
   });
   it('each wall writes a paid_tool_blocked paywall signal for its tool', () => {
@@ -73,7 +73,7 @@ describe('where the wall must not fire', () => {
   it('a Pro key is not walled and writes no lp_wall signal', () => {
     const lpSignals = runs.pro.signals.filter((s) => s.body.message_shown === 'lp_wall');
     expect(lpSignals).toEqual([]);
-    expect(runs.pro.tracks.map((r) => r.body.status)).not.toContain('lp_wall');
+    expect(runs.pro.tracks.map((r) => r.body.status)).not.toContain('pro_wall');
   });
   it('/mcp/claude (kept out of the relay readout) writes no signal', () => {
     expect(runs.claude.signals).toEqual([]);
