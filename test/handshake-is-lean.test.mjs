@@ -121,6 +121,7 @@ describe('claim_free_key', () => {
     const unknown = await claim('acme-siting-bot');
     expect(Object.keys(unknown.result.structuredContent.persist_config.clients).length).toBeGreaterThanOrEqual(8);
     expect(unknown.result.content[0].text).not.toContain('**Save it for ');
-    expect(known.bytes).toBeLessThan(unknown.bytes * 0.8);
+    // 0.8 before #779 (the Claude Desktop entry gained a launcher note and connector_url, ~400 bytes).
+    expect(known.bytes).toBeLessThan(unknown.bytes * 0.88);
   });
 });
