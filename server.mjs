@@ -16931,7 +16931,20 @@ export function _planParallelGroups(seq, waves) {
 
 // r-planner-v3: plan-mode disclaimer — plan_query NEVER executes; without this
 // note some agents were observed waiting for an execute_plan follow-up tool.
-const _PLAN_ONLY_NOTE = 'This tool only plans; execute the sequence yourself — plan_query never executes and there is no execute_plan tool to wait for.';
+// execute_plan exists (listed on /mcp, /mcp/claude and /mcp/chatgpt, and the payload's own operator_note says so),
+// so the note must not claim otherwise. A profile or pack that withholds it is covered by "if it is in your tool list".
+const _PLAN_ONLY_NOTE = 'This tool only plans; execute the sequence yourself, or call execute_plan(intent="...") to run the same plan in one call if it is in your tool list. plan_query never executes.';
+// The retirement alternative under the grid-headroom class used a FIXED reason, "The intent did not mention
+// retirements", which printed for an intent that was entirely about retirements (Grok 2026-10-06: "retirement
+// headroom: which retiring power plants in PJM ..."). The reason now follows the intent text.
+const _RETIREMENT_INTENT_RE = /retir|decommission|shut(?:ting)?[ -]?down|plant clos|coal clos/i;
+function _planAlternativeReason(alt, intentText) {
+  if (alt && alt.tool === 'get_retirement_headroom' && /did not mention retirements/.test(String(alt.rejected_because || ''))
+      && _RETIREMENT_INTENT_RE.test(String(intentText || ''))) {
+    return { ...alt, rejected_because: 'The intent mentioned retirements, but it scored highest as a broader grid-headroom question. For the filed-retirement list itself, call get_retirement_headroom directly (region_iso, target_mw, horizon_months).' };
+  }
+  return alt;
+}
 
 // r-planner-v2: dual-confidence + call-estimate derivation over a sequence.
 // workflow_confidence is DISTINCT from intent_confidence: intent asks "did we
@@ -17898,6 +17911,7 @@ export function _planQuery(intent, context) {
     // tool-specific, where the runner-up entry restates a score margin that
     // matched_classes already carries.
     alternatives: [...top.cls.alternatives, ...runnerUp]
+      .map((a) => _planAlternativeReason(a, text))
       .filter((a) => !seq.some((s) => s.tool === a.tool))
       .filter((a, i, all) => all.findIndex((x) => x.tool === a.tool) === i),
     coverage_notes: top.cls.coverage_notes,
