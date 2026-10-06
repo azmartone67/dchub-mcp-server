@@ -30,6 +30,9 @@ const validateCalls = [];
 // /api/v1/keys/validate call. Undefined -> tier_detail.users_plan: null
 // (the "cannot disambiguate" case).
 let planFor = {};
+// api_key -> tier_detail.plan_lookup the stubbed backend answers ('ok' | 'error').
+// Undefined -> field absent (an older backend).
+let lookupFor = {};
 
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
@@ -48,7 +51,8 @@ beforeAll(async () => {
         developer_id: null,
         email: 'caller@example.com',
         tier_detail: { mcp_dev_keys: 'paid', users_plan: plan === undefined ? null : plan,
-                       api_key_tier: null, effective: 'paid' },
+                       api_key_tier: null, effective: 'paid',
+                       ...(lookupFor[body.api_key] ? { plan_lookup: lookupFor[body.api_key] } : {}) },
       });
     }
     return json({});
@@ -59,7 +63,7 @@ beforeAll(async () => {
   if (prev === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prev;
 });
 afterAll(() => { globalThis.fetch = realFetch; });
-beforeEach(() => { validateCalls.length = 0; planFor = {}; S.keyCache.clear(); });
+beforeEach(() => { validateCalls.length = 0; planFor = {}; lookupFor = {}; S.keyCache.clear(); });
 
 describe('_isUnambiguousProOrAbove — no network, a pure string check', () => {
   it('is true for pro/founding/team/metered/enterprise/research_seed — every synonym "paid" collapses', () => {
@@ -109,6 +113,19 @@ describe('_paidKeyIsProOrAbove — resolves the real plan behind an ambiguous "p
   it('fails CLOSED when the backend answered and has no plan on record (P0-5 tail, 2026-10-05)', async () => {
     // planFor has no entry for this key -> tier_detail.users_plan: null on a valid:true answer.
     expect(await S._paidKeyIsProOrAbove('dch_live_tcf_unresolvable')).toBe(false);
+  });
+  it('fails OPEN when the backend says its users-plan lookup threw (plan_lookup error, backend #6424)', async () => {
+    lookupFor['dch_live_tcf_lookup_error'] = 'error';
+    expect(await S._paidKeyIsProOrAbove('dch_live_tcf_lookup_error')).toBe(true);
+  });
+  it('still fails CLOSED when the lookup ran and found no plan (plan_lookup ok)', async () => {
+    lookupFor['dch_live_tcf_lookup_ok_none'] = 'ok';
+    expect(await S._paidKeyIsProOrAbove('dch_live_tcf_lookup_ok_none')).toBe(false);
+  });
+  it('a lookup error never lifts a key whose plan the backend DID read as sub-Pro', async () => {
+    planFor['dch_live_tcf_dev_err'] = 'developer';
+    lookupFor['dch_live_tcf_dev_err'] = 'error';
+    expect(await S._paidKeyIsProOrAbove('dch_live_tcf_dev_err')).toBe(false);
   });
   it('fails OPEN when the backend answers 5xx — indeterminate is not "no plan"', async () => {
     const prevFetch = globalThis.fetch;
