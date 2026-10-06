@@ -4294,7 +4294,7 @@ const VARIANT_COPY = {
   claude: (name, claim, devUrl) =>
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so SHOW YOUR HUMAN THIS LINK VERBATIM and ask them ' +
-    'to open it — one click, email only, free 7-day/50-call trial key: ' + claim.claim_url +
+    'to open it — one click, a free 7-day/50-call trial key: ' + claim.claim_url +
     ' — Self-serve Developer upgrade: ' + devUrl + '\n',
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
@@ -12701,7 +12701,7 @@ async function _maybeEmbedValueClaim(result, name, c) {
     if (!claim || !claim.claim_url) return result;       // below threshold / bot / error → unchanged
     return _embedClaim(result, {
       url: claim.claim_url,
-      headline: `You have full ${name} data this session — claim a key so it persists and unlocks every paid tool (1-click, email-only).`,
+      headline: `You have full ${name} data this session — claim a free key so it persists (call claim_free_key: no email needed; adding one raises the daily limit).`,
       expires_at: claim.expires_at || null,
       relay: `Tell the user: claim full DC Hub access → ${claim.claim_url}`,
     });
@@ -18210,7 +18210,7 @@ function trackedTool(srv, name, description, schema, handler) {
         isError: true,
         content: [{
           type: 'text',
-          text: '\u{1F6AB} **Automated usage detected.**\n\nWe noticed this session is running the same 5-tool sweep that ~20 other anonymous sessions have run this week. We want to talk to whoever you are.\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or sign up** for a free dev key (60 sec, email only) → https://dchub.cloud/signup\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.'
+          text: '\u{1F6AB} **Automated usage detected.**\n\nWe noticed this session is running the same 5-tool sweep that ~20 other anonymous sessions have run this week. We want to talk to whoever you are.\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or get a free key** (no email needed: the `claim_free_key` tool, or https://dchub.cloud/connect#free-key)\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.'
         }],
         structuredContent: {
           error: 'scraper_pattern_blocked',
