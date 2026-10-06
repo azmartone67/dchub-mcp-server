@@ -71,6 +71,10 @@ describe('_isUnambiguousProOrAbove — no network, a pure string check', () => {
     expect(S._tierRank('paid')).toBe(S._tierRank('pro'));   // the rank collision that caused the bug
     expect(S._isUnambiguousProOrAbove('paid')).toBe(false);  // but the literal is never trusted alone
   });
+  it('is true for admin, the operator plan', () => {
+    expect(S._isUnambiguousProOrAbove('admin')).toBe(true);
+    expect(S._isUnambiguousProOrAbove('ADMIN')).toBe(true);
+  });
   it('is false for anything below Pro, and for junk/empty input', () => {
     for (const t of ['free', 'identified', 'starter', 'developer', '', null, undefined, 'not-a-tier']) {
       expect(S._isUnambiguousProOrAbove(t), String(t)).toBe(false);
@@ -89,6 +93,11 @@ describe('_paidKeyIsProOrAbove — resolves the real plan behind an ambiguous "p
     expect(await S._paidKeyIsProOrAbove('dch_live_tcf_founding')).toBe(true);
   });
   // ★ THE BUG, pinned directly at the helper that fixes it.
+  it('confirms Pro for the operator plan: role=admin resolves users_plan "admin", which _TIER_RANK does not rank', async () => {
+    planFor['dch_live_tcf_admin'] = 'admin';
+    expect(await S._paidKeyIsProOrAbove('dch_live_tcf_admin')).toBe(true);
+    expect(S._tierRank('admin')).toBe(-1);   // not ranked globally on purpose: every other caller is unchanged
+  });
   it('DENIES Pro when the real plan is developer — the exact leak this fix closes', async () => {
     planFor['dch_live_tcf_developer'] = 'developer';
     expect(await S._paidKeyIsProOrAbove('dch_live_tcf_developer')).toBe(false);
