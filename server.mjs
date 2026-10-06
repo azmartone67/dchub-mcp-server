@@ -8772,6 +8772,8 @@ function _teaseDepth(parsed, keep) {
   for (const [k, v] of Object.entries(parsed)) {
     if (_PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                                    // r-market-pricing: published figures, see trimForTrial
+    } else if (k === 'provenance' && v && typeof v === 'object' && !Array.isArray(v)) {
+      out[k] = _keepProvenanceCredit(v, _teaseDepth(v, keep));   // G-2: credit lists survive
     } else if (Array.isArray(v) && v.length > keep) {
       out[k] = v.slice(0, keep).map(x => _teaseDepth(x, keep));
       out[`_${k}_total_in_developer`] = v.length;   // honest "N total" for the upgrade pitch
@@ -11561,6 +11563,27 @@ const _NEVER_CUT_KEY_RE = /for_your_human|relay|upgrade|unlock|machine_pay|^retr
 // backend's never-trimmed credit array; `ercotqueue` is its rows_enriched + credit block.
 // Exact keys; no figure lives under any of them (the modelled fields are nulled by the
 // backend tease, not here).
+// G-2 (2026-10-06): the envelope 1.2 credit lists inside `provenance`. `sources[]` carries
+// each upstream's licence and attribution and `caveats[]` the stable-coded warnings, so a cut
+// to 3 rows (+ `_sources_total_in_pro`) is a half-true credit, the same failure G-1 fixed for
+// ercotqueue_provenance. Exact keys under `provenance` only: `denominator` and every other key
+// still go through the normal trim. `fields` (the per-figure basis map) needs no exemption: it is
+// an object of label-only entries, which the trim recurses into without cutting (pinned in
+// test/provenance-credit-survives-anon-trim.test.mjs).
+// Nothing emits these keys yet; the trim is ready for the first route that does.
+const _PROVENANCE_NEVER_CUT = ['sources', 'caveats'];
+function _keepProvenanceCredit(orig, trimmed) {
+  if (!orig || typeof orig !== 'object' || Array.isArray(orig)
+      || !trimmed || typeof trimmed !== 'object' || Array.isArray(trimmed)) return trimmed;
+  for (const key of _PROVENANCE_NEVER_CUT) {
+    if (!Object.prototype.hasOwnProperty.call(orig, key)) continue;
+    trimmed[key] = orig[key];
+    for (const marker of [`_${key}_total_in_pro`, `_${key}_total_unlocks_at`, `_${key}_total_in_developer`]) {
+      delete trimmed[marker];
+    }
+  }
+  return trimmed;
+}
 const _PUBLIC_SUBTREE_KEYS = new Set(['market_pricing', 'dcpi_confidence', 'dcpi_provenance',
   'ercotqueue_provenance', 'ercotqueue', 'attribution', 'freshness', 'large_load']);
 // DCHUB_QUEUE_MOAT (2026-10-05): `freshness` holds the per-ISO fresh/stale counts the anon trim
@@ -11672,6 +11695,8 @@ function trimForTrial(parsed, toolName, _inRate = false) {
   for (const [k, v] of Object.entries(parsed)) {
     if (_NEVER_CUT_KEY_RE.test(k) || _PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                             // never-cut: byte-identical
+    } else if (k === 'provenance' && v && typeof v === 'object' && !Array.isArray(v)) {
+      out[k] = _keepProvenanceCredit(v, trimForTrial(v, toolName, _inRate));   // G-2: credit lists survive
     } else if (RETRIEVAL_TOOLS.has(toolName) && _RETRIEVAL_PASSTHROUGH_KEYS.has(k)) {
       out[k] = v;                             // RAG-1: relevance score + corpus list
     } else if (k === 'verdict_reasons' && Array.isArray(v)) {
@@ -28646,7 +28671,7 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
 // running server). These are the PURE, revenue-critical gating primitives that
 // have regressed repeatedly (the "2/22 grids" over-redaction). Unit-tested in
 // test/gating.test.mjs.
-export { CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim, _paidKeyIsProOrAbove, _isUnambiguousProOrAbove, PRO_ONLY_TOOLS, validateKey, keyCache };
+export { _teaseDepth, CHALLENGE_AFTER_N, CHALLENGE_MAX, _challengeAllowance, _challengeMax, _challengeClientAllowed, _challengesIssued, _bumpChallengeIssued, _anonCallCount, _bumpAnonCall, trimForTrial, TRIAL_PREVIEW_ROWS, applyTierGate, FREE_FULL_TOOLS, CAP_TRIM_EXEMPT, _capTrim, PAID_ONLY_TOOLS, _isMetricKey, shapeGridIntelligence, _anonInlineFullEnabled, _lateKeyResolve, _invalidBearerEligible, _claudeChallengeEligible, _undercapOfferDue, _autoRedeemEnabled, _autoRedeemClaim, _paidKeyIsProOrAbove, _isUnambiguousProOrAbove, PRO_ONLY_TOOLS, validateKey, keyCache };
 export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE_MIX_HOURS };
 // r-quota-charged (2026-08-18): exported for test/quota-meter-charged.test.mjs.
 // `ctx` (the request AsyncLocalStorage) rides along because the seat — anonymous

@@ -1,0 +1,73 @@
+{
+  "contract": "provenance-envelope",
+  "revision": "1.2",
+  "status": "reader-side only: nothing emits revision 1.2 yet",
+  "basis": ["filed", "stated", "measured", "derived", "estimated", "modelled", "mixed", "unknown"],
+  "basis_collection_only": ["mixed"],
+  "basis_class_v11": ["measured", "derived", "estimated", "published", "cited", "unknown"],
+  "v11_to_basis": {
+    "measured": "measured",
+    "derived": "derived",
+    "estimated": "estimated",
+    "published": "stated",
+    "cited": "stated",
+    "unknown": "unknown"
+  },
+  "v11_to_basis_notes": {
+    "published": "filed when the source is official (ISO, regulator, utility, statute, permit, SEC filing), otherwise stated; the emitting route decides, this table is the conservative default",
+    "derived": "modelled when the figure is a score, probability, forecast or optimisation; the emitting route decides"
+  },
+  "basis_to_v11_alias": {
+    "filed": "published",
+    "stated": "cited",
+    "measured": "measured",
+    "derived": "derived",
+    "estimated": "estimated",
+    "modelled": "derived",
+    "mixed": "unknown",
+    "unknown": "unknown"
+  },
+  "required_keys": {
+    "status": "PROPOSAL, not stated by the audit",
+    "keys": ["provenance_version", "provenance_revision", "source", "basis", "basis_class", "as_of", "license", "cite_as"]
+  },
+  "field_path_syntax": {
+    "status": "PROPOSAL, not stated by the audit",
+    "rule": "dotted path relative to the payload root, [] marks an array element, e.g. results[].capacity_mw"
+  },
+  "caveat_codes": {
+    "status": "PROPOSAL: closed list, preliminary kept and hourly_preliminary dropped",
+    "codes": ["buildout_not_it_load", "county_centroid", "synthetic_segment", "preliminary", "third_party_model"]
+  },
+  "as_of_rules": [
+    "collection as_of is the oldest field as_of",
+    "fetched_at is when DC Hub collected the upstream record, retrieved_at is when DC Hub served it, a load date never goes in as_of",
+    "timestamps are ISO 8601 with a zone; an upstream stamp with no zone stays zoneless, gets as_of_zone: unstated, and never gets a Z appended"
+  ],
+  "sample_envelope": {
+    "provenance_version": 1,
+    "provenance_revision": "1.2",
+    "source": "EIA-930 Hourly Electric Grid Monitor",
+    "sources": [
+      {"id": "eia930", "name": "EIA-930 Hourly Electric Grid Monitor", "url": "https://www.eia.gov/electricity/gridmonitor/",
+       "license": "public domain (US government)", "attribution": null,
+       "as_of": "2026-10-03T16:00:00Z", "fetched_at": "2026-10-03T16:07:12Z"}
+    ],
+    "as_of": "2026-10-03T16:00:00Z",
+    "as_of_rule": "oldest_source",
+    "fetched_at": "2026-10-03T16:07:12Z",
+    "retrieved_at": "2026-10-03T17:20:54Z",
+    "basis": "measured",
+    "basis_class": "measured",
+    "fields": {
+      "demand_mw": {"basis": "measured", "source_id": "eia930", "as_of": "2026-10-03T16:00:00Z", "unit": "MW"},
+      "renewable_share_pct": {"basis": "derived", "source_id": "eia930", "as_of": "2026-10-03T16:00:00Z", "method": "sum(solar,wind,hydro)/total", "unit": "%"}
+    },
+    "caveats": [{"code": "preliminary", "text": "EIA-930 hourly values are preliminary and are revised."}],
+    "denominator": {"counted_records": null, "population": null},
+    "license": "composite: see sources[].license",
+    "completeness": "full",
+    "cite_as": "DC Hub, dchub.cloud",
+    "_sample_note": "illustrative shape only, not a real reading"
+  }
+}
