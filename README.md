@@ -177,19 +177,28 @@ Their strength: directories of facilities you can browse. Our strength: an API y
 
 ## Install
 
-### Claude Desktop / Claude Code
+### Claude Desktop — Quickstart (stdio)
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use the launcher package, which connects it to the hosted server. Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp/github",
-      "transport": "http"
+      "command": "npx",
+      "args": ["-y", "dchub-mcp-server"],
+      "env": { "DCHUB_API_KEY": "" }
     }
   }
 }
+```
+
+Leave `DCHUB_API_KEY` empty for previews, or paste a free key from https://dchub.cloud/connect#free-key. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
+
+### Claude Code
+
+```bash
+claude mcp add dchub --transport http https://dchub.cloud/mcp/github
 ```
 
 ### Cursor

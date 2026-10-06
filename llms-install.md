@@ -43,19 +43,22 @@ Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — yo
 
 ### Claude Desktop / Claude Code
 
-Add to `claude_desktop_config.json` (Claude Desktop) — on macOS at
-`~/Library/Application Support/Claude/claude_desktop_config.json`:
+Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers only, so add the launcher
+(Node 18+) — on macOS at `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp",
-      "transport": "http"
+      "command": "npx",
+      "args": ["-y", "dchub-mcp-server"],
+      "env": { "DCHUB_API_KEY": "" }
     }
   }
 }
 ```
+
+For the hosted URL, use Settings → Connectors → Add custom connector and paste `https://dchub.cloud/mcp`.
 
 Or, from the Claude Code CLI (one command):
 
