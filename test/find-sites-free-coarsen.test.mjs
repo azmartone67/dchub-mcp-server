@@ -173,11 +173,9 @@ function expectFreePreview(out, label) {
       expect(c.lat, `${label} ${where} #${i} lat`).toBe(COARSE[i].lat);
       expect(c.lon, `${label} ${where} #${i} lon`).toBe(COARSE[i].lon);
       expect(c.coordinate_precision_km, `${label} ${where} #${i} precision`).toBe(11);
-      expect(c.anchor.operator, `${label} ${where} #${i} operator`).toBeNull();
-      expect(c.anchor.capacity_mva, `${label} ${where} #${i} capacity_mva`).toBeNull();
-      // The public fields a free caller steers by survive.
-      expect(c.anchor.name, `${label} ${where} #${i} anchor name`).toBe(CANDIDATES[i].anchor.name);
-      expect(c.anchor.voltage_kv, `${label} ${where} #${i} voltage`).toBe(CANDIDATES[i].anchor.voltage_kv);
+      // P0-1 tail (2026-10-05): below Pro the anchor is {type, kv_band}; name,
+      // operator, exact kV and capacity are removed (see lockedAnchor below).
+      expect(c.anchor, `${label} ${where} #${i} anchor`).toEqual(lockedAnchor(CANDIDATES[i].anchor));
       expect(c.gas_distance_km, `${label} ${where} #${i} gas distance`).toBe(CANDIDATES[i].gas_distance_km);
       expect(c.next_calls.slice(0, 2), `${label} ${where} #${i} next_calls`).toEqual(COARSE[i].next);
     });
@@ -189,6 +187,24 @@ function expectFreePreview(out, label) {
   for (const needle of EXACT_NEEDLES) {
     expect(leaks(out.text, needle), `${label}: exact value "${needle}" reached the text`).toBe(false);
     expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: exact value "${needle}" reached structuredContent`).toBe(false);
+  }
+}
+
+// P0-1 tail: the anchor below Pro. Mirrors _lockFindSitesAnchors.
+function lockedAnchor(a) {
+  const kv = a.voltage_kv;
+  const band = kv >= 500 ? '500 kV+' : kv >= 345 ? '345-499 kV' : kv >= 230 ? '230-344 kV'
+    : kv >= 115 ? '115-229 kV' : kv >= 69 ? '69-114 kV' : 'below 69 kV';
+  return { type: a.type, kv_band: band };
+}
+// Starter, Developer and a pack keep exact coordinates, operator and capacity
+// elsewhere, but the anchor's substation detail is Pro only.
+function expectAnchorLocked(out, label) {
+  for (const [where, body] of [['text', out.lead], ['structuredContent', out.sc || {}]]) {
+    expect(body.candidates, `${label} ${where}: candidates`).toEqual(
+      CANDIDATES.map((c) => ({ ...c, anchor: lockedAnchor(c.anchor) })));
+    expect(body._required_tier, `${label} ${where}: _required_tier`).toBe('pro');
+    expect(JSON.stringify(body), `${label} ${where}: anchor detail leaked`).not.toMatch(/Coarsen (Sub|Power|Grid)/);
   }
 }
 
@@ -208,15 +224,20 @@ describe('r-find-sites-free-coarsen — find_sites keeps its free-tier promise',
     expectFreePreview(await findSites(K_IDENT), 'identified');
   });
 
-  for (const [key, label] of [[K_STARTER, 'starter'], [K_DEV, 'developer'], [K_PRO, 'pro']]) {
+  for (const [key, label] of [[K_STARTER, 'starter'], [K_DEV, 'developer']]) {
+    it(`${label}: exact coordinates as the backend sent them, anchor detail locked (Pro)`, async () => {
+      expectAnchorLocked(await findSites(key), label);
+    });
+  }
+  for (const [key, label] of [[K_PRO, 'pro']]) {
     it(`${label}: unchanged — exact coordinates, operator and capacity as the backend sent them`, async () => {
       expectUnchanged(await findSites(key), label);
       expect(creditHits.get(key) || 0, `${label}: a paid tier should not need the pack-balance lookup`).toBe(0);
     });
   }
 
-  it('an identified key holding a live $10 pack balance: unchanged (the pack is a paid read)', async () => {
-    expectUnchanged(await findSites(K_PACK), 'identified + pack');
+  it('an identified key holding a live $10 pack balance: exact coordinates, anchor detail locked (Pro)', async () => {
+    expectAnchorLocked(await findSites(K_PACK), 'identified + pack');
     expect(creditHits.get(K_PACK), 'the pack balance was never read').toBeGreaterThan(0);
   });
 });

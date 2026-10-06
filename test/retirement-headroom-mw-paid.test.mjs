@@ -27,6 +27,10 @@ const prevEnv = {};
 
 // Full figures, deliberately ordered by MW (the paid ordering) so the masked
 // re-order by date then name is observable.
+// P0-1 tail (2026-10-05): the nearest substations' name and exact distance are
+// Pro. Below Pro (the pack and Developer included) each is a distance band.
+const BANDED = (rows) => rows.map((r) => ({ ...r,
+  nearest_substations: r.nearest_substations.map(() => ({ distance_band: 'within 5 km' })) }));
 const ROWS = [
   { generator: { name: 'Zeta Station', generator_id: '1', capacity_mw: 812.4, fuel_category: 'Coal',
       prime_mover: 'ST', retirement_date: '2026-12-31', state: 'IN', county: 'Pike' },
@@ -168,7 +172,7 @@ describe('be#5886 parity — get_retirement_headroom MW is Developer+', () => {
     // rows are ordered by date then name, not by the MW they hide
     expect(b.data.map((r) => r.generator.name)).toEqual(['Alpha Plant', 'Zeta Station']);
     // everything else is kept
-    expect(b.data[0].nearest_substations).toEqual(ROWS[1].nearest_substations);
+    expect(b.data[0].nearest_substations).toEqual([{ distance_band: 'within 5 km' }]);
     expect(b.data[0].queue_pressure.competing_projects).toBe(9);
   });
 
@@ -187,7 +191,7 @@ describe('be#5886 parity — get_retirement_headroom MW is Developer+', () => {
     const out = await retirement(K_PACK, { target_mw: 400, horizon_months: 18 });
     expect(targetSeen).toEqual(['400']);
     const b = out.sc || {};
-    expect(b.data, 'pack: rows differ from the backend payload').toEqual(ROWS);
+    expect(b.data, 'pack: rows differ from the backend payload').toEqual(BANDED(ROWS));
     expect(b.total_retiring_mw).toBe(TOTAL);
     expect(b._gated).toBeUndefined();
     for (let i = 0; i < 50 && !burnSeen.length; i++) await new Promise((r) => setTimeout(r, 20));
@@ -203,7 +207,7 @@ describe('be#5886 parity — get_retirement_headroom MW is Developer+', () => {
       const out = await retirement(key, { target_mw: 400, horizon_months: 18 });
       expect(targetSeen).toEqual(['400']);
       const b = out.sc || {};
-      expect(b.data, `${label}: rows differ from the backend payload`).toEqual(ROWS);
+      expect(b.data, `${label}: rows differ from the backend payload`).toEqual(label === 'pro' ? ROWS : BANDED(ROWS));
       expect(b.total_retiring_mw).toBe(TOTAL);
       expect(b._gated).toBeUndefined();
       expect(b._locked_fields).toBeUndefined();
