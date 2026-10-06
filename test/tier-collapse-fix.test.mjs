@@ -17,10 +17,9 @@
 // tier_detail.users_plan. _validateKeyUncached carries it through as
 // .plan_tier on the cached validation. _paidKeyIsProOrAbove re-validates
 // (cache-hit, cheap) and consults THAT to disambiguate an otherwise-ambiguous
-// 'paid', instead of trusting the literal. Fails OPEN (grants) when the plan
-// truly cannot be resolved — a caller already reading 'paid' is never left
-// worse off than before this fix; only a POSITIVELY-confirmed sub-Pro plan
-// denies. See _isUnambiguousProOrAbove + applyTierGate/_lpAccessFor in
+// 'paid', instead of trusting the literal. 2026-10-05: it now fails CLOSED when
+// the backend answered with no plan on record, and fails OPEN only when the
+// backend could not answer at all (a blip must not wall a paid caller). See _isUnambiguousProOrAbove + applyTierGate/_lpAccessFor in
 // server.mjs for the call sites.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
@@ -98,9 +97,16 @@ describe('_paidKeyIsProOrAbove — resolves the real plan behind an ambiguous "p
     planFor['dch_live_tcf_starter'] = 'starter';
     expect(await S._paidKeyIsProOrAbove('dch_live_tcf_starter')).toBe(false);
   });
-  it('fails OPEN (grants) when the plan cannot be resolved at all — never worse than pre-fix', async () => {
-    // planFor has no entry for this key -> tier_detail.users_plan: null.
-    expect(await S._paidKeyIsProOrAbove('dch_live_tcf_unresolvable')).toBe(true);
+  it('fails CLOSED when the backend answered and has no plan on record (P0-5 tail, 2026-10-05)', async () => {
+    // planFor has no entry for this key -> tier_detail.users_plan: null on a valid:true answer.
+    expect(await S._paidKeyIsProOrAbove('dch_live_tcf_unresolvable')).toBe(false);
+  });
+  it('fails OPEN when the backend answers 5xx — indeterminate is not "no plan"', async () => {
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response('{}', { status: 503 });
+    try {
+      expect(await S._paidKeyIsProOrAbove('dch_live_tcf_503')).toBe(true);
+    } finally { globalThis.fetch = prevFetch; }
   });
   it('fails OPEN on a network error — a backend hiccup must never wall an already-paid caller', async () => {
     const prevFetch = globalThis.fetch;

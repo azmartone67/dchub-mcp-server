@@ -99,6 +99,9 @@ beforeAll(async () => {
     try { pathname = new URL(url).pathname; } catch { /* not a URL */ }
     calls.push({ url, pathname, headers: init.headers || {} });
     if (pathname === SUMMARY) return summaryAnswer ? summaryAnswer() : json(404, { ok: false, error: 'not_found' });
+    // The seat is a Pro account: validate answers it with its plan on record (a null plan reads as
+    // no plan on record, which fails closed since 2026-10-05).
+    if (pathname === '/api/v1/keys/validate') return json(200, { valid: true, tier: 'paid', developer_id: 'dev_cap_ptr', email: null, tier_detail: { users_plan: 'pro' } });
     if (pathname === '/api/v1/mcp/tools/rank_markets') return json(200, rankPayload);
     if (pathname === '/api/v1/sites/find' && sitesStatus !== 200) {
       return json(sitesStatus, { ok: false, detail: 'upstream fixture failure' });

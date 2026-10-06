@@ -165,7 +165,8 @@ beforeAll(async () => {
       if (url.pathname === '/api/v1/keys/validate') {
         const key = (await readBody(req)).api_key || '';
         return send(KEY_TIER[key]
-          ? { valid: true, tier: KEY_TIER[key], developer_id: 'dev_ladder1', email: KEY_EMAIL[key] || null }
+          ? { valid: true, tier: KEY_TIER[key], developer_id: 'dev_ladder1', email: KEY_EMAIL[key] || null,
+              tier_detail: { users_plan: KEY_TIER[key] } }
           : { valid: false, tier: 'free' });
       }
       if (url.pathname === '/api/v1/mcp/credits/balance') {
