@@ -259,6 +259,7 @@ test/pro-wall-stamp.test.mjs
 test/problem-taxonomy.test.mjs
 test/provenance-as-of-zones.test.mjs
 test/provenance-asof-headline-vs-oldest.test.mjs
+test/provenance-backend-null-as-of-stands.test.mjs
 test/provenance-basis-class-every-tool.test.mjs
 test/provenance-credit-survives-anon-trim.test.mjs
 test/provenance-envelope-contract-fixture.test.mjs
