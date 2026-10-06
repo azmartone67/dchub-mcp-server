@@ -257,6 +257,8 @@ test/problem-taxonomy.test.mjs
 test/provenance-as-of-zones.test.mjs
 test/provenance-asof-headline-vs-oldest.test.mjs
 test/provenance-basis-class-every-tool.test.mjs
+test/provenance-credit-survives-anon-trim.test.mjs
+test/provenance-envelope-contract-fixture.test.mjs
 test/public-doors-banned-floors.test.mjs
 test/qa-marker-forward.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
