@@ -2768,7 +2768,9 @@ async function _paidKeyIsProOrAbove(apiKey) {
   try { v = await validateKey(apiKey); } catch (_) { v = null; }
   if (!v || v.indeterminate === true) return true;
   const granular = String(v.plan_tier || '').toLowerCase();
-  if (!granular) return false;
+  // No plan: deny only when the backend's lookup RAN and found none. A lookup that
+  // threw (plan_lookup 'error') is indeterminate like a 5xx, so it grants.
+  if (!granular) return v.plan_lookup_failed === true;
   return _planIsProOrAbove(granular);
 }
 
@@ -4601,6 +4603,10 @@ async function _validateKeyUncached(api_key, opts = {}) {
       // returned it as tier_detail.users_plan — just unused here until now. Absent on an
       // older backend or when no users row cross-checked (null), never a wrong plan name.
       plan_tier: (data.tier_detail && data.tier_detail.users_plan) || null,
+      // plan_lookup (backend #6424, 2026-10-06): 'error' when the backend's users-plan
+      // cross-check threw, so a null plan_tier is a failed lookup, not "no plan on
+      // record". Absent on an older backend -> false, keeping the fail-closed default.
+      plan_lookup_failed: !!(data.tier_detail && data.tier_detail.plan_lookup === 'error'),
       // r-free-key-per-call: the backend marks the keys whose allowance is spent
       // per call (an unbound free key, a trial key). Absent on an older backend.
       counts_tool_calls: data.counts_tool_calls === true,
