@@ -37,6 +37,7 @@
 // Kept as fixtures rather than a live fetch so this file qualifies for the
 // deterministic HARD gate — see .github/workflows/test.yml.
 import { describe, it, expect, beforeAll } from 'vitest';
+import { z } from 'zod';
 import { createServer } from '../server.mjs';
 
 let tool;
@@ -189,5 +190,35 @@ describe('the shape switch is documented where an agent will read it', () => {
     const d = tool.description || '';
     expect(d).toMatch(/CHANGES SHAPE|SHAPE DEPENDS/i);
     expect(d).toContain('by_iso_count');
+  });
+});
+
+
+// ── MISO pending-revision (2026-10-06) ───────────────────────────────────────
+// The backend serves queued_generation_pending_revision_gw on MISO's by_iso row
+// (reported beside the active total, never inside it). The free preview nulls it
+// like every other GW figure. Both shapes must be accepted: a narrower declared
+// type would fail the whole call with -32602.
+describe('MISO pending-revision field', () => {
+  const MISO = { iso: 'MISO', queued_generation_gw: 238.7,
+    queued_generation_gw_basis_note: 'Active only, summer MW; excludes Done, Pending and Withdrawn',
+    queued_generation_pending_revision_gw: 18.8,
+    queued_generation_pending_revision_gw_basis:
+      'MISO applicationStatus=Pending Revision Approval, summer MW; reported separately and not part of queued_generation_gw' };
+
+  it('is declared in the outputSchema (both keys)', () => {
+    const js = z.toJSONSchema(tool.outputSchema, { io: 'input', unrepresentable: 'any' });
+    const rowShape = JSON.stringify(js);     // the whole declared schema; by_iso sits inside a union
+    expect(rowShape).toContain('"queued_generation_pending_revision_gw"');
+    expect(rowShape).toContain('"queued_generation_pending_revision_gw_basis"');
+  });
+
+  it('accepts the figure, the masked null, and the unset field', async () => {
+    for (const row of [MISO,
+                       { ...MISO, queued_generation_gw: null, queued_generation_pending_revision_gw: null },
+                       { iso: 'PJM', queued_generation_gw: 135.2 }]) {
+      const r = await parse({ by_iso: [row] });
+      expect(r.success, `row rejected: ${why(r)}`).toBe(true);
+    }
   });
 });
