@@ -79,7 +79,7 @@ describe('item 2: every Pro wall arm names DC Hub Pro and the 7-day trial, with 
     const S = await import('../server.mjs');
     for (const p of ['claude', 'grok', 'chatgpt', '']) {
       const l = S._relayLinkLabel(p, 'analyze_site');
-      expect(l, p).toContain('DC Hub Pro'); expect(l, p).toMatch(/7-day (free )?trial/); expect(l, p).not.toMatch(/\$\d/);
+      expect(l, p).toContain('DC Hub Pro'); expect(l, p).toMatch(/7-day (DC Hub Pro |free )?trial/); expect(l, p).not.toMatch(/\$\d/);
     }
   });
 });
