@@ -128,6 +128,7 @@ test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
 test/github-description-canon.test.mjs
 test/github-description-push-behaviour.test.mjs
+test/github-release-per-version.test.mjs
 test/gitignore-patterns-bite.test.mjs
 test/glama-build-provenance.test.mjs
 test/glama-placement-probe.test.mjs
