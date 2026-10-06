@@ -2914,7 +2914,7 @@ export function _maskRetirementHeadroom(d, sid) {
     _total_available: rows.length,
     _upgrade: {
       tier_required: 'developer',
-      message: 'Preview: every retiring generator, date, fuel, substation distance and queue project count is here; '
+      message: 'Preview: every retiring generator, date, fuel and queue project count is here, with substations as a distance band (names and exact distance are Pro); '
         + 'the MW figures are Developer and above, the same rule as the REST API. '
         + 'The $10 pack does not open them. Call unlock_more_data for the one-click Developer link.',
       developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), sid),
@@ -8427,6 +8427,73 @@ export function _substationFreeViewB2(block) {
   return out;
 }
 
+// ── P0-1 tail (owner 2026-10-05): the other three doors to substation detail ──
+// analyze_site's nearest_substations was locked below Pro (CM-4 / P0-1), but
+// three sibling tools answered the same question to anyone: find_sites (the
+// anchor's name and exact kV), get_retirement_headroom, which execute_plan runs
+// as a plan step (nearest_substations name + exact distance), and
+// get_hosting_capacity (the feeder's substation label). Same line as above:
+// SUBSTATION_DETAIL_MIN_TIER. The check is _lpAccessFor, so the Developer/Pro
+// 'paid' collapse and the pre-cutover pack grandfathering behave exactly as they
+// do for Land & Power.
+const _KV_BANDS = [[500, '500 kV+'], [345, '345-499 kV'], [230, '230-344 kV'],
+  [115, '115-229 kV'], [69, '69-114 kV'], [0, 'below 69 kV']];
+// Mirrors dchub-backend util/substation_detail.kv_band.
+export function _kvBandOf(kv) {
+  const v = Number(kv);
+  if (kv === null || kv === undefined || kv === '' || !Number.isFinite(v) || !(v > 0)) return null;
+  for (const [floor, label] of _KV_BANDS) if (v >= floor) return label;
+  return null;
+}
+export async function _substationDetailOpen(c) {
+  let ctx = c;
+  if (ctx === undefined) { try { ctx = getCtx() || {}; } catch (_) { ctx = {}; } }
+  try { return (await _lpAccessFor(ctx || {}, (ctx && ctx.tier) || '')) === 'full'; } catch (_) { return false; }
+}
+export const FIND_SITES_ANCHOR_LOCKED = ['anchor.name', 'anchor.operator', 'anchor.voltage_kv',
+  'anchor.capacity_mva', 'anchor.city', 'anchor.state', 'anchor.status'];
+// Below Pro an anchor is {type, kv_band, voltage_basis}: the shape be#6303 gives
+// cross-layer anchors. Removed, never nulled.
+export function _lockFindSitesAnchors(payload) {
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.candidates)) return payload;
+  const candidates = payload.candidates.map((cand) => {
+    if (!cand || typeof cand !== 'object' || Array.isArray(cand)) return cand;
+    const a = cand.anchor;
+    if (!a || typeof a !== 'object' || Array.isArray(a)) return cand;
+    const anchor = { type: a.type ?? null, kv_band: a.kv_band || _kvBandOf(a.voltage_kv) };
+    if (a.voltage_basis !== undefined) anchor.voltage_basis = a.voltage_basis;
+    return { ...cand, anchor };
+  });
+  return { ...payload, candidates, _locked_fields: [...FIND_SITES_ANCHOR_LOCKED],
+    _required_tier: SUBSTATION_DETAIL_MIN_TIER };
+}
+// get_retirement_headroom rows: nearest_substations [{name, distance_km}] becomes
+// a distance band; the name goes. substations_within_25km is a count and stays.
+export function _lockRetirementSubstations(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d) || !Array.isArray(d.data)) return d;
+  const data = d.data.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || !Array.isArray(item.nearest_substations)) return item;
+    return { ...item, nearest_substations: item.nearest_substations.map((r) => {
+      const o = { distance_band: _substationDistanceBand(r && r.distance_km) };
+      if (r && r.kv_band) o.kv_band = r.kv_band;
+      else if (r && (r.max_kv ?? r.voltage_kv) != null) o.kv_band = _kvBandOf(r.max_kv ?? r.voltage_kv);
+      return o;
+    }) };
+  });
+  return { ...d, data, _substation_locked_fields: ['name', 'distance_km'],
+    _substation_required_tier: SUBSTATION_DETAIL_MIN_TIER };
+}
+// get_hosting_capacity: the utility's substation label on each feeder.
+export function _lockHostingSubstations(out) {
+  if (!out || typeof out !== 'object' || !Array.isArray(out.top_feeders)) return out;
+  return { ...out,
+    top_feeders: out.top_feeders.map((f) => {
+      if (!f || typeof f !== 'object' || !('substation' in f)) return f;
+      const { substation, ...rest } = f; return rest;
+    }),
+    _locked_fields: ['top_feeders[].substation'], _required_tier: SUBSTATION_DETAIL_MIN_TIER };
+}
+
 export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
   let parsed = null;
   try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
@@ -10274,13 +10341,16 @@ export function _coarsenFindSites(payload) {
 async function _findSitesForCaller(payload, c) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
   if (!Array.isArray(payload.candidates) || payload.candidates.length === 0) return payload;
-  if (payload._gated === true) return payload;          // the backend already served its own preview
+  // P0-1 tail: the anchor's name and exact kV are Pro whatever the coordinate
+  // rule below says, so Starter, Developer and pack holders lose them too.
+  const _lock = (await _substationDetailOpen(c)) ? ((x) => x) : _lockFindSitesAnchors;
+  if (payload._gated === true) return _lock(payload);    // the backend already served its own preview
   const t = String((c && c.tier) || '').trim().toLowerCase();
-  if (!_FIND_SITES_FREE_TIERS.has(t)) return payload;
+  if (!_FIND_SITES_FREE_TIERS.has(t)) return _lock(payload);
   let credits = 0;
   try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
-  if (credits > 0) return payload;
-  return _coarsenFindSites(payload);
+  if (credits > 0) return _lock(payload);
+  return _lock(_coarsenFindSites(payload));
 }
 
 // ── r-location-tier (2026-09-21, owner-approved): exact facility location is paid-only ──
@@ -23661,6 +23731,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       if (_packPaid && data && typeof data === 'object' && Array.isArray(data.data)) {
         _burnCredits(_c, 'get_retirement_headroom', _creditCost('get_retirement_headroom'));
       }
+      if (!(await _substationDetailOpen(_c))) data = _lockRetirementSubstations(data);
       if (!_full) {
         data = _maskRetirementHeadroom(data, _c.session_id);
         if (_ignored && data && data._gated) {
@@ -23708,7 +23779,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
   // territory means PG&E isn't in this feed — NOT that the Bay Area has no
   // capacity, which is exactly the inference an agent would otherwise draw.
   trackedTool(srv, 'get_hosting_capacity',
-    'Utility-PUBLISHED feeder hosting capacity — the MW a NAMED distribution feeder can actually take, straight from the utility\'s own hosting-capacity GIS. Published records from many utilities (e.g. Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista; the no-args call lists current coverage). This is filed distribution-level truth, not a proximity proxy. Three ways to call it: lat+lon (+radius_km, default 25) for a point; utility or market for a whole published territory; NO ARGS for the coverage list of every market that has data. CRITICAL — check capacity_type before quoting any number: "load" = LOAD-serving headroom, what a new data-center load can actually DRAW (only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish it); "gen" = DER/generation EXPORT capacity, what the feeder can ACCEPT from solar/storage — it is NOT available load and must never be relayed as "you can site N MW here"; "bus_headroom" = transmission bus MW. Returns, split by capacity_type: distinct feeder count, max + median MW, the top feeders with substation, voltage_kv, feeder_id, coords and publish date, plus the utilities publishing them. Honest by construction — published rows are GIS vertices, so distinct_feeders and geometry_rows_scanned are reported separately (never conflated), and a capacity-capped read is flagged sample_complete=false with the capacity_floor_mw at or above which the set IS provably complete. Coverage is concentrated in the Northeast, Mid-Atlantic and Midwest — NOT nationwide — and a point outside them returns an explicit not-published answer with the nearest covered markets, never a silent zero. Answers "can this feeder actually take 20 MW", "where can I plug in without waiting on a substation upgrade". Try: get_hosting_capacity utility="Ameren Illinois" capacity_type=load min_mw=5. Do NOT use for transmission-substation proximity or time-to-power (use get_grid_intelligence), the ISO interconnection queue (use get_interconnection_queue / get_refined_queue), or retiring-plant headroom (use get_retirement_headroom) — this is the distribution FEEDER layer. Informational, not binding interconnection guidance; verify with the utility.',
+    'Utility-PUBLISHED feeder hosting capacity — the MW a NAMED distribution feeder can actually take, straight from the utility\'s own hosting-capacity GIS. Published records from many utilities (e.g. Con Edison, National Grid NY/MA, NYSEG/RG&E, Rhode Island Energy, Orange & Rockland, Central Hudson, Eversource CT, BGE, Pepco/Delmarva/ACE, Dominion VA, Ameren Illinois, AEP Ohio & I&M, Xcel MN/CO, DTE, Avista; the no-args call lists current coverage). This is filed distribution-level truth, not a proximity proxy. Three ways to call it: lat+lon (+radius_km, default 25) for a point; utility or market for a whole published territory; NO ARGS for the coverage list of every market that has data. CRITICAL — check capacity_type before quoting any number: "load" = LOAD-serving headroom, what a new data-center load can actually DRAW (only Ameren Illinois, AEP Ohio & I&M and Central Hudson publish it); "gen" = DER/generation EXPORT capacity, what the feeder can ACCEPT from solar/storage — it is NOT available load and must never be relayed as "you can site N MW here"; "bus_headroom" = transmission bus MW. Returns, split by capacity_type: distinct feeder count, max + median MW, the top feeders with voltage_kv, feeder_id, coords and publish date (the utility substation label is Pro), plus the utilities publishing them. Honest by construction — published rows are GIS vertices, so distinct_feeders and geometry_rows_scanned are reported separately (never conflated), and a capacity-capped read is flagged sample_complete=false with the capacity_floor_mw at or above which the set IS provably complete. Coverage is concentrated in the Northeast, Mid-Atlantic and Midwest — NOT nationwide — and a point outside them returns an explicit not-published answer with the nearest covered markets, never a silent zero. Answers "can this feeder actually take 20 MW", "where can I plug in without waiting on a substation upgrade". Try: get_hosting_capacity utility="Ameren Illinois" capacity_type=load min_mw=5. Do NOT use for transmission-substation proximity or time-to-power (use get_grid_intelligence), the ISO interconnection queue (use get_interconnection_queue / get_refined_queue), or retiring-plant headroom (use get_retirement_headroom) — this is the distribution FEEDER layer. Informational, not binding interconnection guidance; verify with the utility.',
     { lat: N.describe('Latitude of the point to search around, decimal degrees. Must be paired with lon.'),
       lon: N.describe('Longitude of the point to search around, decimal degrees. Must be paired with lat.'),
       ...COORD_ALIASES,
@@ -23967,7 +24038,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           out.fallback = 'For a transmission-proximity headroom read anywhere in the US (substation-based, not feeder-level), use get_grid_intelligence.';
         }
       }
-      return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
+      const outF = (await _substationDetailOpen()) ? out : _lockHostingSubstations(out);
+      return { content: [{ type: 'text', text: JSON.stringify(outF, null, 2) }], structuredContent: outF };
     });
 
   trackedTool(srv, 'analyze_parcel',

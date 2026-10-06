@@ -112,6 +112,14 @@ describe('trap 1 — GIS vertex rows must fold to distinct feeders', () => {
     expect(sc.top_feeders.map((f) => f.feeder_id)).toEqual(['A', 'B']);
   });
 
+  it('P0-1 tail: a caller below Pro gets no substation label on a feeder (the stub rows carry WARREN)', async () => {
+    const { sc } = await call({ lat: 41.73, lon: -71.28 });
+    expect(sc.top_feeders.length).toBeGreaterThan(0);
+    for (const f of sc.top_feeders) expect('substation' in f, `feeder ${f.feeder_id} kept its substation label`).toBe(false);
+    expect(JSON.stringify(sc)).not.toContain('WARREN');
+    expect(sc._required_tier).toBe('pro');
+  });
+
   it('keeps the NEAREST vertex of a folded feeder, not an arbitrary one', async () => {
     // Query sits on vertex i=0; every 'A' vertex marches away from it.
     const { sc } = await call({ lat: 41.73, lon: -71.28 });
