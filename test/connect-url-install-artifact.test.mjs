@@ -143,8 +143,11 @@ describe('claim_free_key wiring — every keyed branch ships the artifact', () =
   it('all three response branches pass via into persist_config', () => {
     // _persistConfig(key) with no via would silently drop attribution from the
     // minted URL while still looking correct.
-    expect(SRC).not.toMatch(/_persistConfig\((?:_held|key)\)/);
-    expect((SRC.match(/_persistConfig\((?:_held|key), _via\)/g) || []).length).toBe(3);
+    // 2026-10-06 (item 7): the call sites go through _persistConfigFor(key, via, clientKey), which
+    // narrows the reply to the caller's own client; the held / backend-reused / fresh / gated
+    // branches are four sites.
+    expect(SRC).not.toMatch(/_persistConfig(?:For)?\((?:_held|key)\)/);
+    expect((SRC.match(/_persistConfigFor\((?:_held|_e\.key|key), _via, _ownClientKey\)/g) || []).length).toBe(4);
   });
 
   // r-validate-artifact (2026-08-19)

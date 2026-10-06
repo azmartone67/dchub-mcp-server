@@ -151,6 +151,7 @@ test/grok-profile.test.mjs
 test/grok-relay-label.test.mjs
 test/guided-auth-walls.test.mjs
 test/handler-args-declared.test.mjs
+test/handshake-is-lean.test.mjs
 test/hard-gate-no-network.test.mjs
 test/held-key-persists.test.mjs
 test/high-intent-needs-a-session.test.mjs

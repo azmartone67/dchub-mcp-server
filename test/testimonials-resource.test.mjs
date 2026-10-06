@@ -33,7 +33,9 @@ beforeAll(async () => {
   process.env.DCHUB_API_BASE = 'http://127.0.0.1:1';
   stubFetch(async () => { throw new Error('network refused by test'); });
   ({ createServer } = await import('../server.mjs'));
-  INSTRUCTIONS_SRC = createServer().server._instructions || '';
+  // 2026-10-06 (item 7): the handshake is the lean text; the testimonials pointer lives in the long
+  // form, which is the resource dchub://instructions (the lean text points at it).
+  INSTRUCTIONS_SRC = (await import('../server.mjs'))._INSTRUCTIONS || '';
 }, 60000);
 
 afterEach(() => { calls.length = 0; });
