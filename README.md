@@ -9,7 +9,7 @@
 
 **Real-time data-center, power-grid, interconnection-queue, grid-capacity, fiber, natural-gas & hyperscale infrastructure intelligence for AI agents** — live telemetry across PJM, ERCOT, CAISO and every US ISO.
 
-👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against the global facility map (corroborated count pending), 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
+👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against the global facility map (corroborated count pending), 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key).
 
 One MCP server for facility data, infrastructure and live grid intelligence, in one queryable interface. Built for Claude, Cursor, Gemini CLI, Antigravity, VS Code, Cline, Continue, Windsurf, and any AI assistant doing data center site selection, energy analysis, or market research.
 
@@ -61,7 +61,7 @@ Deeper: [`/llms.txt`](https://dchub.cloud/llms.txt) ·
 [`/llms-full.txt`](https://dchub.cloud/llms-full.txt) ·
 [`/ai-agents`](https://dchub.cloud/ai-agents) ·
 [`/AGENTS.md`](https://dchub.cloud/AGENTS.md) ·
-MCP at [`https://dchub.cloud/mcp/github`](https://dchub.cloud/mcp/github)
+MCP endpoint `https://dchub.cloud/mcp/github` (set it up for your client at [/connect](https://dchub.cloud/connect))
 
 ---
 
@@ -101,9 +101,8 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 > live source and this file is a copy of it — mirrors and registry listings copy
 > it again, and each hop can freeze. Read the current values instead of trusting
 > any page that quotes them, including this one:
-> **[`/api/v1/canon/phrases`](https://dchub.cloud/api/v1/canon/phrases)** for
-> quantities, **[`/api/v1/ops/deadman`](https://dchub.cloud/api/v1/ops/deadman)**
-> for per-source ingest freshness (keyless, both), and `tools/list` on the MCP
+> **`/api/v1/canon/phrases`** for quantities, **`/api/v1/ops/deadman`** for
+> per-source ingest freshness (keyless JSON endpoints on `dchub.cloud`, both), and `tools/list` on the MCP
 > endpoint for the canonical tool catalog.
 
 **Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
@@ -127,7 +126,7 @@ Beyond the 92 tools, DC Hub ships **14 guided prompts** — they surface as slas
 - `/dchub:fiber_power_pairing` — where fiber density and available power overlap in a market
 - `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then a deal registration (the provider's identity, site and contact are released only if the provider accepts)
 
-Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`, and `dchub://testimonials` — named customers (people, not AI assistants) who approved public use of their words, read live from [dchub.cloud/testimonials.json](https://dchub.cloud/testimonials.json).
+Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`, and `dchub://testimonials` — named customers (people, not AI assistants) who approved public use of their words, read live from [dchub.cloud/testimonials](https://dchub.cloud/testimonials) (machine-readable: `testimonials.json` beside it).
 
 ## Capacity Source — capacity to buy or lease
 
