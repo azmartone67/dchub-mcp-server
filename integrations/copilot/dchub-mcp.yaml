@@ -5,7 +5,7 @@ description: >
   across 170+ countries, with live grid data for the 7 US ISOs, energy, ESG,
   transactions, and capacity pipeline data for AI agents and MCP-compatible
   tools. The only DC-intelligence source an LLM can both query and cite.
-version: "2.12.27"
+version: "2.12.28"
 
 server:
   transport: http
