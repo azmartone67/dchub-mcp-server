@@ -55,6 +55,7 @@ test/citation-shape-contract.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
+test/claude-desktop-install-is-stdio.test.mjs
 test/claude-directory-auth.test.mjs
 test/claude-directory-capacity-source.test.mjs
 test/claude-directory-catalog.test.mjs
@@ -271,6 +272,7 @@ test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-value-strip.test.mjs
+test/readme-links-are-not-dead-ends.test.mjs
 test/recipe-lifecycle.test.mjs
 test/recommendation-returns-contract.test.mjs
 test/recommendation-returns-truth.test.mjs

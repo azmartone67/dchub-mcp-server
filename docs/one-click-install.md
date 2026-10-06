@@ -34,8 +34,9 @@ claude mcp add dchub --transport http https://dchub.cloud/mcp
 
 **Claude Desktop** — `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`):
 ```json
-{ "mcpServers": { "dchub": { "url": "https://dchub.cloud/mcp", "transport": "http" } } }
+{ "mcpServers": { "dchub": { "command": "npx", "args": ["-y", "dchub-mcp-server"], "env": { "DCHUB_API_KEY": "" } } } }
 ```
+That file runs stdio servers only; for the hosted URL use Settings → Connectors → Add custom connector → `https://dchub.cloud/mcp`.
 
 **Cline / Roo** — `cline_mcp_settings.json` → `mcpServers`:
 ```json

@@ -25690,7 +25690,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         claude_desktop: {
           label: 'Claude Desktop',
           file: '~/Library/Application Support/Claude/claude_desktop_config.json (macOS) · %APPDATA%\\Claude\\claude_desktop_config.json (Windows)',
-          snippet: JSON.stringify({ mcpServers: { dchub: { url: _u, transport: 'http', headers: { 'X-API-Key': key } } } }),
+          // ★ Grok audit 2026-10-06, item 4: this was a url + http-transport + headers entry, which
+          // claude_desktop_config.json does not run (stdio servers only). The launcher
+          // (npm-launcher, published as dchub-mcp-server) bridges stdio to the hosted server and
+          // reads DCHUB_API_KEY. The URL route lives in Settings → Connectors (connector_url).
+          snippet: JSON.stringify({ mcpServers: { dchub: { command: 'npx', args: ['-y', 'dchub-mcp-server'], env: { DCHUB_API_KEY: key } } } }),
+          connector_url: _cu,
+          note: 'claude_desktop_config.json runs local (stdio) servers only: a {"url": …} entry is not a valid server there and Claude Desktop can drop it. This snippet runs the dchub-mcp-server launcher over stdio (Node 18+) and carries your key in env. For the hosted URL instead, use Settings → Connectors → Add custom connector and paste connector_url.',
         },
         claude_code: {
           label: 'Claude Code (CLI — one command)',
@@ -26056,7 +26062,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           '• **Desktop / IDE client** (Claude Code, Cursor, VS Code, Cline, Continue, Windsurf): add header `X-API-Key: ' + key + '` to the DC Hub MCP connector — CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`\n' +
           '• **Paste-a-URL connector** (Claude.ai web, ChatGPT, Grok, Perplexity, Smithery — a URL box, no header field): have them replace the DC Hub server URL with `' + _cUrl + '`. Same key, carried in the URL, sent on every future call. This is the ONLY durable option on these clients — they rebuild the session per tool call, so a key held in a reply cannot survive to the next one.\n' +
           '• **Either client, as a backstop:** bind it to your human’s email (`bind_email {email}`) so the key can be RECOVERED if the config or URL is lost — we email the key + a sign-in link.\n' +
-          'Re-minting a fresh key every session is the #1 mistake — a saved header or a pasted connector URL is reused automatically; a key that lives only in this reply is gone when the reply is.\n' +
+          'Re-minting a fresh key every session throws away the saved identity — a saved header or a pasted connector URL is reused automatically; a key that lives only in this reply is gone when the reply is.\n' +
           '📋 Copy-paste-ready config snippets — key already inlined — for **Claude Desktop / Claude Code / Cursor / VS Code / Cline / Windsurf**, plus `connect_url` for URL-box clients, are in this response’s `persist_config`; show your human the one for their client.\n\n'
         : '**Save it for future sessions** (skip the preview next time): set header `X-API-Key: ' + key + '`, or — if their client only offers a URL box — paste `' + _cUrl + '` as the DC Hub server URL. CLI: `claude mcp add dchub --transport http --header X-API-Key:' + key + ' https://dchub.cloud/mcp`. Ready-to-paste snippets for Claude Desktop / Cursor / VS Code / Cline / Windsurf are in `persist_config`.\n\n';
       const _tierLine = CLAIM_CAROT_COPY

@@ -9,13 +9,13 @@
 
 **Real-time data-center, power-grid, interconnection-queue, grid-capacity, fiber, natural-gas & hyperscale infrastructure intelligence for AI agents** — live telemetry across PJM, ERCOT, CAISO and every US ISO.
 
-👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against the global facility map (corroborated count pending), 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/mcp) or [grab a free key](https://dchub.cloud/api/v1/keys/claim).
+👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against the global facility map (corroborated count pending), 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key).
 
 One MCP server for facility data, infrastructure and live grid intelligence, in one queryable interface. Built for Claude, Cursor, Gemini CLI, Antigravity, VS Code, Cline, Continue, Windsurf, and any AI assistant doing data center site selection, energy analysis, or market research.
 
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![DC Hub quality](https://dchub.cloud/api/v1/mcp/quality/badge.svg)](https://dchub.cloud/api/v1/mcp/quality) [![Tools](https://img.shields.io/badge/tools-92-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
 
-> ⭐ **Star this repo** — if DC Hub is useful to your agents, a star helps other builders (and their AI assistants) discover it across the MCP registries; it's the #1 signal Smithery, Glama & awesome-mcp-servers rank on. **[→ Star `azmartone67/dchub-mcp-server`](https://github.com/azmartone67/dchub-mcp-server)** &nbsp; [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=social)](https://github.com/azmartone67/dchub-mcp-server)
+> ⭐ **Star this repo** — if DC Hub is useful to your agents, a star helps other builders (and their AI assistants) discover it across the MCP registries. **[→ Star `azmartone67/dchub-mcp-server`](https://github.com/azmartone67/dchub-mcp-server)** &nbsp; [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=social)](https://github.com/azmartone67/dchub-mcp-server)
 
 ---
 
@@ -61,7 +61,7 @@ Deeper: [`/llms.txt`](https://dchub.cloud/llms.txt) ·
 [`/llms-full.txt`](https://dchub.cloud/llms-full.txt) ·
 [`/ai-agents`](https://dchub.cloud/ai-agents) ·
 [`/AGENTS.md`](https://dchub.cloud/AGENTS.md) ·
-MCP at [`https://dchub.cloud/mcp/github`](https://dchub.cloud/mcp/github)
+MCP endpoint `https://dchub.cloud/mcp/github` (set it up for your client at [/connect](https://dchub.cloud/connect))
 
 ---
 
@@ -87,7 +87,7 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 - **Global data-center facility map** across 170+ countries (corroborated count pending) — operator, capacity, location, fiber connectivity
 - **134,000+ substations** with voltage class, available capacity estimates
 - **Real-time grid telemetry** — live load + generation mix across the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) + 40+ EIA balancing authorities (Atlanta, Carolinas, Florida, Pacific NW...), plus Great Britain (NESO), 24 European ENTSO-E zones, Taiwan & Australia — refreshed ~every 5 min
-- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts — including live large-load queue depth where the ISO publishes it (ERCOT is the only US ISO with a public data-center-scale large-load feed)
+- **Interconnection-queue snapshots** with per-ISO BUILD/CAUTION/AVOID verdicts — including live large-load queue depth where the ISO publishes it (ERCOT publishes a data-center-scale large-load feed)
 - **1,700+ tracked M&A transactions** + AI capacity index + hyperscaler $1B+ deal tracker
 - **Transmission lines, gas pipelines, fiber routes** — the full infrastructure stack
 - **NEPA filings** for upcoming federal energy + data center projects
@@ -101,9 +101,8 @@ Your AI assistant gets real-time, structured answers — not links to PDFs.
 > live source and this file is a copy of it — mirrors and registry listings copy
 > it again, and each hop can freeze. Read the current values instead of trusting
 > any page that quotes them, including this one:
-> **[`/api/v1/canon/phrases`](https://dchub.cloud/api/v1/canon/phrases)** for
-> quantities, **[`/api/v1/ops/deadman`](https://dchub.cloud/api/v1/ops/deadman)**
-> for per-source ingest freshness (keyless, both), and `tools/list` on the MCP
+> **`/api/v1/canon/phrases`** for quantities, **`/api/v1/ops/deadman`** for
+> per-source ingest freshness (keyless JSON endpoints on `dchub.cloud`, both), and `tools/list` on the MCP
 > endpoint for the canonical tool catalog.
 
 **Actively used by Claude and Cursor** — see [/cited-by](https://dchub.cloud/cited-by).
@@ -127,7 +126,7 @@ Beyond the 92 tools, DC Hub ships **14 guided prompts** — they surface as slas
 - `/dchub:fiber_power_pairing` — where fiber density and available power overlap in a market
 - `/dchub:find_capacity` — data-center capacity to buy or lease: Capacity Source listings for a requirement, then a deal registration (the provider's identity, site and contact are released only if the provider accepts)
 
-Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`, and `dchub://testimonials` — named customers (people, not AI assistants) who approved public use of their words, read live from [dchub.cloud/testimonials.json](https://dchub.cloud/testimonials.json).
+Plus citable **resources**: `dchub://about`, `dchub://methodology` (DCPI/DCGI), `dchub://data-sources`, `dchub://coverage`, and `dchub://testimonials` — named customers (people, not AI assistants) who approved public use of their words, read live from [dchub.cloud/testimonials](https://dchub.cloud/testimonials) (machine-readable: `testimonials.json` beside it).
 
 ## Capacity Source — capacity to buy or lease
 
@@ -177,19 +176,28 @@ Their strength: directories of facilities you can browse. Our strength: an API y
 
 ## Install
 
-### Claude Desktop / Claude Code
+### Claude Desktop — Quickstart (stdio)
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Claude Desktop's `claude_desktop_config.json` runs local (stdio) servers, so use the launcher package, which connects it to the hosted server. Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp/github",
-      "transport": "http"
+      "command": "npx",
+      "args": ["-y", "dchub-mcp-server"],
+      "env": { "DCHUB_API_KEY": "" }
     }
   }
 }
+```
+
+Leave `DCHUB_API_KEY` empty for previews, or paste a free key from https://dchub.cloud/connect#free-key. Needs Node 18+. Same block works in Cursor, Windsurf and Cline. To use the hosted URL instead, open **Settings → Connectors → Add custom connector** in Claude Desktop and paste `https://dchub.cloud/mcp`; do not put a `url` entry in `claude_desktop_config.json`.
+
+### Claude Code
+
+```bash
+claude mcp add dchub --transport http https://dchub.cloud/mcp/github
 ```
 
 ### Cursor
