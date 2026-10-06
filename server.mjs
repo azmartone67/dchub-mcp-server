@@ -18323,6 +18323,26 @@ function trackedTool(srv, name, description, schema, handler) {
         const _pcOn = _paywallContractOn(c);
         if (_lpAccess === 'wall') {
           status = 'lp_wall';
+          // The Pro wall is a paywall encounter, and it wrote NO signal: analyze_site, compare_sites,
+          // find_sites and generate_site_analysis dropped from 148/66/8/3 paywall_hit signals in the
+          // 30 days before 2026-09-23 to ZERO since the Land & Power Pro-only cutover (2026-09-22),
+          // while analyze_site kept ~30 calls a day. The funnel's first step is "sessions with a
+          // trial_preview or paid_tool_blocked signal". A signal only: no paid-hit count and no
+          // claim mint (those drive the high-intent stage and are a separate decision). Fire and
+          // forget like every other site; signalPaywall skips the Claude-directory profile.
+          signalPaywall({
+            tool: name,
+            args,
+            signal_type: 'paid_tool_blocked',
+            session_id: (c && c.session_id) || 'no-session',
+            mcp_client: c.platform || 'mcp',
+            user_agent: c.client_ua || null,
+            ip_address: c.client_ip || null,
+            api_key: c.api_key || null,
+            tier_current: tier || 'free',
+            tier_required: 'paid',
+            message_shown: 'lp_wall',
+          });
           let _hl = null;
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
