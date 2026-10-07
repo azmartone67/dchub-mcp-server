@@ -254,7 +254,8 @@ describe('what every client reads before it calls anything', () => {
     });
     const instructions = JSON.parse(json).result?.instructions || '';
     expect(instructions.length, 'initialize returned no instructions to scan').toBeGreaterThan(500);
-    expect(instructions).toContain('unlock_more_data');
+    // r-relay-contract (2026-10-06): the handshake hands out the relay contract, not a tool to call.
+    expect(instructions).toContain('human_url');
     expect(starterOffers({ instructions })).toEqual([]);
   });
 
@@ -265,7 +266,7 @@ describe('what every client reads before it calls anything', () => {
     expect(tool, 'tools/list has no unlock_more_data').toBeTruthy();
     // ★2026-10-02: the description names no plan price any more (owner rule
     // 09-27); the non-vacuity anchor is the plans line it points at instead.
-    expect(tool.description).toContain('Paid plans: https://dchub.cloud/pricing');
+    expect(tool.description).toContain('Paid plans: on the page behind the human_url link');
     expect(starterOffers(tool)).toEqual([]);
   });
 });

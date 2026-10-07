@@ -193,8 +193,10 @@ describe('get_facility spends the monthly exact-location allowance', () => {
   it('the allowance is used up: approximate, and the answer says why', async () => {
     const { payload } = await callTool('get_facility', { facility_id: '424242' }, 'dch_live_allow_spent');
     expectApproximate(recordOf(payload), 'spent');
-    expect(payload.exact_location).toMatchObject({ status: 'limit_reached', allowance: ALLOWANCE_SPENT,
-      upgrade_url: 'https://dchub.cloud/pricing#developer' });
+    expect(payload.exact_location).toMatchObject({ status: 'limit_reached', allowance: ALLOWANCE_SPENT });
+    // r-relay-contract: the backend's pricing link gives way to the relay link in a wall.
+    expect(payload.exact_location.upgrade_url).toMatch(/^https:\/\/dchub\.cloud\/(?:upgrade\/h|u)\//);
+    expect(payload.exact_location.upgrade_url).not.toMatch(/\/pricing/);
     expect(payload.exact_location.message).toMatch(/used up/);
     expect(meter).toHaveLength(1);
   });

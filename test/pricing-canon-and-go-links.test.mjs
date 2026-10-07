@@ -88,7 +88,7 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
     // ★2026-10-02: was _paidPlansLine() ("Developer $49/mo · Pro $99/mo"),
     // retired with the /mcp tools/list byte freeze (owner rule 09-27).
     const line = _paidPlansOutputLine();
-    expect(line).toBe('Paid plans: https://dchub.cloud/pricing');
+    expect(line).toBe('Paid plans: on the page behind the human_url link');   // r-relay-contract: never a pricing page
     expect(line).not.toMatch(/\$\d/);
     expect(line).not.toMatch(/founding/i);
     expect(line).not.toMatch(/seats last/i);
