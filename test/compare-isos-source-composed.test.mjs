@@ -5,7 +5,7 @@
 // provenance, so the backend's per-ISO EIA-named blocks never reached the caller.
 // composeCompareProvenance builds one block for the comparison; the handler attaches it.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { composeCompareProvenance } from '../lib/grid-provenance.mjs';
+import { composeCompareProvenance, LICENSE_COMPOSITE } from '../lib/grid-provenance.mjs';
 
 const EIA = (iso) => `EIA-930 hourly RTO/BA feed (${iso}) + DC Hub grid intelligence`;
 const QUEUE = 'US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)';
@@ -26,12 +26,14 @@ describe('composeCompareProvenance', () => {
     expect(p.provenance_revision).toBe('1.2');
     expect(p.method).toMatch(/^Side-by-side of 2 regions composed from 4 upstream reads/);
   });
-  it('as_of only where a telemetry block stated one; no licence; none for the shared feeds', () => {
+  it('as_of only where a telemetry block stated one; collection licence Mixed; a source licence only for EIA and DCPI', () => {
     const p = composeCompareProvenance(['PJM', 'ERCOT'], [gi('PJM'), gi('ERCOT')], cmp('PJM'), qsnap('PJM'));
     expect(p.sources[0].as_of).toBe('2026-10-06T10:00:00Z');
     expect(p.sources[2]).not.toHaveProperty('as_of');
     expect(p.sources[3]).not.toHaveProperty('as_of');
-    for (const s of p.sources) expect(s).not.toHaveProperty('license');
+    expect(p.license).toBe(LICENSE_COMPOSITE);
+    expect(p.sources.map((s) => s.license)).toEqual(
+      ['public domain (US government)', 'public domain (US government)', 'CC-BY-4.0', undefined]);
     expect(p).not.toHaveProperty('as_of');
   });
   it('a telemetry block that states no as_of gets none (never invented)', () => {
