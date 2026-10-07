@@ -79,9 +79,37 @@ function expectNoPricing(r, label) {
 }
 
 describe('the contract constant', () => {
+  const OLD = 'First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.';
   it('is defined once in server.mjs and says what the audit asked for', () => {
-    expect(S.RELAY_CONTRACT).toBe('First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.');
+    expect(S.RELAY_CONTRACT).toBe('First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.');
     expect(SRC.split('First line of your answer must be the URL in human_url').length - 1).toBe(1);
+  });
+  it('EXPERIMENT: names no path to avoid (the prohibition was the only place /plans appeared in our output)', () => {
+    expect(S.RELAY_CONTRACT).not.toMatch(/\/pricing|\/plans|\/signup|Stripe|Do not substitute/);
+    expect(S.RELAY_CONTRACT).toMatch(/\/upgrade\/h\//);          // control: it still names the two valid shapes
+    expect(S.RELAY_CONTRACT).toMatch(/\/u\//);
+    expect(S.RELAY_CONTRACT).toMatch(/verbatim/);
+    expect(S.RELAY_CONTRACT).toMatch(/Then stop\./);
+  });
+  it('the previous wording is kept byte for byte behind DCHUB_RELAY_CONTRACT_LEGACY (the kill switch)', () => {
+    expect(S.RELAY_CONTRACT_LEGACY).toBe(OLD);
+    expect(SRC).toMatch(/DCHUB_RELAY_CONTRACT_LEGACY/);
+    expect(S.RELAY_CONTRACT_LEGACY).not.toBe(S.RELAY_CONTRACT);
+  });
+});
+
+describe('EXPERIMENT: /plans no longer appears in what an agent is handed (2026-10-07)', () => {
+  it('a real Pro wall response and the session instructions contain no /plans, and still carry the link', async () => {
+    const r = await call('analyze_site', { lat: 39.04, lon: -77.49 }, anon());
+    const all = textOf(r) + JSON.stringify(r.structuredContent || {});
+    expect(all, 'control: this is a wall that carries the relay contract and a link').toContain(S.RELAY_CONTRACT);
+    expect(all).toMatch(/dchub\.cloud\/(upgrade\/h|u)\//);
+    expect(all).not.toMatch(/\/plans/);
+    expect(all).not.toMatch(/Do not substitute/);
+    for (const instr of [S._INSTRUCTIONS, S._INSTRUCTIONS_LEAN]) {
+      expect(instr).toContain(S.RELAY_CONTRACT);
+      expect(instr).not.toMatch(/\/plans/);
+    }
   });
 });
 
