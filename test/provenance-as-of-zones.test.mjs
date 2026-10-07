@@ -77,3 +77,46 @@ describe('stamps are shown as the source gave them (G-2 2026-10-07)', () => {
     expect(prov({ as_of: '2026-13-45' }).as_of).toBeNull();
   });
 });
+
+// ── as_of_zone follows the as_of that won the merge (G-2 2026-10-07) ─────────
+import { mergeProvenance } from '../lib/attribution.mjs';
+
+describe('mergeProvenance: as_of_zone describes the winning as_of', () => {
+  // live get_grid_data 2026-10-07: backend as_of "2026-10-07T03:00:00Z" (zone stated, be#6433)
+  // merged with a derived block whose oldest stamp was the zoneless hour-only demand_period.
+  const NOW2 = Date.parse('2026-10-07T12:00:00Z');   // the stamps below must not be "future" to the collector
+  const derived = () => buildProvenance({ as_of: '2026-10-07T03' }, { now: NOW2 });
+
+  it('control: the derived block does carry the unstated flag the merge used to leak', () => {
+    expect(derived().as_of_zone).toBe('unstated');
+  });
+  it('a backend as_of that states its zone drops the inherited unstated flag', () => {
+    const out = mergeProvenance({ as_of: '2026-10-07T03:00:00Z', source: 'EIA' }, derived());
+    expect(out.as_of).toBe('2026-10-07T03:00:00Z');
+    expect(out.as_of_zone).toBeUndefined();
+  });
+  it('an offset counts as a stated zone', () => {
+    expect(mergeProvenance({ as_of: '2026-10-07T03:00:00-07:00' }, derived()).as_of_zone).toBeUndefined();
+  });
+  it('a zoneless backend as_of is flagged unstated even when the derived stamp was zoned', () => {
+    const zonedDerived = buildProvenance({ as_of: '2026-10-07T03:00:00Z' }, { now: NOW2 });
+    expect(zonedDerived.as_of_zone).toBeUndefined();
+    const out = mergeProvenance({ as_of: '2026-10-07T03:00:00', source: 'x' }, zonedDerived);
+    expect(out.as_of_zone).toBe('unstated');
+  });
+  it('an hour-only backend as_of is flagged unstated', () => {
+    expect(mergeProvenance({ as_of: '2026-10-07T03' }, buildProvenance({ x: 1 }, { now: NOW2 })).as_of_zone).toBe('unstated');
+  });
+  it('a bare date carries no zone flag', () => {
+    expect(mergeProvenance({ as_of: '2026-10-07' }, derived()).as_of_zone).toBeUndefined();
+  });
+  it('a backend that sends its own as_of_zone keeps it', () => {
+    expect(mergeProvenance({ as_of: '2026-10-07T03:00:00Z', as_of_zone: 'utc' }, derived()).as_of_zone).toBe('utc');
+  });
+  it('no backend as_of: the derived flag stands (it describes the derived as_of)', () => {
+    expect(mergeProvenance({ source: 'x' }, derived()).as_of_zone).toBe('unstated');
+  });
+  it('an unparseable backend as_of leaves the flag alone (nothing to compare against)', () => {
+    expect(mergeProvenance({ as_of: 'last Tuesday' }, derived()).as_of_zone).toBe('unstated');
+  });
+});
