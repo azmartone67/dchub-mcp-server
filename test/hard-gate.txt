@@ -178,6 +178,7 @@ test/invalid-key-anon.test.mjs
 test/invalid-key-visible.test.mjs
 test/invalid-param-hint.test.mjs
 test/key-never-worse-than-anon.test.mjs
+test/keyless-grid-data-honesty.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/ladder-stage1.test.mjs
 test/large-load-passthrough.test.mjs
