@@ -18634,9 +18634,8 @@ function trackedTool(srv, name, description, schema, handler) {
           // find_sites and generate_site_analysis dropped from 148/66/8/3 paywall_hit signals in the
           // 30 days before 2026-09-23 to ZERO since the Land & Power Pro-only cutover (2026-09-22),
           // while analyze_site kept ~30 calls a day. The funnel's first step is "sessions with a
-          // trial_preview or paid_tool_blocked signal". A signal only: no paid-hit count and no
-          // claim mint (those drive the high-intent stage and are a separate decision). Fire and
-          // forget like every other site; signalPaywall skips the Claude-directory profile.
+          // trial_preview or paid_tool_blocked signal". Fire and forget like every other site;
+          // signalPaywall skips the Claude-directory profile.
           signalPaywall({
             tool: name,
             args,
@@ -18650,6 +18649,16 @@ function trackedTool(srv, name, description, schema, handler) {
             tier_required: 'paid',
             message_shown: 'lp_wall',
           });
+          // The wall hands a human a signed /upgrade/h link, but the session never reached
+          // mcp_high_intent_sessions, and human_acted (v5 to v10) joins a relay open to a high-intent row
+          // with a minted claim. So a Pro-wall link click could never count: 5 relay-open sessions in 7d
+          // were visible only to human_acted_v6 (reads relay_opens directly), and the five lp_wall sessions
+          // since #764 had no high-intent row (2026-10-07). Every other wall does both calls. Here they run
+          // after the response is on its way: the paid hit first, then the mint, which reads the count the
+          // hit just wrote. The claim itself is NOT shown (the wall already carries its one link).
+          // trackPaidHit and shouldMintClaim skip bots, probes, no-session and the Claude-directory profile.
+          { const _hiSid = c && c.session_id;
+            if (_hiSid) { (async () => { try { await trackPaidHit(_hiSid, name); await shouldMintClaim(_hiSid, name); } catch (_) { /* never worth a response */ } })(); } }
           let _hl = null;
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
