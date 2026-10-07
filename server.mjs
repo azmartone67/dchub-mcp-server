@@ -21651,6 +21651,11 @@ export function _flagUpstreamError(result, toolName) {
 // per-request memoised buildHumanRelay (see _relayMemo) is asked, which returns the one
 // token minted earlier in this request. Idempotent: a second pass changes nothing.
 // Directory/core profiles keep their own commerce rules and are skipped.
+// A direct pack checkout (/go/c/<token>) is a different ask from the relay. On a Pro wall the
+// contract allows ONE path family (/upgrade/h/ or /u/), so a /go/c link in any field of the
+// wall gives way to the relay link (Grok audit 2026-10-07: for_your_human.url and
+// user_message carried /go/c while human_url carried /upgrade/h/ — two links, one forbidden).
+const _GO_C_URL_RE_G = /https:\/\/dchub\.cloud\/go\/c\/[A-Za-z0-9._-]+(?:\?[^\s"'\\)\]}>]*)?/g;
 const _RELAY_URL_RE = /https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6})(?:\?[^\s"'\\)\]}>]*)?/;
 // A pricing/plans/signup surface is never the relay: in a wall it gives way to the relay link.
 const _PRICING_SURFACE_RE_G = /(?:https?:\/\/)?(?:api\.)?dchub\.cloud\/(?:(?:pricing|plans|signup)(?:[/?#][^\s"'\\)\]}>]*)?|ai#pricing[^\s"'\\)\]}>]*)/g;
@@ -21748,7 +21753,14 @@ export function _relayContractStep(result, name) {
     if (!url) return result;   // no signing secret: nothing to relay, leave the response as it was
     const relayLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
       + '. Open ' + url + ' to see what it found and how to unlock it.';
-    const scrub = (v) => (typeof v === 'string' ? v.replace(_PRICING_SURFACE_RE_G, url) : v);
+    // Keyless only: a keyed caller's /go/c carries the payer-key binding (r-paid-lift), so it stays;
+    // keyless, r-one-checkout-url already says the relay is the ONE human link and /go/c gives way.
+    const proWall = !c.api_key && ((typeof sc0.required_plan === 'string' && /^pro$/i.test(sc0.required_plan)) || PRO_ONLY_TOOLS.has(name));
+    const scrub = (v) => {
+      if (typeof v !== 'string') return v;
+      const w = v.replace(_PRICING_SURFACE_RE_G, url);
+      return proWall ? w.replace(_GO_C_URL_RE_G, url) : w;
+    };
     const walk = (v, d) => {
       if (d > 8 || v === null || typeof v !== 'object') return scrub(v);
       if (Array.isArray(v)) return v.map((x) => walk(x, d + 1));
