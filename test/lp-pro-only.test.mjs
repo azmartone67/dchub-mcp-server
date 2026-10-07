@@ -210,15 +210,12 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     for (const f of [...K.figures, 'Excellent site', ...(_b2 ? [] : ['BUILD']), 'Amazon.com', 'validated']) {
       expect(text).not.toContain(f);
     }
-    // MCP-1: analyze_site / compare_sites lead with the signed /upgrade/h relay page (its Pro
-    // offer lives on that page); the other Land & Power tools keep the /u short link -> Pro /go/c.
-    if (['analyze_site', 'compare_sites'].includes(tool)) {
-      expect(textOf(r).match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\/\S+/)[0]).toMatch(/\/upgrade\/h\//);
-      expect(plansOf(r)).toEqual([]);
-    } else {
-      expect(plansOf(r).length).toBeGreaterThan(0);
-      expect(new Set(plansOf(r))).toEqual(new Set(['pro']));
-    }
+    // MCP-1 + relay contract (2026-10-07): every keyless Land & Power wall carries ONE human link family,
+    // the signed /upgrade/h relay (its Pro offer lives on that page). No /go/c in any field, so
+    // for_your_human, user_message and upgrade_url agree with human_url. A keyed wall keeps its
+    // key-bound /go/c (the payer binding rides it; see the keyed cases above).
+    expect(textOf(r).match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\/\S+/)[0]).toMatch(/\/upgrade\/h\//);
+    expect(plansOf(r)).toEqual([]);
     expect(text).toContain('DC Hub Pro');
     for (const l of LOWER_RUNG) expect(text).not.toContain(l);
     expect(text).toContain('claim_free_key');

@@ -137,6 +137,39 @@ describe('gated results carry agent_instruction, human_url and a self-contained 
   });
 });
 
+describe('a Pro wall carries ONE link family: /go/c gives way to the relay (live audit 2026-10-07)', () => {
+  const GOC = 'https://dchub.cloud/go/c/cHJvfGFiY3x4eXp8YW5hbHl6ZV9zaXRlfHYx.79368a5336114396d8b1be7d4dad1b86';
+  const wall = (extra = {}) => {
+    const line = 'DC Hub Pro has the full site analysis. Start a 7-day Pro trial: ' + GOC;
+    const sc = { _wall: true, _gated: true, _preview_only: true, ...extra, user_message: line,
+      for_your_human: { text: line, url: GOC }, upgrade: { upgrade_url: GOC }, upgrade_url: GOC };
+    return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+  };
+  const run = (name, r) => S._ctxALS.run(anon(), () => S._relayContractStep(r, name));
+  it('analyze_site wall: no /go/c in any field or text block; human_url is every link', () => {
+    const r = run('analyze_site', wall({ required_plan: 'pro' }));
+    const all = textOf(r) + JSON.stringify(r.structuredContent);
+    expect(all, 'a /go/c pack link survived on a Pro wall').not.toMatch(/dchub\.cloud\/go\/c\//);
+    const sc = r.structuredContent;
+    expect(sc.human_url).toMatch(RELAY_OK);
+    expect(sc.for_your_human.url).toBe(sc.human_url);
+    expect(sc.upgrade.upgrade_url).toBe(sc.human_url);
+    expect(sc.upgrade_url).toBe(sc.human_url);
+    expect(sc.user_message).toContain(sc.human_url);
+    expect(sc.for_your_human.text).toContain(sc.human_url);
+    const links = all.match(/https:\/\/dchub\.cloud\/[^\s"'\\)]*/g) || [];
+    for (const l of links) expect(l, 'every dchub link on a Pro wall is the relay').toMatch(RELAY_OK);
+  });
+  it('a KEYED Pro wall keeps its key-bound /go/c (the payer binding rides it)', () => {
+    const r = S._ctxALS.run(keyed('203.0.118.99'), () => S._relayContractStep(wall({ required_plan: 'pro' }), 'analyze_site'));
+    expect(JSON.stringify(r.structuredContent)).toContain(GOC);
+  });
+  it('a non-Pro wall keeps its direct pack checkout (r-direct-pack policy is untouched)', () => {
+    const r = run('get_fiber_intel', wall());
+    expect(JSON.stringify(r.structuredContent)).toContain(GOC);
+  });
+});
+
 describe('what is NOT a wall is left alone', () => {
   it('a full answer, identity tools and unwalled results carry no relay contract', async () => {
     const full = { content: [{ type: 'text', text: '{"ok":1}' }], structuredContent: { ok: 1, completeness: { status: 'full', withheld: [] }, upgrade: { tier: 'free' } } };
