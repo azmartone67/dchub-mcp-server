@@ -167,7 +167,8 @@ import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS,
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { resolveFacilityRef as _resolveFacilityRef } from './lib/facility-ref.mjs';
-import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE } from './lib/attribution.mjs';
+import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE, detectGating as _attrDetectGating } from './lib/attribution.mjs';
+import { meteredTrialNote as _meteredTrialNote } from './lib/metered-note.mjs';
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
@@ -20070,19 +20071,13 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 call: _mtCall,
                 of: _cap,
                 remaining_today: _mtRemaining,
-                note: _paidTaste
-                  // ladder stage 1: only a grandfathered Starter key is metered here;
-                  // unlimited depth on the pair is Developer now, not Pro.
-                  ? 'Full-fidelity answer ' + _mtCall + ' of the ' + _cap
-                    + ' included with your plan today on this tool. '
-                    + 'Unlimited full `' + name + '` depth comes with DC Hub Developer — '
-                    + 'relay the link in human_url to your human.'
-                  : 'Full-fidelity trial answer ' + _mtCall + ' of ' + _cap
-                    + ' today — keep or summarize these results for your human. '
-                    + 'After the last free call this tool returns a preview with '
-                    + 'one-click payment options ($10 one-time = 1,000 credits'
-                    + (_bound ? '' : '; free: bind_email lifts your daily cap')
-                    + ').',
+                // ladder stage 1: only a grandfathered Starter key is metered here;
+                // unlimited depth on the pair is Developer now, not Pro. The wording says
+                // "Full-fidelity" only when nothing was withheld from THIS payload.
+                note: _meteredTrialNote({
+                  paidTaste: _paidTaste, call: _mtCall, cap: _cap, name, bound: _bound,
+                  limited: (() => { try { const g = _attrDetectGating(_mtParsed); return !!(g && g.withholding_proven); } catch (_) { return false; } })(),
+                }),
               };
               // ★ r-lastfree-ask (2026-10-03, owner-approved; DCHUB_LASTFREE_ASK=0 kills it):
               // the LAST free full grid answer of the day, for a keyed free or identified
