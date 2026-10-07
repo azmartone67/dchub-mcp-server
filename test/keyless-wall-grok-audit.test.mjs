@@ -133,7 +133,7 @@ describe('F8: the keyless Pro hint says who acts first', () => {
     expect(h.startsWith('Pro opens this tool; retry')).toBe(false);
     expect(h).toMatch(/^after your user starts Pro, retry the same call; until then use the free headline above\./);
     expect(contentText(r)).toContain('(agent: ' + h + ')');
-    expect(contentText(r)).toMatch(/Free headline: overall BUILD/);   // the headline it points at is there
+    expect(contentText(r)).toMatch(/Free headline: weakest factor /);   // the headline it points at is there
   });
 
   it('a Pro wall with no headline does not point at one', async () => {

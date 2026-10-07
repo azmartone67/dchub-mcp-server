@@ -222,7 +222,7 @@ describe('a contract-arm caller (Grok) keeps the same first line', () => {
     const line = firstLine(r);
     expect(line).toContain(RELAY_SHORT);
     expect(line).toContain('DC Hub Pro');
-    expect(line).toMatch(/rates this site \w+ overall/);      // the verdict band, no figure
+    expect(line).toMatch(/names .+ as the weakest factor on this site/);      // the weakest factor, no verdict, no figure
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.show_to_user).toBe(true);
     expect(r.structuredContent.copy_version).toBe('v12');
@@ -239,7 +239,7 @@ describe('the one-number preview (MCP-1)', () => {
   it('a contract-arm wall carries the MEASURED substations_50km count in the person line, never a score or MW', async () => {
     const r = await call('analyze_site', LOC, seat({ platform: 'grok', client_name_raw: 'grok' }));
     const line = firstLine(r);
-    expect(line).toMatch(/rates this site BUILD overall; 212 substations within 50 km\. DC Hub Pro has the full site analysis/);
+    expect(line).toMatch(/names market conditions as the weakest factor on this site; 212 substations within 50 km\. DC Hub Pro has the full site analysis/);
     expect(r.structuredContent.user_message).toBe(line);
     for (const f of ['83.7', '5123.9']) expect(JSON.stringify(r)).not.toContain(f);
   });

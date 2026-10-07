@@ -203,7 +203,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     // copy v11: the band (owner 2026-09-30) plus ONE measured count (MCP-1: nearby.substations_50km, a
     // count the free preview keeps) — never a score. The weakest factor stays in
     // structuredContent.limiting_factor below, not in the line a person reads.
-    expect(said).toMatch(/^DC Hub rates this site CAUTION overall; 12 substations within 50 km\. DC Hub Pro has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Start a 7-day Pro trial: https:\/\/\S+$/);
+    expect(said).toMatch(/^DC Hub names gas pipeline access as the weakest factor on this site; 12 substations within 50 km\. DC Hub Pro has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Start a 7-day Pro trial: https:\/\/\S+$/);
     expect(said).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(said).not.toMatch(/\$10|credits/);
     expect(ctaUrls(r.body)).toHaveLength(1);
@@ -214,7 +214,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     for (const n of ['62.4', '62', '40.5', '71.2', '4312.7', '7.91']) {
       expect(scrubbed).not.toMatch(new RegExp('(?<![\\d.])' + n.replace('.', '\\.') + '(?![\\d])'));
     }
-    expect(r.sc.verdict).toBe('CAUTION');
+    expect(r.sc.verdict).toBeUndefined();   // a site score is not a DCPI verdict
     expect(r.sc.limiting_factor.factor).toBe('gas pipeline access');
     expect(r.sc.error).toBeUndefined();
     expect(r.sc.agent_hints.error).toBe('pro_required');
@@ -225,7 +225,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     const r = await callAs('claude-ai', 'compare_sites', { locations: '33.45,-112.07;39.04,-77.48' });
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
-    expect(said).toMatch(/^DC Hub rates site 1 CAUTION, site 2 CAUTION\. DC Hub Pro has the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site\. Start a 7-day Pro trial: https:\/\/\S+$/);
+    expect(said).toMatch(/^DC Hub rates site 1 \(weakest: [^)]+\), site 2 \(weakest: [^)]+\)\. DC Hub Pro has the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site\. Start a 7-day Pro trial: https:\/\/\S+$/);
     expect(ctaUrls(r.body)).toHaveLength(1);
   });
 });

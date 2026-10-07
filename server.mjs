@@ -8232,7 +8232,7 @@ export function _lpWallResult(name, headline = null) {
   // answer is a headline on every arm: the verdict band, the NAME of the
   // weakest factor and counts. No score, factor band, MW, distance or
   // substation name.
-  const _b2 = name === 'analyze_site' && !!(headline && headline.verdict && !headline.sites);
+  const _b2 = name === 'analyze_site' && !!(headline && (headline.verdict || headline.weakest_factor) && !headline.sites);
   const payload = {
     error: 'pro_required', tool: name, _gated: true, _wall: true, required_plan: 'pro',
     ..._pcLpHeadlineFields(headline),
@@ -8245,7 +8245,7 @@ export function _lpWallResult(name, headline = null) {
       ...(headline.site_counts ? { site_counts: headline.site_counts } : {}),
     } : {}),
     message: _b2
-      ? '`analyze_site` without a key returns the verdict band, the weakest factor and counts. '
+      ? '`analyze_site` without a key returns the weakest factor and counts. '
         + 'A free key adds factor bands and substation distance bands: call `claim_free_key`. '
         + 'Scores and figures are Pro.'
       : `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
@@ -8468,7 +8468,7 @@ export async function _lpWallResultV11(name, headline = null) {
   const out = await _withWallUserLine(base, name, { offer: 'pro', longUrl, headline, keepBody: false });
   if (out === base) return base;
   // B2: a text-only client must see the weakest factor too, not just the band.
-  const _wf = name === 'analyze_site' && headline && !headline.sites && headline.verdict
+  const _wf = name === 'analyze_site' && headline && !headline.sites && (headline.verdict || headline.weakest_factor)
     ? _b2WeakestFactorLine(headline) : '';
   if (_wf && out.content && out.content[0] && typeof out.content[0].text === 'string') {
     const t = out.content[0].text;
@@ -8549,7 +8549,7 @@ export function _b2KeylessHeadlineOn() {
 // description). With the switch off the gate is the pre-B2 wall and CM-4 lock,
 // so the description says so (A3's original sentence). The source literal keeps
 // the B2 sentence, so scripts/sync-tools-manifest.mjs still reads a literal.
-export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the verdict band and weakest factor; '
+export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the weakest factor and counts; '
   + 'a free key adds factor bands and substation distance bands; scores and figures are Pro.';
 export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns no site data; a free key returns '
   + 'verdict bands, factor names and counts; scores and figures are Pro.';
@@ -8579,7 +8579,7 @@ export function _b2FactorBands(parsed) {
 }
 function _b2WeakestFactorLine(h) {
   return h && h.weakest_factor
-    ? 'Free headline: verdict ' + h.verdict + ', weakest factor ' + h.weakest_factor
+    ? 'Free headline: ' + (h.verdict ? 'verdict ' + h.verdict + ', ' : '') + 'weakest factor ' + h.weakest_factor
       + '. Scores and figures are Pro.'
     : '';
 }
@@ -24985,7 +24985,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx())) }] },
       'find_sites'));
 
-  trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and weakest factor; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: "Score 33.45,-112.07 for 100 MW."',
+  trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: "Score 33.45,-112.07 for 100 MW."',
     { candidate_id: S.describe('PREFERRED for queue survivors: a cand_… id from get_refined_queue — coordinates come from the FROZEN mint (lat/lon args are ignored; zero transcription drift; expired ids fail closed with candidate_expired). See dchub.cloud/docs/candidate-lifecycle'),
       lat: N.describe('Site latitude in decimal degrees (-90 to 90; required unless candidate_id or location given), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180; required unless candidate_id or location given), e.g. -112.07'),

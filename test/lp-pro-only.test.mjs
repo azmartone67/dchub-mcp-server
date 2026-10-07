@@ -206,8 +206,8 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     // counts; test/b2-analyze-site-keyless-headline.test.mjs). Still no figure,
     // no finer label, no carrier name. Every other Land & Power tool: no band.
     const _b2 = tool === 'analyze_site';
-    if (_b2) expect(sc.verdict).toBe('BUILD');
-    for (const f of [...K.figures, 'Excellent site', ...(_b2 ? [] : ['BUILD']), 'Amazon.com', 'validated']) {
+    if (_b2) { expect(sc.verdict).toBeUndefined(); expect(sc.limiting_factor.factor).toBeTruthy(); }
+    for (const f of [...K.figures, 'Excellent site', 'BUILD', 'Amazon.com', 'validated']) {
       expect(text).not.toContain(f);
     }
     // MCP-1 + relay contract (2026-10-07): every keyless Land & Power wall carries ONE human link family,

@@ -197,7 +197,7 @@
     },
     {
       "name": "analyze_site",
-      "description": "Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band and weakest factor; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\""
+      "description": "Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\""
     },
     {
       "name": "get_composite_site_score",
