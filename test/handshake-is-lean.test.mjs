@@ -59,7 +59,7 @@ describe('initialize instructions', () => {
   it('are under 2,000 chars, keep the essentials, and point at the full guide', async () => {
     const { instructions } = await open('lean-test');
     expect(instructions.length).toBeLessThan(2000);
-    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'unlock_more_data', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
+    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'MUST CALL', 'Use this whenever', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     expect(instructions).toContain('7-day Pro trial');

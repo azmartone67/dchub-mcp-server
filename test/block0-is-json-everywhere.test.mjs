@@ -47,6 +47,7 @@ describe('_splitHumanBlock', () => {
 describe('wiring', () => {
   it('the step sits inside _flagUpstreamError, which stays outermost', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(src).toContain('async (args, extra) => _flagUpstreamError(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
+    // r-relay-contract (2026-10-06): the relay chokepoint wraps the split step, still inside the flag.
+    expect(src).toContain('async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
   });
 });

@@ -16,9 +16,8 @@ This power connects the `dchub` MCP server, a remote Streamable HTTP server at
 - For more calls, the `claim_free_key` tool issues a free key for the session.
   `bind_email` ties that key to an email so it can be recovered later with
   `recover_my_key`.
-- If a result is a partial preview and the user wants the complete data, call
-  `unlock_more_data` and relay the checkout link it returns. Do not invent the
-  rows that were not returned.
+- If a result is a partial preview and the user wants the complete data, the result
+  carries `human_url`. First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.
 
 ## Step 1: Pick the tool
 

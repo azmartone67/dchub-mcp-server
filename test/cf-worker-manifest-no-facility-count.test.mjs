@@ -305,7 +305,8 @@ describe('the rebuilt worker carries no baked facility count', () => {
     const INJECT = {
       // growth-plan rewrite (mcp#616): the descriptions no longer name the map,
       // so the count goes in front of a stable opening clause instead.
-      search_facilities: [/^Call when the user wants existing data centers/,
+      // (r-relay-contract 2026-10-06: a routing line now precedes it, so the anchor is no longer ^)
+      search_facilities: [/Call when the user wants existing data centers/,
         'Search 24,600+ global data center facilities across 170+ countries. Call when the user wants existing data centers'],
       semantic_search: [/the global facility map/, '24,600+ discovered facilities'],
       why_dchub: [/Returns DC Hub(?:\\'|')s differentiators/, "Returns DC Hub's differentiators (24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets)"],

@@ -33,8 +33,8 @@ describe('instructions lead', () => {
 });
 
 describe('routing lines', () => {
-  it('cover exactly ten tools and prepend once', () => {
-    expect(Object.keys(ROUTING_LINES)).toHaveLength(10);
+  it('cover exactly fifteen tools and prepend once', () => {
+    expect(Object.keys(ROUTING_LINES)).toHaveLength(15);
     const d = withRoutingLine('rank_markets', 'Ranks markets.');
     expect(d).toBe(`${ROUTING_LINES.rank_markets} Ranks markets.`);
     expect(withRoutingLine('rank_markets', d)).toBe(d);

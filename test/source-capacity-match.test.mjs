@@ -360,7 +360,7 @@ describe('walls and errors on match', () => {
     expect(sc.next_steps).toEqual(['unlock_more_data', 'request_capacity_intro']);
     expect(sc.next_steps_note).toContain('(1 per calendar month, UTC)');
     expect(sc.next_steps_note).toContain('resets on 2026-10-01');
-    expect(sc.next_steps_note).toContain('unlock_more_data');
+    expect(sc.next_steps_note).toContain('human_url');   // r-relay-contract: the link to relay, not a tool to call
     expect(sc.next_steps_note).toContain('stays free');
     expect(sc.next_steps_note).not.toContain('higher plan');
   });

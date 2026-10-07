@@ -63,8 +63,10 @@ beforeAll(async () => { fence = fenceNetwork(); H = await startHarness(); });
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
 describe('the output line', () => {
-  it('points at the pricing page and states no monthly price', () => {
-    expect(_paidPlansOutputLine()).toBe('Paid plans: ' + PRICING_URL);
+  it('points at the human_url link (never a pricing page) and states no monthly price', () => {
+    // r-relay-contract (2026-10-06): no gate output names a pricing page; the unlock is human_url.
+    expect(_paidPlansOutputLine()).toBe('Paid plans: on the page behind the human_url link');
+    expect(_paidPlansOutputLine()).not.toMatch(/pricing|plans\//i);
     expect(PRICING_URL).toBe('https://dchub.cloud/pricing');
     expect(_paidPlansOutputLine()).not.toMatch(MONTHLY);
   });
@@ -125,7 +127,8 @@ describe('tool OUTPUT on the auto-mint path', () => {
         const found = JSON.stringify(sc).match(/"upgrade_instructions":"((?:[^"\\]|\\.)*)"/);
         expect(found, `${tool}: no upgrade_instructions — the path under test did not run`).toBeTruthy();
         const text = JSON.parse('"' + found[1] + '"');
-        expect(text).toContain('Paid plans: https://dchub.cloud/pricing');
+        expect(text).toContain('Paid plans: on the page behind the human_url link');
+        expect(text).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
         expect(text).not.toMatch(/\$49\/mo|\$99\/mo/);
         expect(text).not.toMatch(MONTHLY);
       } finally {
@@ -212,7 +215,8 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
   it('/mcp unlock_more_data description: the plans line, and it matches the committed manifest', async () => {
     const tools = (await H.list('/mcp')).msg.result.tools;
     const live = tools.find((t) => t.name === 'unlock_more_data').description;
-    expect(live).toContain('no subscription). Paid plans: https://dchub.cloud/pricing.');
+    expect(live).toContain('no subscription). Paid plans: on the page behind the human_url link.');
+    expect(live).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
     expect(live).toContain('$10 one-time = 1,000 API credits');
     const committed = MANIFEST.tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toBe(committed);
@@ -228,7 +232,8 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     const instr = (await H.post('/mcp', { jsonrpc: '2.0', id: 77, method: 'resources/read',
       params: { uri: 'dchub://instructions' } }, sh)).msg.result.contents[0].text;
     expect(instr).toContain('💳 $10 one-time = 1,000 API credits');
-    expect(instr).toContain('; Paid plans: https://dchub.cloud/pricing) to relay to your human');
+    expect(instr).toContain('; Paid plans: on the page behind the human_url link) to relay to your human');
+    expect(instr).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
   });
 });
 
