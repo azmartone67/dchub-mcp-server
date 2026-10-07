@@ -111,11 +111,12 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     expect(line).toContain(RELAY_SHORT);
     expect(line).not.toMatch(RELAY);
     expect(line).toContain('DC Hub Pro');
+    expect(line).toContain('7-day Pro trial');
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(sc.user_message).toBe(line);
     expect(sc.show_to_user).toBe(true);
-    expect(sc.copy_version).toBe('v11');
-    const href = line.match(/https:\/\/\S+?(?= — )/)[0];
+    expect(sc.copy_version).toBe('v12');
+    const href = line.match(/https:\/\/\S+/)[0];
     expect(href).toMatch(RELAY_SHORT_RE);                          // Grok F5 test
     expect(sc.upgrade_url || sc.upgrade.upgrade_url).toBe(href);   // a later step nests it under upgrade
     expect(sc.for_your_human.url).toBe(href);                      // one link in both channels
@@ -146,7 +147,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     const { headers, body, signal } = relayPosts[0];
     expect(headers['X-Internal-Key']).toBe('wall-user-line-test-internal-key');
     expect(body.relay_url).toMatch(new RegExp('^' + RELAY.source + '$'));
-    expect(body).toMatchObject({ tool: 'analyze_site', host: 'cursor', copy_version: 'v11' });
+    expect(body).toMatchObject({ tool: 'analyze_site', host: 'cursor', copy_version: 'v12' });
     expect(signal).toBeInstanceOf(AbortSignal);
     expect(firstLine(r)).toContain(RELAY_SHORT);
   });
@@ -185,7 +186,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
       expect(shortPosts.length).toBe(1);
       const { headers, body } = shortPosts[0];
       expect(headers['X-Internal-Key']).toBe('wall-user-line-test-internal-key');
-      expect(body).toMatchObject({ plan: 'pro', tool: 'analyze_site', host: 'cursor', copy_version: 'v11' });
+      expect(body).toMatchObject({ plan: 'pro', tool: 'analyze_site', host: 'cursor', copy_version: 'v12' });
       expect(body.ref).toMatch(/^sess-wall-user-line-/);
       for (const mode of ['http500', 'junk', 'throw']) {
         shortMode = mode;
@@ -224,7 +225,7 @@ describe('a contract-arm caller (Grok) keeps the same first line', () => {
     expect(line).toMatch(/rates this site \w+ overall/);      // the verdict band, no figure
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.show_to_user).toBe(true);
-    expect(r.structuredContent.copy_version).toBe('v11');
+    expect(r.structuredContent.copy_version).toBe('v12');
     expect(r.structuredContent.paywall_contract).toBe('grok');
     expect(r.content[0].text).not.toContain('Tell the user:');
     expect(r.structuredContent.for_your_human.url).toBe(RELAY_SHORT);
@@ -238,7 +239,7 @@ describe('the one-number preview (MCP-1)', () => {
   it('a contract-arm wall carries the MEASURED substations_50km count in the person line, never a score or MW', async () => {
     const r = await call('analyze_site', LOC, seat({ platform: 'grok', client_name_raw: 'grok' }));
     const line = firstLine(r);
-    expect(line).toMatch(/rates this site BUILD overall; 212 substations within 50 km\. For the full site analysis/);
+    expect(line).toMatch(/rates this site BUILD overall; 212 substations within 50 km\. DC Hub Pro has the full site analysis/);
     expect(r.structuredContent.user_message).toBe(line);
     for (const f of ['83.7', '5123.9']) expect(JSON.stringify(r)).not.toContain(f);
   });
@@ -249,7 +250,7 @@ describe('the one-number preview (MCP-1)', () => {
     process.env.DCHUB_B2_SITE_HEADLINE = '0';
     try {
       const r = await call('analyze_site', LOC, seat());      // cursor: no contract arm, handler not run
-      expect(firstLine(r)).toMatch(/^For the full site analysis, your user can open https:\/\/\S+ — it needs DC Hub Pro\.$/);
+      expect(firstLine(r)).toMatch(/^DC Hub Pro has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Start a 7-day Pro trial: https:\/\/\S+$/);
     } finally { delete process.env.DCHUB_B2_SITE_HEADLINE; }
   });
 
@@ -260,7 +261,7 @@ describe('the one-number preview (MCP-1)', () => {
     expect(mk({ value: 7, label: W.COUNT_LABEL })).toContain('BUILD overall; 7 substations within 50 km.');
     for (const bad of [{ value: 7.5, label: W.COUNT_LABEL }, { value: -1, label: W.COUNT_LABEL },
                        { value: 7, label: 'free text' }, { value: '7', label: W.COUNT_LABEL }, null]) {
-      expect(mk(bad), JSON.stringify(bad)).toContain('BUILD overall. For the full');
+      expect(mk(bad), JSON.stringify(bad)).toContain('BUILD overall. DC Hub Pro has');
     }
   });
 });
@@ -322,10 +323,10 @@ describe('the offer is truthful per tool', () => {
 });
 
 describe('should-mint-claim carries the copy version', () => {
-  it('sends cv=v11 beside the session and tool', async () => {
+  it('sends cv=v12 beside the session and tool', async () => {
     await S._ctxALS.run(seat(), async () => S.shouldMintClaim(getSid(), 'analyze_site'));
     expect(claimUrls.length).toBe(1);
-    expect(new URL(claimUrls[0]).searchParams.get('cv')).toBe('v11');
+    expect(new URL(claimUrls[0]).searchParams.get('cv')).toBe('v12');
   });
   function getSid() { return 'sess-wall-user-line-claim-' + (++seatN); }
 });
@@ -340,7 +341,7 @@ describe('the other walls', () => {
     expect(line).toContain('DC Hub Pro');
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
-    expect(r.structuredContent.copy_version).toBe('v11');
+    expect(r.structuredContent.copy_version).toBe('v12');
     expect(r.content[0].text).not.toMatch(/go\/c\/[A-Za-z0-9._-]*\.[0-9a-f]{32}/);   // no second pro ask
     expect(r.content[0].text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\//g)).toHaveLength(1);
     expect(r.isError).toBe(true);   // default transport unchanged
@@ -364,7 +365,7 @@ describe('the other walls', () => {
     expect(line).toMatch(/usage capacity/);
     expect(line).not.toMatch(/unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
-    expect(r.structuredContent.copy_version).toBe('v11');
+    expect(r.structuredContent.copy_version).toBe('v12');
     expect(shortPosts[0].body.plan).toBe('metered');
   });
 });
