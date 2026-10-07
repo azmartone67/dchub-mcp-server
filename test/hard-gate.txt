@@ -253,6 +253,7 @@ test/place-name-iso.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs
+test/plan-step-session-id.test.mjs
 test/planner-eval.test.mjs
 test/planner-geography-scope.test.mjs
 test/platform-desc-sync.test.mjs
