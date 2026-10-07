@@ -46,3 +46,27 @@ describe('unlock_more_data after a Pro-only wall', () => {
     delete process.env.MPP_ENABLED;
   });
 });
+
+describe('unlock_more_data after a Pro wall: one link in both channels (Grok 2026-10-07)', () => {
+  it('structuredContent carries only the trial and the pack, and the same link as the text line', () => {
+    _noteProWall('sess-one-link', 'analyze_site', 'https://dchub.cloud/u/fghrpj');
+    const r = run('sess-one-link', {});
+    const sc = r.structuredContent;
+    const first = r.content[0].text.split('\n')[0];
+    expect(first).toContain('https://dchub.cloud/u/fghrpj');
+    expect(sc.for_your_human.url).toBe('https://dchub.cloud/u/fghrpj');
+    expect(sc.human_url).toBe('https://dchub.cloud/u/fghrpj');
+    expect(sc.plans.map((p) => p.id)).toEqual(['pro_trial', 'credits']);
+    expect(sc.plans[0].checkout_url).toBe('https://dchub.cloud/u/fghrpj');
+    expect(sc.recommended).toBe('pro_trial');
+    expect(JSON.stringify(sc.plans)).not.toMatch(/developer|"pro"/);
+  });
+  it('no short link on the wall: the trial relay is the same URL in text and structure', () => {
+    _noteProWall('sess-long', 'analyze_site');
+    const r = run('sess-long', {});
+    const url = r.structuredContent.for_your_human.url;
+    expect(url).toContain('/upgrade/h/');
+    expect(r.content[0].text.split('\n')[0]).toContain(url);
+    expect(r.structuredContent.plans[0].checkout_url).toBe(url);
+  });
+});
