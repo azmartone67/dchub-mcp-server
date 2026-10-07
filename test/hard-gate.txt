@@ -255,6 +255,7 @@ test/platform-header.test.mjs
 test/platform-recall.test.mjs
 test/portfolio-nudge.test.mjs
 test/power-timeline-class.test.mjs
+test/preview-count-returned.test.mjs
 test/pricing-canon-and-go-links.test.mjs
 test/pro-trial-offer.test.mjs
 test/pro-wall-stamp.test.mjs
