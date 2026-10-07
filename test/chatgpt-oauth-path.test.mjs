@@ -104,6 +104,23 @@ describe('/mcp/chatgpt/oauth challenges an unauthenticated caller', () => {
     });
   }
 
+  it('DCHUB_CHATGPT_OAUTH_OWN_RESOURCE=1: the challenge names the path\'s own metadata (RFC 9728 §5.1)', async () => {
+    const OWN = 'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource/mcp/chatgpt/oauth"';
+    process.env.DCHUB_CHATGPT_OAUTH_OWN_RESOURCE = '1';
+    try {
+      for (const body of [INIT, CALL]) {
+        const r = await post('/mcp/chatgpt/oauth', body);
+        expect(r.status).toBe(401);
+        expect(r.headers.get('www-authenticate')).toContain(OWN);
+        expect(r.headers.get('www-authenticate')).not.toContain(PRM);
+      }
+      // the frozen path is still never challenged
+      expect((await post('/mcp/chatgpt', INIT)).headers.get('www-authenticate')).toBeNull();
+    } finally { delete process.env.DCHUB_CHATGPT_OAUTH_OWN_RESOURCE; }
+    // flag off again: back to the /mcp document
+    expect((await post('/mcp/chatgpt/oauth', INIT)).headers.get('www-authenticate')).toContain(PRM);
+  });
+
   it('the frozen /mcp/chatgpt is never challenged', async () => {
     for (const body of [INIT, CALL]) {
       const r = await post('/mcp/chatgpt', body);

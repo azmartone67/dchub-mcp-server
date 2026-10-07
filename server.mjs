@@ -111,6 +111,7 @@ import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mj
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_PATH, DIRECTORY_OAUTH_SOURCE, DIRECTORY_OAUTH_CHALLENGE, DIRECTORY_OAUTH_MESSAGE,
+         DIRECTORY_OAUTH_RESOURCE, directoryOauthChallenge as _directoryOauthChallenge,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults } from './lib/chatgpt-directory.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
@@ -28210,7 +28211,10 @@ app.post(MCP_PATHS, async (req, res) => {
         // (this branch only runs when no x-api-key header was sent).
         // r-claude-directory: /mcp/claude also accepts tokens issued for its own resource.
         const _wid = await resolveWorkosBearer(_bearer,
-          _claudeProfile ? { audiences: [_WORKOS_AUD, CLAUDE_RESOURCE] } : undefined);
+          _claudeProfile ? { audiences: [_WORKOS_AUD, CLAUDE_RESOURCE] }
+            // ChatGPT OAuth: accept tokens minted for its own resource too, so
+            // flipping DCHUB_CHATGPT_OAUTH_OWN_RESOURCE never strands a client.
+            : (_normPath(req) === DIRECTORY_OAUTH_PATH ? { audiences: [_WORKOS_AUD, DIRECTORY_OAUTH_RESOURCE] } : undefined));
         if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; _bearerResolved = true; }
       }
     }
@@ -28259,7 +28263,7 @@ app.post(MCP_PATHS, async (req, res) => {
         && (req.body?.method === 'initialize' || req.body?.method === 'tools/call')
         && _workosEnabled()
         && !/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CHATGPT_OAUTH_DISABLE || ''))) {
-      res.set('WWW-Authenticate', DIRECTORY_OAUTH_CHALLENGE);
+      res.set('WWW-Authenticate', _directoryOauthChallenge());
       console.log(`[oauth] 401 challenge → ${DIRECTORY_OAUTH_PATH} (no credential, method=${req.body?.method})`);
       return res.status(401).json({
         jsonrpc: '2.0',
