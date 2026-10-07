@@ -126,6 +126,7 @@ test/gated-first-link-is-upgrade-h.test.mjs
 test/gated-text-carries-human-link.test.mjs
 test/gated-tool-cta.test.mjs
 test/gated-unlock-is-tokenized.test.mjs
+test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
