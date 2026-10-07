@@ -127,7 +127,7 @@ describe('B2 keyless analyze_site: verdict band, weakest factor, counts', () => 
   it('returns the headline with no numeric score (contract arm off)', async () => {
     const r = await call('analyze_site', LOC, seat('free'));
     const sc = r.structuredContent;
-    expect(sc.verdict).toBe('BUILD');
+    expect(sc.verdict).toBeUndefined();                         // site score is not a DCPI verdict
     expect(sc.limiting_factor.factor).toBe('market conditions');
     expect(sc.limiting_factor.band).toBeUndefined();            // factor bands need a key
     expect(sc.interpretation_label).toBeUndefined();            // finer than the band
@@ -137,9 +137,9 @@ describe('B2 keyless analyze_site: verdict band, weakest factor, counts', () => 
     for (const f of SCORES) expect(a).not.toContain(f);
     expect(a).not.toMatch(/HOLCOMBE|WESTRIDGE|WESTWING|107655|test_sub_/);
     expect(a).not.toMatch(/overall_score|"scores"/);
-    expect(textOf(r)).toContain('BUILD');
+    expect(textOf(r)).not.toMatch(/\b(BUILD|CAUTION|AVOID)\b/);
     expect(textOf(r)).toContain('weakest factor market conditions');
-    expect(sc.message).toMatch(/verdict band, the weakest factor and counts/);
+    expect(sc.message).toMatch(/returns the weakest factor and counts/);
   });
 
   it('kill switch DCHUB_B2_SITE_HEADLINE=0: the plain wall again', async () => {
@@ -217,14 +217,14 @@ describe('B2 helpers', () => {
 });
 
 describe('B2 description matches behaviour (flips A3)', () => {
-  const DESC_B2 = 'Keyless returns the verdict band and weakest factor; a free key adds factor bands '
+  const DESC_B2 = 'Keyless returns the weakest factor and counts; a free key adds factor bands '
     + 'and substation distance bands; scores and figures are Pro.';
   it('analyze_site says keyless gets the headline, and keyless does', async () => {
     const d = TOOLS.analyze_site.description;
     expect(d).toContain(DESC_B2);
     expect(d).not.toMatch(/Keyless returns no site data/);
     const r = await call('analyze_site', LOC, seat('free'));
-    expect(r.structuredContent.verdict).toBeTruthy();   // the claim is true
+    expect(r.structuredContent.limiting_factor.factor).toBeTruthy();   // the claim is true
   });
 });
 
@@ -243,7 +243,7 @@ describe('analyze_site description follows DCHUB_B2_SITE_HEADLINE', () => {
       const d = tools.analyze_site.description;
       expect(d).toContain(S.ANALYZE_SITE_ACCESS_PRE_B2);
       expect(d).not.toContain(S.ANALYZE_SITE_ACCESS_B2);
-      expect(d).not.toMatch(/Keyless returns the verdict band/);
+      expect(d).not.toMatch(/Keyless returns the weakest factor and counts/);
       const T = tools.analyze_site;
       const parsed = await T.inputSchema.safeParseAsync(LOC);
       const r = await S._ctxALS.run(seat('free'), () => T.handler(parsed.data, { signal: new AbortController().signal }));
