@@ -11815,6 +11815,40 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       + 'Call claim_free_key (no email) for the free tier, or unlock_more_data '
       + 'for full results.';
   }
+  _keylessGridDataHonesty(out, toolName);
+  return out;
+}
+
+// ★ Grok audit 2026-10-06, item 9: a keyless get_grid_data answered "You got the headline demand for PJM
+// (92178 MW @ …)" while demand_mw was null (this trimmer nulls every *_mw figure below Pro, and `message`
+// is a protected key, so the number leaked through the prose); its retry hints named get_grid_intelligence
+// (the backend builds one teaser for both grid tools) and its signup line said "email-only" (a free key
+// needs no email). The message now states what the payload holds, and every hint names get_grid_data and
+// claim_free_key. Runs after the mask, so it reads the state the caller actually receives.
+export function _keylessGridDataHonesty(out, toolName) {
+  if (toolName !== 'get_grid_data' || !out || typeof out !== 'object' || out.gated !== true
+      || typeof out.message !== 'string') return out;
+  const region = String(out.region || out.rto_code || '').toUpperCase();
+  const retry = 'get_grid_data' + (region ? ' with iso=' + region : '');
+  const tail = (/For fund-grade access[\s\S]*$/.exec(out.message) || [''])[0];
+  const claim = 'call claim_free_key (no email needed; adding one raises the daily limit), then retry ' + retry + '.';
+  if (out.demand_mw == null) {
+    out.message = 'Headline demand' + (region ? ' for ' + region : '') + ' is withheld on a keyless call. For the full answer, '
+      + claim + (tail ? ' ' + tail : '');
+  } else {
+    out.message = out.message.replace(/free dev key \(email-only signup, no credit card\)/,
+      'free key (claim_free_key: no email needed)');
+  }
+  if (out.agent_action && typeof out.agent_action === 'object') {
+    out.agent_action = { ...out.agent_action, then: 'Retry ' + retry + " with header 'X-API-Key: <api_key>'" };
+  }
+  if (out.email_capture && typeof out.email_capture === 'object') {
+    out.email_capture = { ...out.email_capture,
+      ...(typeof out.email_capture.url === 'string'
+        ? { url: out.email_capture.url.replace('tool=get_grid_intelligence', 'tool=get_grid_data') } : {}),
+      prompt: 'Ask your human: want a free key (no credit card) plus a reset-time notice? Drop your email at this URL: '
+        + 'it turns this anonymous probe into a tracked account they can manage and upgrade.' };
+  }
   return out;
 }
 
