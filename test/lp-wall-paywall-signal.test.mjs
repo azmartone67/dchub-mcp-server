@@ -32,6 +32,8 @@ async function run(path, extra = {}) {
     signals: hits.filter((h) => h.path === '/api/v1/mcp/signal-paywall' && h.body),
     tracks: hits.filter((h) => h.path === '/api/v1/mcp/track' && h.body && h.body.tool && h.body.event !== 'recipe_lifecycle'),
     paidHits: hits.filter((h) => h.path === '/api/v1/mcp/track-paid-hit'),
+    claimChecks: hits.filter((h) => h.path === '/api/v1/mcp/should-mint-claim'),
+    sid,
   };
 }
 
@@ -64,18 +66,28 @@ describe('keyless Pro wall on the Land & Power tools', () => {
       }
     }
   });
-  it('writes the signal only: no paid-hit count (the high-intent stage is unchanged)', () => {
-    expect(runs.keyless.paidHits.length).toBe(0);
+  it('also registers the session for the high-intent stage: a paid hit for the caller, then a claim mint attempt', () => {
+    // human_acted joins a relay open to a high-intent row with a minted claim; without these two calls a click on
+    // the wall's /upgrade/h link could never count (the join the funnel needs, 2026-10-07).
+    const mine = runs.keyless.paidHits.filter((h) => h.body && h.body.session_id === runs.keyless.sid);
+    for (const t of LP) {
+      expect(mine.map((h) => h.body.tool), `a paid hit for ${t}`).toContain(t);
+    }
+    expect(runs.keyless.claimChecks.length, 'a claim mint attempt followed').toBeGreaterThanOrEqual(LP.length);
   });
 });
 
 describe('where the wall must not fire', () => {
-  it('a Pro key is not walled and writes no lp_wall signal', () => {
+  it('a Pro key is not walled and writes no lp_wall signal, paid hit or claim attempt', () => {
     const lpSignals = runs.pro.signals.filter((s) => s.body.message_shown === 'lp_wall');
     expect(lpSignals).toEqual([]);
+    expect(runs.pro.paidHits).toEqual([]);
+    expect(runs.pro.claimChecks).toEqual([]);
     expect(runs.pro.tracks.map((r) => r.body.status)).not.toContain('pro_wall');
   });
-  it('/mcp/claude (kept out of the relay readout) writes no signal', () => {
+  it('/mcp/claude (kept out of the relay readout) writes no signal, paid hit or claim attempt', () => {
     expect(runs.claude.signals).toEqual([]);
+    expect(runs.claude.paidHits).toEqual([]);
+    expect(runs.claude.claimChecks).toEqual([]);
   });
 });
