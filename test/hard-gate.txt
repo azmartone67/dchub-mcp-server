@@ -168,6 +168,7 @@ test/incentives-class.test.mjs
 test/index-name-canon.test.mjs
 test/infra-projects-tool.test.mjs
 test/init-clientinfo-version-error.test.mjs
+test/inline-full-structured-data.test.mjs
 test/instructions-canon-parity.test.mjs
 test/instructions-compose.test.mjs
 test/instructions-constraint-coverage.test.mjs
