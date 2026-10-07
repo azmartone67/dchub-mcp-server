@@ -166,7 +166,7 @@ import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS,
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
-import { composeGridProvenance } from './lib/grid-provenance.mjs';
+import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack } from './lib/agent-outreach.mjs';
@@ -23439,6 +23439,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };
+      // G-2 (2026-10-06): name the upstreams this comparison was composed from (lib/grid-provenance.mjs).
+      const _cmpProv = composeCompareProvenance(valid, giList, cmp, qsnap);
+      if (_cmpProv) out.provenance = _cmpProv;
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
