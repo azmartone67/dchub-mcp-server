@@ -150,7 +150,8 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
          tagRelayLinksInResult as _pcTagLinks, isHostedPlatform as _pcHosted,
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
-         lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand } from './lib/paywall-contract.mjs';
+         lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand,
+         firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
@@ -19342,6 +19343,9 @@ function trackedTool(srv, name, description, schema, handler) {
                 const _fullTextRaw = (_trialResult && _trialResult.content && _trialResult.content[0] && _trialResult.content[0].text) || _trialText;
                 const _boundedTaste = _boundTasteText(_fullTextRaw, name);   // r-fiber-taste-cap: bound large payloads (fiber 23.5MB) to a top-N tease
                 const _fullText = _boundedTaste.text;
+                let _inlineData = null;
+                try { _inlineData = _pcFirstJson(_fullText); } catch (_) { _inlineData = null; }
+                if (!_inlineData || typeof _inlineData !== 'object' || Array.isArray(_inlineData)) _inlineData = null;
                 // r-map-upsell: the trial-taste "wow" moment is the best time to
                 // point a free agent at the live Land & Power map (the visual
                 // payoff of the data it just got) + the Developer upgrade.
@@ -19414,6 +19418,12 @@ function trackedTool(srv, name, description, schema, handler) {
                   // no competing CTA before it. No claim → text unchanged.
                   content: [{ type: 'text', text: composeHumanCta(_hiClaim && _hiClaim.human_url, _fullText + _mapText + _autoMintText + _hiText) }],
                   structuredContent: _collapseEnvelope(_dedupeAliasKeys({
+                    // The answer itself. content[0].text carries it (JSON + appended
+                    // prose), but a client that reads structuredContent as THE result
+                    // got an envelope with no rows, and the contract wrapper then
+                    // stamped completeness from that empty object. Envelope keys below
+                    // win any collision.
+                    ...(_inlineData || {}),
                     trial_taste: true,
                     inline_full: true,
                     ..._preSC,
