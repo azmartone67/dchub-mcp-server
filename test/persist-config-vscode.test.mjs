@@ -126,19 +126,10 @@ describe('persist_config carries a canonical VS Code snippet', () => {
     // 2026-10-06 (item 7): the handshake instructions are lean and name no client; the list of clients
     // with a snippet is in the long form, the resource dchub://instructions, which they point at.
     expect((JSON.parse(json).result || {}).instructions || '').toContain('dchub://instructions');
-    const sid2 = res.headers.get('mcp-session-id');
-    const h2 = { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-session-id': sid2 };
-    await fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST', headers: h2, body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) });
-    const res2 = await fetch(`http://127.0.0.1:${PORT}/mcp`, {
-      method: 'POST',
-      headers: h2,
-      body: JSON.stringify({ jsonrpc: '2.0', id: 10, method: 'resources/read', params: { uri: 'dchub://instructions' } }),
-    });
-    const raw2 = await res2.text();
-    const json2 = raw2.includes('data: ')
-      ? raw2.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('')
-      : raw2;
-    const instructions = (JSON.parse(json2).result || {}).contents?.[0]?.text || '';
+    // The long form is served as the resource dchub://instructions (S._capacityInstructions(S._INSTRUCTIONS),
+    // byte for byte while no listings are live). Read from the export, not over HTTP: this hard-gate file
+    // stays on loopback, and a resources/read session reaches the production backend lazily.
+    const instructions = S._capacityInstructions(S._INSTRUCTIONS);
     expect(instructions.length, 'instructions came back empty — guard would be vacuous')
       .toBeGreaterThan(1000);
 
