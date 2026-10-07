@@ -8309,8 +8309,11 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
 // takes a relay URL; /u/<code> 302s to that exact URL, query string included, and the
 // /upgrade/h GET it lands on logs the open. FAIL-OPEN to the long link, byte for byte: kill
 // switch (DCHUB_WALL_SHORT_LINK=0 or DCHUB_RELAY_SHORT_LINK=0), no internal key, non-2xx,
-// junk answer or the ~300 ms budget running out. Copy, offer, arm and link count are untouched.
-const _RELAY_SHORT_TIMEOUT_MS = 300;
+// junk answer or the ~1 s budget running out. Copy, offer, arm and link count are untouched.
+// 2026-10-07 (Grok item 4): 300 ms -> 1000 ms. Prod logs 10-03..10-07: 26 '[wall-relay-short] failed:
+// The operation was aborted due to timeout', and no backend-status or unusable-answer failures, so the
+// fallback to the long link was the budget, not the mint. The sibling _shortRelayLink allows 1500 ms.
+const _RELAY_SHORT_TIMEOUT_MS = 1000;
 const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&]{1,200})?$/;
 export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch) {
   try {

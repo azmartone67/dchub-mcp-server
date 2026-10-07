@@ -140,7 +140,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     for (const f of ['83.7', '88.1', '71.3', '95.4', '60.6', '72.2', '39.0412345']) expect(all).not.toContain(f);
   });
 
-  it('F5: mints the /u link for the EXACT signed relay URL, with the internal key and a <=300 ms budget', async () => {
+  it('F5: mints the /u link for the EXACT signed relay URL, with the internal key and an abort signal', async () => {
     const r = await call('analyze_site', LOC, seat());
     expect(shortPosts.length).toBe(0);                  // no checkout short link on the relay path
     expect(relayPosts.length).toBe(1);
