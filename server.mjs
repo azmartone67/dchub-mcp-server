@@ -23453,7 +23453,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       const out = {
         isos: valid,
         comparison,
-        as_of: new Date().toISOString(),
+        // G-2 (2026-10-07, audit rule 2): this was `as_of: new Date().toISOString()`, the SERVE
+        // time under a data-date name. The data dates are on the per-ISO sections and in
+        // provenance; this is when the comparison was assembled.
+        retrieved_at: new Date().toISOString(),
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };

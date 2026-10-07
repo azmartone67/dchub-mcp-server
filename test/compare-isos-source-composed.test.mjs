@@ -127,4 +127,20 @@ describe('compare_isos through the handler', () => {
     failEricot = false;
     expect(p.sources.map((s) => s.id)).toEqual(['eia930_pjm', 'dcpi', 'iso_queues']);
   }, 30_000);
+
+  it('the body carries retrieved_at (serve time, zoned), not a data-date-named as_of', async () => {
+    // G-2 (2026-10-07, audit rule 2): the body used to say as_of = new Date(), the SERVE time.
+    const r = await call({ isos: 'PJM,ERCOT' }, KEYED);
+    const body = JSON.parse(r.content[0].text);
+    expect(body).not.toHaveProperty('as_of');
+    expect(r.structuredContent).not.toHaveProperty('as_of');
+    expect(Number.isNaN(Date.parse(body.retrieved_at))).toBe(false);
+    expect(body.retrieved_at).toMatch(/Z$/);
+    expect(Math.abs(Date.now() - Date.parse(body.retrieved_at))).toBeLessThan(120_000);
+    // the data date is the stalest stamp, never the serve time
+    const p = r.structuredContent.provenance;
+    expect(p.as_of).toBeTruthy();
+    expect(p.as_of).not.toBe(body.retrieved_at);
+    expect(Date.parse(p.as_of)).toBeLessThan(Date.parse(body.retrieved_at) - 3_600_000);
+  }, 30_000);
 });
