@@ -90,9 +90,12 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
   it('CONTROL: /mcp keeps the full-catalog lead sentence unchanged', async () => {
     const init = await post('/mcp', INIT);
     const instr = init.json.result.instructions;
-    expect(instr).toMatch(new RegExp(`\\b${TOTAL} tools over\\b`));
+    // 2026-10-06 (item 7): the handshake is the lean text, which states the count once as "(N tools)";
+    // the full-catalog "N tools over" sentence is in the long form, the resource dchub://instructions.
+    expect(instr).toMatch(new RegExp(`\\(${TOTAL} tools\\)`));
+    expect(S._INSTRUCTIONS).toMatch(new RegExp(`\\b${TOTAL} tools over\\b`));
     expect(instr).not.toContain('curated subset');
-    expect(instr).toBe(S._INSTRUCTIONS);
+    expect(instr).toBe(S._INSTRUCTIONS_LEAN);
   });
 
   it('grokServedCount counts only names the catalog carries (serves short, never long)', () => {

@@ -123,7 +123,13 @@ describe('persist_config carries a canonical VS Code snippet', () => {
     const json = raw.includes('data: ')
       ? raw.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('')
       : raw;
-    const instructions = (JSON.parse(json).result || {}).instructions || '';
+    // 2026-10-06 (item 7): the handshake instructions are lean and name no client; the list of clients
+    // with a snippet is in the long form, the resource dchub://instructions, which they point at.
+    expect((JSON.parse(json).result || {}).instructions || '').toContain('dchub://instructions');
+    // The long form is served as the resource dchub://instructions (S._capacityInstructions(S._INSTRUCTIONS),
+    // byte for byte while no listings are live). Read from the export, not over HTTP: this hard-gate file
+    // stays on loopback, and a resources/read session reaches the production backend lazily.
+    const instructions = S._capacityInstructions(S._INSTRUCTIONS);
     expect(instructions.length, 'instructions came back empty — guard would be vacuous')
       .toBeGreaterThan(1000);
 

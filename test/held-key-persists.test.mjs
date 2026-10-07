@@ -137,6 +137,6 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     // base unchanged while no listings are live); the tail contract is the same.
     // Since 2026-09-29 /mcp/grok may rewrite the BASE's lead tool count
     // (instructionsRewrite); the tail is still appended after it, unrewritten.
-    expect(SRC).toMatch(/: _capacityInstructions\(_INSTRUCTIONS\)\) \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
+    expect(SRC).toMatch(/: _capacityInstructions\(_INSTRUCTIONS_LEAN\)\) \+ \(\(typeof instructionsTail === 'string'\) \? instructionsTail : ''\)/);
   });
 });

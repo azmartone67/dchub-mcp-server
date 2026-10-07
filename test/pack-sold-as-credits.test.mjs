@@ -214,7 +214,12 @@ describe('the pack is sold as credits', () => {
       jsonrpc: '2.0', id: 1, method: 'initialize',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'pack-credits-test', version: '1.0' } },
     });
-    const instructions = JSON.parse(json).result?.instructions || '';
+    // 2026-10-06 (item 7): the credit rule is in the long form (resource dchub://instructions); the
+    // lean handshake carries no pack price, only the pointer.
+    expect(JSON.parse(json).result?.instructions || '').toContain('dchub://instructions');
+    const s0 = await openSession({});
+    const rr = await post({ 'mcp-session-id': s0.sid }, { jsonrpc: '2.0', id: 9, method: 'resources/read', params: { uri: 'dchub://instructions' } });
+    const instructions = JSON.parse(rr.json).result.contents[0].text;
     expect(instructions).toContain('1,000 API credits — ' + S._creditRuleText());
     const s = await openSession({});
     const list = await post({ 'mcp-session-id': s.sid }, { jsonrpc: '2.0', id: 2, method: 'tools/list' });

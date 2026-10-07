@@ -205,7 +205,7 @@ describe('summary client', () => {
   it('an unarmed cache (a module import, a test) never fetches', async () => {
     expect(S._capacitySummary.peek()).toBeNull();
     await call('find_sites', { state: 'TX' });
-    expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS);
+    expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS_LEAN);
     expect(summaryCalls()).toHaveLength(0);
   });
 
@@ -585,16 +585,21 @@ describe('session instructions', () => {
   for (const [label, arrange] of DORMANT) {
     it(`dormant, ${label}: initialize carries the instructions byte for byte`, async () => {
       await arrange();
-      expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS);
+      expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS_LEAN);
       const client = await connect(S.createServer(null, ' TAIL'));
-      expect(client.getInstructions()).toBe(`${S._INSTRUCTIONS} TAIL`);
+      expect(client.getInstructions()).toBe(`${S._INSTRUCTIONS_LEAN} TAIL`);
+      // the long form is the resource; dormant, it too is the original byte for byte
+      expect((await client.readResource({ uri: 'dchub://instructions' })).contents[0].text).toBe(S._INSTRUCTIONS);
     });
   }
 
   it('live: the sentence gains the clause, and removing it restores the original exactly', async () => {
     await withSummary(LIVE);
     const client = await connect(S.createServer(null, ' TAIL'));
-    const ins = client.getInstructions();
+    // 2026-10-06 (item 7): the handshake is the lean text, which has no CAPACITY SOURCE sentence to
+    // carry the live clause; the long form is the resource, and it carries it exactly as before.
+    expect(client.getInstructions()).toBe(`${S._INSTRUCTIONS_LEAN} TAIL`);
+    const ins = (await client.readResource({ uri: 'dchub://instructions' })).contents[0].text + ' TAIL';
     expect(ins).toContain(`each listing stamped with when it was last updated (${L.CAPACITY_INSTR_LIVE_CLAUSE}).`);
     expect(ins.replace(` (${L.CAPACITY_INSTR_LIVE_CLAUSE})`, '')).toBe(`${S._INSTRUCTIONS} TAIL`);
     // ★2026-09-29: the clause names where the numbers are, never the numbers.
@@ -795,7 +800,7 @@ describe('kill switch: DCHUB_CAPACITY_POINTERS=off', () => {
       expect(pointerOf(r), name).toBeNull();
       expect(pointerLines(r), name).toEqual([]);
     }
-    expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS);
+    expect(S.createServer().server._instructions).toBe(S._INSTRUCTIONS_LEAN);
     expect(pasteLine(attachCapacity({ tools: 91 }, { ok: true, status: 200, text: JSON.stringify(LIVE) })))
       .not.toContain('Capacity Source');
     calls = [];
@@ -807,7 +812,7 @@ describe('kill switch: DCHUB_CAPACITY_POINTERS=off', () => {
     delete process.env[KILL];
     S._capacitySummary.disarm();
     expect(pointerOf(await call('find_sites', { state: 'TX' }))).toBeTruthy();
-    expect(S.createServer().server._instructions).toContain('(live now: ');
+    expect((await (await connect(S.createServer())).readResource({ uri: 'dchub://instructions' })).contents[0].text).toContain('(live now: ');
   });
 
   it('reads the usual spellings of off, and anything else as on', () => {

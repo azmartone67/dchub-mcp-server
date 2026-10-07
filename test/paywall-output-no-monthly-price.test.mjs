@@ -219,7 +219,14 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
   });
 
   it('/mcp instructions keep the $10 pack and point at the pricing page', async () => {
-    const instr = (await H.init('/mcp')).msg.result.instructions;
+    // 2026-10-06 (item 7): the pack line and plans pointer moved to the long form, served as the
+    // resource dchub://instructions; the lean handshake states no price at all.
+    const init = await H.init('/mcp');
+    expect(init.msg.result.instructions).not.toMatch(/\$\d/);
+    const sh = { 'mcp-session-id': init.headers.get('mcp-session-id') };
+    await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, sh);
+    const instr = (await H.post('/mcp', { jsonrpc: '2.0', id: 77, method: 'resources/read',
+      params: { uri: 'dchub://instructions' } }, sh)).msg.result.contents[0].text;
     expect(instr).toContain('💳 $10 one-time = 1,000 API credits');
     expect(instr).toContain('; Paid plans: https://dchub.cloud/pricing) to relay to your human');
   });
