@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 
 const KEY = 'dch_live_' + 'c0ffee11'.repeat(4);
-let S, stub, srv, PORT, claimBodies = [];
+let S, stub, srv, PORT, claimBodies = [], claimHeaders = [];
 const prev = {};
 beforeAll(async () => {
   await new Promise((resolve) => {
@@ -18,7 +18,7 @@ beforeAll(async () => {
       req.on('data', (d) => { buf += d; });
       req.on('end', () => {
         res.setHeader('content-type', 'application/json');
-        if (p === '/api/v1/keys/claim') { try { claimBodies.push(JSON.parse(buf)); } catch (_) {} res.end(JSON.stringify({ success: true, api_key: KEY, tier: 'free' })); return; }
+        if (p === '/api/v1/keys/claim') { try { claimBodies.push(JSON.parse(buf)); claimHeaders.push(req.headers); } catch (_) {} res.end(JSON.stringify({ success: true, api_key: KEY, tier: 'free' })); return; }
         res.end('{}');
       });
     });
@@ -36,7 +36,7 @@ afterAll(async () => {
   for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
 
-async function post(h, body) {
+async function post(h, body, extra) {
   const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...h }, body: JSON.stringify(body) });
   const raw = await res.text();
@@ -65,5 +65,22 @@ describe('claim_free_key sends the canonical client_name to the claim endpoint',
   it('an empty name falls back to mcp-agent, a plain name is untouched', async () => {
     expect((await claimAs('   ')).client_name).toBe('mcp-agent');
     expect((await claimAs('grokbot-firstcall-audit-2026-10-06')).client_name).toBe('grokbot-firstcall-audit-2026-10-06');
+  });
+});
+
+describe('claim_free_key forwards the real caller IP in a header Railway does not rewrite', () => {
+  it('sends X-DC-Client-IP (and X-Internal-Key, which is what lets the backend trust it)', async () => {
+    claimHeaders = [];
+    const init = await fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'x-dc-client-ip': '203.0.113.77' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'ip-test', version: '1' } } }) });
+    const sid = init.headers.get('mcp-session-id');
+    await init.text();
+    const h = { 'mcp-session-id': sid, 'x-dc-client-ip': '203.0.113.77' };
+    await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });
+    await post(h, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'claim_free_key', arguments: { client_name: 'ip-forward-check' } } });
+    expect(claimHeaders.length).toBeGreaterThan(0);
+    expect(claimHeaders[0]['x-dc-client-ip']).toBe('203.0.113.77');
+    expect(claimHeaders[0]['x-internal-key']).toBeTruthy();
   });
 });

@@ -6274,6 +6274,11 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // (split(',')[0]); a later proxy hop only APPENDS, so the agent IP stays first.
   // Fail-safe: if absent/wrong, dedupe falls back to today's egress behaviour.
   if (c.client_ip)  headers['X-Forwarded-For'] = c.client_ip;
+  // ★ Grok audit 2026-10-06, item 8 (measured against production): Railway rewrites X-Forwarded-For at its
+  // edge, so the line above never reached the backend: every MCP-door claim was keyed by THIS server's
+  // shared egress IP and could not match the same caller's REST claim. X-DC-Client-IP is a custom header
+  // Railway leaves alone; the backend honours it only because this request also carries X-Internal-Key.
+  if (c.client_ip)  headers['X-DC-Client-IP'] = c.client_ip;
   try {
     const resp = await fetch(url.toString(), {
       method: opts.method || 'POST',
