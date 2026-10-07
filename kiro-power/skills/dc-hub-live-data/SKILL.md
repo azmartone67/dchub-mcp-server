@@ -17,7 +17,7 @@ This power connects the `dchub` MCP server, a remote Streamable HTTP server at
   `bind_email` ties that key to an email so it can be recovered later with
   `recover_my_key`.
 - If a result is a partial preview and the user wants the complete data, the result
-  carries `human_url`. First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.
+  carries `human_url`. First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.
 
 ## Step 1: Pick the tool
 

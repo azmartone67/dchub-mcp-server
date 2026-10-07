@@ -30,7 +30,7 @@ deliberately not restated here (see "No numbers in this file", below).
 
 When an answer is gated or a preview, the result carries `human_url` (also
 `for_your_human.url`): the one link your human opens to unlock the rest. Relay it exactly:
-First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.
+First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.
 
 Per-client config, including the two that silently fail:
 
