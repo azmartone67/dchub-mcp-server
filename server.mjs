@@ -27907,7 +27907,7 @@ app.post(MCP_PATHS, async (req, res) => {
     const _claudeProfile = _dirProfile === CLAUDE_PROFILE;
     if (_dirProfile) {
       if (_claudeProfile) _installClaudeFilter(req, res);
-      else _installDirectoryFilter(req, res);
+      else _installDirectoryFilter(req, res, { identity: _normPath(req) === DIRECTORY_OAUTH_PATH });
       delete req.headers['mcp-session-id'];
     }
     // r-core-profile: /mcp/core is stateless too; a session id sent to it is ignored.

@@ -45,6 +45,7 @@ test/challenge-carries-human-line.test.mjs
 test/chatgpt-directory-probe-hard-wall.test.mjs
 test/chatgpt-directory-probe.test.mjs
 test/chatgpt-directory-resubmission.test.mjs
+test/chatgpt-oauth-identity-tier.test.mjs
 test/chatgpt-oauth-path.test.mjs
 test/chatgpt-openai-session-sid.test.mjs
 test/chatgpt-resubmission-round2.test.mjs
