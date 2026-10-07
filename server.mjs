@@ -166,6 +166,7 @@ import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS,
 // anti-inflation contract (as_of is read out of the data or reported
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
+import { resolveFacilityRef as _resolveFacilityRef } from './lib/facility-ref.mjs';
 import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE } from './lib/attribution.mjs';
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
@@ -22930,7 +22931,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       include_nearby: B.describe('Include peer facilities near this one in the response (default true)'),
       include_power: B.describe('Include power capacity detail (total/used MW) in the response (default true)') },
     async (a) => {
-      const fid = a.facility_id || a.slug || a.id || a.name || '';
+      let fid = a.facility_id || a.slug || a.id || a.name || '';
+      // A name in words ("Equinix DA1") is not an id or slug: resolve it through search.
+      const _hit = await _resolveFacilityRef(fid, (q) => callAPI('/api/v1/facilities', { query: q, limit: 20 }, { internal: true }));
+      if (_hit) fid = _hit.slug;
       const main = await callAPI(`/api/v1/facilities/${fid}`, { include_nearby: a.include_nearby, include_power: a.include_power });
       // The plural facility handler doesn't join on-site fiber carriers; the singular
       // /api/v1/facility/<slug> endpoint does — merge them so the promised carrier list lands.
@@ -25640,10 +25644,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       if (!a.facility_id) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'facility_id is required' }) }], isError: true };
       }
+      const _hit = await _resolveFacilityRef(a.facility_id, (q) => callAPI('/api/v1/facilities', { query: q, limit: 20 }, { internal: true }));
       return {
         content: [{ type: 'text',
           text: JSON.stringify(await callAPI('/api/v1/mcp/tools/score_facility', {
-            facility_id: a.facility_id,
+            facility_id: _hit ? _hit.slug : a.facility_id,
             weighting:   a.weighting || 'balanced',
           }))
         }]
