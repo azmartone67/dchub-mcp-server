@@ -52,6 +52,7 @@ test/chatgpt-resubmission-round3.test.mjs
 test/chatgpt-toolset-frozen.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
+test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
 test/claude-arrival-counter.test.mjs
