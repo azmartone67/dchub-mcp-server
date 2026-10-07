@@ -71,6 +71,7 @@ test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/compare-isos-source-composed.test.mjs
 test/comparison-symmetry.test.mjs
+test/composed-provenance-caveats.test.mjs
 test/composite-shell.test.mjs
 test/connect-query-key-reaches-track.test.mjs
 test/connect-url-install-artifact.test.mjs
