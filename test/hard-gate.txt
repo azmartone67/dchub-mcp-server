@@ -205,6 +205,7 @@ test/manifest-description-heals.test.mjs
 test/market-intel-json-first-block.test.mjs
 test/market-pricing-public.test.mjs
 test/mcp-packs.test.mjs
+test/metered-note-not-full-fidelity.test.mjs
 test/mint-forwards-caller-ip.test.mjs
 test/mint-sends-paywall-arm.test.mjs
 test/monthly-quota-gateway.test.mjs
