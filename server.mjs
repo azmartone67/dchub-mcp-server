@@ -24430,6 +24430,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       // r-claude-directory: a plan run from /mcp/claude keeps its steps in the
       // Claude profile (no key minting, out of the relay readout), same mechanism.
       if (c && c.profile === CLAUDE_PROFILE) headers[CLAUDE_LOOPBACK_HEADER] = _mintClaudeLoopbackToken();
+      // The step belongs to the caller's session: its signals and tracking rows carry that id, not 'no-session'.
+      { const _pst = _mintPlanSessionToken(c && c.session_id); if (_pst) headers[PLAN_SESSION_HEADER] = _pst; }
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
@@ -27481,6 +27483,32 @@ export function _consumeClaudeLoopbackToken(tok, now = Date.now()) {
   _claudeLoopbackTokens.delete(tok);
   return exp >= now;
 }
+// execute_plan steps are sessionless loopback calls, so every paywall signal and tracking row a step wrote
+// carried session 'no-session' / null (2026-10-06: all plan-step walls collapsed into one phantom session in the
+// funnel's distinct-session count, and the step calls could not be joined to the caller). Forwarding the caller's
+// mcp-session-id header is NOT an option: a live id routes the request into the caller's own in-flight session
+// transport. Instead the plan hands each step a single-use in-process token that names the caller's session; the
+// step's handler resolves it (loopback peer only) and uses it as the call's session_id, exactly what a native
+// call from that session carries. A token that is missing, expired, reused or sent from outside is ignored, so
+// no outside caller can borrow a session id.
+const PLAN_SESSION_HEADER = 'x-dchub-plan-session';
+const _planSessionTokens = new Map();   // token -> { sid, exp }
+export function _mintPlanSessionToken(sid, now = Date.now()) {
+  if (typeof sid !== 'string' || !sid) return null;
+  if (_planSessionTokens.size > 5000) {
+    for (const [t, v] of _planSessionTokens) if (v.exp < now) _planSessionTokens.delete(t);
+  }
+  const tok = randomUUID() + randomUUID();
+  _planSessionTokens.set(tok, { sid, exp: now + CORE_LOOPBACK_TTL_MS });
+  return tok;
+}
+export function _consumePlanSessionToken(tok, now = Date.now()) {
+  if (typeof tok !== 'string' || !tok) return null;
+  const v = _planSessionTokens.get(tok);
+  if (v === undefined) return null;
+  _planSessionTokens.delete(tok);
+  return v.exp >= now ? v.sid : null;
+}
 function _isLoopbackPeer(req) {
   const a = String(req?.socket?.remoteAddress || '');
   return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
@@ -27663,6 +27691,11 @@ app.post(MCP_PATHS, async (req, res) => {
     delete req.headers[CLAUDE_LOOPBACK_HEADER];
     const _claudeLoopback = !_dirProfile && !_coreProfile && !_coreLoopback && _isLoopbackPeer(req)
       && _consumeClaudeLoopbackToken(_claudeLoopbackTok);
+    // An execute_plan step: the caller's session id, from a single-use token minted in this process. Read once and
+    // removed so it can never ride further; only honoured from this process.
+    const _planSessTok = req.headers[PLAN_SESSION_HEADER];
+    delete req.headers[PLAN_SESSION_HEADER];
+    const _planLoopbackSid = _isLoopbackPeer(req) ? _consumePlanSessionToken(_planSessTok) : null;
     const sessionId = req.headers['mcp-session-id'];
     const userAgent = req.headers['user-agent'] || '';
     // The QA marker header (QA_MARKER_HEADER). Read for the trial-mint skip
@@ -28671,11 +28704,11 @@ app.post(MCP_PATHS, async (req, res) => {
         developer_id: validation.developer_id || null,
         email: validation.email || null,
         // stale id → still the backend funnel key; none → ChatGPT's conversation id (r-oai-session-sid)
-        session_id: sessionId || _openaiSessionSid(body) || null,
+        session_id: sessionId || _planLoopbackSid || _openaiSessionSid(body) || null,
         // ★ Recovered raw clientInfo.name — without this the telemetry row's
         // client_name falls back to the generic platform and the identity view
         // classifies the call as 'mcp'.
-        client_name_raw: _recallClientName(sessionId),
+        client_name_raw: _recallClientName(sessionId || _planLoopbackSid),
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
