@@ -225,6 +225,7 @@ test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
 test/oauth-funnel-stages.test.mjs
 test/oauth.test.mjs
+test/one-free-tier-rule-one-pro-list.test.mjs
 test/one-human-cta.test.mjs
 test/one-of-published.test.mjs
 test/one-of-required.test.mjs
