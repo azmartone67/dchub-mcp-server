@@ -8788,6 +8788,24 @@ function _isPaidDepthTier(t) {
   // Developer ($49) and up get full depth. founding==pro (tier_registry.py).
   return ['paid', 'enterprise', 'developer', 'starter', 'pro', 'founding'].includes(String(t || '').toLowerCase());
 }
+// A backend `count_returned` counts the rows of the list it returned. Once a preview trim has cut that list, the
+// number no longer matches the rows on the wire (get_retirement_headroom free preview: count_returned 5, three
+// rows; Grok 2026-10-06). The honest full length stays in the list's own `_<field>_total_in_<tier>` marker, which
+// is the documented contract, so count_returned is brought back to the rows actually present. Only when exactly
+// that list was trimmed: the marker equals the backend's number, and the list is now shorter than it.
+function _alignReturnedCount(parsed, out, markerSuffix) {
+  const n = parsed && parsed.count_returned;
+  if (typeof n !== 'number' || !Number.isFinite(n) || typeof out.count_returned !== 'number') return out;
+  const re = new RegExp('^_(.+)_total_in_' + markerSuffix + '$');
+  for (const mk of Object.keys(out)) {
+    const m = re.exec(mk);
+    if (m && out[mk] === n && Array.isArray(out[m[1]]) && out[m[1]].length < n) {
+      out.count_returned = out[m[1]].length;
+      break;
+    }
+  }
+  return out;
+}
 // Like trimForTrial but keeps the TOP-N of each array (a more generous taste
 // than the anon top-1) and records the honest full count in a side field.
 function _teaseDepth(parsed, keep) {
@@ -8813,7 +8831,7 @@ function _teaseDepth(parsed, keep) {
       out[k] = v;                                    // identifiers, verdicts, summary strings stay
     }
   }
-  return out;
+  return _alignReturnedCount(parsed, out, 'developer');
 }
 // Build the depth-teased response (or null if the payload isn't JSON to trim).
 // Exported for test/anon-seat-fence.test.mjs — the tease envelope must carry
@@ -11815,7 +11833,7 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       + 'Call claim_free_key (no email) for the free tier, or unlock_more_data '
       + 'for full results.';
   }
-  return out;
+  return _alignReturnedCount(parsed, out, 'pro');
 }
 
 // r-unlock (2026-06-16): quantified deprivation. "Showing 1 of N" converts far
@@ -24129,6 +24147,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       const capped = rows.length >= FEED_CAP;
       const floorMw = (capped && rows.length) ? _r2(rows[rows.length - 1].capacity_mw_max) : null;
       const overall = _stats(feeders);
+      // The cap is on the RAW read (capacity-DESC, so complete at or above floorMw). A min_mw at or above that
+      // floor makes the FILTERED set complete, which the output never said (Grok 2026-10-06: min_mw 19.93 still
+      // showed the unfiltered floor 12.27 and "partial"). capacity_type does not change this: the cut is on
+      // capacity, across all types.
+      const filteredComplete = capped ? (minMw != null && floorMw != null && minMw >= floorMw) : true;
+      const capHeadlineNote = !capped ? ''
+        : filteredComplete
+          ? `; min_mw ${minMw} is at or above the read's floor (${floorMw} MW), so this filtered set is complete`
+          : `; totals describe only the top ${FEED_CAP} feed rows by capacity (complete at or above ${floorMw} MW), so the median is not the area's median`;
 
       const out = {
         query: {
@@ -24141,7 +24168,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         // bus_headroom rows are substation buses, not feeders — don't call them
         // feeders just because they share a table.
         headline: overall
-          ? `${overall.feeders} ${(Object.keys(byType).length === 1 && byType.bus_headroom) ? 'transmission bus record' : 'distinct published feeder'}${overall.feeders === 1 ? '' : 's'}, best ${overall.max_mw} MW`
+          ? `${overall.feeders} ${(Object.keys(byType).length === 1 && byType.bus_headroom) ? 'transmission bus record' : 'distinct published feeder'}${overall.feeders === 1 ? '' : 's'}, best ${overall.max_mw} MW${capHeadlineNote}`
           : 'No published feeder hosting capacity matched this query.',
         capacity_by_type: byType,
         totals: overall,
@@ -24152,7 +24179,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           sample_complete: !capped,
           ...(capped ? {
             capacity_floor_mw: floorMw,
-            truncation_note: `The feed returns rows capacity-DESC and capped this read at ${FEED_CAP} rows, so it is COMPLETE at or above ${floorMw} MW and partial below it. max_mw is exact; median_mw describes only the returned head, not the whole territory. Narrow the radius or set min_mw at/above the floor for a complete answer.`,
+            // capacity_floor_mw is the floor of the RAW read, before min_mw and capacity_type. Whether YOUR
+            // filtered set is complete is its own field.
+            filtered_set_complete: filteredComplete,
+            truncation_note: `The feed returns rows capacity-DESC and capped this read at ${FEED_CAP} rows, so it is COMPLETE at or above ${floorMw} MW and partial below it. max_mw is exact; median_mw describes only the returned head, not the whole territory. Narrow the radius or set min_mw at/above the floor for a complete answer. capacity_floor_mw is the floor of the raw read, before the min_mw and capacity_type filters; filtered_set_complete says whether the set you asked for is complete${minMw != null ? ` (min_mw ${minMw} ${filteredComplete ? 'is at or above' : 'is below'} the floor)` : ''}.`,
           } : {}),
           ...(unidentifiedRows ? { rows_without_feeder_id: unidentifiedRows } : {}),
           // State the ratio MEASURED on this read rather than asserting a
