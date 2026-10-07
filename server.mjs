@@ -166,7 +166,7 @@ import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS,
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
 import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
-import { composeGridProvenance } from './lib/grid-provenance.mjs';
+import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack } from './lib/agent-outreach.mjs';
@@ -4295,7 +4295,7 @@ const VARIANT_COPY = {
   claude: (name, claim, devUrl) =>
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
     'Claude cannot attach an API-key header, so SHOW YOUR HUMAN THIS LINK VERBATIM and ask them ' +
-    'to open it — one click, email only, free 7-day/50-call trial key: ' + claim.claim_url +
+    'to open it — one click, a free 7-day/50-call trial key: ' + claim.claim_url +
     ' — Self-serve Developer upgrade: ' + devUrl + '\n',
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
@@ -8788,6 +8788,24 @@ function _isPaidDepthTier(t) {
   // Developer ($49) and up get full depth. founding==pro (tier_registry.py).
   return ['paid', 'enterprise', 'developer', 'starter', 'pro', 'founding'].includes(String(t || '').toLowerCase());
 }
+// A backend `count_returned` counts the rows of the list it returned. Once a preview trim has cut that list, the
+// number no longer matches the rows on the wire (get_retirement_headroom free preview: count_returned 5, three
+// rows; Grok 2026-10-06). The honest full length stays in the list's own `_<field>_total_in_<tier>` marker, which
+// is the documented contract, so count_returned is brought back to the rows actually present. Only when exactly
+// that list was trimmed: the marker equals the backend's number, and the list is now shorter than it.
+function _alignReturnedCount(parsed, out, markerSuffix) {
+  const n = parsed && parsed.count_returned;
+  if (typeof n !== 'number' || !Number.isFinite(n) || typeof out.count_returned !== 'number') return out;
+  const re = new RegExp('^_(.+)_total_in_' + markerSuffix + '$');
+  for (const mk of Object.keys(out)) {
+    const m = re.exec(mk);
+    if (m && out[mk] === n && Array.isArray(out[m[1]]) && out[m[1]].length < n) {
+      out.count_returned = out[m[1]].length;
+      break;
+    }
+  }
+  return out;
+}
 // Like trimForTrial but keeps the TOP-N of each array (a more generous taste
 // than the anon top-1) and records the honest full count in a side field.
 function _teaseDepth(parsed, keep) {
@@ -8813,7 +8831,7 @@ function _teaseDepth(parsed, keep) {
       out[k] = v;                                    // identifiers, verdicts, summary strings stay
     }
   }
-  return out;
+  return _alignReturnedCount(parsed, out, 'developer');
 }
 // Build the depth-teased response (or null if the payload isn't JSON to trim).
 // Exported for test/anon-seat-fence.test.mjs — the tease envelope must carry
@@ -11816,7 +11834,7 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       + 'for full results.';
   }
   _keylessGridDataHonesty(out, toolName);
-  return out;
+  return _alignReturnedCount(parsed, out, 'pro');
 }
 
 // ★ Grok audit 2026-10-06, item 9: a keyless get_grid_data answered "You got the headline demand for PJM
@@ -11836,7 +11854,7 @@ export function _keylessGridDataHonesty(out, toolName) {
     out.message = 'Headline demand' + (region ? ' for ' + region : '') + ' is withheld on a keyless call. For the full answer, '
       + claim + (tail ? ' ' + tail : '');
   } else {
-    out.message = out.message.replace(/free dev key \(email-only signup, no credit card\)/,
+    out.message = out.message.replace(/free dev key \([^)]*\)/,   // the backend's older wording, whatever its parenthetical
       'free key (claim_free_key: no email needed)');
   }
   if (out.agent_action && typeof out.agent_action === 'object') {
@@ -12736,7 +12754,7 @@ async function _maybeEmbedValueClaim(result, name, c) {
     if (!claim || !claim.claim_url) return result;       // below threshold / bot / error → unchanged
     return _embedClaim(result, {
       url: claim.claim_url,
-      headline: `You have full ${name} data this session — claim a key so it persists and unlocks every paid tool (1-click, email-only).`,
+      headline: `You have full ${name} data this session — claim a free key so it persists (call claim_free_key: no email needed; adding one raises the daily limit).`,
       expires_at: claim.expires_at || null,
       relay: `Tell the user: claim full DC Hub access → ${claim.claim_url}`,
     });
@@ -18245,7 +18263,7 @@ function trackedTool(srv, name, description, schema, handler) {
         isError: true,
         content: [{
           type: 'text',
-          text: '\u{1F6AB} **Automated usage detected.**\n\nWe noticed this session is running the same 5-tool sweep that ~20 other anonymous sessions have run this week. We want to talk to whoever you are.\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or sign up** for a free dev key (60 sec, email only) → https://dchub.cloud/signup\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.'
+          text: '\u{1F6AB} **Automated usage detected.**\n\nWe noticed this session is running the same 5-tool sweep that ~20 other anonymous sessions have run this week. We want to talk to whoever you are.\n\nIf you\'re building a legitimate integration:\n- **Email** partner@dchub.cloud — we\'ll provision a real enterprise key, no charge for evaluation\n- **Or get a free key** (no email needed: the `claim_free_key` tool, or https://dchub.cloud/connect#free-key)\n\nIf you\'re benchmarking DC Hub vs competitors: we\'ll give you a benchmark key with extended quota — partner@dchub.cloud.\n\nAnonymous sweep blocked. Re-enable instantly with any X-API-Key.'
         }],
         structuredContent: {
           error: 'scraper_pattern_blocked',
@@ -23469,10 +23487,16 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       const out = {
         isos: valid,
         comparison,
-        as_of: new Date().toISOString(),
+        // G-2 (2026-10-07, audit rule 2): this was `as_of: new Date().toISOString()`, the SERVE
+        // time under a data-date name. The data dates are on the per-ISO sections and in
+        // provenance; this is when the comparison was assembled.
+        retrieved_at: new Date().toISOString(),
         source: 'DC Hub — EIA hourly RTO (fuel mix/demand) + DCPI (constraint/excess/TTP) + live interconnection queue',
         unsupported_ignored: unsupported.length ? unsupported : undefined,
       };
+      // G-2 (2026-10-06): name the upstreams this comparison was composed from (lib/grid-provenance.mjs).
+      const _cmpProv = composeCompareProvenance(valid, giList, cmp, qsnap);
+      if (_cmpProv) out.provenance = _cmpProv;
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
@@ -24163,6 +24187,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
       const capped = rows.length >= FEED_CAP;
       const floorMw = (capped && rows.length) ? _r2(rows[rows.length - 1].capacity_mw_max) : null;
       const overall = _stats(feeders);
+      // The cap is on the RAW read (capacity-DESC, so complete at or above floorMw). A min_mw at or above that
+      // floor makes the FILTERED set complete, which the output never said (Grok 2026-10-06: min_mw 19.93 still
+      // showed the unfiltered floor 12.27 and "partial"). capacity_type does not change this: the cut is on
+      // capacity, across all types.
+      const filteredComplete = capped ? (minMw != null && floorMw != null && minMw >= floorMw) : true;
+      const capHeadlineNote = !capped ? ''
+        : filteredComplete
+          ? `; min_mw ${minMw} is at or above the read's floor (${floorMw} MW), so this filtered set is complete`
+          : `; totals describe only the top ${FEED_CAP} feed rows by capacity (complete at or above ${floorMw} MW), so the median is not the area's median`;
 
       const out = {
         query: {
@@ -24175,7 +24208,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
         // bus_headroom rows are substation buses, not feeders — don't call them
         // feeders just because they share a table.
         headline: overall
-          ? `${overall.feeders} ${(Object.keys(byType).length === 1 && byType.bus_headroom) ? 'transmission bus record' : 'distinct published feeder'}${overall.feeders === 1 ? '' : 's'}, best ${overall.max_mw} MW`
+          ? `${overall.feeders} ${(Object.keys(byType).length === 1 && byType.bus_headroom) ? 'transmission bus record' : 'distinct published feeder'}${overall.feeders === 1 ? '' : 's'}, best ${overall.max_mw} MW${capHeadlineNote}`
           : 'No published feeder hosting capacity matched this query.',
         capacity_by_type: byType,
         totals: overall,
@@ -24186,7 +24219,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           sample_complete: !capped,
           ...(capped ? {
             capacity_floor_mw: floorMw,
-            truncation_note: `The feed returns rows capacity-DESC and capped this read at ${FEED_CAP} rows, so it is COMPLETE at or above ${floorMw} MW and partial below it. max_mw is exact; median_mw describes only the returned head, not the whole territory. Narrow the radius or set min_mw at/above the floor for a complete answer.`,
+            // capacity_floor_mw is the floor of the RAW read, before min_mw and capacity_type. Whether YOUR
+            // filtered set is complete is its own field.
+            filtered_set_complete: filteredComplete,
+            truncation_note: `The feed returns rows capacity-DESC and capped this read at ${FEED_CAP} rows, so it is COMPLETE at or above ${floorMw} MW and partial below it. max_mw is exact; median_mw describes only the returned head, not the whole territory. Narrow the radius or set min_mw at/above the floor for a complete answer. capacity_floor_mw is the floor of the raw read, before the min_mw and capacity_type filters; filtered_set_complete says whether the set you asked for is complete${minMw != null ? ` (min_mw ${minMw} ${filteredComplete ? 'is at or above' : 'is below'} the floor)` : ''}.`,
           } : {}),
           ...(unidentifiedRows ? { rows_without_feeder_id: unidentifiedRows } : {}),
           // State the ratio MEASURED on this read rather than asserting a
