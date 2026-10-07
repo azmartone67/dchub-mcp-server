@@ -1007,11 +1007,11 @@ export function _unlockOfferFor(c) {
 const _proWallSeen = new Map();   // session id -> { tool, at }
 const _PRO_WALL_SEEN_CAP = 20000;
 const _PRO_WALL_SEEN_MS = 30 * 60 * 1000;
-export function _noteProWall(sid, tool) {
+export function _noteProWall(sid, tool, link) {
   try {
     if (!sid || !tool) return;
     if (_proWallSeen.size > _PRO_WALL_SEEN_CAP) _proWallSeen.clear();
-    _proWallSeen.set(sid, { tool, at: Date.now() });
+    _proWallSeen.set(sid, { tool, at: Date.now(), link: (typeof link === 'string' && /^https:\/\/dchub\.cloud\/(u|upgrade\/h)\//.test(link)) ? link : '' });
   } catch (_) { /* a memo, never the answer */ }
 }
 export function _proTriggerTool(sid, reason) {
@@ -1021,6 +1021,14 @@ export function _proTriggerTool(sid, reason) {
     const m = sid ? _proWallSeen.get(sid) : null;
     return (m && Date.now() - m.at < _PRO_WALL_SEEN_MS) ? m.tool : null;
   } catch (_) { return null; }
+}
+// The link the session's own Pro wall showed (a /u/ code when it had one), so unlock_more_data
+// repeats it instead of minting a second, longer one (Grok 2026-10-07, item 3).
+export function _proWallLink(sid) {
+  try {
+    const m = sid ? _proWallSeen.get(sid) : null;
+    return (m && m.link && Date.now() - m.at < _PRO_WALL_SEEN_MS) ? m.link : '';
+  } catch (_) { return ''; }
 }
 
 export function _unlockMoreDataEnvelope(a) {
@@ -1093,9 +1101,20 @@ export function _unlockMoreDataEnvelope(a) {
   // Pro-only trigger: the person's line is the Pro trial (same copy as the wall), the pack follows
   // as API capacity and says it does not cover Pro tools.
   const _proLeadOn = !!(_proTool && _offer.pro);
+  // ★ Grok 2026-10-07, items 2-3: the text line and structuredContent must carry ONE link, and
+  // after a Pro wall that link is the trial (the wall's own /u/ code when it showed one). The
+  // plans list used to add Developer and Pro direct checkouts, and a ChatGPT connector relayed
+  // all four links from it.
   let _proLink = '';
+  let _proRelay = null;
   if (_proLeadOn) {
-    try { const _pr = buildHumanRelay(_proTool, _tier, _sid, { offer: PRO_TRIAL_OFFER }); _proLink = (_pr && _pr.url) || ''; } catch (_) {}
+    try { _proRelay = buildHumanRelay(_proTool, _tier, _sid, { offer: PRO_TRIAL_OFFER }); _proLink = (_proRelay && _proRelay.url) || ''; } catch (_) {}
+    const _seen = _proWallLink(_sid);
+    if (_seen) {
+      const _old = _proLink;
+      _proLink = _seen;
+      if (_proRelay) _proRelay = { ..._proRelay, url: _seen, markdown: _old ? String(_proRelay.markdown || '').split(_old).join(_seen) : _proRelay.markdown };
+    }
     if (!_proLink) _proLink = pro;
   }
   const human_message = !_ladder
@@ -1125,7 +1144,8 @@ export function _unlockMoreDataEnvelope(a) {
       relay_to_human: human_message,
       ...(_ladder ? { user_message: human_message.split('\n')[0].replace(HUMAN_FIRST_MARKER, '').trim(), show_to_user: true } : {}),
       // The /upgrade/h token the first line of human_message carries.
-      ...(_relay ? { for_your_human: _relay } : {}),
+      ...((_proLeadOn && _proRelay) ? { for_your_human: _proRelay, human_url: _proLink }
+        : _relay ? { for_your_human: _relay } : {}),
       ...(_mppOn ? { machine_pay: {
         protocol: 'stripe-mpp',
         machine_payable: true,
@@ -1145,17 +1165,19 @@ export function _unlockMoreDataEnvelope(a) {
       // human, so it shouldn't have to dig it out of machine_pay. Falls back
       // to 'credits' (the cheapest human option) when MPP is off.
       recommended: _mppOn ? 'mpp' : 'credits',
+      ...(_proLeadOn ? { recommended: 'pro_trial' } : {}),   // after a Pro wall the trial is the pick, not per-call MPP
       // r-dev-rung: the default SUBSCRIPTION for an agent is Developer. Pro is
       // the human screener's plan (Pro-only tools, site-grade coordinates).
-      recommended_subscription: _offer.developer ? 'developer' : (_offer.pro ? 'pro' : null),
+      recommended_subscription: _proLeadOn ? 'pro' : _offer.developer ? 'developer' : (_offer.pro ? 'pro' : null),
       plans: [
-        ...(_mppOn ? [{ id: 'mpp', label: '$0.50 per call — pay yourself, no human, no account',
+        ...(_proLeadOn ? [{ id: 'pro_trial', label: 'DC Hub Pro, 7-day trial', best_for: 'a human screening real sites — the Pro-only tools', checkout_url: _proLink }] : []),
+        ...((_mppOn && !_proLeadOn) ? [{ id: 'mpp', label: '$0.50 per call — pay yourself, no human, no account',
                         best_for: 'autonomous agents (no card-holder in the loop)',
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
         // ladder stage 1: only the rungs above this caller (_unlockOfferFor).
         ...(_offer.pack ? [{ id: 'credits',   label: '$10 one-time — 1,000 API credits (API capacity; Pro tools not included)', best_for: 'API capacity for one screen at full depth on every tool outside the Pro-only set; Pro tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
-        ...(_offer.developer ? [{ id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer }] : []),
-        ...(_offer.pro ? [{ id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro }] : []),
+        ...((_offer.developer && !_proLeadOn) ? [{ id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer }] : []),
+        ...((_offer.pro && !_proLeadOn) ? [{ id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro }] : []),
       ],
       free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
       // ladder stage 1: the pack and Developer open everything outside the Pro-only
@@ -8287,8 +8309,11 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
 // takes a relay URL; /u/<code> 302s to that exact URL, query string included, and the
 // /upgrade/h GET it lands on logs the open. FAIL-OPEN to the long link, byte for byte: kill
 // switch (DCHUB_WALL_SHORT_LINK=0 or DCHUB_RELAY_SHORT_LINK=0), no internal key, non-2xx,
-// junk answer or the ~300 ms budget running out. Copy, offer, arm and link count are untouched.
-const _RELAY_SHORT_TIMEOUT_MS = 300;
+// junk answer or the ~1 s budget running out. Copy, offer, arm and link count are untouched.
+// 2026-10-07 (Grok item 4): 300 ms -> 1000 ms. Prod logs 10-03..10-07: 26 '[wall-relay-short] failed:
+// The operation was aborted due to timeout', and no backend-status or unusable-answer failures, so the
+// fallback to the long link was the budget, not the mint. The sibling _shortRelayLink allows 1500 ms.
+const _RELAY_SHORT_TIMEOUT_MS = 1000;
 const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&]{1,200})?$/;
 export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch) {
   try {
@@ -8430,7 +8455,7 @@ export function _stampProWall(result, name, c) {
         out.content = [{ ...result.content[0], text: JSON.stringify({ ...parsed, ...stamp }) }, ...result.content.slice(1)];
       }
     } catch (_) { /* prose-bearing branch: structuredContent carries the stamp */ }
-    _noteProWall(c && c.session_id, name);
+    _noteProWall(c && c.session_id, name, link);
     return { result: out, wall: true };
   } catch (_) { return { result, wall: false }; }
 }
