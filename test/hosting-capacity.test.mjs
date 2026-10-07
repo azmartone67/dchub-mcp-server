@@ -151,6 +151,46 @@ describe('trap 2 — capacity-DESC truncation must be declared', () => {
   });
 });
 
+describe('a capped read: what the cap means for the set you asked for', () => {
+  // 4000 rows = the backend hard cap; capacity runs 100 down to 96.0, so the raw read is complete at or above 96.
+  const capped = () => Array.from({ length: 4000 }, (_, i) => vertex('F' + i, 100 - i / 1000, i));
+
+  it('control: the raw read is capped and its floor is 96', async () => {
+    routes.feeders = { feeders: capped(), count: 4000, limit: 4000 };
+    const { sc } = await call({ lat: 41.73, lon: -71.28 });
+    expect(sc.sample.sample_complete).toBe(false);
+    expect(sc.sample.capacity_floor_mw).toBe(96.0);
+  });
+  it('no min_mw: the filtered set is NOT complete, and the headline says the totals are the capped head', async () => {
+    routes.feeders = { feeders: capped(), count: 4000, limit: 4000 };
+    const { sc } = await call({ lat: 41.73, lon: -71.28 });
+    expect(sc.sample.filtered_set_complete).toBe(false);
+    expect(sc.headline).toMatch(/totals describe only the top 4000 feed rows by capacity \(complete at or above 96 MW\), so the median is not the area's median/);
+  });
+  it('min_mw at or above the floor: the filtered set IS complete, and the headline says so', async () => {
+    routes.feeders = { feeders: capped(), count: 4000, limit: 4000 };
+    const { sc } = await call({ lat: 41.73, lon: -71.28, min_mw: 98 });
+    expect(sc.sample.sample_complete, 'the RAW read is still capped').toBe(false);
+    expect(sc.sample.capacity_floor_mw, 'the floor still names the raw read').toBe(96.0);
+    expect(sc.sample.filtered_set_complete).toBe(true);
+    expect(sc.headline).toMatch(/min_mw 98 is at or above the read's floor \(96 MW\), so this filtered set is complete/);
+    expect(sc.headline).not.toMatch(/median is not the area's median/);
+    expect(sc.sample.truncation_note).toMatch(/min_mw 98 is at or above the floor/);
+  });
+  it('min_mw below the floor: still incomplete, and the note says it is below', async () => {
+    routes.feeders = { feeders: capped(), count: 4000, limit: 4000 };
+    const { sc } = await call({ lat: 41.73, lon: -71.28, min_mw: 50 });
+    expect(sc.sample.filtered_set_complete).toBe(false);
+    expect(sc.sample.truncation_note).toMatch(/min_mw 50 is below the floor/);
+    expect(sc.headline).toMatch(/median is not the area's median/);
+  });
+  it('an uncapped read says nothing about a cap', async () => {
+    const { sc } = await call({ lat: 41.73, lon: -71.28 });
+    expect('filtered_set_complete' in sc.sample).toBe(false);
+    expect(sc.headline).not.toMatch(/feed rows|filtered set is complete/);
+  });
+});
+
 describe('trap 3 — gen is not load', () => {
   it('splits by capacity_type and glosses each one in-band', async () => {
     routes.feeders = { feeders: [...VERTEX_FIXTURE, vertex('C', 9.9, 9, 'load')], count: 7, limit: 4000 };
