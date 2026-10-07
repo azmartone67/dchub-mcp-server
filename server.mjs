@@ -25929,7 +25929,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
           }
         }
       } catch (_) { /* fall through to the normal mint */ }
-      const cn = (a.client_name || '').toString().trim().slice(0, 120) || 'mcp-agent';
+      // ★ Grok audit 2026-10-06, item 8: the same canonical client_name the REST door stores (backend
+      // routes/claim_identity.normalize_client_name: control chars out, whitespace runs collapsed, trimmed,
+      // 80 chars), so a name claimed here and re-claimed over REST is one (client_name, ip) pair.
+      const cn = (a.client_name || '').toString().replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim() || 'mcp-agent';
       const body = { client_name: cn };
       if (a.email) {
         body.email = String(a.email).trim().slice(0, 200);
