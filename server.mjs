@@ -166,7 +166,7 @@ import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS,
 // anti-inflation contract (as_of is read out of the data or reported
 // UNMEASURED; verification counts are omitted rather than zero-filled; a
 // tier-gated partial says PARTIAL in the cite_as an agent quotes).
-import { stampEnvelopeAttribution as _stampAttribution } from './lib/attribution.mjs';
+import { stampEnvelopeAttribution as _stampAttribution, PEERINGDB_LICENSE as _ATTR_PEERINGDB_LICENSE } from './lib/attribution.mjs';
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
@@ -13175,8 +13175,7 @@ function _withProvenance(result, toolName) {
 // _source/_cite, the footer, the citation object, the provenance mirror) is
 // rewritten after the chain runs, so no stamping path can reintroduce it.
 export const PEERINGDB_TOOLS = new Set(['get_peering_intel']);
-export const PEERINGDB_LICENSE =
-  'PeeringDB data, not CC-BY. Subject to the PeeringDB Acceptable Use Policy; see https://dchub.cloud/data-sources';
+export const PEERINGDB_LICENSE = _ATTR_PEERINGDB_LICENSE;
 export function _relicensePeeringDB(result) {
   try {
     if (!result || typeof result !== 'object') return result;

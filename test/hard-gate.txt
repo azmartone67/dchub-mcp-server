@@ -187,6 +187,7 @@ test/large-load-passthrough.test.mjs
 test/late-key.test.mjs
 test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
+test/license-per-layer-envelope.test.mjs
 test/list-transactions-free-values.test.mjs
 test/listing-copy.test.mjs
 test/listing-no-monthly-price.test.mjs
