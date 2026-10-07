@@ -127,6 +127,7 @@ test/gated-first-link-is-upgrade-h.test.mjs
 test/gated-text-carries-human-link.test.mjs
 test/gated-tool-cta.test.mjs
 test/gated-unlock-is-tokenized.test.mjs
+test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
@@ -225,6 +226,7 @@ test/npm-publish-trusted.test.mjs
 test/oauth-first-copy.test.mjs
 test/oauth-funnel-stages.test.mjs
 test/oauth.test.mjs
+test/one-free-tier-rule-one-pro-list.test.mjs
 test/one-human-cta.test.mjs
 test/one-of-published.test.mjs
 test/one-of-required.test.mjs
