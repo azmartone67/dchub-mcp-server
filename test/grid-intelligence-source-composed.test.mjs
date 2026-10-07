@@ -7,7 +7,7 @@
 // contributed, and the handler attaches it. Drives the lib directly and the real handler
 // (keyed and anonymous) with a stubbed backend.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { composeGridProvenance } from '../lib/grid-provenance.mjs';
+import { composeGridProvenance, LICENSE_COMPOSITE } from '../lib/grid-provenance.mjs';
 
 const EIA = 'EIA-930 hourly RTO/BA feed (PJM) + DC Hub grid intelligence';
 const QUEUE = 'US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)';
@@ -30,13 +30,26 @@ describe('composeGridProvenance', () => {
     expect(p.provenance_revision).toBe('1.2');
     expect(p.provenance_version).toBe(1);
   });
-  it('as_of only where that upstream stated one; never invented, never a licence', () => {
+  it('as_of only where that upstream stated one, never invented', () => {
     const p = composeGridProvenance('PJM', { gi: gi(), cmp: cmp(), qsnap: qsnap() });
     expect(p.sources[0].as_of).toBe('2026-10-06T10:00:00Z');
     expect(p.sources[1]).not.toHaveProperty('as_of');
     expect(p.sources[2]).not.toHaveProperty('as_of');     // the queue block said null
-    for (const s of p.sources) expect(s).not.toHaveProperty('license');
     expect(p).not.toHaveProperty('as_of');                // left to the merge
+  });
+  it('the collection licence is Mixed, and a source carries one only where DC Hub names it', () => {
+    const p = composeGridProvenance('PJM', { gi: gi(), cmp: cmp(), qsnap: qsnap(), ext: { available: true } });
+    expect(p.license).toBe(LICENSE_COMPOSITE);
+    expect(p.license).not.toMatch(/CC-BY/);               // never the blanket claim over third-party data
+    const by = Object.fromEntries(p.sources.map((s) => [s.id, s.license]));
+    expect(by.eia930).toBe('public domain (US government)');
+    expect(by.dcpi).toBe('CC-BY-4.0');                    // DC Hub-computed scores
+    expect(by.iso_queues).toBeUndefined();                // the ISOs' terms are theirs: none claimed
+    expect(by.gridstatus).toBeUndefined();
+  });
+  it('a single contributor keeps its own block, licence untouched', () => {
+    const own = { ...gi().provenance, license: 'CC-BY-4.0' };
+    expect(composeGridProvenance('AZPS', { gi: { ...gi(), iso: 'AZPS', provenance: own } })).toEqual(own);
   });
   it('an upstream with no row for this region is not named', () => {
     // AZPS has telemetry but no DCPI row and no queue row (a balancing authority)
@@ -138,6 +151,8 @@ describe('get_grid_intelligence through the handler', () => {
       expect(p.basis).toBe('mixed');
       expect(p.basis_class).toBe('unknown');              // mixed has no v1.1 class; "unknown", not a guess
       expect(p.provenance_revision).toBe('1.2');
+      expect(p.license).toBe(LICENSE_COMPOSITE);          // not the blanket CC-BY-4.0
+      expect(r.structuredContent.citation.license).toBe(LICENSE_COMPOSITE);
       expect(typeof p.method).toBe('string');
       expect(p.as_of).toBeTruthy();                       // derived by the merge from the payload stamps
       expect(JSON.parse(r.content[0].text).provenance.sources).toHaveLength(3);
