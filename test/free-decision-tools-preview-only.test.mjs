@@ -118,7 +118,7 @@ const MARKET = {
   recent_facilities: Array.from({ length: 5 }, (_, i) => ({ name: `Facility ${i}`, city: 'Ashburn', capacity_mw: 60 + i })),
   market_pricing: { available: true, basis: 'broker_report', asking_rate: 160.0, asking_rate_range: [160.0, 185.0],
     unit: '$/kW/mo', deal_size: '250-500 kW wholesale', vacancy_percent: 4.0, period: 'H1 2026', stale: false,
-    source: 'CBRE / JLL market reports, H1 2026 (as held by DC Hub)' },
+    source: 'CBRE / JLL market reports, H1 2026 (as held by DC Hub) $160-185/kW/mo' },
   siting: { available: true,
     iso: { code: 'PJM', class: 'RTO', operator: 'PJM Interconnection', as_of: '2026-10-07' },
     utilities: { names: ['Dominion Energy Virginia'], kind: 'IOU', source_url: 'https://www.scc.virginia.gov/' },
@@ -324,6 +324,7 @@ describe('the three decision tools are previews on every non-paid seat (default 
             expect(JSON.stringify(r.data), 'leaked ' + frag).not.toContain(frag);
           }
           expect(r.data.pricing_source.source).toMatch(/CBRE/);
+          expect(JSON.stringify(r.data.pricing_source), 'dollar figure in the source line').not.toMatch(/\$\s?\d|kW\/mo/);
         }
         // the per-(IP,tool,day) counter is never charged, locally or durably
         expect(counterKeysFor(r.ip, tool)).toEqual([]);
