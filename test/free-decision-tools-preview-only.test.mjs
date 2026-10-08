@@ -455,7 +455,11 @@ describe('kill switch DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0 restores the prev
     expect(r.data.constraint_score).toBe(49.2);
     expect(r.data._metered_trial && r.data._metered_trial.of).toBeGreaterThan(0);
     expect(counterKeysFor(r.ip, 'get_grid_intelligence').length).toBeGreaterThan(0);
-    expect(consumeHits.slice(consumeBefore).some((h) => h.tool === 'get_grid_intelligence')).toBe(true);
+    // the durable consume is write-behind (fire-and-forget POST, server.mjs _fullCapConsume):
+    // it lands after the response, so wait for it rather than read the stub synchronously.
+    const consumed = () => consumeHits.slice(consumeBefore).some((h) => h.tool === 'get_grid_intelligence');
+    for (let i = 0; i < 40 && !consumed(); i++) await new Promise((res) => setTimeout(res, 50));
+    expect(consumed(), 'no /full-cap/consume write within 2s').toBe(true);
   });
   it('free key market intel: the capped full taste again (trial_taste), rows and pricing intact', async () => {
     process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
