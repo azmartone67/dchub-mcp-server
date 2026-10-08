@@ -51,9 +51,10 @@ const ROWS = Array.from({ length: 10 }, (_, i) => ({
   site_evaluation_handoff: { analyze_site: { lat: 39.9, lon: -83.0, capacity_mw: 1000 } } }));
 const GENERIC = { ok: true, count: 10, total_mw: 10525.4, data: ROWS, results: ROWS, deals: ROWS,
   changes: ROWS, iso: 'PJM', iso_name: 'PJM Interconnection', demand_mw: 91234.5,
-  fuel_mix: { gas: 40.1, nuclear: 33.3 }, constraint_score: 61.7, queue_depth_gw: 287.4,
+  fuel_mix: { gas: 40.1, nuclear: 33.3 }, constraint_score: 61.7, queue_depth_gw: 287.4, peak_mw: 95555.5,
   _cite: 'DC Hub (dchub.cloud)' };
-const FULL_SENTINELS = { get_grid_intelligence: ['91234.5'] };
+// Owner 2026-10-08: the grid taste KEEPS demand_mw, so the full sentinel is a withheld figure (peak_mw).
+const FULL_SENTINELS = { get_grid_intelligence: ['95555.5'] };
 const DEFAULT_SENTINELS = ['Proj 9', '10525.4'];
 
 // Arguments per claimed tool. A claim about a tool with no entry here fails,
@@ -85,6 +86,14 @@ const m = (anon, free, pack, starter, developer, pro) => ({ anon, free, pack, st
 // full-answer allowance unused / used up. Regexes are matched against the
 // note text itself, so the wording IS the claim.
 const PHRASES = [
+  // Owner 2026-10-08: the decision tools are previews on every non-paid seat, the pack
+  // included; Developer and up get the full answer (test/free-decision-tools-preview-only).
+  { id: 'developer-only-full',
+    re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a \$10 credit pack\); Developer and up get the full answer(?! \(a grandfathered)/,
+    fresh: m(P, P, P, F, F, F), spent: m(P, P, P, F, F, F) },
+  { id: 'developer-only-full-starter-allowance',
+    re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a \$10 credit pack\); Developer and up get the full answer \(a grandfathered Starter key keeps its daily allowance\)/,
+    fresh: m(P, P, P, F, F, F), spent: m(P, P, P, P, F, F) },
   { id: 'any-key-full',
     re: /with no key a trimmed preview \(3 rows, project names and MW withheld\); any key, a free one included, gets the full survivor set/,
     fresh: m(P, F, F, F, F, F), spent: m(P, F, F, F, F, F), threeRowPreview: true },

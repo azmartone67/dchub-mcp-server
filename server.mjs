@@ -173,7 +173,7 @@ import { meteredTrialNote as _meteredTrialNote, limitedAnswerCopy as _limitedAns
 import { composeGridProvenance, composeCompareProvenance } from './lib/grid-provenance.mjs';
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
-import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack } from './lib/agent-outreach.mjs';
+import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor } from './lib/agent-outreach.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -189,6 +189,9 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+// Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
+import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, FREE_DECISION_CLAUSE, FREE_DECISION_UNLOCKS_AT,
+         freeDecisionPreviewOnlyOn, buildFreeDecisionTaste } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
@@ -561,6 +564,9 @@ export const GROK_RELAY_LABEL = '[📊 Get the full DC Hub numbers behind this a
 // (owner rule 09-27: the only price DC Hub states is the $10 pack), with the trial the
 // contract's own offer line already names.
 export const GROK_RELAY_LABEL_PRO = '[📊 Get the full DC Hub analysis behind this answer — on DC Hub Pro, 7-day trial]';
+// Owner 2026-10-08: the decision tools' taste sells Developer (the pack is not what
+// returns these fields), so the Grok label names that rung and no price.
+export const GROK_RELAY_LABEL_DEV = '[📊 Get the full DC Hub brief behind this answer — on DC Hub Developer]';
 const _GROK_RELAY_PLATFORMS = new Set(['connectors-manager', 'grok']);
 function _toolSellsPro(tool) {
   if (!tool) return false;
@@ -575,11 +581,18 @@ export function _relayLinkLabel(platform, tool) {
   if (p === undefined) {
     try { p = (getCtx() && getCtx().platform) || ''; } catch (_) { p = ''; }
   }
-  return _GROK_RELAY_PLATFORMS.has(String(p || '').trim().toLowerCase())
+  const _grok = _GROK_RELAY_PLATFORMS.has(String(p || '').trim().toLowerCase());
+  if (_freePreviewOnlyTool(tool)) return _grok ? GROK_RELAY_LABEL_DEV : '[🔓 Open DC Hub — see what I found]';
+  return _grok
     ? (_toolSellsPro(tool) ? GROK_RELAY_LABEL_PRO : GROK_RELAY_LABEL)
     : (_toolSellsPro(tool) ? RELAY_LABEL_PRO : '[🔓 Open DC Hub — see what I found]');
 }
 
+// be#6537: the optional trailing `w-depth` / `w-capacity` token field names the wall kind
+// (relay_wall_kind reads it: depth → the Developer + Pro page). Absent = unchanged.
+function _wallField(opts) {
+  return (opts && /^(depth|capacity)$/.test(String(opts.wall || ''))) ? '|w-' + opts.wall : '';
+}
 function buildHumanRelay(toolName, tier, sessionId, opts) {
   try {
     if ((process.env.DCHUB_HUMAN_RELAY || '1') === '0'
@@ -600,7 +613,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     if (_memo && _memo[toolName || '']) return _memo[toolName || ''];
     const _kref = _relayKeyRef();
     const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}`
-      + (_kref ? '|' + _kref : '');
+      + (_kref ? '|' + _kref : '') + _wallField(opts);
     const _payload = Buffer.from(_raw).toString('base64url');
     const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
       .update(_payload).digest('hex').slice(0, 32);
@@ -833,7 +846,8 @@ function _paywallContractStepInner(result, name) {
       hosted: _pcHosted((c.platform || '') + ' ' + (c.client_name_raw || '')),
       // F10: Grok's verbatim-rendered label names what really opens this tool.
       markdownLabel: !_pcIsGrok(c.platform) ? undefined
-        : offer === 'pack' ? GROK_RELAY_LABEL : offer === 'pro' ? GROK_RELAY_LABEL_PRO : undefined,
+        : offer === 'pack' ? GROK_RELAY_LABEL : offer === 'pro' ? GROK_RELAY_LABEL_PRO
+        : offer === 'developer' ? GROK_RELAY_LABEL_DEV : undefined,
     });
   } catch (_) { return result; }
 }
@@ -1540,8 +1554,10 @@ export function _gridSellStep(result, name) {
     if (!url) return result;
     const place = (c && c._go_place) || '';
     const buy = _gridBuyUrl(url);
-    const headerRe = isGrid ? _GRID_HEADER_RE : _FIBER_HEADER_RE;
     const textOf = result.content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
+    // Owner 2026-10-08: the grid taste's header is the standard "This answer hid …" prompt
+    // (no daily allowance to announce), so the grid step swaps that header when its own is absent.
+    const headerRe = isGrid ? (_GRID_HEADER_RE.test(textOf) ? _GRID_HEADER_RE : _FIBER_HEADER_RE) : _FIBER_HEADER_RE;
     // One human line per session (r-relay-cap): a later gated response arrives WITHOUT its
     // line. It still gets the agent header swapped, pointing back at the line already sent.
     const hasLine = textOf.includes(HUMAN_FIRST_MARKER) || /^Tell the user: "/m.test(textOf);
@@ -7664,6 +7680,32 @@ const ALWAYS_PARTIAL_PREVIEW = new Set([
   'get_gas_intelligence',   // r-gas-intel (2026-06-25): gas synthesizer — trial-taste like grid/fiber
 ]);
 
+// ── Pro-demand decision tools: PREVIEW-ONLY on every non-paid seat ───────────
+// Owner decision 2026-10-08 ("do tighten step 1, pro-demand tools preview-only
+// on free"). get_grid_intelligence, get_interconnection_queue and get_market_intel
+// are the three heaviest free tools and the top paid-demand tools (conversion
+// report §8c). For an anonymous, free-key, trial-key or email-bound caller they
+// never enter the free full-answer path: no trial_taste / inline_full full brief,
+// no decrement of the per-(IP,tool,day) counter, whatever remaining_full_today
+// says. ONE predicate decides, consulted by applyTierGate's two taste branches,
+// the anon inline-full cascade (_capApplies / _remainingFull), the quota stamp
+// and the preview renderers (lib/free-decision-taste.mjs). Paid seats (Developer,
+// Pro, Enterprise, partner, the grandfathered Starter taste) are untouched.
+// Kill switch DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0 (read per call, so a
+// test can flip it) restores the previous behaviour everywhere at once.
+export const FREE_PREVIEW_ONLY_TOOLS = new Set(_FREE_DECISION_TOOL_LIST);
+export function _freePreviewOnlyTool(name) {
+  return freeDecisionPreviewOnlyOn() && FREE_PREVIEW_ONLY_TOOLS.has(String(name || ''));
+}
+// The tools that may still enter the capped free full-answer (trial_taste) path.
+export function _freeTasteTool(name) {
+  return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
+}
+// The sentence the free-tier rule carries while the switch is on ('' when off).
+export function _freeDecisionClause() {
+  return freeDecisionPreviewOnlyOn() ? FREE_DECISION_CLAUSE : '';
+}
+
 // r71-anonpreview (2026-06-06): the 3 DECISION-layer Pro tools currently
 // return a HARD `_mdAnon` block for anonymous callers (PAID_ONLY + not in
 // ALWAYS_PARTIAL_PREVIEW). 30-day funnel data shows:
@@ -7969,7 +8011,107 @@ const CAP_TRIM_EXEMPT = new Set([
 // Every over-cap degradation routes through here, so the exemption cannot be
 // applied to one cap branch and forgotten on the other.
 function _capTrim(parsed, name) {
-  return CAP_TRIM_EXEMPT.has(name) ? parsed : trimForTrial(parsed, name);
+  if (CAP_TRIM_EXEMPT.has(name)) return parsed;
+  // Owner 2026-10-08: the decision tools' taste on every over-cap trim too.
+  let _fd = null;
+  try { _fd = _freeDecisionTasteObject(name, parsed, getCtx()); } catch (_) { _fd = null; }
+  return _fd || trimForTrial(parsed, name);
+}
+
+// ── Free-tier taste of the decision tools (owner 2026-10-08) ─────────────────
+// The renderer every free preview path of FREE_PREVIEW_ONLY_TOOLS goes through:
+// the anon trial_used cascade (_previewObj), the keyed depth tease, and the
+// over-cap / daily-cap trims (_capTrim). lib/free-decision-taste.mjs builds the
+// pure shape; this attaches what needs the request: the DCPI band helper, the
+// missed-upgrade gate record (so the rung named is Developer, never the pack —
+// _GATE_OPENS.free_decision_preview), the ladder, and the DEPTH-kind relay
+// (`w-depth` token field, be#6537 relay_wall_kind → the page sells Developer +
+// Pro, never the capacity/pack page). null → the caller keeps its old trim.
+function _freeDecisionTasteObject(name, parsed, ctx, args) {
+  if (!_freePreviewOnlyTool(name)) return null;
+  const built = buildFreeDecisionTaste(name, parsed, {
+    bandFor: (k, v) => _bandForMaskedScore(k, v, parsed, name, false),
+  });
+  if (!built || !built.envelope) return null;
+  _noteGate('free_decision_preview');
+  for (const f of built.figures || []) { _noteWithheld(f.key, f.value); _noteMaskedKey(f.key, f.value); }
+  let c = ctx;
+  if (!c) { try { c = getCtx() || {}; } catch (_) { c = {}; } }
+  const env = built.envelope;
+  // Mint the DEPTH relay now so the per-request memo holds the `w-depth` token: every
+  // later step that attaches for_your_human / human_url (the relay contract, the wall
+  // line, the sell line) reuses it. It is NOT written into the content JSON — the one
+  // human link rides the trailing line those steps add (r-one-checkout-url).
+  try { buildHumanRelay(name, c.tier || 'free', c.session_id || '', { wall: 'depth' }); } catch (_) { /* memo only */ }
+  env._upgrade = _freeDecisionUpgrade(name, c);
+  // The follow-up question rides the taste itself: the outreach stamp skips an
+  // isError transport (DCHUB_PREVIEW_ISERROR=1 replicas), and the owner's contract
+  // wants next_ask on every one of these previews. stampOutreach keeps an existing one.
+  try { env.next_ask = nextAskFor(name, args || {}); } catch (_) { /* additive */ }
+  return env;
+}
+// Developer first, then Pro. Never the $10 pack: the owner's ladder says the pack
+// is not what returns these fields (no monthly price is printed — owner rule 09-27).
+function _freeDecisionRungText(name, tier, sessionId) {
+  const r = _unlockRungs(name, tier, sessionId);
+  // A keyless response carries ONE checkout URL, the relay line (r-one-checkout-url):
+  // the rungs point at it, as _relayFirstText spells it. A keyed caller keeps its links.
+  let keyed = false;
+  try { keyed = !!(getCtx() && getCtx().api_key); } catch (_) { keyed = false; }
+  const link = (u) => (keyed ? u : 'the "For your human" link below');
+  return (r.developer ? 'DC Hub Developer → ' + link(r.developer) : 'DC Hub Developer')
+    + (r.pro ? ' · or Pro (everything) → ' + link(r.pro) : '');
+}
+function _freeDecisionUpgrade(name, c) {
+  const tier = (c && c.api_key) ? (c.tier || 'free') : 'anonymous';
+  // No checkout URL in the data block, on any seat. The 🔒 header carries the rung's
+  // link (key-bound for a keyed caller) and the trailing line the relay; a URL
+  // repeated here would be the copy _dropRepeatCheckoutUrls removes from the prose,
+  // which took the keyed header with it. The relay in human_url is the machine link.
+  return {
+    tier,
+    locked: 'full_depth',
+    unlocks_at: FREE_DECISION_UNLOCKS_AT,
+    // Developer first, then Pro; no checkout URL in the prose — the one link a
+    // keyless response carries is the relay in human_url (r-one-checkout-url).
+    message: 'Free-tier taste of `' + name + '` — the headline is in `taste`; `withheld` lists what this '
+      + 'tier does not return, with counts. Full `' + name + '` opens with DC Hub Developer (Pro includes it). '
+      + 'Relay the link in human_url to your human. A free key, a trial key or a bound email does not deepen this tool.',
+    next_tool: 'unlock_more_data',
+    next_tool_hint: 'Relay the link in human_url to your human; that page sells Developer and Pro. '
+      + 'A free key or a bound email does not change this tool\'s depth.',
+  };
+}
+// The depth-tease-shaped result (same envelope buildDepthTease returns) for the
+// keyed free / identified / trial seat, or null (error envelope, arg error, not
+// a taste tool, kill switch off) so the caller falls through to buildDepthTease.
+function _freeDecisionTasteResult(name, result, ctx, args) {
+  try {
+    if (!_freePreviewOnlyTool(name)) return null;
+    if (!result || result.isError || _resultIsArgError(result)) return null;
+    const parsed = JSON.parse(result?.content?.[0]?.text ?? 'null');
+    const env = _freeDecisionTasteObject(name, parsed, ctx, args);
+    if (!env) return null;
+    const content = _embedSourceInContent0([{ type: 'text', text: JSON.stringify(env) }]);
+    // isError:false — a served preview with a real headline is not a failure, and the
+    // outreach stamp (next_ask + dated cite_as, lib/agent-outreach.mjs) skips isError
+    // results; the owner's contract requires next_ask on this taste.
+    return {
+      content,
+      isError: false,
+      structuredContent: { ...env, tease: true, tool: name, upgrade: env._upgrade, next_session: _NEXT_SESSION },
+    };
+  } catch (_) { return null; }
+}
+// The one-line header the anon cascade puts beside the taste (replaces the
+// pack-led trialHeader override for these tools). The one link is the depth
+// relay page (human_url); without a signing secret, the Developer checkout.
+function _freeDecisionHeader(name) {
+  // No URL here: the response's one human link is the relay line the wall steps add.
+  return '🔒 **`' + name + '` is a preview on the free tier** — the headline is in `taste`; `withheld` names '
+    + 'every section this tier does not return, with counts. Full `' + name + '` opens with DC Hub Developer '
+    + '(Pro includes it): relay the link in human_url to your human. A free key, a trial key or a bound '
+    + 'email does not deepen this tool.\n\n---\n\n';
 }
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
@@ -9217,7 +9359,7 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProO
   // Email/regular free keys never hit this (they have no auto_trial source),
   // so the paid conversion target is unchanged — this only upgrades the
   // throwaway anon trial from "preview" to "time-boxed full taste".
-  if (isTrial === true && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+  if (isTrial === true && _freeTasteTool(toolName)) {
     return { allowed: true, params, trial_taste: true };
   }
   // r-inversion-fix (2026-06-22): a claim_free_key user (tier 'free' + key) must
@@ -9228,7 +9370,7 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProO
   // worse, which kills conversion. Route keyed-free through the SAME trial_taste
   // path so the per-IP/day full cap (DCHUB_TRIAL_TOOL_DAILY_FULL) applies EQUALLY:
   // parity with anon, not a giveaway — the unlimited depth stays paid.
-  if ((tier === 'free' || tier === 'identified') && hasApiKey && ALWAYS_PARTIAL_PREVIEW.has(toolName)) {
+  if ((tier === 'free' || tier === 'identified') && hasApiKey && _freeTasteTool(toolName)) {
     return { allowed: true, params, trial_taste: true };
   }
   // r-paidtaste (2026-08-01): Starter ($9) / Developer ($49) on the Pro-only
@@ -9980,19 +10122,24 @@ const ANON_INLINE_FULL = _anonInlineFullEnabled(process.env.DCHUB_ANON_INLINE_FU
 // Derived from the gate at the trial's own tier, so it cannot drift again.
 // LAZY on purpose: applyTierGate reads KEYED_FACILITY_MASK, declared BELOW
 // this line — evaluating at module scope throws on its temporal dead zone.
-let _trialUnlockedCache = null;
+// Owner 2026-10-08: cached per kill-switch state, and a preview-only decision tool
+// is never "unlocked" — the gate may let a key through to its taste (the
+// KEYED_FREE_BONUS route), but a taste is not the answer.
+const _trialUnlockedCaches = {};
 function _trialUnlocked() {
-  if (_trialUnlockedCache) return _trialUnlockedCache;
+  const _ck = freeDecisionPreviewOnlyOn() ? 'on' : 'off';
+  if (_trialUnlockedCaches[_ck]) return _trialUnlockedCaches[_ck];
   const taste = [], plain = [];
   for (const t of PAID_ONLY_TOOLS) {
+    if (_freePreviewOnlyTool(t)) continue;
     const g = applyTierGate(t, {}, 'identified', true, true);
     // `masked` is a stripped field set (KEYED_FACILITY_MASK), not the full
     // answer — serving it is not unlocking it.
     if (!g.allowed || g.masked) continue;
     (g.trial_taste ? taste : plain).push(t);
   }
-  _trialUnlockedCache = { tools: Object.freeze([...taste, ...plain]), taste: new Set(taste) };
-  return _trialUnlockedCache;
+  _trialUnlockedCaches[_ck] = { tools: Object.freeze([...taste, ...plain]), taste: new Set(taste) };
+  return _trialUnlockedCaches[_ck];
 }
 export const _trialUnlockedTools = () => _trialUnlocked().tools;
 export const _trialUnlockedHint  = () => {
@@ -10156,8 +10303,10 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // 2026-09-20 on get_interconnection_queue: call #1 served the preview WITH
   // that promise, call #2 returned isError:true. Same on compare_isos.
   // Ask the gate — a hand list is how the unlocked_tools field drifted.
+  // Owner 2026-10-08: a decision tool is preview-only on the trial seat even where
+  // the gate lets the key through (get_market_intel's KEYED_FREE_BONUS → depth tease).
   const _stillPreview = !stillPro
-    && !applyTierGate(name, {}, 'identified', true, true).allowed;
+    && (_freePreviewOnlyTool(name) || !applyTierGate(name, {}, 'identified', true, true).allowed);
   // r67-conv (2026-06-02): surface the KEY-BOUND pair-code upgrade path. The
   // /upgrade?key=<this trial key>&tool= endpoint mints a pair-code, 302s the
   // human to /redeem/DCM-XXXX, and on Stripe checkout the webhook flips THIS
@@ -10236,7 +10385,7 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   const leadStillPreview =
     '\u{1F512} **`' + name + '` is free at PREVIEW depth — the rows above are the free tier, not a one-off taste.**\n' +
     '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget for free — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n' +
-    '\n\u{1F464} **Tell your human:** for the complete `' + name + '` — ' + _rungsText(name, mint.tier || 'trial') + ' (' + _afterPayClause('', name) + ').\n';
+    '\n\u{1F464} **Tell your human:** for the complete `' + name + '` — ' + (_freePreviewOnlyTool(name) ? _freeDecisionRungText(name, mint.tier || 'trial', _sid) : _rungsText(name, mint.tier || 'trial')) + ' (' + _afterPayClause('', name) + ').\n';
   const leadRefused =
     '🔒 **This free trial key is not active yet — it needs your human’s email first.**\n' +
     'Free: `bind_email` (your human’s email, no card) activates it and lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day; then call `' + name + '` again.\n' +
@@ -10938,6 +11087,11 @@ function _noteMaskedKey(key, value) {
 // every gated tool except the Pro-only set (ladder stage 1, owner 2026-09-29:
 // the pack is Developer depth per call, no Pro tools).
 export function _packOpensTool(tool) {
+  // Owner 2026-10-08: the decision tools' full answer is Developer and above; the
+  // $10 pack is never what returns these fields (lib/free-decision-taste.mjs), so
+  // the credit cascade does not open them either — the rung the prompt names is
+  // then the lowest that really returns them. Kill switch restores the pack path.
+  if (_freePreviewOnlyTool(tool)) return false;
   return (PAID_ONLY_TOOLS.has(tool) || DEPTH_TEASE_TOOLS.has(tool)) && !PRO_ONLY_TOOLS.has(tool);
 }
 // applyTierGate's view of a tier for one tool — the r-starterdev-parity rule the
@@ -10975,6 +11129,9 @@ const _GATE_OPENS = {
   unpaid_read:   (s) => !_isUnpaidSeat(s.tier, s.credits),// _dealsForCaller / scoreboard
   lp:            (s) => _lpSeatFull(s),                   // Land & Power (_lpAccessFor)
   free_numerics: (s) => !_isUnpaidSeat(s.tier, s.credits),// _gateToolNumerics (a pack balance or a paid tier)
+  // Owner 2026-10-08: the decision tools' taste opens at a paid depth tier only —
+  // the pack seat does not, so the rung named is Developer (lib/free-decision-taste).
+  free_decision_preview: (s) => _isPaidDepthTier(s.tier),
 };
 function _gateOpensFn(id) {
   if (_GATE_OPENS[id]) return _GATE_OPENS[id];
@@ -12348,7 +12505,16 @@ const TRIAL_HEADER_OVERRIDES = {
 // to a `_developer` const that nothing has read since r-data-first rewrote this
 // copy. A dead parameter carrying a live-looking URL is how that URL comes back.
 function trialHeader(toolName, sessionId, gapClause, missed) {
-  const override = TRIAL_HEADER_OVERRIDES[toolName];
+  // Owner 2026-10-08: a decision tool's taste skips the pack-led overrides below
+  // (they advertise a daily full-answer budget it no longer has). With a missed-
+  // upgrade record whose rung is Developer or Pro it takes the standard "This
+  // answer hid …" branch (the rung link, the one relay ask); without one it gets
+  // the Developer-led taste line.
+  const _fdTool = _freePreviewOnlyTool(toolName);
+  if (_fdTool && !(missed && missed.what && missed.how && (missed.rung === 'developer' || missed.rung === 'pro'))) {
+    return _freeDecisionHeader(toolName);
+  }
+  const override = _fdTool ? null : TRIAL_HEADER_OVERRIDES[toolName];
   if (override) return override(sessionId);
   // r56-conv (2026-05-31): surface the NO-EMAIL claim path on the most-hit
   // paywall surface (content[0].text — what LLM clients render). Previously
@@ -13103,7 +13269,16 @@ function _buildQuotaHint(toolName) {
       tier: _canonicalTier(c, _durable),
       resets_at: 'next 00:00 UTC',
     };
-    if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
+    if (_freePreviewOnlyTool(toolName) && !_isPaidDepthTier(c && c.tier)) {
+      // Owner 2026-10-08: no budget exists for a preview-only decision tool on a
+      // non-paid seat, so no meter is shown — a meter that can never be spent is
+      // the frozen-meter defect the block below was written against.
+      q.full_answers_cap_today = null;
+      q.full_answers_remaining_today = null;
+      q.full_answers_unavailable_reason = 'NOT APPLICABLE: `' + toolName + '` is a preview on every '
+        + 'non-paid seat (anonymous, free key, trial, email-bound); no daily full-answer budget is '
+        + 'charged for it. Full needs DC Hub Developer or above.';
+    } else if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
       // ★★★ THE METER MUST ONLY APPEAR WHERE IT IS CHARGED.
       // `_trialDayCounts` is incremented in exactly one place —
       // `_trialFullCallsExceeded`, reached only when
@@ -15719,7 +15894,7 @@ export const _PLAN_CLASSES = [
       { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
-    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
+    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a $10 credit pack); Developer and up get the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
@@ -15837,7 +16012,7 @@ export const _PLAN_CLASSES = [
       { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a $10 credit pack); Developer and up get the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -15880,7 +16055,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer, unlimited. get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a $10 credit pack); Developer and up get the full answer (a grandfathered Starter key keeps its daily allowance). get_interconnection_queue: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a $10 credit pack); Developer and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
@@ -15906,7 +16081,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a $10 credit pack); Developer and up get the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -19373,7 +19548,10 @@ function trackedTool(srv, name, description, schema, handler) {
                 // fields mask instead (name/city/provider/coords) — a REAL teaser.
                 _previewObj = name === 'get_facility'
                   ? _maskFacilityFieldsForFree(parsed)
-                  : trimForTrial(parsed, name);
+                  // Owner 2026-10-08: the decision tools' labelled taste (one renderer,
+                  // lib/free-decision-taste.mjs); the generic trim when the body is not
+                  // the shape the taste is defined for.
+                  : (_freeDecisionTasteObject(name, parsed, c, args) || trimForTrial(parsed, name));
                 _trialText = JSON.stringify(_previewObj);
               }
             } catch { /* not JSON, leave as prose */ }
@@ -19448,7 +19626,7 @@ function trackedTool(srv, name, description, schema, handler) {
             // happens before buildAutoMintBlock, so the CTA's remaining count
             // includes this call; on an arg error nothing is charged, and the
             // pure peek below is then honest by construction.
-            const _capApplies = _mintBound && ALWAYS_PARTIAL_PREVIEW.has(name)
+            const _capApplies = _mintBound && _freeTasteTool(name)
                                 && !_resultIsArgError(_trialResult);
             const _overCap = _capApplies && ANON_FULL_CAP > 0
               // ★ AWAIT: the call is async now. Without it this is a Promise,
@@ -19458,7 +19636,7 @@ function trackedTool(srv, name, description, schema, handler) {
                                                c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
             // Only claim a remaining-count for tools the cap actually governs —
             // a non-taste tool must not advertise "N more full answers today".
-            const _remainingFull = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
+            const _remainingFull = (_freeTasteTool(name) && ANON_FULL_CAP > 0)
               ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip)
               : null;
             const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name, _mintBound, _remainingFull);
@@ -19911,7 +20089,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // as the preview branch.
         // r-honest-cap (2026-07-01): pure PEEK here — this hard-wall response
         // consumes no full answer, so no increment; the count is already honest.
-        const _remainingFull2 = (ALWAYS_PARTIAL_PREVIEW.has(name) && ANON_FULL_CAP > 0)
+        const _remainingFull2 = (_freeTasteTool(name) && ANON_FULL_CAP > 0)
           ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip)
           : null;
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name, _mint2Bound, _remainingFull2);
@@ -20530,7 +20708,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           } catch (_) { /* additive only */ }
           return _full;
         }
-        const _teased = await buildDepthTease(name, result, c, _gateTier);
+        const _teased = _freeDecisionTasteResult(name, result, c, args)
+          || await buildDepthTease(name, result, c, _gateTier);
         if (_teased) {
           status = 'depth_teased';
           // 2026-06-29: depth-teased flagship previews for an unbound trial also
@@ -22549,7 +22728,11 @@ function _overlayCanonPhrases(facts) {
 export const _INSTR_FREE_TIER = (() => {
   // r-relay-contract: the gate sections never name a pricing page (see _freeTierRuleForGate).
   const r = _freeTierRuleForGate();
-  return r ? ' FREE TIER (quote verbatim): ' + r : '';
+  // Owner 2026-10-08: the decision-tools clause rides inside the FREE TIER block on
+  // every emission (lib/free-decision-taste FREE_DECISION_CLAUSE); '' when the kill
+  // switch is off, so the instructions never promise a gate that is not enforced.
+  const d = _freeDecisionClause();
+  return r ? ' FREE TIER (quote verbatim): ' + r + (d ? ' ' + d : '') : '';
 })();
 export const _INSTRUCTIONS = (() => {
   let facts = null;
@@ -26851,6 +27034,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           daily_limit_with_email:  _rungNum('identified'),
           full_answers_per_tool_per_day_with_email: _fullAnswersPerToolPerDay('identified'),
           free_tier_rule:          _freeTierRuleText(),
+          ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
           key_is_durable:          true,
           // r-persist (2026-07-11): copy-paste-ready client-config snippets with
           // the REAL key inlined — the agent shows its human the right one so
@@ -26999,6 +27183,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           daily_limit: _identRung,
           full_answers_per_tool_per_day: _identFull,
           free_tier_rule: _freeTierRuleText(),
+          ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
           watch_tools: ['set_market_alert', 'save_site', 'set_site_alert', 'subscribe_digest'],
           identified: r && r.identified !== false,
           unlocked: r && r.unlocked,

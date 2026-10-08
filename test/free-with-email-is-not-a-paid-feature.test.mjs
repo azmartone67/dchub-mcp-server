@@ -146,10 +146,22 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
 
   // The ones a trial key really does open — via ALWAYS_PARTIAL_PREVIEW's capped
   // full taste or KEYED_FREE_BONUS. Dropping these would be the opposite bug.
-  it.each(['get_grid_intelligence', 'get_fiber_intel', 'get_grid_data', 'get_market_intel'])(
+  it.each(['get_fiber_intel', 'get_grid_data'])(
     'still advertises %s, which the gate allows', (t) => {
       expect(_trialUnlockedTools()).toContain(t);
       expect(_trialUnlockedHint()).toContain(t);
+    });
+  // Owner 2026-10-08: the decision tools are previews on every non-paid seat, so the
+  // gate refuses them for a trial key and the derived list drops them with no hand edit.
+  it.each(['get_grid_intelligence', 'get_market_intel'])(
+    'no longer advertises %s (preview-only on free; the kill switch restores it)', (t) => {
+      expect(_trialUnlockedTools()).not.toContain(t);
+      const prev = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+      process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
+      try { expect(_trialUnlockedTools()).toContain(t); } finally {
+        if (prev === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+        else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prev;
+      }
     });
 
   it('never advertises a tool outside PAID_ONLY_TOOLS (the hint describes the GATED set)', () => {
@@ -158,7 +170,7 @@ describe('unlocked_tools is derived from the gate, not kept as a second list', (
 
   it('annotates only the capped-full-taste tools with the daily cap', () => {
     const hint = _trialUnlockedHint();
-    expect(hint).toMatch(/get_grid_intelligence \(full, \d+\/day\)/);
+    expect(hint).toMatch(/get_fiber_intel \(full, \d+\/day\)/);
     // get_grid_data passes the gate outright (KEYED_FREE_BONUS), not as a taste.
     expect(hint).not.toMatch(/get_grid_data \(full, \d+\/day\)/);
   });

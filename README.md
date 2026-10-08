@@ -261,7 +261,7 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 ## Pricing
 
 - **Anonymous:** previews, no API key needed
-- **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews
+- **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; full needs Developer.
 - **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
 - **Credit pack:** $10 one-time pack of 1,000 API credits (no subscription) → [Stripe](https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i)
 - **Developer, Pro and Enterprise plans:** see https://dchub.cloud/pricing

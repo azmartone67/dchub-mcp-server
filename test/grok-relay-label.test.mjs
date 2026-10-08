@@ -209,8 +209,11 @@ describe('the relay link label on Grok vs everyone else', () => {
     let fyh;
     for (let i = 0; i < 4 && !fyh; i++) fyh = await gatedAs('connectors-manager');
     expect(fyh, 'no relay minted on the Grok path').toBeTruthy();
-    expect(fyh.markdown.startsWith(S.GROK_RELAY_LABEL + '(https://dchub.cloud/upgrade/h/')).toBe(true);
-    expect(fyh.markdown).toContain('$10 one-time');
+    // Owner 2026-10-08: the grid brief sells Developer (never the pack), so Grok's label
+    // names that rung and no price (GROK_RELAY_LABEL_DEV); the pack label stays on pack tools.
+    expect(fyh.markdown.startsWith(S.GROK_RELAY_LABEL_DEV + '(https://dchub.cloud/upgrade/h/')).toBe(true);
+    expect(fyh.markdown).not.toContain('$10');
+    expect(fyh.markdown).toContain('Developer');
     expect(fyh.markdown.toLowerCase()).not.toContain('unlock');
   });
 

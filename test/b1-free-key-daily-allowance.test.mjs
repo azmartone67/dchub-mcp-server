@@ -120,16 +120,19 @@ describe('B1 _freeKeyCallRefusal: the lifetime refusal is retired once daily', (
 
 describe('B1 daily allowance: the third full answer on one tool in one day is a preview', () => {
   it('a keyed free caller is on the capped taste path, and the cap is 2 per tool per day', async () => {
-    const gate = S.applyTierGate('get_grid_intelligence', {}, 'free', true, false);
+    // Owner 2026-10-08: the grid brief left the taste set (preview-only on free); the
+    // allowance this sentence promises is driven on get_fiber_intel, which still has it.
+    const gate = S.applyTierGate('get_fiber_intel', {}, 'free', true, false);
     expect(gate.trial_taste).toBe(true);
+    expect(S.applyTierGate('get_grid_intelligence', {}, 'free', true, false).trial_taste).toBeUndefined();
     const cap = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10));
     expect(cap).toBe(2);
     const ip = '198.51.100.' + (Date.now() % 200);
     const id = 'dch_live_b1_cap_fixture_' + Date.now();
-    expect(await S._trialFullCallsExceeded(ip, 'get_grid_intelligence', cap, id)).toBe(false);   // full 1
-    expect(await S._trialFullCallsExceeded(ip, 'get_grid_intelligence', cap, id)).toBe(false);   // full 2
-    expect(await S._trialFullCallsExceeded(ip, 'get_grid_intelligence', cap, id)).toBe(true);    // preview
+    expect(await S._trialFullCallsExceeded(ip, 'get_fiber_intel', cap, id)).toBe(false);   // full 1
+    expect(await S._trialFullCallsExceeded(ip, 'get_fiber_intel', cap, id)).toBe(false);   // full 2
+    expect(await S._trialFullCallsExceeded(ip, 'get_fiber_intel', cap, id)).toBe(true);    // preview
     // another tool the same day has its own two
-    expect(await S._trialFullCallsExceeded(ip, 'get_fiber_intel', cap, id)).toBe(false);
+    expect(await S._trialFullCallsExceeded(ip, 'rank_markets', cap, id)).toBe(false);
   });
 });

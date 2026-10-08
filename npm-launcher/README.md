@@ -27,7 +27,7 @@ Claude Desktop, Cursor, Windsurf, Cline and other JSON-config clients:
 ## Keys and plans
 
 - **Free tier:** works with no key: previews. Leave `DCHUB_API_KEY` empty.
-- **Free key:** ask your agent to call `claim_free_key`, or get one at https://dchub.cloud/connect, then set `DCHUB_API_KEY`. A free key gives previews plus 2 full answers per tool per day; add an email for 50 calls/day.
+- **Free key:** ask your agent to call `claim_free_key`, or get one at https://dchub.cloud/connect, then set `DCHUB_API_KEY`. A free key gives previews plus 2 full answers per tool per day; add an email for 50 calls/day. Grid/queue/market-intel tools: previews on free; full needs Developer.
 - **Paid:** $10 one-time pack of 1,000 API credits. Subscription plans: https://dchub.cloud/pricing.
 
 Environment variables:

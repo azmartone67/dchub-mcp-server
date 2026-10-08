@@ -65,6 +65,8 @@ const ROWS = Array.from({ length: 10 }, (_, i) => ({
 const GENERIC = { ok: true, count: 10, total: 10, total_mw: 10525.4, total_value_usd: 99887766, data: ROWS, results: ROWS,
   deals: ROWS, changes: ROWS, facilities: ROWS, markets: ROWS, items: ROWS, projects: ROWS, routes: ROWS, sites: ROWS,
   iso: 'PJM', iso_name: 'PJM Interconnection', demand_mw: 91234.5, fuel_mix: { gas: 40.1, nuclear: 33.3 },
+  // peak_mw / generation_mix: figures the grid brief carries below its headline (the taste withholds them)
+  peak_mw: 95555.5, generation_mix: { NG: { mw: 54321.5 } },
   constraint_score: 61.7, queue_depth_gw: 287.4, composite_score: 77.7, verdict: 'strong',
   _cite: 'DC Hub (dchub.cloud)' };
 const FACILITY = { id: 'fac_1', slug: 'fac-1', name: 'Sweep DC 1', operator: 'Equinix', provider: 'Equinix', city: 'Columbus', state: 'OH', country: 'US',
@@ -310,11 +312,15 @@ function outcome(res, proTokens) {
 const F = 'full', P = 'preview', N = 'none';
 const PINNED = {
   // grid intel's preview is structure only (audit 'V'): no backend value → N.
+  // Owner 2026-10-08: preview-only on every non-paid seat (the labelled taste keeps the
+  // demand headline, so it is P not N); the $10 pack no longer opens it; a grandfathered
+  // Starter key keeps its daily allowance, spent → the taste. Pre-change row: anon N,N /
+  // free F,N / ident F,N / pack F,F / starter F,N.
   get_grid_intelligence: {
-    anon: [N, N], free: [F, N], ident: [F, N],
-    pack: [F, F],                       // unchanged: full per call
-    starter: [F, N],                    // unchanged (grandfathered A10)
-    developer: [F, F],                  // was A10 → V (10/day, then preview)
+    anon: [P, P], free: [P, P], ident: [P, P],
+    pack: [P, P],
+    starter: [F, P],
+    developer: [F, F],
     pro: [F, F] },
   get_fiber_intel: {
     anon: [P, P], free: [F, P], ident: [F, P],

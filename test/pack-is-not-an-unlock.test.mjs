@@ -62,7 +62,15 @@ function offenders(src) {
 describe('the $10 pack is never called an unlock', () => {
   const SID = 'e6f1c0de-1234-4aaa-9999-abcdef012345';
 
-  for (const tool of ['get_grid_intelligence', 'get_fiber_intel', 'rank_markets']) {
+  // Owner 2026-10-08: the grid brief's anonymous wall names Developer (the pack is not what
+  // returns these fields) — and still never calls anything an unlock.
+  it('get_grid_intelligence: the anonymous wall names Developer, not the pack, and no unlock', () => {
+    const t = withCtx({ session_id: SID }, () => trialHeader('get_grid_intelligence', SID, '3 of 20 results shown'));
+    expect(t).not.toContain('$10 one-time');
+    expect(t).toMatch(/DC Hub Developer/);
+    expect(t).not.toMatch(UNLOCK);
+  });
+  for (const tool of ['get_fiber_intel', 'rank_markets']) {
     it(`${tool}: the anonymous wall sells the pack as credits, not an unlock`, () => {
       const t = withCtx({ session_id: SID }, () => trialHeader(tool, SID, '3 of 20 results shown'));
       expect(t).toContain('$10 one-time = 1,000 API credits');   // the rung is there to judge

@@ -102,8 +102,11 @@ describe('the unlock URL a gated tool composes', () => {
   });
 
   it('is signed and session-bearing on the trial header', () => {
+    // Owner 2026-10-08: the grid brief's header names Developer and carries no raw link of
+    // its own (the relay line is the one link); the tokenized-unlock contract is driven on
+    // get_fiber_intel, whose header still composes the rung links.
     const t = withCtx({ session_id: SID }, () =>
-      trialHeader('get_grid_intelligence', SID, '3 of 10 results shown'));
+      trialHeader('get_fiber_intel', SID, '3 of 10 results shown'));
     const urls = unlockUrls(t);
     expect(urls.length).toBeGreaterThan(0);
     for (const u of urls) expect(isSigned(u) || isStripe(u) || carriesSid(u), u).toBe(true);

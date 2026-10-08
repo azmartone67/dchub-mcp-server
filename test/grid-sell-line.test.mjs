@@ -83,6 +83,15 @@ beforeAll(async () => {
         grid_emergencies_30d: 2, demand_mw: 70000, news: [{ title: 'x', url: 'https://n.example/1' }] });
     }
     if (p.includes('fiber')) return json({ routes: [{ id: 'r1', carrier: 'X', miles: 10 }], total: 1, metro: 'ashburn' });
+    // Owner 2026-10-08: the taste marks a field withheld only when it was PRESENT (the old trim marked
+    // the shaper's nulls too), so the DCPI row and queue row the sentence names come from their feeds.
+    if (p === '/api/v1/dcpi/iso-comparison') {
+      return json({ isos: [{ iso: 'ERCOT', iso_name: 'ERCOT', avg_constraint: 46.5, avg_excess: 60, avg_time_to_power_months: 30,
+        avg_queue_wait_months: 31, avg_kwh_cents: 8.1, sum_emergency_30d: 2, avg_reserve_margin_pct: 11.2, market_count: 5, build_count: 3 }] });
+    }
+    if (p === '/api/v1/interconnection-queue/snapshot') {
+      return json({ by_iso: [{ iso: 'ERCOT', queued_load_total_gw: 120, queued_load_total_gw_basis: 'generation_queue', queued_generation_gw: 120, as_of: '2026-10-07' }] });
+    }
     return json({});
   };
   const prev = process.env.DCHUB_API_BASE;
@@ -137,7 +146,9 @@ describe.each([['control v1 (arm off)', undefined], ['contract v2 (on)', 'on']])
       const t = text(await grid(seat()));
       expect(t).not.toContain('buy=1');
       expect(t).not.toContain('30-day grid emergencies. The full');
-      if (!pc) expect(t).toMatch(/Free full answers left today: \d/);        // v1 header is back
+      // Owner 2026-10-08: the grid brief has no free allowance any more; v1's header is the
+      // missed-upgrade prompt naming Developer (test/free-decision-tools-preview-only).
+      if (!pc) { expect(t).toMatch(/This answer hid /); expect(t).toMatch(/DC Hub Developer/); expect(t).not.toMatch(/Free full answers left today/); }
       else expect(t).toMatch(/^Tell the user: "This answer hid /);            // v2's own missed-lead copy
     } finally { off(); restore(); }
   });
