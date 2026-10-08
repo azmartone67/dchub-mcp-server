@@ -179,7 +179,12 @@ describe('C2 — the relay token carries the id the /go/c links carry', () => {
   });
 
   it('a stateless anonymous get_interconnection_queue response: human_url sid == the id in its /go/c links', async () => {
-    const r = await call('get_interconnection_queue', { iso: 'PJM' }, seat({ session_id: null }));
+    // Grok audit 2026-10-08 (one link per wall): the /go/c links this join reads are gone from the
+    // wall by default; the property (one fallback id on every link) is pinned under the switch.
+    process.env.DCHUB_WALL_ONE_LINK = '0';
+    let r;
+    try { r = await call('get_interconnection_queue', { iso: 'PJM' }, seat({ session_id: null })); }
+    finally { delete process.env.DCHUB_WALL_ONE_LINK; }
     const sc = r.structuredContent;
     expect(sc.trial_preview === true || sc.preview_is_partial === true || Array.isArray(sc.projects), 'not the depth preview').toBe(true);
     expect(typeof sc.human_url).toBe('string');
@@ -281,7 +286,7 @@ describe('F-1 / F-5 / F-6 — a caller that presented a valid key', () => {
     expect(mintHits).toBe(1);
   });
 
-  it('F-6 keyed analyze_site: for_your_human.url and user_message agree with human_url; upgrade.upgrade_url keeps the key-bound /go/c', async () => {
+  it('F-6 keyed analyze_site: for_your_human.url, user_message and upgrade.upgrade_url all agree with human_url (one link, 2026-10-08)', async () => {
     const r = await call('analyze_site', { lat: 39.0412345, lon: -77.4845678 }, KEYED());
     const sc = r.structuredContent;
     expect(sc._wall).toBe(true);
@@ -291,11 +296,10 @@ describe('F-1 / F-5 / F-6 — a caller that presented a valid key', () => {
     expect(sc.user_message).toContain(sc.human_url);
     expect(sc.user_message).not.toContain('/go/c/');
     expect(sc.for_your_human.text).not.toContain('/go/c/');
-    // the payer-key binding stays on the machine field
-    expect(sc.upgrade && sc.upgrade.upgrade_url).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
-    const p = goParts(sc.upgrade.upgrade_url);
-    expect(p[0]).toBe('pro');
-    expect(p[1]).toBe('k-' + sha(LIVE));
+    // Grok audit 2026-10-08 (one link per wall): the machine field points at the same page; the
+    // payer-key binding rides the token's pk- (below), which routes/human_relay binds Pro to.
+    expect(sc.upgrade && sc.upgrade.upgrade_url).toBe(sc.human_url);
+    expect(JSON.stringify(r)).not.toMatch(/dchub\.cloud\/go\/c\//);
     // the keyed relay token binds the same key
     expect(relayParts(sc.human_url)[4]).toBe('pk-' + sha(LIVE));
   });

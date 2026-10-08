@@ -36,7 +36,11 @@ describe('anon_hard_wall', () => {
     () => T.handler(a.data || {}, { signal: new AbortController().signal }));
     expect(r.structuredContent.error).toBe('anon_hard_wall');
     const line = r.content[0].text.split('\n')[0];
-    expect(line).toContain(SHORT);
+    // Grok audit 2026-10-08 (one link per wall): below Developer the person's line carries the
+    // relay page (the one link the wall ends with), not a /u short of the /go/c pack checkout.
+    expect(line).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\//);
+    expect(line).toContain(r.structuredContent.human_url);
+    expect(line).not.toContain(SHORT);
     expect(line).toContain('$10 one-time');
     expect(line).toMatch(/usage capacity/);
     expect(line).not.toMatch(/unlock/i);

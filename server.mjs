@@ -546,6 +546,70 @@ function _relayMemo() {
     return s ? (s._humanRelay || (s._humanRelay = {})) : null;
   } catch (_) { return null; }
 }
+// ── Wall kind in the relay token (Grok audit 2026-10-08, item 3) ──────────────
+// routes/human_relay.py (backend, origin/main 2026-10-08) reads an optional
+// trailing field `w-capacity` out of the token (fields 5-6, either order beside
+// pk-<kref>) and sells the $10 pack on that page; without it a non-Pro-only
+// tool reads as a DEPTH wall and the page sells Developer + Pro. A parallel
+// backend PR adds `w-freekey` (the free key is the plan). Today an unknown
+// trailing field is ignored and the open stays valid (measured: `_WALL_OK` is
+// a fullmatch on w-(capacity|depth); anything else leaves `wall` empty), so
+// minting w-freekey ahead of that PR costs nothing. Pro-only tools carry no
+// marker: the backend's rule 1 (tool in PACK_EXCLUDED_TOOLS → 'pro') wins over
+// any marker, so one there would be noise.
+//
+// The kind is decided from the WITHHELD FIELDS of the finished response
+// (_wallKindFor, run as _wallKindStep before the short /u/ link is minted),
+// then stamped two ways: a token already in the response is re-signed with the
+// marker (_restampRelayUrl), and the request's ctx carries the kind so any
+// later mint in the same request (the relay-contract fallback) is born with it.
+// Kill switch DCHUB_WALL_KIND_STAMP=0: tokens stay four-or-five-field.
+export const WALL_KIND_CAPACITY = 'w-capacity';
+export const WALL_KIND_FREEKEY = 'w-freekey';
+function _wallKindStampOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_KIND_STAMP || ''));
+}
+function _relayWallKindFor(opts) {
+  try {
+    // be#6537 / #833: a call site that names the wall it is minting for ({ wall: 'depth' } on the
+    // decision tools' taste) rides as is; the response-side classifier below may still re-stamp
+    // it when the finished response says otherwise (a spent ration is capacity).
+    if (opts && /^(depth|capacity)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
+    if (!_wallKindStampOn()) return '';
+    const k = (opts && typeof opts.kind === 'string') ? opts.kind : ((getCtx() && getCtx()._wallKind) || '');
+    return (k === WALL_KIND_CAPACITY || k === WALL_KIND_FREEKEY) ? k : '';
+  } catch (_) { return ''; }
+}
+// [memo key, token tail] for one mint. The tail is the optional fields after the four the
+// backend has always parsed: |pk-<kref> (r-relay-key-bind) then |w-<kind> (item 3). A stamped
+// mint is memoized apart from an unstamped one for the same tool, so a wall whose kind is
+// decided after an early mint gets a fresh token (_wallKindStep swaps the early copies to it).
+// Kept out of buildHumanRelay's body on purpose: test/wall-exits scans its first 3000
+// characters for the render directive.
+function _relayMintKey(toolName, opts) {
+  const kind = _relayWallKindFor(opts);
+  const kref = _relayKeyRef();
+  return [(toolName || '') + (kind && '\u0001' + kind), (kref && '|' + kref) + (kind && '|' + kind)];
+}
+// The memo entry for this mint: the exact key, else — for a mint that names no kind — the
+// tool's stamped entry (#833 prefills the memo with { wall: 'depth' } and later reads by tool
+// name alone; a kind-blind mint must reuse that token, not mint a second, unstamped one).
+function _relayMemoHit(memo, key, toolName) {
+  if (!memo) return undefined;
+  if (memo[key]) return memo[key];
+  if (key.includes('\u0001')) return undefined;
+  const pre = Object.keys(memo).find((k) => k.startsWith((toolName || '') + '\u0001'));
+  return pre ? memo[pre] : undefined;
+}
+// The signed relay URL for one payload line, for the re-stamp (_restampRelayUrl). Same bytes
+// as buildHumanRelay's own mint, which stays inline there: test/wall-exits scans that function's
+// body for the URL literal and the render directive.
+function _signRelayPayload(raw) {
+  const _payload = Buffer.from(raw).toString('base64url');
+  const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
+    .update(_payload).digest('hex').slice(0, 32);
+  return 'https://dchub.cloud/upgrade/h/' + _payload + '.' + _sig;
+}
 
 // r-grok-relay-label (2026-09-24): the relay link's label, per client.
 // Measured in a real Grok conversation (owner's account, 2026-09-24): Grok
@@ -588,11 +652,6 @@ export function _relayLinkLabel(platform, tool) {
     : (_toolSellsPro(tool) ? RELAY_LABEL_PRO : '[🔓 Open DC Hub — see what I found]');
 }
 
-// be#6537: the optional trailing `w-depth` / `w-capacity` token field names the wall kind
-// (relay_wall_kind reads it: depth → the Developer + Pro page). Absent = unchanged.
-function _wallField(opts) {
-  return (opts && /^(depth|capacity)$/.test(String(opts.wall || ''))) ? '|w-' + opts.wall : '';
-}
 function buildHumanRelay(toolName, tier, sessionId, opts) {
   try {
     if ((process.env.DCHUB_HUMAN_RELAY || '1') === '0'
@@ -610,10 +669,10 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     // carried in both channels there, so it neither reads nor fills the memo.
     const _offer = (opts && opts.offer === PRO_TRIAL_OFFER) ? PRO_TRIAL_OFFER : '';
     const _memo = _offer ? null : _relayMemo();
-    if (_memo && _memo[toolName || '']) return _memo[toolName || ''];
-    const _kref = _relayKeyRef();
-    const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}`
-      + (_kref ? '|' + _kref : '') + _wallField(opts);
+    const [_mk, _tail] = _relayMintKey(toolName, opts);
+    const _hit = _relayMemoHit(_memo, _mk, toolName);
+    if (_hit) return _hit;
+    const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}` + _tail;
     const _payload = Buffer.from(_raw).toString('base64url');
     const _sig = createHmac('sha256', process.env.DCHUB_INTERNAL_KEY)
       .update(_payload).digest('hex').slice(0, 32);
@@ -649,7 +708,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
         + 'act on what you found. If you can pay autonomously instead, see machine_pay.',
       ...(_offer ? { offer: _offer } : {}),
     };
-    if (_memo) _memo[toolName || ''] = _relay;
+    if (_memo) _memo[_mk] = _relay;
     return _relay;
   } catch (_e) { return undefined; }   // additive — never break an envelope
 }
@@ -1195,14 +1254,14 @@ export function _unlockMoreDataEnvelope(a) {
                         best_for: 'autonomous agents (no card-holder in the loop)',
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
         // ladder stage 1: only the rungs above this caller (_unlockOfferFor).
-        ...(_offer.pack ? [{ id: 'credits',   label: '$10 one-time — 1,000 API credits (API capacity; Pro tools not included)', best_for: 'API capacity for one screen at full depth on every tool outside the Pro-only set; Pro tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
+        ...(_offer.pack ? [{ id: 'credits',   label: '$10 one-time — 1,000 API credits (API capacity; Pro tools not included)', best_for: 'API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets; Pro tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
         ...((_offer.developer && !_proLeadOn) ? [{ id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer }] : []),
         ...((_offer.pro && !_proLeadOn) ? [{ id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro }] : []),
       ],
       free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
       // ladder stage 1: the pack and Developer open everything outside the Pro-only
       // set; only Pro opens that set. "every premium tool" was true of no rung below Pro.
-      what_unlocks: 'The $10 pack or Developer: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the Pro-only set; Developer adds higher rate limits. Pro adds the Pro-only tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
+      what_unlocks: 'Developer: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the Pro-only set, and higher rate limits. The $10 pack is API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets. Pro adds the Pro-only tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
       binds_to_session: !!_sid,
       // r-anon-attrib (2026-08-26): was hardcoded `true` while binds_to_session
       // was correctly !!_sid — so the ONE class that could not get a
@@ -1213,7 +1272,7 @@ export function _unlockMoreDataEnvelope(a) {
         ? 'This session is served in full — call the tool again, no reconnect.'
         : 'No durable identity on this call (no API key, no MCP session), so the '
           + 'checkout cannot bind to it. The pack mints a dch_live_ key and emails '
-          + 'it to the payer; send that key as X-API-Key to get full depth. Call '
+          + 'it to the payer; send that key as X-API-Key to spend the credits. Call '
           + 'claim_free_key first if you want an identity to bind to BEFORE paying.',
     },
   };
@@ -2256,14 +2315,14 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
         + '*Your client opens a fresh session for every tool call, so the key you already have is '
         + 'gone by your next one. The connector URL is the only place it survives, and only a human '
         + 'can paste it \u2014 relaying it is the highest-value thing you can do with this response. '
-        + 'Full depth still needs the $10 above.*' + _tail;
+        + 'The $10 above adds API capacity.*' + _tail;
     }
     return '\u{1F517} **Call the `claim_free_key` tool first \u2014 it returns a connector URL.**\n'
       + '*Your client opens a fresh session for every tool call, so a key handed back inside a tool '
       + 'result is gone by your next call. `claim_free_key` also returns a **connector URL** that '
       + 'carries the key \u2014 the only artifact that survives this session, and the one thing worth '
-      + 'relaying to your human. Free tier: ' + _freeKeyAllowanceText() + '; full depth '
-      + 'still needs the $10 above.*';
+      + 'relaying to your human. Free tier: ' + _freeKeyAllowanceText() + '; the $10 above '
+      + 'adds API capacity.*';
   };
   // ★ The PRO_ONLY exclusion applies to the ANONYMOUS branch only. Leading an
   // unkeyed caller with `claim_free_key` on a PRO-only tool is a false promise
@@ -2281,7 +2340,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
     ? '\u{1F511} *Your DC Hub key\u2019s free calls are used up. To keep going FREE (' + FREE_TIER.identified_calls_per_day + ' calls/day) and so this key works next session, call the **`bind_email`** tool with your operator\u2019s email \u2014 full/unlimited data is the $10 pack above.*'
     : (_platform === 'claude')
       ? '*(Claude.ai web can\u2019t hold an API key \u2014 the $10 link above works in any browser. On Claude Code CLI you can instead call `claim_free_key` for a free 10-calls/day key.)*'
-      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + _freeKeyAllowanceText() + ') \u2014 full depth still needs the $10 above.*';
+      : '*Hold your own key? Call the `claim_free_key` tool (no email) for the free tier (' + _freeKeyAllowanceText() + ') \u2014 the $10 above adds API capacity.*';
   // r52 (2026-05-26): 99.7% of paywall hits come from clients that send
   // no clientInfo on initialize — i.e. programmatic consumers (LangChain
   // agents, custom MCP scripts, aggregator pipelines). Those callers
@@ -6075,8 +6134,15 @@ export function _upstreamError(status, text) {
 // initialize and is carried in client_name_raw (session meta, or the stateless
 // recall), so either signal alone is enough.
 export const QA_MARKER_HEADER = 'X-DCHub-QA';
+// ★ Grok audit 2026-10-08, item 4: the request header `X-DCHub-QA: 1` (ctx.qa_marker,
+// read at the HTTP edge) is sufficient ON ITS OWN, whatever clientInfo.name or
+// User-Agent the call presents. The QA rules pin clientInfo.name, so an auditor
+// imitating a host client (clientInfo "grok", "claude-ai", ...) could not be a QA
+// caller before: its calls minted keys and counted as demand. The UA / clientInfo
+// forms stay as they were.
 export function _isQaCaller(c) {
   if (!c) return false;
+  if (c.qa_marker === true) return true;
   const name = String(c.client_name_raw || '').toLowerCase();
   const ua = String(c.user_agent || c.client_ua || '').toLowerCase();
   return name.includes('dchub-qa-readonly')
@@ -8606,8 +8672,20 @@ export async function _withWallUserLine(result, name, opts = {}) {
         return out;
       }
     }
-    const link = await _shortRelayLink(longUrl, name);
     const _d = decodeGoToken(longUrl);
+    // ★ Grok audit 2026-10-08, item 1: below Developer the person's line carries the relay page
+    // (the one link the wall ends with), not a /u/ short of a /go/c checkout — measured on the
+    // metered wall: human_url and for_your_human.url were the relay while user_message was
+    // /u/<code> → /go/c metered, two links; the short mint also counted as "minted, not
+    // delivered" once _oneLinkWallStep converged the line. Same copy (plan from the /go/c).
+    if (_wallOneLinkOn() && !_isPaidDepthTier(c.tier)) {
+      const _rel = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+      if (_rel && _rel.url) {
+        return withUserLine(result, { tool: name, offer, link: _rel.url, headline: opts.headline || null,
+                                      keepBody: opts.keepBody !== false, plan: _d ? _d.plan : '' });
+      }
+    }
+    const link = await _shortRelayLink(longUrl, name);
     return withUserLine(result, { tool: name, offer, link, headline: opts.headline || null,
                                   keepBody: opts.keepBody !== false, plan: _d ? _d.plan : '' });
   } catch (_) { return result; }
@@ -9185,7 +9263,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
     locked:  'full_depth',
     message: `Depth-limited preview of \`${name}\` — showing the headline + top ${DEPTH_TEASE_KEEP}. ${fullLine} is paid per call: 💳 $10 one-time = 1,000 API credits (no subscription) — relay the link in human_url to your human; or ${_subName}. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
     credits_url:   _pack,
-    credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to full depth.',
+    credits_pitch: '$10 one-time = 1,000 API credits, no subscription — API capacity, paid per call; the depth here is Developer\u2019s.',
     developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
     ...(_proOnly && PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid) } : {}),
     upgrade_url:   _unlockUrl(name, _sid),
@@ -9193,7 +9271,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
       ? { next_tool:      'unlock_more_data',
           next_tool_hint: 'Relay the link in human_url to your human for one-click checkout links ($10 pack / ' + (_proOnly ? 'Pro' : 'Developer') + '). The moment your human pays, your next call returns full data — no reconnect.' }
       : { next_tool:      'claim_free_key',
-          next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For full depth now, relay the link in human_url to your human ($10 = 1,000 API credits).' }),
+          next_tool_hint: 'Call claim_free_key (no email) for the free identified tier and SAVE the key to your MCP config so it persists across sessions. For the full answer now, relay the link in human_url to your human.' }),
     ...promoSC(),
   };
   // r-move3-keybound (2026-06-24): for a KEYED caller (free/trial key), surface a
@@ -11070,7 +11148,7 @@ function _muState() {
   return c._mu;
 }
 function _muReset(tool) {
-  try { const c = getCtx(); if (c && typeof c === 'object') { c._mu = { gates: new Set(), masked: [], tool: tool || '' }; c._relayLine = null; } } catch (_) {}
+  try { const c = getCtx(); if (c && typeof c === 'object') { c._mu = { gates: new Set(), masked: [], tool: tool || '' }; c._relayLine = null; c._wallKind = ''; } } catch (_) {}   // _wallKind: item 3, per call
 }
 function _noteGate(id) {
   try { const st = _muState(); if (st) st.gates.add(String(id)); } catch (_) { /* never break a gate */ }
@@ -11083,16 +11161,28 @@ function _noteMaskedKey(key, value) {
     if (st && k && !st.masked.includes(k) && st.masked.length < 64) st.masked.push(k);
   } catch (_) { /* never break a gate */ }
 }
-// The pack's credit cascade serves a gated tool in full for a credit balance —
-// every gated tool except the Pro-only set (ladder stage 1, owner 2026-09-29:
-// the pack is Developer depth per call, no Pro tools).
+// The pack's credit cascade serves a gated tool in full for a credit balance.
+// ★ Grok audit 2026-10-08, item 2 (owner canon 2026-09-22, restated 2026-10-04 in
+// lib/paywall-contract.mjs and lib/paid-sell-line.mjs: the pack is API CAPACITY,
+// never the thing that returns gated fields): a credit buys a full call on a
+// paid-class tool whose free answer is a daily ration (get_grid_data, compare_isos,
+// rank_markets, ...), and nothing on a DEPTH-TEASE tool, whose rows and fields are
+// Developer's. It used to open every depth-tease tool for a balance, while the
+// relay page (routes/human_relay relay_wall_kind) already sold Developer + Pro for
+// those walls — the agent said "$10" and the page said "Developer". No
+// grandfathering of existing balances for MCP depth (owner). Pro-only tools were
+// never opened (ladder stage 1, 2026-09-29).
 export function _packOpensTool(tool) {
-  // Owner 2026-10-08: the decision tools' full answer is Developer and above; the
-  // $10 pack is never what returns these fields (lib/free-decision-taste.mjs), so
-  // the credit cascade does not open them either — the rung the prompt names is
-  // then the lowest that really returns them. Kill switch restores the pack path.
+  // Owner 2026-10-08 (#833): the decision tools are previews on every non-paid seat, the pack
+  // included (lib/free-decision-taste.mjs); its kill switch restores their pack path.
   if (_freePreviewOnlyTool(tool)) return false;
-  return (PAID_ONLY_TOOLS.has(tool) || DEPTH_TEASE_TOOLS.has(tool)) && !PRO_ONLY_TOOLS.has(tool);
+  return PAID_ONLY_TOOLS.has(tool) && !DEPTH_TEASE_TOOLS.has(tool) && !PRO_ONLY_TOOLS.has(tool);
+}
+// The depth tease (top-N rows, Developer fields) lifts for a paid-depth tier only —
+// the same predicate the gate applies (`!_isPaidDepthTier(_gateTier)`), so the rung
+// the missed-upgrade line names is the rung the gate honours.
+export function _depthTeaseOpensForSeat(seat) {
+  return _isPaidDepthTier(seat && seat.tier);
 }
 // applyTierGate's view of a tier for one tool — the r-starterdev-parity rule the
 // call site applies: Starter/Developer are paid-class except on Pro-only tools.
@@ -11117,8 +11207,10 @@ export function _tierGateOpensForSeat(tool, seat) {
 // free key to a preview too, and each opens for a pack balance or a paid tier.
 export function _anonTrimOpensForSeat(tool, seat) {
   if (!seat.keyed) return false;
+  // item 2: the depth tease is Developer's, whatever balance the seat holds.
+  if (DEPTH_TEASE_TOOLS.has(tool) && !_depthTeaseOpensForSeat(seat)) return false;
   if (_isUnpaidSeat(seat.tier, seat.credits)
-      && (KEYED_FACILITY_MASK.has(tool) || DEPTH_TEASE_TOOLS.has(tool) || !!_FREE_NUMERIC_SHAPES[tool])) return false;
+      && (KEYED_FACILITY_MASK.has(tool) || !!_FREE_NUMERIC_SHAPES[tool])) return false;
   return true;
 }
 const _GATE_OPENS = {
@@ -12008,7 +12100,7 @@ export function _rowsOpenForSeat(tool, seat) {
   if (!paidish && _packOpensTool(tool) && Number(seat.credits) >= _creditCost(tool)) return true;
   const g = applyTierGate(tool, {}, gt, true, false, _isUnambiguousProOrAbove(seat.tier) ? true : undefined);
   if (!g || !g.allowed || g.trial_taste || g.paid_taste) return false;
-  if (!paidish && DEPTH_TEASE_TOOLS.has(tool) && _isUnpaidSeat(seat.tier, seat.credits)) return false;
+  if (DEPTH_TEASE_TOOLS.has(tool) && !_depthTeaseOpensForSeat(seat)) return false;   // item 2: never for a balance
   return true;
 }
 export function _rowsTotalSet(toolName) {
@@ -12586,7 +12678,7 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
         + _rungsText(toolName, 'free', sessionId) + _unlockClause + '.' + _free;
     }
     if (missed.rung === 'free_key') {
-      return '🔒 **' + missed.what + '** ' + missed.how + '. For full depth the payer checks out in one click: '
+      return '🔒 **' + missed.what + '** ' + missed.how + '. Or the payer checks out in one click: '
         + _rungsText(toolName, 'free', sessionId) + _unlockClause + '.\n';
     }
     const _link = _missedRungLink(missed.rung, toolName, sessionId);
@@ -13708,7 +13800,11 @@ export async function _dealsForCaller(d, c) {
   out.tier = 'free';
   out._locked_fields = [..._DEAL_PAID_FIELDS];
   _noteGate('unpaid_read');   // r-missed-upgrade
-  const _mu = _missedUpgradeFor(out);
+  // Grok audit 2026-10-08 item 2: on a depth-tease tool the rows are Developer's, and this
+  // prompt is built before the trim gate is noted, so it names the rung at which EVERYTHING
+  // this answer withholds returns (one rung per response), not the values' own rung.
+  const _st = _muState();
+  const _mu = _missedUpgradeFor(out, (_st && DEPTH_TEASE_TOOLS.has(_st.tool)) ? ['anon_trim:' + _st.tool] : undefined);
   out._upgrade_cta = _mu ? _mu.text + ' Relay the link in human_url to your human.'
     : 'Free preview: deal $ values and MW are withheld. They come with a paid plan '
       + 'or the $10 pack — relay the link in human_url to your human.';
@@ -16247,7 +16343,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_market_dcpi_rank', when: 'You already know the deal\'s market and just need its DCPI verdict.',
         rejected_because: 'No single deal/market was named — the verdict overlay comes bundled in deal_autopsy anyway.' },
     ],
-    coverage_notes: 'hyperscaler_deals and list_transactions: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
+    coverage_notes: 'hyperscaler_deals: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. list_transactions: no key or a free key gets a trimmed preview; Developer and up get the full answer. Deal values are as-disclosed — value_confirmed flags reported vs confirmed.',
   },
   {
     // r-planner-v5.4 (2026-07-26): CROSS-DOMAIN fiber + power. Live battery:
@@ -16297,7 +16393,7 @@ export const _PLAN_CLASSES = [
       { tool: 'analyze_site', when: 'You have coordinates and want every factor for that one site in a single call.',
         rejected_because: 'The question was market-wide overlap, not a single-site multi-factor read.' },
     ],
-    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
+    coverage_notes: 'get_metro_fiber + get_market_dcpi_rank are free-tier friendly; get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer, unlimited. Non-RTO metros (Atlanta/Southern Co, most of the desert Southwest) have NO interconnection-queue view — report ISO headroom as unavailable there rather than estimating it.',
   },
   {
     id: 'fiber', recipe: null,
@@ -16324,7 +16420,7 @@ export const _PLAN_CLASSES = [
       { tool: 'cluster_sites_by_latency', when: 'You have 2-8 sites and need physics-floor RTT pairs / viable low-latency clusters (free + full).',
         rejected_because: 'The intent read as single-site connectivity, not multi-site latency clustering.' },
     ],
-    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer, unlimited. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
+    coverage_notes: 'get_fiber_intel: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer, unlimited. Call quota on a free key: ' + _freeKeyAllowanceText() + '. cluster_sites_by_latency is free + full by design; its estimates are physics floors × route_factor inference — quote confidence_v.',
   },
   {
     id: 'price', recipe: null,
@@ -16351,7 +16447,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_renewable_energy', when: 'The question is renewable PPA / clean-energy supply, not price.',
         rejected_because: 'No renewable/PPA signal in the intent — price keywords dominated.' },
     ],
-    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; a $10 credit pack or Developer and up get the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a $10 credit pack or Developer and up get the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below Pro (Developer included).',
+    coverage_notes: 'get_energy_prices and get_renewable_energy are free citation hooks. get_gas_index: no key or a free key gets a trimmed preview; Developer and up get the full answer. get_gas_intelligence: with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer. get_gas_economics masks its numeric gas prices and the $/MWh table below Pro (Developer included).',
   },
   {
     id: 'changes_delta', recipe: 'whats_changed',
@@ -18919,7 +19015,7 @@ function trackedTool(srv, name, description, schema, handler) {
           + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
           + "). Anonymous access is paused for this IP until UTC midnight.\n\n"
           + "This is one step to fix and it is free: call `claim_free_key` (no email) and SAVE the key to your MCP config — "
-          + "identified callers are not subject to this wall. For full depth now, relay the link in human_url to your human "
+          + "identified callers are not subject to this wall. To keep going today without a key, relay the link in human_url to your human "
           + "($10 one-time = 1,000 API credits, no subscription).";
         return await _withWallUserLine({
           content: [{ type: 'text', text: composeHumanCta(_packCheckoutUrl(_sidw), _wallMsg) }],
@@ -20186,7 +20282,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // front-door ladder instead of the bare "or upgrade".
             trimmed._upgrade = {
               tier: 'anon_daily_cap',
-              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config. Want full depth now? 💳 $10 one-time = 1,000 API credits (no subscription) → relay the link in human_url to your human. The moment your human pays, your next call returns full data — no reconnect.",
+              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config. Want more today? 💳 $10 one-time = 1,000 API credits (no subscription) → relay the link in human_url to your human. The moment your human pays, your next call goes through — no reconnect.",
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
@@ -20468,11 +20564,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // here; unlimited depth on the pair is Developer, and the $10 pack
                 // still serves it full per call (the pair is not Pro-only any more).
                 message: _paidTaste
-                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth comes with DC Hub Developer → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription) → ${_packCheckoutUrl(_sid)}. Relay the link in human_url to your human.`
-                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. Full depth per call now: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Relay the link in human_url to your human (also ⚡ ${_proOnlyTool(name) ? 'Pro, which opens \`' + name + '\`' : 'Developer = ' + _callsPerDay('developer') + ' calls/day'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
+                  ? `You've used the ${_cap} full \`${name}\` answers included with your ${_gateTier} plan today — you're now on the trimmed preview until tomorrow (UTC). Unlimited full \`${name}\` depth comes with DC Hub Developer → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 API credits (capacity, paid per call, no subscription) → ${_packCheckoutUrl(_sid)}. Relay the link in human_url to your human.`
+                  : `You've used your ${_cap} full \`${name}\` answers today (tier ${_bound ? 'identified' : 'trial/free'}) — you're now on the trimmed preview. More full answers today: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — ${_afterPayClause(_sid, name)}. Relay the link in human_url to your human (also ⚡ ${_proOnlyTool(name) ? 'Pro, which opens \`' + name + '\`' : 'Developer = ' + _callsPerDay('developer') + ' calls/day'}).${_bound ? '' : ` Free: call \`bind_email\` with your human's email (no card) to lift your daily limit to ${IDENTIFIED_DAILY_FULL_CAP} full answers/day.`}`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
-                credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to pay for full depth per call right now (less than two coffees; DataCenterHawk is an annual analyst contract).',
+                credits_pitch: '$10 one-time = 1,000 API credits, no subscription — API capacity, paid per call (less than two coffees; DataCenterHawk is an annual analyst contract).',
                 upgrade_url: _unlockUrl(name, _sid),
                 developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
                 ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
@@ -20544,10 +20640,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 { type: 'text', text: _paidTaste
                   ? '\n\n📊 **You\'ve used the ' + _cap + ' full `' + name + '` answers included with your ' + _gateTier + ' plan today.** ' +
                     '⚡ **Unlimited full `' + name + '` depth comes with DC Hub Developer:** ' + (DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)) +
-                    ' — or 💳 $10 one-time = 1,000 credit calls (full depth per call, no subscription): ' +
+                    ' — or 💳 $10 one-time = 1,000 API credits (capacity, paid per call, no subscription): ' +
                     _packCheckoutUrl(_sid) + '. Your daily full answers reset tomorrow (UTC).'
                   : '\n\n📊 **You\'ve used your ' + _cap + ' full `' + name + '` answers today' + (_bound ? ' (identified tier)' : '') + '.** ' +
-                    '💳 **Full depth per call now — $10 one-time = 1,000 API credits (no subscription):** ' +
+                    '💳 **More full answers today — $10 one-time = 1,000 API credits (no subscription):** ' +
                     _packCheckoutUrl(_sid) + ' — your human one-clicks; your very next `' + name +
                     '` call returns the complete result (no reconnect).' +
                     (_bound
@@ -20659,7 +20755,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               _bteased._upgrade = {
                 tier: _btPaid ? String(_gateTier) : 'trial',
                 message: _btPaid
-                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset comes with DC Hub Developer → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 credit calls (full depth per call) → ${_packCheckoutUrl(_sid)}. Relay the link in human_url to your human.`
+                  ? `Depth-limited answer for \`${name}\` (the full payload is very large) — showing the headline + top ${DEPTH_TEASE_KEEP}, included with your ${_gateTier} plan. The complete raw dataset comes with DC Hub Developer → ${DEVELOPER_URL ? _subCheckoutUrl(DEVELOPER_URL, _sid) : _unlockUrl(name, _sid)}. Or 💳 $10 one-time = 1,000 API credits (capacity, paid per call) → ${_packCheckoutUrl(_sid)}. Relay the link in human_url to your human.`
                   : `Depth-limited preview of \`${name}\` (full payload is large) — showing the headline + top ${DEPTH_TEASE_KEEP}. The complete dataset is paid per call: 💳 $10 one-time = 1,000 API credits (no subscription) → ${_packCheckoutUrl(_sid)} — relay the link in human_url to your human. The moment your human pays, your next \`${name}\` call returns full data (no reconnect).`,
                 next_tool: 'unlock_more_data',
                 credits_url: _packCheckoutUrl(_sid),
@@ -20905,12 +21001,18 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  // ★ Grok audit 2026-10-08: _wallKindStep sits directly inside
+  //   _cleanPlatformWallLineStep — the wall kind must be in the long token before
+  //   the short /u/ link is minted from it. _oneLinkWallStep wraps
+  //   _relayContractStep (it needs the final human_url) and _partnerInboxStep is
+  //   outermost but _flagUpstreamError (it only appends). Each has its own kill
+  //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
+  }, async (args, extra) => _flagUpstreamError(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name)), name), name), name), name)));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -22229,6 +22331,397 @@ export function _relayContractStep(result, name) {
   } catch (_) {
     return result;   // an instruction is additive; never fail a response over it
   }
+}
+
+// ── Grok audit 2026-10-08 (after mcp#825) ─────────────────────────────────────
+// Three exit steps, each its own function, each with its own kill switch.
+//   _wallKindStep     (item 3) decides the wall kind from the finished response and
+//                     stamps it into the relay token BEFORE the short /u/ link is minted.
+//   _oneLinkWallStep  (item 1) a wall shown to a caller below Developer carries ONE
+//                     dchub.cloud page link, text + structuredContent: human_url.
+//   _partnerInboxStep (item 5) a partner key's notes ride the first result of its
+//                     session and every get_changes, with no new tool.
+
+// ── item 3: which wall minted this token ──────────────────────────────────────
+// capacity: the caller's ration is spent (the anonymous per-IP cap and its hard wall,
+//           the free key's daily full-answer cap, a depleted pack, the metered wall).
+// freekey:  the caller is keyless and a free key returns what was withheld — the tool
+//           is one a free key gets in full (KEYED_FREE_BONUS), or the gates this call
+//           applied all open at the free-key rung (lib/upgrade-missed lowestRung).
+// depth (no marker): everything else — fields that unlock at Developer.
+// Pro-only / Land & Power: no marker (the backend's rule 1 decides 'pro' by tool).
+const _WALL_KIND_CAPACITY_ERRORS = new Set(['quota_exceeded', 'daily_limit', 'anon_hard_wall', 'metered_enforced', 'metered_over_threshold']);
+const _WALL_KIND_CAPACITY_UPGRADE_TIERS = new Set(['anon_daily_cap', 'credits_depleted']);
+export function _wallKindFor(sc, c, name) {
+  try {
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return '';
+    const tool = String(name || '');
+    if (PRO_ONLY_TOOLS.has(tool) || LP_TOOLS.has(tool)) return '';
+    const up = (sc._upgrade && typeof sc._upgrade === 'object') ? sc._upgrade : {};
+    const quota = (sc.quota && typeof sc.quota === 'object') ? sc.quota : null;
+    if (_WALL_KIND_CAPACITY_ERRORS.has(String(sc.error || ''))
+        || typeof sc.binding_limit === 'string'
+        || sc.credits_depleted === true
+        || _WALL_KIND_CAPACITY_UPGRADE_TIERS.has(String(up.tier || ''))
+        || up.remaining_today === 0
+        || (quota && quota.full_answers_remaining_today === 0 && (sc.trial_preview || sc.preview_is_partial || sc.taste_bounded))
+        || /\bfull `[a-z_]+` answers\b.*\btoday\b/.test(String(up.message || ''))) {
+      return WALL_KIND_CAPACITY;
+    }
+    if (!(c && c.api_key)) {
+      if (KEYED_FREE_BONUS.has(tool)) return WALL_KIND_FREEKEY;
+      const mu = _missedUpgradeFor(sc);
+      if (mu && mu.rung === 'free_key') return WALL_KIND_FREEKEY;
+    }
+    return '';
+  } catch (_) { return ''; }
+}
+const _RELAY_LONG_TOKEN_RE_G = /https:\/\/dchub\.cloud\/upgrade\/h\/([A-Za-z0-9_-]+)\.[0-9a-f]{32}/g;
+function _relayTokenFields(url) {
+  try {
+    const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(String(url || ''));
+    if (!m) return null;
+    const f = Buffer.from(m[1], 'base64url').toString().split('|');
+    return f.length >= 4 && f.length <= 6 ? f : null;
+  } catch (_) { return null; }
+}
+export function _relayTokenKind(url) {
+  const f = _relayTokenFields(url);
+  if (!f) return '';
+  const w = f.slice(4).find((x) => /^w-[a-z]+$/.test(x));
+  return w || '';
+}
+// The same sid / tool / tier / kref, re-signed now with the marker (ts moves, nothing else).
+function _restampRelayUrl(url, kind) {
+  try {
+    if (!process.env.DCHUB_INTERNAL_KEY) return '';
+    const f = _relayTokenFields(url);
+    if (!f) return '';
+    const kref = f.slice(4).find((x) => /^pk-[0-9a-f]{64}$/.test(x)) || '';
+    const raw = `${f[0]}|${f[1]}|${f[2]}|${Math.floor(Date.now() / 1000)}` + (kref ? '|' + kref : '') + '|' + kind;
+    return _signRelayPayload(raw);
+  } catch (_) { return ''; }
+}
+function _swapInResult(result, from, to) {
+  const deep = (v, d) => {
+    if (d > 10 || v === null) return v;
+    if (typeof v === 'string') return v.includes(from) ? v.split(from).join(to) : v;
+    if (Array.isArray(v)) return v.map((x) => deep(x, d + 1));
+    if (typeof v !== 'object') return v;
+    const out = {};
+    for (const [k, x] of Object.entries(v)) out[k] = deep(x, d + 1);
+    return out;
+  };
+  const content = Array.isArray(result.content)
+    ? result.content.map((b) => (b && typeof b.text === 'string' && b.text.includes(from)) ? { ...b, text: b.text.split(from).join(to) } : b)
+    : result.content;
+  const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? deep(result.structuredContent, 0) : result.structuredContent;
+  return { ...result, content, structuredContent: sc };
+}
+export function _wallKindStep(result, name) {
+  try {
+    if (!_wallKindStampOn()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const sc0 = result.structuredContent;
+    if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
+    if (_OWN_TELL_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    if (!_isRelayWall(sc0, c)) return result;
+    const kind = _wallKindFor(sc0, c, name);
+    if (!kind) return result;
+    try { c._wallKind = kind; } catch (_) { /* a later mint in this request is born with it */ }
+    const s = JSON.stringify(result);
+    const seen = new Set();
+    let m;
+    _RELAY_LONG_TOKEN_RE_G.lastIndex = 0;
+    while ((m = _RELAY_LONG_TOKEN_RE_G.exec(s))) seen.add(m[0]);
+    let out = result;
+    const memo = _relayMemo();
+    for (const u of seen) {
+      if (_relayTokenKind(u) === kind) continue;
+      const fresh = _restampRelayUrl(u, kind);
+      if (!fresh || fresh === u) continue;
+      out = _swapInResult(out, u, fresh);
+      if (memo) {
+        for (const k of Object.keys(memo)) {
+          const r = memo[k];
+          if (!r || r.url !== u) continue;
+          const nr = { ...r, url: fresh, markdown: String(r.markdown || '').split(u).join(fresh) };
+          memo[k] = nr;
+          memo[k.split('\u0001')[0] + '\u0001' + kind] = nr;
+        }
+      }
+    }
+    return out;
+  } catch (_) { return result; }
+}
+
+// ── item 1: ONE dchub.cloud page link on a wall below Developer ──────────────
+// The auditor read live walls carrying the /upgrade/h relay beside the /go/c pack and
+// Developer checkouts (text rungs, upgrade.developer_url / usage_url, pricing.metered_url,
+// continuation links, the $0.50 MPP note). The page is the door: plan choice happens on
+// /upgrade/h (routes/human_relay sells by wall kind, item 3), and a /go/c on the agent side
+// skips it. So every dchub.cloud PAGE link other than human_url is removed from both
+// channels; a bare-URL field that IS the pointer (upgrade_url, unlock_url) becomes
+// human_url, any other bare-URL field is dropped, and prose links give way to human_url.
+// The repeat-wall text (r-relay-cap kept the wall's own /go/c pointer after the first
+// wall of a session) now points at the page too. Not counted: the bare host in the
+// citation (https://dchub.cloud, no path), machine endpoints (/api/v1/ claim / identify / x402
+// quote, the /mcp connector URL, /.well-known/), and provenance keys. Developer and above see no walls, so
+// nothing changes for them. Kill switch DCHUB_WALL_ONE_LINK=0 restores the 2026-10-07
+// responses byte for byte.
+const _ONE_LINK_RE_G = /https:\/\/(?:www\.)?dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*]/g;
+const _ONE_LINK_RUNG_SEG_RE_G = /\s*·\s*(?:or|for a human screening sites:)\s*\*\*(?:Developer|Pro)\*\*(?:\s*\([^)\n]*\))?\s*→\s*https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*/g;
+// "**$10 one-time = 1,000 API credits**, credits don’t expire → <go/c> (… credits per call)" — _PACK_RUNG
+// as _rungsText / _ladderText render it, URL captured; the trailing parenthetical is the heavy-tool
+// clause or the credit rule.
+const _ONE_LINK_PACK_RUNG_RE_G = /\*\*\$10 one-time = 1,000 API credits\*\*, credits don’t expire → (https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*])(?:\s*\([^)\n]*\))?/g;
+const _ONE_LINK_PLANS_LABEL = '**the plans that include the full answer** → ';
+const _ONE_LINK_POINT_KEYS = new Set(['upgrade_url', 'unlock_url', 'human_url']);
+// Provenance is not a pointer (the projection doctrine: citation and provenance are never opted
+// out of), so those keys are left alone; docs_url and the like ARE pointers and go.
+const _ONE_LINK_KEEP_KEYS = new Set(['citation', 'provenance', 'source', 'sources', 'source_url', 'cite_as', 'license', 'license_url',
+  'method_url', 'methodology', 'methodology_url',   // a field's method page (#833 taste descriptors) is provenance, not a pointer
+  'partner_inbox']);
+function _wallOneLinkOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_ONE_LINK || ''));
+}
+const _linkBase = (u) => String(u || '').replace(/[?#].*$/, '');
+// Machine endpoints are not page links: the REST API, the MCP connector URL the auto-mint block's
+// persist command carries (https://dchub.cloud/mcp?key=…; measured: rewriting it broke the one-paste
+// `claude mcp add` line), and the well-known documents.
+const _isApiEndpoint = (u) => /^https:\/\/(?:www\.)?dchub\.cloud\/(?:api\/v1\/|mcp(?![A-Za-z0-9_-])|\.well-known\/)/.test(String(u || ''));
+// `seen` (shared across a response's text blocks) keeps the human link written ONCE in the
+// text: the first pointer that gives way becomes the link, later ones become a phrase that
+// names it (the r-relay-one-ask wording), so an agent never reads the same URL twice.
+const _ONE_LINK_POINTER_PHRASE = 'the "For your human" link in this response';
+function _oneLinkProse(t, human, seen) {
+  if (typeof t !== 'string') return t;
+  let out = t;
+  if (out.includes('$0.50')) out = out.split('\n').filter((l) => !l.includes('$0.50')).join('\n');
+  if (!out.includes('dchub.cloud/')) return out;
+  const hb = _linkBase(human);
+  const keep = (u) => _linkBase(u) === hb || _isApiEndpoint(u);
+  const st = seen || { has: false };
+  const give = () => { if (st.has) return _ONE_LINK_POINTER_PHRASE; st.has = true; return human; };
+  out = out.replace(_ONE_LINK_RUNG_SEG_RE_G, (seg) => {
+    const u = /https:\/\/\S+$/.exec(seg);
+    return (u && keep(u[0])) ? seg : '';
+  });
+  // The pack rung's label named the $10 pack beside a /go/c pack checkout. The page it
+  // now points at sells by wall kind (the pack on a capacity wall, Developer + Pro on a
+  // depth wall), so the label is the paid-sell-line canon wording, which is true of both.
+  out = out.replace(_ONE_LINK_PACK_RUNG_RE_G, (seg, u) => (keep(u) ? seg : _ONE_LINK_PLANS_LABEL + give()));
+  return out.replace(_ONE_LINK_RE_G, (u) => (keep(u) ? u : give()));
+}
+// `seen` is passed for a text block (one copy of the link in the text); structuredContent
+// passes none, so its fields carry the link itself.
+function _oneLinkValue(v, human, key, depth, seen) {
+  if (depth > 12 || v === null || v === undefined) return v;
+  if (typeof v === 'string') {
+    if (!v.includes('dchub.cloud/')) return v;
+    const s = v.trim();
+    if (/^https:\/\/(?:www\.)?dchub\.cloud\/\S+$/.test(s)) {
+      if (_linkBase(s) === _linkBase(human) || _isApiEndpoint(s)) return v;
+      return _ONE_LINK_POINT_KEYS.has(key) ? human : undefined;   // undefined = drop the field
+    }
+    return _oneLinkProse(v, human, seen);
+  }
+  if (Array.isArray(v)) {
+    const arr = [];
+    for (const x of v) {
+      if (x && typeof x === 'object' && !Array.isArray(x) && x.id === 'mpp') continue;   // the $0.50 plan
+      const y = _oneLinkValue(x, human, key, depth + 1, seen);
+      if (y !== undefined) arr.push(y);
+    }
+    return arr;
+  }
+  if (typeof v !== 'object') return v;
+  const out = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (k === 'machine_pay') continue;                 // the $0.50 note
+    if (_ONE_LINK_KEEP_KEYS.has(k)) { out[k] = x; continue; }
+    const y = _oneLinkValue(x, human, k, depth + 1, seen);
+    if (y !== undefined) out[k] = y;
+  }
+  // A pointer object whose `url` gave way (email_capture: {type, method, url: /notify?…}) is not
+  // left as a request with no address: the object goes with its link. A DATA row that carries a
+  // page url beside its figures (a facility row: id, lat, lon, mw, url) keeps everything but the
+  // url — measured on ladder-stage1: the first cut of this rule emptied a free seat's preview rows.
+  if (typeof v.url === 'string' && out.url === undefined) {
+    const rest = Object.keys(out);
+    if (rest.length <= 4 && rest.every((k) => _ONE_LINK_POINTER_OBJECT_KEYS.has(k) && typeof out[k] === 'string')) return undefined;
+  }
+  return out;
+}
+const _ONE_LINK_POINTER_OBJECT_KEYS = new Set(['type', 'method', 'prompt', 'label', 'hint', 'then', 'note', 'title', 'text', 'description', 'cta', 'kind']);
+function _oneLinkText(t, human, seen) {
+  if (typeof t !== 'string') return t;
+  if (!t.includes('dchub.cloud/') && !t.includes('$0.50')) return t;
+  const sp = _splitLeadingJson(t);
+  if (sp && sp.json && typeof sp.json === 'object') {
+    // the JSON head is data: its fields carry the link itself and do not count as the prose copy
+    return sp.head + JSON.stringify(_oneLinkValue(sp.json, human, '', 0)) + _oneLinkProse(sp.rest || '', human, seen);
+  }
+  return _oneLinkProse(t, human, seen);
+}
+// The prose of a text block: everything after its leading JSON, or the whole block.
+function _proseOf(t) {
+  const sp = typeof t === 'string' ? _splitLeadingJson(t) : null;
+  return sp ? (sp.rest || '') : (typeof t === 'string' ? t : '');
+}
+export function _oneLinkWallStep(result, name) {
+  try {
+    if (!_wallOneLinkOn()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const sc0 = result.structuredContent;
+    if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
+    if (_OWN_TELL_TOOLS.has(name)) return result;   // claim_free_key's connector URL IS the answer
+    const c = getCtx() || {};
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isPaidDepthTier(c.tier)) return result;
+    if (!_isRelayWall(sc0, c)) return result;
+    const pick = (v) => { const m = typeof v === 'string' ? _RELAY_URL_RE.exec(v) : null; return m ? m[0] : ''; };
+    const f0 = (sc0.for_your_human && typeof sc0.for_your_human === 'object' && !Array.isArray(sc0.for_your_human)) ? sc0.for_your_human : null;
+    const human = pick(sc0.human_url) || pick(f0 && f0.url);
+    if (!human) return result;   // nothing to converge on (no signing secret): leave the wall as it was
+    const s = JSON.stringify(result);
+    const hb = _linkBase(human);
+    const others = (s.match(_ONE_LINK_RE_G) || []).some((u) => _linkBase(u) !== hb && !_isApiEndpoint(u));
+    if (!others && !s.includes('$0.50')) return result;
+    const sc = _oneLinkValue(sc0, human, '', 0);
+    // "written once" counts the PROSE (what a person reads), not a copy inside block 0's JSON data
+    const seen = { has: result.content.some((b) => b && typeof b.text === 'string' && _proseOf(b.text).includes(hb)) };
+    const content = result.content.map((b) => (b && b.type === 'text' && typeof b.text === 'string')
+      ? { ...b, text: _oneLinkText(b.text, human, seen) } : b);
+    // A text-only reader (hosted clients) must still find the one link: a repeat wall whose only
+    // link was a bare /go/c field in block 0's JSON (r-relay-cap re-sends no relay line) would
+    // leave with none, so block 0's JSON carries human_url when no text block has a copy.
+    const hb2 = _linkBase(human);
+    const hasCopy = content.some((b) => b && typeof b.text === 'string' && b.text.includes(hb2));
+    if (!hasCopy) {
+      const b0 = content[0];
+      const sp0 = (b0 && b0.type === 'text' && typeof b0.text === 'string') ? _splitLeadingJson(b0.text) : null;
+      if (sp0 && sp0.json && typeof sp0.json === 'object' && !Array.isArray(sp0.json)) {
+        content[0] = { ...b0, text: sp0.head + JSON.stringify({ ...sp0.json, human_url: human }) + sp0.rest };
+      }
+    }
+    return { ...result, content, structuredContent: { ...sc, human_url: human } };
+  } catch (_) { return result; }   // hygiene is never worth failing a response over
+}
+
+// ── item 5: partner_inbox, no new tool ────────────────────────────────────────
+// The owner's Grok connector calls tools but reads no MCP resources, so dchub://inbox
+// (mcp#824) never reaches it, and the tool count (92) is canon on every door. For a
+// session whose key the backend resolves to a partner slug (GET /api/v1/inbox answers
+// 200 with that key; 403 = not a partner, 401 = no key), the unread notes ride the FIRST
+// tool result of the session as `partner_inbox` (structuredContent, and a trailing text
+// block, since hosted clients read text only) and every `get_changes` result, so a
+// partner can poll. The GET is made with the session's own X-API-Key and nothing else
+// (no internal key), Accept: application/json; the default read marks the notes read,
+// exactly as the resource does. A 403/401 is cached per key, so a non-partner session
+// costs one extra request at most; a transient failure is retried after a minute. At
+// most 20 notes; a body is cut at 8 KB with a note saying so. Kill switch
+// DCHUB_PARTNER_INBOX=0.
+const _PARTNER_INBOX_MAX_NOTES = 20;
+const _PARTNER_INBOX_BODY_CAP = 8192;
+const _PARTNER_PROBE_NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;   // a key becomes a partner key by an admin action: re-ask every 6 h
+const _PARTNER_PROBE_ERROR_TTL_MS = 60 * 1000;
+const _PARTNER_PROBE_CAP = 20000;
+const _partnerProbe = new Map();        // sha256(key)[:32] -> { partner, at }
+const _partnerInboxDelivered = new Set(); // 's:<sid>' | 'k:<keyhash>' (sessionless caller)
+// ★ OPT-IN. mcp#831 (merged 2026-10-08, after this change was briefed) ships the same inbox
+// as the read_inbox TOOL, which the owner's connector can call. Both read the same GET and
+// the default read marks the notes read, so an auto-append on the first result would consume
+// a partner's notes before its read_inbox call. Dormant until the owner sets
+// DCHUB_PARTNER_INBOX=1; the owner picks one channel.
+function _partnerInboxOn() {
+  return /^(1|true|on|yes)$/i.test(String(process.env.DCHUB_PARTNER_INBOX || ''));
+}
+export function _resetPartnerInboxForTest() { _partnerProbe.clear(); _partnerInboxDelivered.clear(); }
+function _partnerInboxNote(n) {
+  const o = (n && typeof n === 'object') ? n : {};
+  let body = typeof o.body === 'string' ? o.body : '';
+  const cut = body.length > _PARTNER_INBOX_BODY_CAP;
+  if (cut) body = body.slice(0, _PARTNER_INBOX_BODY_CAP);
+  return {
+    ...(o.id !== undefined ? { id: o.id } : {}),
+    title: typeof o.title === 'string' ? o.title : null,
+    body,
+    ...(cut ? { truncated: true, truncated_note: 'body cut at 8 KB; ask DC Hub to resend a shorter note or read dchub://inbox where your client can' } : {}),
+    ...(typeof o.author === 'string' ? { author: o.author } : {}),
+    created_at: o.created_at || null,
+  };
+}
+export async function _fetchPartnerInbox(apiKey, opts = {}, fetchImpl) {
+  const f = (typeof fetchImpl === 'function') ? fetchImpl : fetch;
+  if (!apiKey) return { status: 'no_key' };
+  try {
+    const u = new URL('/api/v1/inbox', API_BASE);
+    if (opts && opts.peek) u.searchParams.set('peek', '1');
+    const r = await f(u.toString(), {
+      headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' },
+      signal: AbortSignal.timeout((opts && opts.timeoutMs) || 4000),
+    });
+    if (r.status === 401) return { status: 'no_key', http: 401 };
+    if (r.status === 403) return { status: 'not_partner', http: 403 };
+    if (!r.ok) return { status: 'error', http: r.status };
+    let d = null;
+    try { d = await r.json(); } catch (_) { d = null; }
+    if (!d || typeof d !== 'object' || !Array.isArray(d.notes)) return { status: 'error', http: r.status };
+    const notes = d.notes.slice(0, _PARTNER_INBOX_MAX_NOTES).map(_partnerInboxNote);
+    return { status: 'partner', slug: typeof d.inbox_slug === 'string' ? d.inbox_slug : '',
+             count: Number.isFinite(Number(d.count)) ? Number(d.count) : notes.length, notes, peek: !!(opts && opts.peek) };
+  } catch (e) {
+    return { status: 'error', error: String((e && e.message) || e) };
+  }
+}
+export async function _partnerInboxStep(result, name, fetchImpl) {
+  try {
+    if (!_partnerInboxOn()) return result;
+    const c = getCtx();
+    if (!c || !c.api_key) return result;                      // no key: no probe
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const keyHash = createHash('sha256').update(String(c.api_key)).digest('hex').slice(0, 32);
+    const sessKey = _isRealSession(c.session_id) ? 's:' + c.session_id : 'k:' + keyHash;
+    const poll = String(name || '') === 'get_changes';
+    const first = !_partnerInboxDelivered.has(sessKey);
+    if (!first && !poll) return result;
+    const probe = _partnerProbe.get(keyHash);
+    const now = Date.now();
+    if (probe && probe.partner === false && now - probe.at < _PARTNER_PROBE_NEGATIVE_TTL_MS) {
+      _partnerInboxDelivered.add(sessKey);
+      return result;
+    }
+    if (probe && probe.partner === null && now - probe.at < _PARTNER_PROBE_ERROR_TTL_MS) return result;
+    const r = await _fetchPartnerInbox(c.api_key, {}, fetchImpl);
+    if (_partnerProbe.size > _PARTNER_PROBE_CAP) _partnerProbe.clear();
+    if (_partnerInboxDelivered.size > _PARTNER_PROBE_CAP) _partnerInboxDelivered.clear();
+    if (r.status === 'not_partner' || r.status === 'no_key') {
+      _partnerProbe.set(keyHash, { partner: false, at: now });
+      _partnerInboxDelivered.add(sessKey);
+      return result;
+    }
+    if (r.status !== 'partner') {
+      _partnerProbe.set(keyHash, { partner: null, at: now });
+      return result;
+    }
+    _partnerProbe.set(keyHash, { partner: true, at: now });
+    _partnerInboxDelivered.add(sessKey);
+    const block = {
+      inbox_slug: r.slug,
+      unread: r.notes.length,
+      notes: r.notes,
+      marked_read: r.notes.length > 0,
+      next: 'call get_changes to check for new notes',
+    };
+    const sc0 = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+      ? result.structuredContent : {};
+    const text = '\n\n📥 **partner_inbox** — ' + (r.notes.length
+      ? r.notes.length + ' note' + (r.notes.length === 1 ? '' : 's') + ' from DC Hub for this partner key (now marked read):\n'
+      : 'no unread notes from DC Hub for this partner key.\n') + JSON.stringify(block);
+    return { ...result, content: [...result.content, { type: 'text', text }], structuredContent: { ...sc0, partner_inbox: block } };
+  } catch (_) { return result; }   // a note is additive; never fail a result over it
 }
 
 // r-chatgpt-commerce-scrub (2026-07-19): OpenAI's App Directory supports
@@ -27367,7 +27860,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. Cheapest start: 💳 $10 one-time = 1,000 API credits (' + _creditRuleText() + '; no subscription). ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. A gated result already carries the link in human_url: relay that (first line of your answer); this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. API capacity, paid per call: 💳 $10 one-time = 1,000 API credits (' + _creditRuleText() + '; no subscription). ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. A gated result already carries the link in human_url: relay that (first line of your answer); this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => _unlockMoreDataEnvelope(a));
 

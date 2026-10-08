@@ -179,11 +179,13 @@ function expectFreePreview(out, label) {
     });
     expect(body.tier, `${label} ${where}: a free preview still says tier "paid"`).toBe('free');
     expect(body._locked_fields, `${label} ${where}: _locked_fields`).toEqual(['value', 'value_display', 'mw']);
-    // r-missed-upgrade (2026-09-29): the CTA names what this answer hid and the
-    // lowest rung that returns it (the pack: a live balance is a paying read).
+    // r-missed-upgrade (2026-09-29): the CTA names what this answer hid and the lowest rung that
+    // returns it. Grok audit 2026-10-08 item 2: list_transactions is depth-teased below Developer
+    // and the response names ONE rung, the one at which everything it withholds returns —
+    // Developer. (A live balance still returns the values: the pack seat below.)
     const cta = String(body._upgrade_cta || '');
     expect(cta, `${label} ${where}: _upgrade_cta`).toMatch(/^This answer hid deal values and MW\./);
-    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('The plans that return them are listed behind the link');
+    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('They come with DC Hub Developer');
   }
   for (const needle of EXACT_NEEDLES) {
     expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);
@@ -257,8 +259,25 @@ describe('r-teaser-parity — list_transactions keeps deal $ values and MW paid'
     }
   });
 
-  it('an identified key holding a live $10 pack balance: unchanged (the pack is a paid read)', async () => {
-    expectUnchanged(await listTransactions(K_PACK), 'identified + pack');
+  // Grok audit 2026-10-08 item 2: the pack is API capacity, not depth. A live balance is still a
+  // paying READ (deal values and MW come back on every row served), but the rows themselves are
+  // the depth tease below Developer, so the pack seat gets the three newest deals WITH their
+  // values and no free-preview line. It used to get all twelve.
+  it('an identified key holding a live $10 pack balance: three rows, values kept (a paid read, Developer rows)', async () => {
+    const out = await listTransactions(K_PACK);
+    const list = bodies(out);
+    expect(list.length, 'identified + pack: no body carried transactions').toBeGreaterThan(0);
+    for (const [where, body] of list) {
+      const rows = body.transactions || [];
+      expect(rows.length, `identified + pack ${where}: rows`).toBe(3);
+      rows.forEach((row, i) => {
+        expect(row.value, `identified + pack ${where} #${i} value`).toBe(DEALS[i].value);
+        expect(row.value_display, `identified + pack ${where} #${i} value_display`).toBe(DEALS[i].value_display);
+        expect(row.mw, `identified + pack ${where} #${i} mw`).toBe(DEALS[i].mw);
+      });
+      expect(body._upgrade_cta, `identified + pack ${where}: the free-preview line on a paid read`).toBeUndefined();
+      expect(body._locked_fields, `identified + pack ${where}: _locked_fields`).toBeUndefined();
+    }
     expect(creditHits.get(K_PACK), 'the pack balance was never read').toBeGreaterThan(0);
   });
 });

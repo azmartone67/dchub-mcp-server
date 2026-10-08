@@ -236,9 +236,11 @@ describe('r-relay-cap — unbound trial (inline full off): the "call again" ACK 
 
     const r2 = await call(...GRID);
     expect(r2.text, 'the unlock ACK was repeated: the call-it-again loop').not.toContain(ACK_MANUAL);
-    expect(r2.text, 'the /upgrade/h relay was re-sent beside the wall pointer').not.toContain('dchub.cloud/upgrade/h/');
+    // Grok audit 2026-10-08 (one link per wall): the repeat wall's ONE pointer is the /upgrade/h
+    // page (it was the wall's own /go/c pack checkout, which skipped the page). Still one line.
     expect(payLines(r2.text).length, 'the gated wall lost its pointer').toBe(1);
-    expect(payLines(r2.text)[0]).toContain('dchub.cloud/go/c/');
+    expect(payLines(r2.text)[0]).toContain('dchub.cloud/upgrade/h/');
+    expect(r2.text).not.toContain('dchub.cloud/go/c/');
 
     const o1 = await (await session(port, '198.51.100.42'))(...GRID);
     expect(o1.text).toContain(ACK_MANUAL);

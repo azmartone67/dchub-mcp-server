@@ -143,6 +143,10 @@ beforeAll(async () => {
   // _goUrl reads the signing secret per call; without it links stay raw Stripe URLs.
   prevSecret = process.env.DCHUB_INTERNAL_KEY;
   process.env.DCHUB_INTERNAL_KEY = SECRET;
+  // Grok audit 2026-10-08 (one link per wall): the /go/c tokens this suite decodes are gone from
+  // a keyless / free-key wall by default; which key a /go/c binds is still the property pinned
+  // here (the switch restores the links), so the suite runs with the one-link step off.
+  process.env.DCHUB_WALL_ONE_LINK = '0';
 
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = httpServer.address().port;
@@ -153,6 +157,7 @@ afterAll(async () => {
   else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prevFreeDecision;
   if (prevSecret === undefined) delete process.env.DCHUB_INTERNAL_KEY;
   else process.env.DCHUB_INTERNAL_KEY = prevSecret;
+  delete process.env.DCHUB_WALL_ONE_LINK;
   await new Promise((resolve) => (httpServer ? httpServer.close(resolve) : resolve()));
   await new Promise((resolve) => (stub ? stub.close(resolve) : resolve()));
   if (prevBase === undefined) delete process.env.DCHUB_API_BASE;

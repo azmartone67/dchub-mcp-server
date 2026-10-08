@@ -198,7 +198,12 @@ function relaySids(body) {
 
 describe('ChatGPT stateless calls carry the conversation as the session id', () => {
   it('openai/session present → /upgrade/h and every /go/c token carry oai-<hash>', async () => {
-    const body = await stateless(OAI_UA, { 'openai/session': CONV, 'openai/subject': 'u_x' });
+    // Grok audit 2026-10-08 (one link per wall): the /go/c tokens are gone from a keyless wall by
+    // default; the sid they carry is still pinned here under the switch.
+    process.env.DCHUB_WALL_ONE_LINK = '0';
+    let body;
+    try { body = await stateless(OAI_UA, { 'openai/session': CONV, 'openai/subject': 'u_x' }); }
+    finally { delete process.env.DCHUB_WALL_ONE_LINK; }
     const rs = relaySids(body);
     expect(rs.length, 'no /upgrade/h minted on the ChatGPT path').toBeGreaterThan(0);
     for (const s of rs) expect(s).toBe(expectedSid);

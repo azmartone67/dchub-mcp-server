@@ -159,6 +159,7 @@ test/grok-instructions-tool-count.test.mjs
 test/grok-no-facility-count.test.mjs
 test/grok-profile.test.mjs
 test/grok-relay-label.test.mjs
+test/grok-wall-hygiene-1008.test.mjs
 test/guided-auth-walls.test.mjs
 test/handler-args-declared.test.mjs
 test/handshake-is-lean.test.mjs

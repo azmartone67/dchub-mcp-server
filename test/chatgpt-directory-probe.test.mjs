@@ -206,7 +206,10 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
       const r = await call('/mcp', name, GUESS_ARGS);
       for (const h of probeHits(r.raw)) hits.add(h);
     }
-    expect([...hits]).toEqual(expect.arrayContaining(['/go/c', '/upgrade/h', '$<digit>', 'dch_ key', 'session id']));
+    // Grok audit 2026-10-08 (one link per wall): a keyless /mcp wall carries the /upgrade/h relay and
+    // no /go/c checkout any more, so the control reads the relay, the price and the key / session
+    // material the directory probe must never see.
+    expect([...hits]).toEqual(expect.arrayContaining(['/upgrade/h', '$<digit>', 'dch_ key', 'session id']));
   }, 60_000);
 
   it('no tool response carries commerce, keys or session ids, and gated results end with the plans line', async () => {

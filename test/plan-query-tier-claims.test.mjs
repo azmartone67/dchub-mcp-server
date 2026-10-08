@@ -99,15 +99,30 @@ const PHRASES = [
     fresh: m(P, F, F, F, F, F), spent: m(P, F, F, F, F, F), threeRowPreview: true },
   // ladder stage 1 (2026-09-29): Starter is not sold, so the notes name Developer.
   // A grandfathered Starter key still gets these in full (the seat below).
+  // Grok audit 2026-10-08 item 2: the $10 pack is API capacity and opens no depth-tease tool, so
+  // the notes name Developer alone and the pack seat reads as the identified seat.
+  { id: 'developer-full',
+    re: /no key or a free key gets a trimmed preview; Developer and up get the full answer(?!, unlimited)/,
+    fresh: m(P, P, P, F, F, F), spent: m(P, P, P, F, F, F) },
+  { id: 'allowance-then-developer-full',
+    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer(?!, unlimited)/,
+    fresh: m(P, F, F, F, F, F), spent: m(P, P, P, F, F, F) },
+  // A rationed paid-class tool that is NOT depth-teased (hyperscaler_deals): a credit still buys
+  // the full call, so the pack seat reads full here.
   { id: 'pack-or-developer-full',
     re: /no key or a free key gets a trimmed preview; a \$10 credit pack or Developer and up get the full answer(?!, unlimited)/,
     fresh: m(P, P, F, F, F, F), spent: m(P, P, F, F, F, F) },
-  { id: 'allowance-then-developer-full',
+  // The pre-2026-10-08 wording for depth-tease tools (the pack sold as a depth plan), kept KNOWN
+  // so re-inserting it on one of them is driven: the pack seat no longer gets those in full.
+  { id: 'legacy-allowance-then-pack-or-developer-full',
     re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Developer and up get the full answer(?!, unlimited)/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, F, F, F, F) },
   // ladder stage 1: grid/fiber intel are unlimited at Developer (and per call on
   // the pack). A grandfathered Starter key keeps its old daily allowance (spent → P).
   { id: 'allowance-then-developer-unlimited',
+    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer, unlimited/,
+    fresh: m(P, F, F, F, F, F), spent: m(P, P, P, P, F, F) },
+  { id: 'legacy-allowance-then-pack-or-developer-unlimited',
     re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Developer and up get the full answer, unlimited/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, F, P, F, F) },
   // The pre-stage-1 wording, kept KNOWN so re-inserting it is driven and fails.

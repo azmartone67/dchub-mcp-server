@@ -522,7 +522,10 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
     expect(S._relayLinkLabel('claude', 'get_market_intel')).toBe('[🔓 Open DC Hub — see what I found]');
     expect(S._relayLinkLabel('grok', 'list_transactions')).toBe(S.GROK_RELAY_LABEL);   // control: other tools unchanged
     expect(S._packOpensTool('get_interconnection_queue')).toBe(false);
-    expect(S._packOpensTool('list_transactions')).toBe(true);                           // control
+    // Grok audit 2026-10-08 item 2: the pack opens no depth-tease tool (list_transactions is one), so the
+    // control is a rationed paid-class tool a credit still buys in full.
+    expect(S._packOpensTool('list_transactions')).toBe(false);
+    expect(S._packOpensTool('hyperscaler_deals')).toBe(true);                           // control
   });
   it('the flag parses like every other kill switch here', () => {
     expect(T.freeDecisionPreviewOnlyOn({})).toBe(true);

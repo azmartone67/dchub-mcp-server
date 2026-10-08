@@ -263,7 +263,7 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     tool: 'list_transactions', args: {}, backend: DEALS,
     seats: ['nokey', 'free'],
     keysOf: (p) => [...withheldKeys(DEALS, p)],
-    expectRung: { nokey: 'pack', free: 'pack' },
+    expectRung: { nokey: 'developer', free: 'developer' },   // Grok audit 2026-10-08 item 2: the rows are Developer's
   });
   family({
     tool: 'get_retirement_headroom', args: { target_mw: 50, horizon_months: 18 }, backend: RETIRE,
@@ -295,7 +295,7 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     const [p] = prompts(res.all);
     expect(p.labels).toEqual(expect.arrayContaining(['projects']));
     expect(p.rung).toBe('developer');
-    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* They come with DC Hub Developer → https:\/\/dchub\.cloud\/go\/c\//);
+    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* They come with DC Hub Developer → (?:https:\/\/dchub\.cloud\/upgrade\/h\/|the "For your human" link)/);   // one link per wall (Grok audit 2026-10-08): the page, never a /go/c
     expect(res.text).not.toMatch(/\$10 one-time/);
   });
 

@@ -48,6 +48,8 @@ describe('wiring', () => {
   it('the step sits inside _flagUpstreamError, which stays outermost', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     // r-relay-contract (2026-10-06): the relay chokepoint wraps the split step, still inside the flag.
-    expect(src).toContain('async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
+    // Grok audit 2026-10-08: _oneLinkWallStep wraps the contract step (it needs the final human_url)
+    // and _partnerInboxStep is outermost but the flag; the flag stays outermost.
+    expect(src).toContain('async (args, extra) => _flagUpstreamError(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
   });
 });

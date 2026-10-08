@@ -324,7 +324,8 @@ const PINNED = {
     pro: [F, F] },
   get_fiber_intel: {
     anon: [P, P], free: [F, P], ident: [F, P],
-    pack: [F, F], starter: [F, P],
+    pack: [F, P],                       // Grok audit 2026-10-08 item 2: a balance is capacity, not depth — the pack seat is the identified seat here (was F,F)
+    starter: [F, P],
     developer: [F, F],                  // was A10 → P3
     pro: [F, F] },
   get_dchub_recommendation: {
