@@ -587,6 +587,12 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     if (!sessionId) {
       try { sessionId = (getCtx() && getCtx().session_id) || ''; } catch (_) { sessionId = ''; }
     }
+    // ★ C2 (QA sweep 2026-10-07): no session → the sid is the id this request's /go/c links
+    // carry (the a- offer id, else the per-request uuid); see _requestFallbackSid. An EMPTY sid
+    // sent the human page to an unsigned checkout with a constant client_reference_id.
+    if ((!sessionId || sessionId === 'no-session') && _relaySidFallbackOn()) {
+      sessionId = _anonAttribRef() || _requestFallbackSid();
+    }
     // r-pro-trial-offer: an offer relay is built once by _withProTrialOffer and
     // carried in both channels there, so it neither reads nor fills the memo.
     const _offer = (opts && opts.offer === PRO_TRIAL_OFFER) ? PRO_TRIAL_OFFER : '';
@@ -2703,13 +2709,46 @@ const _GO_PLAN_BY_LINK = {
 // an older parser folds the third field into the ref, fails the charset check
 // and drops client_reference_id. Kill switch DCHUB_GO_SID=0.
 const _GO_SID_OK = /^[A-Za-z0-9_.:-]{1,200}$/;
+// ★ C2 (QA sweep 2026-10-07, conversion lane): the ONE id a stateless request's relay
+// token (/upgrade/h) and its /go/c links share when the transport gave no session.
+// Measured: every stateless anonymous call (no Mcp-Session-Id — the Smithery / listed-
+// connector cohort and any stateless POST) minted its relay token with an EMPTY sid, so
+// routes/human_relay fell back to the unsigned /pricing/upgrade?tier=metered checkout with
+// a CONSTANT client_reference_id (mcp:tool=<tool>:ref=paywall): mcp_go_c.clicks = 0 on
+// every plan, 7d and 30d, and a payment from that page could never be joined to the response
+// that produced it — while the same response's /go/c links already carried the a- offer id.
+// The backend parses the token sid as an opaque string (routes/human_relay._parse_token) and
+// already classifies a- refs on the click side.
+//   real session         → '' here: the session itself is the id, both links carry it.
+//   keyless, sessionless → '' here: the a- offer id (_anonAttribRef) rides every /go/c
+//                          link's client_reference_id, and buildHumanRelay stamps it as sid.
+//   keyed, sessionless   → one per-request uuid, memoised on the store: _goSessionFor
+//                          writes it beside the pk-/k- ref and the relay token's sid is it.
+// Never minted off-request (no store = no one-id-per-request promise). Kill switch
+// DCHUB_RELAY_SID_FALLBACK=0 restores the empty sid in both places.
+function _relaySidFallbackOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_RELAY_SID_FALLBACK || ''));
+}
+function _requestFallbackSid() {
+  try {
+    if (!_relaySidFallbackOn()) return '';
+    const c = ctx.getStore();
+    if (!c) return '';
+    if (c.session_id && c.session_id !== 'no-session') return '';   // the transport's session is the id
+    if (_anonAttribRef()) return '';                                 // keyless: the a- offer id is the id
+    if (!c._relay_sid) c._relay_sid = randomUUID();
+    return c._relay_sid;
+  } catch (_) { return ''; }
+}
 function _goSessionFor(sessionId) {
   try {
     if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_GO_SID || ''))) return '';
     let s = sessionId;
     if (!s) { const c = ctx.getStore(); s = c && c.session_id; }
     s = String(s || '');
-    return (s && s !== 'no-session' && _GO_SID_OK.test(s)) ? s : '';
+    if (s && s !== 'no-session' && _GO_SID_OK.test(s)) return s;
+    // C2: a keyed caller with no session gets the per-request id the relay token carries.
+    return (!s || s === 'no-session') ? _requestFallbackSid() : '';
   } catch (_) { return ''; }
 }
 // The tool the current call is running (set at the top of every registered
@@ -5165,6 +5204,10 @@ async function checkTrialEligibility(session_id, tool_name) {
 // exact existing preview/paywall behavior. Never throws, never blocks the
 // tool call. Short timeout (1500ms, same as trial-check) keeps it off the
 // critical-path latency budget.
+const _PRESENTED_AUTH_SOURCES = new Set(['header', 'bearer', 'query', 'inline_argument']);
+export function _keyPresentedOnRequest(c) {
+  return !!(c && c.api_key && _PRESENTED_AUTH_SOURCES.has(String(c.auth_source || '')));
+}
 export async function mintAutoTrial(tool_name) {
   try {
     const c = getCtx();
@@ -5208,6 +5251,21 @@ export async function mintAutoTrial(tool_name) {
       console.log(`[auto_mint] skipped qa tool=${tool_name || '-'} `
         + `marker=${c.qa_marker === true ? 1 : 0} ua=${JSON.stringify(String(c.user_agent || '').slice(0, 80))} `
         + `sid=${String(c.session_id || '').slice(0, 8)}`);
+      return null;
+    }
+    // ★ F-1 (QA sweep 2026-10-07, MCP lane): a caller that PRESENTED a valid key on this
+    // request mints nothing. Measured live: a free dch_live_ key (identity.credential_source
+    // 'header') calling get_interconnection_queue got a fresh dch_trial_ key on EVERY call
+    // (2 keys in 2 calls, same session, same header), each with retry_with_header +
+    // persist_command telling the agent to drop its durable key for the trial one — one
+    // human = 1 live key + N trial keys (identity split + mint flood). "Presented" is the
+    // request's own credential channel (header / bearer / query / inline argument): a key
+    // the session restored or the inline trial auto-bound arrived on no channel, and that
+    // seat keeps its ack path (r-relay-cap pins it). c.api_key is the ACCEPTED key — a
+    // rejected key is already null here (_effectiveCallerKey) — so a truly anonymous caller
+    // keeps the inline trial exactly as before. Kill switch: DCHUB_MINT_SKIP_KEYED=0.
+    if (c && c.api_key && _keyPresentedOnRequest(c)
+        && (process.env.DCHUB_MINT_SKIP_KEYED || '1') !== '0') {
       return null;
     }
     const url = new URL('/api/v1/keys/auto-mint', API_BASE);
@@ -12345,8 +12403,14 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
   // (r-dev-rung) because the pack IS the lowest rung there and _rungsText leads
   // with it; a higher rung gets that rung's one link, and the pack is not offered
   // where it would not return what was hidden. No `missed` → the old line.
+  // ★ F-5 (QA sweep 2026-10-07): a caller that already holds a key is never told to claim
+  // another (the "save it, never re-mint" rule the instructions state); the line ends there.
+  let _keyedCaller = false;
+  try { _keyedCaller = !!(getCtx() && getCtx().api_key); } catch (_) { _keyedCaller = false; }
+  const _claimFreeKeyAlt = _keyedCaller ? '\n'
+    : ' Or call `claim_free_key` (one call, no email) for a durable free-tier key.\n';
   if (missed && missed.what && missed.how) {
-    const _free = ' Or call `claim_free_key` (one call, no email) for a durable free-tier key.\n';
+    const _free = _claimFreeKeyAlt;
     if (missed.rung === 'pack') {
       return '🔒 **' + missed.what + '** The payer checks out in one click: '
         + _rungsText(toolName, 'free', sessionId) + _unlockClause + '.' + _free;
@@ -12374,8 +12438,7 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
   // rungs, prices and links are unchanged.
   return _lead + 'the payer checks out in one click: ' +
          _rungsText(toolName, 'free', sessionId) +
-         _unlockClause + '. ' +
-         'Or call `claim_free_key` (one call, no email) for a durable free-tier key.\n';
+         _unlockClause + '.' + _claimFreeKeyAlt;
 }
 
 // ── r-site-headline (2026-07-12): analyze_site free-tier REAL headline ──────
@@ -20649,12 +20712,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name, args), name)), name), name), name), name)));
+       name, args, _outSchema), name), name), name), name, args), name)), name), name), name), name)));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -21793,6 +21856,77 @@ function _relayMirrorJson(o) {
   if (f && typeof f === 'object' && !Array.isArray(f)) o.for_your_human = { ...f, agent_instruction: RELAY_CONTRACT };
   return o;
 }
+// ── C4 (QA sweep 2026-10-07, conversion lane): the clean platform's wall line ──────────
+// 30d: 13 of 13 relay links minted for the chatgpt platform were counted "not delivered"
+// (backend RELAY_DELIVERY_BASIS: on a clean-content platform the response the user reads
+// carries no link). Measured on the depth wall (get_interconnection_queue, anon chatgpt):
+// structuredContent carried for_your_human + human_url (the long /upgrade/h token) and NO
+// user_message; the text was the JSON preview. The hard-blocked Pro wall already puts the
+// hosted short link (dchub.cloud/u/<code>, _withWallUserLine F5) in the person's line. The
+// depth / served wall now does the same on a clean platform: user_message, for_your_human
+// and human_url carry the /u/<code> hosted link (the long relay, byte for byte, when the
+// short mint fails), so the human can be shown a path. The link is a dchub.cloud page, never
+// a checkout: consistent with _scrubCommerce (no stripe.com string) and r-cleanplatform-relay.
+// A line that already carries a direct /go/c checkout (r-direct-pack put it there) is left
+// as the one-ask policies wrote it. Directory/core profiles keep their own commerce rules.
+// Kill switch DCHUB_CLEAN_WALL_LINE=0.
+const _CLEAN_WALL_LONG_RE = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[a-z0-9_=&]{1,200})?/;
+export async function _cleanPlatformWallLineStep(result, name) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CLEAN_WALL_LINE || ''))) return result;
+    if (!_isCleanPlatform()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const sc0 = result.structuredContent;
+    if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
+    if (_OWN_TELL_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (!_isRelayWall(sc0, c)) return result;
+    const f0 = (sc0.for_your_human && typeof sc0.for_your_human === 'object' && !Array.isArray(sc0.for_your_human))
+      ? sc0.for_your_human : null;
+    const um = typeof sc0.user_message === 'string' ? sc0.user_message : '';
+    // The person's line already carries a dchub.cloud link that is not the long relay: leave it.
+    if (um && /https:\/\/dchub\.cloud\//.test(um) && !_CLEAN_WALL_LONG_RE.test(um)) return result;
+    const pick = (v) => { const m = typeof v === 'string' ? _RELAY_URL_RE.exec(v) : null; return m ? m[0] : ''; };
+    let relay = pick(f0 && f0.url) || pick(sc0.human_url) || pick(um) || pick(f0 && f0.text);
+    if (!relay) {
+      const r = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+      relay = (r && r.url) || '';
+    }
+    if (!relay) return result;   // no signing secret: nothing to hand a person
+    const link = SHORT_LINK_RE.test(relay) ? relay : await _shortRelayPageLink(relay, name);
+    const swap = (t) => String(t).split(relay).join(link);
+    const fallbackLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
+      + '. Open ' + link + ' to see what it found and how to unlock it.';
+    let line;
+    if (um && um.includes(relay)) line = swap(um);
+    else if (um) line = um.replace(/\s*$/, '') + ' ' + link;
+    else if (f0 && typeof f0.text === 'string' && f0.text.includes(relay)) line = swap(f0.text);
+    else line = fallbackLine;
+    const fyh = { ...(f0 || {}), text: line, url: link };
+    if (typeof fyh.markdown === 'string') fyh.markdown = fyh.markdown.includes(relay) ? swap(fyh.markdown)
+      : fyh.markdown.replace(/\]\([^)]*\)$/, '](' + link + ')');
+    else fyh.markdown = _relayLinkLabel(undefined, name) + '(' + link + ')';
+    // One link, written one way: every copy of the long relay — structuredContent (upgrade.*,
+    // pricing.metered_url, signup_url, ...) and the text blocks — becomes the short one. Same
+    // destination (the /u code 302s to this exact relay URL), so nothing changes but the spelling.
+    const deep = (v, d) => {
+      if (link === relay || d > 8 || v === null) return v;
+      if (typeof v === 'string') return v.includes(relay) ? swap(v) : v;
+      if (Array.isArray(v)) return v.map((x) => deep(x, d + 1));
+      if (typeof v !== 'object') return v;
+      const out = {};
+      for (const [k, x] of Object.entries(v)) out[k] = deep(x, d + 1);
+      return out;
+    };
+    const sc = { ...deep(sc0, 0), user_message: line, show_to_user: true, for_your_human: fyh, human_url: link };
+    const content = link === relay ? result.content
+      : result.content.map((b) => (b && b.type === 'text' && typeof b.text === 'string' && b.text.includes(relay))
+          ? { ...b, text: swap(b.text) } : b);
+    return { ...result, content, structuredContent: sc };
+  } catch (_) { return result; }   // a line for a person is never worth failing a response over
+}
+
 export function _relayContractStep(result, name) {
   try {
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
@@ -21814,22 +21948,36 @@ export function _relayContractStep(result, name) {
     if (!url) return result;   // no signing secret: nothing to relay, leave the response as it was
     const relayLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
       + '. Open ' + url + ' to see what it found and how to unlock it.';
-    // Keyless only: a keyed caller's /go/c carries the payer-key binding (r-paid-lift), so it stays;
-    // keyless, r-one-checkout-url already says the relay is the ONE human link and /go/c gives way.
-    const proWall = !c.api_key && ((typeof sc0.required_plan === 'string' && /^pro$/i.test(sc0.required_plan)) || PRO_ONLY_TOOLS.has(name));
-    const scrub = (v) => {
+    // Keyless: r-one-checkout-url already says the relay is the ONE human link and /go/c gives
+    // way everywhere in the wall.
+    const _proShape = (typeof sc0.required_plan === 'string' && /^pro$/i.test(sc0.required_plan)) || PRO_ONLY_TOOLS.has(name);
+    const proWall = !c.api_key && _proShape;
+    // ★ F-6 (QA sweep 2026-10-07): keyed too, for the STRUCTURED human fields only. A free-key
+    // analyze_site wall carried for_your_human.url and user_message = /go/c/pro|k-… (a Stripe
+    // redirect) beside human_url = /upgrade/h/…, and the instructions let a host follow
+    // for_your_human first ("human_url (or for_your_human / unlock_url)"), so that host relayed
+    // the raw checkout. for_your_human / user_message / human_message now agree with human_url.
+    // Everything else a keyed wall carries — the prose rungs and the machine fields
+    // (upgrade.upgrade_url, pro_url) — keeps its key-bound /go/c (r-paid-lift: that link is how
+    // a Pro purchase stamps the key; test/automint-trial-rungs pins it). The keyed relay token
+    // carries pk- (r-relay-key-bind) and routes/human_relay._pro_links binds Pro to that kref,
+    // so the page the human opens binds the same key.
+    const proWallKeyed = !!c.api_key && _proShape;
+    const _KEYED_HUMAN_FIELDS = new Set(['for_your_human', 'user_message', 'human_message']);
+    const scrub = (v, human = false) => {
       if (typeof v !== 'string') return v;
       const w = v.replace(_PRICING_SURFACE_RE_G, url);
-      return proWall ? w.replace(_GO_C_URL_RE_G, url) : w;
+      return (proWall || (proWallKeyed && human)) ? w.replace(_GO_C_URL_RE_G, url) : w;
     };
-    const walk = (v, d) => {
-      if (d > 8 || v === null || typeof v !== 'object') return scrub(v);
-      if (Array.isArray(v)) return v.map((x) => walk(x, d + 1));
+    const walk = (v, d, human = false) => {
+      if (d > 8 || v === null || typeof v !== 'object') return scrub(v, human);
+      if (Array.isArray(v)) return v.map((x) => walk(x, d + 1, human));
       const out = {};
-      for (const [k, x] of Object.entries(v)) out[k] = walk(x, d + 1);
+      for (const [k, x] of Object.entries(v)) out[k] = walk(x, d + 1, human || _KEYED_HUMAN_FIELDS.has(k));
       return out;
     };
     const scOut = walk(_relayPatchObject({ ...sc0 }, url, relayLine), 0);
+    // Block 0's JSON mirror is re-serialised key by key below, so its human fields follow too.
     const content = result.content.map((b) => (b && b.type === 'text' && typeof b.text === 'string')
       ? { ...b, text: scrub(b.text) } : b);
     // Mirror into block 0 when it is the JSON payload (hosted clients read text, not structuredContent).
@@ -29299,6 +29447,9 @@ export { _goUrl };
 // Tests drive it under a realistic per-request store via the already-exported
 // `_ctxALS` (ctx.run({...}, fn)) rather than against a mocked getCtx.
 export { _stripeWithAnon, _anonAttribRef, _packCheckoutUrl, _subCheckoutUrl, ANON_REF_PREFIX };
+// C2 / C4 (QA sweep 2026-10-07): the per-request fallback sid and the clean-platform wall
+// line step, exported for test/qa-1007-relay-sid-chatgpt-keyed-walls.test.mjs.
+export { _requestFallbackSid, _goSessionFor };
 // trialHeader: exported so the same-session-unlock promise can be pinned per
 // identity class. It was asserted unconditionally and was false for the entire
 // anonymous cohort (found by driving a real tools/call, 2026-08-26).
