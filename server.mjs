@@ -20905,12 +20905,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   site-scoring REST route in the payload becomes its MCP call {tool, args}.
   //   It keeps the error keys _flagUpstreamError reads. lib/site-envelope.mjs,
   //   test/site-envelope-contract.test.mjs.
-  }, async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _oneLinkStep(await _cleanPlatformWallLineStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name)), name), name), name), name)));
+       name, args, _outSchema), name), name), name), name), name, args), name)), name), name), name), name)));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -22118,6 +22118,99 @@ export async function _cleanPlatformWallLineStep(result, name) {
           ? { ...b, text: swap(b.text) } : b);
     return { ...result, content, structuredContent: sc };
   } catch (_) { return result; }   // a line for a person is never worth failing a response over
+}
+
+// ── ONE commerce link per wall (Grok->Brain revenue plan item 1, 2026-10-07) ───────────
+// Measured on live anonymous walls 10-08 (scripts/wall-probe.py): search_facilities carried 5
+// /go/c checkouts in the text an agent reads, find_sites and get_gas_intelligence 3, and the grid /
+// market / queue / price / fiber walls kept /go/c Developer + metered links in
+// structuredContent.upgrade.developer_url / usage_url, with "$10 one-time = 1,000 API credits" and
+// "Developer $49" in credits_hint, upgrade_options[].label and next_tool_hint. An agent picks
+// whichever link it reads first, so a wall with five of them is a wall that is not relayed
+// (walled sessions 923 -> relay opens 70 -> signed clicks 0, 30d).
+//
+// DCHUB_ONE_LINK_V1 (default OFF; owner flips): on a non-paid, non-clean-platform relay wall every
+// commerce link — /go/c checkout, long /upgrade/h token, /u/ code — becomes the ONE relay link, in
+// its /u/ short form. The page it opens shows the rungs; the agent text no longer names a price.
+// Machine fields keep their keys (an outputSchema may require them): only the value changes, and
+// the pure-copy field credits_hint goes. A keyed caller keeps upgrade_url / pro_url as the
+// key-bound /go/c (r-paid-lift stamps the purchase on the key). No relay link and no way to mint
+// one -> the response is returned untouched: a link is never removed without a replacement.
+// Directory / core / Claude profiles and clean platforms keep their own commerce rules.
+const _oneLinkOn = () => /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_ONE_LINK_V1 || ''));
+const _ONE_LINK_RELAY_RE_G = new RegExp(_RELAY_URL_RE.source, 'g');
+const _ONE_LINK_KEYED_KEEP = new Set(['upgrade_url', 'pro_url']);
+const _ONE_LINK_DROP_KEYS = new Set(['credits_hint']);
+const _ONE_LINK_COPY_KEYS = new Set(['next_tool_hint', '_upgrade_cta', 'upgrade_hint', 'agent_message', 'credits_hint']);
+const _ONE_LINK_PRICE_RE = /\$\s?\d|\bafter (?:they|your human|the human) pay\w*|\b1,000 (?:API )?credits?\b|\bone-time\b|\b(?:Developer|Starter)\b/i;
+const _ONE_LINK_PRICE_PAREN_RE = /\s*\([^()]*(?:\$\s?\d|credits|one-time|\bDeveloper\b|\bStarter\b)[^()]*\)/gi;
+// Drops price/plan sentences, keeping any sentence that carries the link and any claim_free_key guidance.
+export function _oneLinkScrubCopy(s, link) {
+  if (typeof s !== 'string' || !s) return s;
+  const unparen = s.replace(_ONE_LINK_PRICE_PAREN_RE, '');
+  const kept = unparen.split(/(?<=[.!?])\s+/).filter((x) => !_ONE_LINK_PRICE_RE.test(x) || (link && x.includes(link)));
+  return kept.join(' ').trim();
+}
+export async function _oneLinkStep(result, name) {
+  try {
+    if (!_oneLinkOn()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const sc0 = result.structuredContent;
+    if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
+    if (_OWN_TELL_TOOLS.has(name) || _isCleanPlatform()) return result;
+    const c = getCtx() || {};
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isPaidDepthTier(c.tier)) return result;
+    if (!_isRelayWall(sc0, c)) return result;
+    const textOf = () => result.content.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('\n');
+    const f0 = (sc0.for_your_human && typeof sc0.for_your_human === 'object' && !Array.isArray(sc0.for_your_human))
+      ? sc0.for_your_human : null;
+    const pick = (v) => { const m = typeof v === 'string' ? _RELAY_URL_RE.exec(v) : null; return m ? m[0] : ''; };
+    let relay = pick(f0 && f0.url) || pick(sc0.human_url) || pick(f0 && f0.text) || pick(sc0.user_message)
+      || pick(sc0.human_message) || pick(textOf());
+    if (!relay) {
+      const r = buildHumanRelay(name, c.tier || 'free', c.session_id || '');
+      relay = (r && r.url) || '';
+    }
+    if (!relay) return result;   // nothing to replace the checkouts with: leave the wall as it was
+    const link = SHORT_LINK_RE.test(relay) ? relay : await _shortRelayPageLink(relay, name);
+    const keyed = !!c.api_key;
+    const fixUrls = (s, key) => {
+      let o = s.replace(_ONE_LINK_RELAY_RE_G, link);
+      if (!(keyed && _ONE_LINK_KEYED_KEEP.has(key))) o = o.replace(_GO_C_URL_RE_G, link);
+      return o;
+    };
+    const walk = (v, d, key, inUpgrade) => {
+      if (d > 8 || v === null) return v;
+      if (typeof v === 'string') {
+        const o = fixUrls(v, key);
+        return (inUpgrade || _ONE_LINK_COPY_KEYS.has(key)) ? _oneLinkScrubCopy(o, link) : o;
+      }
+      if (Array.isArray(v)) {
+        if (key === 'upgrade_options') return [{ label: 'See what unlocks this', url: link }];
+        return v.map((x) => walk(x, d + 1, key, inUpgrade));
+      }
+      if (typeof v !== 'object') return v;
+      const out = {};
+      for (const [k, x] of Object.entries(v)) {
+        if (_ONE_LINK_DROP_KEYS.has(k)) continue;
+        out[k] = walk(x, d + 1, k, inUpgrade || k === 'upgrade' || k === '_upgrade');
+      }
+      return out;
+    };
+    const sc = walk(sc0, 0, '', false);
+    const content = result.content.map((b, i) => {
+      if (!b || b.type !== 'text' || typeof b.text !== 'string') return b;
+      if (i === 0 && /^\s*\{/.test(b.text)) {
+        try {
+          const j = JSON.parse(b.text);
+          if (j && typeof j === 'object' && !Array.isArray(j)) return { ...b, text: JSON.stringify(walk(j, 0, '', false)) };
+        } catch (_) { /* prose-bearing block: fall through to the URL swap */ }
+      }
+      return { ...b, text: fixUrls(b.text, '') };
+    });
+    return { ...result, content, structuredContent: sc };
+  } catch (_) { return result; }   // a tidier wall is never worth failing a response over
 }
 
 export function _relayContractStep(result, name) {
