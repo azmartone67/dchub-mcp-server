@@ -95,7 +95,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key (higher limits)
 
-The free tier: Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. The decision tools get_grid_intelligence, get_interconnection_queue and get_market_intel are previews on free; full needs Developer. To raise limits, get a free key
+The free tier: Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; full needs Developer. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 
@@ -158,7 +158,7 @@ A healthy server card is also published at
 
 - **No tools appear:** make sure the entry uses a `url` (remote), not a `command`. DC Hub
   is not an npm/stdio server — there is no local process to spawn.
-- **429 / rate-limited:** you have hit the free-tier limit (Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. The decision tools get_grid_intelligence, get_interconnection_queue and get_market_intel are previews on free; full needs Developer.) Add an `X-API-Key` header
+- **429 / rate-limited:** you have hit the free-tier limit (Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; full needs Developer.) Add an `X-API-Key` header
   (free at https://dchub.cloud/signup) with an email bound for 50/day, or a paid tier for more.
 - **Transport type:** if your client supports it, prefer `streamableHttp` /
   `streamable-http`. Older clients can use plain `http`.

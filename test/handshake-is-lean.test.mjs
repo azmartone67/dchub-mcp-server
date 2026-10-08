@@ -58,7 +58,7 @@ async function claim(clientName, args = {}) {
 describe('initialize instructions', () => {
   it('are under 2,000 chars, keep the essentials, and point at the full guide', async () => {
     const { instructions } = await open('lean-test');
-    expect(instructions.length).toBeLessThan(2000);
+    expect(instructions.length).toBeLessThan(2048);   // 2026-10-08 owner decision: free-tier decision-tools clause (was 2000)
     for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'MUST CALL', 'Use this whenever', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
@@ -75,7 +75,7 @@ describe('initialize instructions', () => {
   });
   it('the full text is still exported for the canon fences', () => {
     expect(S._INSTRUCTIONS.length).toBeGreaterThan(10000);
-    expect(S._INSTRUCTIONS_LEAN.length).toBeLessThan(2000);
+    expect(S._INSTRUCTIONS_LEAN.length).toBeLessThan(2048);   // 2026-10-08 owner decision: free-tier decision-tools clause (was 2000)
   });
 });
 

@@ -536,8 +536,10 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
   const B1 = 'Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. '
     + 'Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.';
   it('the clause names the three tools and the rung', () => {
-    for (const t of TOOLS) expect(CLAUSE).toContain(t);
+    // the shortest honest form: the lean handshake quotes the FREE TIER block verbatim under a 2,048-char budget
+    for (const t of ['grid', 'queue', 'market-intel']) expect(CLAUSE.toLowerCase()).toContain(t);
     expect(CLAUSE).toMatch(/previews on free; full needs Developer\.$/);
+    expect(CLAUSE.length).toBeLessThanOrEqual(73);
     expect(CLAUSE).not.toMatch(/\$\d/);
   });
   it('initialize instructions (full, lean) and the FREE TIER block carry the rule AND the clause', () => {
@@ -574,7 +576,7 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     walk(ROOT);
     expect(hits.length, 'the sentence must still be emitted somewhere (a scan that finds nothing proves nothing)').toBeGreaterThan(3);
     const missing = hits.filter((p) => !readFileSync(join(ROOT, p), 'utf8').includes(
-      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'are previews on free; full needs Developer'));
+      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'previews on free; full needs Developer'));
     expect(missing, 'free-key sentence without the decision-tools clause').toEqual([]);
   });
 });

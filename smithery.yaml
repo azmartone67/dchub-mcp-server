@@ -89,8 +89,7 @@ configSchema:
         connect once and call `claim_free_key`, then paste the key here so
         every future session starts identified. Add an email with
         `bind_email` for 50 calls/day (up to 10 full answers per tool per day).
-        The decision tools get_grid_intelligence, get_interconnection_queue and
-        get_market_intel are previews on free; full needs Developer.
+        Grid/queue/market-intel tools: previews on free; full needs Developer.
         Saved sites and alerts need a key at all (they are per-account).
         A paid key raises limits further.
       format: password
@@ -201,7 +200,7 @@ tools:
 # Free-tier vs paid-tier breakdown so Smithery users know what to expect.
 pricing:
   anonymous: "Previews, no key or signup needed"
-  free: "Free key (call claim_free_key — no email) — previews plus 2 full answers per tool per day; every tool callable, most as previews; the decision tools get_grid_intelligence, get_interconnection_queue and get_market_intel are previews on free; full needs Developer"
+  free: "Free key (call claim_free_key — no email) — previews plus 2 full answers per tool per day; every tool callable, most as previews; grid/queue/market-intel tools: previews on free; full needs Developer"
   identified: "Add an email (bind_email) — 50 calls/day, up to 10 full answers per tool per day"
   developer: "500 calls/day; full results on all tools except 7 Pro tools (10 full grid/fiber answers/day, previews of site analysis) — see https://dchub.cloud/pricing"
   pro: "2,000 calls/day + Pro tools, bulk export, historical data — see https://dchub.cloud/pricing"
