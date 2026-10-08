@@ -216,9 +216,15 @@ describe('ChatGPT stateless calls carry the conversation as the session id', () 
     expect(a).toBe(expectedSid); expect(b).toBe(a); expect(c).not.toBe(a);
   });
 
-  it('control: no openai/session → the sid stays empty (unchanged behaviour)', async () => {
+  it('control: no openai/session → no oai- sid is fabricated (the sid is the a- offer id, C2 2026-10-07)', async () => {
+    // Before C2 (QA sweep 2026-10-07) the sid here was EMPTY and the human page fell to an
+    // unsigned checkout. It is now the per-request a- offer id the same response's /go/c links
+    // carry (buildHumanRelay → _anonAttribRef); what this control still pins is that no
+    // openai/session is invented when none arrived.
     const body = await stateless(OAI_UA, { 'openai/subject': 'u_x' });
-    for (const s of relaySids(body)) expect(s).toBe('');
+    const sids = relaySids(body);
+    expect(sids.length).toBeGreaterThan(0);
+    for (const s of sids) { expect(s).toMatch(/^a-[0-9a-f]{32}$/); expect(s).not.toMatch(/^oai-/); }
     for (const bad of [undefined, null, '', '   ', 42, {}]) {
       expect(S._openaiSessionSid({ params: { _meta: { 'openai/session': bad } } })).toBe('');
     }

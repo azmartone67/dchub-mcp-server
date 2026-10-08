@@ -283,6 +283,7 @@ test/provenance-credit-survives-anon-trim.test.mjs
 test/provenance-envelope-contract-fixture.test.mjs
 test/provenance-withheld-layer-as-of.test.mjs
 test/public-doors-banned-floors.test.mjs
+test/qa-1007-relay-sid-chatgpt-keyed-walls.test.mjs
 test/qa-marker-forward.test.mjs
 test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
