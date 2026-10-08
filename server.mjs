@@ -8160,7 +8160,9 @@ const _LP_KEEP_STR = /^(name|names|carrier|provider|operator|state|state_code|is
 // with any number in them that equals a figure withheld from the same payload
 // blanked, so a caveat cannot quote a score back.
 const _LP_CAVEAT_KEY = /^(caveats|_caveats|caveat)$/;
-const _LP_DROP_KEY = /pdf|report_url|share_text|share_hint|download|upgrade_url|pricing_url/i;
+// `interpretation` is the site composite's own label ("Excellent site"): a verdict by another name that can
+// contradict the DCPI market verdict beside it (2026-10-08), so a preview does not carry it.
+const _LP_DROP_KEY = /pdf|report_url|share_text|share_hint|download|upgrade_url|pricing_url|^interpretation$/i;
 // The caller's own request, echoed back: kept, so a preview still shows what
 // was asked (a 5 GW constraint must not vanish without a trace).
 const _LP_ECHO_KEY = /^(capacity_requested_mw|requested_mw)$/;
