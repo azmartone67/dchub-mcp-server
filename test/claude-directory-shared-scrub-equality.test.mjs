@@ -16,6 +16,15 @@ import * as OLD from './fixtures/chatgpt-directory.pre-claude.mjs';
 import * as NEW from '../lib/chatgpt-directory.mjs';
 import { startHarness, fenceNetwork, GUESS_ARGS, SPONSOR_TEXT_BLOCK } from './helpers/claude-directory-harness.mjs';
 
+// Grok 2026-10-07: the /mcp/chatgpt profile now diverges from the frozen copy on purpose (a neutral
+// partial-result notice, no plan link, upsell prose dropped; test/chatgpt-directory-probe.test.mjs pins
+// that). This test's job is that the shared FACTORY still reproduces the frozen copy byte for byte, so
+// the reference profile is the factory built with the frozen configuration.
+const REF = NEW.createDirectoryProfile({
+  label: 'directory', tools: NEW.DIRECTORY_TOOLS, removed: NEW.DIRECTORY_REMOVED,
+  instructions: NEW.DIRECTORY_INSTRUCTIONS, plansNotice: NEW.PLANS_NOTICE, argDefaults: NEW.DIRECTORY_ARG_DEFAULTS,
+});
+
 let H, fence;
 beforeAll(async () => { fence = fenceNetwork(); H = await startHarness(); });
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
@@ -83,12 +92,12 @@ describe('real server output through both modules', () => {
     for (const name of tools) {
       for (const args of [{}, GUESS_ARGS]) {
         const r = await H.call('/mcp', name, args);
-        const a = NEW.transformDirectoryBody(r.raw, 'tools/call', name);
+        const a = REF.transformDirectoryBody(r.raw, 'tools/call', name);
         const b = OLD.transformDirectoryBody(r.raw, 'tools/call', name);
         expect(a, `${name} ${args === GUESS_ARGS ? 'args' : 'no args'}`).toBe(b);
         if (r.msg && r.msg.result) {
-          expect(NEW.scrubToolResult(r.msg.result, name)).toEqual(OLD.scrubToolResult(r.msg.result, name));
-          expect(NEW.scrubStructured(r.msg.result)).toEqual(OLD.scrubStructured(r.msg.result));
+          expect(REF.scrubToolResult(r.msg.result, name)).toEqual(OLD.scrubToolResult(r.msg.result, name));
+          expect(REF.scrubStructured(r.msg.result)).toEqual(OLD.scrubStructured(r.msg.result));
         }
         n += 1;
       }
@@ -110,7 +119,7 @@ describe('edge cases', () => {
     '---\nA\n\n\n\nB\n---',
     '', 'oai-0123456789abcdef', 'dch_trial_ABC123 is yours',
   ];
-  it('scrubText', () => { for (const t of texts) expect(NEW.scrubText(t), t).toBe(OLD.scrubText(t)); });
+  it('scrubText', () => { for (const t of texts) expect(REF.scrubText(t), t).toBe(OLD.scrubText(t)); });
 
   const bodies = [
     { jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'Unknown tool: claim_free_key' } },
@@ -125,14 +134,14 @@ describe('edge cases', () => {
     for (const [i, b] of bodies.entries()) {
       for (const [m, t] of [['tools/call', 'get_news'], ['tools/call', 'search'], ['tools/call', 'fetch'], ['initialize', null], ['tools/list', null], ['resources/read', null]]) {
         const json = JSON.stringify(b);
-        expect(NEW.transformDirectoryBody(json, m, t), `${i} ${m} ${t}`).toBe(OLD.transformDirectoryBody(json, m, t));
+        expect(REF.transformDirectoryBody(json, m, t), `${i} ${m} ${t}`).toBe(OLD.transformDirectoryBody(json, m, t));
         const sse = `event: message\nid: 7\ndata: ${json}\n\n`;
-        expect(NEW.transformDirectoryBody(sse, m, t), `sse ${i} ${m}`).toBe(OLD.transformDirectoryBody(sse, m, t));
+        expect(REF.transformDirectoryBody(sse, m, t), `sse ${i} ${m}`).toBe(OLD.transformDirectoryBody(sse, m, t));
       }
     }
     const batch = JSON.stringify(bodies);
-    expect(NEW.transformDirectoryBody(batch, 'tools/call', 'get_news')).toBe(OLD.transformDirectoryBody(batch, 'tools/call', 'get_news'));
-    expect(NEW.transformDirectoryBody('not json at all. Upgrade to Pro.', 'tools/call', 'x')).toBe(OLD.transformDirectoryBody('not json at all. Upgrade to Pro.', 'tools/call', 'x'));
+    expect(REF.transformDirectoryBody(batch, 'tools/call', 'get_news')).toBe(OLD.transformDirectoryBody(batch, 'tools/call', 'get_news'));
+    expect(REF.transformDirectoryBody('not json at all. Upgrade to Pro.', 'tools/call', 'x')).toBe(OLD.transformDirectoryBody('not json at all. Upgrade to Pro.', 'tools/call', 'x'));
   });
 
   it('isGated, directoryAnnotations, arg defaults, allowlist membership', () => {
@@ -141,9 +150,9 @@ describe('edge cases', () => {
       expect(NEW.directoryAnnotations(n, { title: 'T', readOnlyHint: true, maturity: 'x' })).toEqual(OLD.directoryAnnotations(n, { title: 'T', readOnlyHint: true, maturity: 'x' }));
     }
     for (const a of [{}, { verdict: 'BUILD' }, { verdict: '' }]) {
-      expect(NEW.applyDirectoryArgDefaults('site_selection_canvas', { ...a })).toEqual(OLD.applyDirectoryArgDefaults('site_selection_canvas', { ...a }));
+      expect(REF.applyDirectoryArgDefaults('site_selection_canvas', { ...a })).toEqual(OLD.applyDirectoryArgDefaults('site_selection_canvas', { ...a }));
     }
-    for (const n of ['search', 'analyze_site', 'claim_free_key', 'toString', '__proto__']) expect(NEW.isDirectoryTool(n), n).toBe(OLD.isDirectoryTool(n));
+    for (const n of ['search', 'analyze_site', 'claim_free_key', 'toString', '__proto__']) expect(REF.isDirectoryTool(n), n).toBe(OLD.isDirectoryTool(n));
   });
 });
 

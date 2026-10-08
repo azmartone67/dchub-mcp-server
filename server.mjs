@@ -11806,6 +11806,20 @@ export function _rowsTotalSet(toolName) {
   } catch (_) { return 'pro'; }
 }
 
+// Pure: narrow a /api/v1/tax-incentives list to the requested state (2-letter code or full name).
+// No state or a non-list body passes through; an unknown state is an empty answer with a note, never
+// the unfiltered 50, which an agent asking for one state would mistake for its answer.
+export function _filterTaxIncentivesByState(d, state) {
+  const want = String(state == null ? '' : state).trim().toLowerCase();
+  if (!want || !d || typeof d !== 'object' || !Array.isArray(d.data)) return d;
+  // Rows with no state abbr at all (shape drift): leave them, never empty a body we cannot read.
+  if (!d.data.some((r) => r && r.abbr)) return d;
+  const rows = d.data.filter((r) => r && (String(r.abbr || '').toLowerCase() === want
+    || String(r.name || '').toLowerCase() === want));
+  return { ...d, data: rows, count: rows.length, state: rows.length ? rows[0].abbr : String(state).trim().toUpperCase(),
+    ...(rows.length ? {} : { state_note: 'No state matched "' + String(state).trim() + '". Use a 2-letter US code such as OH.' }) };
+}
+
 function trimForTrial(parsed, toolName, _inRate = false) {
   if (parsed === null || parsed === undefined) return parsed;
   // execute_plan: every step already ran as a real tools/call at the caller's
@@ -11833,6 +11847,11 @@ function trimForTrial(parsed, toolName, _inRate = false) {
   for (const [k, v] of Object.entries(parsed)) {
     if (_NEVER_CUT_KEY_RE.test(k) || _PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                             // never-cut: byte-identical
+    } else if (toolName === 'get_dchub_recommendation' && k === 'available_categories') {
+      // Grok 2026-10-07: the four category names are DC Hub's own description menu,
+      // not product data. Trimming 4 -> 3 behind `_available_categories_total_in_pro`
+      // hid `technical` and advertised a paywall on a list the caller needs to use the tool.
+      out[k] = v;
     } else if (k === 'provenance' && v && typeof v === 'object' && !Array.isArray(v)) {
       out[k] = _keepProvenanceCredit(v, trimForTrial(v, toolName, _inRate));   // G-2: credit lists survive
     } else if (RETRIEVAL_TOOLS.has(toolName) && _RETRIEVAL_PASSTHROUGH_KEYS.has(k)) {
@@ -25260,7 +25279,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite) {
 
   trackedTool(srv, 'get_tax_incentives', 'Use when a user asks "what tax breaks does <state> give data centers?" — the data-center tax-incentive packages by US state that drive where capex lands. Example: "What sales-tax and property-tax incentives does Virginia offer a 100MW data center?" — get_tax_incentives state=VA. Params: state (2-letter US code; required). Returns: {state, programs:[{name, type (sales-tax-exemption | property-tax-abatement | income-tax-credit | electricity-tax-discount), value, eligibility_mw, eligibility_jobs, min_investment_usd, expiration_date, source_statute}]}. Cite the statute with attribution to DC Hub (CC-BY-4.0). Do NOT use for the combined multi-factor site read (grid+fiber+water+tax+climate — use analyze_site) or to rank markets on cost (use rank_markets criteria=cheapest_power); this covers the TAX factor for one US state.',
     { state: S.describe('US state abbreviation (required), e.g. VA, TX, AZ') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/tax-incentives', a)) }] }));
+    async (a) => {
+      // Grok 2026-10-07: /api/v1/tax-incentives lists all 50 states and ignores ?state=, so
+      // state="OH" answered 3 unrelated rows. Filter here, on the list route, so the free
+      // view keeps its structural-fields-only gate (the /<abbr> route returns full detail).
+      const d = await callAPI('/api/v1/tax-incentives', a);
+      return { content: [{ type: 'text', text: JSON.stringify(_filterTaxIncentivesByState(d, a && a.state)) }] };
+    });
 
   trackedTool(srv, 'get_water_risk', 'FRONT DOOR CHECK — if you need a SITE VERDICT spanning grid + fiber + water + tax + climate, call `execute_plan(intent="<the user\'s question, unchanged>")` rather than hand-chaining this with its siblings. If you want the WATER factor on its own, get_water_risk IS the right call — one round trip, free tier, no planner overhead. Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: "Is this Phoenix parcel water-constrained for a 100MW build?" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ, or location="phoenix"). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or location (a DC Hub market name or slug, resolved to that market\'s PUBLISHED CENTROID with a resolved_from block saying so; a market-level read, not your parcel, and a trailing state is not stripped); lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90) for the most precise water-risk read, e.g. 33.45'),

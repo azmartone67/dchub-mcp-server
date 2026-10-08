@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import {
-  DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, PLANS_NOTICE, scrubStructured,
+  DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, CHATGPT_NOTICE, scrubStructured,
   STANDARD_ANNOTATION_KEYS, EMAIL_OR_WEBHOOK_TOOLS,
 } from '../lib/chatgpt-directory.mjs';
 import { PROBE_PATTERNS, probeHits, annotationViolations, GUESS_ARGS, CHATGPT_HEADERS, CHATGPT_META, classifyResponse } from '../scripts/probe-chatgpt-directory.mjs';
@@ -226,11 +226,12 @@ describe('/mcp/chatgpt — no-key probe across every tool', () => {
         if (!msg.result) continue;
         answered += 1;
         const texts = msg.result.content.filter((c) => c.type === 'text').map((c) => c.text);
-        const notices = texts.filter((t) => t.includes('dchub.cloud/plans'));
-        if (notices.length) {
+        // Grok 2026-10-07: no plan link or "after they pay" anywhere; a gated result ends
+        // with exactly the neutral partial-result notice.
+        expect(texts.join('\n'), name).not.toMatch(/dchub\.cloud\/plans|after they pay|free preview|\/upgrade\/h|dchub\.cloud\/u\//i);
+        if (texts[texts.length - 1] === CHATGPT_NOTICE) {
           gated += 1;
-          expect(notices, name).toEqual([PLANS_NOTICE]);
-          expect(texts[texts.length - 1], name).toBe(PLANS_NOTICE);
+          expect(texts.filter((t) => t === CHATGPT_NOTICE), name).toEqual([CHATGPT_NOTICE]);
         }
       }
     }

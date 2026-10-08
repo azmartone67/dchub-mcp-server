@@ -291,6 +291,7 @@ test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-value-strip.test.mjs
 test/readme-links-are-not-dead-ends.test.mjs
 test/recipe-lifecycle.test.mjs
+test/recommendation-categories-not-trimmed.test.mjs
 test/recommendation-returns-contract.test.mjs
 test/recommendation-returns-truth.test.mjs
 test/refined-queue-developer-attribution.test.mjs
@@ -356,6 +357,7 @@ test/step-slim-keeps-honesty.test.mjs
 test/structured-content-mirrors-payload.test.mjs
 test/substations-heal-from-canon.test.mjs
 test/summarize-citation.test.mjs
+test/tax-incentives-state-filter.test.mjs
 test/testimonials-resource.test.mjs
 test/tier-collapse-fix.test.mjs
 test/tier-descriptions-match-gate.test.mjs
