@@ -10,19 +10,14 @@ const URL1 = 'https://dchub.cloud/upgrade/h/tok.sig';
 describe('gridSellLine (pure)', () => {
   const ALL = ['queue_depth_gw', 'avg_time_to_power_months', 'constraint_score', 'excess_power_score',
     'grid_emergencies_30d', 'retail_price_cents_kwh'];
-  it('equal bands: the brief sentence, no em dash, price, one click', () => {
-    const s = gridSellLine({ iso: 'ERCOT', bands: { constraint: 'BUILD', excess: 'BUILD' },
-      withheld: ALL.slice(0, 5), url: URL1 });
-    expect(s).toBe('DC Hub rates ERCOT BUILD for power, but this free preview hides queue depth, time to power, '
-      + 'the constraint and excess power scores and 30-day grid emergencies. The plans that include the full ERCOT brief are on this page: '
-      + '' + URL1);
-    expect(s).not.toMatch(/—|\/mo|facilit/i);
-  });
-  it('differing bands, and no bands', () => {
-    expect(gridSellLine({ iso: 'PJM', bands: { constraint: 'CAUTION', excess: 'BUILD' }, withheld: ALL, url: URL1 }))
-      .toMatch(/^DC Hub rates PJM CAUTION on constraint and BUILD on excess power, but this free preview hides /);
-    expect(gridSellLine({ iso: 'PJM', bands: {}, withheld: ALL, url: URL1 }))
-      .toMatch(/^This free DC Hub preview of PJM hides /);
+  it('never quotes a sub-score band as a rating (verdicts come from the DCPI composite only)', () => {
+    const exp = 'This free DC Hub preview of ERCOT hides queue depth, time to power, '
+      + 'the constraint and excess power scores and 30-day grid emergencies. The plans that include the full ERCOT brief are on this page: ' + URL1;
+    for (const bands of [{ constraint: 'BUILD', excess: 'BUILD' }, { constraint: 'CAUTION', excess: 'BUILD' }, {}, undefined]) {
+      const s = gridSellLine({ iso: 'ERCOT', bands, withheld: ALL.slice(0, 5), url: URL1 });
+      expect(s).toBe(exp);
+      expect(s).not.toMatch(/—|\/mo|facilit|BUILD|CAUTION|AVOID|rates/i);
+    }
   });
   it('names at most 5, fits 240 before the URL, and says nothing it did not measure', () => {
     for (const w of [ALL, ALL.slice(0, 1), ['constraint_score'], ['excess_power_score', 'queue_depth_gw']]) {
@@ -249,11 +244,11 @@ describe('a market-scoped grid call names the market (fail 3)', () => {
   it('the sentence says whose grid it is; an iso-scoped call is unchanged', () => {
     const base = { iso: 'PJM', withheld: ['constraint_score', 'queue_depth_gw'], url: 'https://dchub.cloud/upgrade/h/a.b?buy=1',
       bands: { constraint: 'BUILD', excess: 'BUILD' } };
-    expect(gridSellLine({ ...base, market: 'ashburn' })).toMatch(/^DC Hub rates PJM \(the grid behind Ashburn\) BUILD for power/);
+    expect(gridSellLine({ ...base, market: 'ashburn' })).toMatch(/^This free DC Hub preview of PJM \(the grid behind Ashburn\) hides /);
     expect(gridSellLine({ ...base, market: 'northern-virginia' })).toContain('the grid behind Northern Virginia');
-    expect(gridSellLine({ ...base, market: 'PJM' })).toMatch(/^DC Hub rates PJM BUILD/);
-    expect(gridSellLine(base)).toMatch(/^DC Hub rates PJM BUILD/);
-    expect(gridSellLine({ ...base, market: 'x; DROP TABLE' })).toMatch(/^DC Hub rates PJM BUILD/);   // not a plain slug: ignored
+    expect(gridSellLine({ ...base, market: 'PJM' })).toMatch(/^This free DC Hub preview of PJM hides /);
+    expect(gridSellLine(base)).toMatch(/^This free DC Hub preview of PJM hides /);
+    expect(gridSellLine({ ...base, market: 'x; DROP TABLE' })).toMatch(/^This free DC Hub preview of PJM hides /);   // not a plain slug: ignored
   });
   it('the handler remembers the market the caller passed', async () => {
     const s = seat();

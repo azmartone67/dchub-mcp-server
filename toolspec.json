@@ -955,7 +955,7 @@
       "type": "object",
       "properties": {
         "region_id": {
-          "description": "Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id=\"PJM-DOM\" for live Ashburn / Northern Virginia zone load + real-time LMP (the world's #1 DC market, invisible in EIA)",
+          "description": "Grid region (required): one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), an EIA balancing-authority code (e.g. SOCO, DUK, AZPS, TVA), or the PJM Dominion zone region_id=\"PJM-DOM\" for live Ashburn / Northern Virginia zone load + real-time LMP (the Ashburn / Northern Virginia zone, not visible in EIA)",
           "type": "string"
         },
         "iso": {
