@@ -118,7 +118,7 @@ const MARKET = {
   recent_facilities: Array.from({ length: 5 }, (_, i) => ({ name: `Facility ${i}`, city: 'Ashburn', capacity_mw: 60 + i })),
   market_pricing: { available: true, basis: 'broker_report', asking_rate: 160.0, asking_rate_range: [160.0, 185.0],
     unit: '$/kW/mo', deal_size: '250-500 kW wholesale', vacancy_percent: 4.0, period: 'H1 2026', stale: false,
-    source: 'CBRE / JLL market reports, H1 2026 (as held by DC Hub)' },
+    source: 'CBRE / JLL market reports, H1 2026 (as held by DC Hub) $160-185/kW/mo' },
   siting: { available: true,
     iso: { code: 'PJM', class: 'RTO', operator: 'PJM Interconnection', as_of: '2026-10-07' },
     utilities: { names: ['Dominion Energy Virginia'], kind: 'IOU', source_url: 'https://www.scc.virginia.gov/' },
@@ -165,6 +165,7 @@ beforeAll(async () => {
       if (p === '/api/v1/grid/extended/PJM') return send(EXT);
       if (p === '/api/v1/interconnection-queue/by-iso') return send(QUEUE_BY_ISO);
       if (p === '/api/v1/markets/northern-virginia') return send(MARKET);
+      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, retail_rates: { avg_cents_kwh: 23.41, max_cents_kwh: 30.1, min_cents_kwh: 18.2 } });
       return send({});
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -324,6 +325,7 @@ describe('the three decision tools are previews on every non-paid seat (default 
             expect(JSON.stringify(r.data), 'leaked ' + frag).not.toContain(frag);
           }
           expect(r.data.pricing_source.source).toMatch(/CBRE/);
+          expect(JSON.stringify(r.data.pricing_source), 'dollar figure in the source line').not.toMatch(/\$\s?\d|kW\/mo/);
         }
         // the per-(IP,tool,day) counter is never charged, locally or durably
         expect(counterKeysFor(r.ip, tool)).toEqual([]);
@@ -586,4 +588,17 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
 
 describe('hard gate', () => {
   it('nothing left loopback', () => { expect(foreign).toEqual([]); });
+});
+
+describe('caller_tier is one value across both channels (Grok 10-08 item 2)', () => {
+  it('get_energy_prices: an anonymous seat is never told "pro" in content[0] or structuredContent', async () => {
+    const r = await callAs({}, 'get_energy_prices', { iso: 'CAISO' });
+    const tiers = [r.sc.caller_tier];
+    for (const c of r.result.content || []) {
+      try { const o = JSON.parse(c.text); if (o && 'caller_tier' in o) tiers.push(o.caller_tier); } catch (_) { /* prose block */ }
+    }
+    expect(tiers.length).toBeGreaterThan(1);
+    expect(new Set(tiers).size, JSON.stringify(tiers)).toBe(1);
+    expect(tiers[0]).not.toBe('pro');
+  });
 });

@@ -83,3 +83,13 @@ describe('honestCallerTier — the label matches the seat', () => {
     expect(out.structuredContent.caller_tier).toBe('free');
   });
 });
+
+describe('honestCallerTier — JSON plus prose in one block', () => {
+  it('corrects the leading object label when the block is not pure JSON', () => {
+    const text = JSON.stringify({ market: 'ashburn', caller_tier: 'pro' }) + '\n---\nhuman line "caller_tier":"pro"';
+    const out = honestCallerTier({ structuredContent: { caller_tier: 'pro' }, content: [{ type: 'text', text }] }, { tier: null });
+    expect(out.structuredContent.caller_tier).toBe('free');
+    expect(out.content[0].text).toContain('"caller_tier":"free"');
+    expect(out.content[0].text).toContain('human line "caller_tier":"pro"');   // only the first (leading) label moves
+  });
+});
