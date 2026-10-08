@@ -160,6 +160,12 @@ describe('the relay line names what THIS response stripped and the gate\'s own r
       // so that tool runs with DCHUB_GRID_SELL_LINE=0 here.
       const _prevGrid = process.env.DCHUB_GRID_SELL_LINE;
       if (tool === 'get_grid_intelligence') process.env.DCHUB_GRID_SELL_LINE = '0';
+      // Owner 2026-10-08: grid and market intel serve the labelled taste on free (sections with
+      // counts, test/free-decision-tools-preview-only.test.mjs); the field-by-field clause this
+      // file pins is driven with that switch off, on the generic trim it was written for.
+      const _prevFd = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+      if (tool !== 'rank_markets') process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
+      try {
       const gated = await H.call('/mcp', tool, ARGS[tool]);
       if (_prevGrid === undefined) delete process.env.DCHUB_GRID_SELL_LINE; else process.env.DCHUB_GRID_SELL_LINE = _prevGrid;
       const lines = relayLines(textOf(gated));
@@ -183,6 +189,7 @@ describe('the relay line names what THIS response stripped and the gate\'s own r
       const opened = payloadOf(await H.call('/mcp', tool, ARGS[tool], { 'x-api-key': seatKey(rung, tool) }));
       const back = figures(opened);
       for (const p of stripped) expect(back.has(p), `${tool}: ${c.plan} should return ${p}`).toBe(true);
+      // (the switch stays off until the rung-below check completes: see the finally below)
       // ... and the rung below it (above the keyless caller) does not. A free
       // key's daily taste of full answers is a taste, not the plan (the gate's
       // own rule, _tierGateOpensForSeat), so the lower seat is called until
@@ -203,6 +210,9 @@ describe('the relay line names what THIS response stripped and the gate\'s own r
       expect(line).not.toMatch(/\/mo\b|per month|monthly|\$\s?(49|99|199|499)\b/i);
       expect(line).not.toMatch(/unlock/i);
       expect(line.length).toBeLessThan(400);
+      } finally {
+        if (_prevFd === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY; else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = _prevFd;
+      }
     }, 60_000);
   }
 

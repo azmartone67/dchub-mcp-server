@@ -40,7 +40,7 @@ POST https://dchub.cloud/mcp                                  # the full 38-tool
 ```
 
 ## Free vs. paid
-- **Free tier:** Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. No signup. Claim a key (optional, raises limits + saves it):
+- **Free tier:** Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. The decision tools get_grid_intelligence, get_interconnection_queue and get_market_intel are previews on free; full needs Developer. No signup. Claim a key (optional, raises limits + saves it):
   `curl -X POST https://dchub.cloud/api/v1/keys/claim -d '{"client_name":"your-app"}'`
 - **Paid tools** (e.g. `analyze_site`, `compare_sites`, `get_grid_intelligence`, `get_interconnection_queue`): pass the key as **`X-API-Key`** header (REST) or in your MCP client config.
 

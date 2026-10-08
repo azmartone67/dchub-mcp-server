@@ -119,7 +119,10 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
       expect(S._relayLinkLabel('grok', t), t).toBe(S.GROK_RELAY_LABEL_PRO);
       expect(S._relayLinkLabel('grok', t), t).not.toContain('$10');
     }
-    expect(S._relayLinkLabel('grok', 'get_interconnection_queue')).toBe(S.GROK_RELAY_LABEL);
+    // Owner 2026-10-08: the queue sells Developer (never the pack): its Grok label names that rung, no price
+    expect(S._relayLinkLabel('grok', 'get_interconnection_queue')).toBe(S.GROK_RELAY_LABEL_DEV);
+    expect(S.GROK_RELAY_LABEL_DEV).not.toContain('$');
+    expect(S._relayLinkLabel('grok', 'list_transactions')).toBe(S.GROK_RELAY_LABEL);
     expect(S._relayLinkLabel('grok')).toBe(S.GROK_RELAY_LABEL);
     expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[🔓 Start a 7-day DC Hub Pro trial]');
     expect(S._relayLinkLabel('claude', 'get_facility')).toBe('[🔓 Open DC Hub — see what I found]');
@@ -178,9 +181,11 @@ describe('F6: a keyless gated preview carries exactly one checkout URL', () => {
     const line = t.indexOf('→ **For your human:**');
     expect(line).toBeGreaterThan(t.indexOf('This answer hid'));
     expect(t.slice(line)).toMatch(RELAY);
-    // the rungs still name both plans; they point at the one link
-    expect(t).toMatch(/\$10 one-time = 1,000 API credits\*\*, credits don’t expire → the "For your human" link below/);
-    expect(t).toMatch(/\*\*Developer\*\* \([^)]*\) → the "For your human" link below/);
+    // Owner 2026-10-08: the rung named is Developer (the pack is not what returns these fields),
+    // and it points at the one link
+    expect(t).toMatch(/DC Hub Developer/);
+    expect(t).not.toMatch(/\$10 one-time/);
+    expect(t).not.toContain('dchub.cloud/go/c/');
   });
 
   it('a keyed caller keeps its key-bound /go/c checkout (not rewritten)', async () => {

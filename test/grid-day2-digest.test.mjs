@@ -24,7 +24,15 @@ const NEWS_URL = 'https://news.example/rss/articles/ABCDEF123?oc=5';
 const BASE = 'https://backend.grid-day2.test';
 let S, TOOLS, realFetch, prevInternal;
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+// ★ Owner 2026-10-08 (test/free-decision-tools-preview-only.test.mjs): get_grid_intelligence,
+// get_interconnection_queue and get_market_intel are previews on every non-paid seat, so
+// the capped full taste this file pins on the grid brief is dormant by default. This file
+// runs with the kill switch off (DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0, read per call)
+// so the mechanics it pins stay driven; the per-seat truth under the switch is pinned there.
+let prevFreeDecision;
 beforeAll(async () => {
+  prevFreeDecision = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+  process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
   prevInternal = process.env.DCHUB_INTERNAL_KEY;
   process.env.DCHUB_INTERNAL_KEY = 'grid-sell-test-internal-key';
   realFetch = globalThis.fetch;
@@ -51,6 +59,7 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => {
   globalThis.fetch = realFetch;
+  if (prevFreeDecision === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY; else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prevFreeDecision;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
 });
 

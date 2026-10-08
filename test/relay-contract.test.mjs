@@ -134,17 +134,19 @@ describe('gated results carry agent_instruction, human_url and a self-contained 
   it('keyed free caller past the daily full allowance (item 12): the preview carries the relay', async () => {
     const ip = '203.0.119.31';
     const k = 'dch_live_relay_contract_overcap_key';
-    const full1 = await call('get_grid_intelligence', { iso: 'ERCOT' }, keyed(ip, k));
-    const full2 = await call('get_grid_intelligence', { iso: 'ERCOT' }, keyed(ip, k));
-    const capped = await call('get_grid_intelligence', { iso: 'ERCOT' }, keyed(ip, k));
+    // Owner 2026-10-08: the grid brief is preview-only on free (no allowance to spend);
+    // the over-cap relay mechanics are driven on get_fiber_intel, which keeps the allowance.
+    const full1 = await call('get_fiber_intel', { metro: 'ashburn' }, keyed(ip, k));
+    const full2 = await call('get_fiber_intel', { metro: 'ashburn' }, keyed(ip, k));
+    const capped = await call('get_fiber_intel', { metro: 'ashburn' }, keyed(ip, k));
     // the first answers are full tastes that withhold nothing: no wall, no relay forced onto them
     expect(full1.structuredContent._metered_trial).toBeTruthy();
     expect(full1.structuredContent.human_url).toBeUndefined();
     expect(full2.structuredContent.human_url).toBeUndefined();
     // the over-cap preview withholds fields and used to carry NO for_your_human at all
     expect(capped.structuredContent._metered_trial).toBeUndefined();
-    expectContract(capped, 'keyed over-cap get_grid_intelligence');
-    expectNoPricing(capped, 'keyed over-cap get_grid_intelligence');
+    expectContract(capped, 'keyed over-cap get_fiber_intel');
+    expectNoPricing(capped, 'keyed over-cap get_fiber_intel');
     expect(capped.structuredContent.human_url).toMatch(/\/upgrade\/h\//);
     // a text-only (hosted) client reads content, not structuredContent: the link is in the text too
     expect(textOf(capped)).toContain(capped.structuredContent.human_url);

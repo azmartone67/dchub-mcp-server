@@ -22,7 +22,9 @@
 import { describe, it, expect } from 'vitest';
 import { _autoBindTrialToSession, sessionMeta, _ctxALS, _buildQuotaHint } from '../server.mjs';
 
-const TOOL = 'get_grid_intelligence';
+// Owner 2026-10-08: get_grid_intelligence is preview-only on every non-paid seat and carries no
+// budget; the mint-visibility mechanics this file pins are driven on a tool that still does.
+const TOOL = 'get_fiber_intel';
 
 describe('auto-mint bind is visible to the SAME request that minted it', () => {
   it('binding a trial key updates the live ctx, not just sessionMeta', () => {

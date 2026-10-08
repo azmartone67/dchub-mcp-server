@@ -169,6 +169,11 @@ function withheldKeys(backend, response) {
   };
   const b = byKey(backend), r = byKey(response);
   const out = new Set();
+  // Owner 2026-10-08: the decision tools' taste withholds a field by LEAVING IT OUT beside its
+  // `_<field>_in_pro: true` marker (never a null in place); a marker-backed absence is withheld.
+  if (response && typeof response === 'object' && !Array.isArray(response)) {
+    for (const [k] of b) if (!r.has(k) && response['_' + k + '_in_pro'] === true) out.add(k);
+  }
   for (const [k, rv] of r) {
     const bv = b.get(k);
     if (!bv) continue;
@@ -251,7 +256,8 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     tool: 'get_interconnection_queue', args: { iso: 'ERCOT' }, backend: QUEUE,
     seats: ['nokey', 'free'],
     keysOf: (p) => [...withheldKeys(QUEUE, p)],
-    expectRung: { nokey: 'pack', free: 'pack' },
+    // Owner 2026-10-08: preview-only on every non-paid seat, the pack included → Developer.
+    expectRung: { nokey: 'developer', free: 'developer' },
   });
   family({
     tool: 'list_transactions', args: {}, backend: DEALS,
@@ -281,12 +287,16 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     expectRung: { free: 'pro', pack: 'pro', starter: 'pro' },
   });
 
-  it('the queue prompt reads as intended (what was hidden, how many more rows, then the pack)', async () => {
+  it('the queue prompt reads as intended (the withheld section, then Developer — never the pack)', async () => {
+    // Owner 2026-10-08: the queue is a labelled taste on every non-paid seat — the project rows
+    // are withheld whole (no 3-row sample to count "more" from), and the lowest rung that
+    // returns them is Developer; the $10 pack is never named as what returns them.
     const res = await call('get_interconnection_queue', { iso: 'ERCOT' }, seat('free'));
     const [p] = prompts(res.all);
-    expect(p.labels).toEqual(expect.arrayContaining(['project names', 'capacity (MW)']));
-    expect(p.more).toBe(QUEUE.projects.length - 3);
-    expect(res.text).toMatch(/🔒 \*\*This answer hid [^*]+, and 7 more projects\.\*\* The payer checks out in one click: \*\*\$10 one-time = 1,000 API credits\*\*/);
+    expect(p.labels).toEqual(expect.arrayContaining(['projects']));
+    expect(p.rung).toBe('developer');
+    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* They come with DC Hub Developer → https:\/\/dchub\.cloud\/go\/c\//);
+    expect(res.text).not.toMatch(/\$10 one-time/);
   });
 
   it('keyed gas masks stay a mask: no prompt is invented where the answer had none', async () => {

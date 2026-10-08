@@ -103,7 +103,12 @@ async function call(args, seat) {
   return S._ctxALS.run(s, () => T.handler(parsed.data, { signal: new AbortController().signal }));
 }
 
+// Owner 2026-10-08: the free-key grid brief is a preview; its transport is DCHUB_PREVIEW_ISERROR
+// (production runs 0, see the r-wall-transport comment in server.mjs), so the harness sets it.
+let prevIsError;
 beforeAll(async () => {
+  prevIsError = process.env.DCHUB_PREVIEW_ISERROR;
+  process.env.DCHUB_PREVIEW_ISERROR = '0';
   realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = String(input && input.url ? input.url : input);
@@ -125,7 +130,10 @@ beforeAll(async () => {
   if (prev === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prev;
   TOOLS = S.createServer()._registeredTools;
 }, 60_000);
-afterAll(() => { globalThis.fetch = realFetch; });
+afterAll(() => {
+  globalThis.fetch = realFetch;
+  if (prevIsError === undefined) delete process.env.DCHUB_PREVIEW_ISERROR; else process.env.DCHUB_PREVIEW_ISERROR = prevIsError;
+});
 
 describe('get_grid_intelligence through the handler', () => {
   it('the gridstatus extended read is named when it contributed, and only then', async () => {

@@ -203,15 +203,30 @@ describe('applyTierGate — tier access', () => {
     expect(g.allowed).toBe(true);
     expect(g.bonus).toBe(true);
   });
-  it('keyed-free market_intel routes through the always-preview taste (r-tease-wow)', () => {
+  // Owner 2026-10-08: the three decision tools never enter the taste path on a non-paid
+  // seat (test/free-decision-tools-preview-only.test.mjs); the kill switch restores it.
+  it('keyed-free market_intel no longer routes through the taste: the bonus path (depth-teased later)', () => {
     const g = applyTierGate('get_market_intel', {}, 'free', true, false);
     expect(g.allowed).toBe(true);
-    expect(g.trial_taste).toBe(true);
+    expect(g.trial_taste).toBeUndefined();
+    expect(g.bonus).toBe(true);
   });
-  it('a validated trial unlocks the always-preview Pro tools as a taste', () => {
-    const g = applyTierGate('get_grid_intelligence', {}, 'free', false, true);
-    expect(g.allowed).toBe(true);
-    expect(g.trial_taste).toBe(true);
+  it('a validated trial no longer tastes get_grid_intelligence; it still tastes get_fiber_intel', () => {
+    expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).allowed).toBe(false);
+    const f = applyTierGate('get_fiber_intel', {}, 'free', false, true);
+    expect(f.allowed).toBe(true);
+    expect(f.trial_taste).toBe(true);
+  });
+  it('control: with DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0 the old taste routes come back', () => {
+    const prev = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+    process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
+    try {
+      expect(applyTierGate('get_market_intel', {}, 'free', true, false).trial_taste).toBe(true);
+      expect(applyTierGate('get_grid_intelligence', {}, 'free', false, true).trial_taste).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+      else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prev;
+    }
   });
   // r-paidtaste (2026-08-01): Starter/Developer must get AT LEAST the anon
   // taste on the flagship pair — before this, a paying key got ZERO full

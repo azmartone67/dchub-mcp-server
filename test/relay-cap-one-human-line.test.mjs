@@ -72,8 +72,14 @@ function readBody(req) {
 }
 
 // One import of server.mjs per config: ANON_INLINE_FULL is read once, at import.
+// ★ Owner 2026-10-08 (test/free-decision-tools-preview-only.test.mjs): get_grid_intelligence,
+// get_interconnection_queue and get_market_intel are previews on every non-paid seat, so
+// the capped full taste this file pins on the grid brief is dormant by default. This file
+// runs with the kill switch off (DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0, read per call)
+// so the mechanics it pins stay driven; the per-seat truth under the switch is pinned there.
 async function boot(inlineFull) {
   vi.resetModules();
+  process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
   if (inlineFull === undefined) delete process.env.DCHUB_ANON_INLINE_FULL;
   else process.env.DCHUB_ANON_INLINE_FULL = inlineFull;
   const S = await import('../server.mjs');

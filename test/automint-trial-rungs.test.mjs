@@ -77,7 +77,15 @@ function readBody(req) {
   });
 }
 
+// ★ Owner 2026-10-08 (test/free-decision-tools-preview-only.test.mjs): get_grid_intelligence,
+// get_interconnection_queue and get_market_intel are previews on every non-paid seat, so
+// the capped full taste this file pins on the grid brief is dormant by default. This file
+// runs with the kill switch off (DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0, read per call)
+// so the mechanics it pins stay driven; the per-seat truth under the switch is pinned there.
+let prevFreeDecision;
 beforeAll(async () => {
+  prevFreeDecision = process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+  process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = '0';
   await new Promise((resolve) => {
     stub = createServer(async (req, res) => {
       const url = new URL(req.url, 'http://_');
@@ -141,6 +149,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (prevFreeDecision === undefined) delete process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY;
+  else process.env.DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY = prevFreeDecision;
   if (prevSecret === undefined) delete process.env.DCHUB_INTERNAL_KEY;
   else process.env.DCHUB_INTERNAL_KEY = prevSecret;
   await new Promise((resolve) => (httpServer ? httpServer.close(resolve) : resolve()));

@@ -297,7 +297,13 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
 
   it('get_grid_intelligence: the keyless preview withholds the four DCPI aggregates', async () => {
     const out = await callTool(null, 'get_grid_intelligence', { iso: 'ERCOT' });
-    expectPreviewLocked(out.lead, 'keyless ERCOT');
+    // Owner 2026-10-08: the keyless grid brief is the labelled taste (lib/free-decision-taste.mjs):
+    // a withheld field is ABSENT with its `_<field>_in_pro` marker, never nulled in place.
+    expect(out.lead && out.lead.iso, 'keyless ERCOT: no payload').toBe('ERCOT');
+    for (const f of Object.keys(PREVIEW_FIELDS)) {
+      expect(Object.prototype.hasOwnProperty.call(out.lead, f), `keyless ERCOT.${f} must be absent`).toBe(false);
+      expect(out.lead[`_${f}_in_pro`], `keyless ERCOT._${f}_in_pro`).toBe(true);
+    }
     expectNoNeedles(out, 'get_grid_intelligence keyless');
   });
 

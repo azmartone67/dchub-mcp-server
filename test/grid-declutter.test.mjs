@@ -70,18 +70,20 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
       expect(sc.user_message).toMatch(/plans that include the full/);
       const blocks = r.content.map((b) => b.text).filter((x) => !/^Cite as: /.test(x));
       expect(blocks[blocks.length - 1]).toContain(sc.user_message.slice(0, 40));   // the ask is the last block but a bare citation line
-      expect(URL_COUNT(t, NEWS_URL)).toBe(1);                          // each news URL once
+      expect(URL_COUNT(t, NEWS_URL)).toBe(0);                          // owner 2026-10-08: related_intel is withheld on the taste
       expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     } finally { r2(); r1(); }
   });
 
   it('kill switch DCHUB_GRID_DECLUTTER=0: the opt-in card and the repeated news URLs come back', async () => {
     const off = env('DCHUB_GRID_DECLUTTER', '0');
+    // the repeated news URLs live in related_intel, which the taste withholds: drive the old shape
+    const fd = env('DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY', '0');
     try {
       const t = text(await grid(seat()));
       if (!pc) expect(t).toMatch(/opt-in\/request/);                  // v1 card is back
       expect(URL_COUNT(t, NEWS_URL)).toBeGreaterThan(1);              // today's repeated news URLs
-    } finally { off(); r2(); r1(); }
+    } finally { fd(); off(); r2(); r1(); }
   });
 });
 
