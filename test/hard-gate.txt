@@ -97,6 +97,7 @@ test/doc-stripe-links-are-canonical.test.mjs
 test/ecosystem-sync.test.mjs
 test/edge-gate-recognition.test.mjs
 test/edge-key-flip-evidence.test.mjs
+test/email-hint-after-taste.test.mjs
 test/end-of-burst-hook.test.mjs
 test/enterprise-hint-quotes-no-stale-floor.test.mjs
 test/error-envelope.test.mjs
