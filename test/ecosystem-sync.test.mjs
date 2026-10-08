@@ -597,3 +597,13 @@ describe('toolClaims: a listing figure quoted as their copy', () => {
     expect(toolClaims('mcp.so lists 79 tools')).toEqual([79]);
   });
 });
+
+describe('facilityFloors: a floor quoted from a listing on /mcp-standing', () => {
+  it('ignores a floor the page attributes to a listing ("still read"), not to us', () => {
+    const row = 'stale listing: on 2026-10-07 its description still read \u201c20K+ facilities\u201d and it prints no tool count';
+    expect(facilityFloors(row)).toEqual([]);
+    // our own floor beside it is still caught; an unquoted floor is not exempt
+    expect(facilityFloors(`${row}. DC Hub tracks 20K+ facilities.`)).toEqual(['20K+']);
+    expect(facilityFloors('its description is 20K+ facilities')).toEqual(['20K+']);
+  });
+});

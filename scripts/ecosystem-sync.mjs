@@ -271,10 +271,17 @@ export function parseFloor(phrase) {
   return null;
 }
 
+// A floor the page quotes from someone else's listing ("its description still
+// read \u201c20K+ facilities\u201d") is not a claim the page makes. /mcp-standing
+// prints it on purpose (backend routes/mcp_standing.py `_NO_VERIFIED_MARK`).
+// Only the "still read <curly-quoted>" form is exempt; a bare floor is still read.
+const QUOTED_LISTING_RE = /\bstill\s+read\s+\u201c[^\u201d]*\u201d/gi;
+
 /** Every facility floor a text states, as written ("21,800+", "20K+"). */
 export function facilityFloors(text) {
   const out = new Set();
-  for (const m of String(text || '').matchAll(FLOOR_RE)) out.add(`${m[1].replace(/\s/g, '')}+`);
+  const own = String(text || '').replace(QUOTED_LISTING_RE, ' ');
+  for (const m of own.matchAll(FLOOR_RE)) out.add(`${m[1].replace(/\s/g, '')}+`);
   return [...out];
 }
 
