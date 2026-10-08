@@ -230,7 +230,15 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     const text = all(r);
     for (const f of K.figures) expect(text).not.toContain(f);
     expect(K.kept(p)).toEqual(K.keptWant);
-    expect(new Set(plansOf(r))).toEqual(new Set(['pro']));
+    // Grok audit 2026-10-08 (one link per wall): below Developer the preview carries the relay page
+    // (which sells Pro for a Land & Power tool), not a /go/c Pro checkout. A Starter / Developer
+    // seat is paid-depth and keeps its Pro checkout (the one-link step is for callers below Developer).
+    if (['starter', 'developer'].includes(who)) {
+      expect(new Set(plansOf(r))).toEqual(new Set(['pro']));
+    } else {
+      expect(plansOf(r)).toEqual([]);
+      expect(text).toMatch(/dchub\.cloud\/upgrade\/h\//);
+    }
     for (const l of LOWER_RUNG) expect(text).not.toContain(l);
     expect(burns).toEqual([]);          // a preview spends no credit
   });

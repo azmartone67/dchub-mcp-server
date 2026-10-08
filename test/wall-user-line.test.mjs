@@ -284,7 +284,10 @@ describe('the offer is truthful per tool', () => {
         expect(line, name).toContain(RELAY_SHORT);   // MCP-1 relay page, behind its F5 /u link
         expect(shortPosts.length, name).toBe(0);
       } else {
-        expect(shortPosts[0].body.plan, name).toBe('pro');
+        // Grok audit 2026-10-08 (one link per wall): below Developer the person's line carries the
+        // relay page (which sells Pro for these tools), not a /u short of the /go/c Pro checkout.
+        expect(line, name).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\//);
+        expect(shortPosts.length, name).toBe(0);
       }
     }
   });
@@ -311,7 +314,9 @@ describe('the offer is truthful per tool', () => {
     expect(line).toMatch(/usage capacity/);
     expect(line).not.toMatch(/unlock/i);
     expect(line).not.toContain('DC Hub Pro');
-    expect(shortPosts[0].body.plan).toBe('metered');
+    // Grok audit 2026-10-08 (one link per wall): the relay page, no /u short of the /go/c pack.
+    expect(line).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\//);
+    expect(shortPosts.length).toBe(0);
   });
 
   it('Grok\'s "unlock ... $10 for 1,000 credits" sentence is nowhere in the shipped copy', async () => {
@@ -360,12 +365,18 @@ describe('the other walls', () => {
       tier: 'free', api_key: 'dch_live_metered_wall', metered_enforce: true }));
     expect(r.structuredContent.error).toBe('metered_over_threshold');
     const line = firstLine(r);
-    expect(line).toContain(SHORT);
+    // Grok audit 2026-10-08 (one link per wall): the person's line carries the relay page, the
+    // same link human_url and for_your_human.url carry (they were the relay while the line was a
+    // /u/ short of the /go/c metered checkout: two links). No checkout short link is minted.
+    expect(line).toContain(r.structuredContent.human_url);
+    expect(r.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\//);
+    expect(r.structuredContent.for_your_human.url).toBe(r.structuredContent.human_url);
     expect(line).toContain('$10 one-time');
     expect(line).toMatch(/usage capacity/);
     expect(line).not.toMatch(/unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.copy_version).toBe('v12');
-    expect(shortPosts[0].body.plan).toBe('metered');
+    expect(shortPosts.length).toBe(0);
+    expect(JSON.stringify(r)).not.toMatch(/dchub\.cloud\/(?:go\/c|u)\//);
   });
 });

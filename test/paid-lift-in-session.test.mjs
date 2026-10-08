@@ -46,7 +46,11 @@ const sha = (k) => createHash('sha256').update(k).digest('hex');
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
 let S, PORT, httpServer, stub;
-const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_KEY_TIER_PROBE_MS'];
+// Grok audit 2026-10-08 (one link per wall): a keyed wall no longer carries the k- /go/c link
+// this suite reads the key ref from (the relay page binds the same key through pk- in the
+// token). The MECHANISM under test, the mid-session re-read after a k- purchase, is unchanged,
+// so the suite runs under the one-link kill switch to keep its direct-link fixture.
+const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_KEY_TIER_PROBE_MS', 'DCHUB_WALL_ONE_LINK'];
 const prevEnv = {};
 const paid = new Set();         // keys the webhook's k- branch has stamped
 const fixE = new Map();          // session id → tier_upgrade a session-bound purchase returns
@@ -126,6 +130,7 @@ beforeAll(async () => {
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
   process.env.DCHUB_INTERNAL_KEY = SECRET;
   process.env.DCHUB_KEY_TIER_PROBE_MS = String(PROBE_MS);
+  process.env.DCHUB_WALL_ONE_LINK = '0';
   S = await import('../server.mjs');
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = httpServer.address().port;

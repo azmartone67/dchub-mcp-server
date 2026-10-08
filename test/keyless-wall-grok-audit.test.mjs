@@ -188,9 +188,19 @@ describe('F6: a keyless gated preview carries exactly one checkout URL', () => {
     expect(t).not.toContain('dchub.cloud/go/c/');
   });
 
-  it('a keyed caller keeps its key-bound /go/c checkout (not rewritten)', async () => {
+  // Grok audit 2026-10-08 (owner decision 10-07 supersedes the 10-02 pin above): a keyed
+  // FREE caller's wall is one link too — the relay page binds the same key (pk- in the
+  // token), so the key-bound /go/c it used to carry bought nothing the page does not.
+  // DCHUB_WALL_ONE_LINK=0 restores the 10-02 response (test/grok-wall-hygiene-1008).
+  it('a keyed free caller: no /go/c anywhere, the one page link is human_url', async () => {
     const r = await call('get_interconnection_queue', { iso: 'PJM' },
       seat({ tier: 'free', api_key: 'dch_live_grok_audit_keyed_' + seatN }));
-    expect(contentText(r)).toMatch(/https:\/\/dchub\.cloud\/go\/c\//);
+    expect(isGatedResult(r)).toBe(true);
+    const all = JSON.stringify(r);
+    expect(all).not.toMatch(/https:\/\/dchub\.cloud\/go\/c\//);
+    expect(r.structuredContent.human_url).toMatch(RELAY);
+    const pages = [...new Set((all.match(/https:\/\/dchub\.cloud\/[^\s"'<>\\)\]}]+/g) || [])
+      .filter((u) => !u.startsWith('https://dchub.cloud/api/v1/')).map((u) => u.replace(/[?#].*$/, '')))];
+    expect(pages).toEqual([r.structuredContent.human_url.replace(/[?#].*$/, '')]);
   });
 });

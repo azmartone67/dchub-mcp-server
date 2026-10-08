@@ -64,7 +64,8 @@ describe('/mcp/claude — every listed tool, keyless and keyed', () => {
       const r = await H.call('/mcp', name, GUESS_ARGS);
       for (const h of hitsOf(PATTERNS, r.raw)) hits.add(h);
     }
-    expect([...hits]).toEqual(expect.arrayContaining(['/go/c', '/upgrade/h', '$<digit>', 'dch_ key', 'sponsor']));
+    // Grok audit 2026-10-08 (one link per wall): a keyless /mcp wall carries the relay, no /go/c.
+    expect([...hits]).toEqual(expect.arrayContaining(['/upgrade/h', '$<digit>', 'dch_ key', 'sponsor']));
   }, 120_000);
 
   it('keyless: no response carries commerce, relay, price, key, session id or sponsor content; gated ends with one plans line', async () => {

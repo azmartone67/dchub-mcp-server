@@ -227,8 +227,10 @@ describe('repeat keyless grid call in one session (fail 1)', () => {
     expect(t1).not.toContain('dchub.cloud/go/c/');
     expect(t2).toContain('Your user was sent the full ask earlier in this session');
     expect(t2).not.toContain('Show your user the next line');
-    expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(0);      // one human line per session stands
-    expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(1);           // ...and the wall keeps its one direct pointer
+    // Grok audit 2026-10-08 (one link per wall): the repeat wall's one pointer is the page (it was
+    // the direct /go/c); still no second human line (the "sent the full ask earlier" note stands).
+    expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
+    expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(0);
     expect(r2.structuredContent.for_your_human.url).toMatch(/[?&]buy=1$/);
   });
 });
@@ -296,7 +298,8 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     const off = env('DCHUB_GRID_SELL_LINE', '0');
     try {
       const t = text(await callTool('get_fiber_intel', { metro: 'ashburn' }, seat()));
-      expect(t).toMatch(/the plans that return them are on the page behind the link/);
+      // Grok audit 2026-10-08 item 2: the fiber rows are Developer's, so the old wall names Developer.
+      expect(t).toMatch(/the lowest plan that returns them is DC Hub Developer/);
       expect(t).not.toContain('buy=1');
     } finally { off(); }
   });
@@ -311,8 +314,9 @@ describe('a repeat get_fiber_intel call in one session (live finding 10-04)', ()
     }
     const t2 = text(await callTool('get_fiber_intel', { metro: 'ashburn' }, s));
     expect(t2).toContain('Your user was sent the full ask earlier in this session');
-    expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(1);
-    expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(0);
+    // Grok audit 2026-10-08 (one link per wall): the one direct link is the page, not a /go/c.
+    expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(0);
+    expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
   });
   it('the header pattern matches with and without a trailing blank line', () => {
     const step = (text) => S._gridSellStep({ content: [{ type: 'text', text }],

@@ -39,7 +39,7 @@ const ROWS = Array.from({ length: 6 }, (_, i) => ({
 }));
 
 let S, PORT, httpServer, stub;
-const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_TRIAL_TOOL_DAILY_FULL', 'DCHUB_GO_LINKS'];
+const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_TRIAL_TOOL_DAILY_FULL', 'DCHUB_GO_LINKS', 'DCHUB_WALL_ONE_LINK'];
 const prevEnv = {};
 const validated = new Set();
 
@@ -87,6 +87,10 @@ beforeAll(async () => {
   process.env.DCHUB_INTERNAL_KEY = SECRET;
   // Read at import: one full answer per tool per day, then the trial-cap wall.
   process.env.DCHUB_TRIAL_TOOL_DAILY_FULL = '1';
+  // Grok audit 2026-10-08 (one link per wall): the Developer / Pro /go/c links this file decodes
+  // are gone from a keyless / free-key wall by default; which ref they bind is still pinned here
+  // under the switch (the no-Starter rule is asserted on the source and the instructions too).
+  process.env.DCHUB_WALL_ONE_LINK = '0';
   delete process.env.DCHUB_GO_LINKS;
   S = await import('../server.mjs');
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
