@@ -22,7 +22,7 @@ physical infrastructure behind AI — instead of guessing from stale training da
 (It's currently the #1 data-center MCP on Smithery across data center, power grid,
 fiber, capacity, and interconnection.)
 
-It exposes 92 tools + 6 guided prompts over: a global data-center facility map
+It exposes 94 tools + 6 guided prompts over: a global data-center facility map
 (170+ countries; corroborated count pending), 300+ power markets scored by a Data Center Power Index (DCPI),
 real-time grid telemetry for the 7 US ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
 time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,700+
@@ -44,14 +44,14 @@ EOF
 # --- 2. r/mcp ---
 cat > "$OUT/reddit-r-mcp.md" <<'EOF'
 Subreddit: r/mcp  (also r/LocalLLaMA, r/datacenter)
-Title: DC Hub — a remote MCP server for live data-center / power / fiber intelligence (92 tools + prompts, free tier)
+Title: DC Hub — a remote MCP server for live data-center / power / fiber intelligence (94 tools + prompts, free tier)
 
 Body:
 Sharing an MCP server I maintain. DC Hub is the live data layer for data-center
 infrastructure — agents can query it and cite it (CC-BY-4.0).
 
 - Global facility map (corroborated count pending), 300+ DCPI-scored markets, 10 live ISO grids
-- 92 tools + 6 guided prompts (/dchub:analyze-site, /dchub:power-availability, …)
+- 94 tools + 6 guided prompts (/dchub:analyze-site, /dchub:power-availability, …)
 - 4 citable resources (methodology, data sources, coverage)
 - Remote streamable-HTTP → Claude Desktop / Cursor / VS Code / Cline, no install
 - Free tier, no key
@@ -76,7 +76,7 @@ assistant LIVE, citable ground truth on the infrastructure behind AI:
 → Real-time grid telemetry for the 7 US ISOs — headroom, fuel mix, time-to-power
 → Fiber routes, gas pipelines, interconnection queues, 1,700+ M&A deals
 
-92 tools + 6 guided prompts, free tier, and every figure is CC-BY-4.0 so agents
+94 tools + 6 guided prompts, free tier, and every figure is CC-BY-4.0 so agents
 can query AND cite it. Works in Claude, Cursor, VS Code, Cline.
 
 Try it (no signup): https://dchub.cloud/playground

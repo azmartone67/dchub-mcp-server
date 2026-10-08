@@ -25,8 +25,8 @@ console.log(await dc.grid("ERCOT"));                 // live grid intel
 | `dc.market(slug)` | `get_market_intel` | by-status counts, operators, recent facilities |
 | `dc.search({ q, state, country, limit })` | `search_facilities` (`q` is sent as the tool's `query` argument) | rows w/ canonical slug, provider, location |
 | `dc.grid(iso)` | `get_grid_data` | live demand / mix / headroom |
-| `dc.call(tool, args)` | *any of the 92 tools* | cleaned data payload |
-| `dc.tools()` | `tools/list` | array of tool names (92 today) |
+| `dc.call(tool, args)` | *any of the 94 tools* | cleaned data payload |
+| `dc.tools()` | `tools/list` | array of tool names (94 today) |
 
 ## Auth & tiers
 Set `DCHUB_API_KEY` (sent as `X-API-Key`) for full data:

@@ -96,7 +96,7 @@ describe('copy rules', () => {
 
   it('endpoints is exactly the approved line for the current tool count', () => {
     expect(COPY.endpoints).toBe(endpointsLine(COPY.tool_count));
-    expect(COPY.endpoints).toBe('92 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1'
+    expect(COPY.endpoints).toBe('94 MCP tools at https://dchub.cloud/mcp plus a REST API at https://dchub.cloud/api/v1'
       .replace(/^\d+/, String(COPY.tool_count)));
     expect(COPY.long).toContain(COPY.endpoints);
     expect(COPY.glama_400).toContain(COPY.endpoints);

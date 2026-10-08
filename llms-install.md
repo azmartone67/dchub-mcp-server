@@ -8,7 +8,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 - **Transport:** Streamable HTTP (MCP `2025-06-18`)
 - **Auth:** none required for the free anonymous tier (previews, no key needed). For higher limits,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
-- **Tools exposed:** 92 (facility search, market intelligence, grid + interconnection,
+- **Tools exposed:** 94 (facility search, market intelligence, grid + interconnection,
   site analysis + board-ready site-risk scoring, M&A deals, infrastructure).
 
 ## What it does
@@ -38,7 +38,7 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 ```
 
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
-92 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
+94 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
 
 ### Claude Desktop / Claude Code
