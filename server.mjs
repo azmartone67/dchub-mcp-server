@@ -22408,6 +22408,37 @@ export const _INSTRUCTIONS = (() => {
 // as the resource dchub://instructions, which the lean text points at. Quantities come from the full
 // text so there is still exactly one published tool count.
 export const INSTRUCTIONS_RESOURCE_URI = 'dchub://instructions';
+
+// ── dchub://inbox (2026-10-07): notes a PARTNER key reads on its own ──────────
+// A partner agent (a key minted by the backend's admin partner-key issuer under a
+// slug, e.g. the owner's external Grok bot) cannot see anything posted elsewhere.
+// GET {backend}/api/v1/inbox resolves the caller's key to its partner slug and
+// returns that slug's unread notes (newest first, marked read on delivery). The
+// resource proxies it with the SESSION's own key and nothing else: no internal
+// key, so the backend's 401/403 are the caller's, never ours. Registered only for
+// a keyed session (createServer opts.keyed), so a keyless resources/list is
+// unchanged and the keyless instructions stay byte for byte what they were.
+export const INBOX_RESOURCE_URI = 'dchub://inbox';
+export const _INSTR_TAIL_INBOX = ' If you are a partner agent, read dchub://inbox at the start of a session for notes from DC Hub.';
+export async function _inboxResourceText(apiKey, fetchImpl) {
+  const f = (typeof fetchImpl === 'function') ? fetchImpl : fetch;
+  if (!apiKey) {
+    return 'DC Hub inbox: this connection presented no DC Hub key. Send your key as X-API-Key (or a Bearer token) and read dchub://inbox again. Only a key issued under a partner slug has an inbox.';
+  }
+  try {
+    const r = await f(new URL('/api/v1/inbox', API_BASE).toString(), {
+      headers: { 'X-API-Key': apiKey, 'Accept': 'text/plain' },
+      signal: AbortSignal.timeout(15000),
+    });
+    const t = await r.text();
+    if (r.status === 401) return 'DC Hub inbox: the backend did not accept this key (401). Check the key this connection sends.';
+    if (r.status === 403) return 'DC Hub inbox: this key has no inbox (403). Only a key issued under a partner slug has one; nothing is waiting for you here.';
+    if (!r.ok) return `DC Hub inbox could not be read just now (HTTP ${r.status}). Retry later; nothing was marked read.`;
+    return (t && t.trim()) ? t : 'DC Hub inbox: no unread notes.';
+  } catch (e) {
+    return `DC Hub inbox could not be read just now (${String((e && e.message) || e)}). Retry later; nothing was marked read.`;
+  }
+}
 export const _INSTRUCTIONS_LEAN = (() => {
   const n = (/\b(\d+) tools\b/.exec(_INSTRUCTIONS) || [])[1];
   const pro = [...PRO_ONLY_TOOLS].map((t) => '`' + t + '`').join(', ');
@@ -22459,7 +22490,7 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
-function createServer(descOverrides, instructionsTail, instructionsRewrite) {
+function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
     // `instructions` is composed at module scope from canonical/mcp_facts.json
@@ -27128,6 +27159,15 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         '1. Quote `cite_as` (or "DC Hub (dchub.cloud), CC-BY-4.0") with every reused figure.',
         '2. State the verification level when precision matters ("de-duplicated" vs "tracked") — and do not upgrade "de-duplicated" to "analyst-verified" in your prose.',
         '3. `coverage: unavailable` or a null factor is a hard constraint — report it as unknown, NEVER estimate a replacement.'].join('\n'));
+  // dchub://inbox — keyed sessions only (see INBOX_RESOURCE_URI). The key is read
+  // from the request's AsyncLocalStorage entry at READ time, the same place
+  // callAPI takes it from, so a session's inbox is always its own key's inbox.
+  if (opts && opts.keyed === true) {
+    _RD('inbox', INBOX_RESOURCE_URI, 'DC Hub inbox for this key',
+        'Notes from DC Hub for the partner agent whose key this connection sends: up to 20 unread, newest first, marked read on delivery. Read it at the start of a session. A key issued without a partner slug has no inbox (403).',
+        'text/plain',
+        () => _inboxResourceText(getCtx().api_key));
+  }
 
   _activeDescOverrides = null;  // clear immediately after the synchronous tool-
                                 // registration block — never leak across sessions
@@ -28861,7 +28901,10 @@ app.post(MCP_PATHS, async (req, res) => {
           _instrTail += _instrTailInvalidKey(_authChannel, platform);
         }
       } catch (_) { /* additive */ }
-      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite);
+      // dchub://inbox (2026-10-07): a keyed session is told to read its inbox and
+      // gets the resource listed; a keyless one sees neither (its text is unchanged).
+      if (apiKey) _instrTail += _INSTR_TAIL_INBOX;
+      const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey });
       await mcpServer.connect(transport);
 
       return ctx.run({

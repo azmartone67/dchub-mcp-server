@@ -127,10 +127,13 @@ describe('wiring in server.mjs (anchored on the committed source)', () => {
     expect(remember).toBeGreaterThan(mint);
   });
   it('a keyless initialize gets the held key in-band, a keyed one never does', () => {
-    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite);', 'per-session createServer');
-    const window = SRC.slice(Math.max(0, i - 900), i);
+    // 2026-10-07: the call gained { keyed: !!apiKey } for dchub://inbox; the
+    // held-key contract below is unchanged, and the inbox tail is keyed-only.
+    const i = sole(SRC, 'const mcpServer = createServer(_descOverrides, _instrTail, _instrRewrite, { keyed: !!apiKey });', 'per-session createServer');
+    const window = SRC.slice(Math.max(0, i - 1200), i);
     expect(window).toContain('if (!apiKey) {');
     expect(window).toContain('_instrTail = _INSTR_TAIL_HELD(_held.key)');
+    expect(window).toContain('if (apiKey) _instrTail += _INSTR_TAIL_INBOX;');
     // The per-session tail is appended after the base instructions. Since
     // 2026-09-14 the base passes through _capacityInstructions first (it
     // splices a Capacity Source live clause inside a sentence, and returns the
