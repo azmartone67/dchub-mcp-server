@@ -52,7 +52,7 @@ should always honor:
 ---
 
 ## Partner outreach (honest — claim only what's live)
-> **DC Hub exposes 92 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
+> **DC Hub exposes 94 MCP tools at `dchub.cloud/mcp`** — live data-center, grid,
 > fiber, and M&A intelligence across a global data-center facility map in 170+ countries (corroborated count pending), plus
 > composite site scoring, FEMA National Risk Index disaster risk, and USGS/NOAA
 > climate intel. Every response carries provenance (`source`, `retrieved_at`) and

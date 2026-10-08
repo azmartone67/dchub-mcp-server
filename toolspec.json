@@ -75,7 +75,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns no site data; a free key returns verdict bands, factor names and counts; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
+    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -126,14 +126,6 @@
         "include_fiber": {
           "description": "Include fiber-connectivity analysis (default true)",
           "type": "boolean"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -237,14 +229,6 @@
         "capacity_mw": {
           "description": "Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)",
           "type": "number"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -286,7 +270,7 @@
   },
   {
     "name": "discover_tools",
-    "description": "Meta-tool: navigate DC Hub's tool catalog by FAMILY instead of scanning the whole list. Returns _entity=tool_families — a front_door block (execute_plan for any multi-capability question, get_changes to refresh) plus families with a when-to-use note + their tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, saved_work, account_meta), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical, and if you are BINDING a capability map, bind it from tools/list, not from here.",
+    "description": "Meta-tool: navigate DC Hub's tool catalog by FAMILY instead of scanning the whole list. Returns _entity=tool_families — a front_door block (execute_plan for any multi-capability question, get_changes to refresh) plus families with a when-to-use note + their tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, saved_work, account_meta, partner), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical, and if you are BINDING a capability map, bind it from tools/list, not from here.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -684,14 +668,6 @@
         "iso": {
           "description": "ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE",
           "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -819,14 +795,6 @@
         "include_sources": {
           "description": "Include upstream data-source/provenance metadata in the response",
           "type": "boolean"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -976,14 +944,6 @@
         "period": {
           "description": "Optional time window for the metric, e.g. 24h",
           "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -1008,14 +968,6 @@
         },
         "market": {
           "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — \"Ashburn\" is not a grid code.",
-          "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
           "type": "string"
         }
       },
@@ -1122,7 +1074,7 @@
   },
   {
     "name": "get_infra_projects",
-    "description": "Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects does ERCOT plan by 2028?\", \"what new projects appeared since last month?\". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from ERCOT's Transmission Project and Information Tracking list (TPIT) — ERCOT/TEXAS ONLY so far, no other ISO or utility — owner, from/to substation, county, kV, new and rebuilt miles, MVA, projected and actual in-service date, status (Planned, Conceptual, Under Construction, Completed, or dropped from the plan). Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source. Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).",
+    "description": "Use when a user asks what GAS PIPELINE or TRANSMISSION LINE PROJECTS are planned, proposed, approved or under construction — the forward build-out, not the existing network. e.g. \"which interstate gas pipelines are under construction into Louisiana?\", \"what 345 kV transmission projects are planned in PJM by 2030?\", \"what new projects appeared since last month?\". COVERS: (1) natural gas pipeline projects US-wide from the EIA natural gas pipeline projects list (public domain) — operator, status (Announced, Pre-applied, Applied, Approved, Construction, On Hold, Completed), states crossed, capacity in MMcf/d, miles, cost in $M, diameter, FERC/state docket, in-service year; (2) transmission projects from five ISOs' own project lists — ERCOT (TPIT), PJM (RTEP), MISO (MTEP Appendix A), SPP (STEP) and ISO-NE (RSP list); NOT CAISO or NYISO, and not utilities outside those ISOs. Each ISO publishes a different grain (an upgrade or facility, not a whole project), so a row count is a count of upgrades. Fields vary by ISO and an absent figure is null, never estimated: ERCOT has county, MVA and miles; MISO and SPP have from/to substations and some miles; PJM has no miles or endpoints; ISO-NE has no kV or miles. Common fields: owner, kV, projected in-service date, status (Planned, Conceptual, Proposed, Under Construction, On Hold, Completed; the ISO's own word is in source_status), and per-ISO source, release date and licence. Filter by type (gas_pipeline, transmission or all), state, status, min_capacity (gas MMcf/d), min_kv (transmission kV), an in-service window, new_since (projects first seen on or after a date, the initial backfill excluded) and include_delisted. Every row cites its source_url and license, and the summary counts every match by type, status and state with totals and an as_of date per source (sources.transmission.per_iso gives each ISO's own release date; the top-level as_of is the OLDEST). NOTE: the \"Texas only\" wording in the type and state parameter help is out of date — transmission covers the five ISOs above, and transmission rows carry whatever state(s) their ISO lists; rows are labelled by iso, so filter or group on that field of the result. Answers \"what gas pipelines are being built into Louisiana, how much capacity do they add, and when do they enter service\". Try: get_infra_projects type=gas_pipeline state=LA status=Construction. Do NOT use for new POWER GENERATION projects (use get_power_pipeline), for EXISTING, already-built pipelines, lines and substations (use get_infrastructure or get_grid_intelligence), or for data-center construction (use get_pipeline).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1240,14 +1192,6 @@
         "iso": {
           "description": "ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot",
           "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -1328,14 +1272,6 @@
         },
         "compare_to": {
           "description": "Optional second market slug to compare against, e.g. dallas",
-          "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
           "type": "string"
         }
       }
@@ -1627,14 +1563,6 @@
         "longitude": {
           "description": "Alias for lon — either name works",
           "type": "number"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -1780,14 +1708,6 @@
         },
         "location": {
           "description": "Market NAME or metro slug instead of coordinates, e.g. \"phoenix\", \"northern-virginia\", \"dallas\". Resolved to that market's PUBLISHED CENTROID through the DCPI market row, and the answer carries a resolved_from block saying so. A MARKET-level read, not your parcel; pass lat/lon for a specific site. Not an alias for lat/lon: a place name is not a coordinate.",
-          "type": "string"
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
           "type": "string"
         }
       }
@@ -2027,14 +1947,6 @@
             "market_summary",
             "identity_only"
           ]
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -2075,6 +1987,19 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 50
+        }
+      }
+    }
+  },
+  {
+    "name": "read_inbox",
+    "description": "PARTNER KEY ONLY: read the notes DC Hub left for the partner agent whose key this session sends — up to 20 unread, newest first, marked read on delivery (peek=true reads without marking). Call it at the start of a session. Proxies GET /api/v1/inbox with the session's own key: no key answers key required; a key issued without a partner slug answers partner key required (403). Not a data tool: it returns no market, power, fiber or siting figures.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "peek": {
+          "description": "true = read without marking the notes read",
+          "type": "boolean"
         }
       }
     }
@@ -2198,6 +2123,85 @@
       },
       "required": [
         "kind"
+      ]
+    }
+  },
+  {
+    "name": "report_finding",
+    "description": "PARTNER KEY ONLY: file what you observed on a DC Hub surface as a brain finding (detector external_audit) so it is triaged like every other detector's. class is one of completeness_contradiction, geography_leak, as_of_cite_as, pro_wall_dead_end, count_drift, stale_payload_complete, leak_past_pro_gate, link_hygiene, other; tool names the DC Hub tool or endpoint; quoted_fields carries the exact fields you saw (hashed for dedupe: the same observation re-filed within 24h bumps recurrence instead of inserting). Proxies POST /api/v1/inbox/findings with the session's own key; a key issued without a partner slug answers partner key required (403). 120 per key per day.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": [
+            "completeness_contradiction",
+            "geography_leak",
+            "as_of_cite_as",
+            "pro_wall_dead_end",
+            "count_drift",
+            "stale_payload_complete",
+            "leak_past_pro_gate",
+            "link_hygiene",
+            "other"
+          ],
+          "description": "Finding class: completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a Pro wall that says stop while next_ask offers another Pro tool and no cheaper rung), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a Pro field served below Pro), link_hygiene (dead or wrong-shape links), other"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "The DC Hub tool or endpoint the finding is about, e.g. analyze_site"
+        },
+        "args": {
+          "description": "The arguments you called it with",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "quoted_fields": {
+          "description": "The exact fields/values you observed (object, list or string); hashed for dedupe",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "array",
+              "items": {}
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "observed_at": {
+          "description": "ISO-8601 time you observed it",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "Your session identifier, if any",
+          "type": "string"
+        },
+        "recurrence": {
+          "description": "How many times you have seen it (default 1)",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "note": {
+          "description": "One or two sentences of context",
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "tool"
       ]
     }
   },
@@ -2461,14 +2465,6 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100000
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }
@@ -2689,14 +2685,6 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
-        },
-        "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
-          "type": "boolean"
-        },
-        "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
-          "type": "string"
         }
       }
     }

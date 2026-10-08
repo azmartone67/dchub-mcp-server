@@ -271,13 +271,16 @@ describe('the change is bounded', () => {
     }
   });
 
-  it('exactly 26 tools declare a required argument', () => {
+  it('exactly 27 tools declare a required argument', () => {
+    // ★2026-10-08 26 -> 27. report_finding (a partner tool) requires class + tool:
+    //   a finding without a class or a subject is not a finding. read_inbox,
+    //   added alongside it, requires nothing. Net +1.
     // ★2026-09-06 24 -> 26. The standing_intent split retired one tool that
     //   declared NO required args (its `kind` was conditional on action, which a
     //   schema cannot say) and added two that declare real ones —
     //   register_standing_intent (kind + webhook_url) and delete_standing_intent
     //   (intent_id) — plus a lister that correctly requires nothing. Net +2.
     const withReq = TOOLS.filter((t) => (t.inputSchema.required || []).length).map((t) => t.name);
-    expect(withReq.length, `got: ${withReq.sort().join(', ')}`).toBe(26);
+    expect(withReq.length, `got: ${withReq.sort().join(', ')}`).toBe(27);
   });
 });

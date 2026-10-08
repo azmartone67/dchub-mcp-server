@@ -1,11 +1,11 @@
 {
   "pack": "grid",
   "endpoint": "https://dchub.cloud/mcp/grid",
-  "version": "2.12.29",
+  "version": "2.12.30",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
-  "full_catalog_tool_count": 92,
+  "full_catalog_tool_count": 94,
   "tool_count": 17,
   "carries_shared_spine": true,
   "authentication": {
@@ -68,7 +68,7 @@
     },
     {
       "name": "discover_tools",
-      "description": "Meta-tool: navigate DC Hub's tool catalog by FAMILY instead of scanning the whole list. Returns _entity=tool_families — a front_door block (execute_plan for any multi-capability question, get_changes to refresh) plus families with a when-to-use note + their tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, saved_work, account_meta), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical, and if you are BINDING a capability map, bind it from tools/list, not from here."
+      "description": "Meta-tool: navigate DC Hub's tool catalog by FAMILY instead of scanning the whole list. Returns _entity=tool_families — a front_door block (execute_plan for any multi-capability question, get_changes to refresh) plus families with a when-to-use note + their tools (facility, market, grid_power, gas_btm, site_geometry, fiber, deals_news, saved_work, account_meta, partner), optionally filtered by a query. Call this FIRST when you are unsure which tool fits a task; then call the chosen tool (its full schema is in tools/list). This is a navigation layer, not the exhaustive catalog — tools/list stays canonical, and if you are BINDING a capability map, bind it from tools/list, not from here."
     },
     {
       "name": "claim_free_key",

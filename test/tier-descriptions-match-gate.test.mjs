@@ -45,7 +45,7 @@ const KEYLESS_CLAIM = /keyless (?:gets|returns|receives)(?! no )[^.;]*\b(verdict
 
 describe('Land & Power descriptions match the keyless wall', () => {
   it('serves the full catalog (non-vacuous)', () => {
-    expect(TOOLS.length).toBe(92);
+    expect(TOOLS.length).toBe(94);
   });
 
   // analyze_site left this list when B2 (#707) opened its keyless headline;

@@ -76,6 +76,10 @@ export const DIRECTORY_REMOVED = Object.freeze([
   // listings (live verify 2026-09-25, 23:18:55Z). Owner 2026-09-25: off the
   // directory profile; /mcp keeps it.
   'source_capacity',
+  // 2026-10-08: the partner tools joined the catalog after this copy was frozen; they are
+  // key-required (partner slug) and off the No-Auth profile exactly like the rows above, so
+  // the frozen configuration removes them too (lib/chatgpt-directory.mjs does the same).
+  'read_inbox', 'report_finding',
 ]);
 const _REMOVED_SET = new Set(DIRECTORY_REMOVED);
 

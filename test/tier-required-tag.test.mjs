@@ -15,8 +15,8 @@ const ALL = JSON.parse(fs.readFileSync(path.join(ROOT, 'toolspec.json'), 'utf8')
 const CLASSES = ['pro', 'email', 'developer_for_full', 'free_key', 'anonymous'];
 
 describe('tier_required on the access tag', () => {
-  it('covers the whole registered population (92 tools)', () => {
-    expect(ALL.length).toBe(92);
+  it('covers the whole registered population (94 tools)', () => {
+    expect(ALL.length).toBe(94);
     for (const n of ALL) {
       const tag = _accessTagFor(n);
       expect(CLASSES, n).toContain(tag.tier_required);
