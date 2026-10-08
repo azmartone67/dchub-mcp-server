@@ -50,6 +50,7 @@ describe('wiring', () => {
     // r-relay-contract (2026-10-06): the relay chokepoint wraps the split step, still inside the flag.
     // Grok audit 2026-10-08: _oneLinkWallStep wraps the contract step (it needs the final human_url)
     // and _partnerInboxStep is outermost but the flag; the flag stays outermost.
-    expect(src).toContain('async (args, extra) => _flagUpstreamError(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
+    // Revenue plan item 5 (2026-10-08): _emailHintStep wraps that one (it only appends a link-free line).
+    expect(src).toContain('async (args, extra) => _flagUpstreamError(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
   });
 });

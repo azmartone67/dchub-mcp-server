@@ -21007,12 +21007,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   _relayContractStep (it needs the final human_url) and _partnerInboxStep is
   //   outermost but _flagUpstreamError (it only appends). Each has its own kill
   //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
-  }, async (args, extra) => _flagUpstreamError(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -22570,6 +22570,56 @@ function _proseOf(t) {
   const sp = typeof t === 'string' ? _splitLeadingJson(t) : null;
   return sp ? (sp.rest || '') : (typeof t === 'string' ? t : '');
 }
+// ── Email at the moment of value (Grok->Brain revenue plan item 5, 2026-10-08) ─────────
+// Live tastes and walls carry no way to keep what the human just saw: Identified rung 0, and 0 of the
+// 88 free/identified analyze_site keys of the last 30 days has an email we can reach. After a taste,
+// one link-free line tells the agent what to do IF its human wants updates: get an explicit email,
+// state the purpose, then bind_email -> set_market_alert (market tools) or save_site -> set_site_alert
+// (site tools). No link, so the one-link wall rule holds; no ask when an email is already bound.
+// DCHUB_EMAIL_HINT_V1 (default OFF; owner flips on BOTH Railway MCP services). Once per session.
+// Skipped: paid tiers, identified callers, clean platforms (ChatGPT), directory/core/Claude profiles,
+// bots / internal / QA callers, our own key and email tools, and sessionless calls (no way to
+// rate-limit them).
+const _emailHintOn = () => /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_EMAIL_HINT_V1 || ''));
+const _EMAIL_HINT_SENT = new Set();
+const _EMAIL_HINT_MAX = 20000;
+const _EMAIL_HINT_SITE_TOOLS = new Set(['analyze_site', 'compare_sites', 'find_sites', 'generate_site_analysis',
+  'get_composite_site_score', 'score_facility', 'get_water_risk', 'get_disaster_risk']);
+export function _emailHintCopy(name) {
+  const site = _EMAIL_HINT_SITE_TOOLS.has(name);
+  const steps = site ? ['bind_email', 'save_site', 'set_site_alert'] : ['bind_email', 'set_market_alert'];
+  const purpose = 'the address is used only to recover the key and to send the alerts they set; no marketing unless they opt in';
+  const text = '(agent) Optional, only if your human wants to keep this: ask which email they want updates at and tell them '
+    + purpose + '. Never guess or invent an address. Once they give one explicitly: call claim_free_key if you hold no key, then '
+    + steps.join(', then ') + (site ? ' (channel email)' : ' with channel=email')
+    + ' to be emailed when ' + (site ? 'that site' : 'this market') + '\u2019s power picture changes.';
+  return { text, steps, purpose };
+}
+export function _emailHintStep(result, name) {
+  try {
+    if (!_emailHintOn()) return result;
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    const sc0 = result.structuredContent;
+    if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
+    if (_OWN_TELL_TOOLS.has(name) || _isFailureEnvelope(result) || sc0.save_offer) return result;
+    const c = getCtx() || {};
+    if (_isCleanPlatform() || isBotOrInternalCtx(c) || _isQaCaller(c)) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isPaidDepthTier(c.tier) || c.tier === 'identified' || c.email) return result;
+    const sid = c.session_id || '';
+    if (!sid || sid === 'no-session' || _EMAIL_HINT_SENT.has(sid)) return result;
+    if (!_isRelayWall(sc0, c)) return result;   // a taste or a wall; a full free answer keeps its own next-step line
+    const offer = _emailHintCopy(name);
+    if (_EMAIL_HINT_SENT.size >= _EMAIL_HINT_MAX) {
+      let n = 0; for (const k of _EMAIL_HINT_SENT) { _EMAIL_HINT_SENT.delete(k); if (++n >= _EMAIL_HINT_MAX / 10) break; }
+    }
+    _EMAIL_HINT_SENT.add(sid);
+    return { ...result, content: [...result.content, { type: 'text', text: offer.text }],
+             structuredContent: { ...sc0, save_offer: { when: 'only_if_your_human_wants_updates', steps: offer.steps, purpose: offer.purpose } } };
+  } catch (_) { return result; }   // an offer is never worth failing a response over
+}
+export function _resetEmailHintState() { _EMAIL_HINT_SENT.clear(); }
+
 export function _oneLinkWallStep(result, name) {
   try {
     if (!_wallOneLinkOn()) return result;
