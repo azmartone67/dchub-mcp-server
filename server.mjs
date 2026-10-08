@@ -3385,6 +3385,34 @@ function _isCleanPlatform() {
   } catch (_) { return false; }
 }
 
+// #836 (2026-10-08): the clean-platform free preview carried the data in content[0]
+// and a five-key envelope ({tier, tool, note, upgrade_url, citation}) in
+// structuredContent. A host that reads structuredContent as THE result (ChatGPT
+// does) saw no `taste`, no `withheld`, no `free_preview_only`, no
+// `completeness.status` — the honesty contract of #833 held in the text block and
+// vanished in the structure, while the claude platform carried all of it (verified
+// live 2026-10-08 06:20Z). The preview object now rides structuredContent too. It is
+// byte-for-byte what the text block already carries, so nothing new is exposed; the
+// ladder / pointer keys the clean platform never shows are left out. Every commerce
+// scrub is untouched: _scrubCommerce still runs on the whole result and the
+// directory profiles (/mcp/chatgpt, /mcp/chatgpt/oauth) still project it through
+// lib/chatgpt-directory.mjs scrubToolResult. Kill switch
+// DCHUB_CLEAN_PLATFORM_PREVIEW_SC=0 restores the five-key envelope.
+const _CLEAN_SC_DROP = new Set(['_upgrade', 'upgrade', '_upgrade_notice', 'next_tool', 'next_tool_hint', '_note']);
+export function _cleanPlatformPreviewScOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CLEAN_PLATFORM_PREVIEW_SC || ''));
+}
+export function _cleanPlatformPreviewSc(obj) {
+  try {
+    if (!_cleanPlatformPreviewScOn()) return {};
+    if (!obj || typeof obj !== 'object') return {};
+    const src = Array.isArray(obj) ? { results: obj } : obj;
+    const out = {};
+    for (const [k, v] of Object.entries(src)) if (!_CLEAN_SC_DROP.has(k)) out[k] = v;
+    return out;
+  } catch (_) { return {}; }
+}
+
 // r-appstore-clean: on a large full-data response, ChatGPT's app renderer surfaced
 // the `deep_intelligence` SIGNPOST sub-object (a "next steps: call get_grid_intelligence…"
 // hint) instead of the actual data. For clean platforms, strip the signpost / upsell /
@@ -11177,6 +11205,26 @@ export function _packOpensTool(tool) {
   // included (lib/free-decision-taste.mjs); its kill switch restores their pack path.
   if (_freePreviewOnlyTool(tool)) return false;
   return PAID_ONLY_TOOLS.has(tool) && !DEPTH_TEASE_TOOLS.has(tool) && !PRO_ONLY_TOOLS.has(tool);
+}
+// #838 (2026-10-08): the anonymous over-cap coaching (and the keyless trim's pack
+// hint) sells the $10 pack only where a credit buys something — API capacity on a
+// tool whose depth is not Developer's. On a depth-teased tool (DEPTH_TEASE_TOOLS, the
+// three decision tools, Pro-only and Land & Power) a pack buyer gets exactly the
+// preview the caller already holds (item 2 above: the pack opens no depth), so there
+// the coaching names the free key and the page in human_url — the Developer / Pro
+// ladder the relay contract already sells — and _wallKindFor does not stamp that
+// coaching `w-capacity` (the page would sell the pack). Kill switch
+// DCHUB_CAP_COACH_DEPTH=0 restores the pack sentence on every over-cap coaching.
+export function _capCoachOnDepthOn() {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CAP_COACH_DEPTH || ''));
+}
+export function _depthTeasedTool(tool) {
+  const t = String(tool || '');
+  return DEPTH_TEASE_TOOLS.has(t) || _freePreviewOnlyTool(t) || PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t);
+}
+export function _capCoachSellsPack(tool) {
+  if (!_capCoachOnDepthOn()) return true;
+  return !_depthTeasedTool(tool);
 }
 // The depth tease (top-N rows, Developer fields) lifts for a paid-depth tier only —
 // the same predicate the gate applies (`!_isPaidDepthTier(_gateTier)`), so the rung
@@ -19922,6 +19970,11 @@ function trackedTool(srv, name, description, schema, handler) {
                 content: [{ type: 'text', text: _trialText }],
                 isError: false,
                 structuredContent: {
+                  // #836: the preview the text block carries (the #833 taste on the
+                  // decision tools: taste, withheld, free_preview_only, completeness,
+                  // the _in_pro markers provenance.preview is read from), spread
+                  // FIRST so the envelope keys below win any collision.
+                  ..._cleanPlatformPreviewSc(_previewObj || _siteHeadlineObj),
                   tier: 'free',
                   tool: name,
                   // The copy names what the link IS. It used to say "sign in
@@ -20280,13 +20333,31 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // wall (still returns the preview). Lead with the free key (keep
             // going free) then the $5 pack via unlock_more_data — match the
             // front-door ladder instead of the bare "or upgrade".
-            trimmed._upgrade = {
+            // #838: the pack sentence rides only where a credit buys the next call in
+            // full (_capCoachSellsPack). On a depth-teased tool the coaching names the
+            // free key and the page in human_url: what this preview withheld (the
+            // missed-upgrade sentence, the rung the gates this call applied name) and
+            // the Developer / Pro ladder — never the pack, which returns nothing here.
+            const _coachHead = "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config.";
+            const _coachSellsPack = _capCoachSellsPack(name);
+            const _coachMissed = _coachSellsPack ? null
+              : (_missedUpgradeFor(trimmed, undefined, { strict: true }) || _missedUpgradeFor(trimmed));
+            trimmed._upgrade = _coachSellsPack ? {
               tier: 'anon_daily_cap',
-              message: "You've hit today's free anonymous calls from this IP — you're clearly getting value. Keep going FREE: call `claim_free_key` (no email, one step) for the identified tier (" + _freeKeyAllowanceText() + ") and SAVE the key to your MCP config. Want more today? 💳 $10 one-time = 1,000 API credits (no subscription) → relay the link in human_url to your human. The moment your human pays, your next call goes through — no reconnect.",
+              message: _coachHead + " Want more today? 💳 $10 one-time = 1,000 API credits (no subscription) → relay the link in human_url to your human. The moment your human pays, your next call goes through — no reconnect.",
               next_tool: 'claim_free_key',
               unlock_tool: 'unlock_more_data',
               credits_url: _packCheckoutUrl(_sidc),
               credits_pitch: '$10 one-time = 1,000 API credits, no subscription — the cheapest way to pay per call.',
+            } : {
+              tier: 'anon_daily_cap',
+              message: _coachHead + ' ' + (_coachMissed ? _coachMissed.text : 'The full `' + name + '` depth is DC Hub Developer\u2019s (Pro includes it).')
+                + ' A credit pack does not deepen `' + name + '`. For the full answer, relay the link in human_url to your human — that page lists the plans that include it (Developer; Pro includes everything).',
+              next_tool: 'claim_free_key',
+              wall: 'depth',
+              pack_opens: false,
+            };
+            Object.assign(trimmed._upgrade, {
               remaining_today: 0,
               // r-quota-truth (2026-08-10): name what this zero counts. It is
               // the IP-wide anonymous cap across ALL tools — a different
@@ -20294,7 +20365,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // legitimately read 2 in the same envelope. This one binds.
               remaining_today_basis: 'ANONYMOUS PER-IP calls across ALL tools today. This is the limit currently stopping you — it binds BEFORE any per-tool budget, so ignore a non-zero quota.full_answers_remaining_today in this same response and do not retry until you claim a key.',
               binding_limit: 'anon_ip_daily',
-            };
+            });
             // 2026-07-24 growthfix: mirror the payload into structuredContent.
             // Every tool declares an outputSchema, so schema-aware clients read
             // structuredContent as THE result — without this, _stampEntityCb's
@@ -20356,7 +20427,11 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               trimmed._note = 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
                        // r-cite-toplevel: object shape, same reason as above.
-                       structuredContent: { tier: 'free', tool: name,
+                       // #836: the trimmed preview rides structuredContent too (what the
+                       // text block carries), envelope keys last so they win.
+                       structuredContent: { ..._cleanPlatformPreviewSc(trimmed),
+                                            tier: 'free', tool: name,
+                                            note: trimmed._note,
                                             upgrade_url: _cleanPlatformUnlockUrl(name, ''),
                                             citation: _normalizeCitation('According to DC Hub (dchub.cloud)') } };
             }
@@ -20383,10 +20458,15 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // keeps — the fix for the ~4.8-calls/IP one-shot leak (this is the path search_facilities
               // and the masked free tools actually emit; trialHeader/applyTrialGuardIfFree are other branches).
               next_tool:      'claim_free_key',
-              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting). Retrying with the key gives the FREE tier — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews. Complete depth is on the paid plans (a $10 pack of 1,000 API credits covers usage capacity) — relay the link in human_url to your human.',
+              next_tool_hint: 'Call the claim_free_key tool now (no email, one call) → it returns an api_key. Add it as your X-API-Key header and SAVE it to your MCP client config so every future session reuses it (no re-minting). Retrying with the key gives the FREE tier — the first ' + TRIAL_DAILY_FULL_CAP + ' flagship answers/day come back full, the rest as previews. Complete depth is on the paid plans'
+                + (_capCoachSellsPack(name) ? ' (a $10 pack of 1,000 API credits covers usage capacity)' : '') + ' — relay the link in human_url to your human.',
               redeem_url:  `https://dchub.cloud/api/v1/redeem/${_sid}`,
-              credits_url: _packCheckoutUrl(_sid),
-              credits_hint: 'Want API capacity now without the email step? $10 one-time = 1,000 API credits (no subscription), usage capacity only.',
+              // #838: the pack hint rides only where a credit buys something; on a
+              // depth-teased tool the pack returns this same preview.
+              ...(_capCoachSellsPack(name) ? {
+                credits_url: _packCheckoutUrl(_sid),
+                credits_hint: 'Want API capacity now without the email step? $10 one-time = 1,000 API credits (no subscription), usage capacity only.',
+              } : {}),
               developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), _sid),
               ...(PRO_URL ? { pro_url: _subCheckoutUrl(PRO_URL, _sid),
                               pro_hint: 'Pro — everything (the plan most humans choose).' } : {}),
@@ -22359,13 +22439,17 @@ export function _wallKindFor(sc, c, name) {
     if (PRO_ONLY_TOOLS.has(tool) || LP_TOOLS.has(tool)) return '';
     const up = (sc._upgrade && typeof sc._upgrade === 'object') ? sc._upgrade : {};
     const quota = (sc.quota && typeof sc.quota === 'object') ? sc.quota : null;
-    if (_WALL_KIND_CAPACITY_ERRORS.has(String(sc.error || ''))
+    // #838: the over-cap coaching on a depth-teased tool (pack_opens:false) is not a
+    // capacity wall — the pack buys nothing there — so it takes the freekey / depth
+    // decision below like the same preview under the cap.
+    const capCoachOnDepth = String(up.tier || '') === 'anon_daily_cap' && up.pack_opens === false;
+    if (!capCoachOnDepth && (_WALL_KIND_CAPACITY_ERRORS.has(String(sc.error || ''))
         || typeof sc.binding_limit === 'string'
         || sc.credits_depleted === true
         || _WALL_KIND_CAPACITY_UPGRADE_TIERS.has(String(up.tier || ''))
         || up.remaining_today === 0
         || (quota && quota.full_answers_remaining_today === 0 && (sc.trial_preview || sc.preview_is_partial || sc.taste_bounded))
-        || /\bfull `[a-z_]+` answers\b.*\btoday\b/.test(String(up.message || ''))) {
+        || /\bfull `[a-z_]+` answers\b.*\btoday\b/.test(String(up.message || '')))) {
       return WALL_KIND_CAPACITY;
     }
     if (!(c && c.api_key)) {
