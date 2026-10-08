@@ -75,7 +75,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
+    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns no site data; a free key returns verdict bands, factor names and counts; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -126,6 +126,14 @@
         "include_fiber": {
           "description": "Include fiber-connectivity analysis (default true)",
           "type": "boolean"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -229,6 +237,14 @@
         "capacity_mw": {
           "description": "Target power load for the build in megawatts (MW), e.g. 50 (typical 50-500)",
           "type": "number"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -668,6 +684,14 @@
         "iso": {
           "description": "ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE",
           "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -795,6 +819,14 @@
         "include_sources": {
           "description": "Include upstream data-source/provenance metadata in the response",
           "type": "boolean"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -944,6 +976,14 @@
         "period": {
           "description": "Optional time window for the metric, e.g. 24h",
           "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -968,6 +1008,14 @@
         },
         "market": {
           "description": "Market NAME or metro slug instead of a grid code, e.g. \"Ashburn\", \"northern-virginia\", \"dallas\". Resolved to its ISO through the published DCPI market row before the brief is built; the answer carries a resolved_from block naming what it resolved to. Not an alias for region_id — \"Ashburn\" is not a grid code.",
+          "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
           "type": "string"
         }
       },
@@ -1192,6 +1240,14 @@
         "iso": {
           "description": "ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot",
           "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -1272,6 +1328,14 @@
         },
         "compare_to": {
           "description": "Optional second market slug to compare against, e.g. dallas",
+          "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
           "type": "string"
         }
       }
@@ -1563,6 +1627,14 @@
         "longitude": {
           "description": "Alias for lon — either name works",
           "type": "number"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -1708,6 +1780,14 @@
         },
         "location": {
           "description": "Market NAME or metro slug instead of coordinates, e.g. \"phoenix\", \"northern-virginia\", \"dallas\". Resolved to that market's PUBLISHED CENTROID through the DCPI market row, and the answer carries a resolved_from block saying so. A MARKET-level read, not your parcel; pass lat/lon for a specific site. Not an alias for lat/lon: a place name is not a coordinate.",
+          "type": "string"
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
           "type": "string"
         }
       }
@@ -1947,6 +2027,14 @@
             "market_summary",
             "identity_only"
           ]
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -2465,6 +2553,14 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100000
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
@@ -2685,6 +2781,14 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
+        },
+        "mpp_pay": {
+          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "type": "boolean"
+        },
+        "mpp_credential": {
+          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "type": "string"
         }
       }
     }
