@@ -157,3 +157,32 @@ describe('get_infra_projects', () => {
     expect(sc.transmission_projects).toBeUndefined();
   });
 });
+
+// The tool text must say what the data covers. The backend now loads PJM, MISO,
+// SPP and ISO-NE next to ERCOT (dchub-backend #6523); the description used to
+// say "ERCOT/TEXAS ONLY", which sent agents away from rows that exist.
+//
+// The /mcp/chatgpt parameter help is frozen while the OpenAI app is in review
+// (test/chatgpt-toolset-frozen.test.mjs), so the parameter text still says
+// "Texas only"; the tool-level description therefore says so plainly instead of
+// contradicting it silently. Lift both together when the review closes.
+describe('get_infra_projects tool text (main catalog)', () => {
+  it('names the five ISOs, says what is NOT covered, and no longer claims Texas only', async () => {
+    const r = await rpc('tools/list', {});
+    const t = (r.tools || []).find((x) => x.name === 'get_infra_projects');
+    expect(t, 'get_infra_projects is not advertised').toBeTruthy();
+    const d = t.description;
+    expect(d).not.toMatch(/ERCOT\/TEXAS ONLY|TEXAS ONLY so far/);
+    for (const iso of ['ERCOT', 'PJM', 'MISO', 'SPP', 'ISO-NE']) expect(d, iso).toContain(iso);
+    expect(d).toMatch(/NOT CAISO or NYISO/);
+    expect(d).toMatch(/null, never estimated/);          // absent figures are not invented
+    expect(d).toMatch(/Texas only.*out of date/);        // the frozen parameter help is flagged, not left to contradict
+  });
+
+  it('reports the source honestly in its output line', async () => {
+    const out = rowsOf(await call({ type: 'transmission' }));
+    expect(out.source).toMatch(/ISO transmission project lists \(ERCOT, PJM, MISO, SPP, ISO-NE/);
+    expect(out.source).toMatch(/publish no reuse licence/);
+    expect(out.source).not.toMatch(/and ERCOT TPIT transmission projects \(ERCOT terms/);
+  });
+});
