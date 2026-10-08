@@ -399,3 +399,4 @@ test/water-risk-location.test.mjs
 test/web-bot-auth-python.test.mjs
 test/web-bot-auth.test.mjs
 test/write-tool-annotation-accuracy.test.mjs
+test/hard-wall-completeness.test.mjs
