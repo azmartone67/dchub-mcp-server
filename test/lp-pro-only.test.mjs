@@ -158,14 +158,14 @@ const CASES = {
     args: LOC,
     figures: ['83.7', '88.1', '8.37', '11.29', '8336.4', '5123.9', '0.41', '0.77', '95.4', '39.0412345'],
     kept: (p) => [p.interpretation, p.nearby.substations_50km, p.fiber.carrier_count, p.fiber.top_carriers[0].carrier],
-    keptWant: ['Excellent site', 212, 623, 'Amazon.com'],
+    keptWant: [null, 212, 623, 'Amazon.com'],
     full: '83.7',
   },
   compare_sites: {
     args: { locations: '39.0412345,-77.4845678;33.45,-112.07' },
     figures: ['83.7', '88.1', '0.41', '8336.4', '(83.7)'],
     kept: (p) => [p.sites.length, p.sites[0].interpretation, p.winner],
-    keptWant: [2, 'Excellent site', null],
+    keptWant: [2, null, null],
     full: '83.7',
   },
   get_composite_site_score: {

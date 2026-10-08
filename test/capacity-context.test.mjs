@@ -147,7 +147,7 @@ describe('capacity_context reaches a real below-Pro analyze_site call (the previ
       { latitude: 32.7767, longitude: -96.797, capacity_mw: 500 });
     expect(sc.overall_score).toBeNull();
     expect(Object.values(sc.scores || {}).every((v) => v === null)).toBe(true);
-    expect(sc.interpretation).toBe('Excellent site');
+    expect(sc.interpretation ?? null).toBeNull();   // the site label is withheld with the verdict (2026-10-08)
     expect(sc.required_plan).toBe('pro');
   });
 
