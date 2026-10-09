@@ -167,6 +167,16 @@ if (price.founding !== undefined && price.pro !== undefined && price.founding > 
 // (FOUNDING_URL → _GO_PLAN_BY_LINK), and it offers nothing to a new buyer.
 delete price.founding;
 
+// 2026-10-09 (Grok A5): the one-time credit pack price+credits ride in the same
+// snapshot (GET /api/v1/tiers .credit_pack == /api/v1/canon prices.credit_pack),
+// so lib/canon.mjs can be the only place copy reads "$10" from. Fail-closed like
+// every other field: a malformed pack bails and leaves the snapshot unchanged.
+const cp = body.credit_pack;
+if (!cp || !Number.isSafeInteger(cp.price_usd) || cp.price_usd <= 0 || !Number.isSafeInteger(cp.credits) || cp.credits <= 0) {
+  bail(`credit_pack is malformed: ${JSON.stringify(cp)}`);
+}
+const credit_pack = { price_usd: cp.price_usd, credits: cp.credits };
+
 const prev = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
 const next = JSON.stringify({
   _comment: 'DERIVED — do not hand-edit. Source: GET /api/v1/tiers (owner: dchub-backend tier_registry.TIER_LIMITS). Refresh: node scripts/refresh-tier-limits.mjs',
@@ -174,6 +184,7 @@ const next = JSON.stringify({
   calls_per_day: out,
   ...(Object.keys(allowance).length ? { allowance } : {}),
   price_usd_month: price,
+  credit_pack,
   stripe_link,
 }, null, 2) + '\n';
 

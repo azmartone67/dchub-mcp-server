@@ -55,20 +55,17 @@ const PLAN_BASELINE = {
   'lib/upgrade-missed.mjs': 4,
   'lib/wall-user-line.mjs': 2,
 };
+// 2026-10-09 (Grok A5): the "$10" credit-pack literals now read PACK_PRICE from lib/canon.mjs
+// (64 -> 11 in server.mjs; 6 lib files -> 0). What remains is not the pack: the x402 per-call
+// $0.50, "$35.6B"-style examples, the $0/$20 burner-tip range, and regex backrefs ($1).
 const PRICE_BASELINE = {
-  'server.mjs': 64,
+  'server.mjs': 11,
   'lib/chatgpt-directory.mjs': 1,
   'lib/facility-location.mjs': 1,
   'lib/free-decision-taste.mjs': 1,
-  'lib/grid-sell-line.mjs': 2,
   'lib/log-redact.mjs': 3,
-  'lib/metered-note.mjs': 1,
-  'lib/paid-sell-line.mjs': 1,
-  'lib/paywall-contract.mjs': 1,
   'lib/provenance-plain.mjs': 2,
-  'lib/upgrade-missed.mjs': 1,
   'lib/verification-counts.mjs': 1,
-  'lib/wall-user-line.mjs': 1,
 };
 
 const FILES = ['server.mjs', 'oauth.mjs', 'mpp-hook.mjs',

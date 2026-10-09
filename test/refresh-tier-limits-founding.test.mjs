@@ -57,7 +57,7 @@ function tiers(over) {
   };
   for (const [k, v] of Object.entries(over || {})) t[k] = v === undefined ? undefined : { ...t[k], ...v };
   for (const k of Object.keys(t)) if (t[k] === undefined) delete t[k];
-  return { tiers: t };
+  return { tiers: t, credit_pack: { price_usd: 10, credits: 1000 } };
 }
 
 function run() {

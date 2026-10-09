@@ -47,6 +47,10 @@
     "team": 699,
     "enterprise": null
   },
+  "credit_pack": {
+    "price_usd": 10,
+    "credits": 1000
+  },
   "stripe_link": {
     "starter": "https://buy.stripe.com/8x2dRa5sS0x75uteGuaZi0g",
     "founding": "https://buy.stripe.com/14A9AUcVk4Nn1edcymaZi0o",
