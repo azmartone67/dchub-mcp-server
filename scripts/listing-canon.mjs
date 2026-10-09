@@ -102,3 +102,43 @@ export function healCountClaims(text, count) {
   return text.replace(/\b(\d+)((?:[ -](?:live|MCP|read-only))*[ -]tools?\b)/g,
     (m, n, tail) => (Number(n) > 20 ? `${count}${tail}` : m));
 }
+
+// ---- skill.md and its repo copies (Grok publish-from-canon, item 2, PR 3) ------------------
+// canonical/skill.md is the one source (Grok's skills-proposed.md). Every other copy is
+// rendered from it: only the frontmatter `name` changes, because the Agent Skills spec
+// requires `name` to equal the skill's directory. The tool count follows the registered tools.
+export const SKILL_SOURCE = 'canonical/skill.md';
+export const SKILL_TARGETS = [
+  { path: 'skill.md', name: 'dchub' },
+  { path: 'skills/dc-hub-data-center-intelligence/SKILL.md', name: 'dc-hub-data-center-intelligence' },
+  { path: 'kiro-power/skills/dc-hub-live-data/SKILL.md', name: 'dc-hub-live-data' },
+];
+const NAME_RX = /^(---\n(?:[^\n]*\n)*?name: )[^\n]+/;
+
+export function healSkillCount(src, count) {
+  return healCountClaims(src, count).replace(/("tools"\s*:\s*)\d+/, `$1${count}`);
+}
+
+export function renderSkill(src, name) {
+  if (!NAME_RX.test(src)) throw new Error('renderSkill: no frontmatter name to rewrite');
+  return src.replace(NAME_RX, `$1${name}`);
+}
+
+export function skillProblems(src, count) {
+  const bad = [];
+  const fm = src.match(/^---\n([\s\S]*?)\n---\n/);
+  if (!fm) return ['canonical/skill.md: no frontmatter'];
+  const desc = fm[1].match(/^description: (.+)$/m)?.[1] || '';
+  if (!desc) bad.push('canonical/skill.md: no description');
+  if (desc.length > 1024) bad.push(`canonical/skill.md: description is ${desc.length} chars (max 1024)`);
+  if (!/^name: dchub$/m.test(fm[1])) bad.push('canonical/skill.md: source name must be "dchub"');
+  if (/nexus/i.test(src)) bad.push('canonical/skill.md: retired name');
+  if (/—/.test(src)) bad.push('canonical/skill.md: em dash');
+  if (/\b\d[\d,]*\+?\s+(?:data center |data-center )?facilit/i.test(src)) bad.push('canonical/skill.md: facility number');
+  if (/\$\s?\d/.test(src)) bad.push('canonical/skill.md: price');
+  for (const b of countClaimProblems('canonical/skill.md', src, count)) bad.push(b);
+  const meta = src.match(/"tools"\s*:\s*(\d+)/);
+  if (!meta) bad.push('canonical/skill.md: metadata has no "tools" count');
+  else if (Number(meta[1]) !== count) bad.push(`canonical/skill.md: metadata tools ${meta[1]} != ${count}`);
+  return bad;
+}

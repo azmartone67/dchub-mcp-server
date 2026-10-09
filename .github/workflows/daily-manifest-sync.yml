@@ -310,7 +310,7 @@ jobs:
           #  day's canon_phrases.json refresh + server.mjs heal shipped nothing.
           #  Live /.well-known/mcp.json kept "21,400+" x3 against canon 21,500+.
           OWNED="README.md smithery.yaml mcp-server.json server.json package.json \
-                 server.mjs canonical/canon_phrases.json canonical/listing.json context7.json gemini-extension.json kiro-power/plugin.json \
+                 server.mjs canonical/canon_phrases.json canonical/listing.json canonical/skill.md skill.md llms.txt context7.json gemini-extension.json kiro-power/plugin.json \
                  submissions/README.md submissions/cline-marketplace.md submissions/devin-cognition-marketplace.md \
                  submissions/mcp.so.md submissions/official-mcp-registry.md submissions/pulsemcp.md \
                  submissions/smithery.md canonical/problem_taxonomy.json \
