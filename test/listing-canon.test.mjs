@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import {
   listingProblems, renderContext7, context7Problems, withSubmissionHeader,
-  SUBMISSION_HEADER, countClaimProblems,
+  SUBMISSION_HEADER, countClaimProblems, SKILL_SOURCE, SKILL_TARGETS, renderSkill, skillProblems, healSkillCount,
 } from '../scripts/listing-canon.mjs';
 
 const J = (f) => JSON.parse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'));
@@ -62,5 +62,34 @@ describe('manifests agree on the tool count', () => {
   });
   it('catches a stale count', () => {
     expect(countClaimProblems('x', 'a server with 81 tools', 94).length).toBe(1);
+  });
+});
+
+describe('skill.md and its copies', () => {
+  const src = T(SKILL_SOURCE);
+  it('the source passes its rules', () => expect(skillProblems(src, L.tool_count)).toEqual([]));
+  it.each(SKILL_TARGETS)('$path is the source with only the name changed', ({ path, name }) => {
+    expect(T(path)).toBe(renderSkill(src, name));
+    expect(T(path)).toMatch(new RegExp(`^---\\nname: ${name}\\n`));
+  });
+  it.each([
+    ['a stale metadata count', (s) => s.replace('"tools":94', '"tools":81')],
+    ['a stale prose count', (s) => s.replace('94 tools', '81 tools')],
+    ['a price', (s) => s + '\nPro is $99.'],
+    ['a facility number', (s) => s + '\n24,900+ facilities.'],
+    ['an over-long description', (s) => s.replace(/^description: .*$/m, 'description: ' + 'x'.repeat(1025))],
+  ])('rejects %s', (_n, mutate) => {
+    const m = mutate(src);
+    expect(m).not.toBe(src);
+    expect(skillProblems(m, L.tool_count).length).toBeGreaterThan(0);
+  });
+  it('--fix heals the count in the metadata and the prose', () => {
+    const healed = healSkillCount(src, 95);
+    expect(healed).toContain('"tools":95');
+    expect(skillProblems(healed, 95)).toEqual([]);
+  });
+  it('llms.txt points at skill.md and the skills index', () => {
+    expect(T('llms.txt')).toContain('https://dchub.cloud/skill.md');
+    expect(T('llms.txt')).toContain('https://dchub.cloud/.well-known/agent-skills/index.json');
   });
 });

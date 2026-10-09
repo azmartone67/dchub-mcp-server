@@ -109,6 +109,7 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         // (sync-tools-manifest imports/reads them). Same failure mode.
                         'scripts/listing-canon.mjs',
                         'canonical/listing.json',
+                        'canonical/skill.md',
                         // The shipped bundle the dchub.dxt guard compares against.
                         'dchub.dxt',
                         // ★2026-08-30: the release-asset guard and the workflow it runs
