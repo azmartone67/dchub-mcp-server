@@ -75,9 +75,19 @@ const GAS = FACTS.numbers.gas_pipelines;       // e.g. "33k" — no canon home y
 // The line smithery.yaml actually publishes, rebuilt around one substituted
 // quantity. Using the REAL sentence keeps the fixture honest: the facility and
 // deal figures beside it are the ones that always healed.
+// 2026-10-09: the description is RENDERED from canonical/registry-description-template.json,
+// so a synthetic sentence is now prose drift (rewritten whole by --fix) and no
+// longer exercises the per-quantity heal. Build the line from the committed
+// description instead and substitute only the quantities under test.
+const REAL_DESC = JSON.parse(read('smithery.yaml').match(/^description:[ \t]*(.+)$/m)[1]);
+const swap = (txt, noun, value) => {
+  const rx = new RegExp(String.raw`\d{1,3}(?:,\d{3})*k?\+?(?= ${noun})`);
+  if (!rx.test(txt)) throw new Error(`fixture is vacuous: no figure before "${noun}" in the committed description`);
+  return txt.replace(rx, value);
+};
 const descLine = (fiber, gas = commas(qty(GAS))) =>
-  `description: "Live intelligence. ${commas(qty(SUBSTATIONS))}+ substations, ` +
-  `${gas} gas pipeline segments, ${fiber} fiber routes, and more."\n`;
+  `description: ${JSON.stringify(swap(swap(swap(REAL_DESC,
+    'substations', `${commas(qty(SUBSTATIONS))}+`), 'gas pipeline segments', gas), 'fiber routes', fiber))}\n`;
 
 let box;
 // box.write() takes a path it can prove is inside the sandbox copy; every write

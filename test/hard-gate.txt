@@ -315,6 +315,7 @@ test/refresh-tier-limits-rule.test.mjs
 test/registry-copy-names-capacity-source.test.mjs
 test/registry-cron-order.test.mjs
 test/registry-deprecate-superseded.test.mjs
+test/registry-description-render.test.mjs
 test/registry-discover-scaffold.test.mjs
 test/registry-name-single-source.test.mjs
 test/registry-publish-ref-gated.test.mjs
