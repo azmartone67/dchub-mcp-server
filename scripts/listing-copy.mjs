@@ -38,7 +38,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const LISTING_COPY_PATH = 'canonical/listing-copy.json';
 export const GLAMA_MAX = 400;
-export const PRICE_LINE = '$10 one-time pack of 1,000 API credits';
+export const PRICE_LINE = 'Paid plans: dchub.cloud/pricing';  // Grok DCPI rollout 2026-10-09: listings name no price, only the pricing page
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
 export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
