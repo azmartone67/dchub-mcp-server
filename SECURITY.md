@@ -56,7 +56,7 @@ The server makes HTTP calls to a small, fixed set of places:
   configured AuthKit domain for signing keys, and `api.workos.com` for the user lookup.
 * **The machine-payment sidecar** (`MPP_SIDECAR_URL`), only when `MPP_ENABLED=1`. This is a DC Hub service.
 
-There is no analytics, advertising or other third-party telemetry. The server does not run shell commands or load code
+The per-call telemetry above is first-party only: each tool call is recorded by the DC Hub backend (tool, parameters, client/platform, tier, session id, API key if sent, status, duration). There is no analytics, advertising or other third-party telemetry. `bind_email` stores an email you choose to provide, against your key, and is optional. The server does not run shell commands or load code
 from the network.
 
 ## Dependencies

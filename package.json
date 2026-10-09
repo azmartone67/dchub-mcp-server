@@ -10,11 +10,11 @@
     "test": "vitest run",
     "sync": "node scripts/sync-tools-manifest.mjs",
     "sync:fix": "node scripts/sync-tools-manifest.mjs --fix",
-    "prepare": "node scripts/install-hooks.mjs 2>/dev/null || exit 0"
+    "hooks:install": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.17",
-    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "express": "^4.21.2",
     "jose": "^6.2.3",
     "zod": "^4.3.6"

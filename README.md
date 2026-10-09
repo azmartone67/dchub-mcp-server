@@ -258,6 +258,12 @@ Listed at [smithery.ai/servers/azmartone67/dchub](https://smithery.ai/servers/az
 npx -y @smithery/cli install @azmartone67/dchub --client claude
 ```
 
+## Privacy and data handling
+
+- **Per-call telemetry (first-party only).** Every tool call is logged to the DC Hub backend (`POST /api/v1/mcp/track`): timestamp, tool name, call parameters, detected client/platform, tier, session id, your API key (if you sent one), status and duration. It is used for rate limits, billing and quality. It is never sent to a third party, and there is no advertising or third-party analytics. Anonymous calls carry no key. Details: [SECURITY.md](SECURITY.md#outbound-network-calls).
+- **Email capture (`bind_email`) is optional.** The `bind_email` tool exists to raise your daily limit. If you call it, the email you pass is stored against your key, and you can ignore the tool. The server never asks for or collects an email any other way.
+- **No install-time code.** Installing this package runs no scripts (no `preinstall`, `install`, `postinstall` or `prepare`). The git pre-commit hook for contributors is opt-in: `npm run hooks:install`.
+
 ## Pricing
 
 - **Anonymous:** previews, no API key needed
