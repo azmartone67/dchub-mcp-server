@@ -88,7 +88,7 @@ describe('the plans line in server.mjs', () => {
   it('the unlock_more_data description and the /mcp instructions read the output line', () => {
     const desc = CODE.filter(([, l]) => l.includes("Unlock DC Hub\\'s full depth."));
     expect(desc).toHaveLength(1);
-    expect(desc[0][1]).toContain("no subscription). ' + _paidPlansOutputLine() + '.");
+    expect(desc[0][1]).toContain("`after_checkout`. ' + _paidPlansOutputLine() + '.");
     const instr = CODE.filter(([, l]) => /^const _INSTR_TAIL = /.test(l));
     expect(instr).toHaveLength(1);
     expect(instr[0][1]).toContain("' + _creditRuleText() + '; ' + _paidPlansOutputLine() + ') to relay");
@@ -215,9 +215,9 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
   it('/mcp unlock_more_data description: the plans line, and it matches the committed manifest', async () => {
     const tools = (await H.list('/mcp')).msg.result.tools;
     const live = tools.find((t) => t.name === 'unlock_more_data').description;
-    expect(live).toContain('no subscription). Paid plans: on the page behind the human_url link.');
+    expect(live).toContain('`after_checkout`. Paid plans: on the page behind the human_url link.');
     expect(live).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
-    expect(live).toContain('$10 one-time = 1,000 API credits');
+    expect(live).not.toMatch(/\$\d/);   // 2026-10-09 owner: price-free tool text
     const committed = MANIFEST.tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toBe(committed);
   });

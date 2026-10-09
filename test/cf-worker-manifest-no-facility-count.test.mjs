@@ -197,7 +197,8 @@ describe('against the committed live tool surface', () => {
       // figures were removed from tool copy (refined-queue / gas-hosting guards), so
       // fewer descriptions carry a magnitude. The must-keep fixtures above are
       // literals, not corpus reads, so this only needs SOME magnitude to exist.
-      .toBeGreaterThan(2);
+      // 2026-10-09: 2 -> 1, the $10 pack line left the unlock_more_data description (owner call).
+      .toBeGreaterThan(1);
   });
 
   it('moves a description only when the fence objects to it', () => {

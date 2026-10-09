@@ -224,7 +224,9 @@ describe('the pack is sold as credits', () => {
     const s = await openSession({});
     const list = await post({ 'mcp-session-id': s.sid }, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const um = (JSON.parse(list.json).result?.tools || []).find((t) => t.name === 'unlock_more_data');
-    expect(um.description).toContain('1,000 API credits (' + S._creditRuleText() + '; no subscription)');
+    // 2026-10-09 (owner): the description is price-free (directories mirror it); the rule lives in
+    // the long-form instructions above and in the tool's response.
+    expect(um.description).not.toMatch(/\$\d|API credits/);
   });
 });
 
