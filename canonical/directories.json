@@ -1,0 +1,233 @@
+{
+  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
+  "schema_version": 1,
+  "updated_at": "2026-10-09T23:59:00Z",
+  "directories": [
+    {
+      "id": "official-registry",
+      "name": "Official MCP Registry",
+      "status": "live",
+      "listing_url": "https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub/mcp-server&version=latest",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "API listing; cloud.dchub/mcp-server, active, isLatest"
+    },
+    {
+      "id": "github-mcp",
+      "name": "GitHub / VS Code MCP gallery",
+      "status": "live",
+      "listing_url": "https://github.com/mcp/cloud.dchub/mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "keyed by registry name; the owner/repo path 404s"
+    },
+    {
+      "id": "smithery",
+      "name": "Smithery",
+      "status": "live",
+      "listing_url": "https://smithery.ai/servers/azmartone67/dchub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "badge https://smithery.ai/badge/azmartone67/dchub answered 500 on 2026-10-09; add badge_url once it renders"
+    },
+    {
+      "id": "glama",
+      "name": "Glama",
+      "status": "live",
+      "listing_url": "https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server",
+      "badge_url": "https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg",
+      "badge_alt": "Glama score badge for DC Hub",
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "connector page also live: https://glama.ai/mcp/connectors/cloud.dchub/mcp-server"
+    },
+    {
+      "id": "lobehub",
+      "name": "LobeHub",
+      "status": "live",
+      "listing_url": "https://lobehub.com/mcp/azmartone67-dchub-mcp-server",
+      "badge_url": "https://lobehub.com/badge/mcp/azmartone67-dchub-mcp-server",
+      "badge_alt": "LobeHub listing badge for DC Hub",
+      "logo_url": null,
+      "verified_at": "2026-10-09"
+    },
+    {
+      "id": "mcp-hive",
+      "name": "MCP Hive",
+      "status": "live",
+      "listing_url": "https://mcp-hive.com/explore?provider=0f32e358-d410-4e19-9e77-e6dd91150386",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09"
+    },
+    {
+      "id": "mcp-market",
+      "name": "MCP Market",
+      "status": "live",
+      "listing_url": "https://mcpmarket.com/server/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "description is older copy; /server/dchub 404s"
+    },
+    {
+      "id": "mcp-marketplace",
+      "name": "mcp-marketplace.io",
+      "status": "live",
+      "listing_url": "https://mcp-marketplace.io/server/cloud-dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09"
+    },
+    {
+      "id": "gemini-cli",
+      "name": "Gemini CLI extensions",
+      "status": "live",
+      "listing_url": "https://geminicli.com/extensions",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "gallery card azmartone67dchub-mcp-server; no per-extension detail page"
+    },
+    {
+      "id": "tensorblock",
+      "name": "TensorBlock awesome-mcp-servers",
+      "status": "live",
+      "listing_url": "https://github.com/TensorBlock/awesome-mcp-servers/blob/main/docs/data-analysis--business-intelligence.md#L246",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09"
+    },
+    {
+      "id": "context7",
+      "name": "Context7",
+      "status": "live",
+      "listing_url": "https://context7.com/azmartone67/dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09"
+    },
+    {
+      "id": "punkpeye",
+      "name": "awesome-mcp-servers (punkpeye)",
+      "status": "live",
+      "listing_url": "https://github.com/punkpeye/awesome-mcp-servers#customer-data-platforms",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "listed under Customer Data Platforms (likely wrong category); no separate remote list exists in that repo"
+    },
+    {
+      "id": "raycast",
+      "name": "Raycast",
+      "status": "unverified",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "claimed live by Grok 2026-10-09; store search found no DC Hub entry"
+    },
+    {
+      "id": "mcphq",
+      "name": "mcpHQ",
+      "status": "unverified",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "claimed live by Grok 2026-10-09; mcphq.com redirects to a parked /lander page"
+    },
+    {
+      "id": "cursor-directory",
+      "name": "cursor.directory",
+      "status": "unverified",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-09",
+      "note": "claimed live by Grok 2026-10-09; /mcp/dchub answered 429 (Vercel checkpoint), no listing found by search"
+    },
+    {
+      "id": "docker",
+      "name": "Docker MCP Catalog",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "note": "PR to docker/mcp-registry"
+    },
+    {
+      "id": "cline",
+      "name": "Cline Marketplace",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "note": "github.com/cline/mcp-marketplace/issues/1823"
+    },
+    {
+      "id": "devin",
+      "name": "Devin",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "note": ""
+    },
+    {
+      "id": "cursor-marketplace",
+      "name": "Cursor Marketplace",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "note": ""
+    },
+    {
+      "id": "claude-directory",
+      "name": "Claude connectors directory",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "note": "endpoint https://dchub.cloud/mcp/claude"
+    },
+    {
+      "id": "chatgpt-apps",
+      "name": "ChatGPT apps",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "note": "endpoint https://dchub.cloud/mcp/chatgpt"
+    }
+  ]
+}

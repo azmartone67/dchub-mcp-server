@@ -190,6 +190,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { PACK_PRICE } from './lib/canon.mjs';
+import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_CLAUSE, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste } from './lib/free-decision-taste.mjs';
@@ -28958,6 +28959,34 @@ app.get('/server.json', (req, res) => {
     // Fail LOUD (500). A partial/empty body must never be published to the
     // official registry — a failing fetch makes the backend publish nothing.
     res.status(500).json({ error: 'server_json_unavailable', detail: String(e && e.message || e) });
+  }
+});
+
+// /mcp/directories (2026-10-09, Grok -> brain): "Find DC Hub in your MCP directory".
+// Rendered from canonical/directories.json on every request, so a merged edit to
+// that file is the whole update. Not in MCP_PATHS: it is a page, not an endpoint,
+// and the dchub.cloud zone worker forwards only these two GET paths here.
+// Fails loud (500) rather than serving an empty grid.
+app.get([DIRECTORIES_PATH, DIRECTORIES_PATH + '/'], (req, res) => {
+  try {
+    const html = _renderDirectoriesPage(_loadDirectories(), { tools: CANONICAL_TOOL_COUNT });
+    res.set('Cache-Control', 'public, max-age=300');
+    // The global r-csp policy is default-src 'none' (right for JSON-RPC). This one
+    // document needs its inline <style> and the directories' badge/logo images,
+    // and nothing else: still no script, no frames, no form posts.
+    res.set('Content-Security-Policy', DIRECTORIES_CSP);
+    res.type('html').send(html);
+  } catch (e) {
+    res.status(500).type('text').send('directories_unavailable');
+  }
+});
+app.get(DIRECTORIES_JSON_PATH, (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.json(_directoriesJson(_loadDirectories(), { tools: CANONICAL_TOOL_COUNT }));
+  } catch (e) {
+    res.status(500).json({ error: 'directories_unavailable' });
   }
 });
 
