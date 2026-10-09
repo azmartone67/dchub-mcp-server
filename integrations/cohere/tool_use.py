@@ -19,7 +19,7 @@ co = cohere.ClientV2(os.environ["COHERE_API_KEY"])
 _DCHUB_KEY = os.environ.get("DCHUB_API_KEY", "")
 
 
-def dchub_market(slug: str) -> dict:
+def get_market_intel(slug: str) -> dict:
     """Live market intel for a DC Hub market slug, e.g. 'northern-virginia'."""
     headers = {"X-API-Key": _DCHUB_KEY} if _DCHUB_KEY else {}
     r = requests.get(f"https://api.dchub.cloud/api/v1/markets/{slug}",
@@ -30,7 +30,7 @@ def dchub_market(slug: str) -> dict:
 TOOLS = [{
     "type": "function",
     "function": {
-        "name": "dchub_market",
+        "name": "get_market_intel",
         "description": ("Live data-center market intelligence: capacity $/MW-day, "
                         "vacancy, grid headroom, DCPI BUILD/CAUTION/AVOID verdict, "
                         "and a citation URL. `slug` is a market like "
@@ -44,7 +44,7 @@ TOOLS = [{
     },
 }]
 
-_DISPATCH = {"dchub_market": dchub_market}
+_DISPATCH = {"get_market_intel": get_market_intel}
 
 
 def ask(question: str) -> str:

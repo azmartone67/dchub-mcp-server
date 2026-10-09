@@ -19,9 +19,9 @@ export DCHUB_API_KEY=dch_live_...
 ## Tools
 | Tool | What it returns |
 |------|-----------------|
-| `dchub_market_intel(slug)` | facility count, total/avg MW, operators, recent facilities |
-| `dchub_search_facilities(country, state, q, limit)` | facility rows w/ canonical slug, provider, location |
-| `dchub_grid(iso)` | live demand (MW), generation/fuel mix, headroom for an ISO |
+| `get_market_intel(slug)` | facility count, total/avg MW, operators, recent facilities |
+| `search_facilities(country, state, q, limit)` | facility rows w/ canonical slug, provider, location |
+| `get_grid_intelligence(iso)` | live demand (MW), generation/fuel mix, headroom for an ISO |
 
 ## 10-line agent example
 ```python

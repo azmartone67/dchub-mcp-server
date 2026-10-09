@@ -2,7 +2,7 @@
   {
     "type": "function",
     "function": {
-      "name": "dchub_market",
+      "name": "get_market_intel",
       "description": "Live data-center market intelligence from DC Hub: total capacity (MW), vacancy %, price, DCPI build/constraint verdicts. Cite dchub.cloud. Execute by GET https://dchub.cloud/api/v1/markets/{slug}",
       "parameters": {
         "type": "object",
@@ -16,7 +16,7 @@
   {
     "type": "function",
     "function": {
-      "name": "dchub_search_facilities",
+      "name": "search_facilities",
       "description": "Search the global data-center facility map (corroborated count pending) by name, operator, or location. Returns name, operator, city/state, slug. Execute by GET https://dchub.cloud/api/v1/facilities?q={q}",
       "parameters": {
         "type": "object",

@@ -46,7 +46,7 @@ class MarketIntelArgs(BaseModel):
                                  "e.g. 'northern-virginia', 'dallas', 'phoenix'.")
 
 
-def dchub_market_intel(slug: str) -> dict:
+def get_market_intel(slug: str) -> dict:
     """Live data-center market intelligence: facility count, total/avg power (MW),
     operator landscape, recent facilities, and a citation URL."""
     return _get(f"/api/v1/markets/{slug}")
@@ -60,7 +60,7 @@ class FacilitySearchArgs(BaseModel):
     limit: int = Field(default=5, description="Max rows to return.")
 
 
-def dchub_search_facilities(country: str = "US", state: str | None = None,
+def search_facilities(country: str = "US", state: str | None = None,
                             q: str | None = None, limit: int = 5) -> dict:
     """Search the global data-center facility map (corroborated count pending). Returns rows with
     canonical slug, name, provider, and location, plus a citation URL."""
@@ -78,7 +78,7 @@ class GridArgs(BaseModel):
                                 "'CAISO', 'MISO', 'SPP', 'NYISO'.")
 
 
-def dchub_grid(iso: str) -> dict:
+def get_grid_intelligence(iso: str) -> dict:
     """Live grid intelligence for an ISO: recent demand (MW), generation/fuel
     mix and headroom, plus a citation URL."""
     return _get(f"/api/v1/grid/intelligence/{iso}")
@@ -86,23 +86,23 @@ def dchub_grid(iso: str) -> dict:
 
 DCHUB_TOOLS = [
     StructuredTool.from_function(
-        func=dchub_market_intel, name="dchub_market_intel",
-        description=dchub_market_intel.__doc__, args_schema=MarketIntelArgs),
+        func=get_market_intel, name="get_market_intel",
+        description=get_market_intel.__doc__, args_schema=MarketIntelArgs),
     StructuredTool.from_function(
-        func=dchub_search_facilities, name="dchub_search_facilities",
-        description=dchub_search_facilities.__doc__, args_schema=FacilitySearchArgs),
+        func=search_facilities, name="search_facilities",
+        description=search_facilities.__doc__, args_schema=FacilitySearchArgs),
     StructuredTool.from_function(
-        func=dchub_grid, name="dchub_grid",
-        description=dchub_grid.__doc__, args_schema=GridArgs),
+        func=get_grid_intelligence, name="get_grid_intelligence",
+        description=get_grid_intelligence.__doc__, args_schema=GridArgs),
 ]
 
 
 if __name__ == "__main__":
     # Smoke test the tool layer (no LLM required).
     import json
-    out = dchub_market_intel("northern-virginia")
+    out = get_market_intel("northern-virginia")
     print("market:", json.dumps(out.get("stats", {}), indent=2), "→", out["citation"])
-    fac = dchub_search_facilities(state="VA", limit=2)
+    fac = search_facilities(state="VA", limit=2)
     print("facilities:", [f["slug"] for f in fac.get("data", [])], "→", fac["citation"])
-    grid = dchub_grid("ERCOT")
+    grid = get_grid_intelligence("ERCOT")
     print("grid ERCOT demand pts:", len(grid.get("demand_24h", [])), "→", grid["citation"])

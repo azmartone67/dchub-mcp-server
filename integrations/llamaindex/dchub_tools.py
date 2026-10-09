@@ -39,7 +39,7 @@ def _get(path: str, params: dict | None = None) -> dict:
     return data
 
 
-def dchub_market_intel(slug: str) -> dict:
+def get_market_intel(slug: str) -> dict:
     """Live data-center market intelligence for a market slug
     (lowercase-hyphenated, e.g. 'northern-virginia', 'dallas', 'phoenix'):
     facility count, total/avg power (MW), operator landscape, recent
@@ -47,7 +47,7 @@ def dchub_market_intel(slug: str) -> dict:
     return _get(f"/api/v1/markets/{slug}")
 
 
-def dchub_search_facilities(country: str = "US", state: str = "",
+def search_facilities(country: str = "US", state: str = "",
                             q: str = "", limit: int = 5) -> dict:
     """Search the global data-center facility map (corroborated count pending) by country (ISO code),
     state/region code, and/or free-text query. Returns rows with canonical slug,
@@ -60,7 +60,7 @@ def dchub_search_facilities(country: str = "US", state: str = "",
     return _get("/api/v1/facilities", params)
 
 
-def dchub_grid(iso: str) -> dict:
+def get_grid_intelligence(iso: str) -> dict:
     """Live grid intelligence for an ISO/grid operator ('ERCOT', 'PJM', 'CAISO',
     'MISO', 'SPP', 'NYISO'): recent demand (MW), generation/fuel mix, headroom,
     and a citation URL."""
@@ -68,18 +68,18 @@ def dchub_grid(iso: str) -> dict:
 
 
 DCHUB_TOOLS = [
-    FunctionTool.from_defaults(fn=dchub_market_intel, name="dchub_market_intel"),
-    FunctionTool.from_defaults(fn=dchub_search_facilities, name="dchub_search_facilities"),
-    FunctionTool.from_defaults(fn=dchub_grid, name="dchub_grid"),
+    FunctionTool.from_defaults(fn=get_market_intel, name="get_market_intel"),
+    FunctionTool.from_defaults(fn=search_facilities, name="search_facilities"),
+    FunctionTool.from_defaults(fn=get_grid_intelligence, name="get_grid_intelligence"),
 ]
 
 
 if __name__ == "__main__":
     # Smoke test the tool layer (no LLM required).
     import json
-    out = dchub_market_intel("northern-virginia")
+    out = get_market_intel("northern-virginia")
     print("market:", json.dumps(out.get("stats", {}), indent=2), "→", out["citation"])
-    fac = dchub_search_facilities(state="VA", limit=2)
+    fac = search_facilities(state="VA", limit=2)
     print("facilities:", [f["slug"] for f in fac.get("data", [])], "→", fac["citation"])
-    grid = dchub_grid("ERCOT")
+    grid = get_grid_intelligence("ERCOT")
     print("grid ERCOT demand pts:", len(grid.get("demand_24h", [])), "→", grid["citation"])
