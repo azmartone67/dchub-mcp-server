@@ -217,7 +217,11 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     const live = tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toContain('`after_checkout`. Paid plans: on the page behind the human_url link.');
     expect(live).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
-    expect(live).not.toMatch(/\$\d/);   // 2026-10-09 owner: price-free tool text
+    // 2026-10-09 (#872, then #873 owner call): the description states no price and no pack sentence;
+    // the wall and the checkout page still do.
+    expect(live).not.toMatch(/\$\d/);
+    expect(live).not.toContain('$10');
+    expect(live).not.toContain('1,000 API credits');
     const committed = MANIFEST.tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toBe(committed);
   });
