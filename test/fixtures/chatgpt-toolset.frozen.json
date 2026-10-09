@@ -1,5 +1,5 @@
 {
- "_readme": "frz-chatgpt-toolset (owner, 2026-09-26): the /mcp/chatgpt tools/list as submitted to the OpenAI app directory (DC Hub 1.0.0, submitted 2026-09-25 ~18:06 PT, in review). Names, count, titles, descriptions, annotations and input schemas are frozen while the app is in review: adding, removing or renaming a tool, or changing any of these, forces a new review. Captured from live https://dchub.cloud/mcp/chatgpt tools/list. To change it deliberately after the review closes, regenerate this file in the same PR and say so. Regenerated 2026-10-09 after the 1.0.0 rejection (owner): research_task removed (it queues a job, so it is not read-only); count 66. 2026-10-09 (owner): openWorldHint true on the third-party-backed reads for the 1.0.1 resubmission.",
+ "_readme": "frz-chatgpt-toolset (owner, 2026-09-26): the /mcp/chatgpt tools/list as submitted to the OpenAI app directory (DC Hub 1.0.0, submitted 2026-09-25 ~18:06 PT, in review). Names, count, titles, descriptions, annotations and input schemas are frozen while the app is in review: adding, removing or renaming a tool, or changing any of these, forces a new review. Captured from live https://dchub.cloud/mcp/chatgpt tools/list. To change it deliberately after the review closes, regenerate this file in the same PR and say so. Regenerated 2026-10-09 after the 1.0.0 rejection (owner): research_task removed (it queues a job, so it is not read-only); count 66. 2026-10-09 (owner): openWorldHint true on the third-party-backed reads for the 1.0.1 resubmission, and on execute_plan, which runs them.",
  "captured_from": "https://dchub.cloud/mcp/chatgpt tools/list",
  "captured_at": "2026-09-26; research_task removed 2026-10-09",
  "count": 66,
@@ -258,7 +258,7 @@
     "readOnlyHint": true,
     "destructiveHint": false,
     "idempotentHint": true,
-    "openWorldHint": false
+    "openWorldHint": true
    },
    "execution": {
     "taskSupport": "forbidden"

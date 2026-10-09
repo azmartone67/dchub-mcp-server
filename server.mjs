@@ -14671,11 +14671,15 @@ const DESTRUCTIVE_TOOLS = new Set(['delete_standing_intent']);
 // PeeringDB, EIA, the ISO feeds). semantic_search / search_intelligence stay
 // closed-world: they search DC Hub's own corpus (the query is embedded by the
 // disclosed embeddings provider, which returns no outside content).
+// execute_plan is open-world too: its plan steps run those tools (a site intent
+// runs get_disaster_risk, which sends the coordinates to FEMA on Esri), so its
+// hint must not claim less than the tools it runs.
 const OPEN_WORLD_TOOLS = new Set([
   'register_standing_intent',
   'get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
   'get_grid_data', 'get_iso_context', 'get_grid_scoreboard',
   'compare_isos', 'get_grid_intelligence',
+  'execute_plan',
 ]);
 
 // Distinct registered tool NAMES — a Set so the per-connection createServer()
