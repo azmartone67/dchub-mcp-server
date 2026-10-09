@@ -20,6 +20,10 @@
 //   2. the rung the prompt names returns those fields when the handler is driven
 //      at that rung, and the rung below it (when the caller is below it) does not.
 // HARD gate: deterministic, no network.
+// Item 2 (Grok 10-08): depth walls are plan-less by default, so this file's rung checks run with
+// DCHUB_DEPTH_WALL_PLANLESS=0 (they test WHICH rung the gate computes; the plan-less copy is pinned in
+// free-decision-tools-preview-only.test.mjs).
+process.env.DCHUB_DEPTH_WALL_PLANLESS = '0';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { fieldLabel, collectMissed, missedSentence, lowestRung, rungFloor, rungSentence, RUNGS, missedUpgrade }
   from '../lib/upgrade-missed.mjs';

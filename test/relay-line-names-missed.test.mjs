@@ -23,6 +23,10 @@
 // line when either half is unknown.
 //
 // Hard-gate qualified: real server on 127.0.0.1 against a local stub, no egress.
+// Item 2 (Grok 10-08): depth walls are plan-less by default, so this file's rung checks run with
+// DCHUB_DEPTH_WALL_PLANLESS=0 (they test WHICH rung the gate computes; the plan-less copy is pinned in
+// free-decision-tools-preview-only.test.mjs).
+process.env.DCHUB_DEPTH_WALL_PLANLESS = '0';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 import {

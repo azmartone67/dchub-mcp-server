@@ -165,7 +165,7 @@ beforeAll(async () => {
       if (p === '/api/v1/grid/extended/PJM') return send(EXT);
       if (p === '/api/v1/interconnection-queue/by-iso') return send(QUEUE_BY_ISO);
       if (p === '/api/v1/markets/northern-virginia') return send(MARKET);
-      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, retail_rates: { avg_cents_kwh: 23.41, max_cents_kwh: 30.1, min_cents_kwh: 18.2 } });
+      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null }, retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 } });
       return send({});
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -390,12 +390,12 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
     });
   }
 
-  it('anonymous grid: the header is the taste line (Developer then Pro, one relay link), not the pack-led override', async () => {
+  it('anonymous grid: the header is the taste line (plan-less, one relay link), not the pack-led override', async () => {
     const r = await callAs({}, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-    // the missed-upgrade prompt names Developer as the rung (the gate's own record), never the pack
+    // Grok 10-08 item 2: the agent-facing header names no plan; the page behind the one link shows the options
     const line = r.text.split('\n').find((l) => /This answer hid|is a preview on the free tier/.test(l));
     expect(line, r.text.slice(0, 600)).toBeTruthy();
-    expect(line).toMatch(/DC Hub Developer/);
+    expect(line).toMatch(/paid DC Hub plan; the page shows the options/);
     expect(line).not.toMatch(/\$10|Free full answers left today/);
     expect(r.text).not.toMatch(/Free full answers left today/);
     expect(JSON.stringify(r.data)).not.toContain('dchub.cloud/go/c/');
@@ -600,5 +600,37 @@ describe('caller_tier is one value across both channels (Grok 10-08 item 2)', ()
     expect(tiers.length).toBeGreaterThan(1);
     expect(new Set(tiers).size, JSON.stringify(tiers)).toBe(1);
     expect(tiers[0]).not.toBe('pro');
+  });
+});
+
+describe('get_energy_prices anonymous preview carries the labelled taste (Grok 10-08 item 1)', () => {
+  it('taste + withheld[], as_of = EIA period, no plan name or price in the wall copy, spread not served', async () => {
+    const r = await callAs({}, 'get_energy_prices', { iso: 'CAISO' });
+    const sc = r.sc;
+    expect(sc.taste.headline).toMatchObject({ value: 23.41, unit: 'cents/kWh', as_of: '2026' });
+    expect(sc.withheld.map((w) => w.section)).toContain('rate_range');
+    expect(JSON.stringify(sc)).not.toMatch(/30\.1|18\.2/);
+    const msg = (sc._upgrade && sc._upgrade.message) || '';
+    expect(msg).toMatch(/paid DC Hub plan; the page shows the options/);
+    expect(msg).not.toMatch(/\$|Developer|Pro\b/);
+  });
+});
+
+describe('depth walls name no plan and no price to the agent (Grok 10-08 item 2)', () => {
+  for (const tool of ['get_energy_prices', 'get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel']) {
+    it(tool + ': anonymous prose carries the plan-less copy, no $10 / Developer / Pro / "they pay"', async () => {
+      const r = await callAs({}, tool, ARGS[tool] || { iso: 'PJM' });
+      const prose = (r.result.content || []).map((c) => c.text).filter((t) => !t.trim().startsWith('{')).join('\n')
+        .replace(/https?:\/\/\S+/g, '');
+      expect(prose).toMatch(/paid DC Hub plan/);
+      expect(prose).not.toMatch(/\$\s?10|Developer|\bPro\b|they pay|\bpack\b/i);
+    });
+  }
+  it('kill switch DCHUB_DEPTH_WALL_PLANLESS=0 restores the plan-naming copy', async () => {
+    process.env.DCHUB_DEPTH_WALL_PLANLESS = '0';
+    try {
+      const r = await callAs({}, 'get_grid_intelligence', { iso: 'PJM' });
+      expect((r.result.content || []).map((c) => c.text).join('\n')).toMatch(/DC Hub Developer/);
+    } finally { delete process.env.DCHUB_DEPTH_WALL_PLANLESS; }
   });
 });
