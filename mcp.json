@@ -1,10 +1,7 @@
 {
   "mcpServers": {
     "dchub": {
-      "url": "https://dchub.cloud/mcp",
-      "headers": {
-        "X-API-Key": "${DCHUB_API_KEY}"
-      }
+      "url": "https://dchub.cloud/mcp"
     }
   }
 }
