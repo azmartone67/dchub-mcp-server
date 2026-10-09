@@ -1,5 +1,5 @@
 {
-  "_comment": "Committed snapshot of GET https://dchub.cloud/api/v1/canon/listing (dchub-backend routes/canon_v1.py). Written by scripts/refresh-listing.mjs; the sync check reads this file offline. Seeded 2026-10-09 from Grok's refresh-oct9 listing-copy.md until the first live refresh.",
+  "_comment": "Committed snapshot of GET https://dchub.cloud/api/v1/canon/listing (dchub-backend routes/canon_v1.py). Written by scripts/refresh-listing.mjs; the sync check reads this file offline. First live refresh 2026-10-09 (seed was Grok refresh-oct9 listing-copy.md; values were identical).",
   "as_of": "2026-10-09T13:49:49Z",
   "auth": "None required to start (previews); claim_free_key returns a free key in one call; OAuth 2.0 supported",
   "canon_version": "1.0.0",

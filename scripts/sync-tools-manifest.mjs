@@ -22,7 +22,7 @@ import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
 import { registryRemotes } from '../lib/registry-remotes.mjs';
 import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
-import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, CONTEXT7_PATH } from './listing-canon.mjs';
+import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, SKILL_SOURCE, SKILL_TARGETS, healSkillCount, renderSkill, skillProblems, CONTEXT7_PATH } from './listing-canon.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1341,6 +1341,20 @@ if (facts) {
       if (FIX) pend(rel, withSubmissionHeader(t));
       else problems.push(`${rel}: missing the "History. Do not paste." header`);
     }
+  }
+}
+
+// ---- skill.md + repo copies from canonical/skill.md (publish-from-canon, PR 3) ----------------
+{
+  let src = readCur(SKILL_SOURCE);
+  if (FIX && skillProblems(src, COUNT).length) { src = healSkillCount(src, COUNT); pend(SKILL_SOURCE, src); }
+  for (const b of skillProblems(src, COUNT)) problems.push(b);
+  for (const t of SKILL_TARGETS) {
+    const want = renderSkill(src, t.name);
+    let cur = null; try { cur = readCur(t.path); } catch { /* absent */ }
+    if (cur === want) continue;
+    if (FIX) pend(t.path, want);
+    else problems.push(`${t.path}: differs from ${SKILL_SOURCE} (run sync-tools-manifest --fix)`);
   }
 }
 

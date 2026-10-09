@@ -112,3 +112,8 @@ CC-BY-4.0 — attribute it.
 
 Jonathan Martone — Martone Advisors LLC — azmartone@gmail.com
 Issues: https://github.com/azmartone67/dchub-mcp-server/issues
+
+## Agent skill
+
+- Skill (what DC Hub knows, which tool to call, how to cite): https://dchub.cloud/skill.md
+- Skills discovery index: https://dchub.cloud/.well-known/agent-skills/index.json
