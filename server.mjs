@@ -14635,11 +14635,21 @@ const WRITE_TOOLS = new Set([
 const DESTRUCTIVE_TOOLS = new Set(['delete_standing_intent']);
 
 // openWorldHint: the tool interacts with something OUTSIDE DC Hub's own curated
-// dataset. Every read tool queries our closed corpus; standing_intent makes the
-// SERVER issue an outbound HTTPS request to an endpoint the CALLER supplies
-// (private/internal hosts are rejected, which is the mitigation — not a reason
-// to describe the interaction as closed-world).
-const OPEN_WORLD_TOOLS = new Set(['register_standing_intent']);
+// dataset. standing_intent makes the SERVER issue an outbound HTTPS request to
+// an endpoint the CALLER supplies (private/internal hosts are rejected, which is
+// the mitigation — not a reason to describe the interaction as closed-world).
+// Owner 2026-10-09 (OpenAI resubmission): the read tools below are open-world
+// because the backend route behind each one calls a third-party public source
+// while serving the request (FEMA National Risk Index on Esri ArcGIS, USGS/NOAA,
+// PeeringDB, EIA, the ISO feeds). semantic_search / search_intelligence stay
+// closed-world: they search DC Hub's own corpus (the query is embedded by the
+// disclosed embeddings provider, which returns no outside content).
+const OPEN_WORLD_TOOLS = new Set([
+  'register_standing_intent',
+  'get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
+  'get_grid_data', 'get_iso_context', 'get_grid_scoreboard',
+  'compare_isos', 'get_grid_intelligence',
+]);
 
 // Distinct registered tool NAMES — a Set so the per-connection createServer()
 // re-registrations dedupe (a plain counter would multiply). /health reports

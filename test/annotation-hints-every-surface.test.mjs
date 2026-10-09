@@ -93,3 +93,33 @@ describe('directory profiles serve read-only tools only', () => {
     expect(a.idempotentHint).toBe(false);
   });
 });
+
+// Owner 2026-10-09: tools whose backend route calls a third-party public source
+// while serving the request are open-world on every surface that lists them;
+// the corpus search tools are not. Checked wherever the tool is served, and the
+// tool must appear on /mcp, so a rename cannot make this pass by absence.
+const OPEN_WORLD_READS = ['get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
+  'get_grid_data', 'get_iso_context', 'get_grid_scoreboard', 'compare_isos', 'get_grid_intelligence'];
+const CLOSED_WORLD_SEARCH = ['semantic_search', 'search_intelligence'];
+
+describe('openWorldHint for third-party-backed reads', () => {
+  it('every named tool is served on /mcp', () => {
+    const names = new Set(LISTS['/mcp'].map((t) => t.name));
+    expect([...OPEN_WORLD_READS, ...CLOSED_WORLD_SEARCH].filter((n) => !names.has(n))).toEqual([]);
+  });
+
+  it.each(SURFACES)('on %s the third-party reads are open-world and search is not', (path) => {
+    const bad = [];
+    for (const t of LISTS[path]) {
+      const ow = t.annotations?.openWorldHint;
+      if (OPEN_WORLD_READS.includes(t.name) && ow !== true) bad.push(`${t.name}: openWorldHint=${ow}`);
+      if (CLOSED_WORLD_SEARCH.includes(t.name) && ow !== false) bad.push(`${t.name}: openWorldHint=${ow}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the ChatGPT surface still serves the open-world reads it lists (checked above, not skipped)', () => {
+    const names = LISTS['/mcp/chatgpt'].map((t) => t.name);
+    expect(OPEN_WORLD_READS.filter((n) => names.includes(n)).length).toBeGreaterThan(0);
+  });
+});
