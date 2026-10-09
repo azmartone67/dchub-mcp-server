@@ -49,7 +49,9 @@ describe('the Smithery listing body', () => {
   it('states the canon endpoints and the $10 pack, and no retired price wording', () => {
     // the count is healed daily by sync-tools-manifest, so match it as \d+
     expect(SMITHERY).toMatch(/\b\d+ MCP tools at https:\/\/dchub\.cloud\/mcp plus a REST API at https:\/\/dchub\.cloud\/api\/v1\b/);
-    expect(SMITHERY).toMatch(/\$10 one-time pack adds 1,000 API credits/);
+    // Grok DCPI rollout 2026-10-09: listings name no price, only the pricing page.
+    expect(SMITHERY).toMatch(/paid plans: dchub\.cloud\/pricing/);
+    expect(SMITHERY).not.toMatch(/\$\d/);
     expect(SMITHERY).not.toMatch(/REST API at https:\/\/dchub\.cloud\/mcp/);
     expect(SMITHERY).not.toMatch(/unlocks full answers|for full answers/i);
     expect(SMITHERY).not.toMatch(/seven layers/i);
@@ -127,8 +129,9 @@ describe('the manifests the registries ingest', () => {
     }
     // ★2026-09-28 owner rule (09-27): the only price stated is the $10 pack.
     expect(MANIFEST.description).not.toMatch(/\$\d[\d,]*\s*\/\s*(?:mo|month|yr)\b/);
-    expect(MANIFEST.description).toContain('$10 one-time pack of 1,000 API credits');
-    expect(MANIFEST.description).toContain('https://dchub.cloud/pricing');
+    // Grok DCPI rollout 2026-10-09: no price at all on the manifests, only the pricing page.
+    expect(MANIFEST.description).not.toMatch(/\$10\b/);
+    expect(MANIFEST.description).toContain('paid plans: dchub.cloud/pricing');
   });
 });
 

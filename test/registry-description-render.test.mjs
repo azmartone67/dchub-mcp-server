@@ -55,8 +55,8 @@ describe('the committed descriptions ARE the render', () => {
     const r = renderAll(ctx);
     expect(r.smithery_yaml).toContain(`${count} tools.`);
     for (const t of [r.smithery_yaml, r.mcp_server_json]) {
-      expect(t).toContain('$10');
-      expect(t).toContain('1,000 API credits');
+      expect(t).toContain('paid plans: dchub.cloud/pricing');
+      expect(t).not.toMatch(/\$10\b/);
       expect(t).toContain('(corroborated count pending)');
     }
     expect(r.mcp_server_json).toContain(ctx.tier.freeTierRule);

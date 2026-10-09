@@ -84,14 +84,23 @@ describe('copy rules', () => {
   });
 
   it('price_line is exactly the approved line', () => {
-    expect(COPY.price_line).toBe('$10 one-time pack of 1,000 API credits');
+    expect(COPY.price_line).toBe('Paid plans: dchub.cloud/pricing');
     expect(COPY.price_line).toBe(PRICE_LINE);
   });
 
-  it('glama_400 carries the price line; long names the $10 pack and its credits', () => {
-    expect(COPY.glama_400).toContain(PRICE_LINE);
-    expect(COPY.long).toMatch(/\$10 one-time pack/);
-    expect(COPY.long).toMatch(/1,000 API credits/);
+  it('glama_400 and long carry the price line and name no price (no dollar sign anywhere)', () => {
+    expect(COPY.glama_400).toContain('paid plans: dchub.cloud/pricing');
+    expect(COPY.long).toContain('paid plans: dchub.cloud/pricing');
+    for (const k of TEXT_FIELDS) expect(COPY[k], k).not.toMatch(/\$/);
+    expect(read('canonical/github_description.txt')).not.toMatch(/\$/);
+    expect(SERVER_JSON.description).not.toMatch(/\$/);
+  });
+
+  it('DCPI appears in sentence 1 or 2 of short, long, glama_400 and the GitHub description', () => {
+    const early = (t) => t.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+    for (const t of [COPY.short, COPY.long, COPY.glama_400, read('canonical/github_description.txt'), SERVER_JSON.description]) {
+      expect(early(t)).toMatch(/DCPI/);
+    }
   });
 
   it('endpoints is exactly the approved line for the current tool count', () => {
