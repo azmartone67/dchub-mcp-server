@@ -14649,6 +14649,9 @@ const OPEN_WORLD_TOOLS = new Set([
   'get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
   'get_grid_data', 'get_iso_context', 'get_grid_scoreboard',
   'compare_isos', 'get_grid_intelligence',
+  // execute_plan chains the reads above inside one call, so it inherits their
+  // open-world reach (owner 2026-10-09).
+  'execute_plan',
 ]);
 
 // Distinct registered tool NAMES — a Set so the per-connection createServer()

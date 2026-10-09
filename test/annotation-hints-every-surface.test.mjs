@@ -99,7 +99,8 @@ describe('directory profiles serve read-only tools only', () => {
 // the corpus search tools are not. Checked wherever the tool is served, and the
 // tool must appear on /mcp, so a rename cannot make this pass by absence.
 const OPEN_WORLD_READS = ['get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
-  'get_grid_data', 'get_iso_context', 'get_grid_scoreboard', 'compare_isos', 'get_grid_intelligence'];
+  'get_grid_data', 'get_iso_context', 'get_grid_scoreboard', 'compare_isos', 'get_grid_intelligence',
+  'execute_plan'];  // chains the reads above
 const CLOSED_WORLD_SEARCH = ['semantic_search', 'search_intelligence'];
 
 describe('openWorldHint for third-party-backed reads', () => {
