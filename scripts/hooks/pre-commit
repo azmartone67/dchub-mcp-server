@@ -20,7 +20,7 @@
 # so unrelated commits pay zero cost. Bypass (rarely needed) with:
 #   git commit --no-verify
 #
-# Installed by scripts/install-hooks.mjs (npm "prepare"). Offline; no network.
+# Installed on request by `npm run hooks:install` (scripts/install-hooks.mjs). Offline; no network.
 # ============================================================================
 changed=$(git diff --cached --name-only)
 case "$changed" in
