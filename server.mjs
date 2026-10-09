@@ -17150,6 +17150,44 @@ export const _EXEC_TOOL_MINTS = {
 // WECC-region intent must not mint an ERCOT hand-off).
 export const _EXEC_RTOS = new Set(['ERCOT','PJM','MISO','SPP','CAISO','NYISO','ISO-NE','ISONE']);
 
+// ★ THE ONLY TOOLS execute_plan RUNS (2026-10-09, OpenAI review of the ChatGPT
+// app, item 1d). execute_plan is annotated readOnlyHint:true and the app says
+// "every tool is a read-only lookup", so a plan step must never create, change
+// or send anything. Before this list the executor skipped only plan_query /
+// execute_plan and dispatched whatever the planner named; the planner names
+// only read tools today, but nothing in code held it there.
+// Rules: (1) a tool NOT listed here is refused, never dispatched; (2) on a
+// directory profile (/mcp/chatgpt, /mcp/chatgpt/oauth, /mcp/claude) a step must
+// ALSO be a tool that surface lists, so a plan cannot reach a tool the app does
+// not expose (analyze_site, list_saved_sites, research_task ...).
+// Every entry must be served on /mcp with readOnlyHint:true; a write added here
+// fails test/execute-plan-readonly-allowlist.test.mjs.
+export const _EXEC_ALLOWED_TOOLS = Object.freeze([
+  'ai_capacity_index', 'analyze_parcel', 'analyze_site', 'cluster_sites_by_latency',
+  'compare_isos', 'compare_sites', 'deal_autopsy', 'discover_tools', 'find_alternatives',
+  'find_sites', 'generate_site_analysis', 'get_changes', 'get_climate_intel',
+  'get_composite_site_score', 'get_dchub_recommendation', 'get_disaster_risk',
+  'get_energy_prices', 'get_facility', 'get_facility_risk_delta', 'get_fiber_intel',
+  'get_fiber_readiness', 'get_gas_economics', 'get_gas_index', 'get_grid_data',
+  'get_grid_intelligence', 'get_grid_scoreboard', 'get_hosting_capacity',
+  'get_interconnection_queue', 'get_market_dcpi_rank', 'get_market_intel', 'get_metro_fiber',
+  'get_news', 'get_permitting_intel', 'get_pipeline', 'get_power_availability_timeline',
+  'get_power_pipeline', 'get_refined_queue', 'get_renewable_energy', 'get_retirement_headroom',
+  'get_tax_incentives', 'get_water_risk', 'grid_transition_radar', 'hyperscaler_deals',
+  'list_saved_sites', 'list_transactions', 'plan_fiber_leadin', 'predict_market_trajectory',
+  'rank_markets', 'rank_sites', 'score_facility', 'search_facilities', 'semantic_search',
+  'site_selection_canvas', 'source_capacity',
+]);
+const _EXEC_ALLOWED_SET = new Set(_EXEC_ALLOWED_TOOLS);
+export const _EXEC_NOT_ALLOWED_NOTE =
+  'Not run: execute_plan only runs the read-only lookup tools listed in this app.';
+export function _execStepAllowed(tool, profile) {
+  if (!_EXEC_ALLOWED_SET.has(tool)) return false;
+  if (profile === DIRECTORY_PROFILE) return !!_isDirectoryTool(tool);
+  if (profile === CLAUDE_PROFILE) return !!_isClaudeTool(tool);
+  return true;
+}
+
 // ── _execDedupeUpsell (r-payload-diet, 2026-08-10) ─────────────────────────
 // Collapse per-step upsell blocks that are byte-identical to each other.
 //
@@ -18085,6 +18123,9 @@ export const _DEAL_DESK_SKIP_TIERS = new Set([
 export function _dealDeskEligible(c) {
   if ((process.env.DCHUB_DEAL_DESK_AUTOMINT || '1') === '0') return false;
   if (c && c.profile === CORE_PROFILE) return false;   // r-core-profile: no minting on /mcp/core
+  // item 1d (2026-10-09): the ChatGPT app is read-only end to end; the mint POSTs
+  // and stores a brief, so it never runs from /mcp/chatgpt or /mcp/chatgpt/oauth.
+  if (c && c.profile === DIRECTORY_PROFILE) return false;
   if (!c || !c.api_key) return false;          // anonymous cannot be Pro
   return !_DEAL_DESK_SKIP_TIERS.has(String(c.tier || 'free').toLowerCase());
 }
@@ -23964,6 +24005,14 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           if (!s) continue;
           if (s.tool === 'plan_query' || s.tool === 'execute_plan') {
             executed.push({ step: s.step, tool: s.tool, status: 'skipped_meta', ms: 0 });
+            continue;
+          }
+          // ★ item 1d: refuse any step outside the read-only allowlist, and on a
+          // directory profile any step that surface does not list. Refused, not
+          // dispatched: no loopback call is made.
+          if (!_execStepAllowed(s.tool, c && c.profile)) {
+            executed.push({ step: s.step, tool: s.tool, status: 'not_allowed', ms: 0,
+                            note: _EXEC_NOT_ALLOWED_NOTE });
             continue;
           }
           if (ran >= maxSteps || (Date.now() - t0) > DEADLINE_MS) {

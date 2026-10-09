@@ -204,7 +204,7 @@
   {
    "name": "execute_plan",
    "title": "Execute Plan",
-   "description": "Answer a multi-part data-center infrastructure question in one call. Pass the question as intent; DC Hub plans the lookups (markets, grid, fiber, water, incentives), runs them, and returns each step's result with a replay of how the answer was built.",
+   "description": "Answer a multi-part data-center infrastructure question in one call. Pass the question as intent; DC Hub plans the lookups (markets, grid, fiber, water, incentives), runs them, and returns each step's result with a replay of how the answer was built. It only runs the read-only lookup tools listed in this app.",
    "inputSchema": {
     "type": "object",
     "properties": {
