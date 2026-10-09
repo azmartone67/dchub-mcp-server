@@ -14616,6 +14616,9 @@ const WRITE_TOOLS = new Set([
   'accept_capacity_terms',
   // 2026-10-08: files a brain_findings row (POST /api/v1/inbox/findings).
   'report_finding',
+  // 2026-10-09: POSTs a research job row and may return a task_id to poll; each
+  // call queues a new job, so it is neither read-only nor idempotent.
+  'research_task',
 ]);
 
 // ★ The two hints WRITE_TOOLS membership alone gets wrong.

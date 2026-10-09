@@ -80,6 +80,9 @@ export const DIRECTORY_REMOVED = Object.freeze([
   // key-required (partner slug) and off the No-Auth profile exactly like the rows above, so
   // the frozen configuration removes them too (lib/chatgpt-directory.mjs does the same).
   'read_inbox', 'report_finding',
+  // 2026-10-09: research_task queues a job, so it left the read-only profile after the
+  // 1.0.0 rejection (lib/chatgpt-directory.mjs does the same).
+  'research_task',
 ]);
 const _REMOVED_SET = new Set(DIRECTORY_REMOVED);
 
@@ -149,7 +152,6 @@ export const DIRECTORY_TOOLS = Object.freeze({
   deal_autopsy: 'List recent data-center deals with the DCPI verdict and time to power of each deal\'s market.',
   get_permitting_intel: 'List data-center permitting and moratorium records by jurisdiction: moratoriums, zoning restrictions, tax changes and utility pauses, each stage-tagged with a source.',
   simulate_scenario: 'Re-score DC Hub power markets under what-if changes you set (power price, time to power, queue wait, reserve margin, curtailment) and show how rankings move.',
-  research_task: 'Request a cited research brief on a data-center question from DC Hub\'s news, deals, facilities and market analyses. Returns the brief, or a task_id to check back with.',
   plan_fiber_leadin: 'Plan diverse road-following fiber lead-in routes from a site to a carrier hotel or POP, with distances, indicative build cost and shared-corridor points.',
   cluster_sites_by_latency: 'Group 2-8 sites into low-latency clusters using physics-bound round-trip time floors between each pair.',
 });
