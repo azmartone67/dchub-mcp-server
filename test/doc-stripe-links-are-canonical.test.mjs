@@ -47,20 +47,14 @@ function canonicalIds() {
 }
 
 describe('every Stripe link in a tracked doc is canonical', () => {
-  // ★ FLOOR. The assertion below is "no offenders". A doc that stops carrying
-  // Stripe links at all — renamed, emptied, restructured — would also produce
-  // zero offenders and pass while protecting nothing.
-  it('the scan still finds Stripe links to check', () => {
-    let n = 0;
-    for (const d of DOCS) {
-      if (!existsSync(join(ROOT, d))) continue;
-      n += [...readFileSync(join(ROOT, d), 'utf8').matchAll(ID)].length;
-    }
-    expect(n, 'no buy.stripe.com links found in any tracked doc — this guard '
-      + 'now protects nothing; either the docs changed shape or DOCS is stale').toBeGreaterThanOrEqual(2);
-    // ★2026-09-28: floor 4 -> 2. The README's Developer and Pro Stripe links went
-    // with the monthly prices (owner rule 09-27: the only price stated is the
-    // $10 pack); the pack link in README.md and llms-install.md remains.
+  // ★2026-10-09: the docs no longer carry ANY Stripe link (the README / llms-install
+  // $10 pack line came out with the DCPI-led listing copy, mcp#861). Zero links is
+  // now the intended state, so the old "at least 2 links" floor is gone. What keeps
+  // the scan from being vacuous is the control below: the pattern must still catch a
+  // link if one is added back, and the offender test then judges its id.
+  it('MUST-FAIL CONTROL: the id pattern still catches a pasted Stripe link', () => {
+    const hit = [...'pay at https://buy.stripe.com/abc123XYZ now'.matchAll(ID)];
+    expect(hit.map((m) => m[1])).toEqual(['abc123XYZ']);
   });
 
   it('the canonical id set is non-empty', () => {

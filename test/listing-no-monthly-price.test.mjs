@@ -49,9 +49,10 @@ describe('listing surfaces carry no monthly price', () => {
     expect('$10 one-time pack of 1,000 API credits'.match(MONTHLY)).toBeNull();
   });
 
-  it('README states the $10 pack and points at /pricing', () => {
+  it('README states no pack price and points at /pricing', () => {
     const r = read('README.md');
-    expect(r).toContain('$10 one-time pack of 1,000 API credits');
+    // 2026-10-09: listing copy names no price (mcp#861); plans and prices live at /pricing.
+    expect(r).not.toContain('$10 one-time pack');
     expect(r).toContain('https://dchub.cloud/pricing');
   });
 });
