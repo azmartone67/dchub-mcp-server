@@ -145,7 +145,7 @@ import { continuationHumanText as _continuationHumanText,
          continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
 // The upgrade prompt names what THIS answer hid and the lowest rung that opens it.
 import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor, lowestRung as _lowestRung,
-         relayMissedClause as _relayMissedClause } from './lib/upgrade-missed.mjs';
+         relayMissedClause as _relayMissedClause, PLANLESS_WALL_COPY } from './lib/upgrade-missed.mjs';
 // Paywall response contract (growth audit item c) + Grok G3: lib/paywall-contract.mjs.
 import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallContract,
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
@@ -1498,7 +1498,7 @@ function _swapUrl(v, from, to) {
 }
 // A repeat call's header ends the text with no blank line after it, so accept either.
 const _FIBER_HEADER_RE = /🔒 \*\*This answer hid[^\n]*(?:\n\n|\n*$)/;
-const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
+const _HID_RE = /[Tt]his answer hid (.+?)(?:; the lowest plan that returns them|; those fields are in a paid DC Hub plan|; the plans that return them| and \d+ other fields?[.;]|\. The full answer)/;
 // ── r-paid-sell-line (2026-10-04, owner-approved; DCHUB_PAID_SELL_LINE, default OFF) ──
 // The grid sentence for the other keyless paid tools. get_market_intel, compare_isos and
 // rank_markets: the $10 pack opens them, so the sentence says $10 and links ?buy=1.
@@ -1963,7 +1963,10 @@ function _composeHumanCtaText(humanUrl, _body, gatedPayload, sessionId, relayRep
 // this answer did not have. When it names fields, the treatment arm's clause
 // keeps only its row count, so no field is named twice; the arm is not re-drawn.
 function _relayClauseFor(payload) {
-  try { return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true })); }
+  try {
+    const st = (getCtx() || {})._mu;
+    return _relayMissedClause(_missedUpgradeFor(payload, undefined, { strict: true }), { planless: _agentDepthWallPlanless(st && st.tool) });
+  }
   catch (_) { return null; }
 }
 export function _relaySpecific(specific, arm, clause) {
@@ -7796,6 +7799,15 @@ export function _freePreviewOnlyTool(name) {
 export function _tasteShapedOnlyTool(name) {
   return freeDecisionPreviewOnlyOn() && _TASTE_SHAPED_ONLY_LIST.includes(String(name || ''));
 }
+// Owner 2026-10-08 (Grok revenue plan item 2): the agent-facing copy on a DEPTH wall (grid,
+// queue, market, energy) names no plan, no price and no "after they pay" - "the fields above
+// are in a paid DC Hub plan; the page shows the options". Capacity walls keep the $10 pack.
+// Kill switch DCHUB_DEPTH_WALL_PLANLESS=0 restores the plan-naming copy.
+const _DEPTH_WALL_PLANLESS_TOOLS = new Set(['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel', 'get_energy_prices']);
+export function _agentDepthWallPlanless(name) {
+  return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_DEPTH_WALL_PLANLESS || ''))
+    && _DEPTH_WALL_PLANLESS_TOOLS.has(String(name || ''));
+}
 // The tools that may still enter the capped free full-answer (trial_taste) path.
 export function _freeTasteTool(name) {
   return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
@@ -12749,6 +12761,9 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
         + _rungsText(toolName, 'free', sessionId) + _unlockClause + '.\n';
     }
     const _link = _missedRungLink(missed.rung, toolName, sessionId);
+    if (_link && _agentDepthWallPlanless(toolName)) {
+      return '🔒 **' + missed.what + '** ' + PLANLESS_WALL_COPY + ' → ' + _link + '.' + _free;
+    }
     if (_link) {
       return '🔒 **' + missed.what + '** ' + missed.how + ' → ' + _link + _unlockClause + '.' + _free;
     }
