@@ -9,6 +9,7 @@ test/anon-attribution.test.mjs
 test/anon-facility-free-fields.test.mjs
 test/anon-hard-wall.test.mjs
 test/anon-seat-fence.test.mjs
+test/anon-top-tools-snapshot.test.mjs
 test/arg-aliases.test.mjs
 test/arg-error-is-not-a-metered-answer.test.mjs
 test/as-of-record-scope.test.mjs
@@ -80,6 +81,7 @@ test/constraint-iso-shape.test.mjs
 test/context-pack-tease-human-link.test.mjs
 test/continuation.test.mjs
 test/coord-aliases.test.mjs
+test/copy-plan-name-and-price-ratchet.test.mjs
 test/copycheck-tolerates-edge-flap.test.mjs
 test/core-profile.test.mjs
 test/coverage-counts-not-masked.test.mjs
