@@ -493,7 +493,7 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
     expect(out.envelope._demand_24h_in_pro).toBe(true);
     expect(out.envelope).not.toHaveProperty('constraint_score');
     expect(out.envelope._withheld_unlocks_at).toBe('developer');
-    expect(out.envelope.completeness).toEqual({ status: 'partial', withheld: ['dcpi_scores', 'demand_history'] });
+    expect(out.envelope.completeness).toEqual({ status: 'partial', kind: 'taste', withheld: ['dcpi_scores', 'demand_history'] });
     expect(JSON.stringify(out.envelope)).not.toContain('49.2');
     expect(out.figures.map((f) => f.key)).toContain('constraint_score');
   });

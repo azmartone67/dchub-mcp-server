@@ -203,6 +203,7 @@ function expectTasteBlock(sc, tool, scalars, { directory = false } = {}) {
   }
   expect(sc.free_preview_only, `${tool}: free_preview_only`).toBe(true);
   expect(sc.completeness && sc.completeness.status, `${tool}: completeness.status`).toBe('partial');
+  expect(sc.completeness.kind, `${tool}: completeness.kind`).toBe('taste');
   for (const k of scalars) expect(sc[k], `${tool}: decision scalar ${k} must be absent`).toBeUndefined();
   if (!directory) {
     // provenance.preview (lib/attribution detectGating) reads the _in_pro markers the taste carries
