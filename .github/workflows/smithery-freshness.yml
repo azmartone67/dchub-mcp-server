@@ -42,6 +42,11 @@ on:
     # healthy, and losing `verified` on a live listing is a real regression.
     # Insurance does not need 7 runs a week to do that, so this drops 6 of 7.
     - cron: '23 14 * * 1'   # WEEKLY Monday 14:23 UTC (was DAILY). INSURANCE re-publish (keeps verified/deploy/tool-catalog fresh); recency ≈ 0 for rank, so this does NOT hold #1 — relevance does. Local daily LaunchAgent is the redundant backup.
+  # 2026-10-09: also re-publish right after each GitHub Release, so a new
+  # version's tool catalogue reaches Smithery without waiting for Monday.
+  workflow_run:
+    workflows: ['github release']
+    types: [completed]
   workflow_dispatch:
     inputs:
       force_overwrite:
@@ -66,6 +71,8 @@ concurrency:
 
 jobs:
   republish:
+    # workflow_run fires on every completion; only a successful release run counts.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       # ★ 2026-08-22: this job never checked the repo out — the publish and
