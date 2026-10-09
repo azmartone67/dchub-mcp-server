@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "2.12.32",
+  "version": "2.12.33",
   "description": "The real-time agentic procurement endpoint and data center knowledge hub. Live data center market, power/grid, energy and fiber intelligence for site selection — 94 tools.",
   "mcpServers": {
     "dchub": {
