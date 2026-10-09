@@ -123,8 +123,6 @@ The free tier is the rule quoted above, verbatim from canon (`free_tier` at
 https://dchub.cloud/api/v1/canon/phrases). This file carries no plan table:
 plans, limits and prices live at https://dchub.cloud/pricing.
 
-A $10 one-time pack of 1,000 API credits (no subscription) is available at https://buy.stripe.com/9B69AU08y2FfbSR55UaZi0i.
-
 ## Verify the connection
 
 After adding the config, confirm the server is reachable and reports its tools:
