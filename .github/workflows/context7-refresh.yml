@@ -1,0 +1,73 @@
+name: context7 refresh
+
+# Ask Context7 to re-index DC Hub after a GitHub Release, instead of waiting for
+# its popularity-based auto-refresh (45 days for a library outside the top 5,000;
+# https://context7.com/docs/library-updates).
+#
+# DOCUMENTED API ONLY: POST https://context7.com/api/v1/refresh with
+# {"libraryName": "<library id>"} and a Bearer key (ctx7sk-...).
+# Ref: https://context7.com/docs/api-reference/refresh/refresh-a-library
+#      https://context7.com/docs/api-guide (library id format, rate limits)
+# The read-back uses GET /api/v2/libs/search from the same API guide.
+#
+# OWNER STEP: create a Context7 API key (context7.com dashboard, signed in as the
+# library owner) and save it as repo secret CONTEXT7_API_KEY. Until then every
+# run warns and exits 0; it never reads as a refresh that happened.
+
+on:
+  workflow_run:
+    workflows: ['github release']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: context7-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        library:
+          - /azmartone67/dchub-mcp-server
+          - /llmstxt/dchub_cloud_llms_txt
+    steps:
+      - name: POST /api/v1/refresh
+        env:
+          CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
+          LIBRARY: ${{ matrix.library }}
+        run: |
+          if [ -z "${CONTEXT7_API_KEY:-}" ]; then
+            echo "::warning::CONTEXT7_API_KEY secret not set: no refresh requested for $LIBRARY (UNMEASURED, not refreshed)."
+            exit 0
+          fi
+          BODY=$(jq -cn --arg n "$LIBRARY" '{libraryName: $n}')
+          CODE=$(curl -sS -o resp.json -w '%{http_code}' --max-time 30 \
+            -X POST https://context7.com/api/v1/refresh \
+            -H "Authorization: Bearer $CONTEXT7_API_KEY" \
+            -H 'Content-Type: application/json' \
+            -d "$BODY") || CODE=000
+          echo "HTTP $CODE for $LIBRARY"
+          head -c 500 resp.json || true; echo
+          case "$CODE" in
+            2??) echo "### Context7 refresh requested: $LIBRARY (HTTP $CODE)" >> "$GITHUB_STEP_SUMMARY" ;;
+            429) echo "::warning::Context7 rate limit for $LIBRARY (HTTP 429); not refreshed this run." ;;
+            *)   echo "::error::Context7 refresh for $LIBRARY failed: HTTP $CODE"; exit 1 ;;
+          esac
+
+      - name: Read back lastUpdateDate (informational)
+        env:
+          LIBRARY: ${{ matrix.library }}
+        run: |
+          # The refresh runs in the background, so this usually still shows the
+          # previous date; it is printed so a later run can be compared with it.
+          curl -sS --max-time 20 -G https://context7.com/api/v2/libs/search \
+            --data-urlencode "libraryName=$LIBRARY" --data-urlencode "query=dchub" \
+            | jq -r --arg id "$LIBRARY" '.results[]? | select(.id == $id) | "\(.id) state=\(.state) lastUpdateDate=\(.lastUpdateDate)"' || true
