@@ -217,7 +217,9 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     const live = tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toContain('no subscription). Paid plans: on the page behind the human_url link.');
     expect(live).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
-    expect(live).toContain('$10 one-time = 1,000 API credits');
+    // 2026-10-09: the tool description states no price (Grok listing sweep); the wall and the checkout page still do.
+    expect(live).toContain('one-time 1,000 API credits');
+    expect(live).not.toContain('$10');
     const committed = MANIFEST.tools.find((t) => t.name === 'unlock_more_data').description;
     expect(live).toBe(committed);
   });
