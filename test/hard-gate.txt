@@ -112,6 +112,7 @@ test/execute-plan-cohort.test.mjs
 test/execute-plan-corridors-and-slim.test.mjs
 test/execute-plan-geo-bind.test.mjs
 test/execute-plan-invariants.test.mjs
+test/execute-plan-readonly-allowlist.test.mjs
 test/facility-count-withdrawn.test.mjs
 test/facility-location-allowance.test.mjs
 test/facility-location-tier.test.mjs
