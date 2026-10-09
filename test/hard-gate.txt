@@ -393,6 +393,7 @@ test/typed-preview-rank-markets.test.mjs
 test/uncovered-constraints.test.mjs
 test/unlock-leads-with-both-rungs.test.mjs
 test/unlock-more-data-pro-trigger.test.mjs
+test/unlock-tool-text-price-free.test.mjs
 test/unverified-listing-marker.test.mjs
 test/upgrade-names-what-you-missed.test.mjs
 test/upstream-error-contract.test.mjs

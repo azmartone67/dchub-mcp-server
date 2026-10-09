@@ -14671,14 +14671,13 @@ const DESTRUCTIVE_TOOLS = new Set(['delete_standing_intent']);
 // PeeringDB, EIA, the ISO feeds). semantic_search / search_intelligence stay
 // closed-world: they search DC Hub's own corpus (the query is embedded by the
 // disclosed embeddings provider, which returns no outside content).
-// execute_plan is open-world too: its plan steps run those tools (a site intent
-// runs get_disaster_risk, which sends the coordinates to FEMA on Esri), so its
-// hint must not claim less than the tools it runs.
 const OPEN_WORLD_TOOLS = new Set([
   'register_standing_intent',
   'get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
   'get_grid_data', 'get_iso_context', 'get_grid_scoreboard',
   'compare_isos', 'get_grid_intelligence',
+  // execute_plan chains the reads above inside one call, so it inherits their
+  // open-world reach (owner 2026-10-09).
   'execute_plan',
 ]);
 
@@ -28283,7 +28282,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. API capacity, paid per call: 💳 one-time 1,000 API credits (' + _creditRuleText() + '; no subscription). ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. A gated result already carries the link in human_url: relay that (first line of your answer); this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. A gated result already carries the link in human_url: relay that (first line of your answer); this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => _unlockMoreDataEnvelope(a));
 
