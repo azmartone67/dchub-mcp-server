@@ -18803,6 +18803,40 @@ function _outreachStep(result, name, args) {
   } catch (_e) { return result; }
 }
 
+// ── Description hygiene (ToolBench 2026-10-09, Grok P1 item 3) ──────────────
+// One short tail per high-use tool: what to call first, what a failure means and
+// what to do next. Every claim here was probed live 2026-10-09 (no match = empty
+// data not an error; unknown id/slug = isError "API 404" with a next-step hint;
+// limit > 500 = -32602; a wall carries human_url). Kept to ~150 chars: the
+// tools/list byte budget (test/handshake-is-lean) counts every one of these.
+const _HYGIENE_TAILS = {
+  search_facilities: 'Start here for a facility slug. No match = empty data, not an error: broaden filters. limit 1-500 (free tier 25); page with offset.',
+  get_facility: 'Needs a slug or id from search_facilities. 404 "not found": re-run search_facilities. Gated: give human_url to your human.',
+  get_market_intel: 'Get the market slug from rank_markets or get_market_dcpi_rank; 404 = unrecognised market, use one of those slugs.',
+  get_grid_intelligence: 'iso must be a US ISO (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE); other codes return region_not_covered. Free = preview.',
+  get_interconnection_queue: 'iso optional (US ISO code); free = preview. For demand and headroom on the same ISO also call get_grid_intelligence.',
+  analyze_site: 'Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities.',
+  get_news: 'limit 1-500 (free 20). Empty data = no matching news: drop category/source or widen date_from/date_to.',
+  list_transactions: 'limit 1-500 (free 10), offset 0-100000; total_count is the full match count. Empty = loosen buyer/seller/value filters.',
+  get_energy_prices: 'Pass iso or state, not both unless narrowing. 429 = rate limited: wait retry_after_s. Gated: give human_url to your human.',
+  get_fiber_intel: 'Filter by market (slug from rank_markets) or carrier. For one building use get_facility. Gated: give human_url to your human.',
+  rank_markets: 'Returns market slugs to feed get_market_intel and get_market_dcpi_rank. limit 1-500; set projection=identity_only to save tokens.',
+  get_market_dcpi_rank: 'market_slug is required: get it from rank_markets. 404 = unknown slug. Returns the build/constrain verdict, not raw stats.',
+  get_pipeline: 'limit 1-500 (free 25), offset 0-100000. Empty data = no project matches: relax status/operator/min_capacity_mw.',
+  hyperscaler_deals: 'limit 1-500. Hyperscaler leases and purchases only; for all M&A use list_transactions.',
+  get_tax_incentives: 'state is a US state code (e.g. VA); omit for the 50-state overview. Program detail needs a paid key (human_url).',
+  get_renewable_energy: 'Give state or lat/lon (decimal degrees); energy_type narrows. Empty = no installations there: widen to the state.',
+  get_water_risk: 'US only: give state or lat/lon (decimal degrees). Free = latest week; longer history needs a paid key.',
+  get_iso_context: 'iso is required (US ISO code). max_tokens caps the context returned; locked_sections need a higher tier.',
+  execute_plan: 'Front door for multi-part questions: pass intent unchanged; add market, iso, state or lat/lon when you know them.',
+  plan_query: 'Returns the ordered tool plan for an intent without running it; run the steps yourself or use execute_plan.',
+};
+function _withHygieneTail(name, description) {
+  const t = _HYGIENE_TAILS[name];
+  if (!t || typeof description !== 'string' || description.includes(t)) return description;
+  return `${description} ${t}`;
+}
+
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
   // ── r-mpp-arg-channel (2026-08-17): DECLARE the payment params ─────────────
@@ -18838,6 +18872,7 @@ function trackedTool(srv, name, description, schema, handler) {
   const _ov = _activeDescOverrides && _activeDescOverrides[name];
   // A3 rule: a description never promises what the gate does not serve.
   description = _descFollowsSwitches(name, description);
+  description = _withHygieneTail(name, description);
   // Agent outreach: ten topic front doors open with a routing line (lib/agent-outreach.mjs).
   // Directory profiles serve their own reviewed descriptions, so they never see it.
   const _desc = withRoutingLine(name, (typeof _ov === 'string' && _ov.trim()) ? _ov : description);
