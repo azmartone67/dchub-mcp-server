@@ -1,5 +1,7 @@
 # Official MCP Registry — `registry.modelcontextprotocol.io`
 
+> **History. Do not paste.** This file records what was submitted and when. Current listing copy is generated from canon: `canonical/listing.json` (source: https://dchub.cloud/api/v1/canon/listing).
+
 **Artifact:** repo-root [`../server.json`](../server.json) — validated against the
 current official schema (`2025-12-11`), remote (Streamable HTTP), 38-tool count,
 version `2.1.24`.

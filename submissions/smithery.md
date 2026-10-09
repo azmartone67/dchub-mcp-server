@@ -1,5 +1,7 @@
 # Smithery submission
 
+> **History. Do not paste.** This file records what was submitted and when. Current listing copy is generated from canon: `canonical/listing.json` (source: https://dchub.cloud/api/v1/canon/listing).
+
 **Artifact:** repo-root [`../smithery.yaml`](../smithery.yaml) (remote runtime,
 Streamable HTTP, 81 tools). Smithery scans the repo root for this file.
 

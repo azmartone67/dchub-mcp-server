@@ -1,5 +1,7 @@
 # mcp.so submission
 
+> **History. Do not paste.** This file records what was submitted and when. Current listing copy is generated from canon: `canonical/listing.json` (source: https://dchub.cloud/api/v1/canon/listing).
+
 **Type:** web form (no repo file). Go to https://mcp.so → "Submit".
 mcp.so indexes from the GitHub repo + the official registry, so most fields
 auto-populate; paste the values below where prompted.
