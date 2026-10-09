@@ -100,6 +100,11 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         // failure mode, and it pulls lib/claude-directory.mjs +
                         // lib/grok-profile.mjs in behind it.
                         'lib/registry-remotes.mjs',
+                        // ★2026-10-09: the registry-description renderer and the one
+                        // template it renders. Same failure mode: missing, every control
+                        // dies on ERR_MODULE_NOT_FOUND instead of on the drift it catches.
+                        'scripts/registry-description.mjs',
+                        'canonical/registry-description-template.json',
                         // The shipped bundle the dchub.dxt guard compares against.
                         'dchub.dxt',
                         // ★2026-08-30: the release-asset guard and the workflow it runs

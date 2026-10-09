@@ -26,3 +26,10 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: '22' }
       - run: node scripts/sync-tools-manifest.mjs
+      # Registry descriptions are rendered from canonical/registry-description-template.json
+      # (Grok A6). The step above is the offline, blocking check. This one compares the
+      # committed render INPUTS to live GET /api/v1/canon and only WARNS: a live-canon move
+      # the daily sync has not caught up with yet must not block an unrelated PR.
+      - name: Live canon vs committed render inputs (warn only)
+        continue-on-error: true
+        run: node scripts/sync-tools-manifest.mjs --live | grep -E '^(::warning::|✓ live canon)' || true

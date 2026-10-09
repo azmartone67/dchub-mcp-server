@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
 import { registryRemotes } from '../lib/registry-remotes.mjs';
+import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -604,6 +605,36 @@ const applyQuantities = (file, txt, rules, commentAware) => {
   if (FIX && txt !== before) pend(f, txt);
 }
 
+// ---- registry descriptions: ONE template, rendered from canon ---------------
+// ★2026-10-09 (Grok A6). server.json / smithery.yaml / mcp-server.json each carry
+// a `description` that registries show verbatim. They are RENDERED here from
+// canonical/registry-description-template.json + the committed facts, canon
+// phrases and tier canon (scripts/registry-description.mjs) and written by
+// --fix; CHECK fails on any byte of difference. No network: `--live` adds an
+// optional compare against GET /api/v1/canon that only warns.
+let RENDERED;
+let RD_CTX;
+try { RD_CTX = await loadContext(COUNT, { facts: FACTS, phrases: SNAP }); RENDERED = renderAll(RD_CTX); }
+catch (e) { console.error(`FATAL (registry description): ${e.message}`); process.exit(2); }
+if (process.argv.includes('--print-description')) {
+  const t = process.argv[process.argv.indexOf('--print-description') + 1];
+  if (!RENDERED[t]) { console.error(`--print-description <${Object.keys(RENDERED).join('|')}>`); process.exit(2); }
+  console.log(RENDERED[t]); process.exit(0);
+}
+
+// Prose drift vs quantity drift. The render is exact, but a figure that sits
+// next to a canon-owned noun (deals, markets, countries, substations, the asset
+// layers) is judged by the EXISTING quantity rules — floor tolerance, notation
+// ("134k" vs "134,000+"), overclaim — which are owner policy and stay in force.
+// So: mask those figures on both sides; any remaining difference is PROSE (or a
+// non-canon figure such as the feed count / tool count) and fails exactly.
+const maskQuantities = (txt) => {
+  let out = String(txt);
+  for (const q of [...QUANTITIES, ...ASSET_QUANTITIES]) out = out.replace(quantityRx(q.noun), (_m, _n, rest) => `#${rest}`);
+  return out;
+};
+const proseDrift = (committed, rendered) => committed !== rendered && maskQuantities(committed) !== maskQuantities(rendered);
+
 // Tool list is derived AFTER the heal above (readCur sees the pending healed
 // content), so mcp-server.json ships the healed descriptions in the same run.
 const tools = canonicalTools();
@@ -654,6 +685,14 @@ const names = new Set(tools.map((t) => t.name));
     // the fence below asks its question about the tree --fix would produce,
     // rather than reporting "bump me" one run later than the count drift.
     meta.toolCount = COUNT;
+  }
+  // ★2026-10-09 — `description` is RENDERED (registry-description.mjs). Healed in
+  // memory in both modes like toolCount/remotes, so a wording or canon move
+  // reaches the version fence below and --fix bumps the patch.
+  if (proseDrift(sj.description, RENDERED.server_json)) {
+    problems.push(`${SJ} description differs from the render of ${'canonical/registry-description-template.json'}: `
+      + `${JSON.stringify(sj.description)} != ${JSON.stringify(RENDERED.server_json)}`);
+    sj.description = RENDERED.server_json;
   }
   // ★2026-09-28 — `remotes` is GENERATED from lib/registry-remotes.mjs (the
   // allowlist of served profile paths the official registry advertises). Healed
@@ -735,11 +774,18 @@ const names = new Set(tools.map((t) => t.name));
   // The PROSE stays operator-owned; only the five phrase QUANTITIES inside it
   // heal, through the exact helper the other eight surfaces use — so this
   // sentence can no longer drift, and no longer taxes an unrelated change.
-  if (typeof m.description === 'string' && m.description) {
-    const healedDesc = applyQuantities('mcp-server.json (top-level description)',
-                                       m.description, QUANTITIES, false);
-    if (FIX) m.description = healedDesc;
+  // ★2026-10-09: now RENDERED whole from the one template (the quantities-only
+  // heal this replaced could not say the three registry files agree). The
+  // quantity scan below still judges the rendered text like any other surface.
+  const mcDrift = proseDrift(m.description, RENDERED.mcp_server_json);
+  if (mcDrift) {
+    problems.push('mcp-server.json description differs from the render of canonical/registry-description-template.json '
+      + `(committed ${String(m.description).length} chars, render ${RENDERED.mcp_server_json.length}; first difference at char `
+      + `${[...String(m.description)].findIndex((c, i) => c !== RENDERED.mcp_server_json[i])})`);
   }
+  const healedDesc = applyQuantities('mcp-server.json (top-level description)',
+                                     mcDrift ? RENDERED.mcp_server_json : m.description, QUANTITIES, false);
+  if (FIX) m.description = healedDesc;
   if (FIX) { m.version = VERSION; m.tools = tools; if ('tools_count' in m) m.tools_count = COUNT;
     pend('mcp-server.json', JSON.stringify(m, null, 2) + '\n'); }
 }
@@ -988,6 +1034,20 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   } else if (Number(lm[2]) !== COUNT) {
     problems.push(`${LC} tool_count ${lm[2]} != ${COUNT}`);
     if (FIX) pend(LC, lc.replace(LCRX, `$1${COUNT}$3`));
+  }
+}
+
+// ---- smithery.yaml description — rendered from the one template -------------
+{
+  const sy = readCur('smithery.yaml');
+  const dm = SMITHERY_DESC_RX.exec(sy);
+  let cur = null;
+  try { cur = dm ? JSON.parse(dm[1]) : null; } catch { cur = null; }
+  if (!dm) problems.push('smithery.yaml: no top-level `description:` -- cannot render the registry description into it');
+  else if (cur === null || proseDrift(cur, RENDERED.smithery_yaml)) {
+    problems.push('smithery.yaml description differs from the render of canonical/registry-description-template.json '
+      + `(committed ${cur === null ? 'unparseable' : cur.length + ' chars'}, render ${RENDERED.smithery_yaml.length} chars)`);
+    if (FIX) pend('smithery.yaml', sy.replace(SMITHERY_DESC_RX, () => `description: ${JSON.stringify(RENDERED.smithery_yaml)}`));
   }
 }
 
@@ -1248,6 +1308,15 @@ if (facts) {
     if (!d) problems.push('smithery.yaml: no top-level `description:` -- the listing copy is unverifiable');
     else judge('smithery.yaml description', d[1]);
   }
+}
+
+// --live: OPTIONAL compare against GET https://dchub.cloud/api/v1/canon. Warns
+// only (::warning::), never changes the exit code: CHECK stays offline-safe.
+if (process.argv.includes('--live')) {
+  const lc = await liveCompare(RD_CTX);
+  if (!lc.observed) console.log(`::warning::registry description live compare skipped — ${lc.warns[0]}`);
+  for (const w of lc.observed ? lc.warns : []) console.log(`::warning::registry description inputs differ from live canon — ${w}`);
+  if (lc.observed && !lc.warns.length) console.log('✓ live canon agrees with the committed inputs of the registry descriptions');
 }
 
 // ---- apply / report --------------------------------------------------------

@@ -56,10 +56,14 @@ describe('mcp-server.json top-level description', () => {
     expect(guard).toMatch(/if \(FIX\)/);
   });
 
-  it('the prose is still operator-owned — only quantities heal', () => {
-    // QUANTITIES, not a wholesale template overwrite.
+  it('quantities are still judged on the text that gets written', () => {
+    // 2026-10-09: the prose is no longer hand-owned; the whole description is
+    // RENDERED from canonical/registry-description-template.json (see
+    // test/registry-description-render.test.mjs). The quantity rules still run
+    // over the rendered text, so a template edit cannot publish a stale figure.
     const i = SRC.indexOf("applyQuantities('mcp-server.json (top-level description)");
-    expect(SRC.slice(i, i + 200)).toContain('QUANTITIES');
+    expect(SRC.slice(i - 120, i + 300)).toContain('RENDERED.mcp_server_json');
+    expect(SRC.slice(i, i + 300)).toContain('QUANTITIES');
   });
 });
 
