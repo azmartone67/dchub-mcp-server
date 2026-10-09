@@ -165,7 +165,7 @@ beforeAll(async () => {
       if (p === '/api/v1/grid/extended/PJM') return send(EXT);
       if (p === '/api/v1/interconnection-queue/by-iso') return send(QUEUE_BY_ISO);
       if (p === '/api/v1/markets/northern-virginia') return send(MARKET);
-      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, retail_rates: { avg_cents_kwh: 23.41, max_cents_kwh: 30.1, min_cents_kwh: 18.2 } });
+      if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null }, retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 } });
       return send({});
     });
     stub.listen(0, '127.0.0.1', resolve);
@@ -600,5 +600,18 @@ describe('caller_tier is one value across both channels (Grok 10-08 item 2)', ()
     expect(tiers.length).toBeGreaterThan(1);
     expect(new Set(tiers).size, JSON.stringify(tiers)).toBe(1);
     expect(tiers[0]).not.toBe('pro');
+  });
+});
+
+describe('get_energy_prices anonymous preview carries the labelled taste (Grok 10-08 item 1)', () => {
+  it('taste + withheld[], as_of = EIA period, no plan name or price in the wall copy, spread not served', async () => {
+    const r = await callAs({}, 'get_energy_prices', { iso: 'CAISO' });
+    const sc = r.sc;
+    expect(sc.taste.headline).toMatchObject({ value: 23.41, unit: 'cents/kWh', as_of: '2026' });
+    expect(sc.withheld.map((w) => w.section)).toContain('rate_range');
+    expect(JSON.stringify(sc)).not.toMatch(/30\.1|18\.2/);
+    const msg = (sc._upgrade && sc._upgrade.message) || '';
+    expect(msg).toMatch(/paid DC Hub plan; the page shows the options/);
+    expect(msg).not.toMatch(/\$|Developer|Pro\b/);
   });
 });
