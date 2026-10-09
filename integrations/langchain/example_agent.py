@@ -11,7 +11,7 @@ If no OPENAI_API_KEY is set, this falls back to calling the tool directly so the
 example is still runnable (and proves the data + citation path) without an LLM.
 """
 import os
-from dchub_tools import DCHUB_TOOLS, dchub_market_intel
+from dchub_tools import DCHUB_TOOLS, get_market_intel
 
 QUESTION = "What is the data-center capacity in Northern Virginia? Cite your source."
 
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     if os.environ.get("OPENAI_API_KEY"):
         print(run_agent())
     else:
-        d = dchub_market_intel("northern-virginia")
+        d = get_market_intel("northern-virginia")
         s = d["stats"]
         print(f"[tool-only fallback — set OPENAI_API_KEY for the full agent]\n"
               f"Northern Virginia: {s['facility_count']} facilities, "

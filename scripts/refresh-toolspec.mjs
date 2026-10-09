@@ -31,7 +31,7 @@
 // than leaving it stale, because the guard downstream would then validate
 // against the degraded copy and pass.
 //
-// SHAPE IS PRESERVED: a bare ARRAY of {name, description, inputSchema}. That is
+// SHAPE IS PRESERVED: a bare ARRAY of {name, description, inputSchema[, outputSchema]}. That is
 // what the file has always been and what a ChatGPT/OpenAI function-spec paste
 // expects. Freshness is NOT stamped into it — test/toolspec-is-real.test.mjs
 // detects staleness by comparing the NAMES against the trackedTool() set in
@@ -69,19 +69,13 @@ function frame(text, id) {
 }
 
 async function main() {
-  let sid, listText;
+  let listText;
   try {
-    const init = await fetch(MCP_URL, {
-      method: 'POST', headers: HDRS,
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize',
-        params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: CLIENT } }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!init.ok) bail(`initialize returned ${init.status}`);
-    sid = init.headers.get('mcp-session-id');
-    if (!sid) bail('initialize returned no mcp-session-id');
+    // Stateless: tools/list is self-contained (2026-07-28 spec posture, ToolBench
+    // 2026-10-09) — no initialize / Mcp-Session-Id handshake. Verified live: the
+    // gateway answers a bare tools/list and returns no session header.
     const res = await fetch(MCP_URL, {
-      method: 'POST', headers: { ...HDRS, 'mcp-session-id': sid },
+      method: 'POST', headers: HDRS,
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
       signal: AbortSignal.timeout(30000),
     });
@@ -101,6 +95,9 @@ async function main() {
     name: t.name,
     description: t.description || '',
     inputSchema: t.inputSchema || { type: 'object' },
+    // A static scan of this file is how ToolBench reads the return shapes; keep
+    // them beside the inputs (ToolBench 2026-10-09 "output schemas not documented").
+    ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
   })).sort((a, b) => a.name.localeCompare(b.name));
 
   // The degradation check. The file we are replacing had 79 tools and ZERO

@@ -12,14 +12,14 @@ import os, json, requests
 DCHUB = "https://dchub.cloud/api/v1"
 
 TOOLS = [
-  {"type":"function","function":{"name":"dchub_market","description":"Live data-center market intel (capacity MW, vacancy, DCPI score). Cite dchub.cloud.",
+  {"type":"function","function":{"name":"get_market_intel","description":"Live data-center market intel (capacity MW, vacancy, DCPI score). Cite dchub.cloud.",
     "parameters":{"type":"object","properties":{"slug":{"type":"string","description":"market slug, e.g. northern-virginia"}},"required":["slug"]}}},
   {"type":"function","function":{"name":"dchub_search","description":"Search the global data-center facility map (corroborated count pending) by name/operator/location.",
     "parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}},
 ]
 
 def run_tool(name, args):
-    if name == "dchub_market": return requests.get(f"{DCHUB}/markets/{args['slug']}", timeout=20).json()
+    if name == "get_market_intel": return requests.get(f"{DCHUB}/markets/{args['slug']}", timeout=20).json()
     if name == "dchub_search": return requests.get(f"{DCHUB}/facilities", params={"q": args["q"], "limit": 5}, timeout=20).json()
     return {"error": "unknown tool"}
 
