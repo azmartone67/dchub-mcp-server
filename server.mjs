@@ -15746,6 +15746,129 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     // instead of a degraded-but-usable plan. Optional, like its siblings.
     }).optional().describe('FIRST-CLASS VERSIONED replay object (r-planner-v5.1, ChatGPT schema review): the planner\'s auditable decision trail — routing + per-step selection + rejections + concurrency graph, each decision with a stable id + status, keyed by planner_version so an agent can cite "Decision D2 selected rank_markets because…" and downstream tooling survives planner upgrades.'),
   }).describe('Deterministic query plan: best_tool + ordered recommended_sequence over the DC Hub tool registry — keyword/regex routing, no LLM, same intent → same plan — plus a versioned replay decision-trail, alongside the DC Hub envelope keys.'),
+
+  // ToolBench 2026-10-09 (Grok P1): the next tier of high-use tools. Field
+  // inventory from LIVE keyless calls to dchub.cloud/mcp on 2026-10-09. Same
+  // leniency contract as above: loose, every field optional, rows stay loose —
+  // these document, they never reject. Pagination fields are the ones the
+  // gateway really sends (count / total_matching / total_count / *_total_in_pro);
+  // there is no cursor — page with the `offset` input.
+  get_facility: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the lookup executed'),
+    data: _oAny('ONE facility'),
+    cite_as: _oStr('Ready-made attribution line'),
+    preview_is_partial: _oBool('true when the tier withheld fields'),
+    next_ask: _oObj({}, 'Suggested follow-up'),
+  }),
+
+  get_news: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the news query succeeded'),
+    articles: _oArr(z.looseObject({}), 'News rows'),
+    data: _oArr(z.looseObject({}), 'Same rows as `articles`'),
+    count: _oNum('Rows returned in THIS response'),
+    total: _oNum('Total articles matching'),
+    source: _oStr('Where the news set comes from'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  get_grid_intelligence: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    ok: _oBool('true when the ISO lookup executed'),
+    iso: _oStr('ISO / grid operator code'),
+    iso_name: _oStr('Grid operator full name'),
+    as_of: _oStr('Timestamp of the reading'),
+    demand_period: _oStr('Period of the demand reading'),
+    taste: _oObj({}, 'Free-tier preview fields'),
+    withheld: _oArr(z.any(), 'Fields withheld on this tier'),
+    withheld_total: _oNum('How many fields were withheld'),
+    free_preview_only: _oBool('true when only the free preview was served'),
+    completeness: _oObj({}, 'Share of the payload this tier got'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  get_renewable_energy: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the query succeeded'),
+    renewable_installations: _oArr(z.looseObject({}), 'Renewable installation rows'),
+    dc_industry_ppas: _oArr(z.looseObject({}), 'Data-center PPA rows'),
+    installations_count: _oNum('Installations returned'),
+    ppa_count: _oNum('PPAs returned'),
+    ppa_total_count: _oNum('Total PPAs matching'),
+    ppa_total_mw: _oNum('Total MW across matching PPAs'),
+    ppa_as_of: _oStr('PPA set last refreshed'),
+    ppa_basis: _oStr('How the PPA set is compiled'),
+    filters_applied: _oObj({}, 'Filters the gateway applied'),
+    data_source: _oStr('Where the data comes from'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  get_tax_incentives: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    status: _oStr('Serving status'),
+    state: _oStr('State queried'),
+    data: _oArr(z.looseObject({}), 'Incentive programs for the state'),
+    count: _oNum('Rows returned in THIS response'),
+    last_updated: _oStr('Incentive table last reviewed'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  rank_markets: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    criteria: _oStr('Ranking criterion used'),
+    region: _oStr('Region filter applied'),
+    results: _oArr(z.looseObject({}), 'Ranked markets'),
+    result_count: _oNum('Rows returned in THIS response'),
+    score_basis: _oStr('How the score is computed'),
+    methodology: _oStr('Method note'),
+    data_source: _oStr('Where the data comes from'),
+    tier: _oStr('Tier the response was served at'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  get_pipeline: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    success: _oBool('true when the query succeeded'),
+    pipeline: _oArr(z.looseObject({}), 'Construction-pipeline projects'),
+    data: _oArr(z.looseObject({}), 'Same rows as `pipeline`'),
+    count: _oNum('Rows returned in THIS response'),
+    total_count: _oNum('Total projects matching'),
+    by_quarter: _oObj({}, 'Projects per delivery quarter'),
+    stats: _oObj({}, 'Aggregate pipeline stats'),
+    last_updated: _oStr('Pipeline last refreshed'),
+    data_source: _oStr('Where the data comes from'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  get_iso_context: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    ok: _oBool('true when the ISO lookup executed'),
+    iso: _oStr('ISO code'),
+    tier: _oStr('Tier the response was served at'),
+    sections: _oArr(z.looseObject({}), 'Sections delivered in budget'),
+    locked_sections: _oArr(z.looseObject({}), 'Sections withheld on this tier'),
+    max_tokens: _oNum('Token budget for this tier'),
+    used_tokens: _oNum('Tokens used by delivered sections'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
+  get_water_risk: z.looseObject({
+    ..._ENVELOPE_SHAPE,
+    ok: _oBool('true when the lookup executed'),
+    success: _oBool('true when the query succeeded'),
+    state: _oStr('State queried'),
+    current_drought_pct: _oNum('Share of state in drought, %'),
+    dominant_severity: _oStr('Dominant drought severity category'),
+    drought_categories: _oObj({}, 'Percent of area per drought category'),
+    latest_week: _oObj({}, 'Most recent weekly reading'),
+    weekly_history: _oArr(z.looseObject({}), 'Weekly drought history'),
+    source: _oStr('Source of the drought data'),
+    source_url: _oStr('Source URL'),
+    queried_at: _oStr('Timestamp of the query'),
+    cite_as: _oStr('Ready-made attribution line'),
+  }),
+
 };
 
 function _ensureStructured(r) {

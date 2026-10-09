@@ -80,11 +80,14 @@ describe('initialize instructions', () => {
 });
 
 describe('tools/list', () => {
-  it('is smaller than the 2026-10-06 baseline (458,152 bytes) by at least 8%', async () => {
+  it('is smaller than the 2026-10-06 baseline (458,152 bytes) by at least 6.5%', async () => {
     const { h } = await open('lean-test');
     const r = await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     expect(JSON.parse(r.json).result.tools.length).toBeGreaterThan(80);
-    expect(r.bytes).toBeLessThan(458152 * 0.92);
+    // 2026-10-09 ToolBench: 9 more tools advertise TYPED outputSchemas (each repeats
+    // the 6-key envelope), +~8.5KB. Budget moved 8% -> 6.5% under the 2026-10-06
+    // baseline; main was 416,019 before this change.
+    expect(r.bytes).toBeLessThan(458152 * 0.935);
   });
   it('the shared output envelope is terse (it is repeated on ~80 tools)', async () => {
     const { h } = await open('lean-test');
