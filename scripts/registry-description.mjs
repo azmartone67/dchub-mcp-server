@@ -34,7 +34,8 @@ export const TEMPLATE_PATH = 'canonical/registry-description-template.json';
 export const TARGETS = ['server_json', 'smithery_yaml', 'mcp_server_json'];
 /** The official registry schema caps `description` at 100 characters. */
 export const SERVER_JSON_MAX = 100;
-export const CANON_LIVE_URL = 'https://dchub.cloud/api/v1/canon';
+// Overridable so the hard gate (no network) can point --live at a dead loopback port.
+export const CANON_LIVE_URL = process.env.DCHUB_CANON_LIVE_URL || 'https://dchub.cloud/api/v1/canon';
 
 const readJSON = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'));
 // facts publish floors as "182k"; a comma form ("911,000+") is accepted as-is

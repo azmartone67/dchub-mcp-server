@@ -20,8 +20,8 @@ afterAll(() => SANDBOX.cleanup());
 const R = (...p) => path.join(SANDBOX.root, ...p);
 const SCRIPT = R('scripts', 'sync-tools-manifest.mjs');
 
-function run(args = []) {
-  try { return { ok: true, out: execFileSync('node', [SCRIPT, ...args], { cwd: SANDBOX.root, encoding: 'utf8' }) }; }
+function run(args = [], env = {}) {
+  try { return { ok: true, out: execFileSync('node', [SCRIPT, ...args], { cwd: SANDBOX.root, encoding: 'utf8', env: { ...process.env, ...env } }) }; }
   catch (e) { return { ok: false, out: `${e.stdout || ''}${e.stderr || ''}` }; }
 }
 function mutate(rel, fn, body) {
@@ -149,5 +149,11 @@ describe('optional live compare warns, never fails', () => {
     expect(r.observed).toBe(false);
     expect(r.warns[0]).toMatch(/unreadable/);
   });
-  it('--live never changes the exit code of a clean tree', () => { expect(run(['--live']).ok).toBe(true); });
+  it('--live never changes the exit code of a clean tree', () => {
+    // The hard gate forbids off-loopback connects, so --live is pointed at a dead
+    // loopback port: the fetch fails, the compare is skipped, the exit code holds.
+    const r = run(['--live'], { DCHUB_CANON_LIVE_URL: 'http://127.0.0.1:9/api/v1/canon' });
+    expect(r.ok).toBe(true);
+    expect(r.out, 'the live path did not run, so this control proves nothing').toMatch(/live compare skipped/);
+  });
 });
