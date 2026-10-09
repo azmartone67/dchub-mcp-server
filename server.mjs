@@ -14676,6 +14676,12 @@ const OPEN_WORLD_TOOLS = new Set([
   'get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
   'get_grid_data', 'get_iso_context', 'get_grid_scoreboard',
   'compare_isos', 'get_grid_intelligence',
+  // 2026-10-09 trace of every /mcp/chatgpt tool to its backend route: these also
+  // call a third-party host while serving the request, at least on cache miss:
+  // EIA (gas economics/intelligence), US Drought Monitor (water risk), public OSRM
+  // (fiber lead-in routing), ercotqueue.com (queues, when no DB snapshot exists).
+  'get_gas_economics', 'get_gas_intelligence', 'get_water_risk', 'plan_fiber_leadin',
+  'get_interconnection_queue', 'get_refined_queue',
   // execute_plan chains the reads above inside one call, so it inherits their
   // open-world reach (owner 2026-10-09).
   'execute_plan',
