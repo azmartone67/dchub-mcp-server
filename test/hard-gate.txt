@@ -5,6 +5,7 @@ test/agent-outreach.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-site-location.test.mjs
 test/anchor-contract.test.mjs
+test/annotation-hints-every-surface.test.mjs
 test/anon-attribution.test.mjs
 test/anon-facility-free-fields.test.mjs
 test/anon-hard-wall.test.mjs

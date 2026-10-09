@@ -87,7 +87,8 @@ describe('tools/list', () => {
     const names = LIST.tools.map((t) => t.name);
     expect(names).toEqual(Object.keys(CLAUDE_TOOLS));
     // 67 → 68 on 2026-09-29 (owner-approved): source_capacity added.
-    expect(names).toHaveLength(68);
+    // 68 → 67 on 2026-10-09: research_task removed (it queues a job).
+    expect(names).toHaveLength(67);
     expect(names).toContain('source_capacity');
     // /mcp/chatgpt measured 72,831 chars live and /mcp 473,081 (2026-09-26).
     expect(LIST_RAW.length).toBeLessThan(90_000);
@@ -338,7 +339,7 @@ describe('listing copy', () => {
   });
   it('lists exactly the profile tools and states the profile count', () => {
     // 67 → 68 on 2026-09-29 (owner-approved): source_capacity added.
-    const tools = section('Tools \\(68, all read-only\\)').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
+    const tools = section('Tools \\(67, all read-only\\)').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
     expect(tools).toEqual(Object.keys(CLAUDE_TOOLS));
     expect(section('Long description')).toMatch(new RegExp(`\\b${Object.keys(CLAUDE_TOOLS).length} read-only tools\\b`));
   });
