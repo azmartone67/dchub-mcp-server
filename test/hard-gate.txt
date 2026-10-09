@@ -9,6 +9,7 @@ test/annotation-hints-every-surface.test.mjs
 test/anon-attribution.test.mjs
 test/anon-facility-free-fields.test.mjs
 test/anon-hard-wall.test.mjs
+test/anon-overcap-prose-leaks.test.mjs
 test/anon-seat-fence.test.mjs
 test/anon-top-tools-snapshot.test.mjs
 test/arg-aliases.test.mjs

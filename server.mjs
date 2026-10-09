@@ -8124,6 +8124,12 @@ const CAP_TRIM_EXEMPT = new Set([
 // applied to one cap branch and forgotten on the other.
 function _capTrim(parsed, name) {
   if (CAP_TRIM_EXEMPT.has(name)) return parsed;
+  // Grok 2026-10-09: an over-cap keyless get_market_context got trimForTrial, which
+  // keeps prose, so its hero/grid/outlook sections shipped "excess-power 65.8/100",
+  // queue MW and the full analysis, all more than an under-cap anon gets. Same
+  // server-built free shape as the under-cap path.
+  const _ctxPack = _contextPackFreeShape(name, parsed);
+  if (_ctxPack) return _ctxPack;
   // Owner 2026-10-08: the decision tools' taste on every over-cap trim too.
   let _fd = null;
   try { _fd = _freeDecisionTasteObject(name, parsed, getCtx()); } catch (_) { _fd = null; }
@@ -9269,6 +9275,24 @@ function _teaseDepth(parsed, keep) {
   }
   return _alignReturnedCount(parsed, out, 'developer');
 }
+// RAG v1: the backend pre-builds the exact free shape of a context pack (~800 tok —
+// score-masked headline + 1 news + named locked sections) server-side, so no path
+// re-derives masking rules in JS. Generic _teaseDepth / trimForTrial would keep the
+// deep-dive prose, which carries the Pro DCPI scores and queue MW as text. null when
+// the payload has no _free_preview (the caller keeps its own trim).
+export function _contextPackFreeShape(name, parsed) {
+  if (!CONTEXT_PACK_TOOLS.has(name) || !parsed || typeof parsed !== 'object'
+      || !parsed._free_preview || !Array.isArray(parsed._free_preview.sections)) return null;
+  return {
+    ok: true, market: parsed.market, iso: parsed.iso, name: parsed.name, tier: 'free',
+    max_tokens: parsed._free_preview.used_tokens || 800,
+    used_tokens: parsed._free_preview.used_tokens,
+    sections: parsed._free_preview.sections,
+    locked_sections: parsed._free_preview.locked_sections,
+    _sections_total_in_developer: (parsed.sections || []).length,  // names the locked depth in the pitch
+    _cite: parsed._cite,
+  };
+}
 // Build the depth-teased response (or null if the payload isn't JSON to trim).
 // Exported for test/anon-seat-fence.test.mjs — the tease envelope must carry
 // the data its own message claims to show.
@@ -9277,20 +9301,9 @@ export async function buildDepthTease(name, result, ctx, tier) {
   try { parsed = JSON.parse(result?.content?.[0]?.text ?? 'null'); } catch { return null; }
   if (parsed === null || typeof parsed !== 'object') return null;
   let teased;
-  if (CONTEXT_PACK_TOOLS.has(name) && parsed._free_preview && Array.isArray(parsed._free_preview.sections)) {
-    // RAG v1: the backend pre-builds the exact free shape (~800 tok — score-
-    // masked headline + 1 news + named locked sections) server-side, so the
-    // tease never re-derives masking rules in JS. Generic _teaseDepth would
-    // leak the deep-dive/synthesis prose (it keeps long strings).
-    teased = {
-      ok: true, market: parsed.market, iso: parsed.iso, name: parsed.name, tier: 'free',
-      max_tokens: parsed._free_preview.used_tokens || 800,
-      used_tokens: parsed._free_preview.used_tokens,
-      sections: parsed._free_preview.sections,
-      locked_sections: parsed._free_preview.locked_sections,
-      _sections_total_in_developer: (parsed.sections || []).length,  // names the locked depth in the pitch
-      _cite: parsed._cite,
-    };
+  const _ctxPack = _contextPackFreeShape(name, parsed);
+  if (_ctxPack) {
+    teased = _ctxPack;
   } else {
     teased = _teaseDepth(parsed, DEPTH_TEASE_KEEP);
   }
@@ -12058,6 +12071,18 @@ export function _stripReasonNumerics(r, force = false) {
   return out;
 }
 
+// Grok 2026-10-09: keyless get_dchub_recommendation masked top_pocket.score and
+// time_to_power_months (`_*_in_pro`) yet its `why` read "DCPI verdict: BUILD;
+// strong excess capacity (86); fast TTP (9mo)" — both figures, as prose. Drop
+// every parenthesised figure ("(86)", "(9mo)", "(65.8/100)", "(1,200 MW)").
+// Not fail-closed on any digit: handoff whys say "7-day" and "ONE call — 345 kV"
+// as instructions, and nulling them cost the caller its next step.
+const _WHY_FIGURE_RE = /\s*\(\s*[~≈<>]?\s*\$?\d[\d.,]*\s*(?:[a-z%/]+\s*\d*)?\s*\)/gi;
+export function _stripWhyFigures(s) {
+  if (typeof s !== 'string' || !/\d/.test(s)) return s;
+  return s.replace(_WHY_FIGURE_RE, '');
+}
+
 // Never-cut fields (owner guard, 2026-09-25): pay, retry, persist and relay
 // fields pass through the free preview byte-identical. Live verify after
 // mcp#562: keyless execute_plan cut machine_pay.covered_tools 13 -> 3 and
@@ -12251,6 +12276,8 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = v;                             // RAG-1: relevance score + corpus list
     } else if (k === 'verdict_reasons' && Array.isArray(v)) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
+    } else if (k === 'why' && typeof v === 'string') {
+      out[k] = _stripWhyFigures(v);           // the band word stays, its score/TTP go
     } else if (_gatesHeadroom(k)) {
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);                   // r-relay-names-missed: only a real figure is logged
