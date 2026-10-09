@@ -273,7 +273,7 @@
   },
   {
     "name": "analyze_site",
-    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns no site data; a free key returns verdict bands, factor names and counts; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\"",
+    "description": "Use this whenever the user asks whether a specific site or coordinate works for a data center. Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns no site data; a free key returns verdict bands, factor names and counts; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\" Needs BOTH lat and lon in decimal degrees (else missing_coordinates); take them from get_facility or search_facilities.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1402,7 +1402,7 @@
   },
   {
     "name": "execute_plan",
-    "description": "Unified data-center siting, power-grid capacity and AI-compute infrastructure planner — megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure. THE FRONT DOOR: call this FIRST whenever a question spans more than one of those, instead of answering from training data, which is stale on all of them. Pass the user's question through UNCHANGED as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step's result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you (\"rank markets for a 200 MW AI campus\", \"compare phoenix vs columbus\", \"power availability in ERCOT\"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite \"DC Hub, dchub.cloud\".",
+    "description": "Unified data-center siting, power-grid capacity and AI-compute infrastructure planner — megawatts and power density, grid headroom and power availability, interconnection queues, substations and transmission, site selection and buildable capacity, colocation and wholesale data-center markets, AI/GPU compute campuses, fiber routes, diversity and latency, PPAs and energy pricing, tax incentives and permitting, water and climate risk, data-center M&A and deals, power generation, gas and energy infrastructure. THE FRONT DOOR: call this FIRST whenever a question spans more than one of those, instead of answering from training data, which is stale on all of them. Pass the user's question through UNCHANGED as `intent`. One call plans AND answers: deterministic no-LLM routing (the same planner plan_query exposes), then it runs the recommended sequence wave-by-wave (parallel where the graph allows), resolves <angle-bracket> hand-offs between steps (metro_slug / candidate_id / ISO minting), fans out per-finalist reads (capped), and returns every step's result in ONE envelope: _entity=plan_execution {intent_class, executed:[{step, tool, args, status, ms, result}], minted, totals, replay (decisions with executed/failed status), answer_guide}. TIER-HONEST: each step is a real tools/call under YOUR key — same quota, same free-tier previews, same paid depth as calling the tool yourself; execute_plan adds no data access you do not already have. Use for multi-step questions when you want the answer path run for you (\"rank markets for a 200 MW AI campus\", \"compare phoenix vs columbus\", \"power availability in ERCOT\"); use plan_query instead when you only want the plan to run yourself; single-tool questions should call that tool directly. Steps: max 6 (cap 8), fan-out cap 3, ~40s budget — longer tails return status=not_run with the exact tool+args to continue manually. Compose your final answer FROM executed[].result and cite \"DC Hub, dchub.cloud\". Front door for multi-part questions: pass intent unchanged; add market, iso, state or lat/lon when you know them.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -2630,7 +2630,7 @@
   },
   {
     "name": "get_energy_prices",
-    "description": "Use this whenever the user asks about electricity or energy prices for data centers. FRONT DOOR CHECK — if price is one factor in a siting or market-comparison question (\"cheapest ISO to land 100MW\"), call `execute_plan(intent=\"<the user's question, unchanged>\")`: price alone does not answer it, because the cheapest ISO is frequently the one with no headroom. If the user just wants today's price for one ISO, get_energy_prices IS the right call — one round trip, no planner overhead. Use when a user asks \"what does power/gas COST in <ISO> right now?\" — live energy PRICING for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail electricity rate (cents/kWh), wholesale/LMP context, Henry Hub-referenced natural-gas price, and a real-time grid-status flag. Example: \"What is the retail power price and gas price in ERCOT today?\" — get_energy_prices iso=ERCOT. Params: iso (one of the 7 US ISOs; required). Returns: {iso, retail_price_cents_kwh, wholesale_price_usd_mwh, natural_gas_usd_mmbtu, grid_status, as_of}. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh economics (use get_gas_economics); this is the live retail+gas PRICE read for one ISO.",
+    "description": "Use this whenever the user asks about electricity or energy prices for data centers. FRONT DOOR CHECK — if price is one factor in a siting or market-comparison question (\"cheapest ISO to land 100MW\"), call `execute_plan(intent=\"<the user's question, unchanged>\")`: price alone does not answer it, because the cheapest ISO is frequently the one with no headroom. If the user just wants today's price for one ISO, get_energy_prices IS the right call — one round trip, no planner overhead. Use when a user asks \"what does power/gas COST in <ISO> right now?\" — live energy PRICING for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail electricity rate (cents/kWh), wholesale/LMP context, Henry Hub-referenced natural-gas price, and a real-time grid-status flag. Example: \"What is the retail power price and gas price in ERCOT today?\" — get_energy_prices iso=ERCOT. Params: iso (one of the 7 US ISOs; required). Returns: {iso, retail_price_cents_kwh, wholesale_price_usd_mwh, natural_gas_usd_mmbtu, grid_status, as_of}. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh economics (use get_gas_economics); this is the live retail+gas PRICE read for one ISO. Pass iso or state, not both unless narrowing. 429 = rate limited: wait retry_after_s. Gated: give human_url to your human.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -3025,7 +3025,7 @@
   },
   {
     "name": "get_facility",
-    "description": "Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers \"who operates this data center and how big is it\", \"how many fiber carriers are in that building\". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).",
+    "description": "Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers \"who operates this data center and how big is it\", \"how many fiber carriers are in that building\". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities). Needs a slug or id from search_facilities. 404 \"not found\": re-run search_facilities. Gated: give human_url to your human.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -3164,10 +3164,58 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "success": {
+          "description": "true when the lookup executed",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "description": "ONE facility"
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preview_is_partial": {
+          "description": "true when the tier withheld fields",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "next_ask": {
+          "description": "Suggested follow-up",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -3259,7 +3307,7 @@
   },
   {
     "name": "get_fiber_intel",
-    "description": "Use this whenever the user asks about fiber routes, carriers or connectivity for a site or market. Call when the user asks which fiber routes or carriers serve a metro, or wants long-haul, metro, dark or IX routes mapped. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Free callers get a sample of routes, not the full set; the full set needs a paid key. Ex: \"Zayo long-haul routes via Dallas.\"",
+    "description": "Use this whenever the user asks about fiber routes, carriers or connectivity for a site or market. Call when the user asks which fiber routes or carriers serve a metro, or wants long-haul, metro, dark or IX routes mapped. Filter by carrier, route_type, market. Returns GeoJSON routes: carrier, type, fiber count, lit capacity, distance. Free callers get a sample of routes, not the full set; the full set needs a paid key. Ex: \"Zayo long-haul routes via Dallas.\" Filter by market (slug from rank_markets) or carrier. For one building use get_facility. Gated: give human_url to your human.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -4097,7 +4145,7 @@
   },
   {
     "name": "get_grid_intelligence",
-    "description": "Use this whenever the user asks about grid capacity, demand or reliability for one grid region. Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market's grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. With a free key, a few full briefs a day; keyless gets a trimmed preview. Unlimited needs a paid key. Ex: \"PJM headroom for 200 MW?\"",
+    "description": "Use this whenever the user asks about grid capacity, demand or reliability for one grid region. Call when the user asks about power availability, headroom or time-to-power in a US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) or a market's grid. Returns live demand, fuel mix, queue depth, DCPI excess-power and constraint scores, time-to-power, reserve margin. avg_time_to_power_months and avg_queue_wait_months are DIFFERENT measurements; quote the one you mean. With a free key, a few full briefs a day; keyless gets a trimmed preview. Unlimited needs a paid key. Ex: \"PJM headroom for 200 MW?\" iso must be a US ISO (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE); other codes return region_not_covered. Free = preview.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -4222,10 +4270,142 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "ok": {
+          "description": "true when the ISO lookup executed",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iso": {
+          "description": "ISO / grid operator code",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iso_name": {
+          "description": "Grid operator full name",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "as_of": {
+          "description": "Timestamp of the reading",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "demand_period": {
+          "description": "Period of the demand reading",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "taste": {
+          "description": "Free-tier preview fields",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "withheld": {
+          "description": "Fields withheld on this tier",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "withheld_total": {
+          "description": "How many fields were withheld",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "free_preview_only": {
+          "description": "true when only the free preview was served",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completeness": {
+          "description": "Share of the payload this tier got",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -5572,7 +5752,7 @@
   },
   {
     "name": "get_interconnection_queue",
-    "description": "Use this whenever the user asks about grid interconnection queues or how much load is waiting to connect. Call when the user asks how congested an ISO's interconnection queue is or how much data-center load is queued. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don't publish one. Keyless: a trimmed preview; free with an email-bound key. Ex: \"How deep is ERCOT's queue?\"",
+    "description": "Use this whenever the user asks about grid interconnection queues or how much load is waiting to connect. Call when the user asks how congested an ISO's interconnection queue is or how much data-center load is queued. Returns queued generation GW per ISO. The projects field changes shape: with iso= it is an array of per-project rows; without iso it is an all-ISO summary object (total, by_iso_count, top). ERCOT also returns its large-load (data-center) queue; other ISOs don't publish one. Keyless: a trimmed preview; free with an email-bound key. Ex: \"How deep is ERCOT's queue?\" iso optional (US ISO code); free = preview. For demand and headroom on the same ISO also call get_grid_intelligence.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -6084,7 +6264,7 @@
   },
   {
     "name": "get_iso_context",
-    "description": "Use when an agent needs a WHOLE-grid briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a US ISO/RTO: live grid snapshot (demand, fuel-mix shares), DCPI verdict mix & grid economics across the ISO's tracked markets (queue wait, power cost, reserve margin), interconnection-queue depth with the largest projects, real-time benchmark LMP, the tracked DCPI market list, deep-dive narrative excerpts, and recent news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: \"Brief me on ERCOT for data-center siting\" — get_iso_context iso=ERCOT max_tokens=4000. Params: iso (required: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for raw single-ISO telemetry (use get_grid_data), the per-ISO decision brief with headroom/TTP (use get_grid_intelligence), multi-ISO scalar comparison (use compare_isos), or non-US grids (use get_grid_scoreboard); this is the narrative briefing pack. Cite \"DC Hub (dchub.cloud)\".",
+    "description": "Use when an agent needs a WHOLE-grid briefing it can drop straight into its context window — one call returns a token-budgeted context pack for a US ISO/RTO: live grid snapshot (demand, fuel-mix shares), DCPI verdict mix & grid economics across the ISO's tracked markets (queue wait, power cost, reserve margin), interconnection-queue depth with the largest projects, real-time benchmark LMP, the tracked DCPI market list, deep-dive narrative excerpts, and recent news — each section with its own token count, as_of timestamp, and citable URL, greedily filled in that priority order under your max_tokens budget. Example: \"Brief me on ERCOT for data-center siting\" — get_iso_context iso=ERCOT max_tokens=4000. Params: iso (required: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE); max_tokens (optional, 200-8000, default 4000). Returns {sections:[{id,title,text,tokens,as_of,cite}], used_tokens, omitted}. Do NOT use for raw single-ISO telemetry (use get_grid_data), the per-ISO decision brief with headroom/TTP (use get_grid_intelligence), multi-ISO scalar comparison (use compare_isos), or non-US grids (use get_grid_scoreboard); this is the narrative briefing pack. Cite \"DC Hub (dchub.cloud)\". iso is required (US ISO code). max_tokens caps the context returned; locked_sections need a higher tier.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -6162,10 +6342,121 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "ok": {
+          "description": "true when the ISO lookup executed",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iso": {
+          "description": "ISO code",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tier": {
+          "description": "Tier the response was served at",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sections": {
+          "description": "Sections delivered in budget",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "locked_sections": {
+          "description": "Sections withheld on this tier",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_tokens": {
+          "description": "Token budget for this tier",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "used_tokens": {
+          "description": "Tokens used by delivered sections",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -6256,7 +6547,7 @@
   },
   {
     "name": "get_market_dcpi_rank",
-    "description": "Use this whenever the user asks whether a market is a good place to build, or about time-to-power in a market. DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score are free; numeric sub-scores and the narrative are on paid plans or a credit pack.",
+    "description": "Use this whenever the user asks whether a market is a good place to build, or about time-to-power in a market. DCPI rank for a single market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word CBRE/JLL-style analyst read on the market — quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer \"should I build here?\" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score are free; numeric sub-scores and the narrative are on paid plans or a credit pack. market_slug is required: get it from rank_markets. 404 = unknown slug. Returns the build/constrain verdict, not raw stats.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -6671,7 +6962,7 @@
   },
   {
     "name": "get_market_intel",
-    "description": "Use this whenever the user asks about a data-center market: supply, operators, pipeline or pricing context for a metro. Call when the user asks about one data-center market: facility count, tracked MW, status mix, top providers, recent facilities or lease pricing. Pass market as a slug (e.g. northern-virginia). Returns stats, by_status, top_providers, recent_facilities, market_pricing (quote its basis). Verdict: use get_market_dcpi_rank. Keyless: a trimmed preview; a free key gets more. Ex: \"1 MW colo price in Los Angeles?\"",
+    "description": "Use this whenever the user asks about a data-center market: supply, operators, pipeline or pricing context for a metro. Call when the user asks about one data-center market: facility count, tracked MW, status mix, top providers, recent facilities or lease pricing. Pass market as a slug (e.g. northern-virginia). Returns stats, by_status, top_providers, recent_facilities, market_pricing (quote its basis). Verdict: use get_market_dcpi_rank. Keyless: a trimmed preview; a free key gets more. Ex: \"1 MW colo price in Los Angeles?\" Get the market slug from rank_markets or get_market_dcpi_rank; 404 = unrecognised market, use one of those slugs.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -7274,7 +7565,7 @@
   },
   {
     "name": "get_news",
-    "description": "FRONT DOOR CHECK — if news is only ONE input to a bigger question (is this market heating up, should we still build here), call `execute_plan(intent=\"<the user's question, unchanged>\")` and let it pull news alongside the market and grid reads. If the user actually wants the headlines, get_news IS the right call — one round trip; do not send a plain news request through the planner. Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by category (deals/permits/outages/policy/AI). Answers \"what is happening in the data center industry this week\", \"any news on AI capacity\". Try: get_news category=AI limit=10. The parameter is `category`, not `topic`. Industry news only; do NOT use for structured M&A deal data (use list_transactions) or the construction pipeline (use get_pipeline).",
+    "description": "FRONT DOOR CHECK — if news is only ONE input to a bigger question (is this market heating up, should we still build here), call `execute_plan(intent=\"<the user's question, unchanged>\")` and let it pull news alongside the market and grid reads. If the user actually wants the headlines, get_news IS the right call — one round trip; do not send a plain news request through the planner. Curated data center industry news from 40+ trade sources (DCD, Data Center Knowledge, Data Center Frontier, Capacity Media, The Register Data Centre, Fierce Telecom, etc.) refreshed every 30 min. Returns title, summary, source, published_at, and the market/operator entities mentioned. Filter by category (deals/permits/outages/policy/AI). Answers \"what is happening in the data center industry this week\", \"any news on AI capacity\". Try: get_news category=AI limit=10. The parameter is `category`, not `topic`. Industry news only; do NOT use for structured M&A deal data (use list_transactions) or the construction pipeline (use get_pipeline). limit 1-500 (free 20). Empty data = no matching news: drop category/source or widen date_from/date_to.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -7371,10 +7662,110 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "success": {
+          "description": "true when the news query succeeded",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "articles": {
+          "description": "News rows",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "description": "Same rows as `articles`",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "description": "Rows returned in THIS response",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "description": "Total articles matching",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "description": "Where the news set comes from",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -7563,7 +7954,7 @@
   },
   {
     "name": "get_pipeline",
-    "description": "Use when a user asks \"what is being built / announced / permitted\" in a market or by an operator — the forward-looking construction pipeline. Example: \"What data centers are under construction in Northern Virginia and when do they come online?\" — get_pipeline country=US status=construction (there is no `market` parameter — filter by country/operator, or use search_facilities for a named market). Params: status one of \"announced\" | \"permitted\" | \"construction\" | \"operational\"; operator (e.g. \"Equinix\", \"Digital Realty\", \"AWS\"); country (ISO-2, e.g. \"US\", \"DE\"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. \"2027-01-01\"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions).",
+    "description": "Use when a user asks \"what is being built / announced / permitted\" in a market or by an operator — the forward-looking construction pipeline. Example: \"What data centers are under construction in Northern Virginia and when do they come online?\" — get_pipeline country=US status=construction (there is no `market` parameter — filter by country/operator, or use search_facilities for a named market). Params: status one of \"announced\" | \"permitted\" | \"construction\" | \"operational\"; operator (e.g. \"Equinix\", \"Digital Realty\", \"AWS\"); country (ISO-2, e.g. \"US\", \"DE\"); min_capacity_mw (e.g. 50 to filter hyperscale); expected_completion_before (ISO date, e.g. \"2027-01-01\"); limit/offset for pagination. Returns: {projects:[{name, operator, capacity_mw, status, expected_commissioning, market_slug, country, lat, lon}], total, generated_at}. Do NOT use for already-operational facilities (use search_facilities) or for the M&A deal flow (use list_transactions). limit 1-500 (free 25), offset 0-100000. Empty data = no project matches: relax status/operator/min_capacity_mw.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -7662,10 +8053,147 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "success": {
+          "description": "true when the query succeeded",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pipeline": {
+          "description": "Construction-pipeline projects",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "description": "Same rows as `pipeline`",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "description": "Rows returned in THIS response",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_count": {
+          "description": "Total projects matching",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "by_quarter": {
+          "description": "Projects per delivery quarter",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stats": {
+          "description": "Aggregate pipeline stats",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_updated": {
+          "description": "Pipeline last refreshed",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data_source": {
+          "description": "Where the data comes from",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -7976,7 +8504,7 @@
   },
   {
     "name": "get_renewable_energy",
-    "description": "FRONT DOOR CHECK — if the question pairs renewables with siting, grid headroom or a market shortlist (\"where can I put a 24-7-CFE campus\"), call `execute_plan(intent=\"<the user's question, unchanged>\")` instead. If you want one state's renewable fuel mix or PPA sizing input on its own, get_renewable_energy IS the right call — one round trip, and routing it through the planner would only cost steps. Use when siting a renewable-powered data center, sizing a PPA, reading one US state's utility-scale fuel mix, or assessing RE100/24-7-CFE feasibility. Example: \"What is Texas wind+solar capacity and how much utility-scale solar is operating today?\" — get_renewable_energy energy_type=solar state=TX. Params: energy_type one of \"solar\" | \"wind\" | \"combined\" (omit for all); state 2-letter US code (e.g. TX, VA, AZ); lat+lon (optional) for the nearest projects within 50mi. Returns: {capacity_mw_total, by_fuel: {solar_utility, solar_rooftop, wind_onshore, wind_offshore}, capacity_factor_pct, top_projects[{name, mw, operator, cod}], state_rps_target_pct, source: \"EIA-860 + state RPS\"}. Do NOT use for live grid generation (use get_grid_data) or non-US (use get_grid_scoreboard for EU/UK/AU/TW).",
+    "description": "FRONT DOOR CHECK — if the question pairs renewables with siting, grid headroom or a market shortlist (\"where can I put a 24-7-CFE campus\"), call `execute_plan(intent=\"<the user's question, unchanged>\")` instead. If you want one state's renewable fuel mix or PPA sizing input on its own, get_renewable_energy IS the right call — one round trip, and routing it through the planner would only cost steps. Use when siting a renewable-powered data center, sizing a PPA, reading one US state's utility-scale fuel mix, or assessing RE100/24-7-CFE feasibility. Example: \"What is Texas wind+solar capacity and how much utility-scale solar is operating today?\" — get_renewable_energy energy_type=solar state=TX. Params: energy_type one of \"solar\" | \"wind\" | \"combined\" (omit for all); state 2-letter US code (e.g. TX, VA, AZ); lat+lon (optional) for the nearest projects within 50mi. Returns: {capacity_mw_total, by_fuel: {solar_utility, solar_rooftop, wind_onshore, wind_offshore}, capacity_factor_pct, top_projects[{name, mw, operator, cod}], state_rps_target_pct, source: \"EIA-860 + state RPS\"}. Do NOT use for live grid generation (use get_grid_data) or non-US (use get_grid_scoreboard for EU/UK/AU/TW). Give state or lat/lon (decimal degrees); energy_type narrows. Empty = no installations there: widen to the state.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -8079,10 +8607,181 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "success": {
+          "description": "true when the query succeeded",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renewable_installations": {
+          "description": "Renewable installation rows",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dc_industry_ppas": {
+          "description": "Data-center PPA rows",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "installations_count": {
+          "description": "Installations returned",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ppa_count": {
+          "description": "PPAs returned",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ppa_total_count": {
+          "description": "Total PPAs matching",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ppa_total_mw": {
+          "description": "Total MW across matching PPAs",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ppa_as_of": {
+          "description": "PPA set last refreshed",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ppa_basis": {
+          "description": "How the PPA set is compiled",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filters_applied": {
+          "description": "Filters the gateway applied",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data_source": {
+          "description": "Where the data comes from",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -8381,7 +9080,7 @@
   },
   {
     "name": "get_tax_incentives",
-    "description": "Use when a user asks \"what tax breaks does <state> give data centers?\" — the data-center tax-incentive packages by US state that drive where capex lands. Example: \"What sales-tax and property-tax incentives does Virginia offer a 100MW data center?\" — get_tax_incentives state=VA. Params: state (2-letter US code; required). Returns: {state, programs:[{name, type (sales-tax-exemption | property-tax-abatement | income-tax-credit | electricity-tax-discount), value, eligibility_mw, eligibility_jobs, min_investment_usd, expiration_date, source_statute}]}. Cite the statute with attribution to DC Hub (CC-BY-4.0). Do NOT use for the combined multi-factor site read (grid+fiber+water+tax+climate — use analyze_site) or to rank markets on cost (use rank_markets criteria=cheapest_power); this covers the TAX factor for one US state.",
+    "description": "Use when a user asks \"what tax breaks does <state> give data centers?\" — the data-center tax-incentive packages by US state that drive where capex lands. Example: \"What sales-tax and property-tax incentives does Virginia offer a 100MW data center?\" — get_tax_incentives state=VA. Params: state (2-letter US code; required). Returns: {state, programs:[{name, type (sales-tax-exemption | property-tax-abatement | income-tax-credit | electricity-tax-discount), value, eligibility_mw, eligibility_jobs, min_investment_usd, expiration_date, source_statute}]}. Cite the statute with attribution to DC Hub (CC-BY-4.0). Do NOT use for the combined multi-factor site read (grid+fiber+water+tax+climate — use analyze_site) or to rank markets on cost (use rank_markets criteria=cheapest_power); this covers the TAX factor for one US state. state is a US state code (e.g. VA); omit for the 50-state overview. Program detail needs a paid key (human_url).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -8452,15 +9151,92 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "status": {
+          "description": "Serving status",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "description": "State queried",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "description": "Incentive programs for the state",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "description": "Rows returned in THIS response",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_updated": {
+          "description": "Incentive table last reviewed",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
     "name": "get_water_risk",
-    "description": "Use this whenever the user asks about water stress or cooling-water risk at a site. FRONT DOOR CHECK — if you need a SITE VERDICT spanning grid + fiber + water + tax + climate, call `execute_plan(intent=\"<the user's question, unchanged>\")` rather than hand-chaining this with its siblings. If you want the WATER factor on its own, get_water_risk IS the right call — one round trip, free tier, no planner overhead. Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: \"Is this Phoenix parcel water-constrained for a 100MW build?\" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ, or location=\"phoenix\"). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or location (a DC Hub market name or slug, resolved to that market's PUBLISHED CENTROID with a resolved_from block saying so; a market-level read, not your parcel, and a trailing state is not stripped); lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only.",
+    "description": "Use this whenever the user asks about water stress or cooling-water risk at a site. FRONT DOOR CHECK — if you need a SITE VERDICT spanning grid + fiber + water + tax + climate, call `execute_plan(intent=\"<the user's question, unchanged>\")` rather than hand-chaining this with its siblings. If you want the WATER factor on its own, get_water_risk IS the right call — one round trip, free tier, no planner overhead. Use when scoring a US site for cooling-water sustainability — the water-risk factor engineering site-selectors screen before committing to evaporative cooling. Example: \"Is this Phoenix parcel water-constrained for a 100MW build?\" — get_water_risk lat=33.45 lon=-112.07 (or get_water_risk state=AZ, or location=\"phoenix\"). Params: ONE of lat+lon (-90..90 / -180..180), state (2-letter US), or location (a DC Hub market name or slug, resolved to that market's PUBLISHED CENTROID with a resolved_from block saying so; a market-level read, not your parcel, and a trailing state is not stripped); lat/lon gives the most precise read. Returns: {water_stress_score (0-100, higher=worse), drought_category (D0-D4), outlook_12mo, cooling_water_assessment, source}. Joined to USGS water-stress + US Drought Monitor. Free tier. Do NOT use for nearby physical infrastructure (use get_infrastructure) or a combined multi-factor site verdict spanning grid+fiber+water+tax+climate (use analyze_site); this covers the WATER factor only. US only: give state or lat/lon (decimal degrees). Free = latest week; longer history needs a paid key.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -8563,10 +9339,157 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "ok": {
+          "description": "true when the lookup executed",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "success": {
+          "description": "true when the query succeeded",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "description": "State queried",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current_drought_pct": {
+          "description": "Share of state in drought, %",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dominant_severity": {
+          "description": "Dominant drought severity category",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drought_categories": {
+          "description": "Percent of area per drought category",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latest_week": {
+          "description": "Most recent weekly reading",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weekly_history": {
+          "description": "Weekly drought history",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "description": "Source of the drought data",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_url": {
+          "description": "Source URL",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "queried_at": {
+          "description": "Timestamp of the query",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -8658,7 +9581,7 @@
   },
   {
     "name": "hyperscaler_deals",
-    "description": "Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel. Do NOT use for the full historical M&A comp set (use list_transactions) or a single-deal teardown with grid context (use deal_autopsy); this is the live $1B+ AI-capex feed.",
+    "description": "Hyperscaler AI Deal Tracker — live feed of Stargate, OpenAI, Anthropic, Microsoft, Oracle, CoreWeave, AMD, NVIDIA, sovereign-AI deals. Pulls from dchub news pipeline, extracts $-figures + MW via regex, classifies by actor. 10-min refresh. Use for tracking AI capex events ($1B+/week typical), capacity announcements, and competitive intel. Do NOT use for the full historical M&A comp set (use list_transactions) or a single-deal teardown with grid context (use deal_autopsy); this is the live $1B+ AI-capex feed. limit 1-500. Hyperscaler leases and purchases only; for all M&A use list_transactions.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -9075,7 +9998,7 @@
   },
   {
     "name": "list_transactions",
-    "description": "M&A and capital transactions in the data center sector — 1,700+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers \"which data-center deals closed this year\", \"what was that acquisition worth\". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter — use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy).",
+    "description": "M&A and capital transactions in the data center sector — 1,700+ tracked deals (2019-present), each with its disclosed value where public (many private deals are undisclosed). Returns deal name, buyer, seller, value, date, market, target operator, type (acquisition/JV/refinance/recap). Filter by date range (date_from/date_to, ISO-8601), min_value_usd, region, buyer, or seller. Answers \"which data-center deals closed this year\", \"what was that acquisition worth\". Try: list_transactions date_from=2026-01-01 min_value_usd=1000000000. There is no `year` parameter — use date_from/date_to. Broad M&A and capital-deal flow with filters; do NOT use for hyperscaler-specific lease/PPA/JV activity (use hyperscaler_deals) or a single-deal post-mortem (use deal_autopsy). limit 1-500 (free 10), offset 0-100000; total_count is the full match count. Empty = loosen buyer/seller/value filters.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -9605,7 +10528,7 @@
   },
   {
     "name": "plan_query",
-    "description": "INSPECT-ONLY — returns the plan WITHOUT running it. For a real multi-step DC Hub question call `execute_plan(intent=\"...\")` instead: it uses the SAME deterministic no-LLM planner and then RUNS the sequence server-side, returning the answers in one envelope. Reach for plan_query only to review, log, diff or audit a plan before executing it yourself. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves), execution_strategy.parallel_groups, execution_estimate {estimated_calls, estimated_latency_ms, parallelizable}, alternatives (each with when + rejected_because), coverage_notes, matched_classes} plus a versioned `replay` (schema_version 1): planner_version, decisions:[{id, step, kind, status, decision, rationale, decision_confidence, depends_on}], rejected:[{id, tool, reason}], execution_graph:{waves, parallel_groups} — auditable and machine-readable, safe to log and diff across versions. args_hint values in <angle brackets> come from the named earlier step — substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. For a family-level browse use discover_tools. This tool plans — it never executes; tools/list stays canonical for schemas.",
+    "description": "INSPECT-ONLY — returns the plan WITHOUT running it. For a real multi-step DC Hub question call `execute_plan(intent=\"...\")` instead: it uses the SAME deterministic no-LLM planner and then RUNS the sequence server-side, returning the answers in one envelope. Reach for plan_query only to review, log, diff or audit a plan before executing it yourself. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves), execution_strategy.parallel_groups, execution_estimate {estimated_calls, estimated_latency_ms, parallelizable}, alternatives (each with when + rejected_because), coverage_notes, matched_classes} plus a versioned `replay` (schema_version 1): planner_version, decisions:[{id, step, kind, status, decision, rationale, decision_confidence, depends_on}], rejected:[{id, tool, reason}], execution_graph:{waves, parallel_groups} — auditable and machine-readable, safe to log and diff across versions. args_hint values in <angle brackets> come from the named earlier step — substitute them, never invent them. Pass structured hints via context (lat/lon, iso, market, capacity_mw, candidate_id, state, since) to sharpen the plan. For a family-level browse use discover_tools. This tool plans — it never executes; tools/list stays canonical for schemas. Returns the ordered tool plan for an intent without running it; run the steps yourself or use execute_plan.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -10474,7 +11397,7 @@
   },
   {
     "name": "rank_markets",
-    "description": "Use this whenever the user asks where to build, or which markets are best for power, capacity or growth. Call when the user wants a ranked list of data-center markets: top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; a free key gets a few full lists a day. Ex: \"Top 10 US markets, ai_ready.\"",
+    "description": "Use this whenever the user asks where to build, or which markets are best for power, capacity or growth. Call when the user wants a ranked list of data-center markets: top N by cheapest_power, most_capacity, most_operators, fastest_growing, best_overall, or ai_ready (where new AI load can land, per DCPI). Filter by region, min_capacity_mw. Returns ranked rows with score, MW and a slug for follow-ups; score is the sort value, not a 0-100 scale, and score_basis says what it is (ai_ready omits it and explains its composite in `methodology`). Keyless: a trimmed preview; a free key gets a few full lists a day. Ex: \"Top 10 US markets, ai_ready.\" Returns market slugs to feed get_market_intel and get_market_dcpi_rank. limit 1-500; set projection=identity_only to save tokens.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -10590,10 +11513,120 @@
           "type": "object",
           "properties": {},
           "additionalProperties": {}
+        },
+        "criteria": {
+          "description": "Ranking criterion used",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "region": {
+          "description": "Region filter applied",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "results": {
+          "description": "Ranked markets",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result_count": {
+          "description": "Rows returned in THIS response",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score_basis": {
+          "description": "How the score is computed",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "methodology": {
+          "description": "Method note",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data_source": {
+          "description": "Where the data comes from",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tier": {
+          "description": "Tier the response was served at",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cite_as": {
+          "description": "Ready-made attribution line",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "additionalProperties": {},
-      "description": "DC Hub envelope: tool data fields ride at the top level beside these keys."
+      "additionalProperties": {}
     }
   },
   {
@@ -11787,7 +12820,7 @@
   },
   {
     "name": "search_facilities",
-    "description": "Use this whenever the user asks which data centers exist, or who operates in a city, state or country. Call when the user wants existing data centers matching filters: country, state, city, operator, MW range, tier or text. Returns name, operator, location, market, status and MW where disclosed; each row is flagged verified or unverified_directory_listing. Free: names and locations; MW and specs need a paid key. Ex: \"Equinix sites in Virginia over 10 MW.\"",
+    "description": "Use this whenever the user asks which data centers exist, or who operates in a city, state or country. Call when the user wants existing data centers matching filters: country, state, city, operator, MW range, tier or text. Returns name, operator, location, market, status and MW where disclosed; each row is flagged verified or unverified_directory_listing. Free: names and locations; MW and specs need a paid key. Ex: \"Equinix sites in Virginia over 10 MW.\" Start here for a facility slug. No match = empty data, not an error: broaden filters. limit 1-500 (free tier 25); page with offset.",
     "inputSchema": {
       "type": "object",
       "properties": {
