@@ -1191,6 +1191,65 @@ if (facts) {
   }
 }
 
+// ---- registered tool count vs EVERY manifest description (Grok A6c, 2026-10-08) ---------
+// The "N tools" loop above heals the PROSE forms it knows ("94 tools", "94 MCP tools", the
+// shields badge, "Tools exposed: 94") in the files it lists. It does not look at:
+//   * the hyphenated adjective form  "a 94-tool server"  (a space-only pattern cannot see it),
+//   * numeric COUNT FIELDS (`tools_count`, `tool_count`, `toolCount`) in the manifests,
+//   * the length of mcp-server.json's own tools[] (a hand edit can leave tools_count right and
+//     the array short),
+//   * every string in server.json / glama.json / smithery.yaml, which are the descriptions the
+//     registries (official MCP registry, Glama, Smithery) copy verbatim.
+// Check-only on purpose (like the facts block): the writers above own the heals. A count that is
+// wrong here is a PROBLEM, never a no-op, and a surface that holds no count claim at all is fine
+// (glama.json cannot hold a description) -- but a surface that cannot be parsed is a problem too.
+{
+  const claims = (text) => {
+    const out = [];
+    for (const m of text.matchAll(/\b(\d+)(?:[ -](?:live|MCP|read-only))*[ -]tools?\b/g)) out.push([Number(m[1]), m[0]]);
+    for (const m of text.matchAll(/\btools?[_ ]?count"?\s*[:=]\s*(\d+)/gi)) out.push([Number(m[1]), m[0]]);
+    return out.filter(([n]) => n > 20);   // same floor as the loop above: small unrelated numbers
+  };
+  const strings = (v, acc = []) => {
+    if (typeof v === 'string') acc.push(v);
+    else if (Array.isArray(v)) v.forEach((x) => strings(x, acc));
+    else if (v && typeof v === 'object') Object.values(v).forEach((x) => strings(x, acc));
+    return acc;
+  };
+  const judge = (label, text) => {
+    for (const [n, shown] of claims(text)) {
+      if (n !== COUNT) problems.push(`${label}: "${shown}" != ${COUNT} registered tools`);
+    }
+  };
+  // mcp-server.json: array length, count field, and every top-level scalar string (tools[] is
+  // DERIVED from server.mjs and checked name-by-name above; its per-tool prose is not a count claim).
+  {
+    const m = readJSON('mcp-server.json');
+    if (!Array.isArray(m.tools)) problems.push('mcp-server.json: tools[] missing -- the crawled surface is unverifiable');
+    else if (m.tools.length !== COUNT) problems.push(`mcp-server.json: tools[] has ${m.tools.length} entries != ${COUNT} registered tools`);
+    for (const k of ['tools_count', 'tool_count', 'toolCount']) {
+      if (k in m && m[k] !== COUNT) problems.push(`mcp-server.json: ${k} ${m[k]} != ${COUNT} registered tools`);
+    }
+    for (const [k, v] of Object.entries(m)) if (k !== 'tools') strings(v).forEach((t) => judge(`mcp-server.json .${k}`, t));
+  }
+  // server.json / glama.json: every string in the file, and any tools[] / count field it carries.
+  for (const f of ['server.json', 'glama.json']) {
+    let j;
+    try { j = readJSON(f); } catch (e) { problems.push(`${f}: invalid JSON -- ${e.message}`); continue; }
+    if (Array.isArray(j.tools) && j.tools.length !== COUNT) problems.push(`${f}: tools[] has ${j.tools.length} entries != ${COUNT} registered tools`);
+    strings(j).forEach((t) => judge(f, t));
+    JSON.stringify(j, (k, v) => { if (/^tools?_?count$/i.test(k) && typeof v === 'number' && v !== COUNT) problems.push(`${f}: ${k} ${v} != ${COUNT} registered tools`); return v; });
+  }
+  // smithery.yaml: the `description:` value is what the listing shows. Header COMMENTS are not
+  // scanned here -- line 5 is a dated history note ("71-tool / v2.4.4") that must stay true.
+  {
+    const sy = readCur('smithery.yaml');
+    const d = sy.match(/^description:\s*(.+)$/m);
+    if (!d) problems.push('smithery.yaml: no top-level `description:` -- the listing copy is unverifiable');
+    else judge('smithery.yaml description', d[1]);
+  }
+}
+
 // ---- apply / report --------------------------------------------------------
 // Printed in BOTH modes: a floor inside tolerance passes, but it must say so.
 for (const w of warnings) console.log(ghWarning(w));
