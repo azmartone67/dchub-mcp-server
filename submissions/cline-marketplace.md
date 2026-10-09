@@ -1,5 +1,7 @@
 # Cline Marketplace submission
 
+> **History. Do not paste.** This file records what was submitted and when. Current listing copy is generated from canon: `canonical/listing.json` (source: https://dchub.cloud/api/v1/canon/listing).
+
 **Target:** https://github.com/cline/mcp-marketplace. Submissions are a GitHub
 **issue** from the `mcp-server-submission.yml` template, not a PR. The template
 asks for three things: the repo URL, a 400×400 PNG logo, and two confirmations

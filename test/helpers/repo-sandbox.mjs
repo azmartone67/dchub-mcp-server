@@ -105,6 +105,10 @@ export function createRepoSandbox(repoRoot, label = 'dchub-canon') {
                         // dies on ERR_MODULE_NOT_FOUND instead of on the drift it catches.
                         'scripts/registry-description.mjs',
                         'canonical/registry-description-template.json',
+                        // ★2026-10-09: the listing-from-canon module and its snapshot
+                        // (sync-tools-manifest imports/reads them). Same failure mode.
+                        'scripts/listing-canon.mjs',
+                        'canonical/listing.json',
                         // The shipped bundle the dchub.dxt guard compares against.
                         'dchub.dxt',
                         // ★2026-08-30: the release-asset guard and the workflow it runs

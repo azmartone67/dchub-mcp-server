@@ -22,6 +22,7 @@ import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
 import { registryRemotes } from '../lib/registry-remotes.mjs';
 import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
+import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, CONTEXT7_PATH } from './listing-canon.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1307,6 +1308,39 @@ if (facts) {
     const d = sy.match(/^description:\s*(.+)$/m);
     if (!d) problems.push('smithery.yaml: no top-level `description:` -- the listing copy is unverifiable');
     else judge('smithery.yaml description', d[1]);
+  }
+}
+
+// ---- listing block from canon (Grok publish-from-canon, item 2, 2026-10-09) --------------
+// canonical/listing.json is the committed snapshot of /api/v1/canon/listing. Files that are
+// GENERATED from it (context7.json, the do-not-paste header on submissions/*.md) are healed by
+// --fix; every other manifest is only CHECKED for agreement with its tool count. Offline.
+{
+  let L = null;
+  try { L = readJSON(LISTING_PATH); } catch (e) { problems.push(`${LISTING_PATH}: ${e.message}`); }
+  if (L && L.tool_count !== COUNT && FIX) {
+    // server.mjs moved ahead of the snapshot: heal the count like every other derived surface.
+    L = healListingCount(L, COUNT);
+    pend(LISTING_PATH, JSON.stringify(L, null, 2) + '\n');
+  }
+  if (L) {
+    for (const b of listingProblems(L)) problems.push(`${LISTING_PATH}: ${b}`);
+    if (L.tool_count !== COUNT) problems.push(`${LISTING_PATH}: tool_count ${L.tool_count} != ${COUNT} registered tools`);
+    const cur = (() => { try { return readCur(CONTEXT7_PATH); } catch { return null; } })();
+    const c7 = context7Problems(cur, L);
+    if (c7.length) { if (FIX) pend(CONTEXT7_PATH, renderContext7(L)); else c7.forEach((b) => problems.push(b)); }
+    for (const f of ['gemini-extension.json', '.cursor-plugin/plugin.json', 'dxt/manifest.json', 'kiro-power/plugin.json']) {
+      let t; try { t = readCur(f); } catch { problems.push(`${f}: unreadable`); continue; }
+      if (FIX && countClaimProblems(f, t, L.tool_count).length) { t = healCountClaims(t, L.tool_count); pend(f, t); }
+      countClaimProblems(f, t, L.tool_count).forEach((b) => problems.push(b));
+    }
+    for (const f of fs.readdirSync(path.join(ROOT, 'submissions')).filter((n) => n.endsWith('.md'))) {
+      const rel = `submissions/${f}`;
+      const t = readCur(rel);
+      if (t.includes(SUBMISSION_HEADER)) continue;
+      if (FIX) pend(rel, withSubmissionHeader(t));
+      else problems.push(`${rel}: missing the "History. Do not paste." header`);
+    }
   }
 }
 

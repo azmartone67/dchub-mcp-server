@@ -1,0 +1,13 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "DC Hub Intelligence",
+  "description": "Live data center, power grid and interconnection intelligence for AI agents. 94 MCP tools, cited answers, remote endpoint at dchub.cloud/mcp.",
+  "excludeFolders": [
+    "test",
+    "submissions",
+    "node_modules",
+    "sdk",
+    "integrations"
+  ],
+  "rules": []
+}

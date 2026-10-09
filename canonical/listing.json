@@ -1,0 +1,22 @@
+{
+  "_comment": "Committed snapshot of GET https://dchub.cloud/api/v1/canon/listing (dchub-backend routes/canon_v1.py). Written by scripts/refresh-listing.mjs; the sync check reads this file offline. Seeded 2026-10-09 from Grok's refresh-oct9 listing-copy.md until the first live refresh.",
+  "ok": true,
+  "canon_version": "1.0.0",
+  "version": "1.0.0",
+  "as_of": "2026-10-09T00:00:00Z",
+  "name": "DC Hub Intelligence",
+  "endpoint": "https://dchub.cloud/mcp",
+  "transport": "streamable-http",
+  "website": "https://dchub.cloud",
+  "connect_url": "https://dchub.cloud/connect-mcp",
+  "source_repo": "https://github.com/azmartone67/dchub-mcp-server",
+  "registry_name": "cloud.dchub/mcp-server",
+  "license": "CC-BY-4.0",
+  "cite_as": "DC Hub, dchub.cloud",
+  "auth": "None required to start (previews); claim_free_key returns a free key in one call; OAuth 2.0 supported",
+  "categories": ["data center", "energy", "power grid", "interconnection queue", "site selection", "real estate", "infrastructure", "market intelligence", "fiber", "M&A"],
+  "tool_count": 94,
+  "tool_counts": {"mcp": 94, "chatgpt": 67, "grok": 11},
+  "short_description": "Live data center, power grid and interconnection intelligence for AI agents. 94 MCP tools, cited answers, remote endpoint at dchub.cloud/mcp.",
+  "long_description": "DC Hub Intelligence gives AI agents live, cited ground truth on the infrastructure behind AI. One remote MCP endpoint (https://dchub.cloud/mcp) exposes 94 tools: a global data center facility map across 170+ countries, 300+ markets scored daily with the Data Center Power Index (DCPI), 1,700+ tracked M&A deals, live US ISO grid data and interconnection queues, energy and gas prices, fiber and peering, water, climate and disaster risk, tax incentives, permitting and full site analysis. Every answer carries an as_of date and a ready citation (CC-BY-4.0, cite \"DC Hub, dchub.cloud\"). Works without a key in preview mode. Connect: https://dchub.cloud/connect-mcp"
+}

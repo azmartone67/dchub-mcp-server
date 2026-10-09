@@ -1,5 +1,7 @@
 # DC Hub — MCP Registry Submissions (per-registry)
 
+> **History. Do not paste.** This file records what was submitted and when. Current listing copy is generated from canon: `canonical/listing.json` (source: https://dchub.cloud/api/v1/canon/listing).
+
 Each MCP catalog/registry has its own per-registry branch + PR under
 `submit/<registry>`. This branch holds the **Cline Marketplace** submission.
 

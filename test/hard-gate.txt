@@ -204,6 +204,7 @@ test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
 test/list-transactions-free-values.test.mjs
+test/listing-canon.test.mjs
 test/listing-copy.test.mjs
 test/listing-no-monthly-price.test.mjs
 test/listing-paste-single-origin.test.mjs

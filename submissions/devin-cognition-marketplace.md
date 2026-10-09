@@ -1,5 +1,7 @@
 # Devin / Cognition MCP Marketplace
 
+> **History. Do not paste.** This file records what was submitted and when. Current listing copy is generated from canon: `canonical/listing.json` (source: https://dchub.cloud/api/v1/canon/listing).
+
 Goal: get DC Hub into the **curated Devin MCP Marketplace** so it's discoverable
 to *all* Devin users (organic, "Meta-crawler"-style discovery).
 
