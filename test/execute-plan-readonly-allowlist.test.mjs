@@ -75,6 +75,7 @@ beforeAll(async () => {
   runs.mcp = await runPlan('/mcp', { 'x-api-key': PRO_KEY });
   runs.chatgpt = await runPlan('/mcp/chatgpt');
   runs.chatgptPro = await runPlan('/mcp/chatgpt', { 'x-api-key': PRO_KEY });
+  runs.claudePro = await runPlan('/mcp/claude', { 'x-api-key': PRO_KEY });
 }, 240_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
@@ -150,5 +151,14 @@ describe('the handler refuses what the allowlist refuses (end to end)', () => {
 
   it('/mcp/chatgpt never mints the deal-desk brief, even for a Pro key', () => {
     expect(runs.chatgptPro.dealDesk).toBe(0);
+  });
+
+  // /mcp/claude also says "every tool here is a read-only lookup" and annotates
+  // execute_plan readOnlyHint:true, so the mint (a POST that stores a brief)
+  // must not fire there either.
+  it('/mcp/claude never mints the deal-desk brief, even for a Pro key', () => {
+    expect(runs.claudePro.r.status).toBe(200);
+    expect(runs.claudePro.tools.length, 'control: the plan ran some step').toBeGreaterThan(0);
+    expect(runs.claudePro.dealDesk).toBe(0);
   });
 });

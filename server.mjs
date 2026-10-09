@@ -18163,6 +18163,9 @@ export function _dealDeskEligible(c) {
   // item 1d (2026-10-09): the ChatGPT app is read-only end to end; the mint POSTs
   // and stores a brief, so it never runs from /mcp/chatgpt or /mcp/chatgpt/oauth.
   if (c && c.profile === DIRECTORY_PROFILE) return false;
+  // Same for /mcp/claude: it annotates execute_plan readOnlyHint:true and says
+  // "every tool here is a read-only lookup", so the stored brief never runs there.
+  if (c && c.profile === CLAUDE_PROFILE) return false;
   if (!c || !c.api_key) return false;          // anonymous cannot be Pro
   return !_DEAL_DESK_SKIP_TIERS.has(String(c.tier || 'free').toLowerCase());
 }
