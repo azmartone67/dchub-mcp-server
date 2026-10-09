@@ -29,6 +29,7 @@ test/byo-mcp-paywall-lead.test.mjs
 test/canon-floor-rule.test.mjs
 test/canon-frozen-keys.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs
+test/canon-pack-price.test.mjs
 test/canon-snapshot-copies-every-phrase.test.mjs
 test/cap-signal.test.mjs
 test/cap-trim-spares-capacity-teaser.test.mjs

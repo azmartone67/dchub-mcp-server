@@ -46,7 +46,7 @@ function tiers(over) {
     team:       {},
   };
   for (const [k, v] of Object.entries(priced)) t[k] = { ...t[k], ...v };
-  return { tiers: { ...t, ...(over || {}) } };
+  return { tiers: { ...t, ...(over || {}) }, credit_pack: { price_usd: 10, credits: 1000 } };
 }
 
 function run() {
