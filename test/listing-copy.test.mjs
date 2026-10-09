@@ -24,7 +24,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, PRICE_LINE, endpointsLine,
+  LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, PRICING_URL, endpointsLine,
   copyRuleViolations, loadListingCopy, copyFingerprints, showsCurrentCopy,
   TAGLINE, TAGLINE_SUPERLATIVE,
 } from '../scripts/listing-copy.mjs';
@@ -83,15 +83,12 @@ describe('copy rules', () => {
     expect(COPY.glama_400.length).toBeLessThanOrEqual(GLAMA_MAX);
   });
 
-  it('price_line is exactly the approved line', () => {
-    expect(COPY.price_line).toBe('$10 one-time pack of 1,000 API credits');
-    expect(COPY.price_line).toBe(PRICE_LINE);
-  });
-
-  it('glama_400 carries the price line; long names the $10 pack and its credits', () => {
-    expect(COPY.glama_400).toContain(PRICE_LINE);
-    expect(COPY.long).toMatch(/\$10 one-time pack/);
-    expect(COPY.long).toMatch(/1,000 API credits/);
+  it('names no price and links the pricing page (owner, 2026-10-09)', () => {
+    expect(COPY).not.toHaveProperty('price_line');
+    for (const k of ['long', 'glama_400']) {
+      expect(COPY[k], k).not.toMatch(/\$\d|1,000 API credits|one-time/);
+      expect(COPY[k], k).toContain(PRICING_URL);
+    }
   });
 
   it('endpoints is exactly the approved line for the current tool count', () => {

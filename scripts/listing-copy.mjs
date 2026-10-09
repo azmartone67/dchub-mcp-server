@@ -15,7 +15,8 @@
 //               two cannot drift. test/listing-copy.test.mjs enforces it.
 //   glama_400   the Glama-sized description, at most GLAMA_MAX chars
 //   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
-//   price_line  exactly PRICE_LINE
+//   (no price field: 2026-10-09 owner decision, listings say "free tier, no key"
+//               and link PRICING_URL, so a price change never stales a listing)
 //   endpoints   exactly endpointsLine(tool_count)
 //   capacity_blurb  the Capacity Source paste line (owner, 2026-09-29): count-free,
 //               price-free, and it names source_capacity and dchub.cloud/listings
@@ -38,11 +39,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const LISTING_COPY_PATH = 'canonical/listing-copy.json';
 export const GLAMA_MAX = 400;
-export const PRICE_LINE = '$10 one-time pack of 1,000 API credits';
+export const PRICING_URL = 'https://dchub.cloud/pricing';
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
-export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tool_count', 'endpoints', 'capacity_blurb', 'updated_at'];
+export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'endpoints', 'capacity_blurb'];
 
 /** The owner-approved tagline, character for character (Jonathan, 2026-09-29).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
