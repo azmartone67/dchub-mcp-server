@@ -8495,6 +8495,65 @@ export async function _lpAccessFor(c, tier) {
   }
   return (c && c.api_key) ? 'preview' : 'wall';
 }
+// ── Free monthly full runs (owner 2026-10-10, option ii) ─────────────────────
+// A key below Pro gets LP_FREE_RUN_TOOLS' FULL answer a few times per UTC month
+// (3 for analyze_site; the number lives in the backend, dchub-backend
+// routes/mcp_lp_free_runs.py, counted per key AND bound email, higher wins).
+// After that, the preview it got before. Only the preview branch asks: no key
+// is the wall, Pro is already full. The backend fails CLOSED ({allowed:false}),
+// and so does this side on any transport error, so a counter outage serves the
+// preview, never an unmetered full answer.
+// Kill switch: DCHUB_LP_FREE_RUNS=0.
+export const LP_FREE_RUN_TOOLS = new Set(['analyze_site']);
+export function _lpFreeRunsOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_LP_FREE_RUNS || ''));
+}
+async function _lpFreeRun(c, tool, op) {
+  try {
+    const r = await callAPIWrite('/api/v1/mcp/lp-free-runs', { api_key: c.api_key, tool, op });
+    return (r && r.ok === true && Number.isInteger(r.limit)) ? r : null;
+  } catch (_) { return null; }
+}
+const _lpMonthDay = (iso) => String(iso || '').slice(0, 10) || 'the 1st of next month';
+// One line on a full answer served from the monthly allowance. No plan name or price (mcp#891).
+export function _lpFreeRunNote(fr) {
+  const tail = fr.remaining > 0
+    ? `${fr.remaining} left; the count resets ${_lpMonthDay(fr.resets_at)}.`
+    : `That was the last one this month: the next ${'analyze_site'} call returns the preview until ${_lpMonthDay(fr.resets_at)}.`;
+  return `Free full site analysis ${fr.used} of ${fr.limit} this month (UTC). ${tail}`;
+}
+export function _withLpFreeRun(result, fr) {
+  if (!result || typeof result !== 'object') return result;
+  const note = _lpFreeRunNote(fr);
+  const block = { used: fr.used, limit: fr.limit, remaining: fr.remaining, resets_at: fr.resets_at,
+                  basis: 'per key and per bound email, the higher count; UTC calendar month' };
+  const out = { ...result };
+  if (Array.isArray(out.content) && out.content[0] && out.content[0].type === 'text') {
+    out.content = [...out.content, { type: 'text', text: note }];
+  }
+  out.structuredContent = { ...(out.structuredContent || {}), free_full_runs: block };
+  return out;
+}
+// The preview after the allowance is spent: the same preview, plus one structured
+// block and one line saying why. The preview's own link stays the only link.
+export function _withLpFreeRunsSpent(result, fr, tool) {
+  if (!result || typeof result !== 'object') return result;
+  const msg = `You've used your ${fr.limit} free full site analyses this month (UTC); this is the preview. `
+    + `Full analyses need a paid DC Hub plan; the count resets ${_lpMonthDay(fr.resets_at)}.`;
+  const block = {
+    reason: 'free_monthly_limit_reached', tool, used: fr.used, limit: fr.limit,
+    resets_at: fr.resets_at, required_plan: 'pro',
+    unlocks: ['analyze_site', 'compare_sites', 'get_composite_site_score', 'generate_site_analysis'],
+    message_for_user: msg,
+  };
+  const out = { ...result };
+  if (Array.isArray(out.content) && out.content[0] && out.content[0].type === 'text') {
+    out.content = [out.content[0], { type: 'text', text: msg }, ...out.content.slice(1)];
+  }
+  out.structuredContent = { ...(out.structuredContent || {}), free_monthly_runs: block };
+  return out;
+}
+
 // A pack paid before the Land & Power cutover still opens it; one bought now does not.
 function _lpGrandfatheredPack(cr) {
   return !!cr && (cr.credits || 0) > 0 && cr.lp_grandfathered === true;
@@ -19499,6 +19558,34 @@ function trackedTool(srv, name, description, schema, handler) {
           return await _lpWallResultV11(name, _hl);
         }
         if (_lpAccess === 'preview') {
+          // Free monthly full runs (owner 2026-10-10): spend one if one is left.
+          let _fr = null;
+          if (LP_FREE_RUN_TOOLS.has(name) && c.api_key && _lpFreeRunsOn()) {
+            _fr = await _lpFreeRun(c, name, 'consume');
+            if (_fr && _fr.allowed === true) {
+              let _full;
+              try { _full = _noDataGuard(await handler(args)); }
+              catch (e) { await _lpFreeRun(c, name, 'release'); throw e; }
+              // An error or a non-answer does not spend the month's run.
+              if (!_full || _full.isError === true) { await _lpFreeRun(c, name, 'release'); return _full; }
+              status = 'lp_free_full';
+              return _withLpFreeRun(withCitation(_full, name), _fr);
+            }
+          }
+          if (_fr && _fr.allowed === false && _fr.limit > 0) {
+            // The allowance is spent: a paywall encounter, so it writes the signal lp_wall writes.
+            status = 'lp_free_spent';
+            signalPaywall({
+              tool: name, args, signal_type: 'paid_tool_blocked',
+              session_id: (c && c.session_id) || 'no-session',
+              mcp_client: c.platform || 'mcp', user_agent: c.client_ua || null,
+              ip_address: c.client_ip || null, api_key: c.api_key || null,
+              tier_current: tier || 'free', tier_required: 'paid',
+              message_shown: 'lp_free_spent',
+            });
+            return await _withProTrialOffer(_withLpFreeRunsSpent(
+              _lpPreviewResult(name, _noDataGuard(await handler(args))), _fr, name), name, c);
+          }
           status = 'lp_preview';
           // r-pro-trial-offer: only a DATA answer reaches the offer (the guard
           // throws on a no-data one first); inert while the flag is off.
