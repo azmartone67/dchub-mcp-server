@@ -220,6 +220,7 @@ test/listing-paste-single-origin.test.mjs
 test/live-suite-opt-in.test.mjs
 test/liveness-claim.test.mjs
 test/log-redaction.test.mjs
+test/lp-free-monthly-runs.test.mjs
 test/lp-preview-labels-and-layer-cite.test.mjs
 test/lp-pro-only.test.mjs
 test/lp-wall-paywall-signal.test.mjs
