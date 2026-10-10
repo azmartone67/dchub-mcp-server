@@ -206,7 +206,7 @@ describe('the pack is sold as credits', () => {
     expect(S._rungsText('get_grid_intelligence', 'free', 'sid-t')).toContain('`get_grid_intelligence` uses 5 credits per call');
     expect(S._rungsText('analyze_site', 'free', 'sid-t')).not.toMatch(/uses \d+ credits per call/);
     expect(S._rungsText('get_pipeline', 'free', 'sid-t')).not.toMatch(/uses \d+ credits per call/);
-    expect(S._rungsText('get_pipeline', 'free', 'sid-t')).toContain('**$10 one-time = 1,000 API credits**');
+    expect(S._rungsText('get_pipeline', 'free', 'sid-t')).toContain('**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**');
   });
 
   it('initialize and the unlock_more_data description state the rule', async () => {
@@ -250,7 +250,7 @@ describe('a keyed pack holder gets the rows it paid for', () => {
 });
 
 describe('a Developer on a Pro-only tool', () => {
-  it('is told it is on Developer and what opens the tool, never "free tier"', async () => {
+  it('is told its plan does not open the tool and what does, never "free tier"', async () => {
     const s = await openSession({ 'x-api-key': K_DEV });
     // 2026-09-22: analyze_site became Land & Power, which answers Developer with
     // its own preview (test/lp-pro-only.test.mjs). get_dchub_recommendation is
@@ -258,9 +258,11 @@ describe('a Developer on a Pro-only tool', () => {
     // Ladder stage 1 (2026-09-29): Developer gets the free key's preview here, not
     // a wall, and the one rung named is Pro — never the pack, which opens no Pro tool.
     const t = textOf(await s.call('get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }));
-    expect(t).toContain('is a Pro tool');
-    expect(t).toContain('On Developer this is the same preview a free key gets');
-    expect(t).toContain('DC Hub Pro');
+    // v14 (owner 2026-10-10): neither plan is named; the line says the caller's plan does not open it.
+    expect(t).toContain('needs a different paid DC Hub plan');
+    expect(t).toContain('On your current plan this is the same preview a free key gets');
+    expect(t).toContain('the DC Hub plan that includes every tool');
+    expect(t.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     expect(t).not.toContain('free tier');
     expect(t).not.toContain('1,000 API credits');
     expect(t).not.toContain('still covers every other tool');

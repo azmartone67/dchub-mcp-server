@@ -20,6 +20,7 @@ describe('agent-facing Enterprise copy', () => {
     expect("high_intent_enterprise_url ($25k+/yr data ").toMatch(/\$25k/i);
   });
   it('the high-intent hint still names the enterprise lane', () => {
-    expect(code).toContain('high_intent_enterprise_url (Enterprise data');
+    // v14 (owner 2026-10-10): the lane is named by its field; the copy names no plan.
+    expect(code).toContain("high_intent_enterprise_url (data '\n      + 'licensing; that page shows the terms)");
   });
 });

@@ -30,7 +30,7 @@ describe('the trial wall line is a checkout pointer, not the human ask', () => {
     expect(_hasHumanCta(line)).toBe(false);
     expect(line).not.toMatch(/your human/i);
     expect(line).toContain('the payer checks out in one click: ');
-    expect(line).toContain('**$10 one-time = 1,000 API credits**');   // rungs unchanged
+    expect(line).toContain('**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**');   // rungs unchanged (v14: no amount)
     expect(line).toMatch(/credits don’t expire → https:\/\//);          // checkout link kept
     expect(line).toContain('claim_free_key');                          // off-ramp kept
   });

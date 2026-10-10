@@ -213,7 +213,8 @@ describe('the relay link label on Grok vs everyone else', () => {
     // names that rung and no price (GROK_RELAY_LABEL_DEV); the pack label stays on pack tools.
     expect(fyh.markdown.startsWith(S.GROK_RELAY_LABEL_DEV + '(https://dchub.cloud/upgrade/h/')).toBe(true);
     expect(fyh.markdown).not.toContain('$10');
-    expect(fyh.markdown).toContain('Developer');
+    expect(fyh.markdown).toContain('paid DC Hub plan');   // v14: the rung, unnamed
+    expect(fyh.markdown).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     expect(fyh.markdown.toLowerCase()).not.toContain('unlock');
   });
 

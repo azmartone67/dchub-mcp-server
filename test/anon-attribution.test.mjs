@@ -199,7 +199,7 @@ describe('the same-session-unlock promise is made ONLY where it is true', () => 
   // exactly the cohort that cannot bind: no key, no session — i.e. Smithery.
   // Found by driving a real anonymous tools/call, not by reading the code:
   // sessionId arrives as the literal 'no-session' on the stateless path.
-  const unlockClause = (t) => t.slice(t.indexOf('$10 one-time'));
+  const unlockClause = (t) => t.slice(t.indexOf('a one-time pack of 1,000 API credits'));   // v14: the pack rung states no amount
 
   it('a session-bearing caller IS promised the same-session unlock', () => {
     const t = withCtx({ session_id: 'e6f1c0de-1234-4aaa-9999-abcdef012345' },

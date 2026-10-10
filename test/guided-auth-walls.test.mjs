@@ -104,7 +104,7 @@ describe('guided 401/402 through a real session', () => {
       expect(b.next_tool).toBe('unlock_more_data');
       expect(b.tier_required).toBe('pro');
       expect(b.required_plan).toBe('pro');
-      expect(b.message).toMatch(/needs the Pro plan/);
+      expect(b.message).toMatch(/needs a paid DC Hub plan/);
     }
   });
 

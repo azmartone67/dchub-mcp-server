@@ -84,7 +84,7 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
   it('the plain /mcp/grok handshake is actually pinned (not skipped)', async () => {
     const init = await post('/mcp/grok', INIT);
     expect(typeof init.json.result.instructions).toBe('string');
-    expect(init.json.result.instructions).toContain('/mcp/grok, which lists');
+    expect(init.json.result.instructions).toContain('/mcp/grok lists ');
   });
 
   it('CONTROL: /mcp keeps the full-catalog lead sentence unchanged', async () => {

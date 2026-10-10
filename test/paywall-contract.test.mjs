@@ -152,8 +152,9 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     // r-missed-upgrade (2026-09-29): the sentence names what this keyless answer
     // hid, and the offer is the lowest rung that returns it — the pack, because
     // a free key still gets the facility-field mask on this tool.
-    expect(said).toMatch(/^This answer hid .+, and \d+ more facilities\. The full answer is \$10 one-time/);
-    expect(said).toContain('$10 one-time');
+    // v14 (owner 2026-10-10): the pack offer states no amount.
+    expect(said).toMatch(/^This answer hid .+, and \d+ more facilities\. The full answer is available with a one-time pack of 1,000 credits/);
+    expect(said).not.toMatch(/\$\d/);
     const urls = ctaUrls(r.body);
     expect(urls, JSON.stringify(urls)).toHaveLength(1);
     expect(urls[0]).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}\?pc=v2$/);

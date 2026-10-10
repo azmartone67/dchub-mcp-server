@@ -1,4 +1,4 @@
-// analyze_site's gated answers name no plan (owner 2026-10-10, WALL_COPY_VERSION v13).
+// analyze_site's gated answers name no plan (owner 2026-10-10, WALL_COPY_VERSION v13; v14 extends it to the rest of the gated copy).
 //
 // Grok rule: no price or plan names in tool text. The Pro-only walls said "DC Hub Pro has
 // ... Start a 7-day Pro trial", "is a DC Hub Pro tool", "[🔓 Start a 7-day DC Hub Pro
@@ -156,7 +156,7 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     // Keyless: the wall leads with the person's line (r-wall-user-line).
     if (!c.key) {
       expect(r.content[0].text.startsWith(sc.user_message)).toBe(true);
-      expect(sc.copy_version).toBe('v13');
+      expect(sc.copy_version).toBe('v14');
     }
   });
 
@@ -200,9 +200,10 @@ describe('initialize instructions name no plan for the paid tools', () => {
     }
   });
 
-  it('/mcp and /mcp/grok carry the PAID line (the scan below reads real text)', () => {
+  it('/mcp and /mcp/grok carry the PAID line and the relay rule (the scan below reads real text)', () => {
     for (const path of ['/mcp', '/mcp/grok']) {
-      expect(served[path], path).toMatch(/PAID: `analyze_site`, [^.]*`export_dataset` need a paid DC Hub plan\. A gated answer carries `human_url`: the 7-day trial or checkout link\./);
+      // v14: the human_url description went (RELAY_CONTRACT, which follows, says what to do with it).
+      expect(served[path], path).toMatch(/PAID: `analyze_site`, [^.]*`export_dataset` need a paid DC Hub plan\. First line of your answer must be the URL in human_url /);
     }
   });
 

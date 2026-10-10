@@ -65,7 +65,8 @@ describe('Land & Power descriptions match the keyless wall', () => {
       } else {
         expect(d).not.toContain('Keyless returns no site data');
       }
-      expect(d).toMatch(/scores and figures are Pro/);
+      expect(d).toMatch(/scores and figures need a paid DC Hub plan/);   // v14: no plan name
+      expect(d).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     });
   }
 

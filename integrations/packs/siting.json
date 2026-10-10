@@ -24,11 +24,11 @@
     },
     {
       "name": "analyze_site",
-      "description": "Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures are Pro. Ex: \"Score 33.45,-112.07 for 100 MW.\""
+      "description": "Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures need a paid DC Hub plan. Ex: \"Score 33.45,-112.07 for 100 MW.\""
     },
     {
       "name": "compare_sites",
-      "description": "Call when the user has 2-4 candidate locations and asks which is best for a data center. Pass locations as \"lat,lon;lat,lon\" and optional capacity_mw. Returns each site's analyze_site scores side by side plus a recommended winner and why. Keyless returns no site data; a free key gets each site's verdict band without figures; scores and figures are Pro. Ex: \"Phoenix vs Ashburn for 50 MW?\""
+      "description": "Call when the user has 2-4 candidate locations and asks which is best for a data center. Pass locations as \"lat,lon;lat,lon\" and optional capacity_mw. Returns each site's analyze_site scores side by side plus a recommended winner and why. Keyless returns no site data; a free key gets each site's verdict band without figures; scores and figures need a paid DC Hub plan. Ex: \"Phoenix vs Ashburn for 50 MW?\""
     },
     {
       "name": "rank_sites",

@@ -24,6 +24,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { stringLiterals } from './helpers/js-literals.mjs';
 
 const ROOT = new URL('../', import.meta.url);
+// v14 (owner 2026-10-10): no plan name at all, so the once-approved phrase is an offender too. It is
+// kept as a constant so the must-fail control below proves it now counts.
 const APPROVED = 'DC Hub Developer or Pro';
 const PLAN = /\b(Developer|Pro|Enterprise)\b/g;
 const PRICE = /\$\d[\d,]*(?:\.\d+)?(?![\w$])/g;
@@ -32,8 +34,7 @@ const SLACK = 10;   // how far under its baseline a file may drift before the ba
 export function planOffenders(src) {
   const hits = [];
   for (const { line, text } of stringLiterals(src)) {
-    const t = text.split(APPROVED).join(' '.repeat(APPROVED.length));
-    for (const m of t.matchAll(PLAN)) hits.push({ line, word: m[1], text: text.replace(/\s+/g, ' ').slice(Math.max(0, m.index - 30), m.index + 40) });
+    for (const m of text.matchAll(PLAN)) hits.push({ line, word: m[1], text: text.replace(/\s+/g, ' ').slice(Math.max(0, m.index - 30), m.index + 40) });
   }
   return hits;
 }
@@ -47,20 +48,19 @@ export function priceOffenders(src) {
 
 // Measured 2026-10-08 on origin/main. file → count.
 // 2026-10-10 (v13, owner: no plan name in the Pro-only walls or the instructions line): server.mjs 148 -> 130.
+// 2026-10-10 (v14, owner: no plan name and no price in any tool-facing text): server.mjs 130 -> 1
+// (the one left is "Developer names come from ERCOTQueue", a project developer, not a plan), and
+// every lib file -> 0. The approved phrase above is retired with it: nothing may name a plan now.
 const PLAN_BASELINE = {
-  'server.mjs': 130,
-  'lib/free-decision-taste.mjs': 3,
-  'lib/metered-note.mjs': 1,
-  'lib/paid-sell-line.mjs': 2,
-  'lib/paywall-contract.mjs': 4,
-  'lib/upgrade-missed.mjs': 4,
-  'lib/wall-user-line.mjs': 2,
+  'server.mjs': 1,
 };
 // 2026-10-09 (Grok A5): the "$10" credit-pack literals now read PACK_PRICE from lib/canon.mjs
 // (64 -> 11 in server.mjs; 6 lib files -> 0). What remains is not the pack: the x402 per-call
 // $0.50, "$35.6B"-style examples, the $0/$20 burner-tip range, and regex backrefs ($1).
+// 2026-10-10 (v14): the MPP "$0.50" prose and its one-link detector literals went (11 -> 4); what is
+// left is data examples ("$35.6B", "$9.2B") and the $0/$20 burner-tip range.
 const PRICE_BASELINE = {
-  'server.mjs': 11,
+  'server.mjs': 4,
   'lib/chatgpt-directory.mjs': 1,
   'lib/facility-location.mjs': 1,
   'lib/free-decision-taste.mjs': 1,
@@ -91,17 +91,18 @@ function ratchet(name, scan, baseline) {
   });
 }
 
-ratchet('(a) plan names only via "' + APPROVED + '"', planOffenders, PLAN_BASELINE);
+ratchet('(a) no plan name in a string literal (v14: not even "' + APPROVED + '")', planOffenders, PLAN_BASELINE);
 ratchet('(b) no hard-coded price literal outside canon-derived template parts', priceOffenders, PRICE_BASELINE);
 
 describe('must-fail controls: the scanners catch the forms that matter', () => {
   it('(a) flags a bare plan name, an enterprise mention and a name beside the approved phrase', () => {
     expect(planOffenders(`const a = 'Full depth needs Pro.';`)).toHaveLength(1);
     expect(planOffenders('const a = `Ask about Enterprise`;')).toHaveLength(1);
-    expect(planOffenders(`const a = 'DC Hub Developer or Pro opens it; Developer also does.';`)).toHaveLength(1);
+    expect(planOffenders(`const a = 'DC Hub Developer or Pro opens it; Developer also does.';`)).toHaveLength(3);
   });
-  it('(a) passes the approved phrase, lowercase identifiers, comments and regexes', () => {
-    expect(planOffenders(`const a = 'Full depth needs ${APPROVED}.'; // Pro tier\nconst t = x === 'pro'; const r = /Pro|Developer/;`)).toEqual([]);
+  it('(a) v14: the once-approved phrase counts; lowercase identifiers, comments and regexes still pass', () => {
+    expect(planOffenders(`const a = 'Full depth needs ${APPROVED}.';`)).toHaveLength(2);
+    expect(planOffenders(`const a = 'Full depth needs a paid DC Hub plan.'; // Pro tier\nconst t = x === 'pro'; const r = /Pro|Developer/;`)).toEqual([]);
   });
   it('(b) flags typed prices, passes canon-derived template parts', () => {
     expect(priceOffenders(`const a = 'one-time $10 pack';`)).toHaveLength(1);

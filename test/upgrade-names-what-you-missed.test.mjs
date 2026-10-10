@@ -126,11 +126,12 @@ async function call(name, args, s) {
 
 // ── reading the prompt ──────────────────────────────────────────────────────
 // Every "This answer hid …" sentence in the response (text and structured).
-const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|They come with DC Hub Developer|They come with DC Hub Pro|They come with a paid DC Hub plan|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
-const RUNG_OF = { 'The plans that return them are listed behind the link': 'pack', 'They come with DC Hub Developer': 'developer',
-  'They come with DC Hub Pro': 'pro',
-  // v13 (owner 2026-10-10): the Pro-only walls word the Pro rung without the plan name.
-  'They come with a paid DC Hub plan': 'pro', 'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
+const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|They come with a paid DC Hub plan|They come with the DC Hub plan that includes every tool|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
+// v14 (owner 2026-10-10): the rung sentences name no plan. The old "They come with DC Hub Developer"
+// / "DC Hub Pro" are not parsed, so a wall that brought them back has no prompt and fails as vacuous.
+const RUNG_OF = { 'The plans that return them are listed behind the link': 'pack',
+  'They come with a paid DC Hub plan': 'developer', 'They come with the DC Hub plan that includes every tool': 'pro',
+  'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
 function prompts(all) {
   const out = [];
   const s = all.replace(/\\"/g, '"');
@@ -301,7 +302,7 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     const [p] = prompts(res.all);
     expect(p.labels).toEqual(expect.arrayContaining(['projects']));
     expect(p.rung).toBe('developer');
-    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* They come with DC Hub Developer → (?:https:\/\/dchub\.cloud\/upgrade\/h\/|the "For your human" link)/);   // one link per wall (Grok audit 2026-10-08): the page, never a /go/c
+    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* They come with a paid DC Hub plan → (?:https:\/\/dchub\.cloud\/upgrade\/h\/|the "For your human" link)/);   // one link per wall (Grok audit 2026-10-08): the page, never a /go/c
     expect(res.text).not.toMatch(/\$10 one-time/);
   });
 

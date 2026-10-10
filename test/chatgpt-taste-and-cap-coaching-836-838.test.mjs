@@ -287,7 +287,8 @@ describe('#836 — /mcp/chatgpt and /mcp/chatgpt/oauth: the directory scrub keep
 });
 
 // ── #838 ──────────────────────────────────────────────────────────────────────
-const PACK_RE = /\$10/;
+// v14 (owner 2026-10-10): the pack is "a one-time pack of 1,000 API credits", no amount; the old "$10" still counts.
+const PACK_RE = /\$10|one-time pack/i;
 describe('#838 — the anonymous over-cap coaching sells the pack only where a credit buys the next call', () => {
   it('predicate: depth-teased tools never sell the pack; capacity-class tools do; the switch restores the old copy', () => {
     for (const t of ['get_gas_intelligence', 'get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel',
@@ -327,7 +328,8 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     expect(sc._upgrade.remaining_today).toBe(0);
     expect(sc._upgrade.message).toContain('claim_free_key');
     expect(sc._upgrade.message).toContain('human_url');
-    expect(sc._upgrade.message).toMatch(/Developer/);
+    expect(sc._upgrade.message).toMatch(/that page lists the plans that include it\./);   // v14: the plans, unnamed
+    expect(sc._upgrade.message).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(sc._upgrade.credits_pitch).toBeUndefined();
     expect(sc._upgrade.credits_url).toBeUndefined();
     expect(sc._upgrade.unlock_tool).toBeUndefined();

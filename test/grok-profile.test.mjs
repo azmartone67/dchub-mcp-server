@@ -156,7 +156,7 @@ describe('G1: /mcp/grok lists a Grok-sized catalog', () => {
 
   it('the handshake says this path is a listing scope', async () => {
     const init = await post('/mcp/grok', INIT);
-    expect(init.json.result.instructions).toContain('/mcp/grok, which lists 11 DC Hub tools');
+    expect(init.json.result.instructions).toContain('/mcp/grok lists 11 DC Hub tools');
   });
 
   it('a tool not listed is still callable by name (listing scope, not access scope)', async () => {

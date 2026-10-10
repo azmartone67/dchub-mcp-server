@@ -218,7 +218,7 @@ describe('B2 helpers', () => {
 
 describe('B2 description matches behaviour (flips A3)', () => {
   const DESC_B2 = 'Keyless returns the weakest factor and counts; a free key adds factor bands '
-    + 'and substation distance bands; scores and figures are Pro.';
+    + 'and substation distance bands; scores and figures need a paid DC Hub plan.';   // v14: no plan name
   it('analyze_site says keyless gets the headline, and keyless does', async () => {
     const d = TOOLS.analyze_site.description;
     expect(d).toContain(DESC_B2);

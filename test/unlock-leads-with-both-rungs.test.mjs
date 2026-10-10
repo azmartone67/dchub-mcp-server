@@ -69,10 +69,13 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     const at = (s) => first.indexOf(s);
     const PACK = '**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**';
     expect(at(PACK)).toBeGreaterThanOrEqual(0);
-    expect(at('**Developer**')).toBeGreaterThan(-1);
-    expect(at(PACK)).toBeLessThan(at('**Developer**'));
+    // v14 (owner 2026-10-10): the two subscription rungs are described, not named.
+    const DEV = '**a paid DC Hub plan for agents**', PRO = '**the DC Hub plan with every tool**';
+    expect(at(DEV)).toBeGreaterThan(-1);
+    expect(at(PACK)).toBeLessThan(at(DEV));
     expect(first).not.toContain('$');
-    expect(at('**Developer**')).toBeLessThan(at('**Pro**'));
+    expect(first).not.toMatch(/\b(Developer|Pro|Starter)\b/);
+    expect(at(DEV)).toBeLessThan(at(PRO));
     expect(first).not.toMatch(/\$\d+\s*\/\s*mo/);
     // Nothing links out ahead of the ask.
     expect(text.search(LINK_RE)).toBe(first.search(LINK_RE));

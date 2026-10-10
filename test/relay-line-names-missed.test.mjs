@@ -144,14 +144,14 @@ function strippedPaths(full, gated) {
 }
 const leaf = (p) => p.replace(/\[\d+\]/g, '').split('.').pop();
 function parseClause(line) {
-  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:DC Hub Developer|DC Hub Pro|a free DC Hub key)) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
+  const m = /this answer hid (.+); (the plans that return them are on the page behind the link|the lowest plan that returns them is (?:a paid DC Hub plan|the DC Hub plan with every tool|a free DC Hub key)) — open (https:\/\/\S+) to see what your agent found\.$/.exec(line);
   if (!m) return null;
   const parts = m[1].replace(/ and (?=[^,]*$)/, ', ').split(', ');
   let others = 0;
   if (/^\d+ other fields?$/.test(parts[parts.length - 1])) others = parseInt(parts.pop(), 10);
   return { named: parts, others, plan: m[2].replace(/^the lowest plan that returns them is /, ''), url: m[3] };
 }
-const PLAN_RUNG = { 'a free DC Hub key': 'free_key', 'the plans that return them are on the page behind the link': 'pack', 'DC Hub Developer': 'developer', 'DC Hub Pro': 'pro' };
+const PLAN_RUNG = { 'a free DC Hub key': 'free_key', 'the plans that return them are on the page behind the link': 'pack', 'a paid DC Hub plan': 'developer', 'the DC Hub plan with every tool': 'pro' };   // v14: the rungs, unnamed
 const seatKey = (rung, tool) => ({ free_key: keyFor('FREE', tool), pack: keyFor('PACK', tool), developer: DEV_KEY, pro: PRO_KEY })[rung];
 
 // ── the four tools, keyless ──────────────────────────────────────────────────
@@ -262,8 +262,8 @@ describe('relayMissedClause', () => {
   it('names the fields and the rung, never a monthly price', () => {
     expect(relayMissedClause(mu(['MW', 'scores', 'lease rate'], 'pack')))
       .toBe('this answer hid MW, scores and lease rate; the plans that return them are on the page behind the link');
-    expect(relayMissedClause(mu(['MW'], 'developer'))).toBe('this answer hid MW; the lowest plan that returns them is DC Hub Developer');
-    expect(relayMissedClause(mu(['gas prices'], 'pro'))).toBe('this answer hid gas prices; the lowest plan that returns them is DC Hub Pro');
+    expect(relayMissedClause(mu(['MW'], 'developer'))).toBe('this answer hid MW; the lowest plan that returns them is a paid DC Hub plan');
+    expect(relayMissedClause(mu(['gas prices'], 'pro'))).toBe('this answer hid gas prices; the lowest plan that returns them is the DC Hub plan with every tool');
     expect(relayPlanName('free_key')).toBe('a free DC Hub key');
   });
   it('four labels are all named; five or more name three and count the rest', () => {

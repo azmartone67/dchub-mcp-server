@@ -13,11 +13,11 @@ describe('meteredTrialNote', () => {
     expect(meteredTrialNote({ ...base, paidTaste: false, limited: false })).toBe(
       'Full-fidelity trial answer 1 of 2 today — keep or summarize these results for your human. '
       + 'After the last free call this tool returns a preview with one-click payment options '
-      + '($10 one-time = 1,000 credits; free: bind_email lifts your daily cap).');
+      + '(a one-time pack of 1,000 credits; free: bind_email lifts your daily cap).');
     expect(meteredTrialNote({ ...base, paidTaste: false, limited: false, bound: true })).toMatch(/1,000 credits\)\.$/);
     expect(meteredTrialNote({ ...base, paidTaste: true, limited: false })).toBe(
       'Full-fidelity answer 1 of the 2 included with your plan today on this tool. '
-      + 'Unlimited full `get_market_intel` depth comes with DC Hub Developer — relay the link in human_url to your human.');
+      + 'Unlimited full `get_market_intel` depth comes with a paid DC Hub plan — relay the link in human_url to your human.');
   });
   it('a tier-limited answer never says full-fidelity and says it is not the complete dataset', () => {
     for (const paidTaste of [false, true]) {

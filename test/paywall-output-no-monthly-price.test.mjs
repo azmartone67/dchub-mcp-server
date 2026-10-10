@@ -235,7 +235,8 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, sh);
     const instr = (await H.post('/mcp', { jsonrpc: '2.0', id: 77, method: 'resources/read',
       params: { uri: 'dchub://instructions' } }, sh)).msg.result.contents[0].text;
-    expect(instr).toContain('💳 $10 one-time = 1,000 API credits');
+    expect(instr).toContain('💳 a one-time pack of 1,000 API credits');   // v14: no amount either
+    expect(instr).not.toMatch(/\$\d/);
     expect(instr).toContain('; Paid plans: on the page behind the human_url link) to relay to your human');
     expect(instr).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);
   });

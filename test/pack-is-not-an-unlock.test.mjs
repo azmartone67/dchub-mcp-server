@@ -66,15 +66,17 @@ describe('the $10 pack is never called an unlock', () => {
   // returns these fields) — and still never calls anything an unlock.
   it('get_grid_intelligence: the anonymous wall names Developer, not the pack, and no unlock', () => {
     const t = withCtx({ session_id: SID }, () => trialHeader('get_grid_intelligence', SID, '3 of 20 results shown'));
-    expect(t).not.toContain('$10 one-time');
-    expect(t).toMatch(/DC Hub Developer/);
+    expect(t).not.toContain('one-time pack');
+    expect(t).toMatch(/a paid DC Hub plan/);   // v14: described, never named
+    expect(t.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(t).not.toMatch(UNLOCK);
   });
   for (const tool of ['get_fiber_intel', 'rank_markets']) {
     it(`${tool}: the anonymous wall sells the pack as credits, not an unlock`, () => {
       const t = withCtx({ session_id: SID }, () => trialHeader(tool, SID, '3 of 20 results shown'));
-      expect(t).toContain('$10 one-time = 1,000 API credits');   // the rung is there to judge
-      const i = t.indexOf('$10 one-time');
+      expect(t).toContain('a one-time pack of 1,000 API credits');   // the rung is there to judge (v14: no amount)
+      expect(t).not.toMatch(/\$\d/);
+      const i = t.indexOf('a one-time pack');
       const around = t.slice(Math.max(0, i - 200), i + 400);
       expect(around).not.toMatch(UNLOCK);
     });
@@ -84,16 +86,18 @@ describe('the $10 pack is never called an unlock', () => {
   // ask is pack then Developer; a Pro-only tool's ask is Pro alone (no pack rung).
   it('_rungsText on get_grid_intelligence: pack rung, then Developer — and no unlock word', () => {
     const r = withCtx({ session_id: SID }, () => _rungsText('get_grid_intelligence', 'free', SID));
-    expect(r).toContain('$10 one-time = 1,000 API credits');
-    expect(r).toContain('**Developer**');
+    expect(r).toContain('a one-time pack of 1,000 API credits');
+    expect(r).toContain('**a paid DC Hub plan for agents**');   // v14: the Developer rung, unnamed
+    expect(r).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(r).not.toMatch(UNLOCK);
   });
 
   it('_rungsText on a Pro-only tool: Pro alone — no pack rung, no unlock word', () => {
     const r = withCtx({ session_id: SID }, () => _rungsText('compare_sites', 'free', SID));
-    expect(r).toContain('**Pro**');
-    expect(r).not.toContain('$10 one-time');
+    expect(r).toContain('**the DC Hub plan with every tool**');   // v14: the Pro rung, unnamed
+    expect(r).not.toContain('one-time pack');
+    expect(r).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(r).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(r).not.toMatch(UNLOCK);
   });

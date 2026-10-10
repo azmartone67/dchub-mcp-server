@@ -217,7 +217,9 @@ describe("server.mjs states no rung as a literal", () => {
   const LIT = /\b\d[\d,]*\s*(?:free\s+)?calls?(?:\/day|\s+total)\b/i;
   it("finds the interpolated sites at all (vacuity guard)", () => {
     const hits = SRC.filter((l) => CODE(l) && /FREE_TIER\.\w+_calls_per_day|_callsPerDay\('\w+'\)/.test(l));
-    expect(hits.length).toBeGreaterThan(12);
+    // v14 (owner 2026-10-10) dropped the per-plan call counts from the walls (no counts tied to a plan),
+    // so fewer sites interpolate a rung; the free-tier ones remain.
+    expect(hits.length).toBeGreaterThan(5);
   });
   it("no code line carries a literal N calls/day or N free calls total", () => {
     const bad = SRC.map((l, i) => ({ l, n: i + 1 })).filter(({ l }) => CODE(l) && LIT.test(l));
