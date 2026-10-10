@@ -15,6 +15,10 @@
 //               (trimmed), which smithery-freshness.yml pushes to Smithery, so the
 //               two cannot drift. test/listing-copy.test.mjs enforces it.
 //   glama_400   the Glama-sized description, at most GLAMA_MAX chars
+//   tight       the variant for tight caps (owner 2026-10-10), at most TIGHT_MAX
+//               chars: DCPI lead + the MCP URL. cursor_directory caps at 280, so
+//               it got `short` (no URL), plus the backend Capacity Source line
+//               (118) on the submitter path. TIGHT_MAX leaves room for that line.
 //   tool_count  the served /mcp tools/list count (healed by sync-tools-manifest)
 //   price_line  exactly PRICE_LINE
 //   endpoints   exactly endpointsLine(tool_count)
@@ -39,11 +43,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const LISTING_COPY_PATH = 'canonical/listing-copy.json';
 export const GLAMA_MAX = 400;
+export const TIGHT_MAX = 160;
 export const PRICE_LINE = 'Paid plans: dchub.cloud/pricing';  // Grok DCPI rollout 2026-10-09: listings name no price, only the pricing page
 export const REST_URL = 'https://dchub.cloud/api/v1';
 export const MCP_URL = 'https://dchub.cloud/mcp';
-export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
-export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
+export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
+export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tight', 'price_line', 'endpoints', 'capacity_blurb'];
 
 /** The owner-approved tagline, character for character (Jonathan, 2026-10-09).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
@@ -115,7 +120,7 @@ export function copyFingerprints(copy) {
   const long = String(copy.long ?? '');
   const at = long.indexOf(CAPACITY_SENTENCE_ANCHOR);
   const capacitySentence = at >= 0 ? long.slice(at) : '';
-  return [...new Set([copy.short, copy.glama_400, copy.long, copy.tagline, capacitySentence, copy.capacity_blurb]
+  return [...new Set([copy.short, copy.glama_400, copy.long, copy.tight, copy.tagline, capacitySentence, copy.capacity_blurb]
     .map((v) => norm(v).slice(0, FINGERPRINT_CHARS))
     .filter((s) => s.length >= 40))];
 }
