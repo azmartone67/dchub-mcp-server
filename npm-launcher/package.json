@@ -1,6 +1,6 @@
 {
   "name": "dchub-mcp-server",
-  "version": "2.12.33",
+  "version": "2.12.34",
   "description": "DC Hub MCP server launcher: DCPI (Data Center Power Index) scores where data centers can get grid power across 300+ markets, plus live power-grid, fiber and site-selection intelligence for AI agents (94 tools). Connects any stdio MCP client to the hosted server at https://dchub.cloud/mcp.",
   "type": "module",
   "bin": {
