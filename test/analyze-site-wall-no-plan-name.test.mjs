@@ -26,7 +26,7 @@ const SITE_SCORE = {
   interpretation: 'Excellent site', source: 'DC Hub Site Intelligence',
 };
 const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY', 'DCHUB_PAYWALL_CONTRACT', 'DCHUB_B2_SITE_HEADLINE',
-  'DCHUB_PAID_SELL_LINE', 'DCHUB_WALL_SHORT_LINK'];
+  'DCHUB_PAID_SELL_LINE', 'DCHUB_WALL_SHORT_LINK', 'DCHUB_SITE_EMAIL_UNLOCK'];
 const prevEnv = {};
 // A site answer with no figure to withhold: the preview note keeps its base wording (no
 // "This answer hid ..." sentence to replace it).
@@ -120,7 +120,12 @@ for (const path of ['/mcp', '/mcp/grok']) {
   CASES.push({ path, pc: 'off', b2: '0', sell: '0', short: '1', bare: true,
                key: 'dch_live_wallnoplan' + String(CASES.length).padStart(6, '0') });
 }
-const label = (c) => `${c.path} ${c.key ? 'free key' : 'keyless'} contract=${c.pc} b2=${c.b2} sell=${c.sell} short=${c.short}${c.bare ? ' bare' : ''}`;
+// The cases above pin the trial wall: the keyless analyze_site email unlock (owner 2026-10-10) is
+// switched off for them (DCHUB_SITE_EMAIL_UNLOCK=0 restores that wall). Every keyless case runs
+// again with it on (the default), where the wall's one link is the email unlock instead.
+for (const c of CASES) c.email = '0';
+for (const c of CASES.filter((x) => !x.key)) CASES.push({ ...c, email: '1' });
+const label = (c) => `${c.path} ${c.key ? 'free key' : 'keyless'} contract=${c.pc} b2=${c.b2} sell=${c.sell} short=${c.short}${c.bare ? ' bare' : ''}${c.email === '1' ? ' email' : ''}`;
 
 describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', (_name, c) => {
   let r;
@@ -129,12 +134,28 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     process.env.DCHUB_B2_SITE_HEADLINE = c.b2;
     process.env.DCHUB_PAID_SELL_LINE = c.sell;
     process.env.DCHUB_WALL_SHORT_LINK = c.short;
+    process.env.DCHUB_SITE_EMAIL_UNLOCK = c.email;
     siteScore = c.bare ? SITE_SCORE_BARE : SITE_SCORE;
     r = await analyzeSite(c.path, { key: c.key, ua: c.path === '/mcp/grok' ? 'Grok/1.0' : 'claude-user' });
   });
 
   it('is the Pro-only wall, carrying the trial link (the check below is not vacuous)', () => {
     const sc = r.structuredContent;
+    if (c.email === '1') {
+      // Keyless with the email unlock on: the same wall markers, the one link is the email unlock.
+      expect(sc.required_plan).toBe('pro');
+      expect(sc._wall).toBe(true);
+      expect(sc.unlock_kind).toBe('email');
+      const link = sc.human_url;
+      expect(link).toMatch(c.short === '0' ? /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?\S*)?$/
+        : /^https:\/\/dchub\.cloud\/u\/abcdef$/);
+      expect(sc.user_message).toBe('Unlock the full site report free by email → ' + link);
+      expect(sc.for_your_human.url).toBe(link);
+      expect(r.content[0].text.startsWith(sc.user_message)).toBe(true);
+      expect(sc.agent_message).toMatch(/^Without a key, `analyze_site` returns /);
+      expect(sc.copy_version).toBe('v14');
+      return;
+    }
     expect(sc.required_plan).toBe('pro');
     expect(sc._wall).toBe(true);
     // Keyless: the /u/ short link the stub minted. Free key, or the short link switched off: the

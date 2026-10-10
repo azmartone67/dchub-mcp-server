@@ -196,7 +196,11 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
   const K = CASES[tool];
 
   it('a keyless caller gets the wall and no data', async () => {
-    const r = await call(tool, K.args, seat('anonymous', null));
+    // Pins the trial wall: analyze_site's email unlock + bands-only teaser (owner 2026-10-10, default on)
+    // is test/analyze-site-email-unlock-teaser.test.mjs; DCHUB_SITE_EMAIL_UNLOCK=0 restores this wall.
+    process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
+    let r;
+    try { r = await call(tool, K.args, seat('anonymous', null)); } finally { delete process.env.DCHUB_SITE_EMAIL_UNLOCK; }
     const sc = r.structuredContent || {};
     expect(sc._wall).toBe(true);
     expect(sc.error).toBe('pro_required');

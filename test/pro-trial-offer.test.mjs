@@ -124,6 +124,7 @@ describe('pro trial offer', () => {
 
   it('the Land & Power preview branch wraps its data answer after the no-data guard', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(src).toMatch(/_withProTrialOffer\(\s*_lpPreviewResult\(name, _noDataGuard\(await handler\(args\)\)\), name, c\)/);
+    // 2026-10-10: the raw answer is kept for the site teaser (_withLpSiteTeaser); the guard still runs first.
+    expect(src).toMatch(/const _rawP = _noDataGuard\(await handler\(args\)\);\s*return await _withProTrialOffer\(_withLpSiteTeaser\(name, _lpPreviewResult\(name, _rawP\), _rawP\), name, c\)/);
   });
 });

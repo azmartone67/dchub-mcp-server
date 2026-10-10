@@ -198,7 +198,12 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
 
   it('analyze_site anonymous: the free headline (band + weakest factor, no figures), the paid plan not the pack, not an error', async () => {
     process.env.DCHUB_PAYWALL_CONTRACT = 'on';
-    const r = await callAs('claude-ai', 'analyze_site', { lat: 33.45, lon: -112.07, capacity_mw: 100, state: 'AZ' });
+    // Pins the trial wall (DCHUB_SITE_EMAIL_UNLOCK=0); the email-unlock arm under the contract is
+    // test/analyze-site-email-unlock-teaser.test.mjs.
+    process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
+    let r;
+    try { r = await callAs('claude-ai', 'analyze_site', { lat: 33.45, lon: -112.07, capacity_mw: 100, state: 'AZ' }); }
+    finally { delete process.env.DCHUB_SITE_EMAIL_UNLOCK; }
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
     expect(said, r.text.slice(0, 400)).toBeTruthy();

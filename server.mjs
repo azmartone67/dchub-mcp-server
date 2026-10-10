@@ -567,6 +567,7 @@ function _relayMemo() {
 // Kill switch DCHUB_WALL_KIND_STAMP=0: tokens stay four-or-five-field.
 export const WALL_KIND_CAPACITY = 'w-capacity';
 export const WALL_KIND_FREEKEY = 'w-freekey';
+export const WALL_KIND_SITERUNS = 'w-siteruns';
 function _wallKindStampOn() {
   return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_KIND_STAMP || ''));
 }
@@ -575,7 +576,10 @@ function _relayWallKindFor(opts) {
     // be#6537 / #833: a call site that names the wall it is minting for ({ wall: 'depth' } on the
     // decision tools' taste) rides as is; the response-side classifier below may still re-stamp
     // it when the finished response says otherwise (a spent ration is capacity).
-    if (opts && /^(depth|capacity)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
+    // 'siteruns' (owner 2026-10-10): the keyless analyze_site wall's email unlock (_lpWallEmailResult);
+    // the backend's relay_wall_kind reads it for analyze_site only. Unknown to an older backend, which
+    // ignores a trailing field it does not know (see the w-freekey note above).
+    if (opts && /^(depth|capacity|siteruns)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
     if (!_wallKindStampOn()) return '';
     const k = (opts && typeof opts.kind === 'string') ? opts.kind : ((getCtx() && getCtx()._wallKind) || '');
     return (k === WALL_KIND_CAPACITY || k === WALL_KIND_FREEKEY) ? k : '';
@@ -8882,10 +8886,14 @@ export function _stampProWall(result, name, c) {
     // 2026-10-10): no plan name in tool text, so a line that still says "Pro" is replaced too.
     const _ok = (t) => typeof t === 'string' && /paid DC Hub plan|DC Hub's paid plan/.test(t)
       && /7-day (free )?trial/.test(t) && !/\bPro\b/.test(t);
-    const userMessage = _ok(sc.user_message) ? sc.user_message : proWallUserMessage(name, link);
-    const human = (fyh && fyh.url && _ok(fyh.text)) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
+    // The keyless analyze_site email unlock (owner 2026-10-10) is not a trial ask: its line and
+    // its one link stay as _lpWallEmailResult wrote them.
+    const _email = sc.unlock_kind === 'email' && typeof sc.user_message === 'string' && !!(fyh && fyh.url);
+    const userMessage = (_email || _ok(sc.user_message)) ? sc.user_message : proWallUserMessage(name, link);
+    const human = (fyh && fyh.url && (_email || _ok(fyh.text))) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
     const stamp = { _wall: true, required_plan: 'pro', user_message: userMessage,
-                    agent_message: proWallAgentMessage(name), for_your_human: human };
+                    agent_message: _email ? String(sc.message || '') + ' ' + RELAY_CONTRACT : proWallAgentMessage(name),
+                    for_your_human: human };
     const nsc = { ...sc, ...stamp };
     const out = { ...result, structuredContent: nsc };
     // content[0] is JSON on most branches, JSON + prose on a few; re-render only the clean case.
@@ -9017,6 +9025,108 @@ export function _b2FactorBands(parsed) {
     if (b) out[k] = b;
   }
   return Object.keys(out).length ? out : null;
+}
+// ── analyze_site email unlock + site teaser (owner 2026-10-10) ──────────────────
+// Below Pro, analyze_site shows a teaser: the VERDICT band (scoreBand of overall_score:
+// BUILD / CAUTION / AVOID, a missing score stays null) and the POWER band
+// (scores.power_infrastructure); every other factor is NAMED as locked and no score or
+// figure is shown. On the keyless wall the one link becomes the email unlock: the signed
+// /upgrade/h relay minted with the trailing marker w-siteruns (dchub-backend relay_wall_kind
+// answers 'siteruns' for analyze_site + that marker; the page takes an email and mints an
+// email-bound key onto this MCP session, whose monthly free full runs then apply). An older
+// backend ignores the marker and shows today's page. The keyed preview / spent branches get
+// the same teaser and keep their own link.
+// Kill switch: DCHUB_SITE_EMAIL_UNLOCK=0 restores the earlier responses byte for byte.
+export function _siteEmailUnlockOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SITE_EMAIL_UNLOCK || ''));
+}
+export const SITE_TEASER_LOCKED = ['overall_score', 'fiber_connectivity', 'gas_pipeline_access',
+  'market_conditions', 'risk_resilience'];
+export const SITE_TEASER_NOTE = 'Scores and the other factor bands come with the full site report.';
+export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email → ';
+const _SITE_VERDICTS = new Set(['BUILD', 'CAUTION', 'AVOID']);
+const _teaserNum = (v) => (typeof v === 'number' ? v
+  : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN));
+const _teaserBand = (v) => { const b = _pcScoreBand(_teaserNum(v)); return _SITE_VERDICTS.has(b) ? b : null; };
+// The teaser from analyze_site's raw (unmasked) answer; null when there is no answer
+// or nothing to band.
+export function _siteTeaser(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.success === false) return null;
+  const s = (parsed.scores && typeof parsed.scores === 'object') ? parsed.scores : {};
+  const verdict = _teaserBand(parsed.overall_score);
+  const power = _teaserBand(s.power_infrastructure);
+  if (!verdict && !power) return null;
+  return { verdict, power_infrastructure: power, locked: [...SITE_TEASER_LOCKED], note: SITE_TEASER_NOTE };
+}
+const _SITE_LOCKED_LABELS = { overall_score: 'overall score', fiber_connectivity: 'fiber connectivity',
+  gas_pipeline_access: 'gas pipeline access', market_conditions: 'market conditions',
+  risk_resilience: 'risk and resilience' };
+// One plain-text line, for clients that read text only.
+export function _siteTeaserLine(t) {
+  if (!t) return '';
+  return 'Site teaser: verdict ' + (t.verdict || 'not rated') + '; power infrastructure '
+    + (t.power_infrastructure || 'not rated') + '. Locked: '
+    + t.locked.map((k) => _SITE_LOCKED_LABELS[k] || k.replace(/_/g, ' ')).join(', ') + '. ' + t.note;
+}
+// The keyed preview / spent branches: structuredContent.site_teaser, the same block in block 0's
+// JSON when block 0 is the JSON payload, and the text line as its own block after it.
+export function _withSiteTeaser(result, teaser) {
+  if (!teaser || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+  const out = { ...result, structuredContent: { ...(result.structuredContent || {}), site_teaser: teaser } };
+  const content = result.content.slice();
+  const b0 = content[0];
+  if (b0 && b0.type === 'text' && typeof b0.text === 'string') {
+    try {
+      const j = JSON.parse(b0.text);
+      if (j && typeof j === 'object' && !Array.isArray(j)) content[0] = { ...b0, text: JSON.stringify({ ...j, site_teaser: teaser }) };
+    } catch (_) { /* prose block 0: the line below carries it */ }
+  }
+  content.splice(1, 0, { type: 'text', text: _siteTeaserLine(teaser) });
+  out.content = content;
+  return out;
+}
+// The keyed branches: the teaser from the handler's raw answer, analyze_site only, switch on.
+export function _withLpSiteTeaser(name, result, raw) {
+  if (name !== 'analyze_site' || !_siteEmailUnlockOn()) return result;
+  try { return _withSiteTeaser(result, _siteTeaser(JSON.parse(raw?.content?.[0]?.text || ''))); }
+  catch (_) { return result; }
+}
+// The keyless analyze_site wall with the email unlock as its one link. `relay` is the
+// buildHumanRelay result minted with { wall: 'siteruns' } (null → the caller serves the
+// earlier wall). `headline` is whatever the B2 / paywall-contract arms computed (kept as
+// before); `teaser` is _siteTeaser's block, null past the rate limit.
+export async function _lpWallEmailResult(name, relay, headline = null, teaser = null) {
+  if (!relay || !relay.url) return null;
+  const base = _lpWallResult(name, headline);
+  const c = getCtx() || {};
+  const tagged = _pcTagUrl(relay.url, _paywallArmFor(c));
+  const link = await _shortRelayPageLink(tagged, name);
+  const line = SITE_EMAIL_UNLOCK_LINE + link;
+  const site_teaser = teaser ? { ...teaser, unlock_url: link } : null;
+  const message = (teaser
+    ? 'Without a key, `analyze_site` returns the verdict band and the power band; scores and the other factor bands are locked. '
+    : 'Without a key, `analyze_site` returns no scores or figures. ')
+    + 'The full site report is free by email: show your human the link in human_url. Once they enter an email, '
+    + 'this session’s next `analyze_site` call returns the full report.';
+  const sc = {
+    ...base.structuredContent,
+    message,
+    unlock_kind: 'email',
+    ...(site_teaser ? { site_teaser } : {}),
+    upgrade_url: link, human_url: link,
+    user_message: line, show_to_user: true, copy_version: WALL_COPY_VERSION,
+    for_your_human: {
+      message: 'Your AI assistant ran a DC Hub site analysis. Open this link to unlock the full report free by email:',
+      url: link, text: line, render: 'verbatim_link_required',
+      markdown: '[Unlock the full site report free by email](' + link + ')',
+      _agent_instruction: 'DO NOT summarize or paraphrase this block away. Show your human the LINK ITSELF: '
+        + 'emit the `markdown` field above exactly as written, as a clickable link in your reply.',
+    },
+  };
+  const _wf = headline && !headline.sites && (headline.verdict || headline.weakest_factor) ? _b2WeakestFactorLine(headline) : '';
+  const text = [line, _siteTeaserLine(teaser), _wf,
+    'If the user prefers not to give an email, call `claim_free_key` (one call, no email).'].filter(Boolean).join('\n\n');
+  return { content: [{ type: 'text', text }], isError: base.isError, structuredContent: sc };
 }
 function _b2WeakestFactorLine(h) {
   return h && h.weakest_factor
@@ -19504,6 +19614,12 @@ function trackedTool(srv, name, description, schema, handler) {
         const _pcOn = _paywallContractOn(c);
         if (_lpAccess === 'wall') {
           status = 'lp_wall';
+          // Email unlock (owner 2026-10-10): the one link this wall serves, minted first so the
+          // signal below can say which arm it was. Undefined (switch off, no signing secret,
+          // relay off) serves the earlier wall.
+          const _emailRelay = (name === 'analyze_site' && _siteEmailUnlockOn())
+            ? buildHumanRelay(name, tier || 'free', (c && c.session_id) || '', { wall: 'siteruns' }) : undefined;
+          const _emailOn = !!(_emailRelay && _emailRelay.url);
           // The Pro wall is a paywall encounter, and it wrote NO signal: analyze_site, compare_sites,
           // find_sites and generate_site_analysis dropped from 148/66/8/3 paywall_hit signals in the
           // 30 days before 2026-09-23 to ZERO since the Land & Power Pro-only cutover (2026-09-22),
@@ -19521,7 +19637,7 @@ function trackedTool(srv, name, description, schema, handler) {
             api_key: c.api_key || null,
             tier_current: tier || 'free',
             tier_required: 'paid',
-            message_shown: 'lp_wall',
+            message_shown: _emailOn ? 'lp_wall_email' : 'lp_wall',
           });
           // The wall hands a human a signed /upgrade/h link, but the session never reached
           // mcp_high_intent_sessions, and human_acted (v5 to v10) joins a relay open to a high-intent row
@@ -19536,11 +19652,13 @@ function trackedTool(srv, name, description, schema, handler) {
           let _hl = null;
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
-          if ((_pcOn || _b2) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+          let _teaser = null;
+          if ((_pcOn || _b2 || _emailOn) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
               const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
-              _hl = _pcLpHeadline(name, _parsedHl);
+              if (_emailOn) _teaser = _siteTeaser(_parsedHl);
+              _hl = (_pcOn || _b2) ? _pcLpHeadline(name, _parsedHl) : null;
               // r-upgrade-h-first: the one number the wall may show is a COUNT the free
               // preview already keeps (nearby.substations_50km), measured by this very
               // call. Never a score or MW; absent when the call did not measure it.
@@ -19554,6 +19672,10 @@ function trackedTool(srv, name, description, schema, handler) {
                 if (_sc) _hl = { ..._hl, site_counts: _sc };
               }
             } catch (_) { _hl = null; }
+          }
+          if (_emailOn) {
+            const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser);
+            if (_ew) return _ew;
           }
           return await _lpWallResultV11(name, _hl);
         }
@@ -19583,14 +19705,15 @@ function trackedTool(srv, name, description, schema, handler) {
               tier_current: tier || 'free', tier_required: 'paid',
               message_shown: 'lp_free_spent',
             });
-            return await _withProTrialOffer(_withLpFreeRunsSpent(
-              _lpPreviewResult(name, _noDataGuard(await handler(args))), _fr, name), name, c);
+            const _rawS = _noDataGuard(await handler(args));
+            return await _withProTrialOffer(_withLpSiteTeaser(name, _withLpFreeRunsSpent(
+              _lpPreviewResult(name, _rawS), _fr, name), _rawS), name, c);
           }
           status = 'lp_preview';
           // r-pro-trial-offer: only a DATA answer reaches the offer (the guard
           // throws on a no-data one first); inert while the flag is off.
-          return await _withProTrialOffer(
-            _lpPreviewResult(name, _noDataGuard(await handler(args))), name, c);
+          const _rawP = _noDataGuard(await handler(args));
+          return await _withProTrialOffer(_withLpSiteTeaser(name, _lpPreviewResult(name, _rawP), _rawP), name, c);
         }
       }
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'

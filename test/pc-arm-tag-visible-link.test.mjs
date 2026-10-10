@@ -141,7 +141,11 @@ describe('F2: the arm tag rides the link people see', () => {
   });
 
   it('no arm (contract off, non-Grok client): nothing is tagged and the relay is the raw minted one', async () => {
-    const r = await call('analyze_site', LOC, seat());
+    // The trial label below is the trial wall's (DCHUB_SITE_EMAIL_UNLOCK=0); the email unlock's own label
+    // is pinned in test/analyze-site-email-unlock-teaser.test.mjs.
+    process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
+    let r;
+    try { r = await call('analyze_site', LOC, seat()); } finally { delete process.env.DCHUB_SITE_EMAIL_UNLOCK; }
     const all = JSON.stringify(r);
     expect(all).not.toMatch(/[?&]pc=/);
     const seen = r.content[0].text.match(RELAY)[0];

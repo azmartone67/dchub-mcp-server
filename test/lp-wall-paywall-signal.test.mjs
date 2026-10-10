@@ -60,7 +60,8 @@ describe('keyless Pro wall on the Land & Power tools', () => {
       expect(sig.length, `${t}: a paywall signal`).toBeGreaterThan(0);
       for (const s of sig) {
         expect(s.body.signal_type).toBe('paid_tool_blocked');
-        expect(s.body.message_shown).toBe('lp_wall');
+        // analyze_site's keyless wall serves the email unlock (owner 2026-10-10, default on): its own arm label.
+        expect(s.body.message_shown).toBe(t === 'analyze_site' ? 'lp_wall_email' : 'lp_wall');
         expect(s.body.session_id).toBeTruthy();
         expect(s.body.tier_required).toBe('paid');
       }
@@ -79,7 +80,7 @@ describe('keyless Pro wall on the Land & Power tools', () => {
 
 describe('where the wall must not fire', () => {
   it('a Pro key is not walled and writes no lp_wall signal, paid hit or claim attempt', () => {
-    const lpSignals = runs.pro.signals.filter((s) => s.body.message_shown === 'lp_wall');
+    const lpSignals = runs.pro.signals.filter((s) => /^lp_wall/.test(String(s.body.message_shown || '')));
     expect(lpSignals).toEqual([]);
     expect(runs.pro.paidHits).toEqual([]);
     expect(runs.pro.claimChecks).toEqual([]);
