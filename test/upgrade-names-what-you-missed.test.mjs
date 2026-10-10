@@ -126,9 +126,11 @@ async function call(name, args, s) {
 
 // ── reading the prompt ──────────────────────────────────────────────────────
 // Every "This answer hid …" sentence in the response (text and structured).
-const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|They come with DC Hub Developer|They come with DC Hub Pro|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
+const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|They come with DC Hub Developer|They come with DC Hub Pro|They come with a paid DC Hub plan|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
 const RUNG_OF = { 'The plans that return them are listed behind the link': 'pack', 'They come with DC Hub Developer': 'developer',
-  'They come with DC Hub Pro': 'pro', 'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
+  'They come with DC Hub Pro': 'pro',
+  // v13 (owner 2026-10-10): the Pro-only walls word the Pro rung without the plan name.
+  'They come with a paid DC Hub plan': 'pro', 'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
 function prompts(all) {
   const out = [];
   const s = all.replace(/\\"/g, '"');

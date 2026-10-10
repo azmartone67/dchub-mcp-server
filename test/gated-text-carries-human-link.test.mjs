@@ -41,7 +41,8 @@ const NAMED = ['get_market_dcpi_rank', 'unlock_more_data'];
 // pinned by paywall-contract.test.mjs) is a deliberate alternative to the relay
 // line on error walls: one sentence, one link, in the text block. It is the
 // response's one human ask, so it counts as the human line here.
-const WALL_USER_LINE = /(?:, your user can open|Start a 7-day Pro trial:) https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c)\//;
+// v13 (owner 2026-10-10): the Pro-only line reads "Start a 7-day trial:" (no plan name).
+const WALL_USER_LINE = /(?:, your user can open|Start a 7-day trial:) https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c)\//;
 const LINK = /https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c)\//g;
 
 let S, PORT, httpServer, stub, prevBase, prevSecret, GATED;

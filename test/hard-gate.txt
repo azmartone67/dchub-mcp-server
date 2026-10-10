@@ -4,6 +4,7 @@ test/agent-outreach-e2e.test.mjs
 test/agent-outreach.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-site-location.test.mjs
+test/analyze-site-wall-no-plan-name.test.mjs
 test/anchor-contract.test.mjs
 test/annotation-hints-every-surface.test.mjs
 test/anon-attribution.test.mjs

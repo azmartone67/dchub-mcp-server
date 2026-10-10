@@ -216,7 +216,8 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     // key-bound /go/c (the payer binding rides it; see the keyed cases above).
     expect(textOf(r).match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\/\S+/)[0]).toMatch(/\/upgrade\/h\//);
     expect(plansOf(r)).toEqual([]);
-    expect(text).toContain('DC Hub Pro');
+    expect(text).toContain("DC Hub's paid plan");
+    expect(text).not.toMatch(/\bPro\b/);   // v13: no plan name in tool text
     for (const l of LOWER_RUNG) expect(text).not.toContain(l);
     expect(text).toContain('claim_free_key');
     expect(burns).toEqual([]);

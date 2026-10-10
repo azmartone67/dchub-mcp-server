@@ -121,10 +121,10 @@ describe('F2: the arm tag rides the link people see', () => {
 
   it('_paywallContractStep tags a person\'s line that arrives untagged (whatever path built it)', () => {
     const bare = 'https://dchub.cloud/upgrade/h/c2Vzcy14fGFuYWx5emVfc2l0ZXxmcmVlfDE.0123456789abcdef0123456789abcdef';
-    const line = 'DC Hub Pro has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost. Start a 7-day Pro trial: ' + bare;
+    const line = "DC Hub's paid plan has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost. Start a 7-day trial: " + bare;
     const wall = { content: [{ type: 'text', text: line }], isError: true,
       structuredContent: { _wall: true, error: 'pro_required', tool: 'analyze_site', user_message: line,
-                           show_to_user: true, copy_version: 'v12', for_your_human: { url: bare } } };
+                           show_to_user: true, copy_version: 'v13', for_your_human: { url: bare } } };
     const r = S._ctxALS.run(seat(GROK), () => S._paywallContractStep(wall, 'analyze_site'));
     expect(r.content[0].text.startsWith(line.replace(bare, bare + '?pc=grok'))).toBe(true);
     expect(r.structuredContent.user_message).toContain(bare + '?pc=grok');
@@ -147,7 +147,7 @@ describe('F2: the arm tag rides the link people see', () => {
     const seen = r.content[0].text.match(RELAY)[0];
     const fyh = r.structuredContent.for_your_human;
     expect(fyh.url).toBe(seen);
-    expect(fyh.markdown).toBe('[🔓 Start a 7-day DC Hub Pro trial](' + seen + ')');
+    expect(fyh.markdown).toBe('[🔓 Start a 7-day DC Hub trial](' + seen + ')');
     expect(fyh.render).toBe('verbatim_link_required');
   });
 

@@ -62,7 +62,8 @@ describe('initialize instructions', () => {
     for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'MUST CALL', 'Use this whenever', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
-    expect(instructions).toContain('7-day Pro trial');
+    expect(instructions).toContain('the 7-day trial or checkout link');   // v13: no plan name
+    expect(instructions).not.toMatch(/\b(Pro|Developer|Starter)\b/);
     expect(instructions).not.toMatch(/\$\d/);          // no price on a Pro mention in the handshake
   });
   it('the long form is the resource dchub://instructions and keeps what moved out', async () => {

@@ -88,12 +88,13 @@ const LOC = { lat: 39.0412345, lon: -77.4845678, state: 'VA' };
 const contentText = (r) => r.content.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('\n');
 
 describe('F10: the Grok label never prices a tool the $10 pack does not open', () => {
-  it('Grok keyless analyze_site (contract on): for_your_human.markdown names Pro, no $10', async () => {
+  it('Grok keyless analyze_site (contract on): for_your_human.markdown names the paid plan, no plan name, no $10', async () => {
     const r = await call('analyze_site', LOC, seat(GROK));
     const md = r.structuredContent.for_your_human.markdown;
     expect(typeof md, 'no markdown: the check below would be vacuous').toBe('string');
     expect(md).not.toContain('$10');
-    expect(md).toContain('DC Hub Pro');
+    expect(md).toContain('paid plan, 7-day trial');
+    expect(md).not.toMatch(/\bPro\b/);   // v13: no plan name in tool text
   });
 
   it('the Grok markdown links the same URL the person\'s line and for_your_human.url carry', async () => {
@@ -114,7 +115,7 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
     expect(md).not.toContain('$10');
   });
 
-  it('the label helper: Pro on Land & Power / Pro-only tools, $10 on pack tools, Claude untouched', () => {
+  it('the label helper: the paid plan on Land & Power / Pro-only tools, $10 on pack tools, Claude untouched', () => {
     for (const t of ['analyze_site', 'compare_sites', 'get_dchub_recommendation']) {
       expect(S._relayLinkLabel('grok', t), t).toBe(S.GROK_RELAY_LABEL_PRO);
       expect(S._relayLinkLabel('grok', t), t).not.toContain('$10');
@@ -124,7 +125,8 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
     expect(S.GROK_RELAY_LABEL_DEV).not.toContain('$');
     expect(S._relayLinkLabel('grok', 'list_transactions')).toBe(S.GROK_RELAY_LABEL);
     expect(S._relayLinkLabel('grok')).toBe(S.GROK_RELAY_LABEL);
-    expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[🔓 Start a 7-day DC Hub Pro trial]');
+    expect(S._relayLinkLabel('claude', 'analyze_site')).toBe('[🔓 Start a 7-day DC Hub trial]');
+    expect(S.GROK_RELAY_LABEL_PRO).toBe('[📊 Get the full DC Hub analysis behind this answer — paid plan, 7-day trial]');
     expect(S._relayLinkLabel('claude', 'get_facility')).toBe('[🔓 Open DC Hub — see what I found]');
   });
 });
@@ -134,7 +136,7 @@ describe('F8: the keyless Pro hint says who acts first', () => {
     const r = await call('analyze_site', LOC, seat(GROK));
     const h = r.structuredContent.agent_hints.summary;
     expect(h.startsWith('Pro opens this tool; retry')).toBe(false);
-    expect(h).toMatch(/^after your user starts Pro, retry the same call; until then use the free headline above\./);
+    expect(h).toMatch(/^after your user starts a paid DC Hub plan, retry the same call; until then use the free headline above\./);
     expect(contentText(r)).toContain('(agent: ' + h + ')');
     expect(contentText(r)).toMatch(/Free headline: weakest factor /);   // the headline it points at is there
   });
@@ -142,7 +144,7 @@ describe('F8: the keyless Pro hint says who acts first', () => {
   it('a Pro wall with no headline does not point at one', async () => {
     const r = await call('get_dchub_recommendation', {}, seat(GROK));
     const h = r.structuredContent.agent_hints.summary;
-    expect(h).toMatch(/^after your user starts Pro, retry the same call\. /);
+    expect(h).toMatch(/^after your user starts a paid DC Hub plan, retry the same call\. /);
     expect(h).not.toContain('headline');
   });
 });

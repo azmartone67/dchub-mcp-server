@@ -46,8 +46,9 @@ export function priceOffenders(src) {
 }
 
 // Measured 2026-10-08 on origin/main. file → count.
+// 2026-10-10 (v13, owner: no plan name in the Pro-only walls or the instructions line): server.mjs 148 -> 130.
 const PLAN_BASELINE = {
-  'server.mjs': 148,
+  'server.mjs': 130,
   'lib/free-decision-taste.mjs': 3,
   'lib/metered-note.mjs': 1,
   'lib/paid-sell-line.mjs': 2,
