@@ -13,6 +13,8 @@
 //   - the copy rules on every text field: no facility count, no monthly price,
 //     no "$10 unlocks full answers", no "seven layers"
 //   - glama_400 is at most 400 characters
+//   - tight is at most 160 characters, leads with DCPI, carries the MCP URL,
+//     and fits beside the backend Capacity Source line in a 280-char cap
 //   - tool_count equals the canon snapshot AND the served /mcp tools/list set
 //     (the trackedTool registrations in server.mjs, the same derivation
 //     sync-tools-manifest uses) AND the registry manifests
@@ -24,7 +26,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, PRICE_LINE, endpointsLine,
+  LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, TIGHT_MAX, MCP_URL, PRICE_LINE, endpointsLine,
   copyRuleViolations, loadListingCopy, copyFingerprints, showsCurrentCopy,
   TAGLINE, TAGLINE_SUPERLATIVE, FINGERPRINT_CHARS,
 } from '../scripts/listing-copy.mjs';
@@ -83,6 +85,28 @@ describe('copy rules', () => {
     expect(COPY.glama_400.length).toBeLessThanOrEqual(GLAMA_MAX);
   });
 
+  // Owner 2026-10-10: a variant for tight caps. The backend registry builder
+  // (dchub-backend routes/mcp_presence_crawler.py) appends its Capacity Source
+  // line (118 chars, CAPACITY_SOURCE_BLURB there) when it fits; cursor_directory
+  // caps at 280. Repeated here on purpose: if either side grows, this goes red.
+  const BACKEND_BLURB_LEN = 118;
+  const CURSOR_CAP = 280;
+
+  it('tight is at most TIGHT_MAX (160) characters', () => {
+    expect(TIGHT_MAX).toBe(160);
+    expect(COPY.tight.length).toBeLessThanOrEqual(TIGHT_MAX);
+  });
+
+  it('tight + the backend Capacity Source line fits a 280-char cap', () => {
+    expect(COPY.tight.length + 1 + BACKEND_BLURB_LEN).toBeLessThanOrEqual(CURSOR_CAP);
+  });
+
+  it('tight carries the MCP URL (short does not: why tight exists) and names no tool count', () => {
+    expect(COPY.tight).toContain(MCP_URL);
+    expect(COPY.short).not.toContain(MCP_URL);
+    expect(COPY.tight).not.toMatch(/\btools?\b/);
+  });
+
   it('price_line is exactly the approved line', () => {
     expect(COPY.price_line).toBe('Paid plans: dchub.cloud/pricing');
     expect(COPY.price_line).toBe(PRICE_LINE);
@@ -98,7 +122,7 @@ describe('copy rules', () => {
 
   it('DCPI appears in sentence 1 or 2 of short, long, glama_400 and the GitHub description', () => {
     const early = (t) => t.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-    for (const t of [COPY.short, COPY.long, COPY.glama_400, read('canonical/github_description.txt'), SERVER_JSON.description]) {
+    for (const t of [COPY.short, COPY.long, COPY.glama_400, COPY.tight, read('canonical/github_description.txt'), SERVER_JSON.description]) {
       expect(early(t)).toMatch(/DCPI/);
     }
   });
@@ -290,8 +314,9 @@ describe('read-back fingerprints', () => {
   // The tagline is longer than FINGERPRINT_CHARS, so its fingerprint is a prefix.
   const TAGLINE_FP = COPY.tagline.toLowerCase().slice(0, FINGERPRINT_CHARS);
 
-  it('are derived from short / glama_400 / long', () => {
+  it('are derived from short / glama_400 / long / tight', () => {
     expect(fps.length).toBeGreaterThan(0);
+    expect(fps).toContain(COPY.tight.toLowerCase().slice(0, FINGERPRINT_CHARS));
   });
 
   it('include the tagline, the Capacity Source sentence of long, and capacity_blurb', () => {
