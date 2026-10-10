@@ -75,12 +75,17 @@ beforeAll(async () => {
   TOOLS = S.createServer()._registeredTools;
 }, 60_000);
 afterAll(() => {
+  delete process.env.DCHUB_SITE_EMAIL_UNLOCK;
   globalThis.fetch = realFetch;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
   delete process.env.DCHUB_WALL_ISERROR; delete process.env.DCHUB_WALL_SUCCESS_PLATFORMS;
   delete process.env.DCHUB_WALL_SHORT_LINK; delete process.env.DCHUB_RELAY_SHORT_LINK;
 });
 beforeEach(() => {
+  // This file pins the v11+ trial line on the keyless Land & Power walls. analyze_site's keyless wall now
+  // serves the email unlock by default (owner 2026-10-10; test/analyze-site-email-unlock-teaser.test.mjs);
+  // DCHUB_SITE_EMAIL_UNLOCK=0 restores the wall pinned here.
+  process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
   shortMode = 'ok'; shortPosts.length = 0; claimUrls.length = 0; S.keyCache.clear();
   relayMode = 'ok'; relayPosts.length = 0; delete process.env.DCHUB_RELAY_SHORT_LINK;
   delete process.env.DCHUB_WALL_ISERROR; delete process.env.DCHUB_WALL_SUCCESS_PLATFORMS;

@@ -90,11 +90,17 @@ beforeAll(async () => {
   TOOLS = S.createServer()._registeredTools;
 }, 60_000);
 afterAll(() => {
+  delete process.env.DCHUB_SITE_EMAIL_UNLOCK;
   globalThis.fetch = realFetch;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY;
   else process.env.DCHUB_INTERNAL_KEY = prevInternal;
 });
-beforeEach(() => { credits = 0; grandfathered = false; burns.length = 0; backendPaths.length = 0; planFor = {}; S.keyCache.clear(); });
+beforeEach(() => {
+  // B2 is pinned on the wall it shipped with. analyze_site's keyless email unlock (owner 2026-10-10,
+  // default on) keeps B2's headline fields and is covered in test/analyze-site-email-unlock-teaser.test.mjs.
+  process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
+  credits = 0; grandfathered = false; burns.length = 0; backendPaths.length = 0; planFor = {}; S.keyCache.clear();
+});
 
 let seatN = 0;
 const seat = (tier, key, extra = {}) => ({
