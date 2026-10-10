@@ -7,7 +7,8 @@
 // auto-sync) pastes or pushes FROM it; nothing writes a listing from memory.
 //
 // Fields:
-//   tagline     the owner-approved DC Hub tagline (2026-09-29), exact wording,
+//   tagline     the owner-approved DC Hub tagline (2026-10-09; the 2026-09-29
+//               "agentic procurement endpoint" line is retired), exact wording,
 //               no superlative ever added. TAGLINE below is the pinned value.
 //   short       one-sentence summary
 //   long        the Long description. Byte-equal to scripts/smithery_description.txt
@@ -44,9 +45,9 @@ export const MCP_URL = 'https://dchub.cloud/mcp';
 export const FIELDS = ['tagline', 'short', 'long', 'glama_400', 'tool_count', 'price_line', 'endpoints', 'capacity_blurb', 'updated_at'];
 export const TEXT_FIELDS = ['tagline', 'short', 'long', 'glama_400', 'price_line', 'endpoints', 'capacity_blurb'];
 
-/** The owner-approved tagline, character for character (Jonathan, 2026-09-29).
+/** The owner-approved tagline, character for character (Jonathan, 2026-10-09).
  *  canonical/listing-copy.json `tagline` must equal it; test/listing-copy.test.mjs. */
-export const TAGLINE = 'The real-time agentic procurement endpoint and data center knowledge hub.';
+export const TAGLINE = 'Live data center, power, grid, fiber and deal data for AI agents and site selection.';
 
 /** Words that may never be bolted onto the tagline ("the only", "first", ...). */
 export const TAGLINE_SUPERLATIVE = /\b(?:the only|only|first|on the planet|world'?s|largest|leading|best|number one|premier|ultimate)\b|#1/i;

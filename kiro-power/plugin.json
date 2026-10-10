@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "dchub",
   "version": "1.0.0",
-  "description": "The real-time agentic procurement endpoint and data center knowledge hub. Live data center market, power and grid, energy price and fiber data for site selection, from the remote DC Hub MCP server at https://dchub.cloud/mcp. The free tier needs no key.",
+  "description": "Live data center market, power and grid, energy price and fiber data for site selection, from the remote DC Hub MCP server at https://dchub.cloud/mcp. The free tier needs no key.",
   "author": {
     "name": "Jonathan Martone",
     "email": "jonathan@dchub.cloud",
