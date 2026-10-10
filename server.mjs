@@ -22740,7 +22740,10 @@ export function _wallKindFor(sc, c, name) {
       return WALL_KIND_CAPACITY;
     }
     if (!(c && c.api_key)) {
-      if (KEYED_FREE_BONUS.has(tool)) return WALL_KIND_FREEKEY;
+      // 2026-10-09 (phone test of be#6652): get_market_intel is still in KEYED_FREE_BONUS but
+      // has been preview-only on every free tier since 10-08 (tighten step 1), so marking it
+      // freekey sold a free key / email that returns the same preview. Its wall is depth.
+      if (KEYED_FREE_BONUS.has(tool) && !_freePreviewOnlyTool(tool)) return WALL_KIND_FREEKEY;
       const mu = _missedUpgradeFor(sc);
       if (mu && mu.rung === 'free_key') return WALL_KIND_FREEKEY;
     }

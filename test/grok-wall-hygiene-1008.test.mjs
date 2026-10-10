@@ -273,6 +273,15 @@ describe('item 3: the relay token is stamped with the wall kind at mint', () => 
     expect(S._wallKindFor({ error: 'anon_hard_wall' }, {}, 'analyze_site')).toBe('');
   });
 
+  it('a preview-only tool is never a free-key wall, even in KEYED_FREE_BONUS (phone test 2026-10-09)', () => {
+    // get_market_intel: still in KEYED_FREE_BONUS, preview-only on every free tier since 10-08.
+    // Marked freekey, its hand-off page sold an email unlock that returned the same preview.
+    expect(S._wallKindFor({ trial_preview: true }, {}, 'get_market_intel')).toBe('');
+    expect(S._wallKindFor({ trial_preview: true }, {}, 'get_grid_intelligence')).toBe('');
+    // control: a KEYED_FREE_BONUS tool a free key does answer in full keeps the marker
+    expect(S._wallKindFor({ trial_preview: true }, {}, 'get_water_risk')).toBe(S.WALL_KIND_FREEKEY);
+  });
+
   it('a depth wall carries no marker (four fields, keyless)', async () => {
     const r = await call('get_interconnection_queue', { iso: 'PJM' }, seat());
     const f = tokenFields(r.structuredContent.human_url);
