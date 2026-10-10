@@ -170,7 +170,7 @@ describe('gated results carry agent_instruction, human_url and a self-contained 
 describe('a Pro wall carries ONE link family: /go/c gives way to the relay (live audit 2026-10-07)', () => {
   const GOC = 'https://dchub.cloud/go/c/cHJvfGFiY3x4eXp8YW5hbHl6ZV9zaXRlfHYx.79368a5336114396d8b1be7d4dad1b86';
   const wall = (extra = {}) => {
-    const line = 'DC Hub Pro has the full site analysis. Start a 7-day Pro trial: ' + GOC;
+    const line = "DC Hub's paid plan has the full site analysis. Start a 7-day trial: " + GOC;   // v13 copy
     const sc = { _wall: true, _gated: true, _preview_only: true, ...extra, user_message: line,
       for_your_human: { text: line, url: GOC }, upgrade: { upgrade_url: GOC }, upgrade_url: GOC };
     return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };

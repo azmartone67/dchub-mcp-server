@@ -113,13 +113,14 @@ describe('_paidSellStep on real-shape keyless responses', () => {
     } finally { restore(); }
   });
   describe.each(['analyze_site', 'compare_sites'])('%s wall', (name) => {
-    it('Pro sentence, relay link without ?buy=1, no price, no claim_free_key', () => {
+    it('paid-plan sentence (no plan name), relay link without ?buy=1, no price, no claim_free_key', () => {
       const restore = env('1');
       try {
         const r = run(mk(name), name), t = text(r);
         const s = r.structuredContent.user_message;
         expect(s).toBe(proWallLine(name, r.structuredContent.for_your_human.url));
-        expect(s).toMatch(/in DC Hub Pro: https:\/\/dchub\.cloud\/(upgrade\/h|u)\/[^\s?]+$/);
+        expect(s).toMatch(/in DC Hub's paid plan: https:\/\/dchub\.cloud\/(upgrade\/h|u)\/[^\s?]+$/);
+        expect(s).not.toMatch(/\bPro\b/);
         expect(t).not.toMatch(/claim_free_key|buy=1|\$\d/);
         expect(t).toContain(s);
         expect(r.structuredContent._wall).toBeTruthy();   // still a wall

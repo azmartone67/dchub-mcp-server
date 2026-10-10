@@ -139,7 +139,8 @@ const tellLine = (text) => {
   if (m) return m[1];
   // copy v11 (2026-09-30): a Land & Power wall leads with the person's own line
   // (lib/wall-user-line.mjs), which replaces the contract's "Tell the user" ask.
-  return /Start a 7-day Pro trial: https:\/\//.test(first) ? first : null;
+  // v13 (owner 2026-10-10): "Start a 7-day trial:", no plan name.
+  return /Start a 7-day trial: https:\/\//.test(first) ? first : null;
 };
 
 describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', () => {
@@ -194,7 +195,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     expect(ctaUrls(r.text).length).toBeLessThanOrEqual(1);
   });
 
-  it('analyze_site anonymous: the free headline (band + weakest factor, no figures), Pro not the pack, not an error', async () => {
+  it('analyze_site anonymous: the free headline (band + weakest factor, no figures), the paid plan not the pack, not an error', async () => {
     process.env.DCHUB_PAYWALL_CONTRACT = 'on';
     const r = await callAs('claude-ai', 'analyze_site', { lat: 33.45, lon: -112.07, capacity_mw: 100, state: 'AZ' });
     expect(r.result.isError).toBe(false);
@@ -203,7 +204,7 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     // copy v11: the band (owner 2026-09-30) plus ONE measured count (MCP-1: nearby.substations_50km, a
     // count the free preview keeps) — never a score. The weakest factor stays in
     // structuredContent.limiting_factor below, not in the line a person reads.
-    expect(said).toMatch(/^DC Hub names gas pipeline access as the weakest factor on this site; 12 substations within 50 km\. DC Hub Pro has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Start a 7-day Pro trial: https:\/\/\S+$/);
+    expect(said).toMatch(/^DC Hub names gas pipeline access as the weakest factor on this site; 12 substations within 50 km\. DC Hub's paid plan has the full site analysis for this location: power, gas, fiber, market and risk scores, nearby substations and power cost\. Start a 7-day trial: https:\/\/\S+$/);
     expect(said).not.toMatch(/\$\d+\s*\/\s*mo/);
     expect(said).not.toMatch(/\$10|credits/);
     expect(ctaUrls(r.body)).toHaveLength(1);
@@ -220,12 +221,12 @@ describe('the contract over the real /mcp handler (DCHUB_PAYWALL_CONTRACT=on)', 
     expect(r.sc.agent_hints.error).toBe('pro_required');
   });
 
-  it('compare_sites anonymous: per-site bands, no winner, Pro', async () => {
+  it('compare_sites anonymous: per-site bands, no winner, the paid plan', async () => {
     process.env.DCHUB_PAYWALL_CONTRACT = 'on';
     const r = await callAs('claude-ai', 'compare_sites', { locations: '33.45,-112.07;39.04,-77.48' });
     expect(r.result.isError).toBe(false);
     const said = tellLine(r.text);
-    expect(said).toMatch(/^DC Hub rates site 1 \(weakest: [^)]+\), site 2 \(weakest: [^)]+\)\. DC Hub Pro has the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site\. Start a 7-day Pro trial: https:\/\/\S+$/);
+    expect(said).toMatch(/^DC Hub rates site 1 \(weakest: [^)]+\), site 2 \(weakest: [^)]+\)\. DC Hub's paid plan has the full side-by-side comparison: scores, the pick and why, nearby substations and power cost for each site\. Start a 7-day trial: https:\/\/\S+$/);
     expect(ctaUrls(r.body)).toHaveLength(1);
   });
 });

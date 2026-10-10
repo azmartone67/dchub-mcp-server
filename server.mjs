@@ -629,7 +629,8 @@ export const GROK_RELAY_LABEL = '[📊 Get the full DC Hub numbers behind this a
 // open (_paywallOffer sells Pro there). On those tools the label names Pro, unpriced
 // (owner rule 09-27: the only price DC Hub states is the $10 pack), with the trial the
 // contract's own offer line already names.
-export const GROK_RELAY_LABEL_PRO = '[📊 Get the full DC Hub analysis behind this answer — on DC Hub Pro, 7-day trial]';
+// v13 (owner 2026-10-10): no plan name in tool text.
+export const GROK_RELAY_LABEL_PRO = '[📊 Get the full DC Hub analysis behind this answer — paid plan, 7-day trial]';
 // Owner 2026-10-08: the decision tools' taste sells Developer (the pack is not what
 // returns these fields), so the Grok label names that rung and no price.
 export const GROK_RELAY_LABEL_DEV = '[📊 Get the full DC Hub brief behind this answer — on DC Hub Developer]';
@@ -641,7 +642,8 @@ function _toolSellsPro(tool) {
 }
 // ★ 2026-10-06 (Grok audit item 2): the default label on a Pro-only tool named neither
 // Pro nor the trial ("Open DC Hub — see what I found"); it now names both, unpriced.
-export const RELAY_LABEL_PRO = '[🔓 Start a 7-day DC Hub Pro trial]';
+// v13 (owner 2026-10-10): no plan name in tool text.
+export const RELAY_LABEL_PRO = '[🔓 Start a 7-day DC Hub trial]';
 export function _relayLinkLabel(platform, tool) {
   let p = platform;
   if (p === undefined) {
@@ -1202,7 +1204,7 @@ export function _unlockMoreDataEnvelope(a) {
     ? '✅ **This key already holds every DC Hub rung** — every tool, including the Pro-only ones, is served in full. Nothing more to add.'
     : _proLeadOn
       ? HUMAN_FIRST_MARKER + ' ' + proWallUserMessage(_proTool, _proLink) + '\n' +
-        '**API capacity, a separate option:** ' + PACK_PRICE + ' one-time = 1,000 API credits; Pro tools not included → ' + credits + '\n' +
+        '**API capacity, a separate option:** ' + PACK_PRICE + ' one-time = 1,000 API credits; paid-plan tools not included → ' + credits + '\n' +
         '💳 I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
         (_offer.pack
           ? '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*'
@@ -1251,12 +1253,15 @@ export function _unlockMoreDataEnvelope(a) {
       // the human screener's plan (Pro-only tools, site-grade coordinates).
       recommended_subscription: _proLeadOn ? 'pro' : _offer.developer ? 'developer' : (_offer.pro ? 'pro' : null),
       plans: [
-        ...(_proLeadOn ? [{ id: 'pro_trial', label: 'DC Hub Pro, 7-day trial', best_for: 'a human screening real sites — the Pro-only tools', checkout_url: _proLink }] : []),
+        ...(_proLeadOn ? [{ id: 'pro_trial', label: 'Paid DC Hub plan, 7-day trial', best_for: 'a human screening real sites — the paid-plan tools', checkout_url: _proLink }] : []),
         ...((_mppOn && !_proLeadOn) ? [{ id: 'mpp', label: '$0.50 per call — pay yourself, no human, no account',
                         best_for: 'autonomous agents (no card-holder in the loop)',
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
         // ladder stage 1: only the rungs above this caller (_unlockOfferFor).
-        ...(_offer.pack ? [{ id: 'credits',   label: '' + PACK_PRICE + ' one-time — 1,000 API credits (API capacity; Pro tools not included)', best_for: 'API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets; Pro tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
+        // v13 (owner 2026-10-10): after a Pro-only wall this list names no plan either.
+        ...(_offer.pack ? [{ id: 'credits',   label: '' + PACK_PRICE + ' one-time — 1,000 API credits (API capacity; ' + (_proLeadOn ? 'paid-plan' : 'Pro') + ' tools not included)', best_for: _proLeadOn
+          ? 'API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets; paid-plan tools not included; credits don’t expire, no subscription'
+          : 'API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets; Pro tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
         ...((_offer.developer && !_proLeadOn) ? [{ id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer }] : []),
         ...((_offer.pro && !_proLeadOn) ? [{ id: 'pro',       label: 'Pro subscription',       calls_per_day: _rungNum('pro'), best_for: 'a human screening real sites — Pro-only tools, site-grade coordinates, reports', checkout_url: pro }] : []),
       ],
@@ -8580,21 +8585,21 @@ export function _lpWallResult(name, headline = null) {
       // three verdict bands, so it is a key's (the preview keeps it).
       interpretation_label: undefined,
       limiting_factor: { factor: headline.weakest_factor,
-                         note: 'The weakest factor is named free; factor bands come with a free key, scores with Pro.' },
+                         note: 'The weakest factor is named free; factor bands come with a free key, scores with a paid DC Hub plan.' },
       ...(headline.site_counts ? { site_counts: headline.site_counts } : {}),
     } : {}),
     message: _b2
       ? '`analyze_site` without a key returns the weakest factor and counts. '
         + 'A free key adds factor bands and substation distance bands: call `claim_free_key`. '
-        + 'Scores and figures are Pro.'
-      : `\`${name}\` is Land & Power, and Land & Power details are Pro. Without a key it `
+        + 'Scores and figures need a paid DC Hub plan.'
+      : `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. Without a key it `
         + 'returns no data: no verdict, score or figure. A free key opens the preview '
         + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
     upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
-    content: [{ type: 'text', text: '🔒 **`' + name + '` is Land & Power, which is Pro.** No data without a key. '
-      + 'Get Pro → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
+    content: [{ type: 'text', text: '🔒 **`' + name + '` is Land & Power, which needs a paid DC Hub plan.** No data without a key. '
+      + 'Get a paid DC Hub plan → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
       + 'verdicts and bands, no scores or figures.' }],
     isError: _wallIsError(),
     structuredContent: payload,
@@ -8770,10 +8775,10 @@ export async function _withWallUserLine(result, name, opts = {}) {
 // reports it so the call is logged as status 'pro_wall'. Full Pro answers are untouched
 // (no required_plan marker). No price in the copy.
 export function proWallUserMessage(name, link) {
-  return 'DC Hub Pro has ' + proWhat(name) + '. Start a 7-day Pro trial: ' + link;
+  return "DC Hub's paid plan has " + proWhat(name) + '. Start a 7-day trial: ' + link;
 }
 export function proWallAgentMessage(name) {
-  return name + ' is a DC Hub Pro tool; this response is a preview. ' + RELAY_CONTRACT;
+  return name + ' needs a paid DC Hub plan; this response is a preview. ' + RELAY_CONTRACT;
 }
 export function _stampProWall(result, name, c) {
   try {
@@ -8788,10 +8793,12 @@ export function _stampProWall(result, name, c) {
       try { const r = buildHumanRelay(name, (c && c.tier) || 'free', (c && c.session_id) || '', { offer: PRO_TRIAL_OFFER }); link = (r && r.url) || ''; } catch (_) {}
     }
     if (!link) { try { link = _unlockUrl(name, (c && c.session_id) || ''); } catch (_) { link = ''; } }   // never a pricing page (r-relay-contract)
-    // Existing wall copy is kept when it already names DC Hub Pro and the 7-day trial (each arm's
+    // Existing wall copy is kept when it already names the paid plan and the 7-day trial (each arm's
     // own line is pinned by its own tests); anything else is replaced, so every gated Pro answer
-    // carries a compliant line for both readers (Grok audit 2026-10-06, item 2).
-    const _ok = (t) => typeof t === 'string' && t.includes('DC Hub Pro') && /7-day (Pro )?(free )?trial/.test(t);
+    // carries a compliant line for both readers (Grok audit 2026-10-06, item 2). v13 (owner
+    // 2026-10-10): no plan name in tool text, so a line that still says "Pro" is replaced too.
+    const _ok = (t) => typeof t === 'string' && /paid DC Hub plan|DC Hub's paid plan/.test(t)
+      && /7-day (free )?trial/.test(t) && !/\bPro\b/.test(t);
     const userMessage = _ok(sc.user_message) ? sc.user_message : proWallUserMessage(name, link);
     const human = (fyh && fyh.url && _ok(fyh.text)) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
     const stamp = { _wall: true, required_plan: 'pro', user_message: userMessage,
@@ -8931,7 +8938,7 @@ export function _b2FactorBands(parsed) {
 function _b2WeakestFactorLine(h) {
   return h && h.weakest_factor
     ? 'Free headline: ' + (h.verdict ? 'verdict ' + h.verdict + ', ' : '') + 'weakest factor ' + h.weakest_factor
-      + '. Scores and figures are Pro.'
+      + '. Scores and figures need a paid DC Hub plan.'
     : '';
 }
 // The distance bands dchub-backend routes/substation_band_producer.py
@@ -9074,13 +9081,16 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
     ...preview,
     ...(_withheldAny ? { _scores_in_pro: true } : {}),
     _gated: true, _preview_only: true, required_plan: 'pro',
-    _preview_note: 'Land & Power details are Pro: every score, MW, distance, price and '
+    _preview_note: 'Land & Power details need a paid DC Hub plan: every score, MW, distance, price and '
       + 'report link is null here. Verdicts, bands, names and counts are the preview.',
     upgrade_url: _lpProLink(),
   };
   // r-missed-upgrade: name the figures this preview hid and the rung that returns them.
   const _mu = _missedUpgradeFor(envelope);
-  if (_mu) envelope._preview_note = _mu.text + ' Verdicts, bands, names and counts are the preview.';
+  // v13 (owner 2026-10-10): no plan name in tool text. lib/upgrade-missed is unchanged (it
+  // serves every tool); on these Pro-only walls its Pro rung sentence is reworded here.
+  if (_mu) envelope._preview_note = (_mu.rung === 'pro' ? _mu.what + ' They come with a paid DC Hub plan.' : _mu.text)
+    + ' Verdicts, bands, names and counts are the preview.';
   return { content: [{ type: 'text', text: JSON.stringify(envelope) }], structuredContent: envelope };
 }
 
@@ -22669,7 +22679,8 @@ export function _relayContractStep(result, name) {
     const all = content.map((b) => (b && typeof b.text === 'string' ? b.text : '')).join('\n');
     const hasAsk = all.includes(HUMAN_FIRST_MARKER) || /Tell the user:/.test(all)
       || /https:\/\/dchub\.cloud\/go\/c\//.test(all) || /sent the full ask earlier/.test(all)
-      || /Start a 7-day Pro trial:|your user can open /.test(all) || _RELAY_URL_RE.test(all);
+      // v13 dropped "Pro" from the wall line; the v12 spelling is still accepted.
+      || /Start a 7-day (Pro )?trial:|your user can open /.test(all) || _RELAY_URL_RE.test(all);
     if (!hasAsk) content.push({ type: 'text', text: HUMAN_FIRST_MARKER + ' ' + relayLine });
     // Text with no parseable JSON head has nowhere to carry agent_instruction as data, so the
     // contract rides as one paragraph. The human line stays the LAST thing the agent reads: the
@@ -23810,7 +23821,8 @@ export const _INSTRUCTIONS_LEAN = (() => {
     + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool whose description says "Use this whenever...". Never answer MW, queue, fiber or price figures from memory or from an earlier call: a stale number is worse than a preview; cite `as_of`. '
     + 'KEYS: no key gives previews. `claim_free_key` (no email, one call) returns a key + config snippet; save it, never re-mint; `recover_my_key` re-sends a lost one.'
     + _INSTR_FREE_TIER + ' '
-    + 'PRO: ' + pro + ' are DC Hub Pro tools. A gated answer carries `human_url`: the 7-day Pro trial or checkout link. ' + RELAY_CONTRACT + ' '
+    // v13 (owner 2026-10-10): no plan name in tool text; the instructions line follows the walls.
+    + 'PAID: ' + pro + ' need a paid DC Hub plan. A gated answer carries `human_url`: the 7-day trial or checkout link. ' + RELAY_CONTRACT + ' '
     + 'FULL GUIDE: read the resource `' + INSTRUCTIONS_RESOURCE_URI + '` or https://dchub.cloud/llms.txt.';
 })();
 
