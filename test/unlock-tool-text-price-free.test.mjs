@@ -22,6 +22,8 @@ describe('unlock_more_data description is price-free', () => {
   }
   it('the response still sells the pack', () => {
     const r = _ctxALS.run({ session_id: 'pf-sid', tier: 'free', platform: 'cursor' }, () => _unlockMoreDataEnvelope({}));
-    expect(r.structuredContent.human_message).toContain('$10 one-time = 1,000 API credits');
+    // Owner 2026-10-10: sold as a pack of credits, with no amount (the checkout page shows it).
+    expect(r.structuredContent.human_message).toContain('a one-time pack of 1,000 API credits (usage capacity, not a subscription)');
+    expect(r.structuredContent.human_message).not.toContain('$');
   });
 });

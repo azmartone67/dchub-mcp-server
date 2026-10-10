@@ -1027,6 +1027,9 @@ function _subRungText(plan, url, what) {
     + (detail ? ' (' + detail + ')' : '') + ' → ' + url;
 }
 const _PACK_RUNG = '**' + PACK_PRICE + ' one-time = 1,000 API credits**, credits don’t expire → ';
+// unlock_more_data's copy states no amount (owner 2026-10-10): the checkout page shows the price.
+const _UNLOCK_PACK_TEXT = 'a one-time pack of 1,000 API credits (usage capacity, not a subscription)';
+const _UNLOCK_PACK_RUNG = '**' + _UNLOCK_PACK_TEXT + '**, credits don’t expire → ';
 
 // The ask every wall relays: the $10 pack, then Developer — or Pro when the tool
 // is Pro-only (r-dev-rung). Both links ride ONE line, so it survives
@@ -1069,7 +1072,9 @@ function _ladderText(toolName, tier, sessionId, offer) {
     const parts = [dev, pro].filter(Boolean);
     return parts.join(' · or ');
   }
-  return _PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')' + (dev ? ' · or ' + dev : '')
+  // Owner 2026-10-10: unlock_more_data (this function's only caller) names no amount; the checkout
+  // page shows the price. Other walls keep _PACK_RUNG.
+  return _UNLOCK_PACK_RUNG + r.pack + ' (' + _creditRuleText() + ')' + (dev ? ' · or ' + dev : '')
     + (pro ? ' · for a human screening sites: ' + pro : '');
 }
 // Which rungs are ABOVE this caller (lib/upgrade-missed rungFloor, the same floor
@@ -1204,7 +1209,7 @@ export function _unlockMoreDataEnvelope(a) {
     ? '✅ **This key already holds every DC Hub rung** — every tool, including the Pro-only ones, is served in full. Nothing more to add.'
     : _proLeadOn
       ? HUMAN_FIRST_MARKER + ' ' + proWallUserMessage(_proTool, _proLink) + '\n' +
-        '**API capacity, a separate option:** ' + PACK_PRICE + ' one-time = 1,000 API credits; paid-plan tools not included → ' + credits + '\n' +
+        '**API capacity, a separate option:** ' + _UNLOCK_PACK_TEXT + '; paid-plan tools not included → ' + credits + '\n' +
         '💳 I can’t enter a card myself — ' + _afterPay + '.' + _why + '\n\n' +
         (_offer.pack
           ? '*No payment needed yet? I can call `claim_free_key` for the free identified tier — all tools, ' + _freeKeyAllowanceText() + '.*'
@@ -1259,7 +1264,7 @@ export function _unlockMoreDataEnvelope(a) {
                         how: `retry the original call with the argument ${MPP_ARG_PAY}=true` }] : []),
         // ladder stage 1: only the rungs above this caller (_unlockOfferFor).
         // v13 (owner 2026-10-10): after a Pro-only wall this list names no plan either.
-        ...(_offer.pack ? [{ id: 'credits',   label: '' + PACK_PRICE + ' one-time — 1,000 API credits (API capacity; ' + (_proLeadOn ? 'paid-plan' : 'Pro') + ' tools not included)', best_for: _proLeadOn
+        ...(_offer.pack ? [{ id: 'credits',   label: 'One-time pack of 1,000 API credits (usage capacity, not a subscription; ' + (_proLeadOn ? 'paid-plan' : 'Pro') + ' tools not included)', best_for: _proLeadOn
           ? 'API capacity: full answers paid per call on the paid-class tools outside the paid-plan and depth-tease sets; paid-plan tools not included; credits don’t expire, no subscription'
           : 'API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets; Pro tools not included; credits don’t expire, no subscription', checkout_url: credits }] : []),
         ...((_offer.developer && !_proLeadOn) ? [{ id: 'developer', label: 'Developer subscription', calls_per_day: _rungNum('developer'), best_for: 'agents and apps running daily — full depth on every tool except the Pro-only ones, cancel anytime', checkout_url: developer }] : []),
@@ -1268,7 +1273,7 @@ export function _unlockMoreDataEnvelope(a) {
       free_alternative: { tool: 'claim_free_key', note: 'free identified tier, no email, ' + _freeKeyAllowanceText() + ', all tools' },
       // ladder stage 1: the pack and Developer open everything outside the Pro-only
       // set; only Pro opens that set. "every premium tool" was true of no rung below Pro.
-      what_unlocks: 'Developer: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the Pro-only set, and higher rate limits. The ' + PACK_PRICE + ' pack is API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets. Pro adds the Pro-only tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
+      what_unlocks: 'Developer: full grid intelligence (all ISOs/grids, not 1), full fiber depth, complete result sets (not partial previews) on every tool outside the Pro-only set, and higher rate limits. The one-time credit pack is API capacity: full answers paid per call on the paid-class tools outside the Pro-only and depth-tease sets. Pro adds the Pro-only tools: Land & Power, get_dchub_recommendation, gas prices and GeoJSON export.',
       binds_to_session: !!_sid,
       // r-anon-attrib (2026-08-26): was hardcoded `true` while binds_to_session
       // was correctly !!_sid — so the ONE class that could not get a
@@ -22892,7 +22897,9 @@ const _ONE_LINK_RUNG_SEG_RE_G = /\s*·\s*(?:or|for a human screening sites:)\s*\
 // "**$10 one-time = 1,000 API credits**, credits don’t expire → <go/c> (… credits per call)" — _PACK_RUNG
 // as _rungsText / _ladderText render it, URL captured; the trailing parenthetical is the heavy-tool
 // clause or the credit rule.
-const _ONE_LINK_PACK_RUNG_RE_G = /\*\*\$10 one-time = 1,000 API credits\*\*, credits don’t expire → (https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*])(?:\s*\([^)\n]*\))?/g;
+// Also unlock_more_data's unpriced rung (_UNLOCK_PACK_RUNG, owner 2026-10-10), so its ladder line still
+// converges on the one link.
+const _ONE_LINK_PACK_RUNG_RE_G = /\*\*(?:\$10 one-time = 1,000 API credits|a one-time pack of 1,000 API credits \(usage capacity, not a subscription\))\*\*, credits don’t expire → (https:\/\/dchub\.cloud\/[^\s"'`<>\\)\]}]*[^\s"'`<>\\)\]}.,;:!?*])(?:\s*\([^)\n]*\))?/g;
 const _ONE_LINK_PLANS_LABEL = '**the plans that include the full answer** → ';
 const _ONE_LINK_POINT_KEYS = new Set(['upgrade_url', 'unlock_url', 'human_url']);
 // Provenance is not a pointer (the projection doctrine: citation and provenance are never opted

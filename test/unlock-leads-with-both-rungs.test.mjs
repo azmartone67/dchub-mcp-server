@@ -53,7 +53,7 @@ function fields(url, prefix) {
 }
 
 describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () => {
-  it('keyless session: line one is the ask — $10, Developer, Pro, each a /go/c checkout on the session', () => {
+  it('keyless session: line one is the ask — the credit pack, Developer, Pro, each a /go/c checkout on the session', () => {
     const text = unlock({ session_id: SID }).content[0].text;
     const first = text.split('\n')[0];
     expect(first.startsWith(HUMAN_FIRST_MARKER)).toBe(true);
@@ -63,12 +63,15 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(fields(links[0], GO)).toEqual(['metered', SID]);
     expect(fields(links[1], GO)).toEqual(['developer', SID]);
     expect(fields(links[2], GO)).toEqual(['pro', SID]);
-    // Agent rungs ($10, Developer) are named before Pro. ★2026-10: the plans
+    // Agent rungs (the pack, Developer) are named before Pro. ★2026-10: the plans
     // are named, never priced (owner rule 09-27) — no monthly price on the line.
+    // Owner 2026-10-10: the pack is not priced here either; the checkout page shows it.
     const at = (s) => first.indexOf(s);
-    expect(at('$10 one-time')).toBeGreaterThanOrEqual(0);
+    const PACK = '**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**';
+    expect(at(PACK)).toBeGreaterThanOrEqual(0);
     expect(at('**Developer**')).toBeGreaterThan(-1);
-    expect(at('$10 one-time')).toBeLessThan(at('**Developer**'));
+    expect(at(PACK)).toBeLessThan(at('**Developer**'));
+    expect(first).not.toContain('$');
     expect(at('**Developer**')).toBeLessThan(at('**Pro**'));
     expect(first).not.toMatch(/\$\d+\s*\/\s*mo/);
     // Nothing links out ahead of the ask.
