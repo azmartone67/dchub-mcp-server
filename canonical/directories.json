@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-10T01:00:00Z",
+  "updated_at": "2026-10-10T15:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -155,13 +155,13 @@
     {
       "id": "raycast",
       "name": "Raycast",
-      "status": "unverified",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://github.com/raycast/extensions/blob/main/extensions/model-context-protocol-registry/src/registries/builtin/entries.ts",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-09",
-      "note": "raycast/extensions#31889 merged 2026-10-03 adds DC Hub as a built-in entry of the Model Context Protocol Registry extension (author thomas), not its own store page; raycast.com/azmartone67 404s. Keep unverified until an entry is visible on a public URL"
+      "verified_at": "2026-10-10",
+      "note": "built-in entry name 'dc-hub' / title 'DC Hub' in the Model Context Protocol Registry extension (raycast/extensions#31889, merged 2026-10-03); no own store page. GitHub source URL accepted as listing_url by owner 2026-10-10. Copy says 92 tools; refresh via a PR to raycast/extensions"
     },
     {
       "id": "mcphq",
@@ -177,13 +177,13 @@
     {
       "id": "cursor-directory",
       "name": "cursor.directory",
-      "status": "unverified",
-      "listing_url": null,
+      "status": "live",
+      "listing_url": "https://cursor.directory/plugins/dc-hub",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-09",
-      "note": "claimed live by Grok 2026-10-09; /mcp/dchub answered 429 (Vercel checkpoint), no listing found by search"
+      "verified_at": "2026-10-10",
+      "note": "live 2026-10-10 (title 'DC Hub | Cursor Directory', config url https://dchub.cloud/mcp; curl gets Vercel checkpoint 429, verified in a real browser). Copy is stale: says 92 MCP tools and links paid plans at dchub.cloud/pricing; refreshing it needs the listing claimed"
     },
     {
       "id": "docker",
