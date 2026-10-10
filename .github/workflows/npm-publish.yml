@@ -118,10 +118,34 @@ jobs:
             }
           ' "$RUNNER_TEMP/pack.json"
 
+      # Two pushes seconds apart can both pass the skip check above for the same
+      # version: the first publish is not yet visible to `npm view` when the
+      # second asks, so the second gets E409 "Cannot publish over previously
+      # staged version" (run 37986515965, 2026-10-09, 2.12.32). The publish is
+      # allowed to fail; the next step decides. The job only goes green if the
+      # version is then actually on npm.
       - name: Publish (trusted publishing, provenance)
+        id: publish
         if: steps.published.outputs.skip == 'false'
+        continue-on-error: true
         working-directory: npm-launcher
         run: npm publish --provenance --access public
+
+      - name: Publish failed - pass only if the version is on npm anyway
+        if: steps.publish.outcome == 'failure'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            out=$(npm view "dchub-mcp-server@$VERSION" version 2>/dev/null || true)
+            if [ "$out" = "$VERSION" ]; then
+              echo "::warning::npm publish failed, but dchub-mcp-server@$VERSION is on npm (a concurrent run published it). Treating as published."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::npm publish failed and dchub-mcp-server@$VERSION is still not on npm after 60s."
+          exit 1
 
       - name: Summary
         env:
