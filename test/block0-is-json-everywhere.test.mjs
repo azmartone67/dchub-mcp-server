@@ -51,6 +51,6 @@ describe('wiring', () => {
     // Grok audit 2026-10-08: _oneLinkWallStep wraps the contract step (it needs the final human_url)
     // and _partnerInboxStep is outermost but the flag; the flag stays outermost.
     // Revenue plan item 5 (2026-10-08): _emailHintStep wraps that one (it only appends a link-free line).
-    expect(src).toContain('async (args, extra) => _flagUpstreamError(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
+    expect(src).toContain('async (args, extra) => _flagUpstreamError(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(');
   });
 });

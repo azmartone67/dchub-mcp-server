@@ -90,6 +90,6 @@ describe('once per session, and only where it makes sense', () => {
 
 describe('wired into the pipeline', () => {
   it('wraps the partner-inbox step just inside _flagUpstreamError', () => {
-    expect(SRC).toMatch(/_flagUpstreamError\(_emailHintStep\(await _partnerInboxStep\(/);
+    expect(SRC).toMatch(/_flagUpstreamError\(_bindNoticeOnceStep\(_emailHintStep\(await _partnerInboxStep\(/);
   });
 });

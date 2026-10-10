@@ -4874,6 +4874,12 @@ async function _validateKeyUncached(api_key, opts = {}) {
       // {calls, since}; null on a resolve, a bound or paid key, or an older backend.
       usage: (data.usage && typeof data.usage === 'object' && Number.isFinite(Number(data.usage.calls)))
         ? { calls: Number(data.usage.calls), since: data.usage.since || null } : null,
+      // 2026-10-10 (owner, warm-keys decisions): the bind notice fires ONCE PER KEY.
+      // The backend stamps the key on its first counted call and answers true that
+      // once. per_key says the backend speaks it at all (an older one does not,
+      // and the per-session line in withBindHint stays in charge).
+      bind_notice_due: data.bind_notice_due === true,
+      bind_notice_per_key: typeof data.bind_notice_due === 'boolean',
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -5273,6 +5279,9 @@ export async function _freeKeyCallRefusal(c, toolName, daily = _freeKeyIsDaily()
   // The counted hop's usage record rides the request ctx for the bind notice
   // (withBindHint): no extra hop, and only keys the backend counts carry it.
   try { if (r && r.usage) c.key_usage = r.usage; } catch (_) { /* ctx is best-effort */ }
+  try {
+    if (r && r.bind_notice_per_key) { c.bind_notice_per_key = true; c.bind_notice_due = r.bind_notice_due === true; }
+  } catch (_) { /* ctx is best-effort */ }
   if (!r || _effectiveCallerKey(c.api_key, r) !== null) return null;
   // B1: a daily-allowance key is never refused for the retired lifetime count
   // here, whatever an un-migrated backend answers; that backend's own
@@ -9249,7 +9258,8 @@ export function withBindHint(result, name, c) {
     const out = { ...result, structuredContent: sc };
     try {
       const _sid = c && c.session_id;
-      if (_sid && sessionMeta.has(_sid)) {
+      // Once per KEY when the backend says so: _bindNoticeOnceStep owns the line then.
+      if (_sid && sessionMeta.has(_sid) && !(c && c.bind_notice_per_key)) {
         const _m = sessionMeta.get(_sid);
         if (!_m.bind_prose_shown) {
           _m.bind_prose_shown = true;
@@ -21420,12 +21430,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   _relayContractStep (it needs the final human_url) and _partnerInboxStep is
   //   outermost but _flagUpstreamError (it only appends). Each has its own kill
   //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
-  }, async (args, extra) => _flagUpstreamError(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -23044,6 +23054,33 @@ export function _emailHintStep(result, name) {
   } catch (_) { return result; }   // an offer is never worth failing a response over
 }
 export function _resetEmailHintState() { _EMAIL_HINT_SENT.clear(); }
+
+// ── Bind notice, once per key (owner 2026-10-10, warm-keys decisions) ──────────
+// 751 of 883 active keys have no email, so the agent is the only channel to them.
+// The backend's counted validate hop answers bind_notice_due=true on exactly one
+// call per key (it stamps the key in the same UPDATE), so this holds across
+// sessions, stateless calls, replicas and deploys. Here, in the outer chain, it
+// reaches every tool and every return path. The copy is _bindNoticeLine (mcp#888):
+// usage first, bind_email, and human_url only when this response carries one.
+// Skipped on the directory and Claude profiles and clean platforms (no relay lines
+// there by policy; /mcp/chatgpt never makes the counted hop anyway), and for bots,
+// internal and QA callers. A skip spends that key's notice: the stamp is the
+// backend's, and it is not worth a second hop to un-spend it.
+export function _bindNoticeOnceStep(result, name) {
+  try {
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    const c = getCtx() || {};
+    if (c.bind_notice_due !== true) return result;
+    c.bind_notice_due = false;   // one line per call, even if a step runs twice
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform() || isBotOrInternalCtx(c) || _isQaCaller(c)) return result;
+    if (!_isBindableCaller(c)) return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : {};
+    const line = _bindNoticeLine(c, sc);
+    if (result.content.some((x) => x && typeof x.text === 'string' && x.text.includes('call `bind_email` with your human'))) return result;
+    return { ...result, content: [...result.content, { type: 'text', text: line }] };
+  } catch (_) { return result; }   // a notice is never worth failing a response over
+}
 
 export function _oneLinkWallStep(result, name) {
   try {
