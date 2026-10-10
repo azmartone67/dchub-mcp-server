@@ -185,7 +185,9 @@ function expectFreePreview(out, label) {
     // Developer. (A live balance still returns the values: the pack seat below.)
     const cta = String(body._upgrade_cta || '');
     expect(cta, `${label} ${where}: _upgrade_cta`).toMatch(/^This answer hid deal values and MW\./);
-    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('They come with DC Hub Developer');
+    // v14 (owner 2026-10-10): the Developer rung's sentence names no plan.
+    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('They come with a paid DC Hub plan.');
+    expect(cta, `${label} ${where}: _upgrade_cta names no plan`).not.toMatch(/\b(Developer|Pro)\b/);
   }
   for (const needle of EXACT_NEEDLES) {
     expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);

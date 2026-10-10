@@ -108,7 +108,7 @@ describe('_paidSellStep on real-shape keyless responses', () => {
       const hdr = f.text.slice(f.text.indexOf('🔒'), f.text.indexOf('→ **For your human:**')).replace('the "For your human" link below (`rank_markets`', 'https://dchub.cloud/go/c/wall.tok (`rank_markets`');
       const r = { content: [{ type: 'text', text: '{"x":1}\n\n---\n\n' + hdr.trimEnd() }], structuredContent: f.sc };
       const t = run(r, 'rank_markets').content[0].text.trimEnd();
-      expect(t.endsWith('the one-click $10 link is: https://dchub.cloud/go/c/wall.tok')).toBe(true);
+      expect(t.endsWith('the one-click credit-pack link is: https://dchub.cloud/go/c/wall.tok')).toBe(true);   // v14: no amount
       expect(JSON.parse(t.split('\n\n---\n\n')[0])).toEqual({ x: 1 });
     } finally { restore(); }
   });

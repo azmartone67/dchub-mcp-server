@@ -7,7 +7,7 @@
 //     structuredContent.user_message is that line, show_to_user true, copy_version 'v11';
 //     claim_free_key follows it, as the "free preview first" alternative;
 //   * the offer is TRUTHFUL per tool: Land & Power and Pro-only tools name the paid plan, v13: no plan name (no
-//     price, no $10); the $10 pack is described as API capacity and the line never says unlock;
+//     price, no $10); the credit pack is described as API capacity (v14: with no amount) and the line never says unlock;
 //   * a keyless caller sees at most the verdict band, never a score or figure;
 //   * the mint is fail-open to the long /go/c link, and isError stays owner-controlled
 //     (DCHUB_WALL_ISERROR / DCHUB_WALL_SUCCESS_PLATFORMS), never hard-coded false;
@@ -116,7 +116,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(sc.user_message).toBe(line);
     expect(sc.show_to_user).toBe(true);
-    expect(sc.copy_version).toBe('v13');
+    expect(sc.copy_version).toBe('v14');
     const href = line.match(/https:\/\/\S+/)[0];
     expect(href).toMatch(RELAY_SHORT_RE);                          // Grok F5 test
     expect(sc.upgrade_url || sc.upgrade.upgrade_url).toBe(href);   // a later step nests it under upgrade
@@ -148,7 +148,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
     const { headers, body, signal } = relayPosts[0];
     expect(headers['X-Internal-Key']).toBe('wall-user-line-test-internal-key');
     expect(body.relay_url).toMatch(new RegExp('^' + RELAY.source + '$'));
-    expect(body).toMatchObject({ tool: 'analyze_site', host: 'cursor', copy_version: 'v13' });
+    expect(body).toMatchObject({ tool: 'analyze_site', host: 'cursor', copy_version: 'v14' });
     expect(signal).toBeInstanceOf(AbortSignal);
     expect(firstLine(r)).toContain(RELAY_SHORT);
   });
@@ -187,7 +187,7 @@ describe('keyless analyze_site wall (Land & Power)', () => {
       expect(shortPosts.length).toBe(1);
       const { headers, body } = shortPosts[0];
       expect(headers['X-Internal-Key']).toBe('wall-user-line-test-internal-key');
-      expect(body).toMatchObject({ plan: 'pro', tool: 'analyze_site', host: 'cursor', copy_version: 'v13' });
+      expect(body).toMatchObject({ plan: 'pro', tool: 'analyze_site', host: 'cursor', copy_version: 'v14' });
       expect(body.ref).toMatch(/^sess-wall-user-line-/);
       for (const mode of ['http500', 'junk', 'throw']) {
         shortMode = mode;
@@ -227,7 +227,7 @@ describe('a contract-arm caller (Grok) keeps the same first line', () => {
     expect(line).toMatch(/names .+ as the weakest factor on this site/);      // the weakest factor, no verdict, no figure
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.show_to_user).toBe(true);
-    expect(r.structuredContent.copy_version).toBe('v13');
+    expect(r.structuredContent.copy_version).toBe('v14');
     expect(r.structuredContent.paywall_contract).toBe('grok');
     expect(r.content[0].text).not.toContain('Tell the user:');
     expect(r.structuredContent.for_your_human.url).toBe(RELAY_SHORT);
@@ -309,10 +309,11 @@ describe('the offer is truthful per tool', () => {
     });
   });
 
-  it('a pack-class tool describes the $10 pack as API capacity, never as an unlock', async () => {
+  it('a pack-class tool describes the credit pack as API capacity (v14: no amount), never as an unlock', async () => {
     const r = await S._ctxALS.run(seat(), () => wall('get_market_intel'));
     const line = firstLine(r);
-    expect(line).toContain('$10 one-time');
+    expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount
+    expect(line).not.toMatch(/\$\d/);
     expect(line).toContain('1,000 API credits');
     expect(line).toMatch(/usage capacity/);
     expect(line).not.toMatch(/unlock/i);
@@ -332,10 +333,10 @@ describe('the offer is truthful per tool', () => {
 });
 
 describe('should-mint-claim carries the copy version', () => {
-  it('sends cv=v13 beside the session and tool', async () => {
+  it('sends cv=v14 beside the session and tool', async () => {
     await S._ctxALS.run(seat(), async () => S.shouldMintClaim(getSid(), 'analyze_site'));
     expect(claimUrls.length).toBe(1);
-    expect(new URL(claimUrls[0]).searchParams.get('cv')).toBe('v13');
+    expect(new URL(claimUrls[0]).searchParams.get('cv')).toBe('v14');
   });
   function getSid() { return 'sess-wall-user-line-claim-' + (++seatN); }
 });
@@ -351,7 +352,7 @@ describe('the other walls', () => {
     expect(line).not.toMatch(/\bPro\b/);
     expect(line).not.toMatch(/\$\d|unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
-    expect(r.structuredContent.copy_version).toBe('v13');
+    expect(r.structuredContent.copy_version).toBe('v14');
     expect(r.content[0].text).not.toMatch(/go\/c\/[A-Za-z0-9._-]*\.[0-9a-f]{32}/);   // no second pro ask
     expect(r.content[0].text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\//g)).toHaveLength(1);
     expect(r.isError).toBe(true);   // default transport unchanged
@@ -376,11 +377,12 @@ describe('the other walls', () => {
     expect(line).toContain(r.structuredContent.human_url);
     expect(r.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\//);
     expect(r.structuredContent.for_your_human.url).toBe(r.structuredContent.human_url);
-    expect(line).toContain('$10 one-time');
+    expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount
+    expect(line).not.toMatch(/\$\d/);
     expect(line).toMatch(/usage capacity/);
     expect(line).not.toMatch(/unlock/i);
     expect(r.structuredContent.user_message).toBe(line);
-    expect(r.structuredContent.copy_version).toBe('v13');
+    expect(r.structuredContent.copy_version).toBe('v14');
     expect(shortPosts.length).toBe(0);
     expect(JSON.stringify(r)).not.toMatch(/dchub\.cloud\/(?:go\/c|u)\//);
   });

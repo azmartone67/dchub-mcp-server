@@ -101,7 +101,7 @@ describe('#3 — every price is sourced, and Pro is the $99 that sells', () => {
     expect(bad.map((l) => l.trim().slice(0, 100))).toEqual([]);
   });
   it('the checkout ladder offers pro and no longer offers founding', () => {
-    expect(SRC).toMatch(/\{ id: 'pro', +label: 'Pro subscription'/);
+    expect(SRC).toMatch(/\{ id: 'pro', +label: 'A higher-volume DC Hub plan with every tool'/);
     expect(SRC).not.toMatch(/id: 'founding'/);
     // r-gated-cta-tokenized (2026-09-18): this used to pin the free-tier
     // nudge's link as a BARE https://dchub.cloud/pricing. That was the single

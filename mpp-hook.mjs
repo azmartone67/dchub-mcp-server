@@ -474,7 +474,7 @@ export function mppAdvertiseHint(name) {
     protocol: 'stripe-mpp',
     price_usd: price,
     machine_payable: true,
-    note: `Machine-payable: pay $${price} for this single \`${name}\` call (no key, no subscription) via Stripe MPP — a Shared Payment Token — to unlock the full result.`,
+    note: `Machine-payable: pay for this single \`${name}\` call with a per-call Stripe payment (no key, no subscription) via Stripe MPP — a Shared Payment Token — to unlock the full result.`,
     how: `Step 1: retry this exact call with the ARGUMENT ${MPP_ARG_PAY}=true to receive a payment challenge (in structuredContent.payment_required). Step 2: mint a Shared Payment Token from that challenge and retry once more with it in the ARGUMENT ${MPP_ARG_CRED} — you get full data + a payment receipt. Both are ordinary declared parameters of this tool, so you can set them yourself. (MCP clients that control params._meta may use _meta.mpp_pay / _meta[${JSON.stringify(MPP_CRED_KEY)}] instead — same rail.)`,
     credential_arg: MPP_ARG_CRED,
     pay_arg: MPP_ARG_PAY,
@@ -591,8 +591,8 @@ export async function mppPrewallOffer(name, remaining) {
     passive: true,
     free_full_answers_remaining: remaining,
     note: last
-      ? `This was your LAST free full \`${name}\` answer today. The next one is $${mppPrice(name)} — payable in one retry with the challenge below, no key and no human needed.`
-      : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that it is $${mppPrice(name)} per call — payable in one retry with the challenge below, no key and no human needed.`,
+      ? `This was your LAST free full \`${name}\` answer today. The next one is a per-call Stripe payment — payable in one retry with the challenge below, no key and no human needed.`
+      : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that each call is a per-call Stripe payment — payable in one retry with the challenge below, no key and no human needed.`,
   };
 }
 
@@ -632,6 +632,6 @@ export function mppUndercapOffer(name, remaining) {
     offer_type: 'under_cap',                   // passive — NOT pay-intent, NOT the near-wall pre_wall offer
     passive: true,
     ...(Number.isFinite(remaining) ? { free_full_answers_remaining: remaining } : {}),
-    note: `Heads up while your free \`${name}\` answers last: any call — including after today's free cap — can be paid in-turn for $${mppPrice(name)} (no key, no subscription; see \`how\`).`,
+    note: `Heads up while your free \`${name}\` answers last: any call — including after today's free cap — can be paid in-turn with a per-call Stripe payment (no key, no subscription; see \`how\`; the amount is in price_usd).`,
   };
 }

@@ -129,14 +129,17 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
       expect(go).toHaveLength(2);
       expect(fields(go[0], GO).parts).toEqual(['metered', SID]);
       expect(fields(go[1], GO).parts).toEqual(['developer', SID]);
-      expect(text).toContain('**$10 one-time = 1,000 API credits**');
-      expect(text).toContain('**Developer**');
-      expect(text).not.toMatch(/\$\d+\s*\/\s*mo/);
-      expect(text).toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
-      // Pro is not the agent default: a tool Developer opens never names it.
-      expect(text).not.toContain('**Pro**');
-      expect(text.indexOf('$10 one-time')).toBeLessThan(text.indexOf(go[0]));
-      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**Developer**'));
+      // v14 (owner 2026-10-10): the rungs are described, never named, priced or given a call count;
+      // the checkout page shows all three.
+      expect(text).toContain('**a one-time pack of 1,000 API credits (usage capacity, not a subscription)**');
+      expect(text).toContain('**a paid DC Hub plan for agents**');
+      expect(text).not.toMatch(/\$\d/);
+      expect(text).not.toMatch(/\b(Developer|Pro|Starter)\b/);
+      expect(text).not.toContain(_callsPerDay('developer').toLocaleString('en-US') + ' calls/day');
+      // The plan with every tool is not the agent default: a tool the agent plan opens never names it.
+      expect(text).not.toContain('**the DC Hub plan with every tool**');
+      expect(text.indexOf('a one-time pack')).toBeLessThan(text.indexOf(go[0]));
+      expect(text.indexOf(go[0])).toBeLessThan(text.indexOf('**a paid DC Hub plan for agents**'));
     });
   });
 
@@ -172,9 +175,9 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
         const go = text.match(GO_RE);
         expect(go, tool).toHaveLength(1);
         expect(fields(go[0], GO).parts, tool).toEqual(['pro', SID]);
-        expect(text, tool).toContain('**Pro**');
-        expect(text, tool).not.toContain('Developer');
-        expect(text, tool).not.toContain('$10 one-time');
+        expect(text, tool).toContain('**the DC Hub plan with every tool**');   // v14: the Pro rung, unnamed
+        expect(text, tool).not.toMatch(/\b(Developer|Pro)\b/);
+        expect(text, tool).not.toContain('one-time pack');
       });
     }
     // ...and grid/fiber intel left the Pro-only set: pack, then Developer.
@@ -204,22 +207,23 @@ describe('r-direct-pack + r-dev-rung — the relayed ask is the $10 checkout, th
     // their tease names Developer like every other DEPTH_TEASE tool.
     for (const tool of ['get_grid_intelligence', 'get_fiber_intel']) {
       const u = await upgrade(tool);
-      expect(u.message, tool).toContain('or a Developer subscription.');
+      expect(u.message, tool).toContain('or a paid DC Hub plan.');   // v14: the Developer rung, unnamed
       expect(u.pro_url, tool).toBeUndefined();
     }
     // The Pro branch itself still names Pro (a Pro-only tool driven directly).
     const up = await upgrade('get_dchub_recommendation');
-    expect(up.message).toContain('or a Pro subscription.');
+    expect(up.message).toContain('or the DC Hub plan with every tool.');
     expect(up.pro_url).toMatch(/^https:\/\/dchub\.cloud\/go\/c\//);
     // Control: a tool Developer opens still names Developer, and gets no pro_url.
     const u = await upgrade('get_pipeline');
-    expect(u.message).toContain('or a Developer subscription.');
+    expect(u.message).toContain('or a paid DC Hub plan.');
+    expect(u.message).not.toMatch(/\b(Developer|Pro)\b|\$\d/);
     expect(u.pro_url).toBeUndefined();
   });
 
   it('r-pro-only-sku: the free over-cap wall names Pro on a Pro-only tool', () => {
     // The over-cap wall is built inline in the tools/call handler; pin the branch.
-    expect(SRC).toContain("(also ⚡ ${_proOnlyTool(name) ? 'Pro, which opens \\`' + name + '\\`'");
+    expect(SRC).toContain("(also ⚡ ${_proOnlyTool(name) ? 'the DC Hub plan that opens \\`' + name + '\\`'");
   });
 
   it('clean platform (ChatGPT/OpenAI): the $10 rung stays the informational /upgrade/h page', () => {

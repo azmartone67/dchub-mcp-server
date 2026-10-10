@@ -156,7 +156,7 @@ describe('capacity_context reaches a real below-Pro analyze_site call (the previ
     const sc = await callOverHttp('analyze_site',
       { latitude: 32.7767, longitude: -96.797, capacity_mw: 500 });
     // v13 (owner 2026-10-10): the way up is named without the plan name.
-    expect(sc._preview_note).toContain('They come with a paid DC Hub plan.');
+    expect(sc._preview_note).toContain('They come with the DC Hub plan that includes every tool.');   // v14: lib/upgrade-missed's own unnamed Pro rung
     expect(sc._preview_note).not.toMatch(/\bPro\b/);
     // The response envelope files upgrade_url under `upgrade` on the wire.
     expect(sc.upgrade_url || (sc.upgrade && sc.upgrade.upgrade_url)).toMatch(/^https:\/\//);

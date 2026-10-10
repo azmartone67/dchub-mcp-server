@@ -370,9 +370,11 @@ describe('ladder stage 1 — per-seat outcome on the tools it changed', () => {
     const r = await call('get_dchub_recommendation', argsFor(t), K_DEV, false);
     const f = await call('get_dchub_recommendation', argsFor(t), K_FREE, false);
     expect(r.wall).toBe(false);
-    expect(r.text).not.toMatch(/needs full access|is a Pro tool\n\nYou're on/);
-    expect(r.text).toMatch(/is a Pro tool/);
-    expect(r.text).toMatch(/DC Hub Pro/);
+    expect(r.text).not.toMatch(/needs full access|needs a different paid plan\n\nYour current/);
+    // v14 (owner 2026-10-10): the line names neither the caller's plan nor the one that opens the tool.
+    expect(r.text).toMatch(/needs a different paid DC Hub plan/);
+    expect(r.text).toMatch(/the DC Hub plan that includes every tool/);
+    expect(r.text.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     expect(r.text).not.toMatch(/\$10 one-time|1,000 API credits/);
     expect(r.text).not.toMatch(/still covers every other tool/);
     // the same data a free key sees
@@ -382,7 +384,7 @@ describe('ladder stage 1 — per-seat outcome on the tools it changed', () => {
   it('a grandfathered Starter key over its grid allowance is pointed at Developer, not Pro', async () => {
     const t = TOOLS.find((x) => x.name === 'get_grid_intelligence');
     const r = await call('get_grid_intelligence', argsFor(t), K_STARTER, true);
-    expect(r.text).toMatch(/comes with DC Hub Developer/);
+    expect(r.text).toMatch(/comes with a paid DC Hub plan/);
     expect(r.text).not.toMatch(/depth is Pro/);
   }, 30000);
 

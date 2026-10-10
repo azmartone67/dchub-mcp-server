@@ -15,7 +15,7 @@ describe('no pack-returns-fields wording anywhere a rung or sell line is built',
     expect(c, 'control: the clause was built').toMatch(/^this answer hid MW and scores; /);
     expect(c).not.toMatch(PACK);
     expect(rungSentence('pack')).not.toMatch(PACK);
-    expect(rungSentence('developer'), 'control: other rungs still name their plan').toBe('They come with DC Hub Developer');
+    expect(rungSentence('developer'), 'control: other rungs still describe their plan (v14: unnamed)').toBe('They come with a paid DC Hub plan');
   });
   it('keyless sell lines never price the pack as the unlock', () => {
     const all = { _avg_time_to_power_months_in_pro: true, _queue_depth_gw_in_pro: true };

@@ -185,8 +185,8 @@ describe('F6: a keyless gated preview carries exactly one checkout URL', () => {
     expect(t.slice(line)).toMatch(RELAY);
     // Owner 2026-10-08: the rung named is Developer (the pack is not what returns these fields),
     // and it points at the one link
-    expect(t).toMatch(/DC Hub Developer/);
-    expect(t).not.toMatch(/\$10 one-time/);
+    expect(t).toMatch(/a paid DC Hub plan/);   // v14: the rung, unnamed
+    expect(t).not.toMatch(/\$10 one-time|one-time pack|\bDeveloper\b/);
     expect(t).not.toContain('dchub.cloud/go/c/');
   });
 

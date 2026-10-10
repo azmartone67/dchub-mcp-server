@@ -61,7 +61,10 @@ describe('mppUndercapOffer — compact machine-payable block', () => {
     expect(o.credential_arg).toBe(mpp.MPP_ARG_CRED);
     expect(o.how).toContain(mpp.MPP_CRED_KEY);
     // the human one-liner names the price
-    expect(o.note).toContain('$0.50');
+    // v14 (owner 2026-10-10): the note states no amount; price_usd carries it.
+    expect(o.note).toContain('per-call Stripe payment');
+    expect(o.note).not.toMatch(/\$\d/);
+    expect(o.price_usd).toBe('0.50');
     expect(o.free_full_answers_remaining).toBe(3);
   });
 

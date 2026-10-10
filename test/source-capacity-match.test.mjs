@@ -318,7 +318,7 @@ describe('rendering a match', () => {
 
   it('quota: exhausted free and unlimited paid each render their own line', async () => {
     responder = () => json(200, { ...MATCH_EXACT, quota: QUOTA_FREE_USED });
-    expect(rendered(await call({ target_mw: 40 }, seat()))).toContain('0 of 1 left this month on the free plan (resets 2026-10-01). More now: unlimited from Developer up');
+    expect(rendered(await call({ target_mw: 40 }, seat()))).toContain('0 of 1 left this month on the free plan (resets 2026-10-01). More now: unlimited on a paid DC Hub plan');
     responder = () => json(200, { ...MATCH_EXACT, quota: QUOTA_PAID, caller_tier: 'pro' });
     expect(rendered(await call({ target_mw: 40 }, seat({ tier: 'pro' })))).toContain('Introduction requests: unlimited on this plan.');
   });

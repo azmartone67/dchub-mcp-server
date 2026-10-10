@@ -108,7 +108,7 @@ describe('/mcp/grok states no facility count (corroborated count pending)', () =
   it('the /mcp/grok initialize instructions state no facility count', async () => {
     const init = await post('/mcp/grok', INIT);
     const instr = init.json.result.instructions;
-    expect(instr).toContain('/mcp/grok, which lists 11 DC Hub tools');   // it IS the Grok handshake
+    expect(instr).toContain('/mcp/grok lists 11 DC Hub tools');   // it IS the Grok handshake
     expect(facilityCounts(instr)).toEqual([]);
   });
 });

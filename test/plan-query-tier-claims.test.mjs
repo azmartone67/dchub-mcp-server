@@ -85,14 +85,16 @@ const m = (anon, free, pack, starter, developer, pro) => ({ anon, free, pack, st
 // Claim phrases. `fresh` / `spent` = expected result per seat with the daily
 // full-answer allowance unused / used up. Regexes are matched against the
 // note text itself, so the wording IS the claim.
+// v14 (owner 2026-10-10): the notes name no plan and no price ("a paid DC Hub plan gets the full answer",
+// "a credit pack"). Each phrase accepts the old wording too, so re-inserting it is still driven.
 const PHRASES = [
   // Owner 2026-10-08: the decision tools are previews on every non-paid seat, the pack
   // included; Developer and up get the full answer (test/free-decision-tools-preview-only).
   { id: 'developer-only-full',
-    re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a \$10 credit pack\); Developer and up get the full answer(?! \(a grandfathered)/,
+    re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a (?:\$10 )?credit pack\); (?:Developer and up get|a paid DC Hub plan gets) the full answer(?! \(a grandfathered)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, F, F, F) },
   { id: 'developer-only-full-starter-allowance',
-    re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a \$10 credit pack\); Developer and up get the full answer \(a grandfathered Starter key keeps its daily allowance\)/,
+    re: /a preview on every non-paid seat \(no key, a free key, a trial key, a bound email or a (?:\$10 )?credit pack\); (?:Developer and up get|a paid DC Hub plan gets) the full answer \(a grandfathered (?:Starter|older) key keeps its daily allowance\)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, P, F, F) },
   { id: 'any-key-full',
     re: /with no key a trimmed preview \(3 rows, project names and MW withheld\); any key, a free one included, gets the full survivor set/,
@@ -102,15 +104,15 @@ const PHRASES = [
   // Grok audit 2026-10-08 item 2: the $10 pack is API capacity and opens no depth-tease tool, so
   // the notes name Developer alone and the pack seat reads as the identified seat.
   { id: 'developer-full',
-    re: /no key or a free key gets a trimmed preview; Developer and up get the full answer(?!, unlimited)/,
+    re: /no key or a free key gets a trimmed preview; (?:Developer and up get|a paid DC Hub plan gets) the full answer(?!, unlimited)/,
     fresh: m(P, P, P, F, F, F), spent: m(P, P, P, F, F, F) },
   { id: 'allowance-then-developer-full',
-    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer(?!, unlimited)/,
+    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; (?:Developer and up get|a paid DC Hub plan gets) the full answer(?!, unlimited)/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, P, F, F, F) },
   // A rationed paid-class tool that is NOT depth-teased (hyperscaler_deals): a credit still buys
   // the full call, so the pack seat reads full here.
   { id: 'pack-or-developer-full',
-    re: /no key or a free key gets a trimmed preview; a \$10 credit pack or Developer and up get the full answer(?!, unlimited)/,
+    re: /no key or a free key gets a trimmed preview; a (?:\$10 )?credit pack or (?:Developer and up get|a paid DC Hub plan gets) the full answer(?!, unlimited)/,
     fresh: m(P, P, F, F, F, F), spent: m(P, P, F, F, F, F) },
   // The pre-2026-10-08 wording for depth-tease tools (the pack sold as a depth plan), kept KNOWN
   // so re-inserting it on one of them is driven: the pack seat no longer gets those in full.
@@ -120,7 +122,7 @@ const PHRASES = [
   // ladder stage 1: grid/fiber intel are unlimited at Developer (and per call on
   // the pack). A grandfathered Starter key keeps its old daily allowance (spent → P).
   { id: 'allowance-then-developer-unlimited',
-    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; Developer and up get the full answer, unlimited/,
+    re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; (?:Developer and up get|a paid DC Hub plan gets) the full answer, unlimited/,
     fresh: m(P, F, F, F, F, F), spent: m(P, P, P, P, F, F) },
   { id: 'legacy-allowance-then-pack-or-developer-unlimited',
     re: /with no key a trimmed preview; a free key gets a daily allowance of full answers, then previews; a \$10 credit pack or Developer and up get the full answer, unlimited/,
@@ -137,11 +139,11 @@ const PHRASES = [
   { id: 'free-full', re: /(?:is|are) free \+ full(?: at every tier| for everyone| by design)?/i, free_full: true },
   { id: 'free-friendly', re: /(?:is|are) free-tier friendly|(?:is|are) free citation hooks?|is free for everyone/, free_friendly: true },
   { id: 'gas-econ-below-pro',
-    re: /masks its numeric gas prices and the \$\/MWh table below Pro \(Developer included\)/, gas_below_pro: true },
+    re: /masks its numeric gas prices and the \$\/MWh table below (?:Pro \(Developer included\)|the DC Hub plan with every tool \(lower paid plans included\))/, gas_below_pro: true },
   // Not about one tool: the free-key call quota, rendered from canon.
   { id: 'free-key-quota', re: /Call quota on a free key: [^.]*\./, untooled: true },
   { id: 'retirement-mw-below-developer',
-    re: /lists retiring generators below Developer too, but its MW figures \([^)]*\) are null below Developer, and below Developer target_mw is held at 50; a \$10 credit pack opens them per call, as Developer depth/,
+    re: /lists retiring generators below (?:Developer|a paid plan) too, but its MW figures \([^)]*\) are null below (?:Developer|a paid plan), and below (?:Developer|a paid plan) target_mw is held at 50; a (?:\$10 )?credit pack opens them per call, as (?:Developer|paid-plan) depth/,
     retirement_mw: true },
 ];
 
@@ -151,6 +153,8 @@ const UNSCOPED = new Set([
   'Free-tier friendly citation hooks.',
   'Discovery is free (anon gets sample rows; a free key unlocks full discovery).',
   'Capacity MW / exact coordinates / deep specs are Developer+.',
+  // v14 (owner 2026-10-10): the same sentence with no plan name.
+  'Capacity MW / exact coordinates / deep specs need a paid DC Hub plan.',
   'analyze_site free tier returns a real citable headline (composite score + verdict + top limiting factor); the full per-factor breakdown is paid.',
 ]);
 const VOCAB = /\b(?:Developer|Starter|Pro|paid|previews?|teased?|free|full depth)\b|\+ full/i;

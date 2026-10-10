@@ -143,7 +143,7 @@ describe.each([['control v1 (arm off)', undefined], ['contract v2 (on)', 'on']])
       expect(t).not.toContain('30-day grid emergencies. The full');
       // Owner 2026-10-08: the grid brief has no free allowance any more; v1's header is the
       // missed-upgrade prompt naming Developer (test/free-decision-tools-preview-only).
-      if (!pc) { expect(t).toMatch(/This answer hid /); expect(t).toMatch(/DC Hub Developer/); expect(t).not.toMatch(/Free full answers left today/); }
+      if (!pc) { expect(t).toMatch(/This answer hid /); expect(t).toMatch(/a paid DC Hub plan/); expect(t).not.toMatch(/Free full answers left today/); }
       else expect(t).toMatch(/^Tell the user: "This answer hid /);            // v2's own missed-lead copy
     } finally { off(); restore(); }
   });
@@ -294,7 +294,7 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     try {
       const t = text(await callTool('get_fiber_intel', { metro: 'ashburn' }, seat()));
       // Grok audit 2026-10-08 item 2: the fiber rows are Developer's, so the old wall names Developer.
-      expect(t).toMatch(/the lowest plan that returns them is DC Hub Developer/);
+      expect(t).toMatch(/the lowest plan that returns them is a paid DC Hub plan/);
       expect(t).not.toContain('buy=1');
     } finally { off(); }
   });

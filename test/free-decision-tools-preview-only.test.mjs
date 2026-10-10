@@ -366,15 +366,17 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
       // the taste's own ladder (content JSON); the cascade's generic `upgrade` object is machine links only
       const up = r.data._upgrade || sc._upgrade || sc.upgrade;
       expect(up && up.unlocks_at).toBe('developer');
-      expect(up.message).toMatch(/DC Hub Developer/);
-      expect(up.message.indexOf('Developer')).toBeLessThan(up.message.indexOf('Pro'));
+      // v14 (owner 2026-10-10): the rung is described, never named or priced.
+      expect(up.message).toMatch(/opens with a paid DC Hub plan\./);
+      expect(up.message).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
       expect(up.message).not.toMatch(/\$10|1,000 (API )?credits|pack|https?:\/\//i);
       // the data block carries no checkout URL on any seat (the header and the relay line do)
       expect(JSON.stringify(up)).not.toMatch(/https?:\/\//);
       if (who.key) {
         // a keyed caller: the ladder is named in the text (the 🔒 header on the cascade tools,
         // the data block's message on the depth-tease path), and its human link is the relay
-        expect(r.text).toMatch(/DC Hub Developer/);
+        expect(r.text).toMatch(/a paid DC Hub plan/);
+        expect(r.text).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
         expect(sc.human_url).toMatch(/^https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/)/);
       } else {
         // keyless: no checkout URL in the DATA, and one human link — the relay — in the text
@@ -518,9 +520,9 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
     expect(out.envelope.taste.headline.basis).toMatch(/UNMEASURED/);
     expect(out.envelope._gated).toBe(true);
   });
-  it('the Grok relay label for these tools names Developer, never the pack price', () => {
+  it('the Grok relay label for these tools names the paid plan generically, never a plan name or price', () => {
     expect(S._relayLinkLabel('grok', 'get_grid_intelligence')).toBe(S.GROK_RELAY_LABEL_DEV);
-    expect(S.GROK_RELAY_LABEL_DEV).not.toMatch(/\$\d/);
+    expect(S.GROK_RELAY_LABEL_DEV).not.toMatch(/\$\d|\b(Developer|Pro)\b/);
     expect(S._relayLinkLabel('claude', 'get_market_intel')).toBe('[🔓 Open DC Hub — see what I found]');
     expect(S._relayLinkLabel('grok', 'list_transactions')).toBe(S.GROK_RELAY_LABEL);   // control: other tools unchanged
     expect(S._packOpensTool('get_interconnection_queue')).toBe(false);
@@ -629,11 +631,15 @@ describe('depth walls name no plan and no price to the agent (Grok 10-08 item 2)
       expect(prose).not.toMatch(/\$\s?10|Developer|\bPro\b|they pay|\bpack\b/i);
     });
   }
-  it('kill switch DCHUB_DEPTH_WALL_PLANLESS=0 restores the plan-naming copy', async () => {
+  // v14 (owner 2026-10-10): the restored copy no longer names a plan either; the switch still
+  // brings back the older rung-pointing header.
+  it('kill switch DCHUB_DEPTH_WALL_PLANLESS=0 restores the older header (still no plan name)', async () => {
     process.env.DCHUB_DEPTH_WALL_PLANLESS = '0';
     try {
       const r = await callAs({}, 'get_grid_intelligence', { iso: 'PJM' });
-      expect((r.result.content || []).map((c) => c.text).join('\n')).toMatch(/DC Hub Developer/);
+      const all = (r.result.content || []).map((c) => c.text).join('\n');
+      expect(all).toMatch(/opens with a paid DC Hub plan/);
+      expect(all.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
     } finally { delete process.env.DCHUB_DEPTH_WALL_PLANLESS; }
   });
 });
