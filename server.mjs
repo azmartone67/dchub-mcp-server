@@ -4862,6 +4862,10 @@ async function _validateKeyUncached(api_key, opts = {}) {
       // r-free-key-per-call: the backend marks the keys whose allowance is spent
       // per call (an unbound free key, a trial key). Absent on an older backend.
       counts_tool_calls: data.counts_tool_calls === true,
+      // 2026-10-10 (be#6670): an unbound key's usage record from the counted hop,
+      // {calls, since}; null on a resolve, a bound or paid key, or an older backend.
+      usage: (data.usage && typeof data.usage === 'object' && Number.isFinite(Number(data.usage.calls)))
+        ? { calls: Number(data.usage.calls), since: data.usage.since || null } : null,
     });
   } catch (err) {
     console.error('[validateKey] failed:', err.message);
@@ -5258,6 +5262,9 @@ export async function _freeKeyCallRefusal(c, toolName, daily = _freeKeyIsDaily()
   if (!v || !(v.counts_tool_calls === true || _gateRefusal)) return null;
   let r = null;
   try { r = await _validateKeyUncached(c.api_key, { count: true }); } catch (_) { r = null; }
+  // The counted hop's usage record rides the request ctx for the bind notice
+  // (withBindHint): no extra hop, and only keys the backend counts carry it.
+  try { if (r && r.usage) c.key_usage = r.usage; } catch (_) { /* ctx is best-effort */ }
   if (!r || _effectiveCallerKey(c.api_key, r) !== null) return null;
   // B1: a daily-allowance key is never refused for the retired lifetime count
   // here, whatever an un-migrated backend answers; that backend's own
@@ -9182,6 +9189,33 @@ function _isBindableCaller(c) {
 // idempotent, fully wrapped — must never break a tool response). The hint is
 // structured-first; r-bind-visible below additionally surfaces ONE prose line
 // per session, since most hosts never render structuredContent.
+// The once-per-session prose line. Owner 2026-10-10 (Grok item 5): 751 of 883
+// active keys have no email, so this line is the only channel to them. When the
+// counted validate hop returned the key's usage (be#6670), lead with it — the
+// agent can tell its human what the key has already done. A paid-path pointer rides
+// only when this response carries its own human_url (the one link an agent may
+// relay; never a second, hand-built link).
+export function _bindNoticeLine(c, sc) {
+  const base = 'call `bind_email` with your human\'s email to lift your daily full-data cap to '
+    + IDENTIFIED_DAILY_FULL_CAP + '/day + make this key recoverable.';
+  const u = c && c.api_key && c.key_usage;
+  const n = u ? Number(u.calls) : NaN;
+  let lead = '🔑 Free: ';
+  if (Number.isFinite(n) && n >= 2) {
+    let since = '';
+    try {
+      if (u.since && /^\d{4}-\d{2}-\d{2}$/.test(u.since)) {
+        since = ' since ' + new Date(u.since + 'T00:00:00Z').toLocaleDateString('en-US',
+          { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      }
+    } catch (_) { since = ''; }
+    lead = '🔑 This DC Hub key has made ' + n.toLocaleString('en-US') + ' calls' + since
+      + ' with no email on it. Free: ';
+  }
+  const pro = (sc && typeof sc.human_url === 'string' && sc.human_url)
+    ? ' For the answers a free key does not open, relay the link in human_url to your human.' : '';
+  return lead + base + pro;
+}
 export function withBindHint(result, name, c) {
   try {
     if (!result || result.isError || !Array.isArray(result.content)) return result;
@@ -9213,9 +9247,7 @@ export function withBindHint(result, name, c) {
         if (!_m.bind_prose_shown) {
           _m.bind_prose_shown = true;
           sessionMeta.set(_sid, _m);
-          out.content = [...result.content, { type: 'text', text:
-            '🔑 Free: call `bind_email` with your human\'s email to lift your daily full-data cap to ' +
-            IDENTIFIED_DAILY_FULL_CAP + '/day + make this key recoverable.' }];
+          out.content = [...result.content, { type: 'text', text: _bindNoticeLine(c, sc) }];
         }
       }
     } catch (_) { /* prose line is best-effort — never break a tool response */ }
