@@ -102,6 +102,18 @@ describe('npm-publish.yml — trusted publishing', () => {
     expect(pub).toMatch(/run:\s*npm publish --provenance --access public\s*$/m);
   });
 
+  it('a failed publish passes only when the version is then on npm', () => {
+    const pub = allSteps[find(/^Publish \(/)].body;
+    expect(pub).toMatch(/id:\s*publish\b/);
+    expect(pub).toMatch(/continue-on-error:\s*true/);
+    const i = find(/^Publish failed/);
+    expect(i).toBeGreaterThan(find(/^Publish \(/));
+    const body = allSteps[i].body;
+    expect(body).toMatch(/if:\s*steps\.publish\.outcome == 'failure'/);
+    expect(body).toContain('npm view "dchub-mcp-server@$VERSION" version');
+    expect(body).toMatch(/\[ "\$out" = "\$VERSION" \][\s\S]*?exit 0[\s\S]*?exit 1\s*$/);
+  });
+
   it('dry-run packs and requires exactly the 4 expected tarball files', () => {
     const i = find(/Dry-run pack/);
     expect(i).toBeGreaterThan(-1);
