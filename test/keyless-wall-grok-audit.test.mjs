@@ -65,11 +65,16 @@ afterAll(() => {
   globalThis.fetch = realFetch;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
   delete process.env.DCHUB_PAYWALL_CONTRACT; delete process.env.DCHUB_PAYWALL_CONTRACT_GROK;
+  delete process.env.DCHUB_SITE_EMAIL_UNLOCK;
 });
 beforeEach(() => {
   S.keyCache.clear();
   delete process.env.DCHUB_PAYWALL_CONTRACT; delete process.env.DCHUB_PAYWALL_CONTRACT_GROK;
+  delete process.env.DCHUB_SITE_EMAIL_UNLOCK;
 });
+// These pin the paid wall on keyless analyze_site; since 2026-10-10 that wall is the email
+// unlock (test/analyze-site-email-unlock-teaser.test.mjs) and the paid wall is its kill-switch path.
+const paidSiteWall = () => { process.env.DCHUB_SITE_EMAIL_UNLOCK = '0'; };
 
 let seatN = 0;
 const seat = (extra = {}) => ({
@@ -89,6 +94,7 @@ const contentText = (r) => r.content.map((b) => (b && typeof b.text === 'string'
 
 describe('F10: the Grok label never prices a tool the $10 pack does not open', () => {
   it('Grok keyless analyze_site (contract on): for_your_human.markdown names the paid plan, no plan name, no $10', async () => {
+    paidSiteWall();
     const r = await call('analyze_site', LOC, seat(GROK));
     const md = r.structuredContent.for_your_human.markdown;
     expect(typeof md, 'no markdown: the check below would be vacuous').toBe('string');
@@ -98,6 +104,7 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
   });
 
   it('the Grok markdown links the same URL the person\'s line and for_your_human.url carry', async () => {
+    paidSiteWall();
     const r = await call('analyze_site', LOC, seat(GROK));
     // F5: the person's link is the /u short link to the relay (the long relay when the mint fails).
     const seen = r.content[0].text.match(new RegExp('https://dchub\\.cloud/u/[2-9a-hj-km-np-z]{6}|' + RELAY.source))[0];
@@ -133,6 +140,7 @@ describe('F10: the Grok label never prices a tool the $10 pack does not open', (
 
 describe('F8: the keyless Pro hint says who acts first', () => {
   it('Grok keyless analyze_site: the hint does not tell the agent to retry now', async () => {
+    paidSiteWall();
     const r = await call('analyze_site', LOC, seat(GROK));
     const h = r.structuredContent.agent_hints.summary;
     expect(h.startsWith('Pro opens this tool; retry')).toBe(false);

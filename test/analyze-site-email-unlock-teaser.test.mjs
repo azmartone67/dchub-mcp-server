@@ -208,6 +208,12 @@ describe('paywall-contract arm on (DCHUB_PAYWALL_CONTRACT=on): the contract rewr
     expect(r.text.split('\n')[0]).toBe('Unlock the full site report free by email → ' + link);
     expect(r.sc.user_message).toBe('Unlock the full site report free by email → ' + link);
     expect(r.sc.site_teaser).toMatchObject({ verdict: 'BUILD', power_infrastructure: 'BUILD' });
+    // Live 10-10 (arm v2): the contract rewrote the agent line to "after your user starts a paid
+    // DC Hub plan, retry" and replaced the teaser line with "Free headline: ...". The email wall
+    // is left as built: only its links carry the arm.
+    expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD.');
+    expect(r.text).not.toMatch(/starts a paid|Free headline/);
+    expect(r.sc.agent_hints).toBeUndefined();
     expect(pageLinks(r.res)).toEqual([link]);
     const all = JSON.stringify(r.res);
     for (const f of FIGURES) expect(all).not.toMatch(new RegExp(`(?<![\\d.])${f.replace('.', '\\.')}(?![\\d.])`));

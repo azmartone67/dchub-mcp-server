@@ -890,6 +890,14 @@ function _paywallContractStepInner(result, name) {
     if (_OWN_TELL_TOOLS.has(name)) return result;
     if (_isCleanPlatform() || !_pcIsGated(result)) return result;
     const sc = (result && result.structuredContent) || {};
+    // The analyze_site email-unlock wall (owner 2026-10-10) is not a paywall pitch: the rewrite
+    // told the agent "after your user starts a paid DC Hub plan, retry" beside the email link and
+    // replaced the site-teaser line with "Free headline: ..." (measured live, arm v2, 10-10).
+    // Only its links take the arm tag; the wall is otherwise left as built.
+    if (sc.unlock_kind === 'email') {
+      const tagged = _pcTagLinks(result, arm);
+      return { ...tagged, structuredContent: { ...(tagged.structuredContent || sc), paywall_contract: arm } };
+    }
     // Reuse the relay this response already minted (same token the teaser was
     // stored under, and the pro-trial offer's ?offer=), else mint one.
     let url = (sc.for_your_human && typeof sc.for_your_human.url === 'string'
@@ -9123,8 +9131,9 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
         + 'emit the `markdown` field above exactly as written, as a clickable link in your reply.',
     },
   };
-  const _wf = headline && !headline.sites && (headline.verdict || headline.weakest_factor) ? _b2WeakestFactorLine(headline) : '';
-  const text = [line, _siteTeaserLine(teaser), _wf,
+  // No B2 "Free headline ... need a paid DC Hub plan" line here: the email opens the full
+  // report, so that clause is false on this wall, and the teaser already names the factors.
+  const text = [line, _siteTeaserLine(teaser),
     'If the user prefers not to give an email, call `claim_free_key` (one call, no email).'].filter(Boolean).join('\n\n');
   return { content: [{ type: 'text', text }], isError: base.isError, structuredContent: sc };
 }
