@@ -307,6 +307,7 @@ test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-value-strip.test.mjs
+test/readme-leads-with-dcpi.test.mjs
 test/readme-links-are-not-dead-ends.test.mjs
 test/recipe-lifecycle.test.mjs
 test/recommendation-categories-not-trimmed.test.mjs
