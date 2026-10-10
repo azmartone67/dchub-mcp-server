@@ -13,7 +13,10 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 (set 2026-05-03) became the edge: on 2026-10-10 the unit gate alone took
+    # 221s and whole jobs ran 257-301s, so runs were cancelled after every step
+    # had passed (run 38077603074: live suite 49/49, job killed 5s later).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
