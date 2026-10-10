@@ -161,7 +161,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-10",
-      "note": "built-in entry name 'dc-hub' / title 'DC Hub' in the Model Context Protocol Registry extension (raycast/extensions#31889, merged 2026-10-03); no own store page. GitHub source URL accepted as listing_url by owner 2026-10-10. Copy says 92 tools; refresh via a PR to raycast/extensions"
+      "note": "built-in entry name 'dc-hub' / title 'DC Hub' in the Model Context Protocol Registry extension (raycast/extensions#31889, merged 2026-10-03); no own store page. GitHub source URL accepted as listing_url by owner 2026-10-10. Copy updated to 94 tools by raycast/extensions#32155 (merged 2026-10-10)"
     },
     {
       "id": "mcphq",
