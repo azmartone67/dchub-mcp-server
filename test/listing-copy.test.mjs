@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 import {
   LISTING_COPY_PATH, FIELDS, TEXT_FIELDS, GLAMA_MAX, PRICE_LINE, endpointsLine,
   copyRuleViolations, loadListingCopy, copyFingerprints, showsCurrentCopy,
-  TAGLINE, TAGLINE_SUPERLATIVE,
+  TAGLINE, TAGLINE_SUPERLATIVE, FINGERPRINT_CHARS,
 } from '../scripts/listing-copy.mjs';
 import { execFileSync } from 'node:child_process';
 
@@ -197,27 +197,40 @@ describe('capacity_blurb', () => {
   });
 });
 
-describe('tagline (owner, 2026-09-29)', () => {
+describe('tagline (owner, 2026-10-09)', () => {
   // The literal is repeated here on purpose: a test that only compared the
   // JSON to the module constant would pass if both drifted together.
-  const OWNER_TEXT = 'The real-time agentic procurement endpoint and data center knowledge hub.';
+  const OWNER_TEXT = 'Live data center, power, grid, fiber and deal data for AI agents and site selection.';
+  // Retired 2026-10-09 (owner): the old tagline may not appear anywhere.
+  const RETIRED = /agentic\s+procurement\s+endpoint|data\s+center\s+knowledge\s+hub/i;
 
   it('is exactly the owner-approved string', () => {
     expect(COPY.tagline).toBe(OWNER_TEXT);
     expect(TAGLINE).toBe(OWNER_TEXT);
   });
 
-  it('carries no superlative, count or price', () => {
+  it('carries no superlative, count, price or retired wording', () => {
     expect(COPY.tagline).not.toMatch(TAGLINE_SUPERLATIVE);
     expect(COPY.tagline).not.toMatch(/\d|\$/);
+    expect(COPY.tagline).not.toMatch(RETIRED);
   });
 
   it('the superlative fence catches the banned shapes', () => {
     for (const bad of ['The only real-time agentic procurement endpoint',
       "The world's first real-time agentic procurement endpoint",
       'the real-time agentic procurement endpoint on the planet',
-      'The #1 agentic procurement endpoint', 'the leading data center knowledge hub']) {
+      'The #1 agentic procurement endpoint', 'the leading data center knowledge hub',
+      'The only live data center, power, grid, fiber and deal data',
+      "The world's first live data center, power, grid, fiber and deal data",
+      'the best data for AI agents and site selection']) {
       expect(bad, bad).toMatch(TAGLINE_SUPERLATIVE);
+    }
+  });
+
+  it('the retired-wording fence catches the old tagline', () => {
+    for (const bad of ['The real-time agentic procurement endpoint and data center knowledge hub.',
+      'agentic procurement endpoint', 'the data center knowledge hub']) {
+      expect(bad, bad).toMatch(RETIRED);
     }
   });
 
@@ -228,29 +241,32 @@ describe('tagline (owner, 2026-09-29)', () => {
     expect(next).toBe(COPY.tagline);
   });
 
-  it('every copy anywhere in the repo is exact, with no superlative beside it', () => {
+  it('no file in the repo carries the retired tagline; every copy of the new one is exact', () => {
     const files = execFileSync('git', ['ls-files', '-z'], { cwd: new URL('..', import.meta.url), encoding: 'utf8' })
       .split('\0').filter((f) => /\.(md|txt|json|m?js|ya?ml|html)$/.test(f)
         && f !== 'test/listing-copy.test.mjs' && f !== 'scripts/listing-copy.mjs');
+    let scanned = 0;
     let seen = 0;
     for (const f of files) {
       let text;
       try { text = read(f); } catch { continue; }
-      if (!/agentic\s+procurement\s+endpoint/i.test(text)) continue;
+      scanned++;
       for (const line of text.split('\n')) {
-        for (const m of line.matchAll(/agentic\s+procurement\s+endpoint/gi)) {
-          const start = m.index - 'The real-time '.length;
-          const exact = start >= 0 && line.slice(start, start + OWNER_TEXT.length) === OWNER_TEXT;
-          expect(exact, `${f}: ${line.trim().slice(0, 160)}`).toBe(true);
-          const beside = line.slice(Math.max(0, start - 40), start) + ' | '
-            + line.slice(start + OWNER_TEXT.length, start + OWNER_TEXT.length + 40);
+        expect(line, `${f}: retired tagline wording: ${line.trim().slice(0, 160)}`).not.toMatch(RETIRED);
+        let at = line.indexOf(OWNER_TEXT);
+        while (at !== -1) {
+          const beside = line.slice(Math.max(0, at - 40), at) + ' | '
+            + line.slice(at + OWNER_TEXT.length, at + OWNER_TEXT.length + 40);
           expect(beside, `${f}: superlative beside the tagline`).not.toMatch(TAGLINE_SUPERLATIVE);
           seen++;
+          at = line.indexOf(OWNER_TEXT, at + 1);
         }
       }
     }
-    // listing-copy.json + llms.txt at least; a scan that saw nothing proves nothing.
-    expect(seen).toBeGreaterThanOrEqual(2);
+    // A scan that read nothing, or found no copy of the tagline, proves nothing.
+    expect(scanned).toBeGreaterThan(50);
+    // listing-copy.json + llms.txt + GEMINI.md + kiro-power/README.md at least.
+    expect(seen).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -271,13 +287,15 @@ describe('the heal engine owns it', () => {
 
 describe('read-back fingerprints', () => {
   const fps = copyFingerprints(COPY);
+  // The tagline is longer than FINGERPRINT_CHARS, so its fingerprint is a prefix.
+  const TAGLINE_FP = COPY.tagline.toLowerCase().slice(0, FINGERPRINT_CHARS);
 
   it('are derived from short / glama_400 / long', () => {
     expect(fps.length).toBeGreaterThan(0);
   });
 
   it('include the tagline, the Capacity Source sentence of long, and capacity_blurb', () => {
-    expect(fps).toContain(COPY.tagline.toLowerCase());
+    expect(fps).toContain(TAGLINE_FP);
     expect(fps.some((f) => f.startsWith('capacity source adds a free capacity marketplace'))).toBe(true);
     expect(fps.some((f) => f.startsWith('capacity source by dc hub:'))).toBe(true);
   });
@@ -304,8 +322,11 @@ describe('read-back fingerprints', () => {
   });
 
   it('a reworded or boastful tagline is not a fingerprint match', () => {
-    expect(showsCurrentCopy('The only real-time agentic procurement endpoint and data-center knowledge hub.',
-      fps.filter((f) => f === COPY.tagline.toLowerCase()))).toBe(false);
+    // The tagline fingerprint must exist, or the filter below is empty and the
+    // false verdict would be vacuous.
+    expect(fps.filter((f) => f === TAGLINE_FP)).toHaveLength(1);
+    expect(showsCurrentCopy('The only live data center, power, grid, fiber and deal data for AI agents and site-selection.',
+      fps.filter((f) => f === TAGLINE_FP))).toBe(false);
   });
 
   it('a page carrying the copy (re-wrapped, entity-encoded, truncated) matches', () => {

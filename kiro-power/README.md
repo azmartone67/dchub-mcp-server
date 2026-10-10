@@ -1,6 +1,6 @@
 # DC Hub power for Kiro
 
-The real-time agentic procurement endpoint and data center knowledge hub.
+Live data center, power, grid, fiber and deal data for AI agents and site selection.
 
 This directory is a [Kiro power](https://kiro.dev/docs/powers/) in the
 [Agent Plugins](https://agent-plugins.org) format. It connects Kiro to the

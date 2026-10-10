@@ -1,6 +1,6 @@
 # DC Hub (dchub.cloud)
 
-The real-time agentic procurement endpoint and data center knowledge hub.
+Live data center, power, grid, fiber and deal data for AI agents and site selection.
 
 The `dchub` MCP server connects to the remote server at https://dchub.cloud/mcp.
 The free tier needs no key.
