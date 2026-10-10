@@ -206,9 +206,17 @@ describe('initialize instructions name no plan for the paid tools', () => {
     }
   });
 
-  it.each(SURFACES)('%s instructions contain no "DC Hub Pro", "Pro trial" or "Pro tools"', (path) => {
+  it('/mcp carries the FREE TIER clause without a plan name', () => {
+    expect(served['/mcp']).toContain('Grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan.');
+  });
+
+  // Owner 2026-10-10: no plan name (Pro, Developer, Starter) in the served instructions; URLs and
+  // ids are not copy, so they are dropped before the scan.
+  it.each(SURFACES)('%s instructions name no plan (Pro, Developer, Starter)', (path) => {
     expect(typeof served[path], path).toBe('string');
     expect(served[path].length, path).toBeGreaterThan(200);
-    expect(served[path]).not.toMatch(/DC Hub Pro|Pro trial|Pro tools/);
+    const copy = served[path].replace(/https?:\/\/\S+/g, '<url>');
+    expect(copy).not.toMatch(/DC Hub Pro|Pro trial|Pro tools/);
+    expect(copy.match(/[^.]{0,60}\b(Pro|Developer|Starter)\b[^.]{0,40}/g) || []).toEqual([]);
   });
 });
