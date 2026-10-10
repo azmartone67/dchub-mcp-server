@@ -27,6 +27,7 @@ test/b1-free-key-daily-allowance.test.mjs
 test/b2-analyze-site-keyless-headline.test.mjs
 test/band-matches-verdict.test.mjs
 test/bind-midcall-facility-mask.test.mjs
+test/bind-notice-key-usage.test.mjs
 test/block0-is-json-everywhere.test.mjs
 test/byo-mcp-paywall-lead.test.mjs
 test/canon-floor-rule.test.mjs
