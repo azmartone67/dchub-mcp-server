@@ -41,7 +41,8 @@ describe('unlock_more_data after a Pro-only wall', () => {
   it('no Pro trigger: the pack still leads, described as capacity, never as an unlock', () => {
     const r = run('no-wall-sid', {});
     const m = r.structuredContent.human_message;
-    expect(m).toContain('$10 one-time = 1,000 API credits');
+    expect(m).toContain('a one-time pack of 1,000 API credits (usage capacity, not a subscription)');
+    expect(m).not.toContain('$');   // owner 2026-10-10: no amount in unlock_more_data's copy
     expect(m).not.toMatch(/\bunlock/i);
     expect(m).not.toMatch(/my very next query returns the complete data \(/);
   });
