@@ -896,7 +896,7 @@ function _paywallContractStepInner(result, name) {
     // told the agent "after your user starts a paid DC Hub plan, retry" beside the email link and
     // replaced the site-teaser line with "Free headline: ..." (measured live, arm v2, 10-10).
     // Only its links take the arm tag; the wall is otherwise left as built.
-    if (sc.unlock_kind === 'email') {
+    if (_isSiteUnlockKind(sc.unlock_kind)) {
       const tagged = _pcTagLinks(result, arm);
       return { ...tagged, structuredContent: { ...(tagged.structuredContent || sc), paywall_contract: arm } };
     }
@@ -8971,7 +8971,7 @@ export function _stampProWall(result, name, c) {
       && /7-day (free )?trial/.test(t) && !/\bPro\b/.test(t);
     // The keyless analyze_site email unlock (owner 2026-10-10) is not a trial ask: its line and
     // its one link stay as _lpWallEmailResult wrote them.
-    const _email = sc.unlock_kind === 'email' && typeof sc.user_message === 'string' && !!(fyh && fyh.url);
+    const _email = _isSiteUnlockKind(sc.unlock_kind) && typeof sc.user_message === 'string' && !!(fyh && fyh.url);
     const userMessage = (_email || _ok(sc.user_message)) ? sc.user_message : proWallUserMessage(name, link);
     const human = (fyh && fyh.url && (_email || _ok(fyh.text))) ? fyh : { ...(fyh || {}), text: userMessage, url: link };
     const stamp = { _wall: true, required_plan: 'pro', user_message: userMessage,
@@ -9132,6 +9132,11 @@ export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email
 export function _siteKeyLinkOn(env = process.env) {
   return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SITE_NOSID_KEY_LINK || ''));
 }
+// Both unlock walls: 'email' (session-bound) and 'email_key' (the no-session w-sitekey link). The
+// paywall-contract rewrite and the wall stamp compared against 'email' only, so the key-link wall
+// (mcp#908) was rewritten into "Start a 7-day trial" copy beside a link that opens a free-key page
+// (measured live 2026-10-11, QA headers, no session).
+export const _isSiteUnlockKind = (k) => k === 'email' || k === 'email_key';
 export const SITE_KEY_LINK_MESSAGE = 'The full site report is free by email: show your human the link in human_url. '
   + 'They enter an email, the page shows a free key and emails it to them; they add it to this connector as '
   + 'X-API-Key, and the next `analyze_site` call returns the full report.';
