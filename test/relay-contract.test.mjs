@@ -73,6 +73,21 @@ function expectContract(r, label) {
     }
   }
 }
+// analyze_site's keyless wall is the gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs):
+// its own contract, a polite hint in place of RELAY_CONTRACT, the same one link.
+function expectGatedPreview(r, label) {
+  const sc = r.structuredContent;
+  expect(sc.status, label + ': status').toBe('gated_preview');
+  expect(sc.agent_instruction, label + ': no RELAY_CONTRACT order').toBeUndefined();
+  expect(sc.agent_hint, label + ': agent_hint').toMatch(/show the user human_message and its link/);
+  expect(sc.human_url, label + ': human_url').toMatch(RELAY_OK);
+  expect(sc.for_your_human.url, label).toBe(sc.human_url);
+  expect(sc.human_message, label + ': human_message is self-contained').toContain(sc.human_url);
+  const b0 = r.content[0].text;
+  expect(sc.human_message.startsWith(b0.split('\n')[0]), label + ': content[0] leads with the human_message').toBe(true);
+  expect(b0.split('\n'), label + ': the link as a markdown line').toContain('[Unlock the full site report free](' + sc.human_url + ')');
+  expect(textOf(r), label).not.toContain(S.RELAY_CONTRACT);
+}
 function expectNoPricing(r, label) {
   const all = stripContract(textOf(r) + '\n' + JSON.stringify(r.structuredContent || {}));
   expect(all.match(BANNED), label + ': a pricing/plans/signup surface is in a gated result').toBeNull();
@@ -100,7 +115,8 @@ describe('the contract constant', () => {
 
 describe('EXPERIMENT: /plans no longer appears in what an agent is handed (2026-10-07)', () => {
   it('a real Pro wall response and the session instructions contain no /plans, and still carry the link', async () => {
-    const r = await call('analyze_site', { lat: 39.04, lon: -77.49 }, anon());
+    // compare_sites: analyze_site's keyless wall is the gated_preview, which carries no RELAY_CONTRACT.
+    const r = await call('compare_sites', { locations: '39.04,-77.49;33.45,-112.07' }, anon());
     const all = textOf(r) + JSON.stringify(r.structuredContent || {});
     expect(all, 'control: this is a wall that carries the relay contract and a link').toContain(S.RELAY_CONTRACT);
     expect(all).toMatch(/dchub\.cloud\/(upgrade\/h|u)\//);
@@ -114,11 +130,17 @@ describe('EXPERIMENT: /plans no longer appears in what an agent is handed (2026-
 });
 
 describe('gated results carry agent_instruction, human_url and a self-contained human line', () => {
-  it('Pro wall (analyze_site, keyless)', async () => {
+  it('Pro wall (analyze_site, keyless): the gated_preview', async () => {
     const r = await call('analyze_site', { lat: 39.04, lon: -77.49 }, anon());
     expect(r.structuredContent._wall).toBe(true);
-    expectContract(r, 'analyze_site wall');
+    expectGatedPreview(r, 'analyze_site wall');
     expectNoPricing(r, 'analyze_site wall');
+  });
+  it('Pro wall (compare_sites, keyless): the contract', async () => {
+    const r = await call('compare_sites', { locations: '39.04,-77.49;33.45,-112.07' }, anon());
+    expect(r.structuredContent._wall).toBe(true);
+    expectContract(r, 'compare_sites wall');
+    expectNoPricing(r, 'compare_sites wall');
     expect(textOf(r)).toContain(S.RELAY_CONTRACT);   // a prose-first wall carries it in text too
   });
   it('keyless preview with a JSON head (get_fiber_intel, rank_markets): the contract rides block 0', async () => {
@@ -153,7 +175,7 @@ describe('gated results carry agent_instruction, human_url and a self-contained 
   });
   it.each(['grok', 'chatgpt', 'cursor', 'claude'])('every platform: %s', async (platform) => {
     const r = await call('analyze_site', { lat: 39.04, lon: -77.49 }, anon(platform));
-    expectContract(r, platform);
+    expectGatedPreview(r, platform);
     expectNoPricing(r, platform);
   });
   it('the relay is minted once: a second chokepoint pass changes nothing (idempotent)', async () => {

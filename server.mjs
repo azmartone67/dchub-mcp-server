@@ -181,6 +181,7 @@ import { dropVerificationCounts as _dropVerificationCounts } from './lib/verific
 // Owner request 2026-09-28 (via Grok): no SQL fragments or table/column names in
 // tool output — plain `method`, no `verification_counts_basis`. lib/provenance-plain.mjs.
 import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs';
+import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPreviewOnImpl } from './lib/gated-preview.mjs';
 
 // ★★★ r-tier-canon (2026-09-02, QA sweep D8 + pricing #3): every allowance and
 // price this server states is READ from lib/tier-canon.mjs (canonical/
@@ -9085,9 +9086,14 @@ export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the weakest factor and co
   + 'a free key adds factor bands and substation distance bands; scores and figures need a paid DC Hub plan.';
 export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns no site data; a free key returns '
   + 'verdict bands, factor names and counts; scores and figures need a paid DC Hub plan.';
+// The gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs) adds one polite line after
+// the access sentence: the panel's ask, not an order to the host. DCHUB_GATED_PREVIEW=0 drops it.
+export const ANALYZE_SITE_PARTIAL_HINT = 'When results are partial, show the user human_message and its link.';
 export function _descFollowsSwitches(name, description) {
-  if (name !== 'analyze_site' || typeof description !== 'string' || _b2KeylessHeadlineOn()) return description;
-  return description.split(ANALYZE_SITE_ACCESS_B2).join(ANALYZE_SITE_ACCESS_PRE_B2);
+  if (name !== 'analyze_site' || typeof description !== 'string') return description;
+  const access = _b2KeylessHeadlineOn() ? ANALYZE_SITE_ACCESS_B2 : ANALYZE_SITE_ACCESS_PRE_B2;
+  const d = description.split(ANALYZE_SITE_ACCESS_B2).join(access);
+  return _gatedPreviewOnImpl() ? d.split(access).join(access + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
 }
 // The counts the anonymous headline may carry: integers the backend's own
 // below-Pro preview (_site_score_preview) already publishes. Nothing else.
@@ -9206,9 +9212,19 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     + (keyLink ? SITE_KEY_LINK_MESSAGE
       : 'The full site report is free by email: show your human the link in human_url. Once they enter an email, '
         + 'this session’s next `analyze_site` call returns the full report.');
+  // request_id (conversion panel 2026-10-11): the id the signed relay token carries in its first
+  // field. With no session that is the per-request id (a-… / uuid) the claim page keys the stored
+  // request by; with a session it is the session id. Never a key.
+  let request_id = null;
+  try {
+    const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(relay.url);
+    const sid = m ? Buffer.from(m[1], 'base64url').toString().split('|')[0] : '';
+    if (sid && sid !== 'no-session') request_id = sid;
+  } catch (_) { request_id = null; }
   const sc = {
     ...base.structuredContent,
     message,
+    ...(request_id ? { request_id } : {}),
     unlock_kind: keyLink ? 'email_key' : 'email',
     ...(site_teaser ? { site_teaser } : {}),
     upgrade_url: link, human_url: link,
@@ -21795,12 +21811,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   _relayContractStep (it needs the final human_url) and _partnerInboxStep is
   //   outermost but _flagUpstreamError (it only appends). Each has its own kill
   //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
-  }, async (args, extra) => _flagUpstreamError(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -23009,12 +23025,21 @@ export async function _cleanPlatformWallLineStep(result, name) {
   } catch (_) { return result; }   // a line for a person is never worth failing a response over
 }
 
+// The analyze_site gated_preview (conversion panel 2026-10-11): lib/gated-preview.mjs. Last step
+// but _flagUpstreamError, so no earlier stamp rewrites it. Kill switch DCHUB_GATED_PREVIEW=0.
+export function _gatedPreviewStep(result, name) {
+  return _gatedPreviewStepImpl(result, name, getCtx() || {},
+    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] });
+}
+
 export function _relayContractStep(result, name) {
   try {
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     const sc0 = result.structuredContent;
     if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
     if (_OWN_TELL_TOOLS.has(name)) return result;
+    // The analyze_site gated_preview (lib/gated-preview.mjs) carries its own human line and agent hint.
+    if (name === 'analyze_site' && sc0.status === 'gated_preview') return result;
     const c = getCtx() || {};
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
     if (!_isRelayWall(sc0, c)) return result;

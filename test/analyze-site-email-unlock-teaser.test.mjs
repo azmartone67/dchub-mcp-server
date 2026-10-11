@@ -100,8 +100,11 @@ beforeEach(() => {
   delete process.env.DCHUB_SITE_EMAIL_UNLOCK; delete process.env.DCHUB_SITE_NOSID_KEY_LINK; delete process.env.DCHUB_LP_FREE_RUNS;
   // B2 is OFF in prod (owner, 10-04..10-18 A/B); the teaser must not depend on it.
   process.env.DCHUB_B2_SITE_HEADLINE = '0';
+  // This file pins the wall the gated_preview step reshapes (lib/gated-preview.mjs), which is what
+  // DCHUB_GATED_PREVIEW=0 serves; test/analyze-site-gated-preview.test.mjs pins the default.
+  process.env.DCHUB_GATED_PREVIEW = '0';
 });
-afterEach(() => { delete process.env.DCHUB_B2_SITE_HEADLINE; });
+afterEach(() => { delete process.env.DCHUB_B2_SITE_HEADLINE; delete process.env.DCHUB_GATED_PREVIEW; });
 
 describe('keyless analyze_site, switch on (default): email unlock + bands-only teaser', () => {
   it('site_teaser carries the verdict band and the power band, the rest named as locked', async () => {
