@@ -4460,7 +4460,7 @@ async function trackPaidHit(sessionId, toolName) {
   }
 }
 
-export async function shouldMintClaim(sessionId, toolName) {
+export async function shouldMintClaim(sessionId, toolName, opts = {}) {
   if (!_isRealSession(sessionId) || !toolName) return null;
   try {
     const c = getCtx();
@@ -4480,6 +4480,9 @@ export async function shouldMintClaim(sessionId, toolName) {
     // r-wall-user-line (2026-09-30): the wall copy this session is shown, stamped first-wins on
     // mcp_high_intent_sessions.copy_version (dchub-backend#6017) beside paywall_arm.
     url.searchParams.set('cv', WALL_COPY_VERSION);
+    // wl=1: this response already handed the human its relay link (the analyze_site email wall),
+    // so the backend records the mint on the first hit (dchub-backend should_mint_claim).
+    if (opts && opts.wallLink === true) url.searchParams.set('wl', '1');
     const resp = await fetch(url.toString(), {
       method: 'GET',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Accept': 'application/json' },
@@ -8852,11 +8855,67 @@ export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch) {
     }
     if (_SHORT_LINK_CACHE.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_CACHE.clear();
     _SHORT_LINK_CACHE.set(relayUrl, data.url);
+    if (_SHORT_LINK_TARGET.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_TARGET.clear();
+    _SHORT_LINK_TARGET.set(data.url, relayUrl);
     return data.url;
   } catch (err) {
     console.error('[wall-relay-short] failed:', err && err.message);
     return relayUrl;
   }
+}
+
+// ── conversion metric step 1 (2026-10-11): which link did this wall hand out ──────
+// The analyze_site funnel divided unlock-page opens by walls bucketed by UTC day only:
+// no wall row said which link it served (audit ~/Downloads/dchub-p1-conversion-baseline-
+// 2026-10-11.md, sections 1.5 and 5.1). The join key is the link's OWN identity:
+// sha256(<payload>.<sig>)[:32], exactly what dchub-backend relay_opens.token_hash stores
+// for an open (routes/human_relay._log_open hashes the cleaned path token, no query). No
+// new token field and no new URL parameter, so every link already in the wild keeps
+// parsing and keeps counting (as unattributed), and nothing new rides in a URL. The hash
+// travels only server-to-server on /api/v1/mcp/track as `wall_link_th`.
+// A /u/<code> short link 302s to the long /upgrade/h/ URL and the open is logged there, so
+// a short link resolves through _SHORT_LINK_TARGET (filled by _shortRelayPageLink).
+const _SHORT_LINK_TARGET = new Map();
+const _RELAY_TOKEN_IN_URL_RE = /\/upgrade\/h\/([A-Za-z0-9_-]+\.[0-9a-f]{32})/;
+export function _relayTokenHash(url) {
+  try {
+    let u = String(url || '');
+    if (!u) return null;
+    if (!_RELAY_TOKEN_IN_URL_RE.test(u) && _SHORT_LINK_TARGET.has(u)) u = _SHORT_LINK_TARGET.get(u);
+    const m = u.match(_RELAY_TOKEN_IN_URL_RE);
+    return m ? createHash('sha256').update(m[1]).digest('hex').slice(0, 32) : null;
+  } catch (_) { return null; }
+}
+// The link a finished wall response hands the person: human_url first (what the person is
+// told to open), then the for_your_human / site_teaser / upgrade_url copies of it.
+export function _wallLinkTokenHash(result) {
+  try {
+    const sc = result && result.structuredContent;
+    if (!sc || typeof sc !== 'object') return null;
+    const fy = sc.for_your_human;
+    for (const v of [sc.human_url, fy && fy.url, sc.site_teaser && sc.site_teaser.unlock_url, sc.upgrade_url]) {
+      const th = typeof v === 'string' ? _relayTokenHash(v) : null;
+      if (th) return th;
+    }
+    return null;
+  } catch (_) { return null; }
+}
+// The id a wall is logged under. A transport session is the id. Without one, the id the
+// relay token itself carries (buildHumanRelay: the keyless a- offer id, else the per-request
+// uuid; both memoised on the request ctx, so this returns the SAME id the link was minted
+// with, and the same id dchub-backend#6825 uses as the site request_id). 'no-session' only
+// when the fallback is switched off (DCHUB_RELAY_SID_FALLBACK=0) or there is no request ctx.
+// The literal 'no-session' collapsed every session-less wall into ONE session in
+// paywall_hit (audit 1.5).
+export function _wallSessionId(c) {
+  try {
+    if (c && c.session_id && c.session_id !== 'no-session') return c.session_id;
+    if (_relaySidFallbackOn()) {
+      const id = _anonAttribRef() || _requestFallbackSid();
+      if (id) return id;
+    }
+  } catch (_) { /* fall through */ }
+  return 'no-session';
 }
 
 // The checkout link for what really opens this tool (see _paywallOffer): Pro for Land &
@@ -19449,6 +19508,7 @@ function trackedTool(srv, name, description, schema, handler) {
     _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
     const t0 = Date.now();
     let status = 'ok';
+    let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
     // Returns isError=true with a friendly identification CTA. Counts the
@@ -19828,11 +19888,14 @@ function trackedTool(srv, name, description, schema, handler) {
           // while analyze_site kept ~30 calls a day. The funnel's first step is "sessions with a
           // trial_preview or paid_tool_blocked signal". Fire and forget like every other site;
           // signalPaywall skips the Claude-directory profile.
+          // One id per wall (conversion metric step 1): with no transport session this is the id the
+          // wall's own link carries (_wallSessionId), never the shared literal 'no-session'.
+          const _wallSid = _wallSessionId(c);
           signalPaywall({
             tool: name,
             args,
             signal_type: 'paid_tool_blocked',
-            session_id: (c && c.session_id) || 'no-session',
+            session_id: _wallSid,
             mcp_client: c.platform || 'mcp',
             user_agent: c.client_ua || null,
             ip_address: c.client_ip || null,
@@ -19849,8 +19912,13 @@ function trackedTool(srv, name, description, schema, handler) {
           // after the response is on its way: the paid hit first, then the mint, which reads the count the
           // hit just wrote. The claim itself is NOT shown (the wall already carries its one link).
           // trackPaidHit and shouldMintClaim skip bots, probes, no-session and the Claude-directory profile.
-          { const _hiSid = c && c.session_id;
-            if (_hiSid) { (async () => { try { await trackPaidHit(_hiSid, name); await shouldMintClaim(_hiSid, name); } catch (_) { /* never worth a response */ } })(); } }
+          // A session-less wall now registers under its own per-wall id (_wallSid), so it enters
+          // high_intent and, when the wall handed out its link, relay_minted: { wallLink } tells the
+          // backend the relay was minted on this first hit (should-mint-claim wl=1). Before, those
+          // walls were skipped as 'no-session' and never reached relay_minted (audit 1.5).
+          { const _hiSid = _wallSid !== 'no-session' ? _wallSid : '';
+            const _hiOpts = { wallLink: _emailOn };
+            if (_hiSid) { (async () => { try { await trackPaidHit(_hiSid, name); await shouldMintClaim(_hiSid, name, _hiOpts); } catch (_) { /* never worth a response */ } })(); } }
           let _hl = null;
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
@@ -21697,6 +21765,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     })();
     const _pw = _stampProWall(_proWallRaw, name, c);
     if (_pw.wall) status = 'pro_wall';
+    // conversion metric step 1: the call row names the exact link this wall handed out.
+    if (status === 'pro_wall' || status === 'lp_wall') _wallLinkTh = _wallLinkTokenHash(_pw.result);
     return _pw.result;
     } catch (err) {
       status = 'error';
@@ -21766,6 +21836,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // is inert until dchub-backend adds the column (issue filed) — it is
         // sent now so no arrival is lost in the gap between the two deploys.
         source:      c.source || null,
+        // conversion metric step 1 (2026-10-11): sha256 of the /upgrade/h/ token this wall
+        // handed out (joins relay_opens.token_hash), and our QA marker, so the analyze_site
+        // funnel can drop QA walls whose UA does not say QA (X-DCHub-QA: 1 alone). Sent only
+        // when they apply; an older backend ignores both keys.
+        ...(_wallLinkTh ? { wall_link_th: _wallLinkTh } : {}),
+        ...(_isQaCaller(c) ? { is_qa: true } : {}),
       }).catch(() => {});
     }
   });
