@@ -9133,6 +9133,38 @@ export const SITE_TEASER_LOCKED = ['overall_score', 'fiber_connectivity', 'gas_p
   'market_conditions', 'risk_resilience'];
 export const SITE_TEASER_NOTE = 'Scores and the other factor bands come with the full site report.';
 export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email → ';
+// P3 (conversion panel 2026-10-11): the no-session key link stores the request it walled, keyed by the
+// relay token's sid (request_id), so the claim page can show THAT report after the email
+// (dchub-backend routes/site_claim_report.py, POST /api/v1/mcp/site-request, first write wins).
+// The backend takes lat+lon or candidate_id only, so a `location` call sends the coordinates the
+// handler resolved. Fire and forget; QA callers store nothing. Kill switch DCHUB_SITE_REQUEST_STORE=0.
+export function _siteRequestStoreOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SITE_REQUEST_STORE || ''));
+}
+export function _siteClaimRequestBody(c, requestId, args, loc) {
+  if (!requestId || !args || typeof args !== 'object') return null;
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined));
+  const out = {};
+  let lat = num(args.lat), lon = num(args.lon);
+  if ((lat === undefined || lon === undefined) && loc && typeof loc === 'object') { lat = num(loc.lat); lon = num(loc.lon); }
+  if (lat !== undefined && lon !== undefined) { out.lat = lat; out.lon = lon; }
+  if (typeof args.candidate_id === 'string' && args.candidate_id) out.candidate_id = args.candidate_id;
+  if (!('lat' in out) && !out.candidate_id) return null;
+  const st = (typeof args.state === 'string' && args.state) || (loc && typeof loc.state === 'string' && loc.state) || '';
+  if (st) out.state = st;
+  const mw = num(args.capacity_mw) ?? num(args.target_mw);
+  if (mw !== undefined) out.capacity_mw = mw;
+  return { request_id: requestId, tool: 'analyze_site', args: out,
+    platform: (c && c.platform) || 'mcp', user_agent: (c && c.client_ua) || null, client_ip: (c && c.client_ip) || null };
+}
+function _storeSiteClaimRequest(c, requestId, args, loc) {
+  try {
+    if (!_siteRequestStoreOn() || _isQaCaller(c)) return;
+    const body = _siteClaimRequestBody(c, requestId, args, loc);
+    if (!body) return;
+    callAPIWrite('/api/v1/mcp/site-request', body).catch(() => {});
+  } catch (_) { /* storing the request is never worth a response */ }
+}
 // The no-session caller's link (owner 2026-10-10, item 5): the email page hands over a key instead of
 // binding a session. Kill switch DCHUB_SITE_NOSID_KEY_LINK=0 restores the claim_free_key-only wall.
 export function _siteKeyLinkOn(env = process.env) {
@@ -19823,11 +19855,13 @@ function trackedTool(srv, name, description, schema, handler) {
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
           let _teaser = null;
+          let _siteLoc = null;   // the handler's resolved location, for the stored claim request (P3)
           if ((_pcOn || _b2 || _emailOn || _noSid) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
               const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
               if (_emailOn || _noSid) _teaser = _siteTeaser(_parsedHl);
+              _siteLoc = _parsedHl && _parsedHl.location;
               _hl = (_pcOn || _b2) ? _pcLpHeadline(name, _parsedHl) : null;
               // r-upgrade-h-first: the one number the wall may show is a COUNT the free
               // preview already keeps (nearby.substations_50km), measured by this very
@@ -19845,6 +19879,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
           if (_emailOn) {
             const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser, { keyLink: _keyLink });
+            if (_ew && _keyLink) _storeSiteClaimRequest(c, _ew.structuredContent && _ew.structuredContent.request_id, args, _siteLoc);
             if (_ew) return _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
           }
           if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);

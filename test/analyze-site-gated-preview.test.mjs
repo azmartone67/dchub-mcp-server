@@ -196,3 +196,40 @@ describe('analyze_site description carries the panel line', () => {
     }
   });
 });
+
+// P3: the no-session key link stores the request it walled, keyed by request_id (the token's sid).
+describe('no-session wall stores the claim request (P3)', () => {
+  const stored = async (fn) => {
+    const before = H.hits.length;
+    const r = await fn();
+    await new Promise((res) => setTimeout(res, 300));
+    return { r, posts: H.hits.slice(before).filter((h) => h.path === '/api/v1/mcp/site-request').map((h) => h.body) };
+  };
+  afterEach(() => { delete process.env.DCHUB_SITE_REQUEST_STORE; });
+  it('posts request_id + the resolved coordinates, never a key', async () => {
+    const { r, posts } = await stored(() => call({ session: false }));
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ request_id: r.sc.request_id, tool: 'analyze_site', args: { lat: 33.45, lon: -112.07, state: 'AZ' } });
+    expect(JSON.stringify(posts[0])).not.toMatch(/dch_/);
+  });
+  it('a session caller stores nothing (its next call returns the report)', async () => {
+    const { posts } = await stored(() => call({ session: true }));
+    expect(posts).toEqual([]);
+  });
+  it('DCHUB_SITE_REQUEST_STORE=0 stores nothing', async () => {
+    process.env.DCHUB_SITE_REQUEST_STORE = '0';
+    const { posts } = await stored(() => call({ session: false }));
+    expect(posts).toEqual([]);
+  });
+});
+
+describe('_siteClaimRequestBody (unit)', () => {
+  it('location-only args take the handler-resolved coordinates; nothing usable gives null', async () => {
+    const S = await import('../server.mjs');
+    expect(S._siteClaimRequestBody({ platform: 'grok' }, 'a-1', { location: 'ashburn', capacity_mw: 50 }, { lat: 39.04, lon: -77.49, state: 'VA' }))
+      .toEqual({ request_id: 'a-1', tool: 'analyze_site', args: { lat: 39.04, lon: -77.49, state: 'VA', capacity_mw: 50 },
+        platform: 'grok', user_agent: null, client_ip: null });
+    expect(S._siteClaimRequestBody({}, 'a-1', { location: 'ashburn' }, null)).toBeNull();
+    expect(S._siteClaimRequestBody({}, '', { lat: 1, lon: 2 }, null)).toBeNull();
+  });
+});
