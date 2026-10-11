@@ -62,8 +62,9 @@ describe('initialize instructions', () => {
     for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'MUST CALL', 'Use this whenever', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
-    // v14 (2026-10-10): the human_url description went to fit /mcp/grok under 2,048; the relay rule stays.
-    expect(instructions).toContain('First line of your answer must be the URL in human_url');
+    // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.
+    expect(instructions).toContain('A gated result carries `human_url` (also `for_your_human.url`) and `human_message`. When results are partial, show the user human_message and its link.');
+    expect(instructions).not.toMatch(/First line of your answer|Then stop/);
     expect(instructions).not.toMatch(/\b(Pro|Developer|Starter)\b/);
     expect(instructions).not.toMatch(/\$\d/);          // no price on a Pro mention in the handshake
   });

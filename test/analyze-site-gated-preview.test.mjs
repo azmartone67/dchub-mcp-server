@@ -144,7 +144,8 @@ describe('kill switch', () => {
     process.env.DCHUB_GATED_PREVIEW = '0';
     const r = await call({ session: true });
     expect(r.sc.status).toBeUndefined();
-    expect(r.sc.human_message).toBeUndefined();
+    // The relay stamp gives every wall a human_message (2026-10-11): here the wall's own line, not the preview's.
+    expect(r.sc.human_message).toBe(r.sc.user_message);
     expect(r.sc.unlock_kind).toBe('email');
     expect(r.res.content[0].text.startsWith('Unlock the full site report free by email → ')).toBe(true);
   });

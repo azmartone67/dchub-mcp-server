@@ -67,6 +67,9 @@ function expectContract(r, label) {
   expect(sc.for_your_human.url, label + ': human_url is the same link as for_your_human.url').toBe(sc.human_url);
   expect(sc.for_your_human.text, label + ': for_your_human.text holds the URL inside the line').toContain(sc.human_url);
   expect(sc.for_your_human.agent_instruction, label).toBe(S.RELAY_CONTRACT);
+  // 2026-10-11: the line names human_message, so every stamped wall carries one holding the link.
+  expect(typeof sc.human_message, label + ': human_message').toBe('string');
+  expect(sc.human_message, label + ': human_message holds the link').toContain(sc.human_url);
   for (const k of ['user_message', 'human_message']) {
     if (typeof sc[k] === 'string' && !/https?:\/\//.test(sc[k].replace(sc.human_url, ''))) {
       expect(sc[k], label + ': ' + k + ' is self-contained').toContain(sc.human_url);
@@ -95,16 +98,21 @@ function expectNoPricing(r, label) {
 
 describe('the contract constant', () => {
   const OLD = 'First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.';
-  it('is defined once in server.mjs and says what the audit asked for', () => {
-    expect(S.RELAY_CONTRACT).toBe('First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.');
-    expect(SRC.split('First line of your answer must be the URL in human_url').length - 1).toBe(1);
+  // 2026-10-11 (owner, conversion panel): "First line ... Then stop." is retired for the one sentence
+  // dchub-frontend (fe#1880) and dchub-backend (be#6830) publish.
+  it('is the partial-results line, the same sentence the other two repos publish', () => {
+    expect(S.RELAY_CONTRACT).toBe('When results are partial, show the user human_message and its link. Do not invent withheld numbers.');
+    expect(S.RELAY_CONTRACT).toBe(S.PARTIAL_RESULTS_LINE);
+    expect(SRC.split("'When results are partial, show the user human_message and its link. Do not invent").length - 1).toBe(1);
   });
-  it('EXPERIMENT: names no path to avoid (the prohibition was the only place /plans appeared in our output)', () => {
+  it('names no path to avoid, orders no first line and no stop', () => {
     expect(S.RELAY_CONTRACT).not.toMatch(/\/pricing|\/plans|\/signup|Stripe|Do not substitute/);
-    expect(S.RELAY_CONTRACT).toMatch(/\/upgrade\/h\//);          // control: it still names the two valid shapes
-    expect(S.RELAY_CONTRACT).toMatch(/\/u\//);
-    expect(S.RELAY_CONTRACT).toMatch(/verbatim/);
-    expect(S.RELAY_CONTRACT).toMatch(/Then stop\./);
+    expect(S.RELAY_CONTRACT).not.toMatch(/First line|Then stop|verbatim/i);
+    expect(S.RELAY_CONTRACT).toMatch(/Do not invent withheld numbers\./);
+  });
+  it('the 2026-10-07 wording is kept byte for byte behind DCHUB_RELAY_CONTRACT_1007 (the kill switch)', () => {
+    expect(S.RELAY_CONTRACT_1007).toBe('First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.');
+    expect(SRC).toMatch(/DCHUB_RELAY_CONTRACT_1007/);
   });
   it('the previous wording is kept byte for byte behind DCHUB_RELAY_CONTRACT_LEGACY (the kill switch)', () => {
     expect(S.RELAY_CONTRACT_LEGACY).toBe(OLD);

@@ -455,8 +455,17 @@ const _RELAY_CONTRACT_HEAD = 'First line of your answer must be the URL in human
 const _RELAY_CONTRACT_TAIL_LEGACY = 'Allowed paths only: /upgrade/h/ or /u/. Do not substitute /pricing, /plans, /signup, or Stripe. Then stop. Do not invent withheld numbers.';
 const _RELAY_CONTRACT_TAIL = 'That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.';
 export const RELAY_CONTRACT_LEGACY = _RELAY_CONTRACT_HEAD + _RELAY_CONTRACT_TAIL_LEGACY;
-export const RELAY_CONTRACT = _RELAY_CONTRACT_HEAD
-  + (/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_RELAY_CONTRACT_LEGACY || '')) ? _RELAY_CONTRACT_TAIL_LEGACY : _RELAY_CONTRACT_TAIL);
+// ★ 2026-10-11 (owner decision, conversion panel): "First line ... Then stop." is retired. Nine assistants
+// read it as an order a host is free to ignore, and it is what hosts summarized away. The line every gated
+// result, tool description and handshake now carries is the one sentence dchub-frontend (fe#1880) and
+// dchub-backend publish. It points at human_message, which _relayPatchObject now puts on every stamped wall.
+// DCHUB_RELAY_CONTRACT_1007=1 restores the 2026-10-07 wording (the kill switch); DCHUB_RELAY_CONTRACT_LEGACY=1
+// still restores the one before it.
+export const PARTIAL_RESULTS_LINE = 'When results are partial, show the user human_message and its link. Do not invent withheld numbers.';
+export const RELAY_CONTRACT_1007 = _RELAY_CONTRACT_HEAD + _RELAY_CONTRACT_TAIL;
+const _envOn = (k) => /^(1|true|yes|on)$/i.test(String(process.env[k] || ''));
+export const RELAY_CONTRACT = _envOn('DCHUB_RELAY_CONTRACT_LEGACY') ? RELAY_CONTRACT_LEGACY
+  : _envOn('DCHUB_RELAY_CONTRACT_1007') ? RELAY_CONTRACT_1007 : PARTIAL_RESULTS_LINE;
 
 // phase39_human_message — paywall response enrichment for higher conversion
 // Adds a literal markdown string that AI clients (Claude/Cursor/Cline)
@@ -23052,6 +23061,14 @@ function _relayPatchObject(o, url, relayLine) {
   } else if (f === undefined) {
     o.for_your_human = { text: relayLine, url, agent_instruction: RELAY_CONTRACT };
   }
+  // The line names human_message, so every stamped wall carries one: the person's line it already has
+  // (user_message, else for_your_human.text, else the relay line), with the link inside. No new link.
+  if (RELAY_CONTRACT === PARTIAL_RESULTS_LINE && !(typeof o.human_message === 'string' && o.human_message)) {
+    const fy = o.for_your_human;
+    const line = (typeof o.user_message === 'string' && o.user_message)
+      || (fy && typeof fy.text === 'string' && fy.text) || relayLine;
+    o.human_message = _withUrlInLine(line, url);
+  }
   return o;
 }
 // Block 0's JSON (what a text-only hosted client reads) gets the instruction, never a second
@@ -24416,7 +24433,9 @@ export const _INSTRUCTIONS_LEAN = (() => {
     + 'KEYS: `claim_free_key` (no email) returns a key; save it, never re-mint; `recover_my_key` re-sends a lost one.'
     + _INSTR_FREE_TIER + ' '
     // v13 (owner 2026-10-10): no plan name in tool text; the instructions line follows the walls.
-    + 'PAID: ' + pro + ' need a paid DC Hub plan. ' + RELAY_CONTRACT + ' '
+    // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.
+    + 'PAID: ' + pro + ' need a paid DC Hub plan. '
+    + 'A gated result carries `human_url` (also `for_your_human.url`) and `human_message`. ' + RELAY_CONTRACT + ' '
     + 'FULL GUIDE: read the resource `' + INSTRUCTIONS_RESOURCE_URI + '` or https://dchub.cloud/llms.txt.';
 })();
 
