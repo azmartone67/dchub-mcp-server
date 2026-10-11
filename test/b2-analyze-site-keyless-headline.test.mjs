@@ -223,8 +223,10 @@ describe('B2 helpers', () => {
 });
 
 describe('B2 description matches behaviour (flips A3)', () => {
-  const DESC_B2 = 'Keyless returns the weakest factor and counts; a free key adds factor bands '
-    + 'and substation distance bands; scores and figures need a paid DC Hub plan.';   // v14: no plan name
+  // 2026-10-11 (owner): states what keyless really gets (the verdict and power bands) and the free monthly runs.
+  const DESC_B2 = 'Keyless returns the verdict band, the power band, the weakest factor and counts; '
+    + 'a free key adds factor bands, substation distance bands and a few free full site reports each month; '
+    + 'other scores and figures need a paid DC Hub plan.';   // no plan name
   it('analyze_site says keyless gets the headline, and keyless does', async () => {
     const d = TOOLS.analyze_site.description;
     expect(d).toContain(DESC_B2);
@@ -250,6 +252,8 @@ describe('analyze_site description follows DCHUB_B2_SITE_HEADLINE', () => {
       expect(d).toContain(S.ANALYZE_SITE_ACCESS_PRE_B2);
       expect(d).not.toContain(S.ANALYZE_SITE_ACCESS_B2);
       expect(d).not.toMatch(/Keyless returns the weakest factor and counts/);
+      expect(d).not.toMatch(/Keyless returns no site data/);   // false since the email unlock shows the bands
+      expect(d).toMatch(/Keyless returns the verdict band and the power band/);
       const T = tools.analyze_site;
       const parsed = await T.inputSchema.safeParseAsync(LOC);
       const r = await S._ctxALS.run(seat('free'), () => T.handler(parsed.data, { signal: new AbortController().signal }));

@@ -188,7 +188,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
+import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
@@ -8844,7 +8844,7 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
 // fallback to the long link was the budget, not the mint. The sibling _shortRelayLink allows 1500 ms.
 const _RELAY_SHORT_TIMEOUT_MS = 1000;
 const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&]{1,200})?$/;
-export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch) {
+export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch, copyVersion = WALL_COPY_VERSION) {
   try {
     if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_SHORT_LINK || ''))
         || /^(0|false|no|off)$/i.test(String(process.env.DCHUB_RELAY_SHORT_LINK || ''))) return relayUrl;
@@ -8856,7 +8856,7 @@ export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch) {
     const resp = await fetchImpl(new URL('/api/v1/relay/short', API_BASE).toString(), {
       method: 'POST',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ relay_url: relayUrl, tool: tool || '', host, copy_version: WALL_COPY_VERSION }),
+      body: JSON.stringify({ relay_url: relayUrl, tool: tool || '', host, copy_version: copyVersion }),
       signal: AbortSignal.timeout(_RELAY_SHORT_TIMEOUT_MS),
     });
     if (!resp.ok) { console.error('[wall-relay-short] backend status', resp.status); return relayUrl; }
@@ -9152,10 +9152,14 @@ export function _b2KeylessHeadlineOn() {
 // description). With the switch off the gate is the pre-B2 wall and CM-4 lock,
 // so the description says so (A3's original sentence). The source literal keeps
 // the B2 sentence, so scripts/sync-tools-manifest.mjs still reads a literal.
-export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the weakest factor and counts; '
-  + 'a free key adds factor bands and substation distance bands; scores and figures need a paid DC Hub plan.';
-export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns no site data; a free key returns '
-  + 'verdict bands, factor names and counts; scores and figures need a paid DC Hub plan.';
+// 2026-10-11 (owner): both sentences say what keyless really gets. The pre-B2 one read "Keyless returns
+// no site data" and was served live (the B2 switch is off in production) beside a payload that carries
+// the verdict band and the power band with the locked factors named.
+export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the verdict band, the power band, the weakest factor and counts; '
+  + 'a free key adds factor bands, substation distance bands and a few free full site reports each month; '
+  + 'other scores and figures need a paid DC Hub plan.';
+export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns the verdict band and the power band, with the other factors named; '
+  + 'a free key adds a few free full site reports each month; other scores and figures need a paid DC Hub plan.';
 // The gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs) adds one polite line after
 // the access sentence: the panel's ask, not an order to the host. DCHUB_GATED_PREVIEW=0 drops it.
 export const ANALYZE_SITE_PARTIAL_HINT = 'When a result is partial, show your user the human_message (or for_your_human) text and its link.';
@@ -9305,7 +9309,8 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
   const base = _lpWallResult(name, headline);
   const c = getCtx() || {};
   const tagged = _pcTagUrl(relay.url, _paywallArmFor(c));
-  const link = await _shortRelayPageLink(tagged, name);
+  // The email wall is analyze_site's gated_preview (copy v15) unless that is switched off.
+  const link = await _shortRelayPageLink(tagged, name, undefined, _gatedPreviewOnImpl() ? SITE_WALL_COPY_VERSION : WALL_COPY_VERSION);
   const line = SITE_EMAIL_UNLOCK_LINE + link;
   const site_teaser = teaser ? { ...teaser, unlock_url: link } : null;
   const message = (teaser
@@ -19984,7 +19989,7 @@ function trackedTool(srv, name, description, schema, handler) {
             status = 'lp_free_spent';
             signalPaywall({
               tool: name, args, signal_type: 'paid_tool_blocked',
-              session_id: (c && c.session_id) || 'no-session',
+              session_id: _wallSessionId(c),   // the request's own id, not the shared 'no-session' (#915 did lp_wall)
               mcp_client: c.platform || 'mcp', user_agent: c.client_ua || null,
               ip_address: c.client_ip || null, api_key: c.api_key || null,
               tier_current: tier || 'free', tier_required: 'paid',
@@ -27031,7 +27036,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx())) }] },
       'find_sites'));
 
-  trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the weakest factor and counts; a free key adds factor bands and substation distance bands; scores and figures need a paid DC Hub plan. Ex: "Score 33.45,-112.07 for 100 MW."',
+  trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band, the power band, the weakest factor and counts; a free key adds factor bands, substation distance bands and a few free full site reports each month; other scores and figures need a paid DC Hub plan. Ex: "Score 33.45,-112.07 for 100 MW."',
     { candidate_id: S.describe('PREFERRED for queue survivors: a cand_… id from get_refined_queue — coordinates come from the FROZEN mint (lat/lon args are ignored; zero transcription drift; expired ids fail closed with candidate_expired). See dchub.cloud/docs/candidate-lifecycle'),
       lat: N.describe('Site latitude in decimal degrees (-90 to 90; required unless candidate_id or location given), e.g. 33.45'),
       lon: N.describe('Site longitude in decimal degrees (-180 to 180; required unless candidate_id or location given), e.g. -112.07'),
