@@ -74,6 +74,16 @@ async function analyzeSite(path, { key, ua }) {
   const headers = { 'content-type': 'application/json', accept: 'application/json, text/event-stream',
                     'user-agent': ua, 'x-forwarded-for': '198.51.100.' + (10 + (ipN++ % 200)) };
   if (key) headers['x-api-key'] = key;
+  // A real transport session: the email unlock binds to it. A caller with none gets the earlier
+  // wall plus the claim_free_key route (test/analyze-site-email-unlock-teaser.test.mjs).
+  const init = await fetch(`http://127.0.0.1:${PORT}${path}`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'initialize',
+      params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'wall-test', version: '1' } } }),
+  });
+  await init.text();
+  const sid = init.headers.get('mcp-session-id');
+  if (sid) headers['mcp-session-id'] = sid;
   const res = await fetch(`http://127.0.0.1:${PORT}${path}`, {
     method: 'POST', headers,
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',

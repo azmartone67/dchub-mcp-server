@@ -184,6 +184,38 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
   });
 });
 
+describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026-10-10)', () => {
+  async function callNoSession() {
+    const hdr = { ...UA, 'x-dc-client-ip': `203.0.113.${++ipN}` };
+    const before = H.hits.length;
+    const r = await H.call('/mcp', 'analyze_site', ARGS, hdr);
+    await settle();
+    const hits = H.hits.slice(before);
+    const res = (r.msg && r.msg.result) || {};
+    return { res, sc: res.structuredContent || {},
+      text: (res.content || []).map((x) => x.text || '').join('\n'),
+      signals: hits.filter((h) => h.path === '/api/v1/mcp/signal-paywall' && h.body).map((h) => h.body) };
+  }
+  it('keeps the earlier wall and its one link, mints no email relay, adds the claim_free_key route and the teaser', async () => {
+    const r = await callNoSession();
+    expect(r.sc.unlock_kind).toBeUndefined();
+    expect(r.sc.next_tool).toBe('claim_free_key');
+    expect(r.sc.free_key_unlock).toMatchObject({ tool: 'claim_free_key', email_required: false });
+    expect(r.text).toContain('claim_free_key');
+    expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD.');
+    expect(r.text).not.toContain('Unlock the full site report free by email');
+    expect(JSON.stringify(r.res)).not.toMatch(/this session.s next/);
+    expect(shortReqs.every((b) => !(b.relay_url && relayFields(b.relay_url).fields.includes('w-siteruns')))).toBe(true);
+    expect(r.signals.map((x) => x.message_shown)).toContain('lp_wall_nosid');
+    expect(numbersIn(r.sc).filter(([p]) => !/^site_counts\./.test(p)), 'no figure on the wall').toEqual([]);
+  });
+  it('switch off: the earlier wall, byte for byte (no free_key kind)', async () => {
+    process.env.DCHUB_SITE_EMAIL_UNLOCK = '0';
+    const r = await callNoSession();
+    expect(r.sc.unlock_kind).toBeUndefined();
+  });
+});
+
 describe('B2 on (its own switch): its headline is kept, the teaser and the one email link ride with it', () => {
   it('weakest factor + counts from B2, site_teaser bands, no figure, one link', async () => {
     delete process.env.DCHUB_B2_SITE_HEADLINE;
