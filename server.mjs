@@ -23264,6 +23264,15 @@ const _linkBase = (u) => String(u || '').replace(/[?#].*$/, '');
 // persist command carries (https://dchub.cloud/mcp?key=…; measured: rewriting it broke the one-paste
 // `claude mcp add` line), and the well-known documents.
 const _isApiEndpoint = (u) => /^https:\/\/(?:www\.)?dchub\.cloud\/(?:api\/v1\/|mcp(?![A-Za-z0-9_-])|\.well-known\/)/.test(String(u || ''));
+// A Capacity Source listing's own page (/listings/<slug>) and its tracked link (/go/l/<slug>) are
+// the thing the caller searched for, not a pointer to a checkout or a plan page, so a wall leaves
+// them on the row that names them (owner brief 2026-10-10, item 2: a search returns url and
+// tracked_url so DC Hub is credited when the listing is found through us). Bare /listings is NOT
+// here: that stays a pointer and still gives way to the one link. DCHUB_WALL_LISTING_LINKS=0
+// restores the earlier behaviour byte for byte.
+export const _isListingPageUrl = (u) => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_LISTING_LINKS || ''))
+  && /^https:\/\/(?:www\.)?dchub\.cloud\/(?:listings|go\/l)\/[A-Za-z0-9][A-Za-z0-9._~%-]*(?:\?[^\s"'`<>\\)\]}]*)?$/.test(String(u || ''));
+const _keepsOwnLink = (u) => _isApiEndpoint(u) || _isListingPageUrl(u);
 // `seen` (shared across a response's text blocks) keeps the human link written ONCE in the
 // text: the first pointer that gives way becomes the link, later ones become a phrase that
 // names it (the r-relay-one-ask wording), so an agent never reads the same URL twice.
@@ -23277,7 +23286,7 @@ function _oneLinkProse(t, human, seen) {
   if (_MPP_PROSE_RE.test(out)) out = out.split('\n').filter((l) => !_MPP_PROSE_RE.test(l)).join('\n');
   if (!out.includes('dchub.cloud/')) return out;
   const hb = _linkBase(human);
-  const keep = (u) => _linkBase(u) === hb || _isApiEndpoint(u);
+  const keep = (u) => _linkBase(u) === hb || _keepsOwnLink(u);
   const st = seen || { has: false };
   const give = () => { if (st.has) return _ONE_LINK_POINTER_PHRASE; st.has = true; return human; };
   out = out.replace(_ONE_LINK_RUNG_SEG_RE_G, (seg) => {
@@ -23298,7 +23307,7 @@ function _oneLinkValue(v, human, key, depth, seen) {
     if (!v.includes('dchub.cloud/')) return v;
     const s = v.trim();
     if (/^https:\/\/(?:www\.)?dchub\.cloud\/\S+$/.test(s)) {
-      if (_linkBase(s) === _linkBase(human) || _isApiEndpoint(s)) return v;
+      if (_linkBase(s) === _linkBase(human) || _keepsOwnLink(s)) return v;
       return _ONE_LINK_POINT_KEYS.has(key) ? human : undefined;   // undefined = drop the field
     }
     return _oneLinkProse(v, human, seen);
@@ -23440,7 +23449,7 @@ export function _oneLinkWallStep(result, name) {
     if (!human) return result;   // nothing to converge on (no signing secret): leave the wall as it was
     const s = JSON.stringify(result);
     const hb = _linkBase(human);
-    const others = (s.match(_ONE_LINK_RE_G) || []).some((u) => _linkBase(u) !== hb && !_isApiEndpoint(u));
+    const others = (s.match(_ONE_LINK_RE_G) || []).some((u) => _linkBase(u) !== hb && !_keepsOwnLink(u));
     if (!others && !_MPP_PROSE_RE.test(s)) return result;
     const sc = _oneLinkValue(sc0, human, '', 0);
     // "written once" counts the PROSE (what a person reads), not a copy inside block 0's JSON data
