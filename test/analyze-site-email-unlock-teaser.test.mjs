@@ -205,6 +205,13 @@ describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026
     expect(JSON.stringify(r.res)).toContain('X-API-Key');
     expect(JSON.stringify(r.res)).not.toMatch(/this session.s next/);
     expect(shortReqs.some((b) => b.relay_url && relayFields(b.relay_url).fields.includes('w-sitekey'))).toBe(true);
+    // Measured live 2026-10-11 (QA headers, no session): the wall stamp rewrote this wall's person line
+    // and agent line into "Start a 7-day trial" copy beside a link that opens a free-key page.
+    expect(r.sc.user_message).toMatch(/^Unlock the full site report free by email/);
+    expect(r.sc.for_your_human.text).toMatch(/^Unlock the full site report free by email/);
+    for (const t of [r.sc.user_message, r.sc.for_your_human.text, r.sc.agent_message, r.text]) {
+      expect(t, 'no trial or paid-plan ask on the free key-link wall').not.toMatch(/7-day|trial|paid DC Hub plan|needs a paid/i);
+    }
     expect(shortReqs.every((b) => !(b.relay_url && relayFields(b.relay_url).fields.includes('w-siteruns')))).toBe(true);
     expect(numbersIn(r.sc).filter(([p]) => !/^site_counts\./.test(p)), 'no figure on the wall').toEqual([]);
   });
