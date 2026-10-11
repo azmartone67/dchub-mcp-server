@@ -58,10 +58,15 @@ const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
 const stripContract = (t) => t.split(S.RELAY_CONTRACT).join('');
 // 2026-10-11 (owner): the commanding contract is retired. RETIRED holds its fragments; none may reach an
 // agent on any surface (results, instructions, descriptions, llms.txt). Matched case-insensitively.
-const NEW_LINE = 'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.';
+// The owner's exact sentence (2026-10-11). #917's "show your user the human_message (or for_your_human) text"
+// wording is retired and every guard below fails on it.
+const NEW_LINE = 'When results are partial, show the user human_message and its link. Do not invent withheld numbers.';
+const RETIRED_917 = /show your user the human_message|\(or for_your_human\) text and its link|When a result is partial/;
 const OLD_CONTRACT = 'First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.';
 const RETIRED = ['First line of your answer', 'Then stop', 'is the only link to give',
-  'exactly as written (an /upgrade/h/', 'Allowed paths only', 'Do not substitute /pricing'];
+  'exactly as written (an /upgrade/h/', 'Allowed paths only', 'Do not substitute /pricing',
+  // #917's rewording of the owner's sentence (replaced 2026-10-11 by the exact owner sentence)
+  'show your user the human_message', '(or for_your_human) text and its link', 'When a result is partial'];
 const retiredHits = (t) => { const f = String(t).replace(/\s+/g, ' ').toLowerCase(); return RETIRED.filter((x) => f.includes(x.toLowerCase())); };
 
 // The contract, asserted on one gated result (shared by every case below).
@@ -90,7 +95,7 @@ function expectGatedPreview(r, label) {
   const sc = r.structuredContent;
   expect(sc.status, label + ': status').toBe('gated_preview');
   expect(sc.agent_instruction, label + ': no agent_instruction on the gated_preview').toBeUndefined();
-  expect(sc.agent_hint, label + ': agent_hint').toMatch(/show your user the human_message \(or for_your_human\) text and its link/);
+  expect(sc.agent_hint, label + ': agent_hint').toContain(NEW_LINE);
   expect(retiredHits(textOf(r) + JSON.stringify(sc)), label + ': retired relay wording').toEqual([]);
   expect(sc.human_url, label + ': human_url').toMatch(RELAY_OK);
   expect(sc.for_your_human.url, label).toBe(sc.human_url);
@@ -111,9 +116,13 @@ describe('the contract constant', () => {
   // 2026-10-11 (owner, conversion panel): "First line ... Then stop." is retired for the one sentence
   // dchub-frontend (fe#1880) and dchub-backend (be#6830) publish.
   it('is the partial-results line, the same sentence the other two repos publish', () => {
-    expect(S.RELAY_CONTRACT).toBe('When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+    expect(S.RELAY_CONTRACT).toBe(NEW_LINE);
+    expect(S.PARTIAL_RESULTS_LINE).toBe(NEW_LINE);
+    expect(S.RELAY_CONTRACT).not.toMatch(RETIRED_917);
     expect(S.RELAY_CONTRACT).toBe(S.PARTIAL_RESULTS_LINE);
-    expect(SRC.split("'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent").length - 1).toBe(1);
+    // one definition site: the sentence is spelled out in lib/gated-preview.mjs only
+    expect(SRC.includes(NEW_LINE) || SRC.includes('When results are partial, show the user human_message and its link.')).toBe(false);
+    expect(SRC).not.toMatch(RETIRED_917);
   });
   it('no plan name or price in it (mcp#891)', () => {
     expect(S.RELAY_CONTRACT).not.toMatch(/\bPro\b|\bDeveloper\b|\bStarter\b|\bpaid\b|\btrial\b|\$\d/i);
@@ -125,6 +134,9 @@ describe('the contract constant', () => {
     expect(retiredHits('please   THEN\n stop')).toEqual(['Then stop']);   // case and line breaks do not hide it
     expect(retiredHits(NEW_LINE)).toEqual([]);
     expect(retiredHits(S.RELAY_CONTRACT)).toEqual([]);
+    // the #917 wording must be seen as retired (this is what fails if it comes back)
+    expect(retiredHits('When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.'))
+      .toEqual(['show your user the human_message', '(or for_your_human) text and its link', 'When a result is partial']);
   });
   it('names no path to avoid, orders no first line and no stop', () => {
     expect(S.RELAY_CONTRACT).not.toMatch(/\/pricing|\/plans|\/signup|Stripe|Do not substitute/);
@@ -160,6 +172,21 @@ describe('retired relay wording is on no surface an agent is handed (2026-10-11)
     expect(d).toMatch(/that link is the one to share/);
     expect(d).not.toMatch(/first line of your/i);
     expect(retiredHits(d + ' ' + OLD_CONTRACT).length, 'control').toBeGreaterThan(0);
+  });
+  it('toolspec.json, integration packs and mcp-server.json: the exact owner hint on analyze_site, #917 wording nowhere', () => {
+    const HINT = 'When results are partial, show the user human_message and its link.';
+    const files = ['toolspec.json', 'mcp-server.json',
+      ...fs.readdirSync(new URL('../integrations/packs/', import.meta.url)).filter((f) => f.endsWith('.json')).map((f) => 'integrations/packs/' + f)];
+    const bad = [];
+    for (const f of files) {
+      const t = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+      if (retiredHits(t).length) bad.push(f + ': ' + retiredHits(t).join('|'));
+    }
+    expect(bad).toEqual([]);
+    expect(TOOLS.analyze_site.description).toContain(HINT);
+    // mcp-server.json is derived from the source literal, which holds the access sentence only; the hint is
+    // appended when the description is served (_descFollowsSwitches), so the manifest carries no copy of it.
+    expect(JSON.stringify(SPEC.find((t) => t.name === 'analyze_site'))).toContain(HINT);
   });
   it('llms.txt twin: polite line present, retired wording absent', () => {
     expect(LLMS.replace(/\s+/g, ' ')).toContain(NEW_LINE);
