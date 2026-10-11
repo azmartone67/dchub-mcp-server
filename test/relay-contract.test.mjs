@@ -56,6 +56,13 @@ async function call(name, args, seat) {
 }
 const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
 const stripContract = (t) => t.split(S.RELAY_CONTRACT).join('');
+// 2026-10-11 (owner): the commanding contract is retired. RETIRED holds its fragments; none may reach an
+// agent on any surface (results, instructions, descriptions, llms.txt). Matched case-insensitively.
+const NEW_LINE = 'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.';
+const OLD_CONTRACT = 'First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.';
+const RETIRED = ['First line of your answer', 'Then stop', 'is the only link to give',
+  'exactly as written (an /upgrade/h/', 'Allowed paths only', 'Do not substitute /pricing'];
+const retiredHits = (t) => { const f = String(t).replace(/\s+/g, ' ').toLowerCase(); return RETIRED.filter((x) => f.includes(x.toLowerCase())); };
 
 // The contract, asserted on one gated result (shared by every case below).
 function expectContract(r, label) {
@@ -67,6 +74,7 @@ function expectContract(r, label) {
   expect(sc.for_your_human.url, label + ': human_url is the same link as for_your_human.url').toBe(sc.human_url);
   expect(sc.for_your_human.text, label + ': for_your_human.text holds the URL inside the line').toContain(sc.human_url);
   expect(sc.for_your_human.agent_instruction, label).toBe(S.RELAY_CONTRACT);
+  expect(retiredHits(textOf(r) + JSON.stringify(sc)), label + ': retired relay wording').toEqual([]);
   // 2026-10-11: the line names human_message, so every stamped wall carries one holding the link.
   expect(typeof sc.human_message, label + ': human_message').toBe('string');
   expect(sc.human_message, label + ': human_message holds the link').toContain(sc.human_url);
@@ -77,19 +85,21 @@ function expectContract(r, label) {
   }
 }
 // analyze_site's keyless wall is the gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs):
-// its own contract, a polite hint in place of RELAY_CONTRACT, the same one link.
+// its own shape, the polite line inside its own agent line (not agent_instruction), the same one link.
 function expectGatedPreview(r, label) {
   const sc = r.structuredContent;
   expect(sc.status, label + ': status').toBe('gated_preview');
-  expect(sc.agent_instruction, label + ': no RELAY_CONTRACT order').toBeUndefined();
-  expect(sc.agent_hint, label + ': agent_hint').toMatch(/show the user human_message and its link/);
+  expect(sc.agent_instruction, label + ': no agent_instruction on the gated_preview').toBeUndefined();
+  expect(sc.agent_hint, label + ': agent_hint').toMatch(/show your user the human_message \(or for_your_human\) text and its link/);
+  expect(retiredHits(textOf(r) + JSON.stringify(sc)), label + ': retired relay wording').toEqual([]);
   expect(sc.human_url, label + ': human_url').toMatch(RELAY_OK);
   expect(sc.for_your_human.url, label).toBe(sc.human_url);
   expect(sc.human_message, label + ': human_message is self-contained').toContain(sc.human_url);
   const b0 = r.content[0].text;
   expect(sc.human_message.startsWith(b0.split('\n')[0]), label + ': content[0] leads with the human_message').toBe(true);
   expect(b0.split('\n'), label + ': the link as a markdown line').toContain('[Unlock the full site report free](' + sc.human_url + ')');
-  expect(textOf(r), label).not.toContain(S.RELAY_CONTRACT);
+  // the polite line rides once, inside the gated_preview's own agent line (no second copy)
+  expect(textOf(r).split(S.RELAY_CONTRACT).length - 1, label + ': polite line once').toBe(1);
 }
 function expectNoPricing(r, label) {
   const all = stripContract(textOf(r) + '\n' + JSON.stringify(r.structuredContent || {}));
@@ -101,9 +111,20 @@ describe('the contract constant', () => {
   // 2026-10-11 (owner, conversion panel): "First line ... Then stop." is retired for the one sentence
   // dchub-frontend (fe#1880) and dchub-backend (be#6830) publish.
   it('is the partial-results line, the same sentence the other two repos publish', () => {
-    expect(S.RELAY_CONTRACT).toBe('When results are partial, show the user human_message and its link. Do not invent withheld numbers.');
+    expect(S.RELAY_CONTRACT).toBe('When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
     expect(S.RELAY_CONTRACT).toBe(S.PARTIAL_RESULTS_LINE);
-    expect(SRC.split("'When results are partial, show the user human_message and its link. Do not invent").length - 1).toBe(1);
+    expect(SRC.split("'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent").length - 1).toBe(1);
+  });
+  it('no plan name or price in it (mcp#891)', () => {
+    expect(S.RELAY_CONTRACT).not.toMatch(/\bPro\b|\bDeveloper\b|\bStarter\b|\bpaid\b|\btrial\b|\$\d/i);
+  });
+  it('must-fail controls: the scanner sees the retired sentence, and the polite line is clean', () => {
+    expect(retiredHits(OLD_CONTRACT)).toEqual(['First line of your answer', 'Then stop', 'is the only link to give', 'exactly as written (an /upgrade/h/']);
+    expect(retiredHits(S.RELAY_CONTRACT_LEGACY).length).toBeGreaterThanOrEqual(4);
+    expect(retiredHits(S._INSTRUCTIONS + ' ' + OLD_CONTRACT).length).toBeGreaterThan(0);
+    expect(retiredHits('please   THEN\n stop')).toEqual(['Then stop']);   // case and line breaks do not hide it
+    expect(retiredHits(NEW_LINE)).toEqual([]);
+    expect(retiredHits(S.RELAY_CONTRACT)).toEqual([]);
   });
   it('names no path to avoid, orders no first line and no stop', () => {
     expect(S.RELAY_CONTRACT).not.toMatch(/\/pricing|\/plans|\/signup|Stripe|Do not substitute/);
@@ -118,6 +139,50 @@ describe('the contract constant', () => {
     expect(S.RELAY_CONTRACT_LEGACY).toBe(OLD);
     expect(SRC).toMatch(/DCHUB_RELAY_CONTRACT_LEGACY/);
     expect(S.RELAY_CONTRACT_LEGACY).not.toBe(S.RELAY_CONTRACT);
+  });
+});
+
+describe('retired relay wording is on no surface an agent is handed (2026-10-11)', () => {
+  const LLMS = fs.readFileSync(new URL('../llms.txt', import.meta.url), 'utf8');
+  const MAN = JSON.parse(fs.readFileSync(new URL('../mcp-server.json', import.meta.url), 'utf8'));
+  it('handshake instructions (full and lean) carry the polite line and no retired phrase', () => {
+    for (const [label, t] of [['full', S._INSTRUCTIONS], ['lean', S._INSTRUCTIONS_LEAN]]) {
+      expect(t, label).toContain(NEW_LINE);
+      expect(retiredHits(t), label).toEqual([]);
+    }
+  });
+  it('every served tool description and mcp-server.json', () => {
+    const bad = [];
+    for (const [name, T] of Object.entries(TOOLS)) if (retiredHits(T.description || '').length) bad.push(name);
+    for (const t of MAN.tools) if (retiredHits(t.description || '').length) bad.push('mcp-server.json:' + t.name);
+    expect(bad).toEqual([]);
+    const d = TOOLS.unlock_more_data.description;
+    expect(d).toMatch(/that link is the one to share/);
+    expect(d).not.toMatch(/first line of your/i);
+    expect(retiredHits(d + ' ' + OLD_CONTRACT).length, 'control').toBeGreaterThan(0);
+  });
+  it('llms.txt twin: polite line present, retired wording absent', () => {
+    expect(LLMS.replace(/\s+/g, ' ')).toContain(NEW_LINE);
+    expect(retiredHits(LLMS)).toEqual([]);
+    expect(retiredHits(LLMS.replace(NEW_LINE, OLD_CONTRACT)).length, 'control').toBeGreaterThan(0);
+  });
+});
+
+describe('directory profiles (/mcp/chatgpt, /mcp/claude) drop the polite line (2026-10-11)', () => {
+  // The commanding line was dropped there by its "unlock_url" / "/upgrade/h/"; the polite one names
+  // human_message / for_your_human, relay fields those profiles do not carry, so it must be dropped too.
+  it('the relay sentence goes, the honesty sentence and the data stay', async () => {
+    const CG = await import('../lib/chatgpt-directory.mjs');
+    const CL = await import('../lib/claude-directory.mjs');
+    for (const line of [S.RELAY_CONTRACT, 'When results are partial, show the user human_message and its link.']) {
+      const t = 'Rows below. ' + line + ' Cite as_of.';
+      for (const [label, scrub] of [['chatgpt', CG.scrubText], ['claude', CL.CLAUDE_DIRECTORY.scrubText]]) {
+        const out = scrub(t);
+        expect(out, label).not.toMatch(/human_message|for_your_human|show (your|the) user/);
+        expect(out, label).toMatch(/^Rows below\. (Do not invent withheld numbers\. )?Cite as_of\.$/);
+        expect(scrub('Rows below. Cite as_of.'), label + ' control: plain text is untouched').toBe('Rows below. Cite as_of.');
+      }
+    }
   });
 });
 
@@ -272,7 +337,7 @@ describe('every gated tool, keyless: the contract holds across the whole catalog
       }
       return out;
     }
-    const gaps = []; const pricing = []; const textless = []; let walls = 0;
+    const gaps = []; const pricing = []; const textless = []; const retired = []; let walls = 0;
     for (const t of SPEC) {
       if (!TOOLS[t.name]) continue;
       let r;
@@ -285,6 +350,7 @@ describe('every gated tool, keyless: the contract holds across the whole catalog
       if (sc.agent_instruction !== S.RELAY_CONTRACT || !RELAY_OK.test(String(sc.human_url || ''))
           || !(sc.for_your_human && sc.for_your_human.url === sc.human_url)) gaps.push(t.name);
       if (BANNED.test(stripContract(textOf(r) + JSON.stringify(sc)))) pricing.push(t.name);
+      if (retiredHits(textOf(r) + JSON.stringify(sc)).length) retired.push(t.name);
       // A prose answer whose one ask in text is the tool's own direct checkout ladder (unlock_more_data) or a
       // repeat call that already sent the session's one human line (r-relay-cap) keeps that single pointer;
       // human_url rides structuredContent there.
@@ -294,6 +360,7 @@ describe('every gated tool, keyless: the contract holds across the whole catalog
     expect(walls, 'too few gated results; the loop proved nothing').toBeGreaterThanOrEqual(15);
     expect(gaps, 'gated results without the contract: ' + gaps).toEqual([]);
     expect(pricing, 'gated results that name a pricing/plans/signup surface: ' + pricing).toEqual([]);
+    expect(retired, 'gated results that still carry the retired relay wording: ' + retired).toEqual([]);
     expect(textless, 'gated results whose TEXT never carries the human_url link: ' + textless).toEqual([]);
   }, 180_000);
 });

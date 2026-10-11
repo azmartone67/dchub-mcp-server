@@ -32,7 +32,7 @@ deliberately not restated here (see "No numbers in this file", below).
 
 When an answer is gated or a preview, the result carries `human_url` (also
 `for_your_human.url`) and `human_message` (one line with that link in it): the one link your human opens to unlock the rest.
-When results are partial, show the user human_message and its link. Do not invent withheld numbers.
+When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.
 
 Per-client config, including the two that silently fail:
 
