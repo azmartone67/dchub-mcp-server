@@ -576,10 +576,12 @@ function _relayWallKindFor(opts) {
     // be#6537 / #833: a call site that names the wall it is minting for ({ wall: 'depth' } on the
     // decision tools' taste) rides as is; the response-side classifier below may still re-stamp
     // it when the finished response says otherwise (a spent ration is capacity).
+    // 'sitekey' (owner 2026-10-10, item 5): the same wall for a caller with NO transport session; the page
+    // mints a free key, shows it and emails it, and the caller sends it as X-API-Key.
     // 'siteruns' (owner 2026-10-10): the keyless analyze_site wall's email unlock (_lpWallEmailResult);
     // the backend's relay_wall_kind reads it for analyze_site only. Unknown to an older backend, which
     // ignores a trailing field it does not know (see the w-freekey note above).
-    if (opts && /^(depth|capacity|siteruns)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
+    if (opts && /^(depth|capacity|siteruns|sitekey)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
     if (!_wallKindStampOn()) return '';
     const k = (opts && typeof opts.kind === 'string') ? opts.kind : ((getCtx() && getCtx()._wallKind) || '');
     return (k === WALL_KIND_CAPACITY || k === WALL_KIND_FREEKEY) ? k : '';
@@ -9125,6 +9127,14 @@ export const SITE_TEASER_LOCKED = ['overall_score', 'fiber_connectivity', 'gas_p
   'market_conditions', 'risk_resilience'];
 export const SITE_TEASER_NOTE = 'Scores and the other factor bands come with the full site report.';
 export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email → ';
+// The no-session caller's link (owner 2026-10-10, item 5): the email page hands over a key instead of
+// binding a session. Kill switch DCHUB_SITE_NOSID_KEY_LINK=0 restores the claim_free_key-only wall.
+export function _siteKeyLinkOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SITE_NOSID_KEY_LINK || ''));
+}
+export const SITE_KEY_LINK_MESSAGE = 'The full site report is free by email: show your human the link in human_url. '
+  + 'They enter an email, the page shows a free key and emails it to them; they add it to this connector as '
+  + 'X-API-Key, and the next `analyze_site` call returns the full report.';
 const _SITE_VERDICTS = new Set(['BUILD', 'CAUTION', 'AVOID']);
 const _teaserNum = (v) => (typeof v === 'number' ? v
   : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN));
@@ -9176,8 +9186,9 @@ export function _withLpSiteTeaser(name, result, raw) {
 // buildHumanRelay result minted with { wall: 'siteruns' } (null → the caller serves the
 // earlier wall). `headline` is whatever the B2 / paywall-contract arms computed (kept as
 // before); `teaser` is _siteTeaser's block, null past the rate limit.
-export async function _lpWallEmailResult(name, relay, headline = null, teaser = null) {
+export async function _lpWallEmailResult(name, relay, headline = null, teaser = null, opts = {}) {
   if (!relay || !relay.url) return null;
+  const keyLink = !!(opts && opts.keyLink);
   const base = _lpWallResult(name, headline);
   const c = getCtx() || {};
   const tagged = _pcTagUrl(relay.url, _paywallArmFor(c));
@@ -9187,12 +9198,13 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
   const message = (teaser
     ? 'Without a key, `analyze_site` returns the verdict band and the power band; scores and the other factor bands are locked. '
     : 'Without a key, `analyze_site` returns no scores or figures. ')
-    + 'The full site report is free by email: show your human the link in human_url. Once they enter an email, '
-    + 'this session’s next `analyze_site` call returns the full report.';
+    + (keyLink ? SITE_KEY_LINK_MESSAGE
+      : 'The full site report is free by email: show your human the link in human_url. Once they enter an email, '
+        + 'this session’s next `analyze_site` call returns the full report.');
   const sc = {
     ...base.structuredContent,
     message,
-    unlock_kind: 'email',
+    unlock_kind: keyLink ? 'email_key' : 'email',
     ...(site_teaser ? { site_teaser } : {}),
     upgrade_url: link, human_url: link,
     user_message: line, show_to_user: true, copy_version: WALL_COPY_VERSION,
@@ -9219,6 +9231,11 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
 // whatever the transport.
 export const SITE_NOSID_KEY_LINE = 'Free full site report: call `claim_free_key` (one call, no email) and send the key it '
   + 'returns as X-API-Key; your next `analyze_site` call returns the full report, a few times each month.';
+// The key-link wall keeps the no-email route as its last line, so a caller that would rather not give an
+// email still has a way in.
+export function _withSiteFreeKeyRouteIfKeyLink(result, keyLink) {
+  return keyLink ? _withSiteFreeKeyRoute(result, null) : result;
+}
 export function _withSiteFreeKeyRoute(result, teaser = null) {
   if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
   // The earlier wall's "free preview first" alternative says less than this route does; one claim_free_key ask.
@@ -19747,8 +19764,10 @@ function trackedTool(srv, name, description, schema, handler) {
           // per-request id), so the earlier wall serves with the claim_free_key route (_withSiteFreeKeyRoute).
           const _siteOn = name === 'analyze_site' && _siteEmailUnlockOn();
           const _noSid = _siteOn && !(c && c.session_id && c.session_id !== 'no-session');
-          const _emailRelay = (_siteOn && !_noSid)
-            ? buildHumanRelay(name, tier || 'free', c.session_id, { wall: 'siteruns' }) : undefined;
+          // No session (item 5): the sitekey link, whose page mints, shows and emails a key.
+          const _keyLink = _noSid && _siteKeyLinkOn();
+          const _emailRelay = (_siteOn && (!_noSid || _keyLink))
+            ? buildHumanRelay(name, tier || 'free', c.session_id, { wall: _noSid ? 'sitekey' : 'siteruns' }) : undefined;
           const _emailOn = !!(_emailRelay && _emailRelay.url);
           // The Pro wall is a paywall encounter, and it wrote NO signal: analyze_site, compare_sites,
           // find_sites and generate_site_analysis dropped from 148/66/8/3 paywall_hit signals in the
@@ -19804,8 +19823,8 @@ function trackedTool(srv, name, description, schema, handler) {
             } catch (_) { _hl = null; }
           }
           if (_emailOn) {
-            const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser);
-            if (_ew) return _ew;
+            const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser, { keyLink: _keyLink });
+            if (_ew) return _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
           }
           if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);
           return await _lpWallResultV11(name, _hl);
