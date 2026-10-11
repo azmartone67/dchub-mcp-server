@@ -6623,6 +6623,19 @@ export function _listingIsTeaser(payload) {
   return false;
 }
 
+// A listing link we will pass through: https on dchub.cloud (or www), nothing else.
+export function _listingOwnUrl(v) {
+  if (typeof v !== 'string') return '';
+  const t = v.trim();
+  if (t.length > 600 || /\s/.test(t)) return '';
+  try {
+    const u = new URL(t);
+    if (u.protocol !== 'https:') return '';
+    if (u.hostname !== 'dchub.cloud' && u.hostname !== 'www.dchub.cloud') return '';
+    return t;
+  } catch { return ''; }
+}
+
 export function _listingConfidential(payload) {
   const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -6642,7 +6655,13 @@ export function _listingConfidential(payload) {
   const merge = teaser
     ? (block) => ({ ...attr, ...obj(block) })
     : (block) => ({ ...obj(block), ...attr });
-  const citation = merge(p.citation);
+  let citation = merge(p.citation);
+  // 2026-10-10: the backend points citation.url at the listing it answered
+  // about (https://dchub.cloud/listings/<slug>). The licence half above stays
+  // ours on confidential answers, but the URL is the quotable link, so a
+  // dchub.cloud URL from the backend wins; anything else keeps ours.
+  const backendUrl = _listingOwnUrl(obj(p.citation).url);
+  if (backendUrl) citation = { ...citation, url: backendUrl };
   const cite = (typeof citation.cite_as === 'string' && citation.cite_as.trim())
     ? citation.cite_as.trim() : (teaser ? LISTING_TEASER_CITE_AS : LISTING_CITE_AS);
   return { ...p,
@@ -6771,8 +6790,9 @@ function _listingCardLine(card) {
   const where = place && region ? place + ' (' + region + ')' : (place || region);
   // Without a total the fit text IS the capacity statement, so it stands in
   // that slot rather than trailing an empty one.
+  const link = _listingOwnUrl(card.tracked_url) || _listingOwnUrl(card.url);
   return '- ' + label + ': ' + (cap || fit) + (where ? ' in ' + where : '')
-    + (cap && fit ? ' — ' + fit : '');
+    + (cap && fit ? ' — ' + fit : '') + (link ? ' — Link: ' + link : '');
 }
 
 function _listingFiltersText(filters) {
@@ -6851,6 +6871,10 @@ export function _listingLines(body) {
     if (fit) fitShown = true;
   }
   if (fitShown) lines.push(LISTING_FIT_NOTE);
+  if (listing) {
+    const link = _listingOwnUrl(listing.tracked_url) || _listingOwnUrl(listing.url);
+    if (link) lines.push('Link: ' + link);
+  }
   if (b.disclosure !== undefined && b.disclosure !== null) {
     lines.push(..._listingDisclosureLines(b.disclosure, listing ? listing.slug : ''));
   }
@@ -6886,6 +6910,50 @@ export function _listingInvalidSlug(tool, slug) {
     },
   };
   return { isError: true, content: [{ type: 'text', text: JSON.stringify(payload) }], structuredContent: payload };
+}
+
+// ── per-session retrieval receipt memo (2026-10-10) ──────────────────────────
+// source_capacity answers carry retrieval_receipt.reference. The intro that
+// follows is attributed to it, so the reference is remembered per MCP session
+// (session id, else api key) and sent as receipt_reference. Bounded: at most
+// _LISTING_RECEIPT_CAP sessions, _LISTING_RECEIPT_SLUGS slugs each; oldest
+// session evicted first (Map insertion order). Memory only, a hint, never the answer.
+const _listingReceipts = new Map();   // sid -> { last: ref, by: Map<slug, ref> }
+const _LISTING_RECEIPT_CAP = 5000;
+const _LISTING_RECEIPT_SLUGS = 20;
+const _listingReceiptSid = (c) => {
+  const sid = _listingStr(c && c.session_id);
+  if (sid && sid !== 'no-session') return sid;
+  return _listingStr(c && c.api_key);
+};
+export function _listingNoteReceipt(body, c) {
+  try {
+    const sid = _listingReceiptSid(c);
+    const rr = body && typeof body === 'object' ? body.retrieval_receipt : null;
+    const ref = rr && typeof rr === 'object' ? _listingStr(rr.reference) : '';
+    if (!sid || !ref || ref.length > 200) return;
+    let e = _listingReceipts.get(sid);
+    if (e) _listingReceipts.delete(sid);   // re-insert: most recent last
+    else e = { last: '', by: new Map() };
+    e.last = ref;
+    const l = body.listing;
+    const slug = l && typeof l === 'object' ? _listingStr(l.slug) : '';
+    if (slug) {
+      e.by.delete(slug);
+      e.by.set(slug, ref);
+      while (e.by.size > _LISTING_RECEIPT_SLUGS) e.by.delete(e.by.keys().next().value);
+    }
+    _listingReceipts.set(sid, e);
+    while (_listingReceipts.size > _LISTING_RECEIPT_CAP) _listingReceipts.delete(_listingReceipts.keys().next().value);
+  } catch (_) { /* a memo */ }
+}
+export function _listingReceiptFor(c, slug) {
+  try {
+    const e = _listingReceipts.get(_listingReceiptSid(c));
+    if (!e) return '';
+    const s = _listingStr(slug);
+    return (s && e.by.get(s)) || e.last || '';
+  } catch (_) { return ''; }
 }
 
 // Attribution hints for the lead register: which client and which path the
@@ -6955,7 +7023,7 @@ export function _listingAcceptPreflight(args) {
 
 // The POST body, in the contract's shape. Absent optional fields are omitted
 // rather than sent as null.
-export function _listingIntroBody(args, { termsVersion = null, client = null } = {}) {
+export function _listingIntroBody(args, { termsVersion = null, client = null, receiptReference = null } = {}) {
   const a = args || {};
   const requirement = {};
   if (typeof a.capacity_mw === 'number' && Number.isFinite(a.capacity_mw)) requirement.capacity_mw = a.capacity_mw;
@@ -6985,6 +7053,10 @@ export function _listingIntroBody(args, { termsVersion = null, client = null } =
   body.accept_terms = a.accept_terms === true;
   if (termsVersion) body.terms_version = termsVersion;
   if (client) body.client = client;
+  // The source_capacity receipt this introduction follows from; the backend
+  // validates and stamps it. Omitted when the session never read a listing.
+  const receipt = _listingStr(receiptReference);
+  if (receipt) body.receipt_reference = receipt.slice(0, 200);
   return body;
 }
 
@@ -7506,6 +7578,7 @@ export function _listingsToolResult(tool, r, opts = {}) {
   const status = r.http_status;
   const body = (r.body && typeof r.body === 'object' && !Array.isArray(r.body)) ? r.body : null;
   if (status >= 200 && status < 300) {
+    if (tool === 'source_capacity') _listingNoteReceipt(body, getCtx());
     // The terms gate answers a LOCKED listing with 200, like the sign-in wall,
     // so the order of the next calls is spelled out here rather than left for
     // the agent to infer from access.unlock.
@@ -13865,12 +13938,13 @@ function _stampEntityCb(toolName, fn) {
     try {
       if (r && Array.isArray(r.content)) {
         const sc = (r.structuredContent && typeof r.structuredContent === 'object'
-                    && !Array.isArray(r.structuredContent)) ? r.structuredContent : null;
+                    && !Array.isArray(r.structuredContent)) ? _dropNullEnvelopeKeys(r.structuredContent) : null;
+        if (sc && sc !== r.structuredContent) r = { ...r, structuredContent: sc };
         const _q = QUOTA_HINT ? _buildQuotaHint(toolName) : null;
         if (sc) {
           const _add = {};
           if (!sc._entity) _add._entity = _entityType(toolName);
-          if (_q && sc.quota === undefined) _add.quota = _q;
+          if (_q && (sc.quota === undefined || sc.quota === null)) _add.quota = _q;
           // r-coord-handoff: if the result carries coordinates, pre-populate the
           // "power source found -> verify site viability" jump (Gemini 2026-07-06).
           if (sc.site_evaluation_handoff === undefined) {
@@ -13900,11 +13974,11 @@ function _stampEntityCb(toolName, fn) {
           let _base = null;
           try {
             const _p = JSON.parse(r.content[0]?.text || '');
-            if (_p && typeof _p === 'object' && !Array.isArray(_p)) _base = { ..._p };
+            if (_p && typeof _p === 'object' && !Array.isArray(_p)) _base = _dropNullEnvelopeKeys({ ..._p });
           } catch (_) { /* non-JSON text stays content-only */ }
           if (!_base) _base = {};
           if (!_base._entity) _base._entity = _entityType(toolName);
-          if (_q && _base.quota === undefined) _base.quota = _q;
+          if (_q && (_base.quota === undefined || _base.quota === null)) _base.quota = _q;
           return { ...r, structuredContent: _base };
         }
       }
@@ -15568,11 +15642,31 @@ export function withCookbookHint(result, toolName, c) {
 // "MCP error -32602: Output validation error … site_evaluation_handoff …
 // expected object, received array"). Accept BOTH shapes — a schema that can
 // reject a real payload is a production outage.
+// Envelope keys whose schema arm is object/string/array and rejects null. A
+// backend body may carry any of them as an explicit null ("no block"); that
+// means absent, so the key is dropped from structuredContent. Returns the same
+// object when nothing was null.
+const _NULLABLE_ENVELOPE_KEYS = ['_entity', 'provenance', 'quota', 'citation',
+  'site_evaluation_handoff', '_return_loop', '_front_door'];
+export function _dropNullEnvelopeKeys(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  let out = obj;
+  for (const k of _NULLABLE_ENVELOPE_KEYS) {
+    if (out[k] === null) { if (out === obj) out = { ...obj }; delete out[k]; }
+  }
+  return out;
+}
 const _ENVELOPE_SHAPE = {
   _entity: z.string().optional().describe(
     'Payload class (facility|market|iso_grid|queue_results|deal|report|response); branch on it.'),
   provenance: z.looseObject({}).optional().describe(
     'Source, method, as_of, verification_counts, license, cite_as; quote it when citing.'),
+  // 2026-10-10: GET /api/v1/listings/<slug> answers keyless with "quota": null
+  // and this object-only arm made the SDK reject the whole source_capacity
+  // result ("expected object, received null at quota"). The schema is NOT
+  // widened (a nullable arm on every key is +17 KB of tools/list); instead
+  // _dropNullEnvelopeKeys removes a null-valued envelope key from
+  // structuredContent before validation.
   quota: z.looseObject({}).optional().describe(
     'Caller quota state (remaining calls, tier).'),
   // r-cite-shape (2026-08-10): accept BOTH shapes, exactly like
@@ -28594,6 +28688,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const body = _listingIntroBody(a, {
         termsVersion: await _listingTermsVersion(a.terms_version),
         client: _listingClientHint(getCtx()),
+        receiptReference: _listingReceiptFor(getCtx(), a.slug),
       });
       return _listingsToolResult('request_capacity_intro', await callAPIWrite(path, body, { withStatus: true }));
     });
