@@ -9137,6 +9137,24 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     'If the user prefers not to give an email, call `claim_free_key` (one call, no email).'].filter(Boolean).join('\n\n');
   return { content: [{ type: 'text', text }], isError: base.isError, structuredContent: sc };
 }
+// The keyless analyze_site wall for a caller with NO transport session (owner 2026-10-10, Grok
+// follow-up 2: 46 walls that day). The email unlock binds the key to the MCP session, so an email
+// link minted for a caller that has none could never convert, and its copy ("this session's next
+// call") would be false. That caller keeps the earlier wall and its one link, and gains the move
+// that does not need a session: `claim_free_key` (no email, one call). Any key below the paid
+// plan gets the monthly free full runs, and the key is the caller's identity on the next call
+// whatever the transport.
+export const SITE_NOSID_KEY_LINE = 'Free full site report: call `claim_free_key` (one call, no email) and send the key it '
+  + 'returns as X-API-Key; your next `analyze_site` call returns the full report, a few times each month.';
+export function _withSiteFreeKeyRoute(result, teaser = null) {
+  if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+  const content = result.content.slice();
+  content.push({ type: 'text', text: [_siteTeaserLine(teaser), SITE_NOSID_KEY_LINE].filter(Boolean).join('\n\n') });
+  const sc = { ...(result.structuredContent || {}), next_tool: 'claim_free_key',
+    free_key_unlock: { tool: 'claim_free_key', email_required: false, note: SITE_NOSID_KEY_LINE },
+    ...(teaser ? { site_teaser: teaser } : {}) };
+  return { ...result, content, structuredContent: sc };
+}
 function _b2WeakestFactorLine(h) {
   return h && h.weakest_factor
     ? 'Free headline: ' + (h.verdict ? 'verdict ' + h.verdict + ', ' : '') + 'weakest factor ' + h.weakest_factor
@@ -19626,8 +19644,12 @@ function trackedTool(srv, name, description, schema, handler) {
           // Email unlock (owner 2026-10-10): the one link this wall serves, minted first so the
           // signal below can say which arm it was. Undefined (switch off, no signing secret,
           // relay off) serves the earlier wall.
-          const _emailRelay = (name === 'analyze_site' && _siteEmailUnlockOn())
-            ? buildHumanRelay(name, tier || 'free', (c && c.session_id) || '', { wall: 'siteruns' }) : undefined;
+          // No transport session: the email would bind to nothing (buildHumanRelay would mint a
+          // per-request id), so the earlier wall serves with the claim_free_key route (_withSiteFreeKeyRoute).
+          const _siteOn = name === 'analyze_site' && _siteEmailUnlockOn();
+          const _noSid = _siteOn && !(c && c.session_id && c.session_id !== 'no-session');
+          const _emailRelay = (_siteOn && !_noSid)
+            ? buildHumanRelay(name, tier || 'free', c.session_id, { wall: 'siteruns' }) : undefined;
           const _emailOn = !!(_emailRelay && _emailRelay.url);
           // The Pro wall is a paywall encounter, and it wrote NO signal: analyze_site, compare_sites,
           // find_sites and generate_site_analysis dropped from 148/66/8/3 paywall_hit signals in the
@@ -19646,7 +19668,7 @@ function trackedTool(srv, name, description, schema, handler) {
             api_key: c.api_key || null,
             tier_current: tier || 'free',
             tier_required: 'paid',
-            message_shown: _emailOn ? 'lp_wall_email' : 'lp_wall',
+            message_shown: _emailOn ? 'lp_wall_email' : (_noSid ? 'lp_wall_nosid' : 'lp_wall'),
           });
           // The wall hands a human a signed /upgrade/h link, but the session never reached
           // mcp_high_intent_sessions, and human_acted (v5 to v10) joins a relay open to a high-intent row
@@ -19662,11 +19684,11 @@ function trackedTool(srv, name, description, schema, handler) {
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
           let _teaser = null;
-          if ((_pcOn || _b2 || _emailOn) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+          if ((_pcOn || _b2 || _emailOn || _noSid) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
               const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
-              if (_emailOn) _teaser = _siteTeaser(_parsedHl);
+              if (_emailOn || _noSid) _teaser = _siteTeaser(_parsedHl);
               _hl = (_pcOn || _b2) ? _pcLpHeadline(name, _parsedHl) : null;
               // r-upgrade-h-first: the one number the wall may show is a COUNT the free
               // preview already keeps (nearby.substations_50km), measured by this very
@@ -19686,6 +19708,7 @@ function trackedTool(srv, name, description, schema, handler) {
             const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser);
             if (_ew) return _ew;
           }
+          if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);
           return await _lpWallResultV11(name, _hl);
         }
         if (_lpAccess === 'preview') {
