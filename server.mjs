@@ -187,7 +187,7 @@ import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs'
 // tier_limits.json, the daily snapshot of GET /api/v1/tiers). WHY, the
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
-import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat } from './lib/wall-user-line.mjs';
+import { WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
@@ -9221,9 +9221,14 @@ export const SITE_NOSID_KEY_LINE = 'Free full site report: call `claim_free_key`
   + 'returns as X-API-Key; your next `analyze_site` call returns the full report, a few times each month.';
 export function _withSiteFreeKeyRoute(result, teaser = null) {
   if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
-  const content = result.content.slice();
+  // The earlier wall's "free preview first" alternative says less than this route does; one claim_free_key ask.
+  const strip = (v, d = 0) => (typeof v === 'string' ? v.split(CLAIM_ALT).join('').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '')
+    : (d > 6 || !v || typeof v !== 'object') ? v
+      : Array.isArray(v) ? v.map((x) => strip(x, d + 1))
+        : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, strip(x, d + 1)])));
+  const content = result.content.map((b) => strip(b));
   content.push({ type: 'text', text: [_siteTeaserLine(teaser), SITE_NOSID_KEY_LINE].filter(Boolean).join('\n\n') });
-  const sc = { ...(result.structuredContent || {}), next_tool: 'claim_free_key',
+  const sc = { ...strip(result.structuredContent || {}), next_tool: 'claim_free_key',
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: SITE_NOSID_KEY_LINE },
     ...(teaser ? { site_teaser: teaser } : {}) };
   return { ...result, content, structuredContent: sc };

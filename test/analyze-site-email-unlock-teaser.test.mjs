@@ -204,6 +204,8 @@ describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026
     expect(r.text).toContain('claim_free_key');
     expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD.');
     expect(r.text).not.toContain('Unlock the full site report free by email');
+    expect(r.text, 'one claim_free_key ask, not a preview one and a full one').not.toContain('free preview first');
+    expect(JSON.stringify(r.res)).not.toContain('free preview first');
     expect(JSON.stringify(r.res)).not.toMatch(/this session.s next/);
     expect(shortReqs.every((b) => !(b.relay_url && relayFields(b.relay_url).fields.includes('w-siteruns')))).toBe(true);
     expect(r.signals.map((x) => x.message_shown)).toContain('lp_wall_nosid');
