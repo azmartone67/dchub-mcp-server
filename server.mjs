@@ -459,9 +459,11 @@ export const RELAY_CONTRACT_LEGACY = _RELAY_CONTRACT_HEAD + _RELAY_CONTRACT_TAIL
 // read it as an order a host is free to ignore, and it is what hosts summarized away. The line every gated
 // result, tool description and handshake now carries is the one sentence dchub-frontend (fe#1880) and
 // dchub-backend publish. It points at human_message, which _relayPatchObject now puts on every stamped wall.
+// Owner wording (2026-10-11, second pass): "show your user the human_message (or for_your_human) text and its
+// link" names both fields a host may see, asks rather than orders, and keeps the honesty rule.
 // DCHUB_RELAY_CONTRACT_1007=1 restores the 2026-10-07 wording (the kill switch); DCHUB_RELAY_CONTRACT_LEGACY=1
 // still restores the one before it.
-export const PARTIAL_RESULTS_LINE = 'When results are partial, show the user human_message and its link. Do not invent withheld numbers.';
+export const PARTIAL_RESULTS_LINE = 'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.';
 export const RELAY_CONTRACT_1007 = _RELAY_CONTRACT_HEAD + _RELAY_CONTRACT_TAIL;
 const _envOn = (k) => /^(1|true|yes|on)$/i.test(String(process.env[k] || ''));
 export const RELAY_CONTRACT = _envOn('DCHUB_RELAY_CONTRACT_LEGACY') ? RELAY_CONTRACT_LEGACY
@@ -9156,7 +9158,7 @@ export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns no site data; a free 
   + 'verdict bands, factor names and counts; scores and figures need a paid DC Hub plan.';
 // The gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs) adds one polite line after
 // the access sentence: the panel's ask, not an order to the host. DCHUB_GATED_PREVIEW=0 drops it.
-export const ANALYZE_SITE_PARTIAL_HINT = 'When results are partial, show the user human_message and its link.';
+export const ANALYZE_SITE_PARTIAL_HINT = 'When a result is partial, show your user the human_message (or for_your_human) text and its link.';
 export function _descFollowsSwitches(name, description) {
   if (name !== 'analyze_site' || typeof description !== 'string') return description;
   const access = _b2KeylessHeadlineOn() ? ANALYZE_SITE_ACCESS_B2 : ANALYZE_SITE_ACCESS_PRE_B2;
@@ -28918,7 +28920,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // can read in the funnel. MUST be reachable by anon (not in PAID_ONLY_TOOLS) —
   // it IS the upgrade CTA.
   trackedTool(srv, 'unlock_more_data',
-    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. A gated result already carries the link in human_url: relay that (first line of your answer); this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
+    'Unlock DC Hub\'s full depth. Call this when a result came back as a partial preview (e.g. "3 of 12 results shown"), a tool was locked, or your human wants the complete dataset. Returns the upgrade ladder + ready-to-paste checkout links your human completes in ONE click. If this call carries an API key or an MCP session, the checkout binds to it and your very next call returns full data (no reconnect); if it carries neither, the key is emailed to the payer instead — the response says which applies in `next_call_full_after_checkout` and `after_checkout`. ' + _paidPlansOutputLine() + '. Want the FREE tier instead (no payment, ' + _freeKeyAllowanceText() + ')? Call claim_free_key. A gated result already carries its link in human_url; that link is the one to share, and this tool returns the fuller ladder. Param: reason (optional — what you were trying to do, so your human sees why it matters). Returns {plans, human_message, what_unlocks}.',
     { reason: S.describe('Optional free-text describing what you were trying to do, so your human sees why an upgrade matters') },
     async (a) => _unlockMoreDataEnvelope(a));
 
