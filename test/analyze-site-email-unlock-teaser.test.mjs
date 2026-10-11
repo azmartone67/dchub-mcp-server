@@ -97,7 +97,7 @@ beforeAll(async () => {
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 beforeEach(() => {
   siteOverall = 81.8; shortReqs.length = 0;
-  delete process.env.DCHUB_SITE_EMAIL_UNLOCK; delete process.env.DCHUB_LP_FREE_RUNS;
+  delete process.env.DCHUB_SITE_EMAIL_UNLOCK; delete process.env.DCHUB_SITE_NOSID_KEY_LINK; delete process.env.DCHUB_LP_FREE_RUNS;
   // B2 is OFF in prod (owner, 10-04..10-18 A/B); the teaser must not depend on it.
   process.env.DCHUB_B2_SITE_HEADLINE = '0';
 });
@@ -196,7 +196,20 @@ describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026
       text: (res.content || []).map((x) => x.text || '').join('\n'),
       signals: hits.filter((h) => h.path === '/api/v1/mcp/signal-paywall' && h.body).map((h) => h.body) };
   }
-  it('keeps the earlier wall and its one link, mints no email relay, adds the claim_free_key route and the teaser', async () => {
+  it('key link on (default): the sitekey link, email_key kind, claim_free_key kept as the no-email route', async () => {
+    const r = await callNoSession();
+    expect(r.sc.unlock_kind).toBe('email_key');
+    expect(r.sc.human_url).toBeTruthy();
+    expect(r.sc.next_tool).toBe('claim_free_key');
+    expect(r.text).toContain('Unlock the full site report free by email');
+    expect(JSON.stringify(r.res)).toContain('X-API-Key');
+    expect(JSON.stringify(r.res)).not.toMatch(/this session.s next/);
+    expect(shortReqs.some((b) => b.relay_url && relayFields(b.relay_url).fields.includes('w-sitekey'))).toBe(true);
+    expect(shortReqs.every((b) => !(b.relay_url && relayFields(b.relay_url).fields.includes('w-siteruns')))).toBe(true);
+    expect(numbersIn(r.sc).filter(([p]) => !/^site_counts\./.test(p)), 'no figure on the wall').toEqual([]);
+  });
+  it('key link off: keeps the earlier wall and its one link, mints no email relay, adds the claim_free_key route and the teaser', async () => {
+    process.env.DCHUB_SITE_NOSID_KEY_LINK = '0';
     const r = await callNoSession();
     expect(r.sc.unlock_kind).toBeUndefined();
     expect(r.sc.next_tool).toBe('claim_free_key');
