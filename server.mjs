@@ -181,7 +181,7 @@ import { dropVerificationCounts as _dropVerificationCounts } from './lib/verific
 // Owner request 2026-09-28 (via Grok): no SQL fragments or table/column names in
 // tool output — plain `method`, no `verification_counts_basis`. lib/provenance-plain.mjs.
 import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs';
-import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPreviewOnImpl } from './lib/gated-preview.mjs';
+import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPreviewOnImpl, PARTIAL_RESULTS_LINE as _PARTIAL_LINE, PARTIAL_RESULTS_HINT as _PARTIAL_HINT } from './lib/gated-preview.mjs';
 
 // ★★★ r-tier-canon (2026-09-02, QA sweep D8 + pricing #3): every allowance and
 // price this server states is READ from lib/tier-canon.mjs (canonical/
@@ -459,11 +459,11 @@ export const RELAY_CONTRACT_LEGACY = _RELAY_CONTRACT_HEAD + _RELAY_CONTRACT_TAIL
 // read it as an order a host is free to ignore, and it is what hosts summarized away. The line every gated
 // result, tool description and handshake now carries is the one sentence dchub-frontend (fe#1880) and
 // dchub-backend publish. It points at human_message, which _relayPatchObject now puts on every stamped wall.
-// Owner wording (2026-10-11, second pass): "show your user the human_message (or for_your_human) text and its
-// link" names both fields a host may see, asks rather than orders, and keeps the honesty rule.
+// Owner wording (2026-10-11, final): the exact sentence lives in lib/gated-preview.mjs (one definition site);
+// it replaces the reworded one #917 had put here.
 // DCHUB_RELAY_CONTRACT_1007=1 restores the 2026-10-07 wording (the kill switch); DCHUB_RELAY_CONTRACT_LEGACY=1
 // still restores the one before it.
-export const PARTIAL_RESULTS_LINE = 'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.';
+export const PARTIAL_RESULTS_LINE = _PARTIAL_LINE;   // defined once, lib/gated-preview.mjs
 export const RELAY_CONTRACT_1007 = _RELAY_CONTRACT_HEAD + _RELAY_CONTRACT_TAIL;
 const _envOn = (k) => /^(1|true|yes|on)$/i.test(String(process.env[k] || ''));
 export const RELAY_CONTRACT = _envOn('DCHUB_RELAY_CONTRACT_LEGACY') ? RELAY_CONTRACT_LEGACY
@@ -9162,7 +9162,7 @@ export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns the verdict band and 
   + 'a free key adds a few free full site reports each month; other scores and figures need a paid DC Hub plan.';
 // The gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs) adds one polite line after
 // the access sentence: the panel's ask, not an order to the host. DCHUB_GATED_PREVIEW=0 drops it.
-export const ANALYZE_SITE_PARTIAL_HINT = 'When a result is partial, show your user the human_message (or for_your_human) text and its link.';
+export const ANALYZE_SITE_PARTIAL_HINT = _PARTIAL_HINT;
 export function _descFollowsSwitches(name, description) {
   if (name !== 'analyze_site' || typeof description !== 'string') return description;
   const access = _b2KeylessHeadlineOn() ? ANALYZE_SITE_ACCESS_B2 : ANALYZE_SITE_ACCESS_PRE_B2;
