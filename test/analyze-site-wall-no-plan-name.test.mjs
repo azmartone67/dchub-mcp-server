@@ -152,17 +152,20 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
   it('is the Pro-only wall, carrying the trial link (the check below is not vacuous)', () => {
     const sc = r.structuredContent;
     if (c.email === '1') {
-      // Keyless with the email unlock on: the same wall markers, the one link is the email unlock.
-      expect(sc.required_plan).toBe('pro');
+      // Keyless with the email unlock on: the gated_preview (conversion panel 2026-10-11), a
+      // successful partial answer whose one link is the email unlock. No plan field at all.
+      expect(r.isError).toBe(false);
+      expect(sc.status).toBe('gated_preview');
+      expect(sc.required_plan).toBeUndefined();
       expect(sc._wall).toBe(true);
       expect(sc.unlock_kind).toBe('email');
       const link = sc.human_url;
       expect(link).toMatch(c.short === '0' ? /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?\S*)?$/
         : /^https:\/\/dchub\.cloud\/u\/abcdef$/);
-      expect(sc.user_message).toBe('Unlock the full site report free by email → ' + link);
+      expect(sc.human_message).toBe('This is a preview, not the full site report. Unlock it free by email '
+        + '(3 full reports a month, no card): ' + link);
       expect(sc.for_your_human.url).toBe(link);
-      expect(r.content[0].text.startsWith(sc.user_message)).toBe(true);
-      expect(sc.agent_message).toMatch(/^Without a key, `analyze_site` returns /);
+      expect(r.content[0].text).toContain('\n[Unlock the full site report free](' + link + ')\n');
       expect(sc.copy_version).toBe('v14');
       return;
     }
@@ -194,7 +197,7 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
   it('names no plan in content text, user_message, agent_message, human_message or for_your_human', () => {
     const sc = r.structuredContent;
     // The fields this wall always carries must be there, or the scan below skips them.
-    expect(typeof sc.agent_message).toBe('string');
+    expect(typeof (c.email === '1' ? sc.human_message : sc.agent_message)).toBe('string');
     expect(sc.for_your_human && typeof sc.for_your_human.text).toBe('string');
     const hits = [
       ...strings(r.content, 'content'),

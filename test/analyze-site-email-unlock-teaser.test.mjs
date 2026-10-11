@@ -67,6 +67,8 @@ function relayFields(url) {
   const sig = createHmac('sha256', INTERNAL).update(m[1]).digest('hex').slice(0, 32);
   return { fields: Buffer.from(m[1], 'base64url').toString().split('|'), sigOk: sig === m[2] };
 }
+// request_id is an id (a uuid can hold "-82-"), not a figure: figure scans skip it.
+const noIds = (v) => JSON.stringify(v, (k, x) => (k === 'request_id' ? undefined : x));
 function numbersIn(v, path = '', out = []) {
   if (typeof v === 'number') out.push([path, v]);
   else if (Array.isArray(v)) v.forEach((x, i) => numbersIn(x, `${path}[${i}]`, out));
@@ -100,8 +102,11 @@ beforeEach(() => {
   delete process.env.DCHUB_SITE_EMAIL_UNLOCK; delete process.env.DCHUB_SITE_NOSID_KEY_LINK; delete process.env.DCHUB_LP_FREE_RUNS;
   // B2 is OFF in prod (owner, 10-04..10-18 A/B); the teaser must not depend on it.
   process.env.DCHUB_B2_SITE_HEADLINE = '0';
+  // This file pins the wall the gated_preview step reshapes (lib/gated-preview.mjs), which is what
+  // DCHUB_GATED_PREVIEW=0 serves; test/analyze-site-gated-preview.test.mjs pins the default.
+  process.env.DCHUB_GATED_PREVIEW = '0';
 });
-afterEach(() => { delete process.env.DCHUB_B2_SITE_HEADLINE; });
+afterEach(() => { delete process.env.DCHUB_B2_SITE_HEADLINE; delete process.env.DCHUB_GATED_PREVIEW; });
 
 describe('keyless analyze_site, switch on (default): email unlock + bands-only teaser', () => {
   it('site_teaser carries the verdict band and the power band, the rest named as locked', async () => {
@@ -119,7 +124,7 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
 
   it('no score or figure anywhere: no fixture figure in text or JSON, no number in structuredContent but counts', async () => {
     const r = await call(null);
-    const all = JSON.stringify(r.res);
+    const all = noIds(r.res);
     for (const f of FIGURES) {
       expect(all, `figure ${f} leaked`).not.toMatch(new RegExp(`(?<![\\d.])${f.replace('.', '\\.')}(?![\\d.])`));
     }
@@ -247,7 +252,7 @@ describe('B2 on (its own switch): its headline is kept, the teaser and the one e
     expect(r.sc.site_teaser).toMatchObject({ verdict: 'BUILD', power_infrastructure: 'BUILD' });
     const nums = numbersIn(r.sc).filter(([p]) => !/^site_counts\./.test(p));
     expect(nums, JSON.stringify(nums)).toEqual([]);
-    const all = JSON.stringify(r.res);
+    const all = noIds(r.res);
     for (const f of FIGURES) expect(all).not.toMatch(new RegExp(`(?<![\\d.])${f.replace('.', '\\.')}(?![\\d.])`));
     expect(pageLinks(r.res)).toEqual(['https://dchub.cloud/u/abcdef']);
   });
@@ -269,7 +274,7 @@ describe('paywall-contract arm on (DCHUB_PAYWALL_CONTRACT=on): the contract rewr
     expect(r.text).not.toMatch(/starts a paid|Free headline/);
     expect(r.sc.agent_hints).toBeUndefined();
     expect(pageLinks(r.res)).toEqual([link]);
-    const all = JSON.stringify(r.res);
+    const all = noIds(r.res);
     for (const f of FIGURES) expect(all).not.toMatch(new RegExp(`(?<![\\d.])${f.replace('.', '\\.')}(?![\\d.])`));
     const req = shortReqs.find((b) => b.tool === 'analyze_site');
     expect(req.relay_url).toMatch(/[?&]pc=v2\b/);

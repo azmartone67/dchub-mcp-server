@@ -158,7 +158,8 @@ describe('F2: the arm tag rides the link people see', () => {
   it('F2 + F5: the short /u link wraps the TAGGED relay, so the arm rides inside the /u target', async () => {
     delete process.env.DCHUB_RELAY_SHORT_LINK;
     const r = await call('analyze_site', LOC, seat(GROK));
-    const first = r.content[0].text.split('\n')[0];
+    // The gated_preview (2026-10-11) puts the link on its own markdown line in content[0].
+    const first = r.content[0].text;
     expect(first).toContain('https://dchub.cloud/u/abc234');
     expect(first).not.toMatch(RELAY);
     expect(r.structuredContent.for_your_human.url).toBe('https://dchub.cloud/u/abc234');

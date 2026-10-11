@@ -109,6 +109,6 @@ describe('withBindHint stands down when the backend speaks per-key', () => {
 describe('wiring', () => {
   it('sits inside _flagUpstreamError, outside _emailHintStep, in the one outer chain', () => {
     const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(SRC).toContain('async (args, extra) => _flagUpstreamError(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(');
+    expect(SRC).toContain('async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(');
   });
 });

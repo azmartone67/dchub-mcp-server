@@ -181,6 +181,7 @@ import { dropVerificationCounts as _dropVerificationCounts } from './lib/verific
 // Owner request 2026-09-28 (via Grok): no SQL fragments or table/column names in
 // tool output — plain `method`, no `verification_counts_basis`. lib/provenance-plain.mjs.
 import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs';
+import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPreviewOnImpl } from './lib/gated-preview.mjs';
 
 // ★★★ r-tier-canon (2026-09-02, QA sweep D8 + pricing #3): every allowance and
 // price this server states is READ from lib/tier-canon.mjs (canonical/
@@ -9085,9 +9086,14 @@ export const ANALYZE_SITE_ACCESS_B2 = 'Keyless returns the weakest factor and co
   + 'a free key adds factor bands and substation distance bands; scores and figures need a paid DC Hub plan.';
 export const ANALYZE_SITE_ACCESS_PRE_B2 = 'Keyless returns no site data; a free key returns '
   + 'verdict bands, factor names and counts; scores and figures need a paid DC Hub plan.';
+// The gated_preview (conversion panel 2026-10-11, lib/gated-preview.mjs) adds one polite line after
+// the access sentence: the panel's ask, not an order to the host. DCHUB_GATED_PREVIEW=0 drops it.
+export const ANALYZE_SITE_PARTIAL_HINT = 'When results are partial, show the user human_message and its link.';
 export function _descFollowsSwitches(name, description) {
-  if (name !== 'analyze_site' || typeof description !== 'string' || _b2KeylessHeadlineOn()) return description;
-  return description.split(ANALYZE_SITE_ACCESS_B2).join(ANALYZE_SITE_ACCESS_PRE_B2);
+  if (name !== 'analyze_site' || typeof description !== 'string') return description;
+  const access = _b2KeylessHeadlineOn() ? ANALYZE_SITE_ACCESS_B2 : ANALYZE_SITE_ACCESS_PRE_B2;
+  const d = description.split(ANALYZE_SITE_ACCESS_B2).join(access);
+  return _gatedPreviewOnImpl() ? d.split(access).join(access + ' ' + ANALYZE_SITE_PARTIAL_HINT) : d;
 }
 // The counts the anonymous headline may carry: integers the backend's own
 // below-Pro preview (_site_score_preview) already publishes. Nothing else.
@@ -9127,6 +9133,38 @@ export const SITE_TEASER_LOCKED = ['overall_score', 'fiber_connectivity', 'gas_p
   'market_conditions', 'risk_resilience'];
 export const SITE_TEASER_NOTE = 'Scores and the other factor bands come with the full site report.';
 export const SITE_EMAIL_UNLOCK_LINE = 'Unlock the full site report free by email → ';
+// P3 (conversion panel 2026-10-11): the no-session key link stores the request it walled, keyed by the
+// relay token's sid (request_id), so the claim page can show THAT report after the email
+// (dchub-backend routes/site_claim_report.py, POST /api/v1/mcp/site-request, first write wins).
+// The backend takes lat+lon or candidate_id only, so a `location` call sends the coordinates the
+// handler resolved. Fire and forget; QA callers store nothing. Kill switch DCHUB_SITE_REQUEST_STORE=0.
+export function _siteRequestStoreOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SITE_REQUEST_STORE || ''));
+}
+export function _siteClaimRequestBody(c, requestId, args, loc) {
+  if (!requestId || !args || typeof args !== 'object') return null;
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined));
+  const out = {};
+  let lat = num(args.lat), lon = num(args.lon);
+  if ((lat === undefined || lon === undefined) && loc && typeof loc === 'object') { lat = num(loc.lat); lon = num(loc.lon); }
+  if (lat !== undefined && lon !== undefined) { out.lat = lat; out.lon = lon; }
+  if (typeof args.candidate_id === 'string' && args.candidate_id) out.candidate_id = args.candidate_id;
+  if (!('lat' in out) && !out.candidate_id) return null;
+  const st = (typeof args.state === 'string' && args.state) || (loc && typeof loc.state === 'string' && loc.state) || '';
+  if (st) out.state = st;
+  const mw = num(args.capacity_mw) ?? num(args.target_mw);
+  if (mw !== undefined) out.capacity_mw = mw;
+  return { request_id: requestId, tool: 'analyze_site', args: out,
+    platform: (c && c.platform) || 'mcp', user_agent: (c && c.client_ua) || null, client_ip: (c && c.client_ip) || null };
+}
+function _storeSiteClaimRequest(c, requestId, args, loc) {
+  try {
+    if (!_siteRequestStoreOn() || _isQaCaller(c)) return;
+    const body = _siteClaimRequestBody(c, requestId, args, loc);
+    if (!body) return;
+    callAPIWrite('/api/v1/mcp/site-request', body).catch(() => {});
+  } catch (_) { /* storing the request is never worth a response */ }
+}
 // The no-session caller's link (owner 2026-10-10, item 5): the email page hands over a key instead of
 // binding a session. Kill switch DCHUB_SITE_NOSID_KEY_LINK=0 restores the claim_free_key-only wall.
 export function _siteKeyLinkOn(env = process.env) {
@@ -9206,9 +9244,19 @@ export async function _lpWallEmailResult(name, relay, headline = null, teaser = 
     + (keyLink ? SITE_KEY_LINK_MESSAGE
       : 'The full site report is free by email: show your human the link in human_url. Once they enter an email, '
         + 'this session’s next `analyze_site` call returns the full report.');
+  // request_id (conversion panel 2026-10-11): the id the signed relay token carries in its first
+  // field. With no session that is the per-request id (a-… / uuid) the claim page keys the stored
+  // request by; with a session it is the session id. Never a key.
+  let request_id = null;
+  try {
+    const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(relay.url);
+    const sid = m ? Buffer.from(m[1], 'base64url').toString().split('|')[0] : '';
+    if (sid && sid !== 'no-session') request_id = sid;
+  } catch (_) { request_id = null; }
   const sc = {
     ...base.structuredContent,
     message,
+    ...(request_id ? { request_id } : {}),
     unlock_kind: keyLink ? 'email_key' : 'email',
     ...(site_teaser ? { site_teaser } : {}),
     upgrade_url: link, human_url: link,
@@ -19807,11 +19855,13 @@ function trackedTool(srv, name, description, schema, handler) {
           // B2: analyze_site's keyless headline is on every arm, not only the contract arms.
           const _b2 = name === 'analyze_site' && _b2KeylessHeadlineOn();
           let _teaser = null;
+          let _siteLoc = null;   // the handler's resolved location, for the stored claim request (P3)
           if ((_pcOn || _b2 || _emailOn || _noSid) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
               const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
               if (_emailOn || _noSid) _teaser = _siteTeaser(_parsedHl);
+              _siteLoc = _parsedHl && _parsedHl.location;
               _hl = (_pcOn || _b2) ? _pcLpHeadline(name, _parsedHl) : null;
               // r-upgrade-h-first: the one number the wall may show is a COUNT the free
               // preview already keeps (nearby.substations_50km), measured by this very
@@ -19829,6 +19879,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
           if (_emailOn) {
             const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser, { keyLink: _keyLink });
+            if (_ew && _keyLink) _storeSiteClaimRequest(c, _ew.structuredContent && _ew.structuredContent.request_id, args, _siteLoc);
             if (_ew) return _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
           }
           if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);
@@ -21795,12 +21846,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   _relayContractStep (it needs the final human_url) and _partnerInboxStep is
   //   outermost but _flagUpstreamError (it only appends). Each has its own kill
   //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
-  }, async (args, extra) => _flagUpstreamError(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
 }
 
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
@@ -23009,12 +23060,21 @@ export async function _cleanPlatformWallLineStep(result, name) {
   } catch (_) { return result; }   // a line for a person is never worth failing a response over
 }
 
+// The analyze_site gated_preview (conversion panel 2026-10-11): lib/gated-preview.mjs. Last step
+// but _flagUpstreamError, so no earlier stamp rewrites it. Kill switch DCHUB_GATED_PREVIEW=0.
+export function _gatedPreviewStep(result, name) {
+  return _gatedPreviewStepImpl(result, name, getCtx() || {},
+    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] });
+}
+
 export function _relayContractStep(result, name) {
   try {
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     const sc0 = result.structuredContent;
     if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
     if (_OWN_TELL_TOOLS.has(name)) return result;
+    // The analyze_site gated_preview (lib/gated-preview.mjs) carries its own human line and agent hint.
+    if (name === 'analyze_site' && sc0.status === 'gated_preview') return result;
     const c = getCtx() || {};
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
     if (!_isRelayWall(sc0, c)) return result;

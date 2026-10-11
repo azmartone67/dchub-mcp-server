@@ -229,6 +229,8 @@ export function summarize(r) {
 const TASTE = (withheld) => ({ error: null, taste: true, withheld, completeness: 'partial', provenance_completeness: 'partial_preview', wall: false, one_link_is_human_url: true });
 const PREVIEW = { error: null, taste: false, withheld: null, completeness: null, provenance_completeness: 'partial_preview', wall: false, one_link_is_human_url: true };
 const WALL = { error: 'pro_required', taste: false, withheld: null, completeness: null, provenance_completeness: 'walled', wall: true, one_link_is_human_url: true };
+// analyze_site's keyless wall is the gated_preview (conversion panel 2026-10-11): a success, no error key.
+const GATED_PREVIEW = { ...WALL, error: null };
 const CASES = [
   ['get_energy_prices',        { iso: 'PJM' },                    TASTE(['rate_range', 'iso_footprint'])],
   ['get_interconnection_queue', { iso: 'PJM' },
@@ -242,7 +244,7 @@ const CASES = [
   ['get_fiber_intel',         { metro: 'ashburn' },               PREVIEW],
   ['rank_markets',            {},                                 PREVIEW],
   ['get_dchub_recommendation', {},                                PREVIEW],
-  ['analyze_site',            { lat: 39.04, lon: -77.48 },        WALL],
+  ['analyze_site',            { lat: 39.04, lon: -77.48 },        GATED_PREVIEW],
 ];
 
 describe('anonymous responses of the ten top tools', () => {
