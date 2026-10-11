@@ -92,16 +92,17 @@ for (const session of [true, false]) {
       expect(r.sc.required_plan).toBeUndefined();
       expect(r.sc.preview_bands).toEqual({ verdict: 'BUILD', power_infrastructure: 'BUILD' });
       expect(r.sc.missing).toEqual(MISSING);
-      expect(r.sc.offer).toEqual({ price_usd: 0, card_required: false, full_reports_per_month: 3, unlock: 'email' });
+      expect(r.sc.offer).toEqual({ price_usd: 0, card_required: false });
+      expect(r.sc.copy_version).toBe('v15');
     });
 
     it('human_message holds the one link, and content[0] carries it as a markdown link on its own line', () => {
       expect(r.sc.human_url).toBe(SHORT);
       expect(r.sc.human_message).toBe('This is a preview, not the full site report. Unlock it free by email '
-        + '(3 full reports a month, no card): ' + SHORT);
+        + '(a few free full site reports each month, no card): ' + SHORT);
       expect(r.sc.for_your_human).toMatchObject({ url: SHORT, text: r.sc.human_message });
       const b0 = r.res.content[0].text;
-      expect(b0.split('\n')[0]).toBe('This is a preview, not the full site report. Unlock it free by email (3 full reports a month, no card):');
+      expect(b0.split('\n')[0]).toBe('This is a preview, not the full site report. Unlock it free by email (a few free full site reports each month, no card):');
       expect(b0.split(SHORT).length - 1, 'the link once in the text').toBe(1);
       expect(r.sc.user_message).toBe(r.sc.human_message);
       expect(b0.split('\n')).toContain('[Unlock the full site report free](' + SHORT + ')');
@@ -176,9 +177,12 @@ describe('gatedPreviewStep (unit)', () => {
     expect(o.structuredContent.request_id).toMatch(/^sr_[0-9a-f]{20}$/);
     expect(o.structuredContent.missing).toEqual(MISSING);
   });
-  it('the allowance follows DCHUB_LP_FREE_RUNS_ANALYZE_SITE', () => {
-    expect(gatedPreviewHumanMessage(SHORT, { DCHUB_LP_FREE_RUNS_ANALYZE_SITE: '5' })).toContain('(5 full reports a month, no card)');
-    expect(gatedPreviewHumanMessage(SHORT, {})).toContain('(3 full reports a month, no card)');
+  it('agent text never hard-codes the monthly number, whatever the gate allows (owner 2026-10-11)', () => {
+    for (const env of [{ DCHUB_LP_FREE_RUNS_ANALYZE_SITE: '5' }, {}]) {
+      const m = gatedPreviewHumanMessage(SHORT, env);
+      expect(m).toContain('a few free full site reports each month');
+      expect(m).not.toMatch(/\b[0-9]+ (full )?reports?\b|\bthree\b/i);
+    }
   });
 });
 
