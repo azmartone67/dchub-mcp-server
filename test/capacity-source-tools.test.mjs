@@ -1127,7 +1127,7 @@ describe('source_capacity — search by size and location', () => {
     const lines = renderedLines(r);
     expect(lines).toContain('Filters applied: min_kw=500; region=europe; delivery_type=colocation; available_by=2027-06; limit=25');
     expect(lines).toContain('Capacity by listing:');
-    expect(lines).toContain('- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe)');
+    expect(lines).toContain('- fra-500kw-colocation: 500 kW (0.5 MW) in Frankfurt, DE (europe) — Link: https://dchub.cloud/listings?l=fra-500kw-colocation');
     const first = JSON.parse(r.content[0].text);
     expect(first.filters).toEqual(FILTERS_EU);
     expect(first.items[0]).toEqual(TEASER_EU);
@@ -1141,7 +1141,7 @@ describe('source_capacity — search by size and location', () => {
     responder = () => json(200, listWithItems(1));
     const r = await call(READ, {});
     const lines = renderedLines(r);
-    expect(lines).toContain('- dfw-40mw-powered-shell: 40 MW in Dallas, TX, US');
+    expect(lines).toContain('- dfw-40mw-powered-shell: 40 MW in Dallas, TX, US — Link: https://dchub.cloud/listings?l=dfw-40mw-powered-shell');
     expect(lines.some((l) => l.startsWith('Filters applied'))).toBe(false);
   });
 });
@@ -1156,7 +1156,9 @@ describe('source_capacity — search by size and location', () => {
 describe('source_capacity — contiguous_kw and min_contract_kw beside the capacity', () => {
   const card = (over) => ({ ...TEASER_EU, ...over });
   const feed = (over) => ({ ...LIST_FILTERED, items: [card(over)] });
-  const rowsOf = (lines) => lines.filter((l) => l.startsWith('- '));
+  // 2026-10-10: a card carrying url / tracked_url appends ' — Link: <url>'; the link is
+  // pinned in listing-links-receipt.test.mjs, these rows assert the capacity statement.
+  const rowsOf = (lines) => lines.filter((l) => l.startsWith('- ')).map((l) => l.replace(/ — Link: \S+$/, ''));
   const FIT_NOTE_HEAD = 'Fit: a size search is matched against the block a listing can actually deliver';
 
   // A rendered line must never carry a separator with nothing on one side of it:
