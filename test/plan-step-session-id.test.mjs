@@ -70,7 +70,12 @@ describe('an outside caller cannot borrow a session', () => {
     const sigs = signalsOf(run.outsider).filter((s) => s.tool === 'analyze_site');
     const trk = tracksOf(run.outsider).filter((t) => t.tool === 'analyze_site');
     expect(sigs.length + trk.length, 'control: the outsider call reached the gate').toBeGreaterThan(0);
-    for (const s of sigs) { expect(s.session_id).toBe('no-session'); expect(s.session_id).not.toBe(run.sid); }
+    // Sessionless: the wall signal carries the per-wall id its own link was minted with (conversion
+    // metric step 1, test/conversion-metric-wall-link.test.mjs), never the borrowed session.
+    for (const s of sigs) {
+      expect(s.session_id).not.toBe(run.sid);
+      expect(s.session_id).toMatch(/^(a-[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+    }
     for (const t of trk) { expect(t.session_id == null).toBe(true); }
   });
 });

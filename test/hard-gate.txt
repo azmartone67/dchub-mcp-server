@@ -89,6 +89,7 @@ test/connect-url-install-artifact.test.mjs
 test/constraint-iso-shape.test.mjs
 test/context-pack-tease-human-link.test.mjs
 test/continuation.test.mjs
+test/conversion-metric-wall-link.test.mjs
 test/coord-aliases.test.mjs
 test/copy-plan-name-and-price-ratchet.test.mjs
 test/copycheck-tolerates-edge-flap.test.mjs
