@@ -126,7 +126,7 @@ for (const session of [true, false]) {
       const all = strings(r.res).map((s) => s.replace(/https?:\/\/\S+/g, '<url>'));
       const bad = all.filter((s) => /\bPro\b|\bpaid\b|\btrial\b|\$\d|Then stop|First line of your answer/i.test(s));
       expect(bad).toEqual([]);
-      const blob = JSON.stringify(r.res);
+      const blob = JSON.stringify(r.res, (k, x) => (k === 'request_id' ? undefined : x));   // an id, not a figure
       for (const f of FIGURES) expect(blob, f).not.toContain(f);
     });
 
