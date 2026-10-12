@@ -17,7 +17,7 @@ const FULL = {
 };
 
 let H, fence;
-let used = 0, LIMIT = 3, counterDown = false, siteDown = false;
+let used = 0, LIMIT = 3, counterDown = false, siteDown = false, pack = 0;
 const ops = [];
 
 async function settle(quietMs = 300, maxMs = 6000) {
@@ -58,10 +58,17 @@ beforeAll(async () => {
         ops.push(body.op);
         if (counterDown) return { status: 500, body: { error: 'boom' } };
         if (body.op === 'consume') {
+          // P5 (be#6853): past the free runs, a purchased pack report, tagged with its charge_ref.
+          if (used >= LIMIT && pack > 0) {
+            pack -= 1;
+            return { ok: true, allowed: true, used, limit: LIMIT, remaining: 0, resets_at: '2026-11-01T00:00:00Z',
+                     source: 'purchased', charge_ref: 'site5:7', purchased_remaining: pack };
+          }
           const allowed = used < LIMIT; if (allowed) used += 1;
           return { ok: true, allowed, used, limit: LIMIT, remaining: Math.max(0, LIMIT - used),
                    resets_at: '2026-11-01T00:00:00Z', email_bound: false };
         }
+        if (body.op === 'release' && body.charge_ref === 'site5:7') { pack += 1; return { ok: true, allowed: false, used, limit: LIMIT }; }
         if (body.op === 'release') { used = Math.max(0, used - 1); return { ok: true, allowed: false, used, limit: LIMIT }; }
         return { ok: true, allowed: used < LIMIT, used, limit: LIMIT };
       }
@@ -74,7 +81,7 @@ beforeAll(async () => {
   });
 }, 120_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
-beforeEach(() => { used = 0; LIMIT = 3; counterDown = false; siteDown = false; ops.length = 0; delete process.env.DCHUB_LP_FREE_RUNS; });
+beforeEach(() => { used = 0; LIMIT = 3; counterDown = false; siteDown = false; pack = 0; ops.length = 0; delete process.env.DCHUB_LP_FREE_RUNS; });
 
 describe('free key: 3 full analyze_site runs a month, then the preview', () => {
   it('runs 1-3 are full answers with the monthly note; run 4 is the preview with the spent block', async () => {
@@ -142,5 +149,36 @@ describe('who never reaches the counter', () => {
     const r = await call(PRO_KEY);
     expect(r.counterHits).toEqual([]);
     expect(r.sc.free_full_runs).toBeUndefined();
+  });
+});
+
+// P5 site report pack (owner 2026-10-12; dchub-backend be#6853): after the free runs, purchased reports.
+describe('site report pack: purchased reports after the free runs', () => {
+  it('a pack report is a full answer with the pack note: no monthly count, no price, no plan name', async () => {
+    used = 3; pack = 2;
+    const r = await call(FREE_KEY);
+    expect(r.status).toContain('lp_free_full');
+    expect(r.text).toContain('Full site analysis from your site report pack: 1 report left; they do not expire.');
+    expect(r.text).not.toMatch(/of 3 this month/);
+    expect(r.sc.free_full_runs).toEqual({ source: 'purchased', purchased_remaining: 1,
+      basis: 'site report pack: one report per delivered full answer; does not expire' });
+    expect(r.text + JSON.stringify(r.sc.free_full_runs)).not.toMatch(/\$\d|\bPro\b|Developer|Starter/);
+    expect(pack).toBe(1);
+  });
+  it('a failed full call returns the report to the pack (release carries the charge_ref), not to the free count', async () => {
+    used = 3; pack = 2; siteDown = true;
+    const r = await call(FREE_KEY);
+    const rel = r.counterHits.filter((b) => b.op === 'release');
+    expect(rel).toHaveLength(1);
+    expect(rel[0].charge_ref).toBe('site5:7');
+    expect(pack).toBe(2);
+    expect(used).toBe(3);
+  });
+  it('a free-run release sends no charge_ref', async () => {
+    siteDown = true;
+    const r = await call(FREE_KEY);
+    const rel = r.counterHits.filter((b) => b.op === 'release');
+    expect(rel).toHaveLength(1);
+    expect(rel[0]).not.toHaveProperty('charge_ref');
   });
 });
