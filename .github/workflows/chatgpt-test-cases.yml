@@ -1,0 +1,31 @@
+name: chatgpt-test-cases
+# Runs the 5 ChatGPT directory test cases + /plans and /terms from a GitHub
+# runner IP (not a laptop). Manual, plus one run per push touching these files.
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: MCP path to test
+        default: /mcp/chatgpt
+  push:
+    paths:
+      - scripts/chatgpt-test-cases.mjs
+      - .github/workflows/chatgpt-test-cases.yml
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Run test cases 1-5
+        run: node scripts/chatgpt-test-cases.mjs --path "${{ inputs.path || '/mcp/chatgpt' }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chatgpt-test-cases-result
+          path: chatgpt-test-cases-result.json
