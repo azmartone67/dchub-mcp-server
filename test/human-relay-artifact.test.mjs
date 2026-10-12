@@ -114,3 +114,19 @@ describe('human relay artifact threading', () => {
       .toBe('https://dchub.cloud/claim/tok-agent');
   });
 });
+
+// Owner 2026-10-12 (decision 2): the claude-cohort claim line asked agents to "SHOW YOUR HUMAN THIS
+// LINK VERBATIM". Every other surface says share the link with your user; this one matches. The guard
+// is inverted, not deleted: it now fails on the old order and requires the polite wording.
+describe('claude-cohort claim line: share the link, no verbatim order', () => {
+  const ORDER = /verbatim|show your human this link|as written|first line of your/i;
+  it('says "share this link with your user" and carries the claim url', async () => {
+    const { text } = await buildHighIntentClaimBlock(CLAIM, 'rank_markets');
+    expect(text).toMatch(/share this link with your user/i);
+    expect(text).toContain(CLAIM.claim_url);
+    expect(text).not.toMatch(ORDER);
+  });
+  it('must-fail control: the retired wording is caught by the same pattern', () => {
+    expect(ORDER.test('so SHOW YOUR HUMAN THIS LINK VERBATIM and ask them to open it')).toBe(true);
+  });
+});

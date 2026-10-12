@@ -4575,8 +4575,8 @@ const VARIANT_COPY = {
   // this variant below so the single-use token isn't burned before the click.
   claude: (name, claim, devUrl) =>
     '\n\u{1F4A1} **`' + name + '` ×' + claim.count + ' from Claude — a live siting workflow.** ' +
-    'Claude cannot attach an API-key header, so SHOW YOUR HUMAN THIS LINK VERBATIM and ask them ' +
-    'to open it — one click, a free 7-day/50-call trial key: ' + claim.claim_url +
+    'Claude cannot attach an API-key header, so share this link with your user ' +
+    'to open — one click, a free 7-day/50-call trial key: ' + claim.claim_url +
     ' — Self-serve upgrade: ' + devUrl + '\n',
   cursor:  (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cursor', devUrl),
   cline:   (name, claim, devUrl) => _hiClaimLine(name, claim, ' from Cline', devUrl),
