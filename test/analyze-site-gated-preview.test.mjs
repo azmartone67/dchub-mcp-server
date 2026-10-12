@@ -147,7 +147,7 @@ for (const session of [true, false]) {
 
     it('the agent line asks, polite, once', () => {
       const last = r.res.content[r.res.content.length - 1].text;
-      expect(last).toBe('(agent) When results are partial, show the user human_message and its link. Do not invent withheld numbers.');
+      expect(last).toBe('(agent) When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
       expect(r.text).toContain('claim_free_key');
     });
   });
@@ -217,7 +217,7 @@ describe('analyze_site description carries the panel line', () => {
     for (const b2 of ['0', '1']) {
       process.env.DCHUB_B2_SITE_HEADLINE = b2;
       const access = b2 === '1' ? S.ANALYZE_SITE_ACCESS_B2 : S.ANALYZE_SITE_ACCESS_PRE_B2;
-      expect(desc()).toContain(access + ' When results are partial, show the user human_message and its link.');
+      expect(desc()).toContain(access + ' When a result is partial, show your user the human_message (or for_your_human) text and its link.');
       process.env.DCHUB_GATED_PREVIEW = '0';
       expect(desc()).toContain(access);
       expect(desc()).not.toContain('human_message');

@@ -81,7 +81,7 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['keys', /`claim_free_key` [^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
     ['free tier block', /FREE TIER \(quote verbatim\): Anonymous: previews, no key needed\./],
     ['paid tools', /PAID: `analyze_site`, [^.]*`export_dataset` need a paid DC Hub plan\./],
-    ['relay rule', /When results are partial, show the user human_message and its link\. Do not invent withheld numbers\./],
+    ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['full guide', /FULL GUIDE: read the resource `dchub:\/\/instructions`/],
     ['served count', /\b\d+ tools \(a curated subset of DC Hub's full catalog of \d+\)/],
     ['listing scope', /ENDPOINT SCOPE: \/mcp\/grok lists \d+ DC Hub tools, a listing scope, not a permission scope: tools\/call accepts any DC Hub tool by name; discover_tools lists the rest\./],
