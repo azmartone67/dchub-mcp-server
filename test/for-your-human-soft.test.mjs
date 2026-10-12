@@ -80,12 +80,12 @@ describe('controls: the checkers see the old wording', () => {
 describe('decision 1: no "For your human" first-line / verbatim order to agents', () => {
   it('llms.txt carries no first-line / verbatim order (#921 replaced the rule with the partial-result sentence)', () => {
     expect(orderHits(LLMS)).toEqual([]);
-    expect(LLMS).toContain('When a result is partial, show your user the human_message text and its link');
+    expect(LLMS).toContain('When results are partial, show the user human_message and its link');
   });
   it('initialize instructions (with and without facts) carry no first-line order', () => {
     for (const out of [_composeInstructions(null, Date.now())]) {
       expect(orderHits(out)).toEqual([]);
-      expect(out).toContain('(1) PARTIAL RESULTS — When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+      expect(out).toContain('(1) PARTIAL RESULTS — When results are partial, show the user human_message and its link. Do not invent withheld numbers.');
       expect(out).not.toContain('show it to your human with its link');
     }
   });
