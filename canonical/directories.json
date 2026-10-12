@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-10T15:00:00Z",
+  "updated_at": "2026-10-12T17:36:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -184,6 +184,17 @@
       "logo_url": null,
       "verified_at": "2026-10-10",
       "note": "live 2026-10-10 (title 'DC Hub | Cursor Directory', config url https://dchub.cloud/mcp; curl gets Vercel checkpoint 429, verified in a real browser). Copy is stale: says 92 MCP tools and links paid plans at dchub.cloud/pricing; refreshing it needs the listing claimed"
+    },
+    {
+      "id": "toolsdk",
+      "name": "ToolSDK MCP Registry",
+      "status": "live",
+      "listing_url": "https://toolsdk-ai.github.io/toolsdk-mcp-registry/#%40toolsdk-remote%2Fcloud-dchub-mcp",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-12",
+      "note": "published as @toolsdk-remote/cloud-dchub-mcp (data-platforms) via toolsdk-ai/toolsdk-mcp-registry#781, merged 2026-10-12; entry present in the page's raw HTML on 2026-10-12 10:36 PT"
     },
     {
       "id": "docker",
