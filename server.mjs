@@ -8610,15 +8610,25 @@ export const LP_FREE_RUN_TOOLS = new Set(['analyze_site']);
 export function _lpFreeRunsOn(env = process.env) {
   return !/^(0|false|no|off)$/i.test(String(env.DCHUB_LP_FREE_RUNS || ''));
 }
-async function _lpFreeRun(c, tool, op) {
+// P5 site report pack (dchub-backend be#6853): past the free monthly runs, a consume may spend a
+// purchased report; the answer then carries source 'purchased' and a charge_ref, and a release must
+// send that charge_ref back so a failed call returns the report to the pack it came from.
+async function _lpFreeRun(c, tool, op, chargeRef) {
   try {
-    const r = await callAPIWrite('/api/v1/mcp/lp-free-runs', { api_key: c.api_key, tool, op });
+    const r = await callAPIWrite('/api/v1/mcp/lp-free-runs', { api_key: c.api_key, tool, op,
+      ...(chargeRef ? { charge_ref: chargeRef } : {}) });
     return (r && r.ok === true && Number.isInteger(r.limit)) ? r : null;
   } catch (_) { return null; }
 }
 const _lpMonthDay = (iso) => String(iso || '').slice(0, 10) || 'the 1st of next month';
 // One line on a full answer served from the monthly allowance. No plan name or price (mcp#891).
 export function _lpFreeRunNote(fr) {
+  // A report from the purchased pack: no monthly count, no price, no plan name (mcp#891).
+  if (fr && fr.source === 'purchased') {
+    const left = Number.isInteger(fr.purchased_remaining) ? fr.purchased_remaining : null;
+    return 'Full site analysis from your site report pack'
+      + (left === null ? '.' : ': ' + left + ' report' + (left === 1 ? '' : 's') + ' left; they do not expire.');
+  }
   const tail = fr.remaining > 0
     ? `${fr.remaining} left; the count resets ${_lpMonthDay(fr.resets_at)}.`
     : `That was the last one this month: the next ${'analyze_site'} call returns the preview until ${_lpMonthDay(fr.resets_at)}.`;
@@ -8627,8 +8637,11 @@ export function _lpFreeRunNote(fr) {
 export function _withLpFreeRun(result, fr) {
   if (!result || typeof result !== 'object') return result;
   const note = _lpFreeRunNote(fr);
-  const block = { used: fr.used, limit: fr.limit, remaining: fr.remaining, resets_at: fr.resets_at,
-                  basis: 'per key and per bound email, the higher count; UTC calendar month' };
+  const block = fr.source === 'purchased'
+    ? { source: 'purchased', purchased_remaining: Number.isInteger(fr.purchased_remaining) ? fr.purchased_remaining : null,
+        basis: 'site report pack: one report per delivered full answer; does not expire' }
+    : { used: fr.used, limit: fr.limit, remaining: fr.remaining, resets_at: fr.resets_at,
+        basis: 'per key and per bound email, the higher count; UTC calendar month' };
   const out = { ...result };
   if (Array.isArray(out.content) && out.content[0] && out.content[0].type === 'text') {
     out.content = [...out.content, { type: 'text', text: note }];
@@ -19977,9 +19990,9 @@ function trackedTool(srv, name, description, schema, handler) {
             if (_fr && _fr.allowed === true) {
               let _full;
               try { _full = _noDataGuard(await handler(args)); }
-              catch (e) { await _lpFreeRun(c, name, 'release'); throw e; }
-              // An error or a non-answer does not spend the month's run.
-              if (!_full || _full.isError === true) { await _lpFreeRun(c, name, 'release'); return _full; }
+              catch (e) { await _lpFreeRun(c, name, 'release', _fr.charge_ref); throw e; }
+              // An error or a non-answer does not spend the month's run (or the pack's report).
+              if (!_full || _full.isError === true) { await _lpFreeRun(c, name, 'release', _fr.charge_ref); return _full; }
               status = 'lp_free_full';
               return _withLpFreeRun(withCitation(_full, name), _fr);
             }
