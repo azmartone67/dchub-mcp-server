@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
-import { gatedPreviewStep, gatedPreviewHumanMessage } from '../lib/gated-preview.mjs';
+import { gatedPreviewStep, gatedPreviewHumanMessage, powerBandMeaning, powerBandSentence } from '../lib/gated-preview.mjs';
 
 const INTERNAL = 'test-internal-key-not-a-real-secret';   // the harness's DCHUB_INTERNAL_KEY
 const UA = { 'user-agent': 'Claude-User' };
@@ -109,6 +109,13 @@ for (const session of [true, false]) {
       expect(b0).toContain('Preview: verdict BUILD; power infrastructure BUILD. Missing from this preview: '
         + MISSING.join(', ') + '.');
       expect(pageLinks(r.res)).toEqual([SHORT]);
+    });
+
+    it('says what the power band means, so BUILD is not read as "needs a new grid build-out"', () => {
+      expect(r.sc.power_band_meaning).toBe('strong existing power infrastructure nearby');
+      expect(r.res.content[0].text).toContain('Power infrastructure BUILD means strong existing power '
+        + 'infrastructure nearby, not a new grid build-out.');
+      expect(r.sc.preview_bands).toEqual({ verdict: 'BUILD', power_infrastructure: 'BUILD' });   // band values unchanged
     });
 
     it('request_id is the id the signed relay token carries (the session, or the per-request id)', () => {
@@ -253,5 +260,17 @@ describe('_siteClaimRequestBody (unit)', () => {
         platform: 'grok', user_agent: null, client_ip: null });
     expect(S._siteClaimRequestBody({}, 'a-1', { location: 'ashburn' }, null)).toBeNull();
     expect(S._siteClaimRequestBody({}, '', { lat: 1, lon: 2 }, null)).toBeNull();
+  });
+});
+
+describe('power band meaning (Grok replay 2026-10-11)', () => {
+  it('names each band in plain words and nothing for an unrated or unknown band', () => {
+    expect(powerBandMeaning('BUILD')).toMatch(/^strong existing power infrastructure/);
+    expect(powerBandMeaning('CAUTION')).toMatch(/^some existing power infrastructure/);
+    expect(powerBandMeaning('AVOID')).toMatch(/^little existing power infrastructure/);
+    for (const v of [null, undefined, '', 'constructor', 'toString', 'MAYBE']) {
+      expect(powerBandMeaning(v)).toBeNull();
+      expect(powerBandSentence(v)).toBe('');
+    }
   });
 });
