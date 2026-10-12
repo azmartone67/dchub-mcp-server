@@ -170,11 +170,10 @@ describe('initialize instructions carry BOTH doctrines', () => {
     }, Date.now());
     const noFigures = _composeInstructions(null, Date.now());
     for (const out of [withFigures, noFigures]) {
-      // doctrine 1 — the human line, shown with its link (2026-10-11: no longer an order to make it
-      // the FIRST line, verbatim; same reasoning as the retired relay contract)
-      expect(out).toContain('→ **For your human:**');
-      expect(out).toContain('show it to your human with its link');
-      expect(out).not.toMatch(/FIRST line of your final answer|VERBATIM HUMAN LINE/);
+      // doctrine 1 — owner 2026-10-11 (Grok-to-brain item 1): the same single partial-results
+      // sentence as every other surface; no separate "For your human" rule (guard inverted).
+      expect(out).toContain('(1) PARTIAL RESULTS — When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+      expect(out).not.toMatch(/FIRST line of your final answer|VERBATIM HUMAN LINE|show it to your human with its link|carries a prose line beginning/);
       // doctrine 2 — end-of-burst whats_changed return hook
       expect(out).toContain('whats_changed');
       expect(out).toContain('get_changes');
