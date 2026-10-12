@@ -78,10 +78,9 @@ describe('controls: the checkers see the old wording', () => {
 });
 
 describe('decision 1: no "For your human" first-line / verbatim order to agents', () => {
-  it('llms.txt shares the line softly', () => {
+  it('llms.txt carries no first-line / verbatim order (#921 replaced the rule with the partial-result sentence)', () => {
     expect(orderHits(LLMS)).toEqual([]);
-    expect(LLMS).toContain('share it with your user\n  along with its link');
-    expect(LLMS).toContain('`-> **For your human:**`');   // the line is still named, softly
+    expect(LLMS).toContain('When a result is partial, show your user the human_message text and its link');
   });
   it('initialize instructions (with and without facts) carry no first-line order', () => {
     for (const out of [_composeInstructions(null, Date.now())]) {
