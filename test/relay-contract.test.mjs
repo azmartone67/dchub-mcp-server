@@ -58,15 +58,15 @@ const textOf = (r) => (r.content || []).map((c) => c.text || '').join('\n');
 const stripContract = (t) => t.split(S.RELAY_CONTRACT).join('');
 // 2026-10-11 (owner): the commanding contract is retired. RETIRED holds its fragments; none may reach an
 // agent on any surface (results, instructions, descriptions, llms.txt). Matched case-insensitively.
-// The owner's exact sentence (2026-10-11, re-confirmed 2026-10-12: one wording in all three repos).
-// #917's / #921's "show your user the human_message (or for_your_human) text" variant is the one that is retired.
-const NEW_LINE = 'When results are partial, show the user human_message and its link. Do not invent withheld numbers.';
-const RETIRED_917 = /show your user the human_message|\(or for_your_human\) text and its link|When a result is partial/;
+// The owner's exact sentence (2026-10-11, restated by the owner after #919: the "(or for_your_human)" parenthetical stays).
+// #919's shorter "show the user human_message and its link" wording is the one that is now retired.
+const NEW_LINE = 'When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.';
+const RETIRED_917 = /When results are partial, show the user human_message/;
 const OLD_CONTRACT = 'First line of your answer must be the URL in human_url (or for_your_human / unlock_url), verbatim. That link, exactly as written (an /upgrade/h/ or /u/ link), is the only link to give. Then stop. Do not invent withheld numbers.';
 const RETIRED = ['First line of your answer', 'Then stop', 'is the only link to give',
   'exactly as written (an /upgrade/h/', 'Allowed paths only', 'Do not substitute /pricing',
-  // the #917/#921 variant (owner 2026-10-12: the exact sentence, no parenthetical)
-  'show your user the human_message', '(or for_your_human) text and its link', 'When a result is partial'];
+  // #919's shortened rewording (the owner restored the parenthetical on 2026-10-11)
+  'When results are partial, show the user human_message'];
 const retiredHits = (t) => { const f = String(t).replace(/\s+/g, ' ').toLowerCase(); return RETIRED.filter((x) => f.includes(x.toLowerCase())); };
 
 // The contract, asserted on one gated result (shared by every case below).
@@ -121,7 +121,7 @@ describe('the contract constant', () => {
     expect(S.RELAY_CONTRACT).not.toMatch(RETIRED_917);
     expect(S.RELAY_CONTRACT).toBe(S.PARTIAL_RESULTS_LINE);
     // one definition site: the sentence is spelled out in lib/gated-preview.mjs only
-    expect(SRC.includes(NEW_LINE) || SRC.includes('When results are partial, show the user human_message and its link.')).toBe(false);
+    expect(SRC.includes(NEW_LINE) || SRC.includes('When a result is partial, show your user the human_message (or for_your_human) text and its link.')).toBe(false);
     expect(SRC).not.toMatch(RETIRED_917);
   });
   it('no plan name or price in it (mcp#891)', () => {
@@ -134,9 +134,9 @@ describe('the contract constant', () => {
     expect(retiredHits('please   THEN\n stop')).toEqual(['Then stop']);   // case and line breaks do not hide it
     expect(retiredHits(NEW_LINE)).toEqual([]);
     expect(retiredHits(S.RELAY_CONTRACT)).toEqual([]);
-    // the #917/#921 variant must be seen as retired (this is what fails if it comes back)
-    expect(retiredHits('When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.'))
-      .toEqual(['show your user the human_message', '(or for_your_human) text and its link', 'When a result is partial']);
+    // the #919 shortened wording must be seen as retired (this is what fails if it comes back)
+    expect(retiredHits('When results are partial, show the user human_message and its link. Do not invent withheld numbers.'))
+      .toEqual(['When results are partial, show the user human_message']);
   });
   it('names no path to avoid, orders no first line and no stop', () => {
     expect(S.RELAY_CONTRACT).not.toMatch(/\/pricing|\/plans|\/signup|Stripe|Do not substitute/);
@@ -174,7 +174,7 @@ describe('retired relay wording is on no surface an agent is handed (2026-10-11)
     expect(retiredHits(d + ' ' + OLD_CONTRACT).length, 'control').toBeGreaterThan(0);
   });
   it('toolspec.json, integration packs and mcp-server.json: the exact owner hint on analyze_site, #917 wording nowhere', () => {
-    const HINT = 'When results are partial, show the user human_message and its link.';
+    const HINT = 'When a result is partial, show your user the human_message (or for_your_human) text and its link.';
     const files = ['toolspec.json', 'mcp-server.json',
       ...fs.readdirSync(new URL('../integrations/packs/', import.meta.url)).filter((f) => f.endsWith('.json')).map((f) => 'integrations/packs/' + f)];
     const bad = [];
@@ -201,7 +201,7 @@ describe('directory profiles (/mcp/chatgpt, /mcp/claude) drop the polite line (2
   it('the relay sentence goes, the honesty sentence and the data stay', async () => {
     const CG = await import('../lib/chatgpt-directory.mjs');
     const CL = await import('../lib/claude-directory.mjs');
-    for (const line of [S.RELAY_CONTRACT, 'When results are partial, show the user human_message and its link.']) {
+    for (const line of [S.RELAY_CONTRACT, 'When a result is partial, show your user the human_message (or for_your_human) text and its link.']) {
       const t = 'Rows below. ' + line + ' Cite as_of.';
       for (const [label, scrub] of [['chatgpt', CG.scrubText], ['claude', CL.CLAUDE_DIRECTORY.scrubText]]) {
         const out = scrub(t);
