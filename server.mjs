@@ -15223,11 +15223,10 @@ const DESTRUCTIVE_TOOLS = new Set(['delete_standing_intent']);
 // Owner 2026-10-09 (OpenAI resubmission): the read tools below are open-world
 // because the backend route behind each one calls a third-party public source
 // while serving the request (FEMA National Risk Index on Esri ArcGIS, USGS/NOAA,
-// PeeringDB, EIA, the ISO feeds).
-// Owner 2026-10-12 (ChatGPT v1.0.1): search / semantic_search / search_intelligence
-// are open-world too. Results still come only from DC Hub's corpus, but the query
-// text leaves our systems for the embeddings provider (Mistral AI, query text only,
-// no identifiers), and /privacy already names that recipient for these tools.
+// PeeringDB, EIA, the ISO feeds). Owner 2026-10-12: search, semantic_search and
+// search_intelligence are open-world too. They search DC Hub's own corpus, but
+// the query text is sent to the disclosed embeddings provider (Mistral AI) while
+// serving the request, and /privacy names that recipient for exactly these tools.
 const OPEN_WORLD_TOOLS = new Set([
   'register_standing_intent',
   'get_disaster_risk', 'get_climate_intel', 'get_peering_intel',
@@ -15242,6 +15241,7 @@ const OPEN_WORLD_TOOLS = new Set([
   // execute_plan chains the reads above inside one call, so it inherits their
   // open-world reach (owner 2026-10-09).
   'execute_plan',
+  // 2026-10-12: query text goes to the embeddings provider on every call.
   'search', 'semantic_search', 'search_intelligence',
 ]);
 
