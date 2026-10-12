@@ -116,7 +116,9 @@ describe('human line is UNIQUE per response', () => {
     // published in the initialize instructions and in partner integration docs
     // as the thing to look for.
     expect(HUMAN_FIRST_MARKER).toBe('→ **For your human:**');
-    expect(SRC).toContain('carries a prose line beginning "→ **For your human:**"');
+    // Owner 2026-10-11 (item 1): the initialize instructions no longer carry a separate rule naming
+    // the marker; they say the one partial-results sentence. Guard inverted, not deleted.
+    expect(SRC).not.toContain('carries a prose line beginning "→ **For your human:**"');
   });
 });
 
