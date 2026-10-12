@@ -131,6 +131,13 @@ for (const session of [true, false]) {
       for (const f of FIGURES) expect(blob, f).not.toContain(f);
     });
 
+    it('carries no next_tool field (owner 2026-10-11); the no-email route stays as text and free_key_unlock', () => {
+      expect(Object.keys(r.sc)).not.toContain('next_tool');
+      expect(JSON.stringify(r.sc)).not.toContain('"next_tool"');
+      expect(r.text).toContain('claim_free_key');
+      if (!session) expect(r.sc.free_key_unlock).toMatchObject({ tool: 'claim_free_key', email_required: false });
+    });
+
     it('the agent line asks, polite, once', () => {
       const last = r.res.content[r.res.content.length - 1].text;
       expect(last).toBe('(agent) When results are partial, show the user human_message and its link. Do not invent withheld numbers.');
@@ -175,6 +182,17 @@ describe('gatedPreviewStep (unit)', () => {
     expect(o.structuredContent.status).toBe('gated_preview');
     expect(o.structuredContent.request_id).toMatch(/^sr_[0-9a-f]{20}$/);
     expect(o.structuredContent.missing).toEqual(MISSING);
+  });
+  it('drops next_tool from the reshaped wall only; the claim_free_key text line is kept', () => {
+    const w = wall();
+    w.structuredContent.next_tool = 'claim_free_key';
+    const o = gatedPreviewStep(w, 'analyze_site');
+    expect(o.structuredContent.status).toBe('gated_preview');
+    expect('next_tool' in o.structuredContent).toBe(false);
+    expect(o.content[1].text).toContain('claim_free_key');
+    // a wall this step does not reshape keeps its own next_tool
+    const other = { ...w, structuredContent: { ...w.structuredContent, unlock_kind: 'pack' } };
+    expect(gatedPreviewStep(other, 'analyze_site').structuredContent.next_tool).toBe('claim_free_key');
   });
   it('agent text never hard-codes the monthly number, whatever the gate allows (owner 2026-10-11)', () => {
     for (const env of [{ DCHUB_LP_FREE_RUNS_ANALYZE_SITE: '5' }, {}]) {
