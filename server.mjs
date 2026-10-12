@@ -8812,15 +8812,64 @@ export function _lpWallResult(name, headline = null) {
 // degrade to less pretty, never to unpayable. ~1.5 s cap: this runs on wall time.
 const _SHORT_LINK_CACHE = new Map();
 const _SHORT_LINK_CACHE_MAX = 2000;
+
+// ── short-link fallback accounting (2026-10-12) ──────────────────────────────────
+// "Short-link minting falls back to the long link about 1 in 6 times; cause not
+// investigated" (handoff 10-12). Backend proxy logs for POST /api/v1/relay/short,
+// 10-05..10-11: 602 mints, 157 not 200 (26%): 133 HTTP 400 (wall-marked w-<kind> relay
+// tokens the backend could not rebuild; fixed by be#6827 at 10-11 21:05Z) and 22 client
+// timeouts (499). Here only the timeouts and the 400 were logged, as two unrelated lines,
+// and the silent branches (kill switch, no key, a URL the shortener does not take) were
+// not logged at all, so no one could read the rate. Every fallback now has ONE reason,
+// one log line `[<tag>] fallback reason=<r> tool=<t> ms=<n>` and a per-process counter,
+// read at GET /internal/short-link (X-Internal-Key). The long link is still returned.
+const _SHORT_LINK_STATS = { since: new Date().toISOString(), attempts: 0, short: 0, cache_hit: 0, fallback: {} };
+export function _shortLinkStats() {
+  const s = _SHORT_LINK_STATS;
+  const fell = Object.values(s.fallback).reduce((a, b) => a + b, 0);
+  return { since: s.since, attempts: s.attempts, short: s.short, cache_hit: s.cache_hit,
+           fallback_total: fell, fallback: { ...s.fallback },
+           fallback_rate: s.attempts ? Math.round((fell / s.attempts) * 1000) / 1000 : null };
+}
+export function _resetShortLinkStats() {
+  Object.assign(_SHORT_LINK_STATS, { since: new Date().toISOString(), attempts: 0, short: 0, cache_hit: 0, fallback: {} });
+}
+// The reason a mint failed: 'timeout' (our own AbortSignal budget), 'backend_<status>'
+// (+ the backend's error code, e.g. backend_400:bad_request, backend_503:mint_unavailable),
+// 'unusable_answer', or 'error' (network / JSON). Deliberate skips (kill switch, no key,
+// a URL this shortener does not take) are counted under their own reason too.
+function _shortLinkFallback(tag, reason, tool, t0, detail) {
+  _SHORT_LINK_STATS.fallback[reason] = (_SHORT_LINK_STATS.fallback[reason] || 0) + 1;
+  if (reason === 'kill_switch') return;   // a deliberate switch, not a fault: counted, not logged
+  console.error('[' + tag + '] fallback reason=' + reason + ' tool=' + (tool || '')
+    + (t0 ? ' ms=' + (Date.now() - t0) : '') + (detail ? ' detail=' + String(detail).slice(0, 120) : ''));
+}
+function _shortLinkErrReason(err) {
+  const n = err && (err.name || '');
+  return (n === 'TimeoutError' || n === 'AbortError') ? 'timeout' : 'error';
+}
+async function _shortLinkBackendReason(resp) {
+  let code = '';
+  try { const j = await resp.json(); code = j && typeof j.error === 'string' ? j.error : ''; } catch (_) { code = ''; }
+  return 'backend_' + resp.status + (/^[a-z_]{1,40}$/.test(code) ? ':' + code : '');
+}
+
 export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
+  const TAG = 'wall-short-link';
+  let t0 = 0;
   try {
-    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_SHORT_LINK || ''))) return longUrl;
+    _SHORT_LINK_STATS.attempts += 1;
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_SHORT_LINK || ''))) {
+      _shortLinkFallback(TAG, 'kill_switch', tool); return longUrl;
+    }
     const f = decodeGoToken(longUrl);
-    if (!f || !INTERNAL_KEY) return longUrl;
+    if (!INTERNAL_KEY) { _shortLinkFallback(TAG, 'no_internal_key', tool); return longUrl; }
+    if (!f) { _shortLinkFallback(TAG, 'not_go_link', tool); return longUrl; }
     const hit = _SHORT_LINK_CACHE.get(longUrl);
-    if (hit) return hit;
+    if (hit) { _SHORT_LINK_STATS.cache_hit += 1; _SHORT_LINK_STATS.short += 1; return hit; }
     let host = '';
     try { host = (getCtx() && getCtx().platform) || ''; } catch (_) {}
+    t0 = Date.now();
     const resp = await fetchImpl(new URL('/api/v1/relay/short', API_BASE).toString(), {
       method: 'POST',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -8828,16 +8877,17 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
                              copy_version: WALL_COPY_VERSION }),
       signal: AbortSignal.timeout(1500),
     });
-    if (!resp.ok) { console.error('[wall-short-link] backend status', resp.status); return longUrl; }
+    if (!resp.ok) { _shortLinkFallback(TAG, await _shortLinkBackendReason(resp), tool, t0); return longUrl; }
     const data = await resp.json();
     if (!data || data.ok !== true || !SHORT_LINK_RE.test(String(data.url || ''))) {
-      console.error('[wall-short-link] unusable answer'); return longUrl;
+      _shortLinkFallback(TAG, 'unusable_answer', tool, t0); return longUrl;
     }
     if (_SHORT_LINK_CACHE.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_CACHE.clear();
     _SHORT_LINK_CACHE.set(longUrl, data.url);
+    _SHORT_LINK_STATS.short += 1;
     return data.url;
   } catch (err) {
-    console.error('[wall-short-link] failed:', err && err.message);
+    _shortLinkFallback(TAG, _shortLinkErrReason(err), tool, t0, err && err.message);
     return longUrl;
   }
 }
@@ -8854,35 +8904,49 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
 // 2026-10-07 (Grok item 4): 300 ms -> 1000 ms. Prod logs 10-03..10-07: 26 '[wall-relay-short] failed:
 // The operation was aborted due to timeout', and no backend-status or unusable-answer failures, so the
 // fallback to the long link was the budget, not the mint. The sibling _shortRelayLink allows 1500 ms.
+// 2026-10-12: the budget stays 1000 ms, on the measurement. Backend proxy durations for the 445
+// successful mints 10-05..10-11: p50 203 ms, p95 296, p99 414, max 858; every success fits in
+// 1000 ms. The timeouts since the raise (6 of 249 mints 10-07 19:05..10-11 21:05, 2 of ~133 after
+// be#6827) are >1 s stalls, not a budget sitting on the distribution: the backend opened a new
+// Postgres connection per mint (dchub-backend#6869 reuses it). A longer budget would only make
+// the person wait longer for the same long link; /internal/short-link shows whether they stop.
 const _RELAY_SHORT_TIMEOUT_MS = 1000;
 const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&]{1,200})?$/;
 export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch, copyVersion = WALL_COPY_VERSION) {
+  const TAG = 'wall-relay-short';
+  let t0 = 0;
   try {
+    _SHORT_LINK_STATS.attempts += 1;
     if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_SHORT_LINK || ''))
-        || /^(0|false|no|off)$/i.test(String(process.env.DCHUB_RELAY_SHORT_LINK || ''))) return relayUrl;
-    if (!INTERNAL_KEY || !_RELAY_LONG_RE.test(String(relayUrl || ''))) return relayUrl;
+        || /^(0|false|no|off)$/i.test(String(process.env.DCHUB_RELAY_SHORT_LINK || ''))) {
+      _shortLinkFallback(TAG, 'kill_switch', tool); return relayUrl;
+    }
+    if (!INTERNAL_KEY) { _shortLinkFallback(TAG, 'no_internal_key', tool); return relayUrl; }
+    if (!_RELAY_LONG_RE.test(String(relayUrl || ''))) { _shortLinkFallback(TAG, 'not_relay_url', tool); return relayUrl; }
     const hit = _SHORT_LINK_CACHE.get(relayUrl);
-    if (hit) return hit;
+    if (hit) { _SHORT_LINK_STATS.cache_hit += 1; _SHORT_LINK_STATS.short += 1; return hit; }
     let host = '';
     try { host = (getCtx() && getCtx().platform) || ''; } catch (_) {}
+    t0 = Date.now();
     const resp = await fetchImpl(new URL('/api/v1/relay/short', API_BASE).toString(), {
       method: 'POST',
       headers: { 'X-Internal-Key': INTERNAL_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ relay_url: relayUrl, tool: tool || '', host, copy_version: copyVersion }),
       signal: AbortSignal.timeout(_RELAY_SHORT_TIMEOUT_MS),
     });
-    if (!resp.ok) { console.error('[wall-relay-short] backend status', resp.status); return relayUrl; }
+    if (!resp.ok) { _shortLinkFallback(TAG, await _shortLinkBackendReason(resp), tool, t0); return relayUrl; }
     const data = await resp.json();
     if (!data || data.ok !== true || !SHORT_LINK_RE.test(String(data.url || ''))) {
-      console.error('[wall-relay-short] unusable answer'); return relayUrl;
+      _shortLinkFallback(TAG, 'unusable_answer', tool, t0); return relayUrl;
     }
     if (_SHORT_LINK_CACHE.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_CACHE.clear();
     _SHORT_LINK_CACHE.set(relayUrl, data.url);
     if (_SHORT_LINK_TARGET.size >= _SHORT_LINK_CACHE_MAX) _SHORT_LINK_TARGET.clear();
     _SHORT_LINK_TARGET.set(data.url, relayUrl);
+    _SHORT_LINK_STATS.short += 1;
     return data.url;
   } catch (err) {
-    console.error('[wall-relay-short] failed:', err && err.message);
+    _shortLinkFallback(TAG, _shortLinkErrReason(err), tool, t0, err && err.message);
     return relayUrl;
   }
 }
@@ -29671,6 +29735,15 @@ app.get('/health', (req, res) => {
     session_servers: sessionSrv.size,
     features: ['key-validation', 'tool-call-telemetry', 'tier-gating', 'platform-detection', 'trial-mode'],
   });
+});
+
+// The /u/ short-link mint, read from outside the process (2026-10-12): attempts, short links
+// handed out, and every fallback to the long link by reason (_shortLinkStats). Per process,
+// so read `since` with it; both MCP services keep their own.
+app.get('/internal/short-link', (req, res) => {
+  if (!INTERNAL_KEY || req.headers['x-internal-key'] !== INTERNAL_KEY) return res.sendStatus(403);
+  res.set('Cache-Control', 'no-store');
+  res.json(_shortLinkStats());
 });
 
 // Lightweight stats endpoint for our own dashboard
