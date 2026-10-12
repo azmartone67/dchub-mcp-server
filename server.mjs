@@ -181,7 +181,7 @@ import { dropVerificationCounts as _dropVerificationCounts } from './lib/verific
 // Owner request 2026-09-28 (via Grok): no SQL fragments or table/column names in
 // tool output — plain `method`, no `verification_counts_basis`. lib/provenance-plain.mjs.
 import { plainProvenance as _plainProvenance } from './lib/provenance-plain.mjs';
-import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPreviewOnImpl, PARTIAL_RESULTS_LINE as _PARTIAL_LINE, PARTIAL_RESULTS_HINT as _PARTIAL_HINT } from './lib/gated-preview.mjs';
+import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPreviewOnImpl, PARTIAL_RESULTS_LINE as _PARTIAL_LINE, PARTIAL_RESULTS_HINT as _PARTIAL_HINT, powerBandLineStep as _powerBandLineStepImpl } from './lib/gated-preview.mjs';
 
 // ★★★ r-tier-canon (2026-09-02, QA sweep D8 + pricing #3): every allowance and
 // price this server states is READ from lib/tier-canon.mjs (canonical/
@@ -23174,7 +23174,15 @@ export async function _cleanPlatformWallLineStep(result, name) {
 // The analyze_site gated_preview (conversion panel 2026-10-11): lib/gated-preview.mjs. Last step
 // but _flagUpstreamError, so no earlier stamp rewrites it. Kill switch DCHUB_GATED_PREVIEW=0.
 export function _gatedPreviewStep(result, name) {
-  return _gatedPreviewStepImpl(result, name, getCtx() || {},
+  return _powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
+    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name);
+}
+
+// The power band's plain-words reading (lib/gated-preview.mjs powerBandLineStep), added to the
+// "Site teaser:" line after it is built so the profiles that keep their own copy are untouched
+// (ChatGPT directory, Claude directory, core: owner 2026-10-11). Kill switch DCHUB_POWER_BAND_MEANING=0.
+export function _powerBandLineStep(result, name) {
+  return _powerBandLineStepImpl(result, name, getCtx() || {},
     { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] });
 }
 

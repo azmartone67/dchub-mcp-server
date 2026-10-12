@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
-import { gatedPreviewStep, gatedPreviewHumanMessage } from '../lib/gated-preview.mjs';
+import { gatedPreviewStep, gatedPreviewHumanMessage, powerBandMeaning, powerBandSentence, powerBandLineStep } from '../lib/gated-preview.mjs';
 
 const INTERNAL = 'test-internal-key-not-a-real-secret';   // the harness's DCHUB_INTERNAL_KEY
 const UA = { 'user-agent': 'Claude-User' };
@@ -109,6 +109,13 @@ for (const session of [true, false]) {
       expect(b0).toContain('Preview: verdict BUILD; power infrastructure BUILD. Missing from this preview: '
         + MISSING.join(', ') + '.');
       expect(pageLinks(r.res)).toEqual([SHORT]);
+    });
+
+    it('says what the power band means, so BUILD is not read as "needs a new grid build-out"', () => {
+      expect(r.sc.power_band_meaning).toBe('strong existing power infrastructure nearby');
+      expect(r.res.content[0].text).toContain('Power infrastructure BUILD means strong existing power '
+        + 'infrastructure nearby, not a new grid build-out.');
+      expect(r.sc.preview_bands).toEqual({ verdict: 'BUILD', power_infrastructure: 'BUILD' });   // band values unchanged
     });
 
     it('request_id is the id the signed relay token carries (the session, or the per-request id)', () => {
@@ -253,5 +260,35 @@ describe('_siteClaimRequestBody (unit)', () => {
         platform: 'grok', user_agent: null, client_ip: null });
     expect(S._siteClaimRequestBody({}, 'a-1', { location: 'ashburn' }, null)).toBeNull();
     expect(S._siteClaimRequestBody({}, '', { lat: 1, lon: 2 }, null)).toBeNull();
+  });
+});
+
+describe('power band meaning (Grok replay 2026-10-11)', () => {
+  it('names each band in plain words and nothing for an unrated or unknown band', () => {
+    expect(powerBandMeaning('BUILD')).toMatch(/^strong existing power infrastructure/);
+    expect(powerBandMeaning('CAUTION')).toMatch(/^some existing power infrastructure/);
+    expect(powerBandMeaning('AVOID')).toMatch(/^little existing power infrastructure/);
+    for (const v of [null, undefined, '', 'constructor', 'toString', 'MAYBE']) {
+      expect(powerBandMeaning(v)).toBeNull();
+      expect(powerBandSentence(v)).toBe('');
+    }
+  });
+});
+
+describe('powerBandLineStep (teaser line, profile-aware)', () => {
+  const TEXT = 'Site teaser: verdict BUILD; power infrastructure BUILD. Locked: overall score. Scores come with the full site report.';
+  const res = () => ({ content: [{ type: 'text', text: 'wall\n\n' + TEXT + '\n\nclaim_free_key' }] });
+  const SKIP = { skipProfiles: ['claude', 'chatgpt'] };
+  it('appends the sentence to the teaser line only', () => {
+    const out = powerBandLineStep(res(), 'analyze_site', { profile: 'mcp' }, SKIP);
+    expect(out.content[0].text).toContain('full site report. Power infrastructure BUILD means strong existing power infrastructure nearby, not a new grid build-out.\n\nclaim_free_key');
+  });
+  it('is idempotent, and leaves skipped profiles, other tools and the kill switch byte-identical', () => {
+    const once = powerBandLineStep(res(), 'analyze_site', { profile: 'mcp' }, SKIP);
+    expect(powerBandLineStep(once, 'analyze_site', { profile: 'mcp' }, SKIP)).toBe(once);
+    const r = res();
+    expect(powerBandLineStep(r, 'analyze_site', { profile: 'claude' }, SKIP)).toBe(r);
+    expect(powerBandLineStep(r, 'get_facility', { profile: 'mcp' }, SKIP)).toBe(r);
+    expect(powerBandLineStep(r, 'analyze_site', { profile: 'mcp' }, { ...SKIP, env: { DCHUB_POWER_BAND_MEANING: '0' } })).toBe(r);
   });
 });
