@@ -52,7 +52,10 @@ describe('the gated-tool CTA', () => {
       // line to relay and promise no single link shape.
       expect(tag.upgrade_relay).toContain('Tell the user:');
       expect(tag.upgrade_relay).toContain('For your human:');
-      expect(tag.upgrade_relay).toContain('verbatim');
+      // 2026-10-11 (owner decision 1): the pointer asks the agent to share the line with its link; it no
+      // longer orders it relayed verbatim.
+      expect(tag.upgrade_relay).toContain('Share that line with your user along with its link');
+      expect(tag.upgrade_relay).not.toMatch(/verbatim/i);
       expect(tag.upgrade_relay).not.toMatch(/\/upgrade\/h\/|\/go\/c\/|one human link/);
     }
   });
