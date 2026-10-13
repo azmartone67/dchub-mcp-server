@@ -34,6 +34,7 @@ test/bind-notice-key-usage.test.mjs
 test/bind-notice-once-per-key.test.mjs
 test/block0-is-json-everywhere.test.mjs
 test/byo-mcp-paywall-lead.test.mjs
+test/caller-tier-identity-vocab.test.mjs
 test/canon-floor-rule.test.mjs
 test/canon-frozen-keys.test.mjs
 test/canon-heal-gates-on-the-marker.test.mjs

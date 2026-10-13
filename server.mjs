@@ -14001,6 +14001,19 @@ export function _canonicalTier(ctxLike, hasDurableKey) {
   return (t === 'identified' || c.email) ? 'identified' : 'free';
 }
 
+// r-caller-tier-vocab (2026-10-12, Grok agent-text probe item 10): caller_tier said "free" on an
+// anonymous get_energy_prices answer whose identity.tier said "anonymous". honestCallerTier
+// stamps whatever ctx.tier holds, and the anonymous ctx carries 'free'. Hand it the SAME
+// tier identity.tier reports (_identitySource's rule) so one envelope states one tier.
+// No auth_source (not a /mcp request path) keeps ctx.tier, as before.
+export function _servedTierCtx(c) {
+  try {
+    if (!c || typeof c !== 'object' || !c.auth_source) return c;
+    const keyed = !!c.api_key || (c.auth_source !== 'none' && !c.auth_refused);
+    return { ...c, tier: _canonicalTier(c, keyed) };
+  } catch (_) { return c; }
+}
+
 function _buildQuotaHint(toolName) {
   try {
     const c = getCtx();
@@ -22018,7 +22031,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
   }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
-         _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), getCtx()), name, getCtx()), getCtx()), name),
+         _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
        name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
