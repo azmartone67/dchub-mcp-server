@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-12T23:30:00Z",
+  "updated_at": "2026-10-13T17:45:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -107,7 +107,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-09"
+      "verified_at": "2026-10-13",
+      "note": "entry refreshed by TensorBlock/awesome-mcp-servers#3594 (merged 2026-10-13, 94 tools, no pack price); DC Hub line at L246 confirmed 2026-10-13 10:41 PT"
     },
     {
       "id": "context7",
@@ -217,6 +218,28 @@
       "logo_url": null,
       "verified_at": "2026-10-12",
       "note": "PR #85 merged 2026-10-12; DC Hub under Cloud, ops & data (README L235) confirmed 2026-10-12 16:28 PT"
+    },
+    {
+      "id": "sparkgeo",
+      "name": "Sparkgeo Geospatial MCP Servers",
+      "status": "live",
+      "listing_url": "https://github.com/sparkgeo/geo-mcp-servers#geospatial-data-access--catalogs",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-13",
+      "note": "PR #22 merged 2026-10-13 (server #101, maintainer follow-up commit a22182c); DC Hub row in Geospatial data access & catalogs (README L179) confirmed 2026-10-13 10:41 PT"
+    },
+    {
+      "id": "collabnix",
+      "name": "Collabnix awesome-mcp-lists",
+      "status": "live",
+      "listing_url": "https://github.com/collabnix/awesome-mcp-lists#integrations--apis",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-13",
+      "note": "PR #187 merged 2026-10-12 18:35 PT; DC Hub row in Integrations & APIs (README L273) confirmed 2026-10-13 10:41 PT"
     },
     {
       "id": "docker",
