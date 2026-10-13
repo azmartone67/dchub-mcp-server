@@ -1859,16 +1859,44 @@ function _dropRepeatCheckoutUrls(text) {
 // session did. _isRealSession is the check trackPaidHit already uses.
 const _HUMAN_LINE_SENT = new Set();
 const _HUMAN_LINE_SENT_MAX = 20000;
+// r-relay-scope (2026-10-12, Grok agent-text probe item 11): the cap is per session AND
+// per answer. A PJM answer dropped its "For your human" line because an ERCOT answer from
+// the same tool had already carried one: a different market is a different thing the human
+// has not seen. The key is session + tool + the answer's region/market/state; a call with
+// no tool scope (anything outside a registered tool's handler) keeps the bare-session key.
+const _RELAY_REGION_ARGS = ['iso', 'region', 'region_id', 'market', 'market_id', 'metro', 'state', 'location', 'country'];
+export function _relayScopeKey(tool, args) {
+  try {
+    const t = String(tool || '').trim();
+    if (!t) return '';
+    let r = '';
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      for (const k of _RELAY_REGION_ARGS) {
+        const v = args[k];
+        if (typeof v === 'string' && v.trim()) { r = v.trim().toLowerCase().slice(0, 64); break; }
+      }
+    }
+    return t + '|' + r;
+  } catch (_) { return ''; }
+}
+function _relayCapKey(sid) {
+  try {
+    const sc = getCtx()._relayScope;
+    return typeof sc === 'string' && sc ? sid + '|' + sc : sid;
+  } catch (_) { return sid; }
+}
 function _humanLineAlreadySent(sid) {
-  return _isRealSession(sid) && _HUMAN_LINE_SENT.has(sid);
+  return _isRealSession(sid) && _HUMAN_LINE_SENT.has(_relayCapKey(sid));
 }
 function _markHumanLineSent(sid) {
-  if (!_isRealSession(sid) || _HUMAN_LINE_SENT.has(sid)) return;
+  if (!_isRealSession(sid)) return;
+  const key = _relayCapKey(sid);
+  if (_HUMAN_LINE_SENT.has(key)) return;
   if (_HUMAN_LINE_SENT.size >= _HUMAN_LINE_SENT_MAX) {
     let i = 0; const drop = _HUMAN_LINE_SENT_MAX / 10;
     for (const k of _HUMAN_LINE_SENT) { _HUMAN_LINE_SENT.delete(k); if (++i >= drop) break; }
   }
-  _HUMAN_LINE_SENT.add(sid);
+  _HUMAN_LINE_SENT.add(key);
 }
 
 function _ctxSessionId() {
@@ -19600,6 +19628,7 @@ function trackedTool(srv, name, description, schema, handler) {
     const _mppArgs = mppTakeArgSignal(args);
     const c = getCtx();
     _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
+    try { if (c && typeof c === 'object') c._relayScope = _relayScopeKey(name, args); } catch (_) {}   // r-relay-scope
     const t0 = Date.now();
     let status = 'ok';
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
@@ -31517,3 +31546,4 @@ export { ARG_ALIASES, TOOL_ALIASES, ONE_OF_REQUIRED, ONE_OF_PUBLISHED };
 export { buildSiteHeadlineTease };
 
 export { app };
+export { ctx as _requestCtx };
