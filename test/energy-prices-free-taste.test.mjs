@@ -1,5 +1,5 @@
-// get_energy_prices free taste (Grok 10-08 item 1): one labelled rate, as_of = the EIA
-// period, the rest listed in withheld[] with counts, no plan name or price in the copy.
+// get_energy_prices free taste (Grok 10-08 item 1): one labelled rate, the EIA period as
+// averaging_period (not an as_of), the rest listed in withheld[] with counts, no plan name or price in the copy.
 import { describe, it, expect } from 'vitest';
 import * as T from '../lib/free-decision-taste.mjs';
 
@@ -14,10 +14,14 @@ describe('energy taste', () => {
   const env = out && out.envelope;
 
   it('headline is one rate, sector-labelled, dated by the EIA period', () => {
-    expect(env.taste.headline).toMatchObject({ name: 'retail_rate_cents_kwh', value: 7.64, unit: 'cents/kWh', sector: 'all-sector average', as_of: '2026', window: '2026' });
+    expect(env.taste.headline).toMatchObject({ name: 'retail_rate_cents_kwh', value: 7.64, unit: 'cents/kWh', sector: 'all-sector average', as_of: null, averaging_period: '2026', window: '2026' });
     expect(env.taste.headline.basis).toMatch(/all-sector average/);
     expect(env.taste.source).toMatch(/EIA/);
-    expect(env.as_of).toBe('2026');
+    expect(env.as_of).toBeNull();
+    expect(env.averaging_period).toBe('2026');
+    // the period must never be minted into a date: no provenance as_of, no "as of 2026-01-01"
+    expect(JSON.stringify(env)).not.toMatch(/2026-01-01/);
+    expect(env.taste.cite_as).not.toMatch(/as of/);
   });
   it('lists what it withholds with counts and never nulls in place', () => {
     const secs = Object.fromEntries(env.withheld.map((w) => [w.section, w.count]));
@@ -43,5 +47,18 @@ describe('energy taste', () => {
     const o = T.buildFreeDecisionTaste('get_energy_prices', { ...FULL, scope: 'state', filter: { iso: null, sector: 'industrial', state: 'TX' } });
     expect(o.envelope.taste.headline.sector).toBe('industrial');
     expect(o.envelope.taste.headline.basis).not.toMatch(/ISO footprint/);
+  });
+});
+
+describe('queue taste: a live feed fetch date is not a source date (Grok 10-12)', () => {
+  const Q = { iso: 'CAISO', as_of: '2026-10-12', queued_generation_gw: 73.8, queued_generation_gw_as_of: '2026-10-12',
+    project_count: 261, source_as_of: '2026-10-12', source_as_of_basis: 'live_feed_fetch_date',
+    source_name: 'CAISO Public Queue Report', projects: [{ id: 1 }] };
+  it('source.as_of is null for a live feed and the report date for a published report', () => {
+    const live = T.buildFreeDecisionTaste('get_interconnection_queue', Q).envelope;
+    expect(live.taste.source.as_of).toBeNull();
+    const rep = T.buildFreeDecisionTaste('get_interconnection_queue',
+      { ...Q, iso: 'ERCOT', source_as_of: '2026-08-31', source_as_of_basis: 'published_report' }).envelope;
+    expect(rep.taste.source.as_of).toBe('2026-08-31');
   });
 });

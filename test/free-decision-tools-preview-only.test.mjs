@@ -612,7 +612,7 @@ describe('get_energy_prices anonymous preview carries the labelled taste (Grok 1
   it('taste + withheld[], as_of = EIA period, no plan name or price in the wall copy, spread not served', async () => {
     const r = await callAs({}, 'get_energy_prices', { iso: 'CAISO' });
     const sc = r.sc;
-    expect(sc.taste.headline).toMatchObject({ value: 23.41, unit: 'cents/kWh', as_of: '2026' });
+    expect(sc.taste.headline).toMatchObject({ value: 23.41, unit: 'cents/kWh', as_of: null, averaging_period: '2026' });
     expect(sc.withheld.map((w) => w.section)).toContain('rate_range');
     expect(JSON.stringify(sc)).not.toMatch(/30\.1|18\.2/);
     const msg = (sc._upgrade && sc._upgrade.message) || '';
