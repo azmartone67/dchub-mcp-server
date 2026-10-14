@@ -73,7 +73,10 @@ const SURFACES = [
 const FREE_TIER_RULE = "Anonymous: previews, no key needed. "
   + "Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day "
   + "(up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing.";
-const CLAIM = /([\d,]+)\s*calls?\/day/gi;
+// ★2026-10-14: "calls" is optional. integrations/chatgpt/openapi.json said "the full
+// 100/day free tier" three times, a rung that does not exist, and this gate never saw
+// it because the shape had no "calls". A bare "N/day" is the same claim.
+const CLAIM = /([\d,]+)\s*(?:calls?)?\/day/gi;
 const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|no key needed/i;
 const num = (s) => Number(String(s).replace(/,/g, ""));
 
