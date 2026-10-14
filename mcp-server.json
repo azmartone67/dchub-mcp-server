@@ -381,7 +381,7 @@
     },
     {
       "name": "read_inbox",
-      "description": "PARTNER KEY ONLY: read the notes DC Hub left for the partner agent whose key this session sends — up to 20 unread, newest first, marked read on delivery (peek=true reads without marking). Call it at the start of a session. Proxies GET /api/v1/inbox with the session's own key: no key answers key required; a key issued without a partner slug answers partner key required (403). Not a data tool: it returns no market, power, fiber or siting figures."
+      "description": "PARTNER KEY ONLY: read the notes DC Hub left for the partner agent whose key this session sends — up to 20 unread, newest first. Notes are CONSUMED on first read: the default call marks them read, so a later session (or another conversation) sees an empty inbox. include_read=true re-reads read and unread notes from the last `days` days (default 14, max 60), each with read_at, and marks nothing; peek=true reads unread notes without marking. Call it at the start of a session; if it says notes were already read, call it again with include_read=true. Proxies GET /api/v1/inbox with the session's own key: no key answers key required; a key issued without a partner slug answers partner key required (403). Not a data tool: it returns no market, power, fiber or siting figures."
     },
     {
       "name": "report_finding",

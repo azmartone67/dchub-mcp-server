@@ -15,6 +15,9 @@ const PARTNER = 'dchub_pro_' + 'partnerkey000000'.repeat(2);
 const PLAIN = 'dchub_free_' + 'x'.repeat(32);
 const NOTES = { ok: true, inbox_slug: 'slug-test', count: 1, peek: false,
   notes: [{ id: 7, title: 'hello', body: 'note body', author: 'owner', created_at: '2026-10-07T00:00:00+00:00' }] };
+// 2026-10-14: 'consumed' = an earlier session already read every note (the Grok
+// "partner inbox still fails" shape): the default read is empty and carries the hint.
+let inboxMode = 'notes';
 let S, stub, srv, PORT, hits = [];
 const ENV = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY'];
 const prev = {};
@@ -36,6 +39,18 @@ beforeAll(async () => {
           const key = req.headers['x-api-key'];
           if (!key) { res.statusCode = 401; res.end('{"ok":false,"error":"api_key_required"}'); return; }
           if (key !== PARTNER) { res.statusCode = 403; res.end('{"ok":false,"error":"not_a_partner_key"}'); return; }
+          if (u.pathname === '/api/v1/inbox' && u.searchParams.get('include_read') === '1') {
+            res.end(JSON.stringify({ ok: true, inbox_slug: 'slug-test', count: 2, peek: true, include_read: true,
+              days: Number(u.searchParams.get('days') || 14), unread_count: 1,
+              notes: [{ id: 8, title: 'new', body: 'unread body', author: 'brain', created_at: '2026-10-14T15:00:00+00:00', read_at: null },
+                      { ...NOTES.notes[0], read_at: '2026-10-14T15:00:44+00:00' }] }));
+            return;
+          }
+          if (u.pathname === '/api/v1/inbox' && inboxMode === 'consumed') {
+            res.end(JSON.stringify({ ok: true, inbox_slug: 'slug-test', count: 0, peek: u.searchParams.get('peek') === '1',
+              recent_read_count: 2, recent_read_days: 14, hint: 'backend hint: pass include_read=1', notes: [] }));
+            return;
+          }
           if (u.pathname === '/api/v1/inbox') { res.end(JSON.stringify({ ...NOTES, peek: u.searchParams.get('peek') === '1' })); return; }
           const body = JSON.parse(b || '{}');
           if (body.class === 'bogus') { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: 'invalid_class', classes: ['other'] })); return; }
@@ -60,7 +75,7 @@ beforeAll(async () => {
   await new Promise((resolve) => { srv = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = srv.address().port;
 }, 60000);
-afterEach(() => { hits = []; globalThis.fetch = realFetch; });
+afterEach(() => { hits = []; inboxMode = 'notes'; globalThis.fetch = realFetch; });
 afterAll(async () => {
   await new Promise((r) => srv.close(r)); await new Promise((r) => stub.close(r));
   for (const k of ENV) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; }
@@ -184,6 +199,55 @@ describe('over HTTP: schema, instructions, partner vs non-partner', () => {
     expect(b.query).toBe('?peek=1');
   });
 
+  it('read_inbox schema and description: include_read + days, and notes are consumed on first read', async () => {
+    const { h } = await open({});
+    const ri = (await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).msg.result.tools.find((t) => t.name === 'read_inbox');
+    expect(ri.inputSchema.properties.include_read.type).toBe('boolean');
+    expect(ri.inputSchema.properties.days).toMatchObject({ type: 'integer', minimum: 1, maximum: 60 });
+    expect(ri.inputSchema.required || []).toEqual([]);
+    expect(ri.description).toMatch(/CONSUMED on first read/);
+    expect(ri.description).toMatch(/include_read=true re-reads read and unread notes/);
+  });
+
+  it('include_read is forwarded (with days and peek=1, so an older backend cannot mark), and renders read state per note', async () => {
+    const { h } = await open({ 'x-api-key': PARTNER });
+    const r = (await call(h, 'read_inbox', { include_read: true })).msg.result;
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0].text).toContain('DC Hub inbox for slug-test: 2 note(s), read and unread, from the last 14 days (re-read; nothing marked read)');
+    expect(r.content[0].text).toContain('--- #8 | new | from brain | 2026-10-14T15:00:00+00:00 | unread\nunread body');
+    expect(r.content[0].text).toContain('--- #7 | hello | from owner | 2026-10-07T00:00:00+00:00 | read 2026-10-14T15:00:44+00:00\nnote body');
+    expect(r.content[0].text).not.toContain('now marked read');
+    expect(r.structuredContent).toMatchObject({ _entity: 'inbox', ok: true, include_read: true, days: 14, unread_count: 1, count: 2 });
+    expect(r.structuredContent.notes.map((n) => n.read_at)).toEqual([null, '2026-10-14T15:00:44+00:00']);
+    const d = (await call(h, 'read_inbox', { include_read: true, days: 30, peek: true }, 12)).msg.result;
+    expect(d.structuredContent.days).toBe(30);
+    const q = hits.filter((x) => x.path === '/api/v1/inbox').map((x) => x.query);
+    expect(q).toEqual(['?include_read=1&peek=1', '?include_read=1&days=30&peek=1']);
+    for (const x of hits.filter((y) => y.path === '/api/v1/inbox')) { expect(x.key).toBe(PARTNER); expect(x.internal).toBeNull(); }
+  });
+
+  it('an out-of-range days is refused by the schema before any backend call', async () => {
+    const { h } = await open({ 'x-api-key': PARTNER });
+    for (const days of [0, 61, 2.5]) {
+      const m = (await call(h, 'read_inbox', { include_read: true, days })).msg;
+      expect(m.error || (m.result && m.result.isError), String(days)).toBeTruthy();
+    }
+    expect(hits.filter((x) => x.path === '/api/v1/inbox')).toEqual([]);
+  });
+
+  it('an empty default read after an earlier session consumed the notes says how to re-read', async () => {
+    inboxMode = 'consumed';
+    const { h } = await open({ 'x-api-key': PARTNER });
+    const r = (await call(h, 'read_inbox', {})).msg.result;
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0].text).toContain('No unread notes.');
+    expect(r.content[0].text).toContain('2 note(s) for this key were already read in the last 14 days');
+    expect(r.content[0].text).toContain('Call read_inbox with include_read=true to read them again.');
+    expect(r.structuredContent).toMatchObject({ count: 0, recent_read_count: 2, recent_read_days: 14 });
+    expect(r.structuredContent.hint).toMatch(/include_read=true/);
+    expect(hits.filter((x) => x.path === '/api/v1/inbox').map((x) => x.query)).toEqual(['']);
+  });
+
   it('a partner key: report_finding POSTs the body with the session key and returns the receipt', async () => {
     const { h } = await open({ 'x-api-key': PARTNER });
     const args = { class: 'leak_past_pro_gate', tool: 'analyze_site', args: { lat: 1, lon: 2 },
@@ -219,6 +283,21 @@ describe('helpers with a stubbed fetch: every failure is text, never a throw', (
     expect(empty.isError).toBeUndefined();
     expect(empty.content[0].text).toContain('No unread notes.');
     expect(empty.structuredContent.count).toBe(0);
+  });
+  it('read_inbox options: object or legacy boolean; days clamped 1..60 and sent only with include_read', async () => {
+    const urls = [];
+    const f = async (url) => { urls.push(new URL(String(url)).search); return new Response(JSON.stringify({ ok: true, inbox_slug: 's', count: 0, peek: true, notes: [] }), { status: 200 }); };
+    await S._readInboxTool(PARTNER, true, f);                                   // 2026-10-08 boolean = peek
+    await S._readInboxTool(PARTNER, false, f);
+    await S._readInboxTool(PARTNER, { include_read: true, days: 500 }, f);
+    await S._readInboxTool(PARTNER, { include_read: true, days: -4 }, f);
+    await S._readInboxTool(PARTNER, { include_read: true, days: 'soon' }, f);
+    await S._readInboxTool(PARTNER, { peek: true, days: 30 }, f);              // days without include_read: not sent
+    expect(urls).toEqual(['?peek=1', '', '?include_read=1&days=60&peek=1', '?include_read=1&days=1&peek=1', '?include_read=1&peek=1', '?peek=1']);
+    // no hint fields on a plain empty read (nothing was read recently)
+    const plain = await S._readInboxTool(PARTNER, false, f);
+    expect(plain.structuredContent.recent_read_count).toBeUndefined();
+    expect(plain.content[0].text).not.toContain('include_read');
   });
   it('report_finding: 400 names the classes, 413, 429 carries retry, 5xx, network; undefined args are not sent', async () => {
     const r400 = await S._reportFindingTool(PARTNER, { class: 'x', tool: 't' }, res(400, { ok: false, error: 'invalid_class', classes: ['other'] }));
