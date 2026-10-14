@@ -205,7 +205,7 @@ describe('over HTTP: schema, instructions, partner vs non-partner', () => {
     expect(ri.inputSchema.properties.include_read.type).toBe('boolean');
     expect(ri.inputSchema.properties.days).toMatchObject({ type: 'integer', minimum: 1, maximum: 60 });
     expect(ri.inputSchema.required || []).toEqual([]);
-    expect(ri.description).toMatch(/CONSUMED on first read/);
+    expect(ri.description).toMatch(/first read CONSUMES them/);
     expect(ri.description).toMatch(/include_read=true re-reads read and unread notes/);
   });
 
