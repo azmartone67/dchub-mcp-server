@@ -108,6 +108,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // _validateToolArgs invalid-args path emit ONE identical machine-readable shape,
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
+import { utf8CharsetMiddleware } from './lib/utf8-charset.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_PATH, DIRECTORY_OAUTH_SOURCE, DIRECTORY_OAUTH_CHALLENGE, DIRECTORY_OAUTH_MESSAGE,
@@ -15292,13 +15293,13 @@ function _writeRpcResult(req, res, id, result) {
   const accept = String(req.headers['accept'] || '');
   if (accept.includes('text/event-stream')) {
     res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
+      'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
     res.end(`event: message\ndata: ${msg}\n\n`);
   } else {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(msg);
   }
 }
@@ -15308,7 +15309,7 @@ function _writeRpcResult(req, res, id, result) {
 // so a client that already parses the SDK's 400s parses this identically — the
 // only differences are a real JSON-RPC code and the caller's own id.
 function _writeRpcError(res, id, error, status = 400) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify({ jsonrpc: '2.0', error, id: id === undefined ? null : id }));
 }
 
@@ -29578,6 +29579,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
 
 // ── Express ────────────────────────────────────────────────────────────────
 const app = express();
+// UTF-8 charset on every JSON / SSE response, the SDK transport's included (lib/utf8-charset.mjs):
+// a bare text/event-stream let clients decode an em dash as Windows-1252 mojibake. First, so it wraps every writer.
+app.use(utf8CharsetMiddleware);
 app.use(express.json({ limit: '4mb' }));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
