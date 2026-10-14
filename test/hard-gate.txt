@@ -157,6 +157,7 @@ test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
+test/get-iso-context-locked-sections-schema.test.mjs
 test/github-description-canon.test.mjs
 test/github-description-push-behaviour.test.mjs
 test/github-release-per-version.test.mjs

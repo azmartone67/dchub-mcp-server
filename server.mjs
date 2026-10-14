@@ -16543,7 +16543,9 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     iso: _oStr('ISO code'),
     tier: _oStr('Tier the response was served at'),
     sections: _oArr(z.looseObject({}), 'Sections delivered in budget'),
-    locked_sections: _oArr(z.looseObject({}), 'Sections withheld on this tier'),
+    // The backend sends locked_sections as section NAMES (strings); an object-only item schema made
+    // every keyless call fail MCP output validation (-32602) from #854 (2026-10-09). Accept both (z.any() keeps tools/list inside the lean-handshake budget).
+    locked_sections: _oArr(z.any(), 'Sections withheld on this tier'),
     max_tokens: _oNum('Token budget for this tier'),
     used_tokens: _oNum('Tokens used by delivered sections'),
     cite_as: _oStr('Ready-made attribution line'),
