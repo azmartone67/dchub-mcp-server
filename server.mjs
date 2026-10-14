@@ -9383,7 +9383,7 @@ export function _withSiteTeaser(result, teaser) {
 // keyless call gets analyze_site's teaser once per site: the verdict band and the power band,
 // the other factors named as locked. Nothing else: no score, factor band, figure, count, name,
 // and NOT the pick (winner / decision_rationale stay Pro, as they are on the free-key preview).
-// get_composite_site_score, generate_site_analysis and the other Land & Power tools stay walled.
+// generate_site_analysis and the other Land & Power tools stay walled (get_composite_site_score: see below).
 // Unlock path: claim_free_key (no email). The email unlock page opens analyze_site's monthly free
 // runs, which compare_sites does not have, so its link is not offered here.
 // Kill switch: DCHUB_COMPARE_KEYLESS_PREVIEW=0 restores the plain wall (env flags go on BOTH
@@ -9421,6 +9421,41 @@ export function _withCompareTeaser(result, teaser) {
   const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
   content.push({ type: 'text', text: [_compareTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
   const sc = { ...(result.structuredContent || {}), message: COMPARE_KEYLESS_MESSAGE,
+    site_teaser: teaser, next_tool: 'claim_free_key',
+    free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
+  return { ...result, content, structuredContent: sc };
+}
+// ── get_composite_site_score keyless preview (owner 2026-10-14: "yes" to the Grok item-5 ask) ──
+// A keyless call gets the verdict band (BUILD / CAUTION / AVOID) and the power band, the other
+// factors named as locked. No score, sub-score, coverage map or caveat. Same shape as compare_sites.
+// Kill switch: DCHUB_COMPOSITE_KEYLESS_PREVIEW=0 restores the plain wall (set on BOTH Railway services).
+export function _compositeKeylessPreviewOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_COMPOSITE_KEYLESS_PREVIEW || ''));
+}
+export const COMPOSITE_TEASER_LOCKED = ['composite_score', 'fiber', 'water', 'risk_resilience', 'market_dcpi'];
+export const COMPOSITE_TEASER_NOTE = 'The score and the other factor bands come with the full composite score.';
+export function _compositeTeaser(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.success === false) return null;
+  const pg = parsed.sub_scores && parsed.sub_scores.power_grid;
+  const verdict = _teaserBand(parsed.composite_score);
+  const power = pg && pg.coverage === 'validated' ? _teaserBand(pg.score) : null;
+  if (!verdict && !power) return null;
+  return { verdict, power_grid: power, locked: [...COMPOSITE_TEASER_LOCKED], note: COMPOSITE_TEASER_NOTE };
+}
+export const COMPOSITE_KEYLESS_MESSAGE = 'Without a key, `get_composite_site_score` returns the verdict band and the power band; '
+  + 'the score and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + 'Scores and figures need a paid DC Hub plan.';
+export function _compositeTeaserLine(t) {
+  if (!t) return '';
+  return 'Composite teaser: verdict ' + (t.verdict || 'not rated') + '; power grid ' + (t.power_grid || 'not rated')
+    + '. Locked: composite score, fiber, water, risk and resilience, market. ' + t.note;
+}
+export function _withCompositeTeaser(result, teaser) {
+  if (!teaser || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+  const fix = (v) => (typeof v === 'string' ? v.replace(' No data without a key.', '') : v);
+  const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
+  content.push({ type: 'text', text: [_compositeTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
+  const sc = { ...(result.structuredContent || {}), message: COMPOSITE_KEYLESS_MESSAGE,
     site_teaser: teaser, next_tool: 'claim_free_key',
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
   return { ...result, content, structuredContent: sc };
@@ -20088,13 +20123,16 @@ function trackedTool(srv, name, description, schema, handler) {
           let _teaser = null;
           const _cmp = name === 'compare_sites' && _compareKeylessPreviewOn();
           let _cmpTeaser = null;
+          const _cmpo = name === 'get_composite_site_score' && _compositeKeylessPreviewOn();
+          let _cmpoTeaser = null;
           let _siteLoc = null;   // the handler's resolved location, for the stored claim request (P3)
-          if ((_pcOn || _b2 || _emailOn || _noSid || _cmp) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+          if ((_pcOn || _b2 || _emailOn || _noSid || _cmp || _cmpo) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
               const _parsedHl = JSON.parse(_raw?.content?.[0]?.text || '');
               if (_emailOn || _noSid) _teaser = _siteTeaser(_parsedHl);
               if (_cmp) _cmpTeaser = _compareSitesTeaser(_parsedHl);
+              if (_cmpo) _cmpoTeaser = _compositeTeaser(_parsedHl);
               _siteLoc = _parsedHl && _parsedHl.location;
               _hl = (_pcOn || _b2) ? _pcLpHeadline(name, _parsedHl) : null;
               // r-upgrade-h-first: the one number the wall may show is a COUNT the free
@@ -20117,6 +20155,7 @@ function trackedTool(srv, name, description, schema, handler) {
             if (_ew) return _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
+          if (_cmpoTeaser) return _withCompositeTeaser(await _lpWallResultV11(name, _hl), _cmpoTeaser);
           if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);
           return await _lpWallResultV11(name, _hl);
         }
