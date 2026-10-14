@@ -23,7 +23,7 @@ One MCP server for facility data, infrastructure and live grid intelligence, in 
 
 ## Using DC Hub data without MCP
 
-The same data is published over plain HTTPS for clients that do not attach an MCP server.
+The same data is published over plain HTTPS, for clients with no MCP connection.
 
 **Keyless endpoints.** Each answers an anonymous GET with HTTP 200 and open CORS (`access-control-allow-origin: *`):
 
