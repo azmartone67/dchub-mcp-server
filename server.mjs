@@ -190,7 +190,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // measurements, and the fail-soft contract live at the top of that file.
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
-import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_CLAUSE, FREE_DECISION_UNLOCKS_AT,
@@ -24614,14 +24614,24 @@ export const _INSTR_FREE_TIER = (() => {
   const d = _freeDecisionClause();
   return r ? ' FREE TIER (quote verbatim): ' + r + (d ? ' ' + d : '') : '';
 })();
+// Item 2 (owner, 2026-10-14): the analyze_site exemption follows the FREE TIER block in the
+// full text (dchub://instructions), so the rule's "per tool per day" is not read as
+// analyze_site's allowance. '' when the monthly free runs are off (DCHUB_LP_FREE_RUNS=0), so the
+// text never promises runs the gate does not grant. The lean handshake does not carry it yet:
+// at 93 characters it puts /mcp/grok and every pack path over the 2,048 budget
+// (test/initialize-instructions-length.test.mjs), an owner call.
+export function _analyzeSiteFreeSentence(env = process.env) {
+  return _lpFreeRunsOn(env) ? ANALYZE_SITE_FREE_LINE : '';
+}
 export const _INSTRUCTIONS = (() => {
   let facts = null;
   try { facts = JSON.parse(readFileSync(new URL('./canonical/mcp_facts.json', import.meta.url), 'utf8')); } catch { /* soft — gate falls through to figure-less prose */ }
   // OUTREACH_LEAD goes first: clients truncate long instructions (lib/agent-outreach.mjs).
   // A1: the free-tier rule sits before the scope section, which must stay last
   // (test/problem-taxonomy.test.mjs).
+  const asf = _analyzeSiteFreeSentence();
   return OUTREACH_LEAD + _composeInstructions(_overlayCanonPhrases(facts), Date.now()) + _INSTR_FREE_TIER
-    + _composeScopeSection(_TAXONOMY);
+    + (asf ? ' ' + asf : '') + _composeScopeSection(_TAXONOMY);
 })();
 
 // ── Lean handshake (Grok audit 2026-10-06, item 7) ─────────────────────────────
