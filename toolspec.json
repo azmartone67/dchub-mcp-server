@@ -11737,13 +11737,23 @@
   },
   {
     "name": "read_inbox",
-    "description": "PARTNER KEY ONLY: read the notes DC Hub left for the partner agent whose key this session sends — up to 20 unread, newest first, marked read on delivery (peek=true reads without marking). Call it at the start of a session. Proxies GET /api/v1/inbox with the session's own key: no key answers key required; a key issued without a partner slug answers partner key required (403). Not a data tool: it returns no market, power, fiber or siting figures.",
+    "description": "PARTNER KEY ONLY: notes DC Hub left for the partner agent whose key this session sends, newest first. The first read CONSUMES them (marks read), so a later session sees none; include_read=true re-reads read and unread notes (last 14 days) without marking. Non-partner key: 403. Not a data tool.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "peek": {
-          "description": "true = read without marking the notes read",
+          "description": "true = do not mark read",
           "type": "boolean"
+        },
+        "include_read": {
+          "description": "true = re-read read and unread notes, marks nothing",
+          "type": "boolean"
+        },
+        "days": {
+          "description": "Days back (default 14)",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
         }
       }
     },

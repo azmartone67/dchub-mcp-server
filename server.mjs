@@ -24773,25 +24773,56 @@ function _partnerFail(entity, text, code, extra) {
   return { isError: true, content: [{ type: 'text', text }],
            structuredContent: { _entity: entity, ok: false, error: code, ...(extra || {}) } };
 }
+// ★2026-10-14 (Grok: "partner inbox still fails"): the default read is READ-ONCE. The
+// backend returns only unread notes and marks them read, and Grok runs as many separate
+// conversations: the first run consumed the notes and every later run saw an empty inbox and
+// reported its key as broken. include_read=true re-reads read AND unread notes from the last
+// `days` days (backend default 14, max 60) and never marks; an empty default read now carries
+// recent_read_count + hint from the backend, and the text says how to re-read.
+export const _INBOX_DAYS_MAX = 60;
 export function _renderInboxText(j) {
   const notes = Array.isArray(j.notes) ? j.notes : [];
-  let head = `DC Hub inbox for ${j.inbox_slug}: ${notes.length} unread note(s)`;
-  if (notes.length && !j.peek) head += ' (now marked read)';
+  const reread = j.include_read === true;
+  let head;
+  if (reread) {
+    head = `DC Hub inbox for ${j.inbox_slug}: ${notes.length} note(s), read and unread, from the last ${j.days} days (re-read; nothing marked read)`;
+  } else {
+    head = `DC Hub inbox for ${j.inbox_slug}: ${notes.length} unread note(s)`;
+    if (notes.length && !j.peek) head += ' (now marked read)';
+  }
   const lines = [head, ''];
-  if (!notes.length) lines.push('No unread notes.');
+  if (!notes.length) {
+    lines.push(reread ? 'No notes in that window.' : 'No unread notes.');
+    if (!reread && Number(j.recent_read_count) > 0) {
+      lines.push(`${j.recent_read_count} note(s) for this key were already read in the last ${j.recent_read_days || 14} days (an earlier read_inbox call consumed them). Call read_inbox with include_read=true to read them again.`);
+    }
+  }
   for (const n of notes) {
-    lines.push(`--- #${n.id} | ${n.title || '(untitled)'} | from ${n.author || 'DC Hub'} | ${n.created_at}`);
+    const state = reread ? (n.read_at ? ` | read ${n.read_at}` : ' | unread') : '';
+    lines.push(`--- #${n.id} | ${n.title || '(untitled)'} | from ${n.author || 'DC Hub'} | ${n.created_at}${state}`);
     lines.push(String(n.body || ''));
     lines.push('');
   }
   return lines.join('\n').trimEnd() + '\n';
 }
-export async function _readInboxTool(apiKey, peek, fetchImpl) {
+// opts: { peek, include_read, days } — or a bare boolean, read as peek (the 2026-10-08 signature).
+export async function _readInboxTool(apiKey, opts, fetchImpl) {
   const f = (typeof fetchImpl === 'function') ? fetchImpl : fetch;
+  const o = (opts && typeof opts === 'object') ? opts : { peek: opts === true };
   if (!apiKey) return _partnerFail('inbox', _PARTNER_NO_KEY_TEXT, 'api_key_required');
   try {
     const u = new URL('/api/v1/inbox', API_BASE);
-    if (peek) u.searchParams.set('peek', '1');
+    if (o.include_read === true) {
+      u.searchParams.set('include_read', '1');
+      const d = Number(o.days);
+      if (Number.isInteger(d)) u.searchParams.set('days', String(Math.max(1, Math.min(_INBOX_DAYS_MAX, d))));
+      // peek=1 too: a backend that predates include_read ignores it and would otherwise MARK the
+      // unread notes it returns; with peek it returns them unmarked. The current backend never
+      // marks on include_read either way.
+      u.searchParams.set('peek', '1');
+    } else if (o.peek === true) {
+      u.searchParams.set('peek', '1');
+    }
     const r = await f(u.toString(), {
       headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' },
       signal: AbortSignal.timeout(15000),
@@ -24804,9 +24835,15 @@ export async function _readInboxTool(apiKey, peek, fetchImpl) {
     if (!r.ok || !j || j.ok !== true) {
       return _partnerFail('inbox', `DC Hub inbox could not be read just now (HTTP ${r.status}). Retry later; nothing was marked read.`, 'inbox_unavailable', { status: r.status });
     }
+    const extra = {};
+    if (j.include_read === true) Object.assign(extra, { include_read: true, days: j.days, unread_count: j.unread_count });
+    if (Number(j.recent_read_count) > 0) {
+      Object.assign(extra, { recent_read_count: j.recent_read_count, recent_read_days: j.recent_read_days,
+                             hint: 'Call read_inbox with include_read=true to read them again; that marks nothing.' });
+    }
     return { content: [{ type: 'text', text: _renderInboxText(j) }],
              structuredContent: { _entity: 'inbox', ok: true, inbox_slug: j.inbox_slug, count: j.count,
-                                  peek: !!j.peek, notes: j.notes || [] } };
+                                  peek: !!j.peek, ...extra, notes: j.notes || [] } };
   } catch (e) {
     return _partnerFail('inbox', `DC Hub inbox could not be read just now (${String((e && e.message) || e)}). Retry later; nothing was marked read.`, 'inbox_unavailable');
   }
@@ -29624,9 +29661,11 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
   // the catalog is one stable list per session; the backend answers a
   // non-partner key with 403 and the helpers render "partner key required".
   // Both send the SESSION's key only (see _readInboxTool / _reportFindingTool).
-  trackedTool(srv, 'read_inbox', 'PARTNER KEY ONLY: read the notes DC Hub left for the partner agent whose key this session sends — up to 20 unread, newest first, marked read on delivery (peek=true reads without marking). Call it at the start of a session. Proxies GET /api/v1/inbox with the session\'s own key: no key answers key required; a key issued without a partner slug answers partner key required (403). Not a data tool: it returns no market, power, fiber or siting figures.',
-    { peek: B.describe('true = read without marking the notes read') },
-    async (a) => _readInboxTool(getCtx().api_key, a.peek === true));
+  trackedTool(srv, 'read_inbox', 'PARTNER KEY ONLY: notes DC Hub left for the partner agent whose key this session sends, newest first. The first read CONSUMES them (marks read), so a later session sees none; include_read=true re-reads read and unread notes (last 14 days) without marking. Non-partner key: 403. Not a data tool.',
+    { peek: B.describe('true = do not mark read'),
+      include_read: B.describe('true = re-read read and unread notes, marks nothing'),
+      days: z.number().int().min(1).max(_INBOX_DAYS_MAX).optional().describe('Days back (default 14)') },
+    async (a) => _readInboxTool(getCtx().api_key, { peek: a.peek === true, include_read: a.include_read === true, days: a.days }));
   trackedTool(srv, 'report_finding', 'PARTNER KEY ONLY: file what you observed on a DC Hub surface as a brain finding (detector external_audit) so it is triaged like every other detector\'s. class is one of completeness_contradiction, geography_leak, as_of_cite_as, pro_wall_dead_end, count_drift, stale_payload_complete, leak_past_pro_gate, link_hygiene, other; tool names the DC Hub tool or endpoint; quoted_fields carries the exact fields you saw (hashed for dedupe: the same observation re-filed within 24h bumps recurrence instead of inserting). Proxies POST /api/v1/inbox/findings with the session\'s own key; a key issued without a partner slug answers partner key required (403). 120 per key per day.',
     { class: z.enum(FINDING_CLASSES).describe('Finding class: completeness_contradiction (status full/partial_preview with empty withheld_fields), geography_leak (preview resolved outside the requested ISO/region), as_of_cite_as (as_of null while cite_as stamps a date), pro_wall_dead_end (a paid-plan wall that says stop while next_ask offers another paid-plan tool and no cheaper rung), count_drift (tool or asset counts disagree across doors), stale_payload_complete (a stale sub-feed inside a payload marked complete), leak_past_pro_gate (a paid-plan field served below its plan), link_hygiene (dead or wrong-shape links), other'),
       tool: z.string().min(1).max(80).describe('The DC Hub tool or endpoint the finding is about, e.g. analyze_site'),
