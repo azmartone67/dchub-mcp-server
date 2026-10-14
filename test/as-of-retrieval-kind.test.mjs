@@ -28,8 +28,14 @@ describe('as_of_kind retrieval', () => {
     expect(o.provenance.layer_dates.nearest_substations.oldest).toBe('2015-05-08');
     expect(o.provenance.stale_layers).toEqual(['nearest_substations']);
   });
-  it('without the kind the citation still keeps the oldest stamp (contract unchanged)', () => {
+  // Changed 2026-10-14 (issue #827, QA MCP-3): this used to pin '2015-05-08' here, a per-row
+  // substation `as_of`. Rows no longer date the response at all, and the citation carries the
+  // date the backend stated, with or without the kind.
+  it('without the kind, per-row substation dates still do not date the citation', () => {
     const o = stamp(payload(null));
-    expect(o.citation.as_of).toBe('2015-05-08');
+    expect(o.citation.as_of).toBe(NOW);
+    expect(o.citation.cite_as).toContain('as of 2026-10-10');
+    expect(JSON.stringify(o.citation)).not.toContain('2015');
+    expect(o.provenance.as_of).toBe(NOW);
   });
 });
