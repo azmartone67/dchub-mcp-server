@@ -156,6 +156,8 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
+// One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -22071,6 +22073,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         structuredContent: _enriched,
       };
     } finally {
+      // The status this call is about to log, kept on the request ctx for the outer result steps
+      // (_claimHandoffStep reads it: the limit-hit counter and the handoff share one definition).
+      try { c._wallStatus = status; } catch (_) { /* a frozen ctx loses the handoff, never the answer */ }
       // Fire-and-forget telemetry — never block the user response on it
       trackToolCall({
         timestamp:   new Date().toISOString(),
@@ -22179,12 +22184,18 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   _relayContractStep (it needs the final human_url) and _partnerInboxStep is
   //   outermost but _flagUpstreamError (it only appends). Each has its own kill
   //   switch; see the "Grok audit 2026-10-08" block above _scrubCommerce.
-  }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  // ★ _claimHandoffStep (owner growth push 2026-10-14) sits just inside _guideAuthWall, outside
+  //   _limitedAnswerCopy: every wall-copy step (the sell lines, the clean-platform line, the outreach
+  //   block) has run, so it reads the final prose; it runs before _jsonFirstBlock and _splitHumanBlock,
+  //   so the line lands in the block those steps then lay out. It is not at the outer end of the
+  //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
+  //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
+  }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
@@ -23930,6 +23941,74 @@ export function _emailHintStep(result, name) {
 }
 export function _resetEmailHintState() { _EMAIL_HINT_SENT.clear(); }
 
+// ── One-step key handoff (owner growth push, approved 2026-10-14; lib/claim-handoff.mjs) ──────────
+// A keyless caller's limit or preview wall names `claim_free_key` in PROSE, first, with how to use it.
+// Measured the day this shipped (production transport, keyless, one call per fresh session, all 94 tools):
+// anon_daily_cap named the tool only inside block 0's JSON (58 of 58) while the prose said "Next:
+// execute_plan"; trial_used named it last, after the payer's pack and plan links (15 of 17 in prose).
+//
+// The walls it answers are CLAIM_HANDOFF_STATUSES, read from the call's own status (c._wallStatus, the
+// value /api/v1/mcp/track logs), so the limit-hit counter and this line share one definition. One block
+// goes right after the JSON block. Where the response named the tool only in trialHeader's trailing
+// clause, that clause is removed, so the tool is named once and first.
+//
+// Skipped: a caller holding a key; directory / Claude / core profiles and clean platforms (no commerce
+// there by policy); the three key tools; a response that already carries a key (the inline auto-mint);
+// and, for a PREVIEW wall only (not a limit), the decision tools, whose own wall says a free key does
+// not deepen them, and the walls the owner approved as ONE ask with no free offer beside it
+// (r-grid-sell-line 2026-10-03, r-paid-sell-line 2026-10-04) while their switch is on: their tests pin
+// the absence. DCHUB_CLAIM_HANDOFF=0 restores the earlier responses byte for byte (set it on BOTH
+// Railway MCP services).
+const _claimHandoffOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CLAIM_HANDOFF || ''));
+export function _singleAskWall(name) {
+  if (name === 'get_grid_intelligence' || name === 'get_fiber_intel') return _gridSellOn();
+  if (_PAID_SELL_TOOLS.has(name) || _PRO_WALL_TOOLS.has(name)) return _paidSellOn();
+  return false;
+}
+export function _claimHandoffStep(result, name) {
+  try {
+    if (!_claimHandoffOn()) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content) || !result.content.length) return result;
+    if (_OWN_TELL_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    if (c.api_key || c.daily_quota) return result;               // a key (or a demoted one this call) took the step
+    const status = c._wallStatus;
+    if (!_CLAIM_HANDOFF_STATUSES.includes(status)) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform()) return result;
+    // A LIMIT is the IP's, answered by a key on every tool. A preview wall that is a depth wall is not:
+    // the decision tools and the single-ask copy keep what they say.
+    const isLimit = status === 'anon_daily_cap' || status === 'anon_hard_wall';
+    if (!isLimit && (_singleAskWall(name) || _freePreviewOnlyTool(name))) return result;
+    const textOf = (b) => (b && b.type === 'text' && typeof b.text === 'string') ? b.text : '';
+    const proseOf = (t) => { const sp = _splitLeadingJson(t); return sp ? sp.rest : t; };
+    if (result.content.some((b) => _carriesKeyLiteral(textOf(b)))
+        || _carriesKeyLiteral(JSON.stringify(result.structuredContent || {}))) return result;
+    // What the prose says once trialHeader's trailing clause is gone: a mention left over means the
+    // response already tells the reader to call the tool (hard wall, Pro walls), and it stays as it is.
+    const content = result.content.map((b) => {
+      const t = textOf(b);
+      return t.includes(_CLAIM_ALT_TAIL) ? { ...b, text: t.split(_CLAIM_ALT_TAIL).join('') } : b;
+    });
+    if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return result;
+    const line = _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
+    const b0 = content[0];
+    const t0 = textOf(b0);
+    const sp0 = t0 ? _splitLeadingJson(t0) : null;
+    if (sp0 && sp0.rest && sp0.rest.trim()) {
+      // JSON and prose still in one block (this step runs before _splitHumanBlock): the line goes
+      // between them, behind the "---" rule the split step already looks for, so it becomes the first
+      // line of the first prose block and the wall's own header follows it.
+      const cut = t0.length - sp0.rest.length;
+      const m = /^\s*---\s*/.exec(sp0.rest);
+      const after = m ? sp0.rest.slice(m[0].length) : sp0.rest;
+      content[0] = { ...b0, text: t0.slice(0, cut) + '\n\n---\n\n' + line + (/^\s/.test(after) || !after ? after : '\n\n' + after) };
+      return { ...result, content };
+    }
+    return { ...result, content: [content[0], { type: 'text', text: line }, ...content.slice(1)] };
+  } catch (_) { return result; }   // a hand-off is never worth failing a response over
+}
+
 // ── Bind notice, once per key (owner 2026-10-10, warm-keys decisions) ──────────
 // 751 of 883 active keys have no email, so the agent is the only channel to them.
 // The backend's counted validate hop answers bind_notice_due=true on exactly one
@@ -24801,6 +24880,24 @@ export const _INSTRUCTIONS_LEAN = (() => {
 // descOverrides: optional { tool_name: description } map from the per-platform
 // tuner. Set into the module-level _activeDescOverrides for the SYNCHRONOUS
 // registration block below, then cleared before return (see trackedTool).
+// ── claim_free_key first in tools/list (owner growth push, approved 2026-10-14) ─────────────────────
+// The full catalog registers claim_free_key 86th of 94, behind the whole data surface. Measured on the
+// served tools/list 2026-10-14: index 85 of 94. A client that truncates, pages or summarises a long tool
+// list reaches the first data tools long before it reaches the one call a keyless caller can make at a
+// limit. It is moved to the front of the SERVED list, once, here, and nothing else moves: every other
+// tool keeps its relative order, every count guard still reads one canonical catalog, and the pack
+// paths keep their own declared order (packToolNames puts the spine last on purpose).
+// The handshake text is untouched: it already names the tool under KEYS, its CAPACITY SOURCE routing
+// sentence is pinned right after the lead (test/capacity-source-routing-instructions), and /mcp/grok sits
+// 40 characters under the 2,048 budget. DCHUB_CLAIM_KEY_FIRST=0 restores registration order.
+export const CLAIM_KEY_TOOL_NAME = 'claim_free_key';
+const _claimKeyFirstOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CLAIM_KEY_FIRST || ''));
+export function _claimKeyFirst(tools) {
+  if (!Array.isArray(tools) || !_claimKeyFirstOn()) return tools;
+  const i = tools.findIndex((t) => t && t.name === CLAIM_KEY_TOOL_NAME);
+  if (i <= 0) return tools;
+  return [tools[i], ...tools.slice(0, i), ...tools.slice(i + 1)];
+}
 // ── r-schema-dialect-neutral (2026-08-21) ───────────────────────────────────
 // The SDK converts every zod schema with target 'draft-7' and stamps
 //   "$schema": "http://json-schema.org/draft-07/schema#"
@@ -29578,6 +29675,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         t.inputSchema = applyOneOfAnyOf(stripSchemaDialect(t.inputSchema), t.name);
         if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
       }
+      if (res && Array.isArray(res.tools)) res.tools = _claimKeyFirst(res.tools);   // claim_free_key first (see above)
       return res;
     });
   } else {
