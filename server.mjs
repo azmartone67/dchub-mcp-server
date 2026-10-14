@@ -22097,7 +22097,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
        name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
 }
 
-// Owner 2026-10-14: the compare_sites and get_composite_site_score walls carry no required_plan
+// Owner 2026-10-14: agent walls and gated previews on every tool (analyze_site, compare_sites, Pro-only tools, nested substation locked views) carry no required_plan
 // (agent walls name no plan or price, be#6703). It is removed LAST, after every step in the
 // callback chain has read it (_stampProWall and _relayContractStep key on
 // it; it runs inside _gatedPreviewStep, the last of them); `_wall`, `error` and `next_tool` stay the markers. Walls only (error pro_required or
@@ -22106,27 +22106,37 @@ export const _WALL_NO_PLAN_FIELD_TOOLS = new Set(['compare_sites', 'get_composit
 export function _wallNoPlanFieldStep(result, name) {
   try {
     if (!result || typeof result !== 'object') return result;
-    const named = _WALL_NO_PLAN_FIELD_TOOLS.has(name);
     const sc = result.structuredContent;
     // Owner 2026-10-14: the 401/402/403 guidance from _authWallGuidance (any tool) carries no
     // required_plan either. _isRelayWall reads it (402 'pro' => relay link), so it is stripped here, last.
     const isAuthGuidance = (o) => typeof o.error === 'string' && _AUTH_WALL_RE.test(o.error)
       && typeof o.next_tool === 'string' && 'tier_required' in o && typeof o.message === 'string';
+    // Any tool: top-level wall / gated-preview markers (owner 2026-10-14, "analyze_site and Pro walls too").
     const isWall = (o) => !!o && typeof o === 'object' && !Array.isArray(o) && 'required_plan' in o
-      && ((named && (o._wall === true || o.error === 'pro_required')) || isAuthGuidance(o));
+      && (o._wall === true || o.error === 'pro_required' || o._gated === true || o._preview_only === true
+        || isAuthGuidance(o));
+    // Nested locked views inside an otherwise-served answer: the substation locked view
+    // (locked:true), the B2 free substation view (locked_fields) and the free-runs-spent block.
+    const isLockedBlock = (o) => !!o && typeof o === 'object' && !Array.isArray(o) && 'required_plan' in o
+      && (o.locked === true || Array.isArray(o.locked_fields) || o.reason === 'free_monthly_limit_reached');
+    const scrub = (v, depth) => {
+      if (!v || typeof v !== 'object' || depth > 6) return v;
+      if (Array.isArray(v)) return v.map((x) => scrub(x, depth + 1));
+      const o = {};
+      for (const [k, x] of Object.entries(v)) {
+        if (k === 'required_plan' && (isWall(v) || isLockedBlock(v))) continue;
+        o[k] = scrub(x, depth + 1);
+      }
+      return o;
+    };
+    const touches = (v) => { try { return JSON.stringify(v).includes('"required_plan"'); } catch (_) { return false; } };
     let out = result;
-    if (isWall(sc)) {
-      const { required_plan: _drop, ...rest } = sc;
-      out = { ...out, structuredContent: rest };
-    }
+    if (sc && typeof sc === 'object' && touches(sc)) out = { ...out, structuredContent: scrub(sc, 0) };
     if (Array.isArray(out.content)) {
       const content = out.content.map((b) => {
-        if (!b || typeof b.text !== 'string' || b.text.charAt(0) !== '{') return b;
+        if (!b || typeof b.text !== 'string' || b.text.charAt(0) !== '{' || !b.text.includes('"required_plan"')) return b;
         try {
-          const o = JSON.parse(b.text);
-          if (!isWall(o)) return b;
-          delete o.required_plan;
-          return { ...b, text: JSON.stringify(o) };
+          return { ...b, text: JSON.stringify(scrub(JSON.parse(b.text), 0)) };
         } catch (_) { return b; }
       });
       out = { ...out, content };
@@ -23354,7 +23364,7 @@ export async function _cleanPlatformWallLineStep(result, name) {
 // The analyze_site gated_preview (conversion panel 2026-10-11): lib/gated-preview.mjs. Last step
 // but _flagUpstreamError, so no earlier stamp rewrites it. Kill switch DCHUB_GATED_PREVIEW=0.
 export function _gatedPreviewStep(result, name) {
-  // Last read of required_plan in the chain: drop it for the two walls the owner named (2026-10-14).
+  // Last read of required_plan in the chain: dropped from every agent wall / locked view (2026-10-14).
   return _wallNoPlanFieldStep(_powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
     { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name), name);
 }

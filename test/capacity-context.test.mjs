@@ -148,7 +148,8 @@ describe('capacity_context reaches a real below-Pro analyze_site call (the previ
     expect(sc.overall_score).toBeNull();
     expect(Object.values(sc.scores || {}).every((v) => v === null)).toBe(true);
     expect(sc.interpretation ?? null).toBeNull();   // the site label is withheld with the verdict (2026-10-08)
-    expect(sc.required_plan).toBe('pro');
+    expect(sc.required_plan).toBeUndefined();   // owner 2026-10-14
+    expect(sc._gated).toBe(true);
   });
 
   it('★ gating the number keeps the explanation and the way to the paid plan', async () => {
