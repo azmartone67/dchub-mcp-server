@@ -89,7 +89,7 @@ describe('guided 401/402 through a real session', () => {
       expect(b.error).toBe('API 401');               // legacy key stays
       expect(b.next_tool).toBe('claim_free_key');
       expect(b.tier_required).toBe('free_key');
-      expect(b.required_plan).toBe('free');
+      expect('required_plan' in b).toBe(false);
       expect(b.message).toMatch(/claim_free_key/);
     }
   });
@@ -103,7 +103,7 @@ describe('guided 401/402 through a real session', () => {
       expect(b.detail).toBe('upgrade_required');
       expect(b.next_tool).toBe('unlock_more_data');
       expect(b.tier_required).toBe('pro');
-      expect(b.required_plan).toBe('pro');
+      expect('required_plan' in b).toBe(false);
       expect(b.message).toMatch(/needs a paid DC Hub plan/);
     }
   });
@@ -111,8 +111,7 @@ describe('guided 401/402 through a real session', () => {
   it('adds no link, no price, no em dash', async () => {
     for (const name of ['list_standing_intents', 'export_dataset', 'list_saved_sites']) {
       const { lead } = await call(name);
-      const g = { message: lead.message, next_tool: lead.next_tool, tier_required: lead.tier_required,
-                  required_plan: lead.required_plan };
+      const g = { message: lead.message, next_tool: lead.next_tool, tier_required: lead.tier_required };
       expect(JSON.stringify(g), name).not.toMatch(/https?:\/\/|\$\s?\d|—/);
     }
   });
@@ -122,7 +121,23 @@ describe('_authWallGuidance / _guideAuthWall (unit)', () => {
   it('a keyed 401 on an email-class tool points at bind_email', () => {
     const g = S._authWallGuidance('get_facility', 401, 'identity_required', true);
     expect(g.next_tool).toBe('bind_email');
-    expect(g.required_plan).toBe('identified');
+    expect(g.required_plan).toBe('identified');   // builder still feeds _isRelayWall; stripped last
+  });
+  it('_wallNoPlanFieldStep strips required_plan from auth guidance on any tool, keeps the rest', () => {
+    const g = S._authWallGuidance('export_dataset', 402, 'upgrade_required', false);
+    const body = { error: 'API 402', detail: 'upgrade_required', ...g };
+    const r = { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body };
+    const out = S._wallNoPlanFieldStep(r, 'export_dataset');
+    expect('required_plan' in out.structuredContent).toBe(false);
+    expect('required_plan' in JSON.parse(out.content[0].text)).toBe(false);
+    expect(out.structuredContent.next_tool).toBe('unlock_more_data');
+    expect(out.structuredContent.tier_required).toBe('pro');
+    expect(out.structuredContent.message).toBe(g.message);
+  });
+  it('other tools walls (no auth-guidance shape) keep required_plan', () => {
+    const sc = { error: 'pro_required', _wall: true, required_plan: 'pro' };
+    const out = S._wallNoPlanFieldStep({ content: [], structuredContent: sc }, 'analyze_site');
+    expect(out.structuredContent.required_plan).toBe('pro');
   });
   it('leaves a body that already carries a gated envelope alone', () => {
     const res = { content: [{ type: 'text', text: JSON.stringify({ error: 'API 403', detail: 'x', next_tool: 'bind_email' }) }] };
