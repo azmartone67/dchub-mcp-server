@@ -1,10 +1,10 @@
 // canonical/listing.json (snapshot of /api/v1/canon/listing) and the files generated from it.
 // HARD GATE candidate: offline, reads committed files only.
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import {
   listingProblems, renderContext7, context7Problems, withSubmissionHeader,
-  SUBMISSION_HEADER, countClaimProblems, SKILL_SOURCE, SKILL_TARGETS, renderSkill, skillProblems, healSkillCount,
+  SUBMISSION_HEADER, countClaimProblems, healCountClaims, COUNT_CLAIM_MANIFESTS, COUNT_CLAIM_DOCS, COUNT_CLAIM_FILES, SKILL_SOURCE, SKILL_TARGETS, renderSkill, skillProblems, healSkillCount,
 } from '../scripts/listing-canon.mjs';
 
 const J = (f) => JSON.parse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'));
@@ -57,11 +57,40 @@ describe('submissions are history', () => {
 });
 
 describe('manifests agree on the tool count', () => {
-  it.each(['gemini-extension.json', '.cursor-plugin/plugin.json', 'dxt/manifest.json', 'kiro-power/plugin.json'])('%s', (f) => {
+  it.each(COUNT_CLAIM_MANIFESTS)('%s', (f) => {
     expect(countClaimProblems(f, T(f), L.tool_count)).toEqual([]);
+  });
+  // Public docs that state the served count as a current claim. Measured 2026-10-14 before they were
+  // listed: "Full 31-tool MCP server" (integrations/PROMPT.md), "the full 38-tool MCP server"
+  // (integrations/README.md), "82-tool MCP server" (TELEGEOGRAPHY-OUTREACH.md), and "70-tool" twice
+  // across docs/contacts.md and docs/distribution-targets.md, beside a 94-tool server.
+  it.each(COUNT_CLAIM_DOCS)('%s says the served count, not an old one', (f) => {
+    const text = T(f);
+    expect(countClaimProblems(f, text, L.tool_count)).toEqual([]);
+    // not vacuous: each of these files really does state the count, as a number above the checker's floor
+    expect([...text.matchAll(/\b(\d+)[ -]tools?\b/g)].some((m) => Number(m[1]) === L.tool_count), f + ' states no tool count').toBe(true);
+  });
+  it('the sync script heals and checks the very list this test fails on', () => {
+    const src = T('scripts/sync-tools-manifest.mjs');
+    expect(src).toContain('for (const f of COUNT_CLAIM_FILES)');
+    expect([...COUNT_CLAIM_FILES]).toEqual([...COUNT_CLAIM_MANIFESTS, ...COUNT_CLAIM_DOCS]);
+    // the list may grow; it may not quietly shrink back to the manifests (the five docs were outside it)
+    expect(COUNT_CLAIM_MANIFESTS.length).toBeGreaterThanOrEqual(4);
+    expect(COUNT_CLAIM_DOCS.length).toBeGreaterThanOrEqual(5);
+    for (const f of COUNT_CLAIM_FILES) expect(existsSync(new URL(`../${f}`, import.meta.url)), f).toBe(true);
   });
   it('catches a stale count', () => {
     expect(countClaimProblems('x', 'a server with 81 tools', 94).length).toBe(1);
+  });
+  it('catches a stale count wrapped across a line break, and the heal rewrites the same claim', () => {
+    const wrapped = 'Zero-install remote HTTP, 70\ntools, one-hour pilot pack';
+    expect(countClaimProblems('x', wrapped, 94).length).toBe(1);
+    const healed = healCountClaims(wrapped, 94);
+    expect(healed).toBe('Zero-install remote HTTP, 94\ntools, one-hour pilot pack');
+    expect(countClaimProblems('x', healed, 94)).toEqual([]);
+    // the floor is unchanged, and a paragraph break (two newlines) is not a wrapped phrase
+    expect(healCountClaims('10 tools, 20 tools', 94)).toBe('10 tools, 20 tools');
+    expect(countClaimProblems('x', 'it is 70\n\ntools-free', 94).length).toBe(0);
   });
 });
 

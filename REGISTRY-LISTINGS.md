@@ -1,7 +1,7 @@
 # DC Hub MCP — Registry Listing Copy (ready to paste)
 
 Source of truth: `https://dchub.cloud/.well-known/mcp-server.json` · Endpoint: `https://dchub.cloud/mcp` (Streamable HTTP)
-Live server **94 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.21** (isLatest, published 2026-09-26T06:43Z, measured 2026-09-28 via `GET registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub/mcp-server`) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
+Live server **94 tools** · official registry listing `cloud.dchub/mcp-server` **v2.12.37** (active, isLatest, toolCount 94, published 2026-10-14T00:28Z, measured 2026-10-14 via `GET registry.modelcontextprotocol.io/v0/servers/cloud.dchub%2Fmcp-server/versions/latest`) · CC-BY-4.0 data · free tier (no key) + `X-API-Key` for full data.
 
 ## ⚡ STATUS + WHAT'S LEFT (2026-06-02)
 - ✅ **Official MCP Registry** (`registry.modelcontextprotocol.io`) — **DONE, v2.3.3 live.** Auto-republishes on every `server.json` version bump (GitHub Action `registry-refresh.yml`, DNS-auth). **Most directories mirror this**, so you're already broadly listed.

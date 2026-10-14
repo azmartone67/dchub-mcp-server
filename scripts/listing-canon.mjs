@@ -73,10 +73,23 @@ export function withSubmissionHeader(md) {
   return md.slice(0, nl + 1) + '\n' + SUBMISSION_HEADER + '\n' + md.slice(nl + 1);
 }
 
-/** Tool-count claims in a manifest's strings that disagree with canon. */
+// The files whose "N tools" claims must equal the canon tool count: the generated manifests, then the
+// public docs that quote the served count as a CURRENT claim (an agent prompt, an integrations index, an
+// outreach brief, two registry runbooks). The docs sat outside the check at "31-tool", "38-tool",
+// "82-tool" and "70-tool" beside a 94-tool server (measured 2026-10-14). Dated history
+// (docs/outreach-emails.md, submissions/*.md) is deliberately not here. scripts/sync-tools-manifest.mjs
+// heals and checks these; test/listing-canon.test.mjs fails on them; one list, so they cannot diverge.
+export const COUNT_CLAIM_MANIFESTS = Object.freeze(['gemini-extension.json', '.cursor-plugin/plugin.json', 'dxt/manifest.json', 'kiro-power/plugin.json']);
+export const COUNT_CLAIM_DOCS = Object.freeze(['integrations/PROMPT.md', 'integrations/README.md', 'TELEGEOGRAPHY-OUTREACH.md',
+  'docs/contacts.md', 'docs/distribution-targets.md']);
+export const COUNT_CLAIM_FILES = Object.freeze([...COUNT_CLAIM_MANIFESTS, ...COUNT_CLAIM_DOCS]);
+
+/** Tool-count claims in a manifest's strings that disagree with canon. A count wrapped across a line
+ * ("... remote HTTP, 70\ntools, ...") is a claim too: the separator before "tool(s)" may be a newline.
+ * (docs/distribution-targets.md carried exactly that, beside a 94-tool server.) */
 export function countClaimProblems(label, text, count) {
   const bad = [];
-  for (const m of text.matchAll(/\b(\d+)(?:[ -](?:live|MCP|read-only))*[ -]tools?\b/g)) {
+  for (const m of text.matchAll(/\b(\d+)(?:[ -](?:live|MCP|read-only))*[ \n-]tools?\b/g)) {
     if (Number(m[1]) > 20 && Number(m[1]) !== count) bad.push(`${label}: "${m[0]}" != ${count} (canon listing)`);
   }
   return bad;
@@ -99,7 +112,7 @@ export function healListingCount(L, count) {
 /** Move every "N tools" claim above the small-number floor to `count` (same pattern and floor as
  * countClaimProblems, so a heal can never leave what the check still reports). */
 export function healCountClaims(text, count) {
-  return text.replace(/\b(\d+)((?:[ -](?:live|MCP|read-only))*[ -]tools?\b)/g,
+  return text.replace(/\b(\d+)((?:[ -](?:live|MCP|read-only))*[ \n-]tools?\b)/g,
     (m, n, tail) => (Number(n) > 20 ? `${count}${tail}` : m));
 }
 
