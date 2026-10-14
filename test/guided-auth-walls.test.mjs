@@ -134,10 +134,11 @@ describe('_authWallGuidance / _guideAuthWall (unit)', () => {
     expect(out.structuredContent.tier_required).toBe('pro');
     expect(out.structuredContent.message).toBe(g.message);
   });
-  it('other tools walls (no auth-guidance shape) keep required_plan', () => {
+  it('other tools walls (error pro_required / _wall) lose required_plan too (owner 2026-10-14)', () => {
     const sc = { error: 'pro_required', _wall: true, required_plan: 'pro' };
     const out = S._wallNoPlanFieldStep({ content: [], structuredContent: sc }, 'analyze_site');
-    expect(out.structuredContent.required_plan).toBe('pro');
+    expect('required_plan' in out.structuredContent).toBe(false);
+    expect(out.structuredContent._wall).toBe(true);
   });
   it('leaves a body that already carries a gated envelope alone', () => {
     const res = { content: [{ type: 'text', text: JSON.stringify({ error: 'API 403', detail: 'x', next_tool: 'bind_email' }) }] };

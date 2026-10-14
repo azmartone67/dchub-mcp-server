@@ -53,9 +53,11 @@ async function call(name, args) {
 const jsonBlocks = (r) => r.content.map((b) => b.text || '').filter((t) => /^\s*\{/.test(t)).map((t) => { try { return JSON.parse(t); } catch (_) { return null; } }).filter(Boolean);
 
 describe('keyless walls', () => {
-  it('analyze_site still carries required_plan (control: the field exists upstream)', async () => {
+  it('analyze_site wall has no required_plan either', async () => {
     const r = await call('analyze_site', { lat: 33.45, lon: -112.07 });
-    expect(r.structuredContent.required_plan).toBe('pro');
+    expect(r.structuredContent._wall).toBe(true);
+    expect('required_plan' in r.structuredContent).toBe(false);
+    for (const o of jsonBlocks(r)) expect('required_plan' in o).toBe(false);
   });
   for (const [name, args] of [
     ['compare_sites', { sites: [{ lat: 33.45, lon: -112.07 }, { lat: 39.04, lon: -77.48 }] }],
