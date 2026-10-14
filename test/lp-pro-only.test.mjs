@@ -216,7 +216,11 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     // figure and label below stays out.
     const _cmp = tool === 'compare_sites';
     if (_cmp) expect(sc.site_teaser.sites.length).toBeGreaterThan(0);
-    for (const f of [...K.figures, 'Excellent site', ...(_cmp ? [] : ['BUILD']), 'Amazon.com', 'validated']) {
+    // get_composite_site_score (owner 2026-10-14): the same, once: verdict band + power band in
+    // site_teaser (test/composite-keyless-preview.test.mjs). Kill switch DCHUB_COMPOSITE_KEYLESS_PREVIEW=0.
+    const _cmpo = tool === 'get_composite_site_score';
+    if (_cmpo) expect(sc.site_teaser.verdict).toBeTruthy();
+    for (const f of [...K.figures, 'Excellent site', ...(_cmp || _cmpo ? [] : ['BUILD']), 'Amazon.com', 'validated']) {
       expect(text).not.toContain(f);
     }
     // MCP-1 + relay contract (2026-10-07): every keyless Land & Power wall carries ONE human link family,
