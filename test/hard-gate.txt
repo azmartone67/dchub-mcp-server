@@ -424,6 +424,8 @@ test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-exits.test.mjs
+test/wall-no-required-plan-compare-composite.test.mjs
+test/wall-no-required-plan-e2e.test.mjs
 test/wall-transport.test.mjs
 test/wall-user-line-hard-wall.test.mjs
 test/wall-user-line.test.mjs

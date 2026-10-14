@@ -22097,6 +22097,39 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
        name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
 }
 
+// Owner 2026-10-14: the compare_sites and get_composite_site_score walls carry no required_plan
+// (agent walls name no plan or price, be#6703). It is removed LAST, after every step in the
+// callback chain has read it (_stampProWall and _relayContractStep key on
+// it; it runs inside _gatedPreviewStep, the last of them); `_wall`, `error` and `next_tool` stay the markers. Walls only (error pro_required or
+// _wall true), these two tools only.
+export const _WALL_NO_PLAN_FIELD_TOOLS = new Set(['compare_sites', 'get_composite_site_score']);
+export function _wallNoPlanFieldStep(result, name) {
+  try {
+    if (!_WALL_NO_PLAN_FIELD_TOOLS.has(name) || !result || typeof result !== 'object') return result;
+    const sc = result.structuredContent;
+    const isWall = (o) => !!o && typeof o === 'object' && !Array.isArray(o) && 'required_plan' in o
+      && (o._wall === true || o.error === 'pro_required');
+    let out = result;
+    if (isWall(sc)) {
+      const { required_plan: _drop, ...rest } = sc;
+      out = { ...out, structuredContent: rest };
+    }
+    if (Array.isArray(out.content)) {
+      const content = out.content.map((b) => {
+        if (!b || typeof b.text !== 'string' || b.text.charAt(0) !== '{') return b;
+        try {
+          const o = JSON.parse(b.text);
+          if (!isWall(o)) return b;
+          delete o.required_plan;
+          return { ...b, text: JSON.stringify(o) };
+        } catch (_) { return b; }
+      });
+      out = { ...out, content };
+    }
+    return out;
+  } catch (_) { return result; }
+}
+
 // ★★★ r-fields-projection (2026-08-29) — the token diet, to Gemini's spec.
 //
 // ASKED FOR BY THREE AGENTS in the partner round, for the same reason:
@@ -23314,8 +23347,9 @@ export async function _cleanPlatformWallLineStep(result, name) {
 // The analyze_site gated_preview (conversion panel 2026-10-11): lib/gated-preview.mjs. Last step
 // but _flagUpstreamError, so no earlier stamp rewrites it. Kill switch DCHUB_GATED_PREVIEW=0.
 export function _gatedPreviewStep(result, name) {
-  return _powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
-    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name);
+  // Last read of required_plan in the chain: drop it for the two walls the owner named (2026-10-14).
+  return _wallNoPlanFieldStep(_powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
+    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name), name);
 }
 
 // The power band's plain-words reading (lib/gated-preview.mjs powerBandLineStep), added to the
