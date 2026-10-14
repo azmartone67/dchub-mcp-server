@@ -65,6 +65,7 @@ test/chatgpt-taste-and-cap-coaching-836-838.test.mjs
 test/chatgpt-toolset-frozen.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
+test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
