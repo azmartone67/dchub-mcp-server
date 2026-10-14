@@ -77,7 +77,10 @@ const FREE_TIER_RULE = "Anonymous: previews, no key needed. "
 // 100/day free tier" three times, a rung that does not exist, and this gate never saw
 // it because the shape had no "calls". A bare "N/day" is the same claim.
 const CLAIM = /([\d,]+)\s*(?:calls?)?\/day/gi;
-const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|no key needed/i;
+// ★2026-10-14: "without a key" added. The ChatGPT Actions spec said "Without a key this
+// tool returns previews + 2 full answers per day" on getGridIntelligence and
+// getFiberIntel, and none of these words named it as anonymous.
+const ANON_CTX = /anonymous|keyless|no signup|no api key|without one|without an? (?:api )?key|no key needed/i;
 const num = (s) => Number(String(s).replace(/,/g, ""));
 
 function claims() {
@@ -157,6 +160,78 @@ describe("published calls/day claims", () => {
       (c) => /free tier|free key|dch_live_/i.test(c.text) && c.n > CANON.identified,
     );
     expect(bad.map((b) => `${b.file}:${b.line} → ${b.n}`)).toEqual([]);
+  });
+});
+
+// ★2026-10-14 (post-merge review of mcp#951): the calls/day gate above cannot see a
+// "full answers" claim at all; its shape is "N full answers per (tool per) day", not
+// "N calls/day". integrations/chatgpt/openapi.json said "Without a key this tool
+// returns previews + 2 full answers per day" on two operations, which gives the free
+// key's allowance to anonymous callers. Canon: "Anonymous: previews, no key needed.
+// Free key: previews plus 2 full answers per tool per day. Add an email: ... up to 10
+// full answers per tool per day." So a full-answers claim belongs to a keyed rung: the
+// nearest tier word before it, in its own sentence, must name the free key, the free
+// tier or the email rung, never an anonymous one, and its number must be one of
+// canon's full_answers_per_tool_per_day values.
+const FULL_ANSWERS = /(\d+)\s+full answers?(?:\s+per\s+tool)?\s*(?:per\s+|a\s+|\/\s*)day/gi;
+const ANON_WORD = /anonymous|keyless|no signup|no api key|without one|without an? (?:api )?key|no key/gi;
+const KEYED_WORD = /free[ -]key|free tier|claim_?free_?key|unbound key|bind_email|add an email|with an email/gi;
+const FULL_ANSWER_CANON = new Set(Object.values(SNAP.allowance)
+  .map((a) => a && a.full_answers_per_tool_per_day).filter(Number.isFinite));
+
+// The tier a claim belongs to: the LAST tier word between the start of its sentence and
+// the claim. "no key: previews; a free key: previews plus 2 full answers" is the free
+// key's claim; "Without a key this tool returns previews + 2 full answers" is not.
+function tierOf(before) {
+  const lastOf = (re) => { let at = -1; for (const m of before.matchAll(re)) at = m.index; return at; };
+  const anon = lastOf(ANON_WORD);
+  const keyed = lastOf(KEYED_WORD);
+  if (anon === -1 && keyed === -1) return "none";
+  return keyed > anon ? "keyed" : "anonymous";
+}
+
+function fullAnswerClaims() {
+  const out = [];
+  for (const f of SURFACES) {
+    read(f).split("\n").forEach((line, i) => {
+      for (const m of line.matchAll(FULL_ANSWERS)) {
+        const at = m.index ?? 0;
+        // Sentence start: the last ". " / "! " / "? " before the claim (one JSON
+        // description is one line holding many sentences), else the line start.
+        let start = 0;
+        for (const b of line.slice(0, at).matchAll(/[.!?]\s/g)) start = b.index + 2;
+        const before = line.slice(start, at);
+        out.push({ file: f, line: i + 1, n: Number(m[1]), tier: tierOf(before),
+          text: line.slice(Math.max(start, at - 90), at + m[0].length).trim() });
+      }
+    });
+  }
+  return out;
+}
+
+describe("published full-answers claims", () => {
+  it("finds claims at all, and canon has the counts (guards against a vacuous pass)", () => {
+    expect(FULL_ANSWER_CANON).toEqual(new Set([2, 10]));
+    const got = fullAnswerClaims();
+    expect(got.length).toBeGreaterThan(10);
+    expect(got.some((c) => c.tier === "keyed")).toBe(true);
+  });
+
+  it("the classifier reads the old ChatGPT Actions sentence as anonymous", () => {
+    // The exact text mcp#951 left on getGridIntelligence / getFiberIntel.
+    expect(tierOf("Without a key this tool returns previews + ")).toBe("anonymous");
+    expect(tierOf("Free to start (no key: previews; a free key: previews plus ")).toBe("keyed");
+    expect(tierOf("Anonymous: previews plus ")).toBe("anonymous");
+  });
+
+  it("every full-answers claim belongs to the free key or the email rung", () => {
+    const bad = fullAnswerClaims().filter((c) => c.tier !== "keyed");
+    expect(bad.map((b) => `${b.file}:${b.line} (${b.tier}) → ${b.text}`)).toEqual([]);
+  });
+
+  it("every full-answers count is a canon count", () => {
+    const bad = fullAnswerClaims().filter((c) => !FULL_ANSWER_CANON.has(c.n));
+    expect(bad.map((b) => `${b.file}:${b.line} → ${b.n} — ${b.text}`)).toEqual([]);
   });
 });
 

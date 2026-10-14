@@ -298,7 +298,7 @@
       "get": {
         "operationId": "getGridIntelligence",
         "summary": "Full grid intelligence for one ISO/region (grid_and_queue)",
-        "description": "recipe grid_and_queue. Deep grid intelligence for a single ISO/region: headroom, constraints, generation additions, and forward signals. Without a key this tool returns previews + 2 full answers per day. Pass a region id such as 'ercot', 'pjm', 'caiso', 'miso', 'spp', 'nyiso', 'isone', 'uk', 'eu', 'au'. Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe grid_and_queue. Deep grid intelligence for a single ISO/region: headroom, constraints, generation additions, and forward signals. Without a key: previews. A free key also gets previews here; full grid detail needs a paid DC Hub plan (https://dchub.cloud/pricing). Pass a region id such as 'ercot', 'pjm', 'caiso', 'miso', 'spp', 'nyiso', 'isone', 'uk', 'eu', 'au'. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "region_id",
@@ -505,7 +505,7 @@
       "get": {
         "operationId": "getFiberIntel",
         "summary": "Dark / long-haul fiber intelligence for a state or area",
-        "description": ". Fiber-route intelligence - long-haul and metro dark-fiber corridors, carriers, and route density for a state or bounding box. Without a key this tool returns previews + 2 full answers per day; deeper detail is gated (surface 'message'/upgrade_url on 402 or gated bodies). Pass ?state= (e.g. 'VA') or ?bbox=w,s,e,n. Cite 'DC Hub, dchub.cloud'.",
+        "description": ". Fiber-route intelligence - long-haul and metro dark-fiber corridors, carriers, and route density for a state or bounding box. Without a key: previews. Deeper detail is gated (surface 'message'/upgrade_url on 402 or gated bodies). Pass ?state= (e.g. 'VA') or ?bbox=w,s,e,n. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "state",
