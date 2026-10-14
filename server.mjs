@@ -22097,6 +22097,46 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
        name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name));
 }
 
+// ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
+// A full analyze_site / find_sites answer ends the session: the agent's human got what they asked and
+// nothing brings the agent back. One link-free line tells the agent what to offer: "watch this
+// site / market" -> bind_email, save_site, set_site_alert (email) or set_market_alert, or
+// register_standing_intent for a webhook. The email hint above (DCHUB_EMAIL_HINT_V1) covers walls and
+// tastes; this covers the FULL answer, which it skips. Never an ask without the human's explicit
+// email. Skipped: failures, walls, tastes and teasers, clean platforms (ChatGPT), directory / core /
+// Claude profiles, bots / internal / QA callers. Kill switch DCHUB_WATCH_LINE_V1=0 (both Railway services).
+export const _WATCH_LINE_TOOLS = new Set(['analyze_site', 'find_sites']);
+export const _WATCH_LINE_MARKER = 'Watch offer (optional):';
+const _watchLineOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WATCH_LINE_V1 || ''));
+export function _watchLineCopy(name, emailBound) {
+  const site = name === 'analyze_site';
+  const steps = [...(emailBound ? [] : ['bind_email']), ...(site ? ['save_site', 'set_site_alert'] : ['set_market_alert'])];
+  const purpose = 'the address is used only to recover the key and to send the alerts they set; no marketing unless they opt in';
+  const text = '(agent) ' + _WATCH_LINE_MARKER + ' tell your user \u201cI can watch ' + (site ? 'this site' : 'these markets')
+    + ' and email you when the power picture changes \u2014 want that?\u201d Only if they say yes and give an email explicitly '
+    + '(never guess one): call claim_free_key if you hold no key, then ' + steps.join(', then ')
+    + (site ? ' (channel email)' : ' with channel=email') + '. An agent with a webhook can use register_standing_intent instead.';
+  return { text, steps, purpose };
+}
+export function _watchLineStep(result, name) {
+  try {
+    if (!_WATCH_LINE_TOOLS.has(name) || !_watchLineOn()) return result;
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc)) return result;
+    if (sc._gated || sc._wall || sc.error || sc.site_teaser || sc.save_offer || sc.watch_offer || _isFailureEnvelope(result)) return result;
+    const c = getCtx() || {};
+    if (_isRelayWall(sc, c)) return result;
+    if (_isCleanPlatform() || isBotOrInternalCtx(c) || _isQaCaller(c)) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (result.content.some((b) => b && typeof b.text === 'string' && b.text.includes(_WATCH_LINE_MARKER))) return result;
+    const offer = _watchLineCopy(name, !!c.email);
+    return { ...result, content: [...result.content, { type: 'text', text: offer.text }],
+             structuredContent: { ...sc, watch_offer: { when: 'only_if_your_human_wants_updates', steps: offer.steps,
+               alt: 'register_standing_intent', requires: 'an email your human gives explicitly', purpose: offer.purpose } } };
+  } catch (_) { return result; }   // an offer is never worth failing a response over
+}
+
 // Owner 2026-10-14: the compare_sites and get_composite_site_score walls carry no required_plan
 // (agent walls name no plan or price, be#6703). It is removed LAST, after every step in the
 // callback chain has read it (_stampProWall and _relayContractStep key on
@@ -23348,8 +23388,9 @@ export async function _cleanPlatformWallLineStep(result, name) {
 // but _flagUpstreamError, so no earlier stamp rewrites it. Kill switch DCHUB_GATED_PREVIEW=0.
 export function _gatedPreviewStep(result, name) {
   // Last read of required_plan in the chain: drop it for the two walls the owner named (2026-10-14).
-  return _wallNoPlanFieldStep(_powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
-    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name), name);
+  // Watch line (DCHUB_WATCH_LINE_V1): full analyze_site / find_sites answers only; inside _flagUpstreamError.
+  return _watchLineStep(_wallNoPlanFieldStep(_powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
+    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name), name), name);
 }
 
 // The power band's plain-words reading (lib/gated-preview.mjs powerBandLineStep), added to the
