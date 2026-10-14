@@ -95,7 +95,7 @@ In `config.json` under `experimental.modelContextProtocolServers`:
 
 ## Optional: API key (higher limits)
 
-The free tier: Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan. To raise limits, get a free key
+The free tier: Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan. analyze_site: a free key gets a few free full site reports each month; after that, previews. To raise limits, get a free key
 (email signup, ~60 seconds) at https://dchub.cloud/signup, then add an
 `X-API-Key` header. Example for Cline:
 

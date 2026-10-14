@@ -81,6 +81,7 @@ export function buildSlots({ count, facts, phrases, tier }) {
     facility_prose: fc.prose,
     facility_pending: pending[0],
     free_tier_rule: tier.freeTierRule,
+    analyze_site_free: tier.analyzeSiteFree,
     free_key_full: String(tier.freeKeyFull),
     identified_calls: String(tier.identifiedCalls),
     pack_usd: String(tier.pack.price_usd),
@@ -128,6 +129,7 @@ export async function loadContext(count, { facts, phrases } = {}) {
     phrases: phrases ?? readJSON('canonical/canon_phrases.json'),
     tier: {
       freeTierRule: tc._freeTierRuleText(),
+      analyzeSiteFree: tc.ANALYZE_SITE_FREE_LINE,
       freeKeyFull: tc._fullAnswersPerToolPerDay('free'),
       identifiedCalls: tc.FREE_TIER.identified_calls_per_day,
       pack: tc.TIER_CANON.credit_pack,
