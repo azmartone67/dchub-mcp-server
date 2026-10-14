@@ -15424,8 +15424,21 @@ const US_ISOS = ['ERCOT', 'PJM', 'MISO', 'CAISO', 'SPP', 'NYISO', 'ISONE'];
 const _US_ISO_SET = new Set(US_ISOS);
 const _INTL_ISOS = new Set(['NGESO', 'NESO', 'AEMO', 'TAIPOWER', 'EIRGRID',
                             'ENTSOE', 'TEPCO', 'KEPCO', 'IESO']);
-const _normIso = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+// NEISO is "New England ISO" with the words reordered. It is ONE edit from NYISO,
+// so before this alias the error path rejected it and then suggested the wrong
+// RTO ("did you mean NYISO"). The backend accepts the spelling (be#7019); fold
+// it here so the MCP path agrees. Only this reordering is aliased — every other
+// spelling already normalises to a valid code by stripping punctuation.
+const _ISO_REORDERED = { NEISO: 'ISONE' };
+const _isoKey = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const _normIso = v => { const n = _isoKey(v); return _ISO_REORDERED[n] || n; };
 const _isoValid = v => _US_ISO_SET.has(_normIso(v));
+// Handlers forward `a.iso` upstream unchanged, so rewrite the alias to the
+// documented code before the call. A non-alias value is returned untouched.
+export const _foldIsoArg = a => {
+  const f = a && a.iso != null && _ISO_REORDERED[_isoKey(a.iso)];
+  return f ? { ...a, iso: f } : a;
+};
 // Levenshtein edit distance (tiny, allocation-light) — only used on short ISO
 // strings in the (already failed) error path, so cost is negligible.
 function _editDistance(a, b) {
@@ -26595,6 +26608,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     { iso: S.describe('ISO/RTO grid region to drill into: ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE; omit for the all-ISO snapshot') },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_interconnection_queue');
+      a = _foldIsoArg(a);
       const data = await _withLargeLoad(
         await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a), a.iso);
       // r-structured (2026-06-19): structuredContent so agent clients get the
@@ -26617,6 +26631,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       limit: LIMIT },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_refined_queue');
+      a = _foldIsoArg(a);
       const data = await callAPI('/api/v1/interconnection-queue/refined', a);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       // r-error-envelope (2026-07-12, Gemini error_version:1): when the backend
@@ -27263,6 +27278,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       period: S.describe('Optional time window for the metric, e.g. 24h') },
     async (a) => {
       if (a.iso && !_isoValid(a.iso)) return _isoError(a.iso, 'get_grid_data');
+      a = _foldIsoArg(a);
       // 2026-06-07 (Devin QA): /api/v1/grid/status has no iso-aware handler, so it
       // returned the same default (CO, lat 39.74) for EVERY iso. Repoint to the real
       // iso-aware endpoint /api/v1/grid/intelligence/<iso> (path param). Keep
