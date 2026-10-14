@@ -22,7 +22,7 @@ import { packBundle, bundleDrift } from './dxt-bundle.mjs';
 import { versionFence, nextPatch } from './server-json-baseline.mjs';
 import { registryRemotes } from '../lib/registry-remotes.mjs';
 import { renderAll, loadContext, liveCompare, SMITHERY_DESC_RX } from './registry-description.mjs';
-import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, SKILL_SOURCE, SKILL_TARGETS, healSkillCount, renderSkill, skillProblems, CONTEXT7_PATH } from './listing-canon.mjs';
+import { LISTING_PATH, listingProblems, renderContext7, context7Problems, withSubmissionHeader, SUBMISSION_HEADER, countClaimProblems, healListingCount, healCountClaims, COUNT_CLAIM_FILES, SKILL_SOURCE, SKILL_TARGETS, healSkillCount, renderSkill, skillProblems, CONTEXT7_PATH } from './listing-canon.mjs';
 import { judgeCount, describeVerdict, ghWarning, facilityCountFrozen, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1329,7 +1329,7 @@ if (facts) {
     const cur = (() => { try { return readCur(CONTEXT7_PATH); } catch { return null; } })();
     const c7 = context7Problems(cur, L);
     if (c7.length) { if (FIX) pend(CONTEXT7_PATH, renderContext7(L)); else c7.forEach((b) => problems.push(b)); }
-    for (const f of ['gemini-extension.json', '.cursor-plugin/plugin.json', 'dxt/manifest.json', 'kiro-power/plugin.json']) {
+    for (const f of COUNT_CLAIM_FILES) {   // manifests, then the public docs that state the served count (scripts/listing-canon.mjs)
       let t; try { t = readCur(f); } catch { problems.push(`${f}: unreadable`); continue; }
       if (FIX && countClaimProblems(f, t, L.tool_count).length) { t = healCountClaims(t, L.tool_count); pend(f, t); }
       countClaimProblems(f, t, L.tool_count).forEach((b) => problems.push(b));

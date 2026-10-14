@@ -8,12 +8,12 @@ real pilots).
 ## A. Registries — self-serve, do today (~1 hour)
 | Target | Exact action | Link |
 |---|---|---|
-| **Glama** | find DC Hub, sign in as `azmartone67`, **Claim + Refresh** (turns the bot's guess into a verified 70-tool listing) | [glama.ai](https://glama.ai/) → search "dchub" |
+| **Glama** | find DC Hub, sign in as `azmartone67`, **Claim + Refresh** (turns the bot's guess into a verified 94-tool listing) | [glama.ai](https://glama.ai/) → search "dchub" |
 | **mcp.so** | Submit form — name, one-line desc, **94 tools**, transport=Streamable HTTP, repo, homepage `dchub.cloud`, icon | [mcp.so](https://mcp.so/) (Submit) |
 | **awesome-mcp-servers** | fork → add DC Hub under a category → open PR | [github.com/punkpeye/awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) |
 | **MCP.Directory** | Submit form | [mcp.directory/submit](https://mcp.directory/submit) |
 | **PulseMCP** | auto-crawls; find + claim if a claim flow exists | pulsemcp.com |
-| **Official Registry / Smithery** | already listed — just confirm they show **70** | registry.modelcontextprotocol.io · smithery.ai |
+| **Official Registry / Smithery** | already listed — just confirm they show **94** | registry.modelcontextprotocol.io · smithery.ai |
 
 Metadata to paste everywhere (prepare once): **name** DC Hub · **desc** "Authoritative
 data-center & power infrastructure intelligence — 94 MCP tools, provenance +

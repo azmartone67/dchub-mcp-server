@@ -19,13 +19,13 @@ unknowns = safe for institutional diligence.** That's the wedge no general tool 
 ---
 
 ## Tier A — Registries / catalogs (submit; fast, one-time)
-Prepare the metadata once (name, description, URL, 70-tool count, repo, categories:
+Prepare the metadata once (name, description, URL, 94-tool count, repo, categories:
 `data-center, energy, grid, real-estate, infrastructure, finance`).
 
 | Target | Why | How | Status |
 |---|---|---|---|
 | **Official MCP Registry** | canonical discovery source | auto-published via `daily-manifest-sync.yml` | ✅ live — verify at [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/) |
-| **Smithery** | your main external client today | auto re-crawl | ✅ live — confirm 70 |
+| **Smithery** | your main external client today | auto re-crawl | ✅ live — confirm 94 |
 | **Glama** | high-traffic dev directory | **click Refresh** signed in as owner | 🔴 stale (was 33) — 1 click |
 | **mcp.so** | largest public directory (~20k servers) | submit form | ⬜ submit |
 | **awesome-mcp-servers** (punkpeye) | the canonical GitHub list devs grep | open a PR/issue with your entry | ⬜ submit |
@@ -69,7 +69,7 @@ pack (`docs/pilot-pack.md`) with each.
 
 **Pitch (gateways):** lead with governance + trust — *"authoritative federal/
 institutional sources, provenance on every response, explicit unknowns instead of
-hallucinated fields. Safe to route into a decision. Zero-install remote HTTP, 70
+hallucinated fields. Safe to route into a decision. Zero-install remote HTTP, 94
 tools, one-hour pilot pack with acceptance criteria."*
 
 ## Tier D — Vertical fit (the highest-conversion angle)
