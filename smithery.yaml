@@ -202,7 +202,7 @@ pricing:
   anonymous: "Previews, no key or signup needed"
   free: "Free key (call claim_free_key — no email) — previews plus 2 full answers per tool per day; every tool callable, most as previews; grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan; analyze_site: a free key gets a few free full site reports each month; after that, previews"
   identified: "Add an email (bind_email) — 50 calls/day, up to 10 full answers per tool per day"
-  developer: "500 calls/day; full results on all tools except 7 Pro tools (10 full grid/fiber answers/day, previews of site analysis) — see https://dchub.cloud/pricing"
+  developer: "500 calls/day; full results on every tool except the tools in gated_tools — see https://dchub.cloud/pricing"
   pro: "2,000 calls/day + Pro tools, bulk export, historical data — see https://dchub.cloud/pricing"
   enterprise: "Dedicated support, SLAs, 100,000+ calls/day — see https://dchub.cloud/pricing"
 
