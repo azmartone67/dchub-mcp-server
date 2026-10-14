@@ -50,21 +50,18 @@ describe('Land & Power descriptions match the keyless wall', () => {
 
   // analyze_site left this list when B2 (#707) opened its keyless headline;
   // test/b2-analyze-site-keyless-headline.test.mjs owns its copy now. D6
-  // (owner 17:05Z): compare_sites keeps the keyless wall.
+  // (owner 17:05Z) kept compare_sites walled; the owner reversed that for compare_sites on 2026-10-13.
   for (const name of ['compare_sites']) {
     it(`${name}: no keyless data claim while keyless is walled`, async () => {
       expect(S.LP_TOOLS.has(name)).toBe(true);
       const keyless = await S._lpAccessFor({}, 'anonymous');
       const d = descOf(name);
       expect(d.length, `${name} missing from tools/list`).toBeGreaterThan(50);
-      if (keyless === 'wall') {
-        // compare_sites stays walled (D6 remainder, owner 17:05Z: no keyless
-        // headline). If it ever opens one, the else branch makes the copy move too.
-        expect(d, `${name} promises keyless data the wall withholds`).not.toMatch(KEYLESS_CLAIM);
-        expect(d).toContain('Keyless returns no site data');
-      } else {
-        expect(d).not.toContain('Keyless returns no site data');
-      }
+      // Owner 2026-10-13 reversed D6 for compare_sites: the wall serves each site's verdict band and
+      // power band keyless (DCHUB_COMPARE_KEYLESS_PREVIEW, default on), so the copy says exactly that.
+      expect(keyless).toBe('wall');
+      expect(d).not.toContain('Keyless returns no site data');
+      expect(d).toContain("Keyless returns each site's verdict band and power band, with the other factors named");
       expect(d).toMatch(/scores and figures need a paid DC Hub plan/);   // v14: no plan name
       expect(d).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     });
@@ -74,6 +71,7 @@ describe('Land & Power descriptions match the keyless wall', () => {
     expect('Scores need Pro: a free key gets verdict bands and factor names, keyless at most the verdict band and weakest factor.')
       .not.toMatch(/Keyless returns no site data/);
     expect("keyless gets at most each site's band.").toMatch(KEYLESS_CLAIM);
+    expect("Keyless returns each site's verdict band and power band").toMatch(KEYLESS_CLAIM);
     expect('Keyless returns no site data; a free key returns verdict bands').not.toMatch(KEYLESS_CLAIM);
   });
 });
@@ -90,7 +88,7 @@ describe('approved wording (spec A3)', () => {
   it('no new copy carries a price or an em dash', () => {
     for (const n of ['compare_sites', 'get_grid_intelligence', 'get_market_dcpi_rank']) {
       const d = descOf(n);
-      for (const s of ['Keyless returns no site data', 'With a free key, a few full briefs', 'Verdict and composite score are free']) {
+      for (const s of ['Keyless returns no site data', 'Keyless returns each site', 'With a free key, a few full briefs', 'Verdict and composite score are free']) {
         const i = d.indexOf(s);
         if (i < 0) continue;
         const sent = d.slice(i, d.indexOf('.', i) + 1);

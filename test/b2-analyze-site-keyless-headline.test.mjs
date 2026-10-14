@@ -8,7 +8,9 @@
 // A key below Pro: the Land & Power preview plus factor bands and
 // nearest_substations as distance band + kV band (no name, HIFLD id, exact kV
 // or exact distance; P0-1 rule), with test_sub_* fixture rows dropped (P0-2).
-// compare_sites and the other Land & Power tools are untouched (D6 remainder: NO).
+// get_composite_site_score and the other Land & Power tools are untouched (D6 remainder: NO).
+// compare_sites alone was reversed by the owner on 2026-10-13: keyless gets each site's verdict
+// band and power band (the describe block 'compare_sites keyless preview' below).
 // The analyze_site description says exactly this (flips A3's "Keyless returns
 // no site data" assertion).
 //
@@ -66,7 +68,12 @@ beforeAll(async () => {
     const url = String(input && input.url ? input.url : input);
     let p = ''; try { p = new URL(url).pathname; } catch { /* not a URL */ }
     backendPaths.push(p);
-    if (p === '/api/site-score') return json(SITE_SCORE);
+    if (p === '/api/site-score') {
+      // A second, weaker site so a comparison has two different verdicts.
+      if (/[?&]lat=33\.45/.test(url)) return json({ ...SITE_SCORE, overall_score: 52.1,
+        scores: { ...SITE_SCORE.scores, power_infrastructure: 40.2, market_conditions: 33.3 } });
+      return json(SITE_SCORE);
+    }
             if (p.startsWith('/api/v1/mcp/credits/balance'))
       return json({ credits, had_pack: credits > 0, lp_grandfathered: grandfathered });
     if (p.startsWith('/api/v1/mcp/credits/burn')) {
@@ -157,13 +164,68 @@ describe('B2 keyless analyze_site: verdict band, weakest factor, counts', () => 
     } finally { delete process.env.DCHUB_B2_SITE_HEADLINE; }
   });
 
-  it('D6 remainder: compare_sites keyless stays the plain wall', async () => {
-    const r = await call('compare_sites', { sites: [{ lat: 39.04, lon: -77.48 }, { lat: 33.45, lon: -112.07 }] }, seat('free'))
-      .catch(() => null);
-    if (r) {
-      expect(r.structuredContent.site_verdicts).toBeUndefined();
-      expect(r.structuredContent.site_counts).toBeUndefined();
-    }
+  it('D6 remainder: get_composite_site_score keyless stays the plain wall', async () => {
+    const r = await call('get_composite_site_score', { lat: 39.04, lon: -77.48 }, seat('free'));
+    const sc = r.structuredContent;
+    expect(sc.error).toBe('pro_required');
+    expect(sc.site_teaser).toBeUndefined();
+    expect(sc.site_verdicts).toBeUndefined();
+    expect(textOf(r)).not.toMatch(/\b(BUILD|CAUTION|AVOID)\b/);
+  });
+});
+
+describe('compare_sites keyless preview (owner 2026-10-13, reverses D6 for compare_sites only)', () => {
+  const SITES = { locations: '39.04,-77.48;33.45,-112.07', capacity_mw: 100 };
+  it('keyless: per-site verdict band + power band, the rest named as locked, no pick, no figure', async () => {
+    const r = await call('compare_sites', SITES, seat('free'));
+    const sc = r.structuredContent;
+    expect(sc.error).toBe('pro_required');           // still a wall: gated, upgrade path intact
+    expect(sc._gated).toBe(true);
+    expect(sc.site_teaser.sites).toEqual([
+      { site: 1, verdict: 'BUILD', power_infrastructure: 'BUILD' },
+      { site: 2, verdict: 'CAUTION', power_infrastructure: 'AVOID' },
+    ]);
+    expect(sc.site_teaser.locked).toEqual(expect.arrayContaining(['overall_score', 'recommended_pick']));
+    expect(sc.next_tool).toBe('claim_free_key');
+    expect(sc.message).toMatch(/returns each site.s verdict band and power band/);
+    expect(sc.message).not.toMatch(/returns no data/);
+    expect(sc.winner).toBeUndefined();
+    expect(sc.decision_rationale).toBeUndefined();
+    const a = all(r);
+    for (const f of [...SCORES, '52.1', '40.2', '33.3']) expect(a).not.toContain(f);
+    expect(a).not.toMatch(/HOLCOMBE|WESTRIDGE|WESTWING|107655|test_sub_|site_counts|"winner"|"scores"|"overall_score":/);
+    expect(textOf(r)).toContain('Comparison teaser: site 1 verdict BUILD');
+    expect(textOf(r)).not.toMatch(/\b(Developer|Starter)\b/);
+    expect(textOf(r)).not.toMatch(/\$\s?\d/);                     // wall copy names no price
+  });
+
+  it('a site with no usable score is not rated, never CAUTION', async () => {
+    const T = S._compareSitesTeaser({ sites: [{ overall_score: 83.7, scores: {} }, { error: 'boom' }] });
+    expect(T.sites).toEqual([{ site: 1, verdict: 'BUILD', power_infrastructure: null },
+      { site: 2, verdict: null, power_infrastructure: null }]);
+    expect(S._compareSitesTeaser({ sites: [{ error: 'a' }, { error: 'b' }] })).toBeNull();
+    expect(S._compareSitesTeaser({ success: false, sites: [] })).toBeNull();
+  });
+
+  it('kill switch DCHUB_COMPARE_KEYLESS_PREVIEW=0: the plain wall again, description follows', async () => {
+    process.env.DCHUB_COMPARE_KEYLESS_PREVIEW = '0';
+    try {
+      const r = await call('compare_sites', SITES, seat('free'));
+      expect(r.structuredContent.error).toBe('pro_required');
+      expect(r.structuredContent.site_teaser).toBeUndefined();
+      expect(r.structuredContent.message).toMatch(/returns no data/);
+      expect(S._descFollowsSwitches('compare_sites', S.COMPARE_SITES_ACCESS_PREVIEW))
+        .toBe(S.COMPARE_SITES_ACCESS_WALLED);
+    } finally { delete process.env.DCHUB_COMPARE_KEYLESS_PREVIEW; }
+  });
+
+  it('a free key keeps its preview: verdict bands, scores and pick null, no keyless teaser block', async () => {
+    const r = await call('compare_sites', SITES, seat('free', 'dch_live_cmp_free_fixture'));
+    const sc = r.structuredContent;
+    expect(sc._preview_only).toBe(true);
+    expect(sc.winner).toBeNull();
+    expect(sc.site_teaser).toBeUndefined();
+    for (const f of ['83.7', '88.1', '52.1', '40.2']) expect(all(r)).not.toContain(f);
   });
 });
 
