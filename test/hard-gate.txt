@@ -156,6 +156,7 @@ test/gated-tool-cta.test.mjs
 test/gated-unlock-is-tokenized.test.mjs
 test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
+test/generate-site-analysis-keyless-preview.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
 test/github-description-canon.test.mjs
