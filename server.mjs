@@ -22105,10 +22105,15 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
 export const _WALL_NO_PLAN_FIELD_TOOLS = new Set(['compare_sites', 'get_composite_site_score']);
 export function _wallNoPlanFieldStep(result, name) {
   try {
-    if (!_WALL_NO_PLAN_FIELD_TOOLS.has(name) || !result || typeof result !== 'object') return result;
+    if (!result || typeof result !== 'object') return result;
+    const named = _WALL_NO_PLAN_FIELD_TOOLS.has(name);
     const sc = result.structuredContent;
+    // Owner 2026-10-14: the 401/402/403 guidance from _authWallGuidance (any tool) carries no
+    // required_plan either. _isRelayWall reads it (402 'pro' => relay link), so it is stripped here, last.
+    const isAuthGuidance = (o) => typeof o.error === 'string' && _AUTH_WALL_RE.test(o.error)
+      && typeof o.next_tool === 'string' && 'tier_required' in o && typeof o.message === 'string';
     const isWall = (o) => !!o && typeof o === 'object' && !Array.isArray(o) && 'required_plan' in o
-      && (o._wall === true || o.error === 'pro_required');
+      && ((named && (o._wall === true || o.error === 'pro_required')) || isAuthGuidance(o));
     let out = result;
     if (isWall(sc)) {
       const { required_plan: _drop, ...rest } = sc;
@@ -23113,6 +23118,8 @@ const _AUTH_WALL_RE = /^API 40[123]$/;
 const _GATED_ENVELOPE_KEYS = ['next_tool', 'next_steps', '_upgrade', 'upgrade', '_wall', 'wall',
   'required_plan', 'tier_required', 'unlock', 'for_your_human'];
 const _PLAN_FOR_TIER = { pro: 'pro', developer_for_full: 'developer', email: 'identified', free_key: 'free' };
+// NOTE: required_plan is built here only so _isRelayWall (inside _relayContractStep) keeps treating a
+// paid 402/403 as a wall; _wallNoPlanFieldStep strips it from the response last (owner 2026-10-14).
 export function _authWallGuidance(toolName, status, detail, keyed) {
   const tierRequired = _tierRequiredFor(toolName);
   const d = String(detail || '').toLowerCase();
