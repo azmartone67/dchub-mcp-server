@@ -169,7 +169,7 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
       expect(sc.copy_version).toBe('v15');
       return;
     }
-    expect(sc.required_plan).toBe('pro');
+    expect(sc.required_plan).toBeUndefined();   // owner 2026-10-14: no plan field on the wall
     expect(sc._wall).toBe(true);
     // Keyless: the /u/ short link the stub minted. Free key, or the short link switched off: the
     // signed /upgrade/h relay page (one-link wall below Developer, Grok audit 2026-10-08 item 1).

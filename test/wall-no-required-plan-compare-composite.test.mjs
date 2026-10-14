@@ -27,9 +27,10 @@ describe('walls carry no required_plan', () => {
     const r = { content: [{ type: 'text', text: '{"a":1}' }], structuredContent: { a: 1, required_plan: 'free' } };
     expect(_wallNoPlanFieldStep(r, 'compare_sites').structuredContent.required_plan).toBe('free');
   });
-  it('other Pro-only tools keep it', () => {
+  it('other Pro-only tools lose it too (owner 2026-10-14, analyze_site and Pro walls)', () => {
     const result = _wallNoPlanFieldStep(wall(), 'analyze_site');
-    expect(result.structuredContent.required_plan).toBe('pro');
+    expect('required_plan' in result.structuredContent).toBe(false);
+    expect(result.structuredContent._wall).toBe(true);
     expect(_WALL_NO_PLAN_FIELD_TOOLS.size).toBe(2);
   });
 });

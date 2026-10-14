@@ -65,6 +65,7 @@ test/chatgpt-taste-and-cap-coaching-836-838.test.mjs
 test/chatgpt-toolset-frozen.test.mjs
 test/ci-selftag.test.mjs
 test/citation-shape-contract.test.mjs
+test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
@@ -84,6 +85,7 @@ test/cm4-substation-pro-only.test.mjs
 test/compare-isos-source-composed.test.mjs
 test/comparison-symmetry.test.mjs
 test/composed-provenance-caveats.test.mjs
+test/composite-keyless-preview.test.mjs
 test/composite-shell.test.mjs
 test/connect-query-key-reaches-track.test.mjs
 test/connect-url-install-artifact.test.mjs
@@ -157,6 +159,7 @@ test/gating-numeric-locked-count.test.mjs
 test/gating.test.mjs
 test/generic-clientinfo-attribution.test.mjs
 test/geography-arg-parity.test.mjs
+test/get-iso-context-locked-sections-schema.test.mjs
 test/github-description-canon.test.mjs
 test/github-description-push-behaviour.test.mjs
 test/github-release-per-version.test.mjs
@@ -424,6 +427,7 @@ test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-exits.test.mjs
+test/wall-no-required-plan-all-tools.test.mjs
 test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs
 test/wall-transport.test.mjs

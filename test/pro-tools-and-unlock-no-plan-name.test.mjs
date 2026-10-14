@@ -208,7 +208,7 @@ describe.each(CASES.map((c) => [label(c), c]))('%s', (_name, c) => {
       if (!c.mpp) expect(sc.machine_pay).toBeUndefined();
     } else {
       // A wall or preview marker, and the link the agent is told to relay.
-      expect(all).toMatch(/"required_plan":"pro"|"_gated":true|"_wall":true|"_preview_only":true|"preview_is_partial":true|"_upgrade":\{|"error":"paid_only"/);
+      expect(all).toMatch(/"required_plan":"pro"|"_gated":true|"_wall":true|"_preview_only":true|"preview_is_partial":true|"_upgrade":\{|"error":"paid_only"|"error":"API 40[23]"/);   // auth guidance carries no required_plan (owner 2026-10-14)
       expect(all).toMatch(/https:\/\/dchub\.cloud\/(u|upgrade\/h|go\/c)\//);
     }
   });
