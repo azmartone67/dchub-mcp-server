@@ -9460,6 +9460,41 @@ export function _withCompositeTeaser(result, teaser) {
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
   return { ...result, content, structuredContent: sc };
 }
+// ── generate_site_analysis keyless preview (owner 2026-10-14, after the composite one) ───────
+// A keyless call gets the verdict band and the power band from the cheap score call (/api/site-score,
+// analyze_site's own read), NOT from the premium report handler: that builds a report and a signed PDF
+// link. No score, figure, report or link beyond the wall's own. Kill switch:
+// DCHUB_REPORT_KEYLESS_PREVIEW=0 restores the plain wall (set on BOTH Railway services).
+export function _reportKeylessPreviewOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_REPORT_KEYLESS_PREVIEW || ''));
+}
+export const REPORT_TEASER_LOCKED = [...SITE_TEASER_LOCKED, 'shareable_report'];
+export const REPORT_TEASER_NOTE = 'Scores, the other factor bands and the shareable Site Analysis report come with a paid plan.';
+export function _reportTeaser(parsed) {
+  const t = _siteTeaser(parsed);
+  return t ? { verdict: t.verdict, power_infrastructure: t.power_infrastructure,
+    locked: [...REPORT_TEASER_LOCKED], note: REPORT_TEASER_NOTE } : null;
+}
+export const REPORT_KEYLESS_MESSAGE = 'Without a key, `generate_site_analysis` returns the verdict band and the power band; '
+  + 'the shareable report, scores and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + 'The report and figures need a paid DC Hub plan.';
+export function _reportTeaserLine(t) {
+  if (!t) return '';
+  return 'Report teaser: verdict ' + (t.verdict || 'not rated') + '; power infrastructure '
+    + (t.power_infrastructure || 'not rated')
+    + '. Locked: overall score, fiber connectivity, gas pipeline access, market conditions, risk and resilience, the shareable report. '
+    + t.note;
+}
+export function _withReportTeaser(result, teaser) {
+  if (!teaser || !result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+  const fix = (v) => (typeof v === 'string' ? v.replace(' No data without a key.', '') : v);
+  const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
+  content.push({ type: 'text', text: [_reportTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
+  const sc = { ...(result.structuredContent || {}), message: REPORT_KEYLESS_MESSAGE,
+    site_teaser: teaser, next_tool: 'claim_free_key',
+    free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
+  return { ...result, content, structuredContent: sc };
+}
 // The keyed branches: the teaser from the handler's raw answer, analyze_site only, switch on.
 export function _withLpSiteTeaser(name, result, raw) {
   if (name !== 'analyze_site' || !_siteEmailUnlockOn()) return result;
@@ -20149,6 +20184,18 @@ function trackedTool(srv, name, description, schema, handler) {
               }
             } catch (_) { _hl = null; }
           }
+          let _gsaTeaser = null;
+          if (name === 'generate_site_analysis' && _reportKeylessPreviewOn()
+              && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+            try {
+              const { lat: _gl, lon: _go } = _extractCoordArgs(args || {});
+              if (Number.isFinite(_gl) && Number.isFinite(_go)) {
+                const _sc = await callAPI('/api/site-score', { lat: _gl, lon: _go,
+                  ...(args && args.capacity_mw ? { capacity_mw: args.capacity_mw } : {}) });
+                _gsaTeaser = _reportTeaser(_sc);
+              }
+            } catch (_) { _gsaTeaser = null; }
+          }
           if (_emailOn) {
             const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser, { keyLink: _keyLink });
             if (_ew && _keyLink) _storeSiteClaimRequest(c, _ew.structuredContent && _ew.structuredContent.request_id, args, _siteLoc);
@@ -20156,6 +20203,7 @@ function trackedTool(srv, name, description, schema, handler) {
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
           if (_cmpoTeaser) return _withCompositeTeaser(await _lpWallResultV11(name, _hl), _cmpoTeaser);
+          if (_gsaTeaser) return _withReportTeaser(await _lpWallResultV11(name, _hl), _gsaTeaser);
           if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);
           return await _lpWallResultV11(name, _hl);
         }
