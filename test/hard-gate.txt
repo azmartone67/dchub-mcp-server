@@ -70,6 +70,7 @@ test/cite-as-record-vintage.test.mjs
 test/cite-as-unmeasured-provenance.test.mjs
 test/claim-client-name-matches-rest-canon.test.mjs
 test/claim-gate-refuses-crawlers.test.mjs
+test/claim-handoff-keyless-walls.test.mjs
 test/claude-arrival-counter.test.mjs
 test/claude-challenge-method.test.mjs
 test/claude-desktop-install-is-stdio.test.mjs
