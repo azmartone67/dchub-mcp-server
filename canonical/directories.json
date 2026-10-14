@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-13T17:45:00Z",
+  "updated_at": "2026-10-14T17:25:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -216,8 +216,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-12",
-      "note": "PR #85 merged 2026-10-12; DC Hub under Cloud, ops & data (README L235) confirmed 2026-10-12 16:28 PT"
+      "verified_at": "2026-10-14",
+      "note": "PR #85 merged 2026-10-12; entry refreshed by PR #205 (merged 2026-10-14, 94 tools); DC Hub under Cloud, ops & data (README L247) confirmed 2026-10-14 10:23 PT"
     },
     {
       "id": "sparkgeo",
@@ -240,6 +240,17 @@
       "logo_url": null,
       "verified_at": "2026-10-13",
       "note": "PR #187 merged 2026-10-12 18:35 PT; DC Hub row in Integrations & APIs (README L273) confirmed 2026-10-13 10:41 PT"
+    },
+    {
+      "id": "abordage",
+      "name": "abordage awesome-mcp",
+      "status": "unverified",
+      "listing_url": "https://github.com/abordage/awesome-mcp#data-apis",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-14",
+      "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README (auto-update a662260, 2026-10-14 02:10 PT) does not show DC Hub as of 10:23 PT; the README appears to filter entries. Flip to live once DC Hub appears on the page"
     },
     {
       "id": "docker",
