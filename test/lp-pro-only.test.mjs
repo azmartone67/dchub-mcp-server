@@ -218,7 +218,9 @@ describe.each(Object.keys(CASES))('%s is Land & Power: Pro only', (tool) => {
     if (_cmp) expect(sc.site_teaser.sites.length).toBeGreaterThan(0);
     // get_composite_site_score (owner 2026-10-14): the same, once: verdict band + power band in
     // site_teaser (test/composite-keyless-preview.test.mjs). Kill switch DCHUB_COMPOSITE_KEYLESS_PREVIEW=0.
-    const _cmpo = tool === 'get_composite_site_score';
+    // generate_site_analysis (owner 2026-10-14): same shape, from the cheap score call
+    // (test/generate-site-analysis-keyless-preview.test.mjs); no report link, no figure.
+    const _cmpo = tool === 'get_composite_site_score' || tool === 'generate_site_analysis';
     if (_cmpo) expect(sc.site_teaser.verdict).toBeTruthy();
     for (const f of [...K.figures, 'Excellent site', ...(_cmp || _cmpo ? [] : ['BUILD']), 'Amazon.com', 'validated']) {
       expect(text).not.toContain(f);
