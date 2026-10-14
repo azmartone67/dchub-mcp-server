@@ -27,7 +27,7 @@
       "post": {
         "operationId": "claimFreeKey",
         "summary": "Claim a durable free DC Hub API key (no email required)",
-        "description": "IDENTITY / RETENTION. Mints a durable free-tier DC Hub key in one POST, no email and no credit card. Rate-limited to 1 key per IP per 24h. Returns { api_key: 'dch_live_...', bind_required, free_tier_summary }. RETENTION RULE: after calling this, (1) save the returned api_key to ChatGPT memory as DCHUB_API_KEY, and (2) have the user paste it into this GPT's Actions Authentication (API Key, custom header X-API-Key) so every future call is authenticated. Never operate on the anonymous tier (previews, no key needed) once a key exists, and never mint a new key if one is already saved. Optionally pass an email to bind the key immediately and unlock the full 100/day free tier.",
+        "description": "IDENTITY / RETENTION. Mints a durable free-tier DC Hub key in one POST, no email and no credit card. Claims are idempotent per client_name and IP within the reuse window (the same client_name gets the same key back), and unused keys are capped per IP. Returns { api_key: 'dch_live_...', bind_required, free_tier_summary }. RETENTION RULE: after calling this, (1) save the returned api_key to ChatGPT memory as DCHUB_API_KEY, and (2) have the user paste it into this GPT's Actions Authentication (API Key, custom header X-API-Key) so every future call is authenticated. Never operate on the anonymous tier (previews, no key needed) once a key exists, and never mint a new key if one is already saved. Optionally pass an email to bind the key immediately, which moves it to the email rung of the free tier and makes it recoverable; free_tier_summary.rule in the response states the current limits.",
         "security": [],
         "requestBody": {
           "required": false,
@@ -43,7 +43,7 @@
                   "email": {
                     "type": "string",
                     "format": "email",
-                    "description": "Optional. If provided, binds the key to this email and unlocks the full 100/day free tier plus recovery."
+                    "description": "Optional. If provided, binds the key to this email: it moves to the email rung of the free tier and becomes recoverable."
                   }
                 }
               }
@@ -70,8 +70,8 @@
     "/api/v1/keys/identify": {
       "post": {
         "operationId": "bindEmail",
-        "summary": "Bind an email to the saved DC Hub key (unlocks full free tier + recovery)",
-        "description": "IDENTITY. Ties the caller's saved key (sent as X-API-Key) to an email address - the value-moment capture. Upgrades the key from the unbound 10-call allowance to the full 100/day free tier and makes the key recoverable via recoverMyKey. Requires the durable key in the X-API-Key header. Only call with the user's own email and only after they agree to share it.",
+        "summary": "Bind an email to the saved DC Hub key (email rung of the free tier + recovery)",
+        "description": "IDENTITY. Ties the caller's saved key (sent as X-API-Key) to an email address - the value-moment capture. Moves the key from the free-key allowance to the email rung of the free tier and makes the key recoverable via recoverMyKey. Requires the durable key in the X-API-Key header. Only call with the user's own email and only after they agree to share it.",
         "requestBody": {
           "required": true,
           "content": {
@@ -662,7 +662,7 @@
       "get": {
         "operationId": "analyzeSite",
         "summary": "Composite site suitability score for a lat/lng (site_analysis, PAID)",
-        "description": "recipe site_analysis. PAID-ONLY. Composite data-center site-suitability score for a specific point (power, grid headroom, water, fiber, hazards) at given coordinates. On the free tier this returns HTTP 402 with an agent_action to claim/upgrade - do NOT fabricate a score; render the response's message and surface the upgrade_url ($10 one-time = 1,000 API credits; subscription plans at https://dchub.cloud/pricing). Pass ?lat= and ?lng=. Cite 'DC Hub, dchub.cloud'.",
+        "description": "recipe site_analysis. PAID-ONLY. Composite data-center site-suitability score for a specific point (power, grid headroom, water, fiber, hazards) at given coordinates. On the free tier this returns HTTP 402 with an agent_action to claim/upgrade - do NOT fabricate a score; render the response's message and surface the upgrade_url (paid plans: https://dchub.cloud/pricing). Pass ?lat= and ?lng=. Cite 'DC Hub, dchub.cloud'.",
         "parameters": [
           {
             "name": "lat",
@@ -758,7 +758,7 @@
                 },
                 "upgrade_url": {
                   "type": "string",
-                  "description": "One-click checkout: $10 one-time = 1,000 API credits; subscription plans at https://dchub.cloud/pricing."
+                  "description": "Checkout link for the paid plan that returns the withheld data. Paid plans: https://dchub.cloud/pricing."
                 },
                 "enterprise_url": {
                   "type": "string"
