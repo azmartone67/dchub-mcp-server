@@ -179,12 +179,13 @@ describe('the detector: must-fail and must-pass controls', () => {
 describe('the "(corroborated count pending)" caveat is retired from this repo (owner decision 2026-10-15)', () => {
   const CAVEAT_RX = /corroborated count pending/i;
   // Files that may still spell it, each for a reason a reader can check:
-  //   canonical/mcp_facts.json       generated mirror of the backend canon API
   //   scripts/canon-floor.mjs        names the retired string so it is never emitted
   //   scripts/refresh-canon-phrases.mjs  comment quoting the API's own `facilities` value
+  // canonical/mcp_facts.json LEFT this list on 2026-10-15 (G-1014-42): the backend
+  // canon API's `facilities_public` / exporter prose no longer carry the caveat, so
+  // the regenerated mirror is clean and the no-dead-entry check below demanded it.
   // test/ is not scanned: fixtures there quote the backend API value on purpose.
   const ALLOWED = new Set([
-    'canonical/mcp_facts.json',
     'scripts/canon-floor.mjs',
     'scripts/refresh-canon-phrases.mjs',
   ]);
