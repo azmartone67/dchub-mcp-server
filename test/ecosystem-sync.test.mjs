@@ -63,7 +63,7 @@ describe('facility floors: every phrasing the live surfaces use reads as one num
 
   it('CONTROL: a surface with no facility number is in sync', () => {
     expect(judge({ read: true, floors: [] }, SSOT)).toEqual({ state: 'in_sync', reasons: [] });
-    expect(judge({ read: true, floors: facilityFloors('a global data-center facility map (corroborated count pending)') }, SSOT))
+    expect(judge({ read: true, floors: facilityFloors('a global data-center facility map') }, SSOT))
       .toEqual({ state: 'in_sync', reasons: [] });
   });
 
@@ -304,7 +304,8 @@ describe('escalation: who needs a person, and when to say so', () => {
   it('the paste line is built from the live source and quotes no banned price', () => {
     const line = pasteLine(SSOT);
     expect(line).toContain('90 MCP tools');
-    expect(line).toContain('a global data-center facility map (corroborated count pending)');
+    expect(line).toContain('a global data-center facility map');
+    expect(line).not.toMatch(/corroborated count pending/i);
     expect(facilityFloors(line)).toEqual([]);
     expect(bannedClaims(line)).toEqual([]);
   });
@@ -517,7 +518,7 @@ describe('Glama <head> card: meta / og / JSON-LD are read, not only the body', (
   const CANON = { tools: 92, facilities: '24,600+', version: '2.12.21' };
   const STALE_CARD = 'AI agents call 92 tools across 22,900+ facilities for land+power, grid and fiber. Pro $99/mo (never $299/Founding).';
   // ★2026-09-27: the clean card carries no facility number (count withdrawn).
-  const CLEAN_CARD = 'AI agents call 92 tools across a global data-center facility map (corroborated count pending) for land+power, grid and fiber. Pro $99/mo.';
+  const CLEAN_CARD = 'AI agents call 92 tools across a global data-center facility map for land+power, grid and fiber. Pro $99/mo.';
   const head = (card) => `<head><meta content="${card}" name="description"/>`
     + `<meta property="og:description" content="${card}"/>`
     + '<script type="application/ld+json">' + JSON.stringify({ '@context': 'https://schema.org', '@graph': [

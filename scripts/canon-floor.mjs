@@ -69,13 +69,29 @@ export const ghWarning = (msg) => `::warning::${String(msg).replace(/\r?\n/g, ' 
 // any public surface until a corroborated "r3" count lands. The wording matches
 // the r2 comparison brief. /api/v1/canon/phrases keeps a numeric `facilities`
 // (plus, from the backend's parallel PR, facilities_count_status:
-// "corroboration_pending"); the generators here emit the pending wording
+// "corroboration_pending"); the generators here emit the count-free wording
 // REGARDLESS of that field, so a numeric canon can never re-publish a number.
+//
+// ★2026-10-15 (G-1014-33, owner): the "(corroborated count pending)" CAVEAT is
+// retired from every listing surface of this repo. The wording is the plain map
+// ("a global data-center facility map"), the same spelling dchub-backend#7066
+// put on /llms.txt, /agents.md and /facilities. The count stays withdrawn; only
+// the caveat text goes. The backend canon API still publishes the caveat in
+// facility_count.public_phrase / .prose (canonical/mcp_facts.json is its
+// generated mirror, so it keeps the clause); every renderer here goes through
+// plainFacilityProse() instead of copying it.
 export const FACILITY_COUNT_DECISION = '2026-09-27';
 export const FACILITY_COUNT_WITHDRAWN_REASON = 'count withdrawn — owner decision 2026-09-27';
-export const FACILITY_MAP_PROSE = 'a global data-center facility map (corroborated count pending)';
+export const FACILITY_MAP_PROSE = 'a global data-center facility map';
 export const FACILITY_MAP_TILE = 'Global facility map';
-export const FACILITY_MAP_CELL = 'Global map; corroborated count pending';
+export const FACILITY_MAP_CELL = 'Global map';
+export const FACILITY_PENDING_CAVEAT_DECISION = '2026-10-15';
+/** The retired caveat, as the backend canon API still spells it. Never emitted. */
+export const FACILITY_PENDING_CAVEAT = '(corroborated count pending)';
+/** `prose` from canonical/mcp_facts.json with the retired caveat removed. */
+export function plainFacilityProse(prose) {
+  return String(prose ?? '').replace(/\s*\(corroborated count pending\)/gi, '').trim();
+}
 // The backend's status value, honoured when present, never required.
 export const FACILITY_COUNT_PENDING_STATUS = 'corroboration_pending';
 

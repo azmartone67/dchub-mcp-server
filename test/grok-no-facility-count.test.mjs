@@ -73,7 +73,7 @@ const LIST = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize',
   params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'grok-count-test', version: '1.0' } } };
 
-describe('/mcp/grok states no facility count (corroborated count pending)', () => {
+describe('/mcp/grok states no facility count and no pending caveat', () => {
   it('CONTROL: the detector catches the live 2026-09-28 wording and its variants', () => {
     for (const bad of [
       'Search 24,900+ data-center facilities in 170+ countries by text query',
@@ -84,9 +84,9 @@ describe('/mcp/grok states no facility count (corroborated count pending)', () =
     ]) expect(facilityCounts(bad), bad).not.toEqual([]);
     // …and does not fire on the counts that sit beside the facility map.
     for (const ok of [
-      'a global data-center facility map (170+ countries; corroborated count pending), 300+ markets',
+      'a global data-center facility map (170+ countries), 300+ markets',
       'per-facility tenants, and 1,600+ tracked M&A deals',
-      "Search DC Hub's global data-center facility map (170+ countries; corroborated count pending)",
+      "Search DC Hub's global data-center facility map (170+ countries)",
     ]) expect(facilityCounts(ok), ok).toEqual([]);
   });
 
@@ -95,7 +95,9 @@ describe('/mcp/grok states no facility count (corroborated count pending)', () =
     expect(tools.length).toBe(11);
     for (const t of tools) expect(facilityCounts(t.description), `${t.name}: ${t.description}`).toEqual([]);
     const sf = tools.find((t) => t.name === 'search_facilities');
-    expect(sf.description).toContain('corroborated count pending');
+    // ★2026-10-15 (G-1014-33): the map, no number, and no "pending" caveat.
+    expect(sf.description).toContain('global data-center facility map');
+    expect(sf.description).not.toMatch(/corroborated count pending/i);
   });
 
   it('the hand-written descriptions carry none either (independent of canon_phrases.json)', () => {

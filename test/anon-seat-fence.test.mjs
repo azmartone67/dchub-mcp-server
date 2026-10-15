@@ -160,9 +160,10 @@ describe('anon-seat fence — published counts match canon', () => {
     .join('\n');
 
   // ★2026-10-02 (mcp#612): the facility COUNT is withdrawn (owner decision
-  // 2026-09-27, "corroborated count pending"), so the facilities rule is no
-  // longer "equals canon" but "none at all" — canon_phrases.json keeps a numeric
-  // `facilities` that no served string may quote.
+  // 2026-09-27), so the facilities rule is no longer "equals canon" but "none at
+  // all" — canon_phrases.json keeps a numeric `facilities` that no served string
+  // may quote. ★2026-10-15 (G-1014-33): and the served wording is the plain map,
+  // with no "pending" caveat.
   const FACILITY_CLAIM = /([\d][\d,]*\+)\s+(?:(?:global\s+)?data.center\s+|discovered\s+)?facilit/gi;
   it('no "+N facilities" claim is served (count withdrawn, corroboration pending)', () => {
     // CONTROL: the regex still recognises every shape the count used to take.
@@ -170,7 +171,8 @@ describe('anon-seat fence — published counts match canon', () => {
       expect([...c.matchAll(FACILITY_CLAIM)].length, c).toBe(1);
     }
     expect([...code.matchAll(FACILITY_CLAIM)].map((m) => m[0])).toEqual([]);
-    expect(code).toMatch(/corroborated count pending/);
+    expect(code).toMatch(/global data-center facility map/);
+    expect(code).not.toMatch(/corroborated count pending/i);
   });
 
   const CLAIMS = [

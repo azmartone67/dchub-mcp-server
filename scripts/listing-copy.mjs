@@ -27,7 +27,7 @@
 //   updated_at  YYYY-MM-DD of the last copy edit
 //
 // COPY RULES (owner-approved 2026-09-28). No field may state:
-//   - a facility count (the count is withdrawn: "corroborated count pending")
+//   - a facility count (the count is withdrawn, owner decision 2026-09-27)
 //   - a monthly price ("$99/mo", "$49 per month", ...)
 //   - "$10 unlocks full answers"
 //   - "seven layers"
@@ -77,7 +77,7 @@ export function copyRuleViolations(text) {
   const s = String(text ?? '');
   const out = [];
   for (const f of findFacilityFloors(s)) {
-    out.push({ rule: 'facility_count', match: f, why: 'no facility count (corroborated count pending)' });
+    out.push({ rule: 'facility_count', match: f, why: 'no facility count (withdrawn, owner decision 2026-09-27)' });
   }
   for (const [rule, rx, why] of COPY_RULES) {
     for (const m of s.matchAll(rx)) out.push({ rule, match: m[0], why });
