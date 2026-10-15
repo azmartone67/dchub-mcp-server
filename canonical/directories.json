@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-14T23:21:51Z",
+  "updated_at": "2026-10-15T17:25:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -273,6 +273,17 @@
       "logo_url": null,
       "verified_at": "2026-10-14",
       "note": "PR #109 merged 2026-10-14; DC Hub in mcps/catalog.json (Research & Data, id dc-hub) confirmed on GitHub blob 2026-10-14 16:20 PT; no separate store page"
+    },
+    {
+      "id": "yzfly-zh",
+      "name": "yzfly Awesome-MCP-ZH",
+      "status": "live",
+      "listing_url": "https://github.com/yzfly/Awesome-MCP-ZH/blob/main/README.md#L884",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-15",
+      "note": "Chinese-language list; entry refreshed by PR #722 (merged 2026-10-15 07:34 PT, 94 tools); DC Hub row under 数据分析、处理与可视化 (README L884) confirmed 2026-10-15 10:22 PT"
     },
     {
       "id": "abordage",
