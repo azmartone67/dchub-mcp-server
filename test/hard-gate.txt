@@ -54,6 +54,7 @@ test/challenge-after-n.test.mjs
 test/challenge-bound-and-widen.test.mjs
 test/challenge-budget-key.test.mjs
 test/challenge-carries-human-line.test.mjs
+test/challenges-same-resource.test.mjs
 test/chatgpt-directory-probe-hard-wall.test.mjs
 test/chatgpt-directory-probe.test.mjs
 test/chatgpt-directory-resubmission.test.mjs

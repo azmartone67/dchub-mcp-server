@@ -31163,11 +31163,16 @@ app.post(MCP_PATHS, async (req, res) => {
     }
     // ── r-invalid-bearer-401 (2026-07-16): present-but-invalid Bearer → 401 ──
     // See _invalidBearerEligible for the full decision table + rationale.
-    // resource_metadata = the RFC 9728 STANDARD path (CF worker dchub-oauth-meta,
-    // authorization_servers fixed 2026-07-15 — verified in agreement with the
-    // Flask /api/v1 doc the Claude-connector challenge above uses, same AS +
-    // same OIDC scopes). error="invalid_token" (RFC 6750 §3.1) tells the
-    // broker to refresh/re-consent rather than treat auth as unconfigured.
+    // resource_metadata = the SAME document the Claude-connector challenge above
+    // uses (the Flask /api/v1 PRM, resource https://dchub.cloud/mcp). 2026-10-15
+    // (Grok G-1014-35): this header used to name the ROOT PRM
+    // /.well-known/oauth-protected-resource, whose resource is https://dchub.cloud,
+    // while the audience enforced above is https://dchub.cloud/mcp. A client that
+    // followed that challenge asked AuthKit for a token for the origin, and the
+    // aud binding then refused it. Both challenges now name one document, and
+    // test/challenges-same-resource.test.mjs pins them equal.
+    // error="invalid_token" (RFC 6750 §3.1) tells the broker to refresh/
+    // re-consent rather than treat auth as unconfigured.
     // Kill switch: DCHUB_INVALID_BEARER_401_DISABLE=1.
     const _invalid401Disabled = /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_INVALID_BEARER_401_DISABLE || ''));
     // r-invalid-bearer-bound: caller-keyed budget, namespaced 'ib:' so it cannot
@@ -31236,7 +31241,7 @@ app.post(MCP_PATHS, async (req, res) => {
         res.set('WWW-Authenticate',
           'Bearer error="invalid_token", '
           + 'error_description="Token is not a valid DC Hub api key or AuthKit access token", '
-          + 'resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
+          + 'resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource"');
         _bumpChallengeIssued(_ibKey);                  // r-invalid-bearer-bound: spend one
         _chBump('invalid_bearer', req.body?.method);   // r-oauth-funnel: Map bump only
         console.log(`[oauth] 401 invalid bearer (${_logId(String(_bearer))}… method=${req.body?.method}) — challenging via resource_metadata`);
