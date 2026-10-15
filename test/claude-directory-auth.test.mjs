@@ -164,7 +164,7 @@ describe('OAuth (AuthKit bearer) on /mcp/claude', () => {
     const other = await jwt(CLAUDE_RESOURCE, { sub: 'user_other' });
     const b = await H.call('/mcp', 'get_market_intel', { market: 'northern-virginia' }, { authorization: `Bearer ${other}` });
     expect(b.status).toBe(401);
-    expect(b.headers.get('www-authenticate')).toContain('resource_metadata="https://dchub.cloud/.well-known/oauth-protected-resource"');
+    expect(b.headers.get('www-authenticate')).toContain('resource_metadata="https://dchub.cloud/api/v1/oauth-protected-resource"');
   });
 
   it('an invalid or expired bearer gets 401 + WWW-Authenticate naming THIS resource\'s metadata', async () => {
