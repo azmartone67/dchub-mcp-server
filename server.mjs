@@ -5376,6 +5376,20 @@ const _PRESENTED_AUTH_SOURCES = new Set(['header', 'bearer', 'query', 'inline_ar
 export function _keyPresentedOnRequest(c) {
   return !!(c && c.api_key && _PRESENTED_AUTH_SOURCES.has(String(c.auth_source || '')));
 }
+// G-1014-42 item 6 (2026-10-15): name the caller behind an internal-platform
+// skip. `hop` is md5 of ctx.client_ip (X-DC-Client-IP, else the FIRST
+// X-Forwarded-For token, else the socket peer), the same value
+// mcp_calls_identity.agent_id is built from, so this log line joins to the
+// identity view and to mcp_tool_calls without printing a new identifier. The UA
+// is cut at 200, not 80: a harness name can sit past the product token.
+export function _internalSkipLine(c, tool_name) {
+  const ip = c && c.client_ip ? String(c.client_ip) : '';
+  const hop = ip ? createHash('md5').update(ip).digest('hex') : '-';
+  return `[auto_mint] skipped internal tool=${tool_name || '-'} `
+    + `client=${JSON.stringify(String((c && c.client_name_raw) || '').slice(0, 60))} `
+    + `ua=${JSON.stringify(String((c && c.user_agent) || '').slice(0, 200))} `
+    + `hop=${hop} ip=${ip || '-'} sid=${String((c && c.session_id) || '').slice(0, 8)}`;
+}
 export async function mintAutoTrial(tool_name) {
   try {
     const c = getCtx();
@@ -5403,10 +5417,7 @@ export async function mintAutoTrial(tool_name) {
     // DCHUB_MINT_SKIP_INTERNAL=0.
     if (c && c.platform === 'dchub-internal'
         && (process.env.DCHUB_MINT_SKIP_INTERNAL || '1') !== '0') {
-      console.log(`[auto_mint] skipped internal tool=${tool_name || '-'} `
-        + `client=${JSON.stringify(String(c.client_name_raw || '').slice(0, 60))} `
-        + `ua=${JSON.stringify(String(c.user_agent || '').slice(0, 80))} `
-        + `ip=${c.client_ip || '-'} sid=${String(c.session_id || '').slice(0, 8)}`);
+      console.log(_internalSkipLine(c, tool_name));
       return null;
     }
     // r-qa-no-mint (2026-10-04): our QA probes mint nothing either. A keyless
