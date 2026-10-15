@@ -29,8 +29,20 @@
 // COPY RULES (owner-approved 2026-09-28). No field may state:
 //   - a facility count (the count is withdrawn, owner decision 2026-09-27)
 //   - a monthly price ("$99/mo", "$49 per month", ...)
+//   - a plan named with its price ("$49 Developer", "Pro $99")
 //   - "$10 unlocks full answers"
 //   - "seven layers"
+//   - an INTERNAL DIRECTIVE (2026-10-15, finding #116292): a line written to
+//     whoever composes or submits the listing ("Canon prices: ...", "Do not
+//     print exact facility counts"), or internal governance vocabulary (an
+//     owner-rule reference, a finding id, the agent-contract keywords of the
+//     MCP instructions). MCP Collection published exactly that pair of lines
+//     as the About text of the DC Hub listing, because a submitting agent
+//     pasted its own brief into the description field. The rules are scoped
+//     to PUBLIC DESCRIPTION strings; the MCP initialize instructions, llms.txt,
+//     the skill files and the tool descriptions are addressed to agents on
+//     purpose and are not read by them (test/public-descriptions-no-internal-
+//     directives.test.mjs names each one and why).
 // copyRuleViolations() is the one implementation; the ecosystem-sync read-back
 // uses the same function on what a live listing shows.
 // =============================================================================
@@ -62,15 +74,55 @@ export const CAPACITY_SENTENCE_ANCHOR = 'Capacity Source adds';
 
 export const endpointsLine = (n) => `${n} MCP tools at ${MCP_URL} plus a REST API at ${REST_URL}`;
 
+// Internal-directive markers (finding #116292, 2026-10-15). Each is a phrase that
+// only makes sense said to the PERSON OR AGENT WRITING a listing, or that names
+// internal governance. A public description says what DC Hub is and does, in the
+// third person. The same four shapes are fenced on the backend submit path
+// (dchub-backend routes/white_glove_propagation.py listing_copy_violations).
+// Regexes are global so every hit is named; MUST/FRONT DOOR stay case-sensitive
+// (they are agent-contract keywords, not English).
+export const INTERNAL_DIRECTIVE_RULES = [
+  // "Canon prices: $10 pack, ..." / "canon rules are ..." (a label, not the word
+  // "canon" or "canonical" in prose; "/api/v1/canon" has no space-then-noun).
+  ['internal_canon_label',
+    /\bcanon\s+(?:prices?|rules?|floors?|copy|phrases?|wording|offers?|figures?)\s*(?::|\bare\b|\bis\b)/gi,
+    'no internal canon label ("Canon prices: ...")'],
+  // "Do not print exact facility counts." An order about how to write the copy.
+  ['internal_do_not',
+    /\b(?:do not|don't|never)\s+(?:print|state|quote|publish|paste|include|mention|name|round|invent|guess|reuse|cite|say|write|show|assume|ignore)\b/gi,
+    'no instruction to whoever writes the listing ("Do not print ...")'],
+  ['internal_agent_contract', /\bMUST (?:CALL|NOT|USE|ALWAYS)\b|\bFRONT DOOR\b/g,
+    'no agent-contract keywords (MUST CALL, FRONT DOOR)'],
+  ['internal_governance_ref',
+    /\bowner(?:'s)?[ -](?:rule|decision|directive|call|approved|policy|brief)\b|\bG-\d{4}-\d+\b|\bfrz-[a-z0-9-]+\b/gi,
+    'no internal governance reference (owner rule, finding id)'],
+];
+
 // Each rule: [id, regex, what it bans]. Regexes are global so every hit is named.
 export const COPY_RULES = [
   ['monthly_price',
     /\$\s?\d[\d,]*(?:\.\d+)?\s*(?:\/\s*(?:mo|mon|month)\b|(?:per|a|each)\s+month\b|monthly\b)/gi,
     'no monthly prices'],
+  // "$49 Developer", "Pro $99", "Developer ($49)": a plan priced without "/mo".
+  // The $10 credit pack is not a plan and is not matched.
+  ['plan_price',
+    /\$\s?\d[\d,]*(?:\.\d+)?\)?\s+(?:Starter|Developer|Pro|Enterprise)\b|\b(?:Starter|Developer|Pro|Enterprise)\s+\(?\$\s?\d/g,
+    'no plan priced in listing copy (prices live at dchub.cloud/pricing)'],
   ['ten_unlocks_full_answers', /\$\s?10\b[^.]{0,40}?\bunlocks?\b[^.]{0,20}?\bfull\s+answers?\b/gi,
     'no "$10 unlocks full answers"'],
   ['seven_layers', /\b(?:seven|7)\s+(?:[a-z-]+\s+)?layers?\b/gi, 'no "seven layers"'],
+  ...INTERNAL_DIRECTIVE_RULES,
 ];
+
+/** Only the internal-directive breaches in a text: [{ rule, match, why }]. */
+export function internalDirectiveViolations(text) {
+  const s = String(text ?? '');
+  const out = [];
+  for (const [rule, rx, why] of INTERNAL_DIRECTIVE_RULES) {
+    for (const m of s.matchAll(rx)) out.push({ rule, match: m[0], why });
+  }
+  return out;
+}
 
 /** Every copy-rule breach a text contains: [{ rule, match, why }]. */
 export function copyRuleViolations(text) {

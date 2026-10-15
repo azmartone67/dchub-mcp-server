@@ -146,6 +146,10 @@ describe('copy rules', () => {
     ['ten_unlocks_full_answers', '$10 unlocks full answers for your agent.'],
     ['seven_layers', 'seven layers of infrastructure data'],
     ['seven_layers', '7 data layers'],
+    ['plan_price', 'Canon prices: $10 pack, $49 Developer, $99 Pro.'],
+    ['plan_price', 'Developer ($49) and Pro ($99)'],
+    ['internal_canon_label', 'Canon prices: $10 pack.'],
+    ['internal_do_not', 'Do not print exact facility counts.'],
   ])('%s is caught in %j', (rule, text) => {
     expect(copyRuleViolations(text).map((v) => v.rule)).toContain(rule);
   });
@@ -154,6 +158,8 @@ describe('copy rules', () => {
     expect(copyRuleViolations('a $10 one-time pack of 1,000 API credits')).toEqual([]);
     expect(copyRuleViolations('live grid feeds from the seven US ISOs')).toEqual([]);
     expect(copyRuleViolations('scores 300+ markets daily')).toEqual([]);
+    expect(copyRuleViolations('Developer docs and a Pro tier are described at dchub.cloud/pricing')).toEqual([]);
+    expect(copyRuleViolations('Canonical surfaces: /api/v1/canon/phrases (the canon prices object is public)')).toEqual([]);
   });
 });
 
@@ -343,7 +349,8 @@ describe('read-back fingerprints', () => {
   it('a tagline-led listing with old copy still fails the copy rules', () => {
     const page = `${COPY.tagline} 24,900+ facilities. Pro $99/mo.`;
     expect(showsCurrentCopy(page, fps)).toBe(true);
-    expect(copyRuleViolations(page).map((v) => v.rule).sort()).toEqual(['facility_count', 'monthly_price']);
+    // "Pro $99/mo" is a monthly price and, since 2026-10-15, also a plan priced in listing copy.
+    expect(copyRuleViolations(page).map((v) => v.rule).sort()).toEqual(['facility_count', 'monthly_price', 'plan_price']);
   });
 
   it('a reworded or boastful tagline is not a fingerprint match', () => {
