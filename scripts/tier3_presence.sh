@@ -23,7 +23,7 @@ physical infrastructure behind AI — instead of guessing from stale training da
 fiber, capacity, and interconnection.)
 
 It exposes 94 tools + 6 guided prompts over: a global data-center facility map
-(170+ countries; corroborated count pending), 300+ power markets scored by a Data Center Power Index (DCPI),
+(170+ countries), 300+ power markets scored by a Data Center Power Index (DCPI),
 real-time grid telemetry for the 7 US ISOs (PJM/ERCOT/CAISO/… fuel mix, headroom,
 time-to-power), interconnection queues, fiber routes, gas pipelines, and 1,700+
 tracked M&A deals.
@@ -50,7 +50,7 @@ Body:
 Sharing an MCP server I maintain. DC Hub is the live data layer for data-center
 infrastructure — agents can query it and cite it (CC-BY-4.0).
 
-- Global facility map (corroborated count pending), 300+ DCPI-scored markets, 10 live ISO grids
+- Global facility map, 300+ DCPI-scored markets, 10 live ISO grids
 - 94 tools + 6 guided prompts (/dchub:analyze-site, /dchub:power-availability, …)
 - 4 citable resources (methodology, data sources, coverage)
 - Remote streamable-HTTP → Claude Desktop / Cursor / VS Code / Cline, no install
@@ -71,7 +71,7 @@ AI agents keep getting asked data-center questions they can only answer from
 stale training data. So we built DC Hub — an MCP server that gives any AI
 assistant LIVE, citable ground truth on the infrastructure behind AI:
 
-→ A global data-center facility map across 170+ countries (corroborated count pending)
+→ A global data-center facility map across 170+ countries
 → 300+ markets scored by our Data Center Power Index (BUILD / CAUTION / AVOID)
 → Real-time grid telemetry for the 7 US ISOs — headroom, fuel mix, time-to-power
 → Fiber routes, gas pipelines, interconnection queues, 1,700+ M&A deals

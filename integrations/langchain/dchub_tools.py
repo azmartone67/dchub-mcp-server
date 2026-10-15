@@ -62,7 +62,7 @@ class FacilitySearchArgs(BaseModel):
 
 def search_facilities(country: str = "US", state: str | None = None,
                             q: str | None = None, limit: int = 5) -> dict:
-    """Search the global data-center facility map (corroborated count pending). Returns rows with
+    """Search the global data-center facility map. Returns rows with
     canonical slug, name, provider, and location, plus a citation URL."""
     params = {"country": country, "limit": limit}
     if state:

@@ -23,11 +23,13 @@
 // FAIL CLOSED: a slot with no value, a malformed value, a template placeholder
 // with no slot, or a facility count that is no longer withheld all throw. A
 // facility NUMBER is never rendered: while facility_count.status is
-// "corroboration_pending" the only facility text is the pending phrase.
+// "corroboration_pending" the only facility text is the plain map wording, with
+// no number and no "pending" caveat (G-1014-33, owner 2026-10-15).
 // =============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { plainFacilityProse } from './canon-floor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TEMPLATE_PATH = 'canonical/registry-description-template.json';
@@ -58,9 +60,13 @@ export function buildSlots({ count, facts, phrases, tier }) {
   need(fc.status === 'corroboration_pending',
     `facility_count.status is ${JSON.stringify(fc.status)}, not "corroboration_pending". The template has no facility-number wording; `
     + 'write it (and the owner-approved phrasing) before rendering one.');
-  const pending = /\(corroborated count pending\)/.exec(fc.public_phrase || '');
-  need(pending, 'facility_count.public_phrase has no "(corroborated count pending)" clause');
   need(typeof fc.prose === 'string' && !/\d/.test(fc.prose), 'facility_count.prose is missing or contains a digit');
+  // ★2026-10-15 (G-1014-33): the registry copy says the map, with no "pending"
+  // caveat. facts.prose is the backend's own sentence and still carries it, so
+  // it is removed here, not copied.
+  const facilityProse = plainFacilityProse(fc.prose);
+  need(facilityProse && !/pending/i.test(facilityProse) && !/\d/.test(facilityProse),
+    `facility_count.prose renders as ${JSON.stringify(facilityProse)}, which is empty, has a digit or still says pending`);
   const n = facts.numbers || {};
   const g = facts.grid_coverage || {};
   const slots = {
@@ -78,8 +84,7 @@ export function buildSlots({ count, facts, phrases, tier }) {
     substations: phrases.substations,
     transmission_lines: phrases.transmission_lines,
     fiber_routes: phrases.fiber_routes,
-    facility_prose: fc.prose,
-    facility_pending: pending[0],
+    facility_prose: facilityProse,
     free_tier_rule: tier.freeTierRule,
     analyze_site_free: tier.analyzeSiteFree,
     free_key_full: String(tier.freeKeyFull),

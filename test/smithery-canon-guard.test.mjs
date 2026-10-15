@@ -333,7 +333,7 @@ describe('smithery.yaml canonical-quantity guard', () => {
   // (b) number AFTER the noun — "facility search (15,300+)"
   it('FAILS when the quantity trails the noun — "facility search (15,300+)"', () => {
     withFileMutation(LISTINGS,
-      (orig) => orig.replace('facility search (global map; corroborated count pending)', 'facility search (15,300+)'),
+      (orig) => orig.replace('facility search (global map)', 'facility search (15,300+)'),
       () => {
         const { ok, out } = check();
         expect(ok, 'guard did NOT catch a trailing parenthesised quantity').toBe(false);

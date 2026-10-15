@@ -60,12 +60,13 @@ describe('instructions compose gate', () => {
     }
     // ★2026-10-02 (mcp#612): the facility count is withdrawn (owner decision
     // 2026-09-27). facts.numbers.facilities is still exported, so the composed
-    // string must NOT quote it, and must say the count is pending instead.
+    // string must NOT quote it. ★2026-10-15 (G-1014-33): it says the plain map,
+    // with no "corroborated count pending" caveat.
     if (/\d/.test(String(FACTS.numbers.facilities ?? ''))) {
       expect(out).not.toContain(String(FACTS.numbers.facilities));
     }
     expect(out).toContain('global data-center facility map');
-    expect(out).toContain('corroborated count pending');
+    expect(out).not.toMatch(/corroborated count pending/i);
     expect(out).toContain('generating UNITS across all statuses');
     // retired over-claims can never re-enter through this path
     // ★2026-09-02: the retired pipeline figure too. test/retired-claims bans

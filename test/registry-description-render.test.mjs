@@ -57,7 +57,9 @@ describe('the committed descriptions ARE the render', () => {
     for (const t of [r.smithery_yaml, r.mcp_server_json]) {
       expect(t).toContain('paid plans: dchub.cloud/pricing');
       expect(t).not.toMatch(/\$10\b/);
-      expect(t).toContain('(corroborated count pending)');
+      // ★2026-10-15 (G-1014-33): the map, no number, no "pending" caveat.
+      expect(t).toContain('a global data-center facility map');
+      expect(t).not.toMatch(/corroborated count pending/i);
     }
     expect(r.mcp_server_json).toContain(ctx.tier.freeTierRule);
   });

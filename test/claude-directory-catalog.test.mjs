@@ -347,9 +347,11 @@ describe('listing copy', () => {
     const prompts = section('Example prompts').split('\n').filter((l) => /^\d+\. /.test(l));
     expect(prompts.length).toBeGreaterThanOrEqual(3);
     const canon = JSON.parse(readFileSync(path.join(REPO, 'canonical', 'canon_phrases.json'), 'utf8'));
-    // The facility COUNT is withdrawn (owner decision 2026-09-27): the pending
-    // wording, never canon's numeric floor.
-    expect(PASTED).toContain('a global data-center facility map (corroborated count pending)');
+    // The facility COUNT is withdrawn (owner decision 2026-09-27): the plain map
+    // wording, never canon's numeric floor and (owner decision 2026-10-15,
+    // G-1014-33) no "pending" caveat.
+    expect(PASTED).toContain('a global data-center facility map');
+    expect(PASTED).not.toMatch(/corroborated count pending/i);
     expect(PASTED).not.toContain(canon.facilities);
     expect(PASTED).toContain(`${canon.markets} markets`);
     expect(PASTED).not.toMatch(/\$\s?\d|\bUSD\s?\d|per month|\/mo\b|\bpricing\b|\bprice\b|\bcheckout\b|\bpro\b|\btrial\b|\bfree\b/i);
