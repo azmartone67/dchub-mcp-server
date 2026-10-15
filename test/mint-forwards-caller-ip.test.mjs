@@ -11,7 +11,8 @@
 //
 // Qualifies for the hard gate: deterministic, no network (fetch is stubbed).
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mintAutoTrial, _ctxALS } from '../server.mjs';
+import { createHash } from 'node:crypto';
+import { mintAutoTrial, _ctxALS, _internalSkipLine } from '../server.mjs';
 
 function capture() {
   const calls = [];
@@ -66,6 +67,26 @@ describe('mintAutoTrial skips our own harnesses', () => {
     const calls = capture();
     await _ctxALS.run({ client_ip: '198.51.100.7', platform: 'cursor' }, () => mintAutoTrial('get_water_risk'));
     expect(calls).toHaveLength(1);
+  });
+
+  it('logs the UA and the md5 of the first hop so the caller can be named', async () => {
+    const lines = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((...a) => { lines.push(a.join(' ')); });
+    try {
+      await _ctxALS.run(
+        { client_ip: '198.51.100.7', user_agent: 'pipeline_mcp-harness/3.1 (node)', platform: 'dchub-internal',
+          client_name_raw: 'pipeline_mcp', session_id: 'ae307eab99' },
+        () => mintAutoTrial('get_water_risk'));
+    } finally { spy.mockRestore(); }
+    const line = lines.find((l) => l.startsWith('[auto_mint] skipped internal'));
+    expect(line, 'no skipped-internal line was logged').toBeTruthy();
+    expect(line).toContain('ua="pipeline_mcp-harness/3.1 (node)"');
+    expect(line).toContain('hop=' + createHash('md5').update('198.51.100.7').digest('hex'));
+    expect(line).toContain('client="pipeline_mcp"');
+  });
+
+  it('logs hop=- when the request carried no caller IP', () => {
+    expect(_internalSkipLine({ platform: 'dchub-internal' }, 'x')).toContain('hop=- ip=-');
   });
 
   it('kill switch DCHUB_MINT_SKIP_INTERNAL=0 restores the mint', async () => {
