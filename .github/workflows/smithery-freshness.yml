@@ -81,10 +81,10 @@ jobs:
       # first run died on FileNotFoundError *before* it could print the owner
       # action it exists to print. A red step that names no remedy is the
       # failure mode this lane was built to end. Shallow checkout, read-only.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 1
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '22'
 
@@ -447,7 +447,7 @@ jobs:
       - name: Carry the last-written record to the next run
         # no hashFiles() gate: if-no-files-found: ignore already handles a run with no record
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: smithery-description-last-written
           path: .smithery-state/last_written.sha256

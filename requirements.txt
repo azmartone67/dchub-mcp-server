@@ -1,3 +1,5 @@
-mcp>=1.28.1
-uvicorn>=0.30.0
-requests>=2.33.0
+# Exact pins (Dependabot keeps them current: .github/dependabot.yml).
+# mcp stays on 1.x: dchub_mcp_server.py is written against mcp.server.fastmcp 1.x.
+mcp==1.30.0
+uvicorn==0.54.0
+requests==2.34.2

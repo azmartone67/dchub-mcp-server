@@ -16,6 +16,7 @@
 //   snapshot of /api/v1/canon/phrases — see scripts/refresh-canon-phrases.mjs)
 // ============================================================================
 import fs from 'node:fs';
+import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packBundle, bundleDrift } from './dxt-bundle.mjs';
@@ -85,8 +86,11 @@ const DESC_SCOPE = {
   TRIAL_DAILY_FULL_CAP: Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_DAILY_FULL || '2', 10)),
 };
 function evalDescription(expr) {
-  const names = Object.keys(DESC_SCOPE);
-  const v = new Function(...names, 'return (' + expr + ');')(...names.map((n) => DESC_SCOPE[n]));
+  // Evaluated in a fresh vm context that holds ONLY the canon names in
+  // DESC_SCOPE: no module scope, no require/import, no process. `expr` is a
+  // description expression from this repo's own server.mjs, and canonicalTools()
+  // has already restricted it to string literals and canon references.
+  const v = vm.runInNewContext('(' + expr + ')', { ...DESC_SCOPE }, { timeout: 1000 });
   if (typeof v !== 'string' || /\bundefined\b|\bNaN\b|n\/a|=>|function\s*\(/.test(v)) throw new Error('description did not evaluate cleanly');
   return v;
 }
