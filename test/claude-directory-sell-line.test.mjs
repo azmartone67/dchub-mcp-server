@@ -35,6 +35,13 @@ const partial = {
 
 const BANNED = /after they pay|show your user|free preview|human_url|show_to_user|contract plans|\/enterprise\b/i;
 
+describe('/mcp/claude: the notice that ends a gated result', () => {
+  it('names no plan, price, link or checkout (standing rule: agent text names no plans or prices)', () => {
+    expect(CLAUDE_PLANS_NOTICE).not.toMatch(/\bplans?\b|pricing|upgrade|\$\s?\d|https?:|dchub\.cloud|checkout|unlock|credits|\/go\//i);
+    expect(CLAUDE_PLANS_NOTICE).toMatch(/partial/i);
+  });
+});
+
 describe('/mcp/claude: the sell line', () => {
   it('a separate prose block carrying the sell line is dropped, the plans notice stays once', () => {
     const r = scrubClaudeToolResult({

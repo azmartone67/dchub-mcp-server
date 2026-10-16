@@ -24,7 +24,7 @@ DC Hub is a data service about the physical infrastructure behind data centers. 
 
 Use it to look up a facility or an operator, compare markets or grid operators, check power availability and queue depth, assess the risks at a specific site, find recent transactions, or search listed capacity by size and location. A planning tool (execute_plan) answers a question that spans several of these areas in one call and shows which lookups it ran.
 
-Responses include an as_of timestamp and a citation for each figure. Without a DC Hub account some results are previews: withheld fields are marked, and the result says that the full result needs a DC Hub plan. The connector does not take actions, send messages or change any data.
+Responses include an as_of timestamp and a citation for each figure. Without a DC Hub account some results are previews: withheld fields are marked, and the result says it is partial. The connector does not take actions, send messages or change any data.
 
 == Example prompts ==
 1. Which US data-center markets have the most power headroom for a 200 MW AI campus in the next two years?

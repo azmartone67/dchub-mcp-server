@@ -84,7 +84,9 @@ describe('/mcp/claude — every listed tool, keyless and keyed', () => {
         if (!r.msg || !r.msg.result) continue;
         answered += 1;
         const texts = r.msg.result.content.filter((c) => c.type === 'text').map((c) => c.text);
-        const notices = texts.filter((t) => t.includes('dchub.cloud/plans'));
+        // No result on this profile names a plan or links the plans page, gated or not.
+        expect(texts.filter((t) => /dchub\.cloud\/plans|needs a DC Hub plan/i.test(t)), name).toEqual([]);
+        const notices = texts.filter((t) => t === CLAUDE_PLANS_NOTICE);
         if (notices.length) {
           gated += 1;
           expect(notices, name).toEqual([CLAUDE_PLANS_NOTICE]);

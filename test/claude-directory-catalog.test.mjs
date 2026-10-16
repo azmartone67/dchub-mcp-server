@@ -352,6 +352,8 @@ describe('listing copy', () => {
     // G-1014-33) no "pending" caveat.
     expect(PASTED).toContain('a global data-center facility map');
     expect(PASTED).not.toMatch(/corroborated count pending/i);
+    // Grok 2026-10-16: the listing names no plan either, matching the notice a gated result carries.
+    expect(PASTED).not.toMatch(/\bDC Hub plans?\b/i);
     expect(PASTED).not.toContain(canon.facilities);
     expect(PASTED).toContain(`${canon.markets} markets`);
     expect(PASTED).not.toMatch(/\$\s?\d|\bUSD\s?\d|per month|\/mo\b|\bpricing\b|\bprice\b|\bcheckout\b|\bpro\b|\btrial\b|\bfree\b/i);
