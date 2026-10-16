@@ -12127,6 +12127,10 @@ function _nullFreeFigures(row, toolName = '', inRate = false, deep = false) {
     } else if (_dcpiCompositeFree(toolName, k, row, inRate)) {
       const _b = _bandForMaskedScore(k, v, row, toolName, inRate);
       if (_b && row[`${k}_band`] == null) { out[`${k}_band`] = _b; changed = true; }
+    } else if (_dcpiPaidDetail(k, v)) {
+      // G-1016-04: the DCPI risk / opportunity bullets carry paid figures as prose
+      // ("19641 MW additions queued <12mo"); the keyless trim withholds them too.
+      out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
     } else if (_FREE_NUMERIC_KEY_RE.test(k) && !_FREE_NUMERIC_KEEP_RE.test(k) && _isFigure(v)) {
       _noteMaskedKey(k, v);   // r-relay-names-missed
       out[k] = null; out[`_${k}_in_pro`] = true; changed = true;
@@ -12478,6 +12482,23 @@ function _gatesHeadroom(k) {
 // backend withholds from every unpaid caller.
 const _DCPI_ISO_PAID_KEYS = new Set(['avg_time_to_power_months', 'avg_queue_wait_months',
   'retail_price_cents_kwh', 'grid_emergencies_30d']);
+// G-1016-04 (Grok, 2026-10-16): the DCPI risk / opportunity BULLETS are paid on every
+// backend surface (dchub-backend routes/dcpi.py _DCPI_MASK_FIELDS: top_risks_json,
+// top_opportunities_json), but the backend serves this server whole (X-Internal-Key),
+// and they are string arrays, so no numeric mask here reached them. A keyless and a
+// free-key get_market_dcpi_rank served them verbatim with the paid figures inside:
+// houston "578 MW behind-the-meter industrial headroom", "19641 MW additions queued
+// <12mo", "36-month interconnection queue"; santa-clara "7564 MW additions ...".
+// The prose IS the paid number, so the whole field is withheld, not scrubbed: an
+// allowlist that keeps the field gates its name, not what it says.
+const _DCPI_PAID_DETAIL_KEYS = new Set(['top_risks_json', 'top_opportunities_json']);
+// Withheld only when there is something to withhold: an empty list stays an empty list,
+// never a `_<k>_in_pro` claim over nothing. Both free trimmers (trimForTrial keyless,
+// _nullFreeFigures keyed free) read this one predicate.
+function _dcpiPaidDetail(k, v) {
+  if (!_DCPI_PAID_DETAIL_KEYS.has(k)) return false;
+  return Array.isArray(v) ? v.length > 0 : (v != null && v !== '');
+}
 
 // ★ r-preview-rows (2026-08-26): the free-tier preview was ONE row. "You're
 // seeing 1 of 5" reads to an agent as a broken tool — it cannot rank, compare or
@@ -13000,10 +13021,10 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = null;
       out[`_${k}_in_pro`] = true;
       if (_band) out[`${k}_band`] = _band;
-    } else if (_DCPI_ISO_PAID_KEYS.has(k)) {
+    } else if (_DCPI_ISO_PAID_KEYS.has(k) || _dcpiPaidDetail(k, v)) {
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);
-      out[k] = null;                          // DCPI aggregate the backend keeps paid
+      out[k] = null;                          // DCPI aggregate / detail the backend keeps paid
       out[`_${k}_in_pro`] = true;
     } else if (Array.isArray(v) && v.length > TRIAL_PREVIEW_ROWS) {
       // clean — no inline _gated promo object. The _total_in_pro sibling stays
