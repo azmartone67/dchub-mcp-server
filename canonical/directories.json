@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-16T18:40:00Z",
+  "updated_at": "2026-10-16T23:25:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -407,6 +407,17 @@
       "note": "imported from the MCP Registry (source mcp_registry, claimed false), endpoint https://dchub.cloud/mcp/registry, probe_status passing, not stale; listing JSON HTTP 200 confirmed 2026-10-16 11:40 PT (an unknown id returns 404). The board has no HTML listing page; this is its documented one-listing URL"
     },
     {
+      "id": "mcp-so",
+      "name": "mcp.so",
+      "status": "live",
+      "listing_url": "https://mcp.so/servers/dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-16",
+      "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub \u2014 Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so"
+    },
+    {
       "id": "abordage",
       "name": "abordage awesome-mcp",
       "status": "unverified",
@@ -414,8 +425,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-15",
-      "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README still does not show DC Hub as of 2026-10-15 16:17 PT; Flip to live once DC Hub appears on the page"
+      "verified_at": "2026-10-16",
+      "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README on main still does not show DC Hub as of 2026-10-16 16:19 PT; Flip to live once DC Hub appears on the page"
     },
     {
       "id": "docker",
