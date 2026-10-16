@@ -244,6 +244,7 @@ test/lp-preview-labels-and-layer-cite.test.mjs
 test/lp-pro-only.test.mjs
 test/lp-wall-paywall-signal.test.mjs
 test/manifest-description-heals.test.mjs
+test/market-intel-fallback-provisional.test.mjs
 test/market-intel-json-first-block.test.mjs
 test/market-pricing-public.test.mjs
 test/mcp-packs.test.mjs
