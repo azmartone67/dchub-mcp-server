@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-16T04:25:00Z",
+  "updated_at": "2026-10-16T18:40:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -372,6 +372,39 @@
       "logo_url": null,
       "verified_at": "2026-10-15",
       "note": "server id cloud.dchub-mcp-http (http transport, https://dchub.cloud/mcp, optional X-API-Key) via mcpmux/mcp-servers#355, merged 2026-10-15 14:40 PT by its-mash; detail page HTTP 200 titled 'DC Hub MCP Server' confirmed 2026-10-15 21:25 PT"
+    },
+    {
+      "id": "public-api-lists",
+      "name": "public-api-lists",
+      "status": "live",
+      "listing_url": "https://github.com/public-api-lists/public-api-lists#environment",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-16",
+      "note": "public-api-lists/public-api-lists#528 merged 2026-07-06 by k4sud0n; DC Hub row (https://dchub.cloud/playground) under Environment in README.md on master, page HTTP 200 confirmed 2026-10-16 11:40 PT"
+    },
+    {
+      "id": "linny006-mcp-servers-live",
+      "name": "MCP Servers Live (linny006)",
+      "status": "live",
+      "listing_url": "https://linny006.github.io/mcp-servers-live/r/azmartone67/dchub-mcp-server/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-16",
+      "note": "auto-generated per-repo entry page (GitHub Pages), HTTP 200 titled 'azmartone67/dchub-mcp-server - entry on MCP Servers Live' confirmed 2026-10-16 11:40 PT (a nonexistent repo path on the same site returns 404). DC Hub is NOT in the rotating top-50 README table, so link the entry page, not the repo root"
+    },
+    {
+      "id": "sarnai-board",
+      "name": "SarnAI Agent Discovery Board",
+      "status": "live",
+      "listing_url": "https://board.sarnai.dev/listings/93f8727a-1445-4be7-8783-0c64f70112a9",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-16",
+      "note": "imported from the MCP Registry (source mcp_registry, claimed false), endpoint https://dchub.cloud/mcp/registry, probe_status passing, not stale; listing JSON HTTP 200 confirmed 2026-10-16 11:40 PT (an unknown id returns 404). The board has no HTML listing page; this is its documented one-listing URL"
     },
     {
       "id": "abordage",
