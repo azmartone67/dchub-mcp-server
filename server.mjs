@@ -772,7 +772,7 @@ function _proTrialIdentity(apiKey) {
 // POST the data-returning call to the backend; {arm, offer} when THIS response
 // is the eligible one, else null. Fail-closed to "no offer": any error, timeout
 // or non-200 leaves the response exactly as it was.
-async function _proTrialOfferDecide(c, toolName, fetchImpl = fetch) {
+export async function _proTrialOfferDecide(c, toolName, { fetchImpl = fetch, trigger = '' } = {}) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 1500);
   try {
@@ -780,7 +780,8 @@ async function _proTrialOfferDecide(c, toolName, fetchImpl = fetch) {
       method: 'POST', signal: ctl.signal,
       headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
       body: JSON.stringify({ identity: _proTrialIdentity(c.api_key), tool: toolName,
-                             session_id: c.session_id || '', platform: c.platform || '' }),
+                             session_id: c.session_id || '', platform: c.platform || '',
+                             ...(trigger === 'cap' ? { trigger: 'cap' } : {}) }),
     });
     if (!r || r.status !== 200) return null;
     const d = await r.json();
@@ -798,15 +799,18 @@ export function _proTrialOfferEligibleCaller(c, toolName, env = process.env) {
 }
 // `result` must already be a DATA answer (the caller ran _noDataGuard); a result
 // with no structuredContent or a wall/no-data shape is returned untouched.
+// trigger 'cap' (owner 2026-10-16, G-1015-P0-CAP): the caller's monthly free full
+// runs are spent, so THIS preview is the cap hit; the backend makes the identity
+// eligible on this call instead of waiting for a 5th counted one.
 export async function _withProTrialOffer(result, toolName, c, env = process.env,
-                                         decide = _proTrialOfferDecide) {
+                                         decide = _proTrialOfferDecide, trigger = '') {
   try {
     if (!_proTrialOfferEligibleCaller(c, toolName, env)) return result;
     if (!result || !Array.isArray(result.content) || result.isError) return result;
     if (_isNoDataAnswer(result)) return result;
     const sc = result.structuredContent;
     if (!sc || typeof sc !== 'object' || Array.isArray(sc) || sc._wall) return result;
-    const d = await decide(c, toolName);
+    const d = await decide(c, toolName, { trigger });
     if (!d) return result;
     const relay = d.arm === 'offer'
       ? buildHumanRelay(toolName, c.tier || 'free', c.session_id || '', { offer: PRO_TRIAL_OFFER })
@@ -20264,7 +20268,7 @@ function trackedTool(srv, name, description, schema, handler) {
             });
             const _rawS = _noDataGuard(await handler(args));
             return await _withProTrialOffer(_withLpSiteTeaser(name, _withLpFreeRunsSpent(
-              _lpPreviewResult(name, _rawS), _fr, name), _rawS), name, c);
+              _lpPreviewResult(name, _rawS), _fr, name), _rawS), name, c, process.env, _proTrialOfferDecide, 'cap');
           }
           status = 'lp_preview';
           // r-pro-trial-offer: only a DATA answer reaches the offer (the guard

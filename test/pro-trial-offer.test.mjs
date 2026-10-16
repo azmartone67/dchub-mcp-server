@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  _withProTrialOffer, PRO_TRIAL_OFFER, HUMAN_FIRST_MARKER, _lpPreviewResult,
+  _withProTrialOffer, _proTrialOfferDecide, PRO_TRIAL_OFFER, HUMAN_FIRST_MARKER, _lpPreviewResult,
 } from '../server.mjs';
 
 beforeAll(() => { process.env.DCHUB_INTERNAL_KEY = process.env.DCHUB_INTERNAL_KEY || 'test-internal'; });
@@ -126,5 +126,52 @@ describe('pro trial offer', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     // 2026-10-10: the raw answer is kept for the site teaser (_withLpSiteTeaser); the guard still runs first.
     expect(src).toMatch(/const _rawP = _noDataGuard\(await handler\(args\)\);\s*return await _withProTrialOffer\(_withLpSiteTeaser\(name, _lpPreviewResult\(name, _rawP\), _rawP\), name, c\)/);
+  });
+
+  // ── cap-hit trigger (owner 2026-10-16, G-1015-P0-CAP) ─────────────────────
+  it('cap hit: the trigger reaches the decider and the eligible response carries the line', async () => {
+    const seen = [];
+    const d = async (c, tool, opts) => { seen.push(opts); return { fire: true, arm: 'offer' }; };
+    const r = await _withProTrialOffer(preview(), 'analyze_site', FREE, ON, d, 'cap');
+    expect(seen).toEqual([{ trigger: 'cap' }]);
+    expect(markers(r)).toHaveLength(1);
+    expect(r.structuredContent.for_your_human.url).toContain('?offer=' + PRO_TRIAL_OFFER);
+  });
+
+  it('without the cap the decider is asked with an empty trigger (the 5th-call rule)', async () => {
+    const seen = [];
+    const d = async (c, tool, opts) => { seen.push(opts); return null; };
+    await _withProTrialOffer(preview(), 'analyze_site', FREE, ON, d);
+    expect(seen).toEqual([{ trigger: '' }]);
+  });
+
+  it('the request body carries trigger=cap only for a cap hit', async () => {
+    const bodies = [];
+    const fetchImpl = async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return { status: 200, json: async () => ({ fire: true, arm: 'holdout' }) };
+    };
+    const a = await _proTrialOfferDecide(FREE, 'analyze_site', { fetchImpl, trigger: 'cap' });
+    const b = await _proTrialOfferDecide(FREE, 'analyze_site', { fetchImpl });
+    const c2 = await _proTrialOfferDecide(FREE, 'analyze_site', { fetchImpl, trigger: 'always' });
+    expect(a).toEqual({ fire: true, arm: 'holdout' });
+    expect(bodies[0].trigger).toBe('cap');
+    expect('trigger' in bodies[1]).toBe(false);
+    expect('trigger' in bodies[2]).toBe(false);
+    expect(bodies[0].identity).toMatch(/^pk-[0-9a-f]{64}$/);   // never the raw key
+    expect(b && c2).toBeTruthy();
+  });
+
+  it('only the spent branch sends the cap trigger; the plain preview branch does not', () => {
+    const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+    const spent = src.indexOf("status = 'lp_free_spent';");
+    const plain = src.indexOf("status = 'lp_preview';", spent);
+    expect(spent).toBeGreaterThan(0);
+    expect(plain).toBeGreaterThan(spent);
+    const spentBlock = src.slice(spent, plain);
+    const plainBlock = src.slice(plain, plain + 700);
+    expect(spentBlock).toMatch(/return await _withProTrialOffer\([\s\S]*?, name, c, process\.env, _proTrialOfferDecide, 'cap'\);/);
+    expect(plainBlock).toMatch(/return await _withProTrialOffer\(_withLpSiteTeaser\(name, _lpPreviewResult\(name, _rawP\), _rawP\), name, c\);/);
+    expect(plainBlock).not.toContain("'cap'");
   });
 });
