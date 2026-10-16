@@ -18,6 +18,10 @@ on:
 
 jobs:
   dchub-checks:
+    # Probes the LIVE dchub.cloud surface with secrets.DC_HUB_API_KEY, so it
+    # says nothing about a PR's code. Dependabot PRs get no repo secrets and
+    # always failed MISSING_KEY_FAIL (#988-#992, 2026-10-16); skip them.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
