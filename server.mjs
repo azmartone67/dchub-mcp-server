@@ -23531,8 +23531,41 @@ export async function _cleanPlatformWallLineStep(result, name) {
 export function _gatedPreviewStep(result, name) {
   // Last read of required_plan in the chain: dropped from every agent wall / locked view (2026-10-14).
   // Watch line (DCHUB_WATCH_LINE_V1): full analyze_site / find_sites answers only; inside _flagUpstreamError.
-  return _watchLineStep(_wallNoPlanFieldStep(_powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
-    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name), name), name);
+  return _spentCapLinkLineStep(_watchLineStep(_wallNoPlanFieldStep(_powerBandLineStep(_gatedPreviewStepImpl(result, name, getCtx() || {},
+    { skipProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE] }), name), name), name), name);
+}
+
+// G-1015-P0-CAP (2026-10-15): the end of the free allowance is a checkout moment. A keyed caller's
+// capped analyze_site preview (the 3-full-reports-a-month cap, _withLpFreeRunsSpent, or the
+// fail-closed preview when the counter is down) carried its relay link only inside block 0's JSON
+// (user_message / human_url): _relayContractStep and _oneLinkWallStep count that copy as "the ask"
+// and add no prose line, so a host that summarizes the prose never saw a link. This appends ONE
+// plain line, last (the human line is the last thing an agent reads), holding the response's OWN
+// human_url: the same key-bound relay link, never a second one, no plan name and no price. A prose
+// block that already carries that link is left alone. Keyless callers keep the gated_preview line;
+// directory / Claude / core profiles keep their own copy. Kill switch DCHUB_SPENT_LINK_LINE=0
+// (set on BOTH Railway MCP services) returns the earlier response byte for byte.
+export const SPENT_CAP_LINK_LABEL = 'Full report: ';
+export function _spentCapLinkLineOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SPENT_LINK_LINE || ''));
+}
+export function _spentCapLinkLineStep(result, name, c = getCtx() || {}, env = process.env) {
+  try {
+    if (name !== 'analyze_site' || !_spentCapLinkLineOn(env)) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content) || !result.content.length) return result;
+    const sc = result.structuredContent;
+    if (!sc || typeof sc !== 'object' || Array.isArray(sc) || sc._preview_only !== true) return result;
+    if (!c.api_key) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    const f0 = (sc.for_your_human && typeof sc.for_your_human === 'object' && !Array.isArray(sc.for_your_human)) ? sc.for_your_human : null;
+    const pick = (v) => { const m = typeof v === 'string' ? _RELAY_URL_RE.exec(v) : null; return m ? m[0] : ''; };
+    const url = pick(sc.human_url) || pick(f0 && f0.url);
+    if (!url) return result;   // no relay link was minted (no signing secret): nothing to hand over
+    const proseHasLink = result.content.some((b) => b && b.type === 'text' && typeof b.text === 'string'
+      && _proseOf(b.text).includes(url));
+    if (proseHasLink) return result;
+    return { ...result, content: [...result.content, { type: 'text', text: SPENT_CAP_LINK_LABEL + url }] };
+  } catch (_) { return result; }   // a link line is never worth failing a response over
 }
 
 // The power band's plain-words reading (lib/gated-preview.mjs powerBandLineStep), added to the
