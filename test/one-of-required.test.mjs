@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ONE_OF_REQUIRED } from '../server.mjs';
@@ -103,11 +104,11 @@ describe('the precheck predicate', () => {
     expect(m, 'could not locate the one-of predicate in server.mjs').toBeTruthy();
   });
 
-  const missing = (args) => {
-    const _oneOf = ONE_OF_REQUIRED.get_facility;
-    // eslint-disable-next-line no-eval
-    return !eval(m[1].replace(/\bargs\b/g, 'args'));
-  };
+  // Run the extracted predicate in a vm context that holds only the two names
+  // it reads (args, _oneOf), instead of a direct eval in this module's scope.
+  const predicate = (args, _oneOf = ONE_OF_REQUIRED.get_facility) =>
+    vm.runInNewContext(m[1], { args, _oneOf });
+  const missing = (args) => !predicate(args);
 
   it('fires when no identifier is present', () => {
     // eslint-disable-next-line no-unused-vars
@@ -118,25 +119,19 @@ describe('the precheck predicate', () => {
   it('does NOT fire when any one identifier is present', () => {
     for (const k of ONE_OF_REQUIRED.get_facility) {
       const args = { [k]: 'equinix-dc-ash1' };
-      const _oneOf = ONE_OF_REQUIRED.get_facility;
-      // eslint-disable-next-line no-eval
-      expect(eval(m[1]), `${k} should satisfy the requirement`).toBe(true);
+      expect(predicate(args), `${k} should satisfy the requirement`).toBe(true);
     }
   });
 
   it('treats empty string and null as absent, not as an identifier', () => {
     for (const v of ['', null, undefined]) {
       const args = { slug: v };
-      const _oneOf = ONE_OF_REQUIRED.get_facility;
-      // eslint-disable-next-line no-eval
-      expect(eval(m[1]), `slug=${JSON.stringify(v)} must not count`).toBe(false);
+      expect(predicate(args), `slug=${JSON.stringify(v)} must not count`).toBe(false);
     }
   });
 
   it('ignores unrelated arguments', () => {
     const args = { include_power: true, include_nearby: true };
-    const _oneOf = ONE_OF_REQUIRED.get_facility;
-    // eslint-disable-next-line no-eval
-    expect(eval(m[1])).toBe(false);
+    expect(predicate(args)).toBe(false);
   });
 });

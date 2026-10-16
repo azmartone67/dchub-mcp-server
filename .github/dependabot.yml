@@ -1,0 +1,28 @@
+# Dependabot: keep SHA-pinned workflow actions and the exact-pinned dependency
+# manifests current. Monthly + grouped so it opens a few PRs, not dozens.
+# No workflow here arms auto-merge on Dependabot PRs; each one is reviewed
+# and merged like any other PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
