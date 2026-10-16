@@ -3587,6 +3587,57 @@ function _INTERNAL_SELF_TAG(name) {
   return '';
 }
 
+// ── Own test callers: tagged in TELEMETRY only (2026-10-16) ─────────────────
+// Three of our own callers were published as external demand (measured read-only
+// on prod 2026-10-16):
+//   · the chatgpt-test-cases GitHub Actions job (scripts/chatgpt-test-cases.mjs),
+//     UA 'dchub-chatgpt-test-cases/1 (github-actions)'. Its tools/calls are
+//     stateless, so the clientInfo self-tag ('dchub-test-cases') is lost and
+//     detectPlatform(ua) finds 'chatgpt' INSIDE our own UA: 48 call-log rows and
+//     30 trial_preview signals tagged chatgpt (10-12 and 10-16), in a window where
+//     real ChatGPT had made no call since 10-12;
+//   · 'handoff-proof' (the hand-off proof run's clientInfo name): 2 pro_wall
+//     sessions and 2 paid_tool_blocked signals counted as an external platform;
+//   · 'site-eval-a/b/c' (the 10-05 A/B-arm probe): 3 lp_wall sessions.
+// ★ WHY TELEMETRY AND NOT ctx.platform. Each of these must keep behaving like the
+// caller it imitates: the CI job tests the ChatGPT profile (_isCleanPlatform,
+// _scrubCommerce and the headerless-web copy all key on platform 'chatgpt'), and
+// site-eval exists to receive a paywall arm, which _INTERNAL_SELF_TAG's
+// 'dchub-internal' never gets. So the request's platform is untouched and only
+// what we WRITE (call log, paywall signal, high-intent hit) says 'dchub-internal',
+// which every backend reader already excludes (internal_tag_regex_predicate's
+// 'dchub' family; fire_upgrade_signal treats a 'dchub-' client as synthetic).
+// The UA rule needs BOTH our 'dchub-' product prefix and a test family:
+// 'dchub-dxt-bridge/1.0.0' is the Claude Desktop extension REAL users run.
+// Twin of dchub-backend mcp_calls_deloop.OWN_TEST_UA_REGEX / OWN_TEST_CALLER_TAG_REGEX;
+// test/own-test-telemetry-tag.test.mjs pins the same literals as the backend test.
+export const _UA_SELF_TEST_RE = /^dchub-[a-z0-9._-]*(test|probe|verify|audit|check|smoke|regression|canary|harness|diag|sweep)/i;
+export const _OWN_TEST_CALLER_NAME_RE = /^(handoff-proof|site-eval(-[a-z0-9_-]*)?)$/;
+export function _selfTestTelemetryTag(c) {
+  try {
+    if (!c) return '';
+    const ua = String(c.user_agent || c.client_ua || '').trim();
+    if (_UA_SELF_TEST_RE.test(ua)) return 'dchub-internal';
+    for (const n of [c.client_name_raw, c.platform]) {
+      if (_OWN_TEST_CALLER_NAME_RE.test(String(n || '').trim().toLowerCase())) return 'dchub-internal';
+    }
+  } catch (_) { /* attribution must never break a request */ }
+  return '';
+}
+// The telemetry payload with its platform fields re-tagged when the CURRENT
+// request is one of ours; the payload unchanged otherwise. Only keys already
+// present are rewritten. client_name keeps a raw clientInfo name for forensics
+// and loses only a platform-derived fallback ('chatgpt' from the UA).
+export function _tagOwnTestTelemetry(payload, c) {
+  const tag = _selfTestTelemetryTag(c);
+  if (!tag || !payload || typeof payload !== 'object') return payload;
+  const out = { ...payload };
+  if ('platform' in out) out.platform = tag;
+  if ('mcp_client' in out) out.mcp_client = tag;
+  if ('client_name' in out) out.client_name = (c && c.client_name_raw) || tag;
+  return out;
+}
+
 function _KNOWN_PLATFORM_FROM_NAME(name) {
   // r-platform-header (2026-07-20): the KNOWN-platform substring vocabulary,
   // shared by clientInfo detection AND the explicit platform header. Returns a
@@ -4224,6 +4275,8 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
 // it never blocks the response — but a long timeout kept connections
 // open and produced log spam when dchub-backend was slow.
 async function trackToolCall(payload) {
+  // 2026-10-16: our own test callers are written as 'dchub-internal' (see _selfTestTelemetryTag).
+  try { payload = _tagOwnTestTelemetry(payload, getCtx()); } catch (_) { /* never block telemetry */ }
   try {
     await fetch(new URL('/api/v1/mcp/track', API_BASE).toString(), {
       method: 'POST',
@@ -4334,6 +4387,9 @@ async function signalPaywall(payload) {
   // r-claude-directory: /mcp/claude shows no relay line, so its gated calls are
   // not paywall signals and stay out of the relay readout.
   try { if (_excludedFromRelayReadout(getCtx())) return; } catch (_) {}
+  // 2026-10-16: our own test callers' signals carry 'dchub-internal', which the
+  // backend's fire_upgrade_signal treats as synthetic (no row). See _selfTestTelemetryTag.
+  try { payload = _tagOwnTestTelemetry(payload, getCtx()); } catch (_) { /* never block telemetry */ }
   try {
     await fetch(new URL('/api/v1/mcp/signal-paywall', API_BASE).toString(), {
       method: 'POST',
@@ -4466,7 +4522,8 @@ async function trackPaidHit(sessionId, toolName) {
         session_id: sessionId,
         tool: toolName,
         user_agent: c.client_ua || c.user_agent || null,
-        mcp_client: c.platform || null,
+        // 2026-10-16: 'dchub-internal' for our own test callers (_selfTestTelemetryTag)
+        mcp_client: _selfTestTelemetryTag(c) || c.platform || null,
         variant,
       }),
       signal: AbortSignal.timeout(10000),
@@ -6259,6 +6316,8 @@ export function _isQaCaller(c) {
 // Test seam: the header builders, driven inside _ctxALS.run by
 // test/qa-marker-forward.test.mjs.
 export { callAPI as _callAPIForTest, callAPIWrite as _callAPIWriteForTest };
+// Test seam for test/own-test-telemetry-tag.test.mjs (driven inside _ctxALS.run).
+export { signalPaywall as _signalPaywallForTest, trackPaidHit as _trackPaidHitForTest };
 
 async function callAPI(path, params = {}, opts = {}) {
   const url = new URL(path, API_BASE);
