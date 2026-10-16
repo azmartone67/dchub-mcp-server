@@ -6397,11 +6397,7 @@
           "anyOf": [
             {
               "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {},
-                "additionalProperties": {}
-              }
+              "items": {}
             },
             {
               "type": "null"
