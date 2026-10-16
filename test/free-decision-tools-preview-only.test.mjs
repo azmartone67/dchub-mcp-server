@@ -271,7 +271,15 @@ describe('the three decision tools are previews on every non-paid seat (default 
     for (const [seat, who] of SEATS) {
       it(`${tool} / ${seat}: labelled taste, decision scalars absent, counter untouched`, async () => {
         const consumeBefore = consumeHits.length;
-        const r = await callAs(who, tool, ARGS[tool]);
+        // Item 3 (owner draft 2026-10-16): an email-bound key gets capped FULL grid/queue answers
+        // (test/email-bound-decision-full.test.mjs). This row keeps the 10-08 shape as the item-3
+        // switch's OFF state, so the taste contract below is still pinned for that seat.
+        const item3Off = seat === 'email-bound' && T.EMAIL_FULL_DECISION_TOOLS.includes(tool);
+        const prevItem3 = process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS;
+        if (item3Off) process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = '0';
+        let r;
+        try { r = await callAs(who, tool, ARGS[tool]); }
+        finally { if (item3Off) { if (prevItem3 === undefined) delete process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS; else process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = prevItem3; } }
         const views = { data: r.data, sc: r.sc };
         for (const [where, o] of Object.entries(views)) {
           expect(o.taste, `${where}: no taste block\n${r.text.slice(0, 600)}`).toBeTruthy();
@@ -545,11 +553,15 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
   it('the clause names the three tools and the rung', () => {
     // the shortest honest form: the lean handshake quotes the FREE TIER block verbatim under a 2,048-char budget
     for (const t of ['grid', 'queue', 'market-intel']) expect(CLAUSE.toLowerCase()).toContain(t);
-    // v13 (owner 2026-10-10): the rung is named without a plan name.
-    expect(CLAUSE).toMatch(/previews on free; full needs a paid DC Hub plan\.$/);
-    expect(CLAUSE).not.toMatch(/\b(Developer|Pro|Starter)\b/);
-    expect(CLAUSE.length).toBeLessThanOrEqual(79);
-    expect(CLAUSE).not.toMatch(/\$\d/);
+    // Item 3 (owner draft 2026-10-16): the clause states the email allowance on grid/queue, from the
+    // served cap; with the item-3 switch off it is the 10-08 clause (v13: rung named without a plan name).
+    expect(CLAUSE).toMatch(/previews on free; an email adds 3 full grid\/queue answers\/day\.$/);
+    expect(T.FREE_DECISION_CLAUSE_PREVIEW_ONLY).toMatch(/previews on free; full needs a paid DC Hub plan\.$/);
+    for (const c of [CLAUSE, T.FREE_DECISION_CLAUSE_PREVIEW_ONLY]) {
+      expect(c).not.toMatch(/\b(Developer|Pro|Starter)\b/);
+      expect(c.length).toBeLessThanOrEqual(95);
+      expect(c).not.toMatch(/\$\d/);
+    }
   });
   it('initialize instructions (full, lean) and the FREE TIER block carry the rule AND the clause', () => {
     expect(S._INSTR_FREE_TIER).toContain('Free key: previews plus 2 full answers per tool per day.');
@@ -585,8 +597,9 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     };
     walk(ROOT);
     expect(hits.length, 'the sentence must still be emitted somewhere (a scan that finds nothing proves nothing)').toBeGreaterThan(3);
+    // Item 3: the docs quote the CURRENT clause (lib/free-decision-taste.mjs FREE_DECISION_CLAUSE).
     const missing = hits.filter((p) => !readFileSync(join(ROOT, p), 'utf8').includes(
-      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'previews on free; full needs a paid DC Hub plan'));
+      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'previews on free; an email adds 3 full grid/queue answers/day'));
     expect(missing, 'free-key sentence without the decision-tools clause').toEqual([]);
   });
 });

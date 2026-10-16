@@ -317,8 +317,10 @@ const PINNED = {
   // Starter key keeps its daily allowance, spent → the taste. Pre-change row: anon N,N /
   // free F,N / ident F,N / pack F,F / starter F,N.
   get_grid_intelligence: {
-    anon: [P, P], free: [P, P], ident: [P, P],
-    pack: [P, P],
+    // Item 3 (owner draft 2026-10-16): a key with a bound email (ident, and the pack seat, which
+    // carries one) gets capped full answers: full while fresh, the preview once spent.
+    anon: [P, P], free: [P, P], ident: [F, P],
+    pack: [F, P],
     starter: [F, P],
     developer: [F, F],
     pro: [F, F] },

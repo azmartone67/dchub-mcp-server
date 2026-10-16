@@ -78,6 +78,7 @@ test/claude-desktop-install-is-stdio.test.mjs
 test/claude-directory-auth.test.mjs
 test/claude-directory-capacity-source.test.mjs
 test/claude-directory-catalog.test.mjs
+test/claude-directory-decision-claim-line.test.mjs
 test/claude-directory-probe.test.mjs
 test/claude-directory-readout.test.mjs
 test/claude-directory-search-plans-line.test.mjs
@@ -121,6 +122,7 @@ test/doc-stripe-links-are-canonical.test.mjs
 test/ecosystem-sync.test.mjs
 test/edge-gate-recognition.test.mjs
 test/edge-key-flip-evidence.test.mjs
+test/email-bound-decision-full.test.mjs
 test/email-hint-after-taste.test.mjs
 test/end-of-burst-hook.test.mjs
 test/energy-prices-free-taste.test.mjs
