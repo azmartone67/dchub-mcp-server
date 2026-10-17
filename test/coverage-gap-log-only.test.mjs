@@ -108,11 +108,11 @@ const stepsRow = (hits) => track(hits).find((b) => b.tool === 'execute_plan_step
 const completed = (hits) => track(hits).find((b) => b.event === 'recipe_lifecycle' && b.phase === 'completed');
 const callRow = (hits) => track(hits).find((b) => b.tool === 'execute_plan');
 
-async function plan(path, intent) {
+async function plan(path, intent, extra = {}) {
   const before = H.hits.length;
-  const init = await H.init(path, 'claude-ai', UA);
+  const init = await H.init(path, 'claude-ai', { ...UA, ...extra });
   const sid = init.headers.get('mcp-session-id');
-  const res = await H.call(path, 'execute_plan', { intent }, { ...UA, 'mcp-session-id': sid });
+  const res = await H.call(path, 'execute_plan', { intent }, { ...UA, ...extra, 'mcp-session-id': sid });
   await settle();
   return { res, hits: H.hits.slice(before) };
 }
@@ -125,6 +125,7 @@ beforeAll(async () => {
   run.plain = await plan('/mcp', PLAIN);
   run.eval = await plan('/mcp', EVAL);
   run.profile = await plan('/mcp/claude', LEASE);
+  run.qa = await plan('/mcp', PLAIN, { 'x-dchub-qa': '1' });
 }, 240_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 
@@ -184,5 +185,14 @@ describe('the scripted eval family is written as the existing internal tag', () 
   it('the response the agent gets is not changed by the tag', () => {
     expect(run.eval.res.raw).toMatch(/plan_execution/);
     expect(run.eval.res.raw).not.toMatch(/dchub-internal|eval_intent/);
+  });
+});
+
+describe('the steps row carries the QA marker (ported from the duplicate PR)', () => {
+  it('a QA-marked plan writes is_qa on the steps row', () => {
+    expect(stepsRow(run.qa.hits).is_qa).toBe(true);
+  });
+  it('control: a plain caller row is not marked', () => {
+    expect(stepsRow(run.plain.hits).is_qa).toBeUndefined();
   });
 });

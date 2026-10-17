@@ -26054,6 +26054,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // r-claude-directory: tag the planner row with its arrival source when
           // there is one; the /mcp payload (no source) is unchanged.
           ...(c && c.source ? { source: c.source } : {}),
+          // QA runs carry the same marker the per-call rows send, so the gap count can drop them.
+          ...(_isQaCaller(c) ? { is_qa: true } : {}),
         });
         // r-recipe-lifecycle: the paired terminal event. Carries started_at
         // again so a dropped `started` (track is fire-and-forget) is healed
