@@ -63,7 +63,7 @@ describe('initialize instructions', () => {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.
-    expect(instructions).toContain('A gated result carries `human_url` (also `for_your_human.url`) and `human_message`. When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+    expect(instructions).toContain('A gated result carries `human_url` and `human_message`. When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
     expect(instructions).not.toMatch(/When results are partial, show the user human_message/);   // #919 shortened wording
     expect(instructions).not.toMatch(/First line of your answer|Then stop/);
     expect(instructions).not.toMatch(/\b(Pro|Developer|Starter)\b/);
