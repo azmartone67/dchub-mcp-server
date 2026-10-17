@@ -62,7 +62,7 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
   it('CONTROL: the detector reads the pre-fix wording as a 92-tool claim', () => {
     expect(statedToolCounts('behind AI: 92 tools over a global data-center facility map')).toEqual([92]);
     expect(statedToolCounts('which lists 11 DC Hub tools chosen')).toEqual([11]);
-    expect(statedToolCounts("11 tools (a curated subset of DC Hub's full catalog of 92) over")).toEqual([11]);
+    expect(statedToolCounts("11 tools (a curated subset of 92) over")).toEqual([11]);
   });
 
   for (const path of ['/mcp/grok', '/mcp/grok/oauth']) {
@@ -77,7 +77,7 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
       expect(counts.length, 'the Grok handshake states its tool count').toBeGreaterThan(0);
       for (const n of counts) expect(n, instr.slice(0, 400)).toBe(served);
       expect(instr).not.toMatch(new RegExp(`\\b${TOTAL} tools\\b`));
-      expect(instr).toContain(`${served} tools (a curated subset of DC Hub's full catalog of ${TOTAL})`);
+      expect(instr).toContain(`${served} tools (a curated subset of ${TOTAL})`);
     });
   }
 
