@@ -19,12 +19,16 @@ name: hold-guard
 # Removing the label lifts the hold (the job re-runs on `unlabeled` and passes).
 # GITHUB_TOKEN is enough: it only disarms and drafts, and it never merges or
 # pushes.
+# The disarm and draft GraphQL mutations need `contents: write` as well as
+# `pull-requests: write`; with `contents: read` both answered "Resource not
+# accessible by integration" (10-17) and the PR stayed armed. pull_request_target
+# never checks out PR code, so the wider scope runs nothing from the PR.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, auto_merge_enabled]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
