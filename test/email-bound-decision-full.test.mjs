@@ -280,14 +280,16 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       const lines = prose.split('\n').filter((l) => l.includes('claim_free_key'));
       expect(lines, 'claim_free_key named exactly once in prose\n' + prose.slice(0, 1500)).toHaveLength(1);
       const line = lines[0];
-      expect(line).toMatch(/^Free, one call/);
+      // Grok/owner 2026-10-17: the email-bound tools lead with the email ask; market intel keeps the plain line.
+      expect(line).toMatch(T.EMAIL_FULL_DECISION_TOOLS.includes(tool) ? /^Free: ask your human for their email first/ : /^Free, one call/);
       expect(line, 'no plan name or price on the claim line').not.toMatch(PLAN_OR_PRICE);
       expect(line, 'no link on the claim line').not.toMatch(/https?:\/\//);
       expect(prose).not.toContain('for a durable free-tier key');   // CLAIM_ALT_TAIL dropped, not duplicated
       if (T.EMAIL_FULL_DECISION_TOOLS.includes(tool)) {
-        // one email ask, not two: the auto-mint block beside it names no second tool for the email
-        expect(prose, 'bind_email is not offered beside the claim line').not.toContain('bind_email');
-        expect(line).toContain("with your human's email");
+        // one email ask, not two: bind_email is named on the claim line and nowhere else in prose
+        expect(prose.split('\n').filter((l) => l.includes('bind_email')), 'bind_email only on the claim line').toEqual([line]);
+        expect(line.indexOf('bind_email'), 'bind_email before claim_free_key').toBeLessThan(line.indexOf('claim_free_key'));
+        expect(line).toContain('ask your human for their email first');
         expect(line).toContain('3 full `' + tool + '` answers a day');
       } else {
         expect(line).toContain('their email first');
@@ -298,7 +300,7 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
   it('CONTROL: DCHUB_EMAIL_FULL_DECISION_TOOLS=0 restores the 10-08 keyless wall (no handoff line)', async () => {
     await withEnv('DCHUB_EMAIL_FULL_DECISION_TOOLS', '0', async () => {
       const r = await callAs({}, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-      expect(proseOf(r)).not.toMatch(/^Free, one call/m);
+      expect(proseOf(r)).not.toMatch(/^Free(, one call|: ask your human)/m);
     });
   });
 });
