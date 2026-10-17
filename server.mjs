@@ -194,6 +194,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
@@ -603,7 +604,8 @@ function _relayWallKindFor(opts) {
     // 'siteruns' (owner 2026-10-10): the keyless analyze_site wall's email unlock (_lpWallEmailResult);
     // the backend's relay_wall_kind reads it for analyze_site only. Unknown to an older backend, which
     // ignores a trailing field it does not know (see the w-freekey note above).
-    if (opts && /^(depth|capacity|siteruns|sitekey)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
+    // 'freekey' (2026-10-16): the keyless anonymous-cap wall's email unlock (_keylessCapEmailLink).
+    if (opts && /^(depth|capacity|siteruns|sitekey|freekey)$/.test(String(opts.wall || ''))) return 'w-' + opts.wall;
     if (!_wallKindStampOn()) return '';
     const k = (opts && typeof opts.kind === 'string') ? opts.kind : ((getCtx() && getCtx()._wallKind) || '');
     return (k === WALL_KIND_CAPACITY || k === WALL_KIND_FREEKEY) ? k : '';
@@ -779,16 +781,16 @@ function _proTrialIdentity(apiKey) {
 // POST the data-returning call to the backend; {arm, offer} when THIS response
 // is the eligible one, else null. Fail-closed to "no offer": any error, timeout
 // or non-200 leaves the response exactly as it was.
-export async function _proTrialOfferDecide(c, toolName, { fetchImpl = fetch, trigger = '' } = {}) {
+export async function _proTrialOfferDecide(c, toolName, { fetchImpl = fetch, trigger = '', identity = '' } = {}) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 1500);
   try {
     const r = await fetchImpl(API_BASE + '/api/v1/mcp/pro-trial-offer/decide', {
       method: 'POST', signal: ctl.signal,
       headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
-      body: JSON.stringify({ identity: _proTrialIdentity(c.api_key), tool: toolName,
+      body: JSON.stringify({ identity: identity || _proTrialIdentity(c.api_key), tool: toolName,
                              session_id: c.session_id || '', platform: c.platform || '',
-                             ...(trigger === 'cap' ? { trigger: 'cap' } : {}) }),
+                             ...((trigger === 'cap' || trigger === 'keyless_wall') ? { trigger } : {}) }),
     });
     if (!r || r.status !== 200) return null;
     const d = await r.json();
@@ -830,6 +832,51 @@ export async function _withProTrialOffer(result, toolName, c, env = process.env,
     }
     return { ...result, content, structuredContent: { ...sc, for_your_human: relay } };
   } catch (_e) { return result; }   // an ask is never worth failing a response over
+}
+
+// ── keyless wall trial offer (owner-approved conversion item 2026-10-16) ────────
+// A KEYLESS caller's analyze_site wall gets the same offer decision a keyed caller's cap hit
+// does: the backend's once-per-30-days rule, 50/50 arm, operator exclusion. A keyless caller
+// has no key ref, so its identity is sk-<sha256(transport session)>, the session the wall's
+// relay token carries (lib/keyless-wall.mjs sessionIdentity; dchub-backend
+// routes/pro_trial_offer KEYLESS WALL TRIGGER). Only with a REAL session: a session-less
+// wall's relay id is minted per request and cannot carry a once-per-30-days rule. Only after
+// the wall's handler returned data (the teaser), as for the keyed offer. The offer arm's wall
+// link carries ?offer=pro_trial_7d (its page offers the 7-day trial under the email form); the
+// holdout keeps the plain link. Returns the relay to use, or null for "the plain one".
+// Kill switches: DCHUB_PRO_TRIAL_OFFER (the offer itself) and DCHUB_PRO_TRIAL_OFFER_KEYLESS.
+export function _keylessTrialOfferEligible(c, toolName, env = process.env) {
+  if (!proTrialOfferEnabled(env) || !_keylessTrialOfferOn(env) || !proTrialOfferTools(env).has(toolName)) return false;
+  if (!c || c.api_key || !_realSession(c.session_id)) return false;
+  try { if (_excludedFromRelayReadout(c)) return false; } catch (_) {}
+  if (isBotOrInternalCtx(c) || _isQaCaller(c) || _selfTestTelemetryTag(c)) return false;
+  if (_isCleanPlatform()) return false;
+  return true;
+}
+export async function _keylessTrialOfferRelay(c, toolName, tier, wall, hadData,
+                                              decide = _proTrialOfferDecide, env = process.env) {
+  try {
+    if (!hadData || !_keylessTrialOfferEligible(c, toolName, env)) return null;
+    const d = await decide(c, toolName, { trigger: 'keyless_wall', identity: _sessionIdentity(c.session_id) });
+    if (!d || d.arm !== 'offer') return null;
+    const r = buildHumanRelay(toolName, tier || 'free', c.session_id, { wall, offer: PRO_TRIAL_OFFER });
+    return (r && r.url) ? r : null;
+  } catch (_) { return null; }
+}
+
+// ── keyless anonymous-cap wall, email first (lib/keyless-wall.mjs) ──────────────
+// The page link for a keyless land/site caller WITH a session: a relay born w-siteruns for
+// analyze_site (its email unlock page), w-freekey for the others (dchub-backend
+// handoff_email_capture grants the email tier onto the session; a keyed caller is not subject
+// to the anonymous per-IP limits). '' when this does not apply: the caller keeps the earlier
+// wall. Kill switch DCHUB_KEYLESS_EMAIL_FIRST=0.
+export async function _keylessCapEmailLink(c, name, tier) {
+  try {
+    if (!_keylessEmailFirstOn() || !c || c.api_key || !_LAND_SITE_TOOLS.has(name) || !_realSession(c.session_id)) return '';
+    const r = buildHumanRelay(name, tier || 'free', c.session_id, { wall: name === 'analyze_site' ? 'siteruns' : 'freekey' });
+    if (!r || !r.url) return '';
+    return await _shortRelayPageLink(_pcTagUrl(r.url, _paywallArmFor(c)), name);
+  } catch (_) { return ''; }
 }
 
 // ── Paywall response contract (growth audit item c, 2026-09-28) ─────────────
@@ -4384,6 +4431,33 @@ export function _recipeLifecyclePayload(phase, fields, c) {
 // /api/v1/mcp/funnel rollup couldn't tell which tools were driving demand
 // at the paywall.
 //
+// ── quota_wall_hit (2026-10-16, lib/keyless-wall.mjs) ─────────────────────────
+// One event per call whose logged status is a wall, or that wrote a paid_tool_blocked
+// signal, to dchub-backend routes/mcp_funnel_events (POST /api/v1/mcp/funnel-event). The
+// funnel's "quota wall hits" read a monthly-quota rollup no live wall writes; this is the
+// event those walls never wrote. Fire and forget; QA callers are sent with is_qa so the
+// backend flags the row, and our own test callers carry 'dchub-internal'. Kill switch
+// DCHUB_QUOTA_WALL_EVENT=0.
+export function _quotaWallEventFor(c, name, status) {
+  try {
+    if (!_quotaWallEventOn()) return null;
+    const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
+    return _quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
+                                 isQa: _isQaCaller(c), platform: tagged.platform });
+  } catch (_) { return null; }
+}
+function _recordQuotaWallHit(c, name, status) {
+  try {
+    const body = _quotaWallEventFor(c, name, status);
+    if (!body || !INTERNAL_KEY) return;
+    fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+    }).catch(() => {});
+  } catch (_) { /* telemetry never touches a response */ }
+}
+
 // signalPaywall() POSTs to a thin Flask endpoint that delegates to
 // fire_upgrade_signal() — which already handles synthetic-traffic
 // exclusion, api_key→user_email resolution, and the canonical INSERT
@@ -4391,6 +4465,9 @@ export function _recipeLifecyclePayload(phase, fields, c) {
 // paywall response. 1500ms timeout to match the rest of the telemetry
 // pipeline (track / heartbeat / validateKey).
 async function signalPaywall(payload) {
+  // 2026-10-16: a paid_tool_blocked signal makes this call a wall for the quota_wall_hit
+  // event (_recordQuotaWallHit, written once per call in the handler's finally).
+  try { if (payload && payload.signal_type === 'paid_tool_blocked') { const _c = ctx.getStore(); if (_c) _c._paidBlocked = true; } } catch (_) {}
   // r-claude-directory: /mcp/claude shows no relay line, so its gated calls are
   // not paywall signals and stay out of the relay readout.
   try { if (_excludedFromRelayReadout(getCtx())) return; } catch (_) {}
@@ -20040,6 +20117,7 @@ function trackedTool(srv, name, description, schema, handler) {
     _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
     const t0 = Date.now();
     let status = 'ok';
+    try { c._paidBlocked = false; } catch (_) { /* set by signalPaywall for this call only */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
@@ -20360,6 +20438,14 @@ function trackedTool(srv, name, description, schema, handler) {
       // only runs once the IP is already past the wall.
       if (!c.api_key && await _anonHardWalled(c.client_ip) && !(await _anonWallPaidCall(c, extra, _mppArgs))) {
         status = 'anon_hard_wall';
+        // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
+        const _capLink = await _keylessCapEmailLink(c, name, tier);
+        if (_capLink) {
+          const _cw = _keylessCapEmailResult({ name, link: _capLink, isError: _wallIsError(), copyVersion: WALL_COPY_VERSION,
+            base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
+                    limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
+          if (_cw) return _cw;
+        }
         const _sidw = c.session_id || 'no-session';
         const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
           + ANON_HARD_WALL_MULT + "x the free anonymous allowance of " + ANON_DAILY_CAP
@@ -20496,9 +20582,12 @@ function trackedTool(srv, name, description, schema, handler) {
             } catch (_) { _gsaTeaser = null; }
           }
           if (_emailOn) {
-            const _ew = await _lpWallEmailResult(name, _emailRelay, _hl, _teaser, { keyLink: _keyLink });
+            // 2026-10-16: the keyless trial offer (offer arm: the same wall link with ?offer=).
+            const _offRelay = _noSid ? null
+              : await _keylessTrialOfferRelay(c, name, tier, 'siteruns', !!_teaser);
+            const _ew = await _lpWallEmailResult(name, _offRelay || _emailRelay, _hl, _teaser, { keyLink: _keyLink });
             if (_ew && _keyLink) _storeSiteClaimRequest(c, _ew.structuredContent && _ew.structuredContent.request_id, args, _siteLoc);
-            if (_ew) return _withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink);
+            if (_ew) return _withKeylessWallQuota(_withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink));
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
           if (_cmpoTeaser) return _withCompositeTeaser(await _lpWallResultV11(name, _hl), _cmpoTeaser);
@@ -21779,6 +21868,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               remaining_today_basis: 'ANONYMOUS PER-IP calls across ALL tools today. This is the limit currently stopping you — it binds BEFORE any per-tool budget, so ignore a non-zero quota.full_answers_remaining_today in this same response and do not retry until you claim a key.',
               binding_limit: 'anon_ip_daily',
             });
+            // 2026-10-16: a keyless land/site caller with a session: the same preview, email first.
+            const _capLinkS = await _keylessCapEmailLink(c, name, tier);
+            if (_capLinkS) {
+              const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS });
+              return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
+            }
             // 2026-07-24 growthfix: mirror the payload into structuredContent.
             // Every tool declares an outputSchema, so schema-aware clients read
             // structuredContent as THE result — without this, _stampEntityCb's
@@ -22501,6 +22596,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ...(_wallLinkTh ? { wall_link_th: _wallLinkTh } : {}),
         ...(_isQaCaller(c) ? { is_qa: true } : {}),
       }).catch(() => {});
+      // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs).
+      _recordQuotaWallHit(c, name, status);
     }
   });
   // r-output-schema-typed: flagship tools advertise their documented data
@@ -24087,6 +24184,9 @@ export function _wallKindFor(sc, c, name) {
     const tool = String(name || '');
     if (PRO_ONLY_TOOLS.has(tool) || LP_TOOLS.has(tool)) return '';
     const up = (sc._upgrade && typeof sc._upgrade === 'object') ? sc._upgrade : {};
+    // 2026-10-16: the keyless cap wall's email unlock is a free-key wall by construction (its
+    // page grants the email tier); its cap fields below must not re-stamp it capacity.
+    if (sc.unlock_kind === 'email_cap' || up.unlock_kind === 'email_cap') return WALL_KIND_FREEKEY;
     const quota = (sc.quota && typeof sc.quota === 'object') ? sc.quota : null;
     // #838: the over-cap coaching on a depth-teased tool (pack_opens:false) is not a
     // capacity wall — the pack buys nothing there — so it takes the freekey / depth

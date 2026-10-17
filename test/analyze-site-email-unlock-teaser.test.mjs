@@ -69,7 +69,11 @@ function relayFields(url) {
 }
 // request_id is an id (a uuid can hold "-82-"), not a figure: figure scans skip it.
 const noIds = (v) => JSON.stringify(v, (k, x) => (k === 'request_id' ? undefined : x));
+// 2026-10-16 (keyless wall quota, lib/keyless-wall.mjs): the wall carries remaining_this_month: 0,
+// a count of full answers left (always 0 for a keyless caller), not a site figure. Exempt at
+// exactly that path AND that value: any other number there, or anywhere, still fails.
 function numbersIn(v, path = '', out = []) {
+  if (typeof v === 'number' && path === 'remaining_this_month' && v === 0) return out;
   if (typeof v === 'number') out.push([path, v]);
   else if (Array.isArray(v)) v.forEach((x, i) => numbersIn(x, `${path}[${i}]`, out));
   else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) numbersIn(x, path ? `${path}.${k}` : k, out);
@@ -129,6 +133,8 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
       expect(all, `figure ${f} leaked`).not.toMatch(new RegExp(`(?<![\\d.])${f.replace('.', '\\.')}(?![\\d.])`));
     }
     const nums = numbersIn(r.sc);
+    expect(r.sc.remaining_this_month).toBe(0);
+    expect(r.sc.resets_at).toMatch(/^\d{4}-\d{2}-01T00:00:00Z$/);
     expect(nums, JSON.stringify(nums)).toEqual([]);
     expect(r.sc.provenance.completeness_basis).toContain('no score or figure was served');
     expect(r.sc.site_teaser.verdict).not.toBe('HOLD');
