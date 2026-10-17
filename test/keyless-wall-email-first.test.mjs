@@ -26,7 +26,7 @@ const SITE = () => ({
   nearby: { facilities_100km: 41, substations_50km: 12 }, source: 'DC Hub Site Intelligence',
 });
 
-let H, fence, anonCount = 0, ipN = 0, decideArm = 'offer';
+let H, fence, anonCount = 0, ipN = 0, decideArm = 'offer', shortFail = false;
 const shortReqs = [];
 const decideReqs = [];
 
@@ -83,6 +83,7 @@ beforeAll(async () => {
       if (p === '/api/v1/mcp/anon-usage') return { ok: true, count: anonCount };
       if (p === '/api/v1/relay/short') {
         shortReqs.push(body);
+        if (shortFail) return { status: 500, body: { error: 'down' } };
         return (body && body.relay_url) ? { ok: true, url: SHORT } : { status: 500, body: { error: 'no' } };
       }
       if (p === '/api/v1/mcp/pro-trial-offer/decide') {
@@ -97,7 +98,7 @@ beforeAll(async () => {
 }, 120_000);
 afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 beforeEach(() => {
-  anonCount = 0; decideArm = 'offer'; shortReqs.length = 0; decideReqs.length = 0;
+  anonCount = 0; decideArm = 'offer'; shortFail = false; shortReqs.length = 0; decideReqs.length = 0;
   for (const k of ['DCHUB_KEYLESS_EMAIL_FIRST', 'DCHUB_QUOTA_WALL_EVENT', 'DCHUB_PRO_TRIAL_OFFER',
                    'DCHUB_PRO_TRIAL_OFFER_KEYLESS', 'DCHUB_GATED_PREVIEW']) delete process.env[k];
 });
@@ -127,6 +128,18 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     expect(rel.fields[1]).toBe('find_sites');
     expect(rel.fields).toContain('w-freekey');
     expect(rel.fields).not.toContain('w-capacity');
+  });
+
+  it('short-link outage: the long relay is the one link and stays w-freekey (never re-stamped capacity)', async () => {
+    anonCount = 999;
+    shortFail = true;
+    const r = await call('find_sites', { state: 'TX' });
+    expect(r.sc.unlock_kind).toBe('email_cap');
+    const rel = relayFields(r.sc.human_url);
+    expect(rel && rel.sigOk).toBe(true);
+    expect(rel.fields).toContain('w-freekey');
+    expect(rel.fields).not.toContain('w-capacity');
+    expect(r.sc.user_message).toBe('Keep going free by email → ' + r.sc.human_url);
   });
 
   it('analyze_site: the relay is born w-siteruns (its own email unlock page)', async () => {
@@ -221,8 +234,13 @@ describe('B. keyless analyze_site email wall: the trial offer decision', () => {
 
   it('QA callers are never assigned', async () => {
     process.env.DCHUB_PRO_TRIAL_OFFER = '1';
+    // header-only QA (a normal UA): the UA form is already caught as a bot/internal context
+    await call('analyze_site', { lat: 33.45, lon: -112.07 }, { extraHdr: { 'x-dchub-qa': '1' } });
     await call('analyze_site', { lat: 33.45, lon: -112.07 }, { extraHdr: { 'user-agent': 'dchub-qa-readonly/0.1' } });
     expect(decideReqs).toEqual([]);
+    // CONTROL: the same call without the QA marker is asked
+    await call('analyze_site', { lat: 33.45, lon: -112.07 });
+    expect(decideReqs.length).toBe(1);
   });
 });
 
