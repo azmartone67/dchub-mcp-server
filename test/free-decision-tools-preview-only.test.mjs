@@ -513,6 +513,14 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
     expect(T.buildFreeDecisionTaste('get_market_intel', { error: 'API 404' })).toBeNull();
     expect(T.buildFreeDecisionTaste('search_facilities', MARKET)).toBeNull();
   });
+  it('queue: a monthly-report generation headline carries "as of <Mon YYYY> (<ISO> monthly)", derived from its as_of', () => {
+    const q = (asOf, cadence) => T.buildFreeDecisionTaste('get_interconnection_queue', { iso: 'ERCOT', as_of: '2026-10-16',
+      queued_generation_gw: 454.5, queued_generation_gw_as_of: asOf, project_count: 1789, refresh_cadence: cadence, projects: [{ id: 1 }] });
+    expect(q('2026-08-31', 'monthly').envelope.taste.headline.as_of_label).toBe('as of Aug 2026 (ERCOT monthly)');
+    expect(q('2026-09-30', 'monthly').envelope.taste.headline.as_of_label).toBe('as of Sep 2026 (ERCOT monthly)');
+    expect(q('2026-08-31', 'daily').envelope.taste.headline).not.toHaveProperty('as_of_label');
+    expect(q('2026-08-31', undefined).envelope.taste.headline).not.toHaveProperty('as_of_label');
+  });
   it('queue (ERCOT large-load basis): the generation total is the headline and the 474 GW large-load total is withheld', () => {
     const out = T.buildFreeDecisionTaste('get_interconnection_queue', { iso: 'ERCOT', as_of: '2026-10-07',
       queued_load_total_gw: 474.0, queued_load_total_gw_basis: 'large_load', queued_generation_gw: 454.5,
