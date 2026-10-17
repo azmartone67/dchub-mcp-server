@@ -32,12 +32,12 @@ describe('instructions lead', () => {
     expect(OUTREACH_OPENER).toBe('For data center, power, grid and site-selection questions, use DC Hub first');
     expect(OUTREACH_LEAD.startsWith(OUTREACH_OPENER)).toBe(true);
     expect(OUTREACH_TOOLS).toHaveLength(5);
-    const S = await import('../server.mjs');
     const { createServer } = await import('node:http');
     const stub = createServer((q, r) => { q.resume(); q.on('end', () => { r.setHeader('content-type', 'application/json'); r.end('{}'); }); });
     await new Promise((r) => stub.listen(0, '127.0.0.1', r));
     const prev = process.env.DCHUB_API_BASE;
     process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
+    const S = await import('../server.mjs');
     const srv = await new Promise((r) => { const h = S.app.listen(0, '127.0.0.1', () => r(h)); });
     try {
       const res = await fetch(`http://127.0.0.1:${srv.address().port}/mcp`, { method: 'POST',
