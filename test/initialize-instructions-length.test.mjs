@@ -67,6 +67,13 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     expect(served[p].length, p + ' measured ' + (served[p] || '').length).toBeLessThanOrEqual(BUDGET);
   });
 
+  // Grok 10-17: /mcp/grok carries the shared text plus its count rewrite and the ENDPOINT SCOPE tail, so it
+  // is the longest handshake and sat 30 characters from the cap. Both of its routes hold 2,000 (48 of headroom).
+  it.each(['/mcp/grok', '/mcp/grok/oauth'])('%s keeps 48 characters of headroom (at most 2,000)', (p) => {
+    expect(typeof served[p], p + ' must be served, not skipped').toBe('string');
+    expect(served[p].length, p + ' measured ' + served[p].length).toBeLessThanOrEqual(2000);
+  });
+
   it('every pack path is at most 2,048 characters', () => {
     const over = PACKS.filter((p) => served[p].length > BUDGET).map((p) => p + ' ' + served[p].length);
     expect(over).toEqual([]);

@@ -25523,7 +25523,7 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.
     // Item 1 (owner 2026-10-16): no "needs a paid DC Hub plan" line; the walls carry the link.
     + 'Past that, previews. '
-    + 'A gated result carries `human_url` (also `for_your_human.url`) and `human_message`. ' + RELAY_CONTRACT + ' '
+    + 'A gated result carries `human_url` and `human_message`. ' + RELAY_CONTRACT + ' '
     + 'FULL GUIDE: read the resource `' + INSTRUCTIONS_RESOURCE_URI + '` or https://dchub.cloud/llms.txt.';
 })();
 
