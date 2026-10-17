@@ -302,10 +302,15 @@ describe('what it must not do', () => {
     expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call, no email: call `claim_free_key`/);
   });
 
-  it('leaves the decision tools alone: their wall says a free key does not deepen them', async () => {
-    const seat = await open();
-    const r = await call(seat, 'get_market_intel', { market: 'northern-virginia' });
-    expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call, no email: call `claim_free_key`/);
+  it('leaves the decision tools alone while the item-3 switch is off: their 10-08 wall says a free key does not deepen them', async () => {
+    // Item 3 (owner draft 2026-10-16): with DCHUB_EMAIL_FULL_DECISION_TOOLS on (default) a keyless decision
+    // preview DOES carry its own line (test/email-bound-decision-full.test.mjs); off restores this.
+    process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = '0';
+    try {
+      const seat = await open();
+      const r = await call(seat, 'get_market_intel', { market: 'northern-virginia' });
+      expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call, no email: call `claim_free_key`/);
+    } finally { delete process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS; }
     expect(S._singleAskWall('get_market_intel')).toBe(false);   // not a single-ask wall by default; excluded by the decision rule
   });
 
@@ -332,10 +337,18 @@ describe('what it must not do', () => {
     process.env.DCHUB_GRID_SELL_LINE = '0';
     try { expect((await run('get_fiber_intel')).content, 'fiber, sell line off').toHaveLength(3); }
     finally { delete process.env.DCHUB_GRID_SELL_LINE; }
-    // the decision tools: a free key does not deepen them, so a preview wall there is left to say so
+    // the decision tools (item 3, default on): a keyless preview carries the decision line; off: left alone
+    const runKeyless = (name) => S._ctxALS.run({ session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor',
+      auth_source: 'none', _wallStatus: 'trial_used' }, async () => S._claimHandoffStep(res(), name));
     for (const n of ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel']) {
-      expect((await run(n)).content, n).toHaveLength(2);
+      expect((await runKeyless(n)).content, n + ' item 3 on').toHaveLength(3);
     }
+    process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = '0';
+    try {
+      for (const n of ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel']) {
+        expect((await runKeyless(n)).content, n + ' item 3 off').toHaveLength(2);
+      }
+    } finally { delete process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS; }
     // paid sell line (default OFF): served by default, skipped when the owner turns it on
     for (const n of ['compare_isos', 'rank_markets']) expect((await run(n)).content, n + ' default').toHaveLength(3);
     process.env.DCHUB_PAID_SELL_LINE = '1';

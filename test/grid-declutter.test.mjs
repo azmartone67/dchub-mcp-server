@@ -69,7 +69,15 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
       if (pc) expect(sc.next_ask && sc.next_ask.tool).toBeTruthy();   // stays in structuredContent (v1's stub is error-flagged, so no outreach)
       expect(sc.user_message).toMatch(/plans that include the full/);
       const blocks = r.content.map((b) => b.text).filter((x) => !/^Cite as: /.test(x));
-      expect(blocks[blocks.length - 1]).toContain(sc.user_message.slice(0, 40));   // the ask is the last block but a bare citation line
+      {
+        // Item 3 (owner draft 2026-10-16): a keyless decision-tool preview ends with the one-step
+        // claim_free_key line (no link, no plan, no price). Where it lands after the ask, the ask is
+        // the block right before it; nothing else may come between or after.
+        const last = blocks[blocks.length - 1];
+        const ask = /^Free, one call: call `claim_free_key`/.test(last) ? blocks[blocks.length - 2] : last;
+        expect(ask).toContain(sc.user_message.slice(0, 40));   // the ask is the last block but a bare citation line (and the item-3 claim line)
+        if (ask !== last) expect(last).not.toMatch(/https?:\/\//);
+      }
       expect(URL_COUNT(t, NEWS_URL)).toBe(0);                          // owner 2026-10-08: related_intel is withheld on the taste
       expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     } finally { r2(); r1(); }

@@ -27,7 +27,7 @@ Claude Desktop, Cursor, Windsurf, Cline and other JSON-config clients:
 ## Keys and plans
 
 - **Free tier:** works with no key: previews. Leave `DCHUB_API_KEY` empty.
-- **Free key:** ask your agent to call `claim_free_key`, or get one at https://dchub.cloud/connect, then set `DCHUB_API_KEY`. A free key gives previews plus 2 full answers per tool per day; add an email for 50 calls/day. Grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan. analyze_site: a free key gets a few free full site reports each month; after that, previews.
+- **Free key:** ask your agent to call `claim_free_key`, or get one at https://dchub.cloud/connect, then set `DCHUB_API_KEY`. A free key gives previews plus 2 full answers per tool per day; add an email for 50 calls/day. Grid/queue/market-intel tools: previews on free; an email adds 3 full grid/queue answers/day. analyze_site: a free key gets a few free full site reports each month; after that, previews.
 - **Paid:** plans and limits: https://dchub.cloud/pricing.
 
 Environment variables:

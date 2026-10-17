@@ -88,6 +88,15 @@ const m = (anon, free, pack, starter, developer, pro) => ({ anon, free, pack, st
 // v14 (owner 2026-10-10): the notes name no plan and no price ("a paid DC Hub plan gets the full answer",
 // "a credit pack"). Each phrase accepts the old wording too, so re-inserting it is still driven.
 const PHRASES = [
+  // Item 3 (owner draft 2026-10-16): a key with a bound email gets a daily allowance of full grid /
+  // queue answers, then previews. Every key in this harness carries an email (validate stub below),
+  // so the free and pack seats read as email-bound here: full fresh, preview spent.
+  { id: 'email-allowance-then-developer-full-starter-allowance',
+    re: /a preview with no key or a key without a bound email; a key with a bound email gets \d+ full answers a day, then previews; a paid DC Hub plan gets the full answer \(a grandfathered (?:Starter|older) key keeps its daily allowance\)/,
+    fresh: m(P, F, F, F, F, F), spent: m(P, P, P, P, F, F) },
+  { id: 'email-allowance-then-developer-full',
+    re: /a preview with no key or a key without a bound email; a key with a bound email gets \d+ full answers a day, then previews; a paid DC Hub plan gets the full answer(?! \(a grandfathered)/,
+    fresh: m(P, F, F, F, F, F), spent: m(P, P, P, F, F, F) },
   // Owner 2026-10-08: the decision tools are previews on every non-paid seat, the pack
   // included; Developer and up get the full answer (test/free-decision-tools-preview-only).
   { id: 'developer-only-full',
@@ -356,7 +365,7 @@ describe('plan_query coverage_notes tier claims match the handlers', () => {
       }
     }
     expect(done.size, 'no matrix claim was driven').toBeGreaterThanOrEqual(8);
-    expect(bad).toEqual([]);
+    expect(bad, bad.join('\n')).toEqual([]);
   }, 120000);
 
   it('the free-key call quota quoted in the notes is the canon helper', () => {

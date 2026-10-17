@@ -61,7 +61,12 @@ function codeOnly(src) {
 
 /** The `_tasteExceeded` wall branch, from its status label to its return. */
 function walledBranch() {
-  const start = SRC.indexOf("status = 'trial_cap_exceeded';");
+  // Item 3 (owner draft 2026-10-16) added a second cap wall ABOVE this one, for the email-bound
+  // grid/queue allowance (its signal is asserted behaviourally in test/email-bound-decision-full).
+  // This guard reads the original trial/free wall, found by its own label comment.
+  const label = SRC.indexOf('★ LABEL THE WALL.');
+  expect(label, 'the trial/free cap wall lost its label comment').toBeGreaterThan(-1);
+  const start = SRC.indexOf("status = 'trial_cap_exceeded';", label);
   expect(start, "the wall branch no longer labels itself").toBeGreaterThan(-1);
   const end = SRC.indexOf('} catch (_) { /* fall through to full data on parse failure */ }', start);
   expect(end, 'the wall branch lost its parse-failure catch').toBeGreaterThan(start);

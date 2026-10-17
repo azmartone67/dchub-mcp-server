@@ -258,7 +258,7 @@ Why agents pick it: the only DC-intelligence source an LLM can query live AND ci
 `data-center` · `energy` · `natural-gas` · `electricity-grid` · `ISO` · `infrastructure` · `real-estate` · `sustainability` · `market-intelligence` · `M&A`
 
 ## Pricing line (paste wherever a form asks for pricing)
-Free tier, no signup — Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan. analyze_site: a free key gets a few free full site reports each month; after that, previews. Developer, Pro and
+Free tier, no signup — Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day. Add an email: 50 calls/day (up to 10 full answers per tool per day). Paid plans: dchub.cloud/pricing. Grid/queue/market-intel tools: previews on free; an email adds 3 full grid/queue answers/day. analyze_site: a free key gets a few free full site reports each month; after that, previews. Developer, Pro and
 Enterprise plans: see https://dchub.cloud/pricing
 
 > Keep this block in sync with `tier_registry.py` in dchub-backend, which is

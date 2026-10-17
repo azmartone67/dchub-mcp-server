@@ -157,7 +157,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -195,8 +195,11 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
-import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_CLAUSE, FREE_DECISION_UNLOCKS_AT,
-         freeDecisionPreviewOnlyOn, buildFreeDecisionTaste } from './lib/free-decision-taste.mjs';
+import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
+         freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
+         // Item 3 (owner draft 2026-10-16): email-bound keys get capped full grid/queue answers.
+         EMAIL_FULL_DECISION_TOOLS as _EMAIL_FULL_DECISION_LIST, EMAIL_DECISION_DAILY_FULL_DEFAULT, emailFullDecisionOn,
+         freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
@@ -8021,9 +8024,41 @@ export function _agentDepthWallPlanless(name) {
 export function _freeTasteTool(name) {
   return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
 }
-// The sentence the free-tier rule carries while the switch is on ('' when off).
+// ── Item 3 (owner draft 2026-10-16): email-bound keys on the grid and queue reads ─────────
+// Modifies the 10-08 rule for EMAIL-BOUND keys only. A free-class key that carries a bound
+// email (ctx.email from /keys/validate) gets the FULL get_grid_intelligence and
+// get_interconnection_queue answer up to EMAIL_DECISION_DAILY_FULL_CAP per tool per UTC day,
+// then the labelled taste with one link. Anonymous callers and keys without an email stay
+// preview-only; get_market_intel stays preview-only on every non-paid seat. ONE predicate
+// for the tool, one for the seat; applyTierGate's `email_full` branch is the only door.
+// Kill switch DCHUB_EMAIL_FULL_DECISION_TOOLS=0 (read per call) restores the 10-08 rule.
+export function _emailFullDecisionTool(name) {
+  return _freePreviewOnlyTool(name) && emailFullDecisionOn()
+    && _EMAIL_FULL_DECISION_LIST.includes(String(name || '')) && EMAIL_DECISION_DAILY_FULL_CAP > 0;
+}
+// A free-class caller holding a key with a bound email. Not the 'identified' tier word:
+// mcp_dev_keys.tier defaults to 'identified' at claim, email or not (routes/email_bound_series).
+export function _emailFullSeat(c) {
+  return !!(c && c.api_key && typeof c.email === 'string' && c.email.trim() && !_isPaidDepthTier(c.tier));
+}
+// The sentence the free-tier rule carries while the switch is on ('' when off). With the
+// item-3 allowance on it states the email allowance, built from the ENFORCED cap.
 export function _freeDecisionClause() {
-  return freeDecisionPreviewOnlyOn() ? FREE_DECISION_CLAUSE : '';
+  if (!freeDecisionPreviewOnlyOn()) return '';
+  return (emailFullDecisionOn() && EMAIL_DECISION_DAILY_FULL_CAP > 0)
+    ? freeDecisionClause(EMAIL_DECISION_DAILY_FULL_CAP) : FREE_DECISION_CLAUSE_PREVIEW_ONLY;
+}
+// What a decision-tool preview says about the email allowance, by seat. '' where a bound
+// email does not deepen the tool (market intel, switch off), so the 10-08 copy stays.
+//   keyless   -> nothing here: the claim handoff line (_claimHandoffStep) carries the step.
+//   keyed     -> the bind_email step (worded so _bindNoticeOnceStep does not add a second one).
+//   bound     -> the cap is spent; it resets at 00:00 UTC.
+export function _emailFullPreviewSentence(name, c) {
+  if (!_emailFullDecisionTool(name)) return '';
+  const n = EMAIL_DECISION_DAILY_FULL_CAP;
+  if (_emailFullSeat(c)) return 'This key\u2019s ' + n + ' full `' + name + '` answers for today are used; they reset at 00:00 UTC.';
+  if (c && c.api_key) return 'A key with a bound email gets ' + n + ' full `' + name + '` answers a day: call `bind_email` with your human\u2019s email (no card).';
+  return 'A free key with a bound email gets ' + n + ' full `' + name + '` answers a day.';
 }
 
 // r71-anonpreview (2026-06-06): the 3 DECISION-layer Pro tools currently
@@ -8357,6 +8392,7 @@ function _freeDecisionTasteObject(name, parsed, ctx, args) {
   if (!_freePreviewOnlyTool(name) && !_tasteShapedOnlyTool(name)) return null;
   const built = buildFreeDecisionTaste(name, parsed, {
     bandFor: (k, v) => _bandForMaskedScore(k, v, parsed, name, false),
+    emailFullCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0,   // item 3
   });
   if (!built || !built.envelope) return null;
   _noteGate('free_decision_preview');
@@ -8404,6 +8440,8 @@ function _tasteShapedUpgrade(name, c) {
 }
 function _freeDecisionUpgrade(name, c) {
   const tier = (c && c.api_key) ? (c.tier || 'free') : 'anonymous';
+  // Item 3: on the grid/queue reads a bound email does open full answers; say what this seat can do.
+  const _email = _emailFullPreviewSentence(name, c);
   // No checkout URL in the data block, on any seat. The 🔒 header carries the rung's
   // link (key-bound for a keyed caller) and the trailing line the relay; a URL
   // repeated here would be the copy _dropRepeatCheckoutUrls removes from the prose,
@@ -8416,10 +8454,11 @@ function _freeDecisionUpgrade(name, c) {
     // keyless response carries is the relay in human_url (r-one-checkout-url).
     message: 'Free-tier taste of `' + name + '` — the headline is in `taste`; `withheld` lists what this '
       + 'tier does not return, with counts. Full `' + name + '` opens with a paid DC Hub plan. '
-      + 'Relay the link in human_url to your human. A free key, a trial key or a bound email does not deepen this tool.',
+      + 'Relay the link in human_url to your human. '
+      + (_email || 'A free key, a trial key or a bound email does not deepen this tool.'),
     next_tool: 'unlock_more_data',
     next_tool_hint: 'Relay the link in human_url to your human; that page shows the plans. '
-      + 'A free key or a bound email does not change this tool\'s depth.',
+      + (_email || 'A free key or a bound email does not change this tool\'s depth.'),
   };
 }
 // The depth-tease-shaped result (same envelope buildDepthTease returns) for the
@@ -8448,10 +8487,14 @@ function _freeDecisionTasteResult(name, result, ctx, args) {
 // relay page (human_url); without a signing secret, the Developer checkout.
 function _freeDecisionHeader(name) {
   // No URL here: the response's one human link is the relay line the wall steps add.
+  // Item 3: on the grid/queue reads the email sentence replaces "does not deepen" (keyless: the
+  // claim handoff line carries the step, so the header names no tool and nothing is said twice).
+  let _email = '';
+  try { _email = _emailFullPreviewSentence(name, getCtx() || {}); } catch (_) { _email = ''; }
   return '🔒 **`' + name + '` is a preview on the free tier** — the headline is in `taste`; `withheld` names '
     + 'every section this tier does not return, with counts. Full `' + name + '` opens with a paid DC Hub '
-    + 'plan: relay the link in human_url to your human. A free key, a trial key or a bound '
-    + 'email does not deepen this tool.\n\n---\n\n';
+    + 'plan: relay the link in human_url to your human. '
+    + (_email || 'A free key, a trial key or a bound email does not deepen this tool.') + '\n\n---\n\n';
 }
 
 // ── DEPTH-TEASE (2026-06-14): tease the flagship DEPTH tools ────────────────
@@ -10238,7 +10281,7 @@ export async function buildDepthTease(name, result, ctx, tier) {
   };
 }
 
-function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProOrAbove) {
+function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProOrAbove, emailBound) {
   // r-tier-collapse-fix (2026-09-23): 'paid' collapses Developer/Pro/Founding into one
   // literal (see _paidKeyIsProOrAbove above), so on a PRO_ONLY_TOOLS member it cannot
   // alone prove Pro-or-above. Treat an UNCONFIRMED 'paid' as 'developer' — the documented
@@ -10256,6 +10299,13 @@ function applyTierGate(toolName, params, tier, hasApiKey, isTrial, confirmedProO
   // answer trackedTool would serve, not a stale Pro-only reading.
   if (_normalizesToPaid(tier, toolName)) tier = 'paid';
   if (tier === 'paid' || tier === 'enterprise') return { allowed: true, params };
+  // Item 3 (owner draft 2026-10-16): a free-class KEY with a bound email gets the capped full
+  // answer on the grid and queue reads (the cap is applied at the trial_taste dispatch, keyed on
+  // the api key). emailBound is passed only by the request path; every other caller of this
+  // function (hints, unlocked-tool lists) leaves it undefined and keeps the 10-08 answer.
+  if (emailBound === true && (tier === 'free' || tier === 'identified') && hasApiKey && _emailFullDecisionTool(toolName)) {
+    return { allowed: true, params, trial_taste: true, email_full: true };
+  }
   // r62c-conv: a VALIDATED trial key (backend stamps source:'auto_trial' only
   // after validate_trial_key() confirms a live, unexpired row in
   // auto_trial_keys — unforgeable) unlocks the 2 highest-demand PRO tools
@@ -10571,7 +10621,7 @@ function _fullCapConsume(identity, tool, cap) {
   } catch (_) { /* fire-and-forget */ }
 }
 
-export async function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
+export async function _trialFullCallsExceeded(ipKey, tool, cap, durableId, callerCapBase) {
   try {
     const day = new Date().toISOString().slice(0, 10);
     const key = `${ipKey || 'anon'}:${tool}:${day}`;
@@ -10594,7 +10644,9 @@ export async function _trialFullCallsExceeded(ipKey, tool, cap, durableId) {
     // r-caller-cap: the caller bucket is keyed on the DURABLE identity for both
     // the local Map and the backend, because it is the caller that owns the
     // budget — not the NAT the caller shares.
-    const callerCap = _callerCapFor(cap);
+    // Item 3: the email-bound grid/queue allowance passes the email tier's per-tool cap here,
+    // so its small per-tool cap does not shrink the caller's all-tools budget.
+    const callerCap = _callerCapFor(callerCapBase > 0 ? callerCapBase : cap);
     const callerKey = `${id}:${CALLER_CAP_TOOL}:${day}`;
     // Both peeks fire together and are awaited together, so adding the caller
     // bucket costs no extra wall-clock over the per-tool one.
@@ -10643,7 +10695,7 @@ function _hydrateOnce(guardKey, localKey, identity, bucket, cap) {
 // has LEFT today under `cap`. Never increments (unlike _trialFullCallsExceeded,
 // which counts the in-flight call on every check), so CTAs can state a truthful
 // "you have N more full answers today" without burning one.
-export function _trialFullRemaining(ipKey, tool, cap, durableId) {
+export function _trialFullRemaining(ipKey, tool, cap, durableId, callerCapBase) {
   try {
     const day = new Date().toISOString().slice(0, 10);
     const n = _trialDayCounts.get(`${ipKey || 'anon'}:${tool}:${day}`) || 0;
@@ -10652,7 +10704,7 @@ export function _trialFullRemaining(ipKey, tool, cap, durableId) {
     // that promises 2 more answers on this tool while the caller's all-tools
     // budget has 0 left is the same dishonest copy the per-tool count already
     // was — it just moved buckets.
-    const callerCap = _callerCapFor(cap);
+    const callerCap = _callerCapFor(callerCapBase > 0 ? callerCapBase : cap);
     if (callerCap <= 0) return perTool;
     const id = durableId || ipKey || 'anon';
     const cn = _trialDayCounts.get(`${id}:${CALLER_CAP_TOOL}:${day}`) || 0;
@@ -10822,6 +10874,16 @@ const TRIAL_DAILY_FULL_CAP = Math.max(0, parseInt(process.env.DCHUB_TRIAL_TOOL_D
 const IDENTIFIED_DAILY_FULL_CAP = Math.max(
   TRIAL_DAILY_FULL_CAP,
   parseInt(process.env.DCHUB_IDENTIFIED_TOOL_DAILY_FULL || '10', 10));
+// Item 3 (owner draft 2026-10-16): full answers per tool per UTC day for an email-bound key on
+// get_grid_intelligence / get_interconnection_queue. Default 3 (lib/free-decision-taste.mjs),
+// clamped to [0, IDENTIFIED_DAILY_FULL_CAP] so it can never exceed the email tier's general
+// allowance. 0 turns the allowance off (the 10-08 preview-only rule). Counted per KEY, not
+// per IP: the allowance belongs to the bound key, not the NAT it shares.
+const EMAIL_DECISION_DAILY_FULL_CAP = (() => {
+  const v = parseInt(process.env.DCHUB_EMAIL_DECISION_TOOL_DAILY_FULL || String(EMAIL_DECISION_DAILY_FULL_DEFAULT), 10);
+  return Math.min(IDENTIFIED_DAILY_FULL_CAP, Number.isFinite(v) ? Math.max(0, v) : EMAIL_DECISION_DAILY_FULL_DEFAULT);
+})();
+export const _emailDecisionDailyFullCap = () => EMAIL_DECISION_DAILY_FULL_CAP;
 // r-paidtaste (2026-08-01): daily full-answer allowance for Starter/Developer on
 // the Pro-only flagship preview pair (see applyTierGate). Math.max-guarded to the
 // identified cap so a PAYING tier can never see fewer full answers than a free
@@ -11292,7 +11354,12 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // buys — a higher daily CALL cap — instead of at a depth it cannot change.
   const leadStillPreview =
     '\u{1F512} **`' + name + '` is free at PREVIEW depth — the rows above are the free tier, not a one-off taste.**\n' +
-    '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget for free — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n' +
+    (_emailFullDecisionTool(name)
+      // Item 3: on the grid/queue reads a bound email DOES open full answers (capped per day). The one
+      // step to get there is the claim handoff line (_claimHandoffStep) on this same response, so this
+      // line states the fact and names no second tool (one ask, not two).
+      ? '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left). A key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full `' + name + '` answers a day; without one, calling `' + name + '` again returns the same preview.\n'
+      : '   Your trial key is active (' + calls + ' calls/day, ' + days + 'd left) and `bind_email` raises that CALL budget for free — neither changes this tool\u2019s DEPTH. Calling `' + name + '` again returns the same preview, not more rows.\n') +
     '\n\u{1F464} **Tell your human:** for the complete `' + name + '` — ' + (_freePreviewOnlyTool(name) ? _freeDecisionRungText(name, mint.tier || 'trial', _sid) : _rungsText(name, mint.tier || 'trial')) + ' (' + _afterPayClause('', name) + ').\n';
   const leadRefused =
     '🔒 **This free trial key is not active yet — it needs your human’s email first.**\n' +
@@ -11356,6 +11423,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     first_call_nudge:          { ..._FRONT_DOOR, ...(_dcpiTeaserSC || {}) },
     retry_instructions: _refused
       ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (free, no card), then call ' + name + ' again.')
+      : (_stillPreview && _emailFullDecisionTool(name))
+      ? (name + ' is free at PREVIEW depth on this key. bind_email with your human\u2019s email opens ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full ' + name + ' answers a day on it; the full answer without a cap needs a paid DC Hub plan (relay the link in human_url to your human).')
       : _stillPreview
       ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. The complete answer is paid per call (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
       : stillPro
@@ -14262,13 +14331,26 @@ function _buildQuotaHint(toolName) {
       tier: _canonicalTier(c, _durable),
       resets_at: 'next 00:00 UTC',
     };
-    if (_freePreviewOnlyTool(toolName) && !_isPaidDepthTier(c && c.tier)) {
+    if (_emailFullDecisionTool(toolName) && _emailFullSeat(c)) {
+      // Item 3: the email-bound grid/queue allowance IS charged (per key, applyTierGate email_full),
+      // so its meter is real. Same buckets the dispatch reads.
+      q.full_answers_cap_today = EMAIL_DECISION_DAILY_FULL_CAP;
+      q.full_answers_remaining_today = _trialFullRemaining(c.api_key, toolName, EMAIL_DECISION_DAILY_FULL_CAP,
+        c.api_key, IDENTIFIED_DAILY_FULL_CAP);
+      q.full_answers_basis = 'email-bound key: ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full `' + toolName
+        + '` answers per UTC day, counted on this key';
+    } else if (_freePreviewOnlyTool(toolName) && !_isPaidDepthTier(c && c.tier)) {
       // Owner 2026-10-08: no budget exists for a preview-only decision tool on a
       // non-paid seat, so no meter is shown — a meter that can never be spent is
       // the frozen-meter defect the block below was written against.
       q.full_answers_cap_today = null;
       q.full_answers_remaining_today = null;
-      q.full_answers_unavailable_reason = 'NOT APPLICABLE: `' + toolName + '` is a preview on every '
+      q.full_answers_unavailable_reason = _emailFullDecisionTool(toolName)
+        // Item 3: this seat has no email bound, so nothing is charged; say what a bound email opens.
+        ? 'NOT APPLICABLE: `' + toolName + '` is a preview for anonymous callers and keys without a bound '
+          + 'email; no daily full-answer budget is charged here. A key with a bound email gets '
+          + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day.'
+        : 'NOT APPLICABLE: `' + toolName + '` is a preview on every '
         + 'non-paid seat (anonymous, free key, trial, email-bound); no daily full-answer budget is '
         + 'charged for it. Full needs a paid DC Hub plan.';
     } else if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
@@ -17236,7 +17318,7 @@ export const _PLAN_CLASSES = [
       { tool: 'grid_transition_radar', when: 'Forward-looking: which ISOs are EMERGING as buildable, not where headroom is today.',
         rejected_because: 'The intent asked about present headroom, not emerging-grid trajectory.' },
     ],
-    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a credit pack); a paid DC Hub plan gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a credit pack); a paid DC Hub plan gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
+    coverage_notes: 'get_grid_scoreboard is free + full for everyone. get_grid_intelligence: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer (a grandfathered older key keeps its daily allowance). get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. iso must be one of ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE for the queue tools; non-US grids live on the scoreboard.',
   },
   {
     id: 'interconnection_queue', recipe: 'grid_and_queue',
@@ -17262,7 +17344,7 @@ export const _PLAN_CLASSES = [
       { tool: 'get_grid_intelligence', when: 'You need the ISO headroom/time-to-power context around the queue, not the projects themselves.',
         rejected_because: 'The intent pointed at queue projects, not the surrounding ISO headroom context.' },
     ],
-    coverage_notes: 'get_interconnection_queue: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a credit pack); a paid DC Hub plan gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
+    coverage_notes: 'get_interconnection_queue: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. get_refined_queue: with no key a trimmed preview (3 rows, project names and MW withheld); any key, a free one included, gets the full survivor set. candidate_id mints carry a 7-day TTL and fail closed with candidate_expired — never a silent recompute.',
   },
   {
     // r-planner-v5.5 (2026-07-28): the DISTRIBUTION-level intent. Every other
@@ -20363,7 +20445,7 @@ function trackedTool(srv, name, description, schema, handler) {
       // short-circuit is untouched).
       const _confirmedPro = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
         ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
-      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro);
+      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
       // free-taste logic, BELOW paid (paid/enterprise already short-circuited in
@@ -20770,7 +20852,7 @@ function trackedTool(srv, name, description, schema, handler) {
                 // — same disambiguation as the primary gate call above.
                 const _confirmedProK = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
                   ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
-                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedProK);
+                const _gateK = applyTierGate(name, args, _gateTier, true, c.is_trial === true, _confirmedProK, _emailFullSeat(c));
                 if (_gateK.allowed) {
                   const _resK = await handler(args);
                   // r-bind-midcall-mask: `masked` is the gate letting a free/identified
@@ -21737,12 +21819,18 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // (the entitlement belongs to the paid key, not the NAT the customer
         // shares with anon callers). Free/anon buckets stay IP-keyed as before.
         const _paidTaste = gate.paid_taste === true;
-        const _capId = _paidTaste ? (c.api_key || c.client_ip) : c.client_ip;
+        // Item 3 (owner draft 2026-10-16): the email-bound grid/queue allowance. Its own cap, keyed
+        // on the API KEY like the paid taste (the allowance belongs to the bound key); the caller's
+        // all-tools budget stays the email tier's (callerCapBase), not a multiple of this small cap.
+        const _emailFull = gate.email_full === true;
+        const _capId = (_paidTaste || _emailFull) ? (c.api_key || c.client_ip) : c.client_ip;
         const _cap = _paidTaste ? PAID_DAILY_FULL_CAP
+                   : _emailFull ? EMAIL_DECISION_DAILY_FULL_CAP
                    : _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
+        const _callerBase = _emailFull ? IDENTIFIED_DAILY_FULL_CAP : undefined;
         const _tasteExceeded = _cap > 0
           && await _trialFullCallsExceeded(_capId, name, _cap,
-                                           c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
+                                           c.api_key || c.client_ip, _callerBase);  // r-durable-cap: durable identity = api_key||ip
         if (_cap > 0 && !_tasteExceeded) {
           // r-metered-visible (2026-07-27 digest wave, "metered trial"): the
           // taste was SILENT — an agent got N full answers with no warning,
@@ -21755,17 +21843,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try {
             const _mtParsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (_mtParsed && typeof _mtParsed === 'object' && !Array.isArray(_mtParsed)) {
-              const _mtRemaining = _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip);
+              const _mtRemaining = _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip, _callerBase);
               const _mtCall = Math.min(_cap, Math.max(1, _cap - _mtRemaining));
               _mtParsed._metered_trial = {
                 call: _mtCall,
                 of: _cap,
                 remaining_today: _mtRemaining,
+                ...(_emailFull ? { allowance: 'email_bound_decision', resets_at: 'next 00:00 UTC' } : {}),
                 // ladder stage 1: only a grandfathered Starter key is metered here;
                 // unlimited depth on the pair is Developer now, not Pro. The wording says
                 // "Full-fidelity" only when nothing was withheld from THIS payload.
                 note: _meteredTrialNote({
                   paidTaste: _paidTaste, call: _mtCall, cap: _cap, name, bound: _bound,
+                  emailAllowance: _emailFull,   // item 3: no pack, no plan, no price on the email allowance
                   limited: (() => { try { const g = _attrDetectGating(_mtParsed); return !!(g && g.withholding_proven); } catch (_) { return false; } })(),
                 }),
               };
@@ -21775,7 +21865,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // link, so the credits land on the key they already use. The answer and the
               // caps are unchanged; the ask is added beside it.
               let _lf = null;
-              if (!_paidTaste && c.api_key && _mtRemaining === 0 && name === 'get_grid_intelligence'
+              if (!_paidTaste && !_emailFull && c.api_key && _mtRemaining === 0 && name === 'get_grid_intelligence'
                   && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_LASTFREE_ASK || ''))) {
                 _lf = _lastFreeLine({ tool: name, link: _packCheckoutUrl(c.session_id),
                                       perPack: 1000 / _creditCost(name) });   // 1,000 = _PACK_RUNG's credits
@@ -21784,7 +21874,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               // FIRST full grid/fiber answer of the day for a keyed free caller offers the free weekly
               // digest (retention 2.0%: an agent will not return on its own, an inbox can bring the human).
               // Never on the last free answer (that one carries the pack ask) and never on a paid taste.
-              if (!_lf && !_paidTaste && c.api_key && _mtCall === 1 && _mtRemaining > 0
+              if (!_lf && !_paidTaste && !_emailFull && c.api_key && _mtCall === 1 && _mtRemaining > 0
                   && !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_DAY2_DIGEST_ASK || ''))) {
                 _lf = _day2DigestLine({ tool: name, what: name === 'get_grid_intelligence' ? _mtParsed.iso : (c._go_place || _mtParsed.metro) });
               }
@@ -21797,6 +21887,58 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               if (_lf) result.content = [...result.content, { type: 'text', text: _lf.agent + '\n\n' + HUMAN_FIRST_MARKER + ' ' + _lf.human }];
             }
           } catch (_e) { /* annotation must never break a full answer */ }
+        }
+        if (_tasteExceeded && _emailFull) {
+          // Item 3 (owner draft 2026-10-16): the email-bound allowance is spent. The answer is the
+          // labelled taste every other non-paid seat gets (lib/free-decision-taste.mjs), with ONE
+          // link: the depth relay the wall steps attach as for_your_human / human_url. No pack, no
+          // plan name, no price, no bind_email (this key already has an email). Same status and
+          // signal as the trial cap below, so the existing wall counters see it.
+          status = 'trial_cap_exceeded';
+          let _capped = _freeDecisionTasteResult(name, result, c, args);
+          if (_capped) {
+            // The prose: one agent line (the allowance is spent, what this is, what to relay) and the
+            // person's line with the ONE link, the depth relay _freeDecisionTasteObject just memoised.
+            try {
+              const _rel = buildHumanRelay(name, c.tier || 'identified', c.session_id || '', { wall: 'depth' });
+              if (_rel && _rel.url) {
+                const _json = _capped.content[0].text;
+                const _hdr = '🔒 **' + _emailFullPreviewSentence(name, c) + '** This is the `' + name + '` preview: the '
+                  + 'headline is in `taste`; `withheld` lists the rest, with counts. For the full answer today, relay the '
+                  + 'link in human_url to your human.';
+                const _composed = composeHumanCta(_rel.url, _json + '\n\n---\n\n' + _hdr, JSON.parse(_json), c.session_id || '');
+                const _at = _composed.indexOf(HUMAN_FIRST_MARKER);
+                const _blocks = _at > 0
+                  ? [{ type: 'text', text: _composed.slice(0, _at).replace(/\s+$/, '') },
+                     { type: 'text', text: _composed.slice(_at).replace(/\s+$/, '') }]
+                  : [{ type: 'text', text: _composed }];
+                _capped = { ..._capped, content: _blocks,
+                  structuredContent: { ..._capped.structuredContent, for_your_human: _rel, human_url: _rel.url } };
+              }
+            } catch (_) { /* the taste without the prose is still the honest capped answer */ }
+            if (!/^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CAP_SIGNAL_DISABLE || ''))) {
+              signalPaywall({
+                tool: name, args, signal_type: 'trial_cap_exceeded',
+                session_id: c.session_id || 'no-session', mcp_client: c.platform || 'mcp',
+                user_agent: c.client_ua || null, ip_address: c.client_ip || null,
+                api_key: c.api_key || null, tier_current: tier || 'identified', tier_required: 'paid',
+                daily_limit: _cap, message_shown: 'email_decision_cap',
+              });
+            }
+            return _capped;
+          }
+          // No taste shape for this payload (the all-ISO queue snapshot): the generic free trim,
+          // still with no pack or plan copy in it; the wall steps add the one relay link.
+          try {
+            const _p = JSON.parse(result.content?.[0]?.text || 'null');
+            if (_p && typeof _p === 'object' && !Array.isArray(_p)) {
+              const _t = _capTrim(_p, name);
+              _t.preview_is_partial = true;
+              _t._email_allowance = { used: _cap, of: _cap, resets_at: 'next 00:00 UTC' };
+              return { content: [{ type: 'text', text: JSON.stringify(_t) }], isError: false,
+                       structuredContent: { ..._t, tease: true, tool: name } };
+            }
+          } catch (_) { /* fall through to the generic over-cap trim below */ }
         }
         if (_tasteExceeded) {
           // ★ LABEL THE WALL. This branch is THE deprivation moment — the free
@@ -21942,7 +22084,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // free-class funnel metrics ( _GRANTED_ST etc.) with paid traffic.
         // (Also: _rem below reads the client_ip bucket; the paid taste counts
         // on the api_key bucket — the read would be wrong anyway.)
-        else if (_cap > 0 && !_paidTaste) {
+        else if (_cap > 0 && !_paidTaste && !_emailFull) {   // item 3: no pay-per-call offer on the email allowance
           try {
             // ★ Counter semantics: _trialFullCallsExceeded ALREADY incremented
             // for this call in the `if` above (it increments, then compares), so
@@ -22106,6 +22248,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       try {
         if ((process.env.DCHUB_GRID_UNDERCAP_ASK ?? '1') !== '0'
             && gate && gate.trial_taste && MAP_TOOLS.has(name)
+            && gate.email_full !== true   // item 3: the pack does not open these tools; no pack line on the email allowance
             && !_isPaidDepthTier(_gateTier) && c && c.api_key
             && _valued && Array.isArray(_valued.content)
             // r-relay-cap: full data was delivered, nothing is gated. Once this
@@ -23804,13 +23947,16 @@ export function _wallKindFor(sc, c, name) {
     // capacity wall — the pack buys nothing there — so it takes the freekey / depth
     // decision below like the same preview under the cap.
     const capCoachOnDepth = String(up.tier || '') === 'anon_daily_cap' && up.pack_opens === false;
+    // Item 3: a spent email-bound grid/queue allowance is not a capacity wall either — the pack opens
+    // neither tool (_packOpensTool), so the page must sell the depth, as every other preview of it does.
+    const emailAllowance = _emailFullDecisionTool(tool);
     if (!capCoachOnDepth && (_WALL_KIND_CAPACITY_ERRORS.has(String(sc.error || ''))
         || typeof sc.binding_limit === 'string'
         || sc.credits_depleted === true
         || _WALL_KIND_CAPACITY_UPGRADE_TIERS.has(String(up.tier || ''))
         || up.remaining_today === 0
-        || (quota && quota.full_answers_remaining_today === 0 && (sc.trial_preview || sc.preview_is_partial || sc.taste_bounded))
-        || /\bfull `[a-z_]+` answers\b.*\btoday\b/.test(String(up.message || '')))) {
+        || (!emailAllowance && quota && quota.full_answers_remaining_today === 0 && (sc.trial_preview || sc.preview_is_partial || sc.taste_bounded))
+        || (!emailAllowance && /\bfull `[a-z_]+` answers\b.*\btoday\b/.test(String(up.message || ''))))) {
       return WALL_KIND_CAPACITY;
     }
     if (!(c && c.api_key)) {
@@ -24112,7 +24258,12 @@ export function _claimHandoffStep(result, name) {
     if (!result || typeof result !== 'object' || !Array.isArray(result.content) || !result.content.length) return result;
     if (_OWN_TELL_TOOLS.has(name)) return result;
     const c = getCtx() || {};
-    if (c.api_key || c.daily_quota) return result;               // a key (or a demoted one this call) took the step
+    // Item 3: a keyless arrival on a decision tool is auto-minted a trial key inside the call (the inline
+    // auto-mint block), so ctx.api_key is set by the time this runs; auth_source 'none' says the caller
+    // came without one. Every other wall keeps the rule below unchanged.
+    const decisionArrivedKeyless = _freePreviewOnlyTool(name) && emailFullDecisionOn()
+      && c.auth_source === 'none' && !c.daily_quota;
+    if ((c.api_key && !decisionArrivedKeyless) || c.daily_quota) return result;   // a key (or a demoted one this call) took the step
     const status = c._wallStatus;
     if (!_CLAIM_HANDOFF_STATUSES.includes(status)) return result;
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
@@ -24120,11 +24271,18 @@ export function _claimHandoffStep(result, name) {
     // A LIMIT is the IP's, answered by a key on every tool. A preview wall that is a depth wall is not:
     // the decision tools and the single-ask copy keep what they say.
     const isLimit = status === 'anon_daily_cap' || status === 'anon_hard_wall';
-    if (!isLimit && (_singleAskWall(name) || _freePreviewOnlyTool(name))) return result;
+    // Item 3 (owner draft 2026-10-16): a keyless decision-tool PREVIEW now carries the line too (its own
+    // copy, _claimHandoffDecisionText). With the item-3 switch off it is skipped, as on 10-08.
+    // Not on the Grok contract: a Grok wall carries no key or header copy (paywall-contract G3).
+    const decisionPreview = !isLimit && _freePreviewOnlyTool(name) && emailFullDecisionOn() && !_pcIsGrok(c.platform);
+    if (!isLimit && !decisionPreview && (_singleAskWall(name) || _freePreviewOnlyTool(name))) return result;
     const textOf = (b) => (b && b.type === 'text' && typeof b.text === 'string') ? b.text : '';
     const proseOf = (t) => { const sp = _splitLeadingJson(t); return sp ? sp.rest : t; };
-    if (result.content.some((b) => _carriesKeyLiteral(textOf(b)))
-        || _carriesKeyLiteral(JSON.stringify(result.structuredContent || {}))) return result;
+    // A key literal means the wall already handed the caller one. On a decision preview the wall ALSO named
+    // claim_free_key (the trailing clause below) beside that key since 10-08; the item-3 line replaces that
+    // clause in place, so it joins what the response already said instead of adding a second offer.
+    if (!decisionPreview && (result.content.some((b) => _carriesKeyLiteral(textOf(b)))
+        || _carriesKeyLiteral(JSON.stringify(result.structuredContent || {})))) return result;
     // What the prose says once trialHeader's trailing clause is gone: a mention left over means the
     // response already tells the reader to call the tool (hard wall, Pro walls), and it stays as it is.
     const content = result.content.map((b) => {
@@ -24132,7 +24290,9 @@ export function _claimHandoffStep(result, name) {
       return t.includes(_CLAIM_ALT_TAIL) ? { ...b, text: t.split(_CLAIM_ALT_TAIL).join('') } : b;
     });
     if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return result;
-    const line = _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
+    const line = decisionPreview
+      ? _claimHandoffDecisionText({ tool: name, emailCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0 })
+      : _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
     const b0 = content[0];
     const t0 = textOf(b0);
     const sp0 = t0 ? _splitLeadingJson(t0) : null;

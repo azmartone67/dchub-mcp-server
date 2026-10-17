@@ -260,7 +260,7 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 ## Pricing
 
 - **Anonymous:** previews, no API key needed
-- **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; full needs a paid DC Hub plan. analyze_site: a free key gets a few free full site reports each month; after that, previews.
+- **Free key (one `claim_free_key` call, no email):** previews plus 2 full answers per tool per day, every tool callable, most as previews. Grid/queue/market-intel tools: previews on free; an email adds 3 full grid/queue answers/day. analyze_site: a free key gets a few free full site reports each month; after that, previews.
 - **Add an email (`bind_email`):** 50 calls/day (up to 10 full answers per tool per day)
 - **Paid plans (more volume, every tool, exports):** plans and prices at https://dchub.cloud/pricing
 
