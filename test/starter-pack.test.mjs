@@ -111,7 +111,9 @@ describe('withStarterPack — WIRING (the part that made the old nudge reach nob
     //   exactly, by the clean-only-path assertion at the bottom of this block.
     // An awaited outer wrapper counts too (2026-09-28: _returnNudgeStep is async
     // and sits inside _flagUpstreamError).
-    const m = SRC.match(/}\s*,\s*async \(args, extra\) =>\s*(?:(?:await\s+)?\w+\(\s*)*withStarterPack\(/);
+    // A callback-level wrapper counts too (2026-10-16: _sourceLineCb(name, async (args, extra) => ...)
+    // wraps the whole chain so the free answer's Source line is appended last).
+    const m = SRC.match(/}\s*,\s*(?:\w+\(name,\s*)?async \(args, extra\) =>\s*(?:(?:await\s+)?\w+\(\s*)*withStarterPack\(/);
     expect(m, 'withStarterPack must wrap the registerTool callback').toBeTruthy();
   });
 

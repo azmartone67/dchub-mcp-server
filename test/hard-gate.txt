@@ -148,6 +148,7 @@ test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/for-your-human-soft.test.mjs
+test/free-answer-source-line.test.mjs
 test/free-decision-tools-preview-only.test.mjs
 test/free-key-arbitrage.test.mjs
 test/free-key-counts-tool-calls.test.mjs
@@ -399,6 +400,7 @@ test/session-release-covers-every-map.test.mjs
 test/short-link-fallback-reason.test.mjs
 test/site-envelope-contract.test.mjs
 test/site-headline-envelope.test.mjs
+test/siting-email-seat.test.mjs
 test/smithery-canon-guard.test.mjs
 test/smithery-credential-fallback.test.mjs
 test/smithery-drift-guard.test.mjs

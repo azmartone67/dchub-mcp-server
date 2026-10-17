@@ -68,7 +68,8 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
       expect(sc.optin_cta).toBeUndefined();
       if (pc) expect(sc.next_ask && sc.next_ask.tool).toBeTruthy();   // stays in structuredContent (v1's stub is error-flagged, so no outreach)
       expect(sc.user_message).toMatch(/plans that include the full/);
-      const blocks = r.content.map((b) => b.text).filter((x) => !/^Cite as: /.test(x));
+      // Item 8 (owner 2026-10-16): the free answer's closing Source line is a bare citation line too.
+      const blocks = r.content.map((b) => b.text).filter((x) => !/^Cite as: |^Source: DC Hub \(dchub\.cloud[^)]*\)(, as of [\d-]+)?$/.test(x));
       {
         // Item 3 (owner draft 2026-10-16): a keyless decision-tool preview ends with the one-step
         // claim_free_key line (no link, no plan, no price). Where it lands after the ask, the ask is

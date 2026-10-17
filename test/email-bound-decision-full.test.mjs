@@ -290,7 +290,7 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
         expect(line).toContain("with your human's email");
         expect(line).toContain('3 full `' + tool + '` answers a day');
       } else {
-        expect(line).toContain('no email');
+        expect(line).toContain('their email first');
         expect(line, 'market intel: the key does not deepen it, so nothing is promised').not.toMatch(/full .* answers/);
       }
     });

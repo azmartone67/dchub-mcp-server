@@ -177,6 +177,7 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor } from './lib/agent-outreach.mjs';
+import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -195,6 +196,9 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
+// Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
+import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
+         sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
@@ -8740,6 +8744,69 @@ async function _lpFreeRun(c, tool, op, chargeRef) {
     return (r && r.ok === true && Number.isInteger(r.limit)) ? r : null;
   } catch (_) { return null; }
 }
+// ── Item 1 (owner 2026-10-16): the siting tools follow the email (lib/siting-email-seat.mjs) ──
+// The seat a call sits in on find_sites / site_selection_canvas / execute_plan:
+//   null      unchanged: switch off, another tool, keyless, a paid plan, an unknown tier
+//             word, a live pack balance, or the ChatGPT directory profile (frozen for review)
+//   'noemail' a free-class key with no bound email: the keyless preview
+//   'email'   a free-class key with a bound email (_emailFullSeat, the item-3 test: the
+//             tier word 'identified' is set at claim with or without an email)
+const _SITING_FREE_CLASS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+export async function _sitingSeat(c, name, gateTier, env = process.env) {
+  if (!noEmailPreviewOn(env) || !NOEMAIL_PREVIEW_TOOLS.includes(String(name || ''))) return null;
+  if (!c || !c.api_key || c.profile === DIRECTORY_PROFILE) return null;
+  if (!_SITING_FREE_CLASS.has(String(c.tier || '').trim().toLowerCase())) return null;
+  if (gateTier !== undefined && !_SITING_FREE_CLASS.has(String(gateTier || '').trim().toLowerCase())) return null;
+  let credits = 0;
+  try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
+  if (credits > 0) return null;   // a pack buyer is a paid read (CLAUDE.md: read _getCredits)
+  return _emailFullSeat(c) ? 'email' : 'noemail';
+}
+// The monthly block on a full plan, inside the JSON payload so block 0 still parses.
+export function _withSitingFreeRun(result, fr, tool) {
+  if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+  const block = { used: fr.used, limit: fr.limit, remaining: fr.remaining, resets_at: fr.resets_at,
+    basis: 'per key and per bound email, the higher count; UTC calendar month',
+    note: sitingFreeRunNote(fr, tool) };
+  const out = { ...result };
+  try {
+    const p = JSON.parse(out.content[0].text);
+    if (p && typeof p === 'object' && !Array.isArray(p)) {
+      out.content = [{ ...out.content[0], text: JSON.stringify({ ...p, free_full_runs: block }) }, ...out.content.slice(1)];
+    }
+  } catch (_) { /* a non-JSON body keeps its text; structuredContent still carries the block */ }
+  if (out.structuredContent && typeof out.structuredContent === 'object') {
+    out.structuredContent = { ...out.structuredContent, free_full_runs: block };
+  }
+  return out;
+}
+// The keyed caller's line on the keyless preview: the next step is bind_email, never
+// claim_free_key (it already holds a key). No plan name, no price.
+export function _sitingPreviewUpgrade(name, seat, fr) {
+  const spent = seat === 'email';
+  const month = SITING_MONTHLY_TOOLS.includes(name);
+  const what = name === 'find_sites'
+    ? 'every candidate at ~1 km'
+    : SITING_FREE_PLANS_PER_MONTH + ' full ' + name + ' answer' + (SITING_FREE_PLANS_PER_MONTH === 1 ? '' : 's') + ' each month';
+  // An email seat with no counted allowance (the backend does not list the tool, or the
+  // counter did not answer) is not told a count it never had.
+  const counted = !!(fr && Number.isInteger(fr.limit) && fr.limit > 0);
+  const message = spent
+    ? (counted
+      ? 'Preview: this key\'s free full ' + name + ' answers for this month are used'
+        + (fr.resets_at ? '; the count resets ' + String(fr.resets_at).slice(0, 10) : '') + '.'
+      : 'Preview: the full ' + name + ' answer is not open on this key right now.')
+      + ' For the full answer, relay the link in human_url to your human.'
+    :'Preview: a key with no email gets the same ' + name + ' preview as no key. Bind your human\'s email '
+      + '(bind_email {api_key, email}, free) for ' + what + '; past that, relay the link in human_url to your human.';
+  return {
+    tier: spent ? 'identified' : 'free',
+    message,
+    next_tool: spent ? 'unlock_more_data' : 'bind_email',
+    ...(month && counted
+      ? { free_full_runs: { used: fr.used, limit: fr.limit, remaining: 0, resets_at: fr.resets_at } } : {}),
+  };
+}
 const _lpMonthDay = (iso) => String(iso || '').slice(0, 10) || 'the 1st of next month';
 // One line on a full answer served from the monthly allowance. No plan name or price (mcp#891).
 export function _lpFreeRunNote(fr) {
@@ -11757,43 +11824,49 @@ async function _keyedFreeFacilityResult(result, name, c) {
 // something to coarsen.
 const _FIND_SITES_FREE_TIERS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
 const _FIND_SITES_COORD_KEYS = new Set(['lat', 'lon', 'lng', 'latitude', 'longitude']);
-function _findSitesRound1(v) {
+// Item 1 (owner 2026-10-16): an email-bound key gets two decimals (~1 km), everyone else
+// on the free tiers one (~11 km). `dp` is 1 unless the caller passes 2.
+function _findSitesRound1(v, dp = 1) {
   if (v === null || v === undefined || v === '' || typeof v === 'boolean') return v;
   const n = Number(v);
   if (!Number.isFinite(n)) return v;
-  const r = Math.round(n * 10) / 10;
+  const f = dp === 2 ? 100 : 10;
+  const r = Math.round(n * f) / f;
   return Object.is(r, -0) ? 0 : r;
 }
-function _findSitesCoarsenCoords(obj) {
+function _findSitesCoarsenCoords(obj, dp = 1) {
   const out = { ...obj };
   for (const k of Object.keys(out)) {
-    if (_FIND_SITES_COORD_KEYS.has(k.toLowerCase())) out[k] = _findSitesRound1(out[k]);
+    if (_FIND_SITES_COORD_KEYS.has(k.toLowerCase())) out[k] = _findSitesRound1(out[k], dp);
   }
   return out;
 }
-export function _coarsenFindSites(payload) {
+export function _coarsenFindSites(payload, dp = 1) {
   const out = { ...payload };
   out.candidates = payload.candidates.map((cand) => {
     if (!cand || typeof cand !== 'object' || Array.isArray(cand)) return cand;
-    const c2 = _findSitesCoarsenCoords(cand);
-    c2.coordinate_precision_km = 11.0;
+    const c2 = _findSitesCoarsenCoords(cand, dp);
+    c2.coordinate_precision_km = dp === 2 ? 1.1 : 11.0;
     if (cand.anchor && typeof cand.anchor === 'object' && !Array.isArray(cand.anchor)) {
-      c2.anchor = { ..._findSitesCoarsenCoords(cand.anchor), operator: null, capacity_mva: null };
+      c2.anchor = { ..._findSitesCoarsenCoords(cand.anchor, dp), operator: null, capacity_mva: null };
     }
     if (Array.isArray(cand.next_calls)) {
       c2.next_calls = cand.next_calls.map((s) => (typeof s === 'string'
         ? s.replace(/\b(lat|lon|lng|latitude|longitude)=(-?\d+(?:\.\d+)?)/gi,
-            (_m, k, v) => `${k}=${_findSitesRound1(v)}`)
+            (_m, k, v) => `${k}=${_findSitesRound1(v, dp)}`)
         : s));
     }
     return c2;
   });
   out._gated = true;
-  out._upgrade_cta = 'Free preview: candidate coordinates are coarsened to ~11 km and anchor '
-    + 'operator/capacity are withheld. Exact coordinates and anchor detail come with a paid plan '
-    + 'or the credit pack — relay the link in human_url to your human.';
+  out._upgrade_cta = dp === 2
+    ? 'Free with an email: every candidate, coordinates at ~1 km; the anchor substation\'s '
+      + 'operator, capacity and exact kV are withheld. For those, relay the link in human_url to your human.'
+    : 'Free preview: candidate coordinates are coarsened to ~11 km and anchor '
+    + 'operator/capacity are withheld. For exact coordinates and anchor detail, '
+    + 'relay the link in human_url to your human.';
   out._upgrade = {
-    tier: 'free',
+    tier: dp === 2 ? 'identified' : 'free',
     locked: 'exact_coordinates',
     message: out._upgrade_cta,
     next_tool: 'unlock_more_data',
@@ -11812,7 +11885,8 @@ async function _findSitesForCaller(payload, c) {
   let credits = 0;
   try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
   if (credits > 0) return _lock(payload);
-  return _lock(_coarsenFindSites(payload));
+  // Item 1: an email-bound free key (_emailFullSeat) gets ~1 km while the switch is on.
+  return _lock(_coarsenFindSites(payload, (noEmailPreviewOn() && _emailFullSeat(c)) ? 2 : 1));
 }
 
 // ── r-location-tier (2026-09-21, owner-approved): exact facility location is paid-only ──
@@ -13587,7 +13661,7 @@ const TRIAL_HEADER_OVERRIDES = {
       '',
       "The number above is real — but it's a single market with no facility detail, pipeline, or operator landscape. **An agent reasoning from one data point gives incomplete answers.** Give it the full report so it reasons from everything:",
       '',
-      '⚡ **Free, one call, no email — do this first:** call the `claim_free_key` tool now → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the free depth. **Save the key to your MCP config** so every future session reuses it.',
+      '⚡ **Free, one call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the free depth. **Save the key to your MCP config** so every future session reuses it.',
       `💳 **Want full premium depth** (facility detail, pipelines, operator landscape)? Your human pays in one click and THIS session is served in full: ${_rungsText('get_market_intel', 'free', sessionId)}`,
       `→ Prefer a flat plan? **[A paid DC Hub plan](${_developer})** · [free dev key by email](${redeem})`,
       '',
@@ -13872,7 +13946,7 @@ function _freeRungLine(toolName) {
   // A caller holding a key has already taken this rung. Offering it again is
   // noise at best and, on a key that is already identified, wrong.
   if (k) return '';
-  return '⚡ **Free, one call, no email — do this first:** call the `claim_free_key` tool now → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `' + toolName + '` call runs at the free tier. **Save the key to your MCP config** so every future session reuses it.';
+  return '⚡ **Free, one call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `' + toolName + '` call runs at the free tier. **Save the key to your MCP config** so every future session reuses it.';
 }
 
 function siteHeadlineHeader(name, sessionId) {
@@ -19862,6 +19936,32 @@ function _outreachStep(result, name, args) {
   } catch (_e) { return result; }
 }
 
+// Item 8 (owner 2026-10-16): every FREE answer (keyless, free key, email key)
+// ends with ONE citable line, "Source: DC Hub (dchub.cloud/<path>), as of <date>"
+// (lib/source-line.mjs: path from the result, data date only, text only). It
+// wraps the whole callback chain, OUTSIDE _flagUpstreamError, so no step can
+// append after it; it skips isError and error envelopes, so the flag's verdict
+// cannot change. Skipped: paid tiers; the meta/receipt tools of
+// _RETURN_NUDGE_SKIP (a receipt or a paste-ready citation is not a data answer)
+// and the write tools; the directory profiles /mcp/chatgpt and /mcp/claude (a
+// gated result ends with exactly the neutral partial line, search/fetch keep
+// exactly one text item) and /mcp/core; clean platforms (ChatGPT: one data
+// item). Kill switch DCHUB_SOURCE_LINE=0.
+export function _sourceLineStep(result, name, args) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SOURCE_LINE || '').trim())) return result;
+    if (_RETURN_NUDGE_SKIP.has(name) || WRITE_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform()) return result;
+    if (_tierRank(c.tier || 'free') >= _tierRank('starter')) return result;
+    return _withSourceLine(result, name, args);
+  } catch (_e) { return result; }
+}
+function _sourceLineCb(name, fn) {
+  return async (args, extra) => _sourceLineStep(await fn(args, extra), name, args);
+}
+
 // ── Description hygiene (ToolBench 2026-10-09, Grok P1 item 3) ──────────────
 // One short tail per high-use tool: what to call first, what a failure means and
 // what to do next. Every claim here was probed live 2026-10-09 (no match = empty
@@ -20494,6 +20594,28 @@ function trackedTool(srv, name, description, schema, handler) {
           return await _withProTrialOffer(_withLpSiteTeaser(name, _lpPreviewResult(name, _rawP), _rawP), name, c);
         }
       }
+      // Item 1 (owner 2026-10-16, DCHUB_NOEMAIL_PREVIEW_ONLY=0 restores): the siting tools
+      // follow the email. 'noemail' takes the keyless preview below (the anon trim branch);
+      // 'email' spends one monthly full plan on site_selection_canvas / execute_plan and
+      // falls back to the same preview when none is left or the counter does not answer.
+      const _sitingSeatNow = await _sitingSeat(c, name, _gateTier);
+      let _sitingPreview = _sitingSeatNow === 'noemail';
+      let _sitingFr = null;
+      if (_sitingSeatNow === 'email' && SITING_MONTHLY_TOOLS.includes(name)) {
+        _sitingFr = await _lpFreeRun(c, name, 'consume');
+        if (_sitingFr && _sitingFr.allowed === true) {
+          let _full;
+          try { _full = _noDataGuard(await handler(args)); }
+          catch (e) { await _lpFreeRun(c, name, 'release', _sitingFr.charge_ref); throw e; }
+          // An error or a non-answer does not spend the month's run.
+          if (!_full || _full.isError === true) { await _lpFreeRun(c, name, 'release', _sitingFr.charge_ref); return _full; }
+          status = 'siting_free_full';
+          return _withSitingFreeRun(withCitation(_full, name), _sitingFr, name);
+        }
+        _sitingPreview = true;   // fail closed
+      }
+      // execute_plan's steps are loopback calls under the caller's key: run them keyless.
+      if (_sitingPreview && name === 'execute_plan') c.plan_steps_keyless = true;
       // r-tier-collapse-fix (2026-09-23): only spend the disambiguation hop when 'paid'
       // is actually ambiguous for THIS tool — every non-Pro-only tool, and every tier
       // other than the collapsed 'paid', skips it entirely (undefined, applyTierGate's
@@ -21632,6 +21754,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
       // with no isError (2026-09-25, 23:18Z, a caller past the anonymous cap).
       if (result && result.isError === true) return result;
+      // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; its steps already ran
+      // keyless above), so the keyed caller's bind_email / human-link line is stamped here.
+      if (_sitingPreview && name === 'execute_plan') {
+        const _up = _sitingPreviewUpgrade(name, _sitingSeatNow, _sitingFr);
+        try {
+          const _p = JSON.parse(result.content[0].text);
+          if (_p && typeof _p === 'object' && !Array.isArray(_p)) result.content[0] = { ...result.content[0], text: JSON.stringify({ ..._p, _upgrade: _up }) };
+        } catch (_) { /* non-JSON body: structuredContent still carries the line */ }
+        if (result.structuredContent && typeof result.structuredContent === 'object') result.structuredContent = { ...result.structuredContent, _upgrade: _up };
+        status = _sitingSeatNow === 'email' ? 'siting_free_spent' : 'siting_noemail_preview';
+      }
       // ── Anonymous per-IP daily soft cap (DCHUB_ANON_DAILY_CAP) ──────────────
       // (operator-approved 2026-06-18, "build but leave OFF"). Injected HERE — at
       // the single chokepoint every ALLOWED tool call passes through right after
@@ -21739,7 +21872,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // and they carry public-source facts, not the $-aggregates this trim
       // protects. Without the exemption the trim truncated the scoreboard's
       // ~22-grid array to a 1-grid teaser (the "2/22 grids" regression).
-      if (!c.api_key && tier === 'free' && !FREE_FULL_TOOLS.has(name)) {
+      // Item 1: a keyed caller in the siting preview seat takes this same keyless trim.
+      if (((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -21755,7 +21889,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             const trimmed = trimForTrial(await _freeFacilityRows(parsed, name, c), name);
             // r-appstore-clean: ChatGPT/OpenAI get the trimmed data + ONE subtle line.
             if (_isCleanPlatform()) {
-              trimmed._note = 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
+              trimmed._note = _sitingPreview ? _sitingPreviewUpgrade(name, _sitingSeatNow, _sitingFr).message
+                : 'Free preview — a sample is shown. Call claim_free_key (free, no email) for the full free tier, or show your human upgrade_url — it explains what this call found and how to unlock the rest.';
               return { content: [{ type: 'text', text: JSON.stringify(trimmed) }],
                        // r-cite-toplevel: object shape, same reason as above.
                        // #836: the trimmed preview rides structuredContent too (what the
@@ -21803,6 +21938,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                               pro_hint: 'The DC Hub plan with every tool (the plan most humans choose).' } : {}),
               ...promoSC(),
             };
+            // Item 1: the keyed caller already holds a key; its next step is bind_email (or the
+            // human link once the month's run is used), with no plan name, price or checkout URL.
+            if (_sitingPreview) {
+              trimmed._upgrade = _sitingPreviewUpgrade(name, _sitingSeatNow, _sitingFr);
+              status = _sitingSeatNow === 'email' ? 'siting_free_spent' : 'siting_noemail_preview';
+            }
             // r-gated-text-human-link (2026-10-01): Grok read this keyless trim as
             // having no human line (get_market_dcpi_rank on a generic client): the
             // text block was bare JSON whose `_upgrade` carried raw checkout
@@ -21817,7 +21958,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // `_upgrade` block and stay bare JSON, as measured and pinned
             // (relay-line-names-missed: search_facilities adds no line).
             let _anonRelay = null;
-            if (_ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_accessGateClass(name))) {
+            if (_sitingPreview || _ANON_TRIM_RELAY_TOOLS.has(name) || ['paid', 'metered'].includes(_accessGateClass(name))) {
               try { _anonRelay = buildHumanRelay(name, tier, _sid) || null; } catch (_) {}
             }
             if (!_anonRelay || !_anonRelay.url) {
@@ -22496,12 +22637,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
@@ -25047,8 +25188,15 @@ export const _INSTR_FREE_TIER = (() => {
   // every emission (lib/free-decision-taste FREE_DECISION_CLAUSE); '' when the kill
   // switch is off, so the instructions never promise a gate that is not enforced.
   const d = _freeDecisionClause();
-  return r ? ' FREE TIER (quote verbatim): ' + r + (d ? ' ' + d : '') : '';
+  // Item 1 (owner 2026-10-16): the siting clause, built from the enforced monthly number;
+  // '' when DCHUB_NOEMAIL_PREVIEW_ONLY=0, so the text never states a gate that is not enforced.
+  const st = _sitingFreeClause();
+  return r ? ' FREE TIER (quote verbatim): ' + r + (d ? ' ' + d : '') + (st ? ' ' + st : '') : '';
 })();
+// The siting sentence every emission of the free-tier rule carries while the switch is on.
+export function _sitingFreeClause(env = process.env) {
+  return noEmailPreviewOn(env) ? sitingFreeClause(SITING_FREE_PLANS_PER_MONTH) : '';
+}
 // Item 2 (owner, 2026-10-14): the analyze_site exemption follows the FREE TIER block in the
 // full text (dchub://instructions), so the rule's "per tool per day" is not read as
 // analyze_site's allowance. '' when the monthly free runs are off (DCHUB_LP_FREE_RUNS=0), so the
@@ -25245,7 +25393,6 @@ export async function _reportFindingTool(apiKey, a, fetchImpl) {
 }
 export const _INSTRUCTIONS_LEAN = (() => {
   const n = (/\b(\d+) tools\b/.exec(_INSTRUCTIONS) || [])[1];
-  const pro = [...PRO_ONLY_TOOLS].map((t) => '`' + t + '`').join(', ');
   // The owner-pinned Capacity Source routing sentence, taken verbatim from the full text so there is
   // one copy of it (test/capacity-source-routing-instructions.test.mjs pins it, near the top).
   const routing = (/CAPACITY SOURCE ROUTING:[^]*?\(listing is free\)\./.exec(_INSTRUCTIONS) || [''])[0];
@@ -25254,9 +25401,11 @@ export const _INSTRUCTIONS_LEAN = (() => {
   // (test/initialize-instructions-length.test.mjs). /mcp/grok adds its count rewrite and the ENDPOINT
   // SCOPE tail, so the shared text loses its repeats: the domain list (OUTREACH_LEAD names it), the
   // "from memory" rule (OUTREACH_LEAD), the human_url description (RELAY_CONTRACT says what to do with it).
+  // 2026-10-17 (owner): /mcp/grok measured 2,063 after the siting clause (mcp#1001) and the citation
+  // aside (mcp#1002); "whose description says" -> "marked" and "on every result" -> "per result" bring it under.
   return OUTREACH_LEAD + 'DC Hub: live, cited data' + (n ? ' (' + n + ' tools)' : '') + '. '
     + (routing ? routing + ' ' : '')
-    + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool whose description says "Use this whenever...". Never reuse a figure from memory or an earlier call; cite `as_of`. '
+    + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool marked "Use this whenever...". Never reuse a figure from memory or an earlier call; cite `as_of`. '
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
@@ -25264,7 +25413,8 @@ export const _INSTRUCTIONS_LEAN = (() => {
     + _INSTR_FREE_TIER + ' '
     // v13 (owner 2026-10-10): no plan name in tool text; the instructions line follows the walls.
     // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.
-    + 'PAID: ' + pro + ' need a paid DC Hub plan. '
+    // Item 1 (owner 2026-10-16): no "needs a paid DC Hub plan" line; the walls carry the link.
+    + 'Past that, previews. '
     + 'A gated result carries `human_url` (also `for_your_human.url`) and `human_message`. ' + RELAY_CONTRACT + ' '
     + 'FULL GUIDE: read the resource `' + INSTRUCTIONS_RESOURCE_URI + '` or https://dchub.cloud/llms.txt.';
 })();
@@ -27633,7 +27783,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     try {
       const headers = { 'Content-Type': 'application/json',
                         'Accept': 'application/json, text/event-stream' };
-      if (c && c.api_key) headers['X-API-Key'] = c.api_key;
+      // Item 1: a key in the siting preview seat runs its plan's steps keyless (the keyless preview).
+      if (c && c.api_key && !c.plan_steps_keyless) headers['X-API-Key'] = c.api_key;
       if (c && c.platform) headers['X-MCP-Platform'] = String(c.platform);
       // r-core-profile: a plan run from /mcp/core keeps its steps in the core
       // profile (no key minting) via a single-use in-process token.
@@ -29451,6 +29602,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           full_answers_per_tool_per_day_with_email: _fullAnswersPerToolPerDay('identified'),
           free_tier_rule:          _freeTierRuleText(),
           ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
+          ...(_sitingFreeClause() ? { free_tier_siting_tools: _sitingFreeClause() } : {}),
           key_is_durable:          true,
           // r-persist (2026-07-11): copy-paste-ready client-config snippets with
           // the REAL key inlined — the agent shows its human the right one so
@@ -29600,6 +29752,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           full_answers_per_tool_per_day: _identFull,
           free_tier_rule: _freeTierRuleText(),
           ...(_freeDecisionClause() ? { free_tier_decision_tools: _freeDecisionClause() } : {}),
+          ...(_sitingFreeClause() ? { free_tier_siting_tools: _sitingFreeClause() } : {}),
           watch_tools: ['set_market_alert', 'save_site', 'set_site_alert', 'subscribe_digest'],
           identified: r && r.identified !== false,
           unlocked: r && r.unlocked,

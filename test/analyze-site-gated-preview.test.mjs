@@ -146,7 +146,11 @@ for (const session of [true, false]) {
     });
 
     it('the agent line asks, polite, once', () => {
-      const last = r.res.content[r.res.content.length - 1].text;
+      // Item 8 (owner 2026-10-16): the citable Source line closes a free answer; the agent line is
+      // the last block before it.
+      const blocks = r.res.content.map((b) => b.text);
+      expect(blocks[blocks.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud[^)]*\)/);
+      const last = blocks[blocks.length - 2];
       expect(last).toBe('(agent) When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
       expect(r.text).toContain('claim_free_key');
     });
