@@ -85,7 +85,7 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['siting clause + past that', /Siting: no email, previews; [^.]*each a month\. Past that, previews\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
     ['full guide', /FULL GUIDE: read the resource `dchub:\/\/instructions`/],
-    ['served count', /\b\d+ tools \(a curated subset of DC Hub's full catalog of \d+\)/],
+    ['served count', /\b\d+ tools \(a curated subset of \d+\)/],
     ['listing scope', /ENDPOINT SCOPE: \/mcp\/grok lists \d+ DC Hub tools, a listing scope, not a permission scope: tools\/call accepts any DC Hub tool by name; discover_tools lists the rest\./],
   ])('/mcp/grok keeps the rule: %s', (_n, re) => {
     expect(served['/mcp/grok']).toMatch(re);
