@@ -43,7 +43,7 @@ describe('_freeRungLine — who is offered the free key', () => {
     const line = withCtx({ session_id: SID }, () => _freeRungLine('analyze_site'));
     expect(line).toContain('claim_free_key');
     expect(line).toContain('analyze_site');
-    expect(line).toContain('no email');
+    expect(line).toContain('with an email');
   });
 
   it('★ says NOTHING to a caller that already holds a key', () => {
