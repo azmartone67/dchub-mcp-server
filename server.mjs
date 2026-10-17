@@ -76,6 +76,7 @@
  * a 'free' tier with capped result sizes and an upgrade nudge in responses.
  */
 
+import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 // r-list-swr (2026-07-11): Client + InMemoryTransport are used ONLY to build the
@@ -24700,6 +24701,10 @@ export function _bindNoticeOnceStep(result, name) {
 }
 
 export function _oneLinkWallStep(result, name) {
+  // ranked_answer.relay copies the link this step leaves on the finished response (the last word on it).
+  return attachRankedRelay(_oneLinkWallStepInner(result, name));
+}
+function _oneLinkWallStepInner(result, name) {
   try {
     if (!_wallOneLinkOn()) return result;
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
@@ -26107,6 +26112,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
         answer_guide: _execAnswerGuide(executed),
+        // /mcp/chatgpt (clean platform) is frozen during the OpenAI review: no new fields there.
+        ...(() => { const _ra = _isCleanPlatform() ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
+                    return _ra ? { ranked_answer: _ra } : {}; })(),
         // r-next-recipe (2026-07-26): the second call is where habit forms —
         // every execution suggests ONE contextual follow-up (Perplexity/Grok
         // converged ask). Static intent_class→recipe map; measurable because
