@@ -128,7 +128,9 @@ describe('G-1016-02: no hard verdict on a DCPI fallback band (get_market_intel f
     expect(h.provisional).toBe(true);
     expect(h.verdict_band_kind).toBe('fallback');
     expect(h.provisional_basis).toMatch(/fallback/);
-    expect(h.provisional_basis).toMatch(/missing input/);
+    // Grok 10-16 nit 2: canon is "did not clear a scoring band", not a cause.
+    expect(h.provisional_basis).toMatch(/did not clear the BUILD or CAUTION scoring band/);
+    expect(h.provisional_basis).not.toMatch(/missing input/);
     expect(h.provisional_basis).toMatch(/not a measured judgement/);
     // no invented verdict word anywhere in the taste
     for (const v of JSON.stringify(sc.taste).match(/"value":"[A-Z_]+"/g) || []) {
