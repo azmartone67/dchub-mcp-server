@@ -189,7 +189,7 @@ async function keyedFreeRowKeys() {
   if (_freeKeys) return _freeKeys;
   const out = await (await openSession({ 'x-api-key': K_FREE })).call('search_facilities', { state: 'VA' });
   expect(String((out.lead._upgrade || {}).message || ''), 'the reference row did not come from the keyed free mask')
-    .toContain('Free tier: facility capacity (MW)');
+    .toContain('Free tier: This result is partial: some fields are not included at this access level.');   // item 1 leftover (2026-10-17): the neutral line on /mcp
   const row = rowOf(out.lead);
   expect(row.name, 'the keyed free reference row is empty').toMatch(/^Anonmask DC /);
   _freeKeys = new Set(Object.keys(row));

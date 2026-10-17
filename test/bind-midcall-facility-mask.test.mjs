@@ -55,7 +55,7 @@ const record = (i) => ({
   city: 'Ashburn', state: 'VA', country: 'US', status: 'operational',
   latitude: 39.1, longitude: -77.5, ...PAID,
 });
-const KEYED_SIGNATURE = 'Free tier: facility capacity (MW)';
+const KEYED_SIGNATURE = 'Free tier: This result is partial: some fields are not included at this access level.';   // item 1 leftover (2026-10-17)
 
 let S, PORT, httpServer, stub;
 const claimed = new Map();     // session id → key claim_free_key stamped onto it (on another replica)

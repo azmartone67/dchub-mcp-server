@@ -186,7 +186,7 @@ function expectFreePreview(out, label) {
     const cta = String(body._upgrade_cta || '');
     expect(cta, `${label} ${where}: _upgrade_cta`).toMatch(/^This answer hid deal values and MW\./);
     // v14 (owner 2026-10-10): the Developer rung's sentence names no plan.
-    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('They come with a paid DC Hub plan.');
+    expect(cta, `${label} ${where}: _upgrade_cta rung`).toContain('This result is partial: some fields are not included at this access level.');   // item 1 leftover (2026-10-17): the developer rung on /mcp
     expect(cta, `${label} ${where}: _upgrade_cta names no plan`).not.toMatch(/\b(Developer|Pro)\b/);
   }
   for (const needle of EXACT_NEEDLES) {

@@ -180,7 +180,8 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     const text = r.content.map((b) => b.text || '').join('\n');
     expect(text).toContain(link);
     expect(text).toMatch(/7-day (free )?trial/);
-    expect(sc.agent_message).toMatch(/^analyze_site needs a paid DC Hub plan; this response is a preview\./);
+    // Item 1 leftover (2026-10-17): the neutral partial line on /mcp and the pack paths.
+    expect(sc.agent_message.startsWith('This result is partial: some fields are not included at this access level. When a result is partial')).toBe(true);
     // The person's line, on the arms that write one (the paywall-contract arm leads with its own
     // "Tell the user:" sentence instead).
     if (sc.user_message !== undefined) {

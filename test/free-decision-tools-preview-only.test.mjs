@@ -375,7 +375,9 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
       const up = r.data._upgrade || sc._upgrade || sc.upgrade;
       expect(up && up.unlocks_at).toBe('developer');
       // v14 (owner 2026-10-10): the rung is described, never named or priced.
-      expect(up.message).toMatch(/opens with a paid DC Hub plan\./);
+      // Item 1 leftover (2026-10-17): the neutral partial line on /mcp, no paid-plan sentence.
+      expect(up.message).toMatch(/This result is partial: some fields are not included at this access level\./);
+      expect(up.message).not.toMatch(/paid DC Hub plan/);
       expect(up.message).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
       expect(up.message).not.toMatch(/\$10|1,000 (API )?credits|pack|https?:\/\//i);
       // the data block carries no checkout URL on any seat (the header and the relay line do)
@@ -383,7 +385,10 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
       if (who.key) {
         // a keyed caller: the ladder is named in the text (the 🔒 header on the cascade tools,
         // the data block's message on the depth-tease path), and its human link is the relay
-        expect(r.text).toMatch(/a paid DC Hub plan/);
+        // Item 1 leftover (2026-10-17): the wall states the neutral partial line and keeps its one
+        // offer step (relay the human_url link); the rung is no longer described as a paid plan there.
+        expect(r.text).toMatch(/This result is partial: some fields are not included at this access level\./);
+        expect(r.text).toContain('Relay the link in human_url to your human');
         expect(r.text).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
         expect(sc.human_url).toMatch(/^https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/)/);
       } else {
@@ -405,7 +410,7 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
     // Grok 10-08 item 2: the agent-facing header names no plan; the page behind the one link shows the options
     const line = r.text.split('\n').find((l) => /This answer hid|is a preview on the free tier/.test(l));
     expect(line, r.text.slice(0, 600)).toBeTruthy();
-    expect(line).toMatch(/paid DC Hub plan; the page shows the options/);
+    expect(line).toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options/);   // item 1 leftover (2026-10-17)
     expect(line).not.toMatch(/\$10|Free full answers left today/);
     expect(r.text).not.toMatch(/Free full answers left today/);
     expect(JSON.stringify(r.data)).not.toContain('dchub.cloud/go/c/');
@@ -638,7 +643,7 @@ describe('get_energy_prices anonymous preview carries the labelled taste (Grok 1
     expect(sc.withheld.map((w) => w.section)).toContain('rate_range');
     expect(JSON.stringify(sc)).not.toMatch(/30\.1|18\.2/);
     const msg = (sc._upgrade && sc._upgrade.message) || '';
-    expect(msg).toMatch(/paid DC Hub plan; the page shows the options/);
+    expect(msg).toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options/);   // item 1 leftover (2026-10-17)
     expect(msg).not.toMatch(/\$|Developer|Pro\b/);
   });
 });
@@ -649,7 +654,8 @@ describe('depth walls name no plan and no price to the agent (Grok 10-08 item 2)
       const r = await callAs({}, tool, ARGS[tool] || { iso: 'PJM' });
       const prose = (r.result.content || []).map((c) => c.text).filter((t) => !t.trim().startsWith('{')).join('\n')
         .replace(/https?:\/\/\S+/g, '');
-      expect(prose).toMatch(/paid DC Hub plan/);
+      expect(prose).toMatch(/This result is partial: some fields are not included at this access level\./);   // item 1 leftover (2026-10-17): the neutral line, not the paid-plan sentence
+      expect(prose).not.toMatch(/(needs?|opens? with|comes? with) a paid DC Hub plan|fields above are in a paid DC Hub plan/);
       expect(prose).not.toMatch(/\$\s?10|Developer|\bPro\b|they pay|\bpack\b/i);
     });
   }
@@ -660,7 +666,10 @@ describe('depth walls name no plan and no price to the agent (Grok 10-08 item 2)
     try {
       const r = await callAs({}, 'get_grid_intelligence', { iso: 'PJM' });
       const all = (r.result.content || []).map((c) => c.text).join('\n');
-      expect(all).toMatch(/opens with a paid DC Hub plan/);
+      // Item 1 leftover (2026-10-17): the older header is the rung form (no "The page shows the options"),
+      // and its rung sentence is the neutral partial line on /mcp.
+      expect(all).toMatch(/🔒 \*\*This answer hid [^\n]*\*\* This result is partial: some fields are not included at this access level →/);
+      expect(all).not.toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options →/);
       expect(all.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
     } finally { delete process.env.DCHUB_DEPTH_WALL_PLANLESS; }
   });
