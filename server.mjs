@@ -19996,8 +19996,12 @@ function _withHygieneTail(name, description) {
   return `${description} ${t}`;
 }
 
+// Raw handlers by tool name, for the few places one tool hands off to another in the same
+// call (bind_email on a keyless session -> claim_free_key with the email; Grok/owner 10-17).
+const _RAW_TOOL_HANDLERS = new Map();
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
+  _RAW_TOOL_HANDLERS.set(name, handler);
   // ── r-mpp-arg-channel (2026-08-17): DECLARE the payment params ─────────────
   // This merge is the entire fix. mppWantsChallenge has read `args.mpp_pay`
   // since 2026-06-21, but the SDK validates arguments with
@@ -29686,6 +29690,27 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // X-API-Key (the auto-mint identify path). Pass it through only if given.
       const _key = (a.api_key || '').toString().trim();
       if (_key) body.api_key = _key;
+      // KEYLESS MINT+BIND (Grok/owner 2026-10-17, mcp#1004): /api/v1/keys/identify takes
+      // {api_key, email}, so on a session with NO key there is nothing to bind. Instead of
+      // failing, this one call mints a free key with the email bound (claim_free_key's own
+      // path, which sends the email in the mint body) and returns it. A session that holds a
+      // key, or an explicit api_key, takes the bind path below unchanged.
+      let _sessKey = null;
+      try { const _c = getCtx(); _sessKey = _c && _c.api_key; } catch (_) { _sessKey = null; }
+      const _claimImpl = _RAW_TOOL_HANDLERS.get('claim_free_key');
+      if (!_key && !_sessKey && typeof _claimImpl === 'function') {
+        const _minted = await _claimImpl({ email });
+        try {
+          const _lead = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+          if (_minted && Array.isArray(_minted.content) && _minted.content[0] && typeof _minted.content[0].text === 'string') {
+            _minted.content[0] = { ..._minted.content[0], text: _lead + _minted.content[0].text };
+          }
+          if (_minted && _minted.structuredContent && typeof _minted.structuredContent === 'object') {
+            _minted.structuredContent = { ..._minted.structuredContent, bind_email_path: 'keyless_mint_bind' };
+          }
+        } catch (_) { /* the mint result stands as returned */ }
+        return _minted;
+      }
       const r = await callAPIWrite('/api/v1/keys/identify', body);
       // SOFT-FAIL contract: relay any backend ok:false / error calmly; never throw,
       // never isError — the key keeps working, email is optional and gates nothing.

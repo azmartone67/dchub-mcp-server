@@ -434,3 +434,34 @@ describe('email_source sent to /keys/identify and /keys/claim', () => {
     expect(R.emailSourceFor({ auth_oauth: true })).toBe('oauth');
   });
 });
+
+// ── bind_email on a keyless session mints + binds (Grok/owner 2026-10-17, mcp#1004) ──
+describe('bind_email keyless mint+bind', () => {
+  it('no key on the session: one call mints a key with the email bound (claim path), no identify call', async () => {
+    const s = await session('/mcp', 'Claude Code');
+    identifyBody = null; claimBody = null;
+    const r = await s.call('bind_email', { email: 'jane@firm.com' });
+    expect(claimBody && claimBody.email, 'the mint carried the email').toBe('jane@firm.com');
+    expect(identifyBody, 'nothing to bind on a keyless session, so no identify call').toBeNull();
+    expect(r.first.startsWith('No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ')).toBe(true);
+    expect(r.text).toContain(MINTED);
+    expect(r.sc.bind_email_path).toBe('keyless_mint_bind');
+  });
+
+  it('CONTROL: a session that holds a key takes the bind path unchanged (identify, no mint)', async () => {
+    const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
+    identifyBody = null; claimBody = null;
+    const r = await s.call('bind_email', { email: 'jane@firm.com' });
+    expect(identifyBody && identifyBody.email).toBe('jane@firm.com');
+    expect(claimBody, 'no mint for a keyed session').toBeNull();
+    expect(r.sc.bind_email_path).toBeUndefined();
+  });
+
+  it('CONTROL: an explicit api_key binds that key even on a keyless session', async () => {
+    const s = await session('/mcp', 'Claude Code');
+    identifyBody = null; claimBody = null;
+    await s.call('bind_email', { email: 'jane@firm.com', api_key: OLD_NOEMAIL });
+    expect(identifyBody && identifyBody.email, 'the explicit key goes to identify (bind), not to a mint').toBe('jane@firm.com');
+    expect(claimBody).toBeNull();
+  });
+});
