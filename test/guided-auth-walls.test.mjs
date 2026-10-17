@@ -104,7 +104,8 @@ describe('guided 401/402 through a real session', () => {
       expect(b.next_tool).toBe('unlock_more_data');
       expect(b.tier_required).toBe('pro');
       expect('required_plan' in b).toBe(false);
-      expect(b.message).toMatch(/needs a paid DC Hub plan/);
+      // Item 1 leftover (2026-10-17): the neutral partial line on /mcp, then the relay step.
+      expect(b.message).toBe('This result is partial: some fields are not included at this access level. Relay the link in human_url to your human.');
     }
   });
 
