@@ -194,7 +194,7 @@ describe('the pure line', () => {
       const t = L.claimHandoffText({ status, allowance: allow });
       expect(t).toContain('`claim_free_key`');
       expect(t).toContain('X-API-Key');
-      expect(t).toContain('no email');
+      expect(t).toMatch(status === 'trial_used' ? /their email first/ : /no email/);
       expect(t).not.toMatch(/https?:\/\/|dchub\.cloud/);
       expect(t).not.toMatch(PLAN_WORD);
       expect(t).not.toMatch(/\$\d|unlock/i);
@@ -266,7 +266,7 @@ describe('keyless preview wall: trial_used', () => {
     const r = await call(seat, 'get_pipeline', { country: 'US' });
     expect(r.status).toBe('trial_used');
     const prose = proseBlocks(r.blocks);
-    expect(prose[0]).toMatch(/^Free, one call, no email: call `claim_free_key`, then send the api_key it returns as the X-API-Key header/);
+    expect(prose[0]).toMatch(/^Free, one call: ask your human for their email first, then call `claim_free_key` with it \(only an address they gave you\), then send the api_key it returns as the X-API-Key header/);
     expect(prose[0]).not.toMatch(/https?:\/\//);
     expect(prose[0]).not.toMatch(PLAN_WORD);
     const joined = prose.join('\n');
@@ -286,7 +286,7 @@ describe('keyless preview wall: trial_used', () => {
       async () => S._claimHandoffStep({ content: [{ type: 'text', text }], structuredContent: { ok: true } }, 'get_pipeline'));
     expect(out.content).toHaveLength(1);
     const t = out.content[0].text;
-    expect(t.startsWith(json + '\n\n---\n\nFree, one call, no email: call `claim_free_key`')).toBe(true);
+    expect(t.startsWith(json + '\n\n---\n\nFree, one call: ask your human for their email first, then call `claim_free_key`')).toBe(true);
     expect(t).toMatch(/\.\n\n\u{1F512} \*\*Free-tier preview of `get_pipeline`\.\*\*/u);   // the wall's own header follows the line
     expect(t.indexOf('claim_free_key')).toBeLessThan(t.indexOf('the payer checks out'));
     expect(t).not.toContain('durable free-tier key');
@@ -299,7 +299,7 @@ describe('what it must not do', () => {
     const seat = await open({ ip: CAPPED_IP, key: KEY });
     const r = await call(seat, 'search_facilities', { state: 'VA' });
     expect(r.all).not.toContain('This IP has used today');
-    expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call, no email: call `claim_free_key`/);
+    expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call: ask your human for their email first/);
   });
 
   it('leaves the decision tools alone while the item-3 switch is off: their 10-08 wall says a free key does not deepen them', async () => {
@@ -309,7 +309,7 @@ describe('what it must not do', () => {
     try {
       const seat = await open();
       const r = await call(seat, 'get_market_intel', { market: 'northern-virginia' });
-      expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call, no email: call `claim_free_key`/);
+      expect(proseBlocks(r.blocks).join('\n')).not.toMatch(/Free, one call: ask your human for their email first/);
     } finally { delete process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS; }
     expect(S._singleAskWall('get_market_intel')).toBe(false);   // not a single-ask wall by default; excluded by the decision rule
   });
