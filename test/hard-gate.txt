@@ -30,6 +30,7 @@ test/automint-trial-rungs.test.mjs
 test/b1-free-key-daily-allowance.test.mjs
 test/b2-analyze-site-keyless-headline.test.mjs
 test/band-matches-verdict.test.mjs
+test/bind-copy-preview-only.test.mjs
 test/bind-midcall-facility-mask.test.mjs
 test/bind-notice-key-usage.test.mjs
 test/bind-notice-once-per-key.test.mjs
