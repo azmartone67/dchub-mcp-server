@@ -4,7 +4,7 @@
 // Wiring half: the real server.mjs app on loopback (stub backend, no network): keyless and free-key
 // answers end with it; a paid key, /mcp/claude and a clean platform (ChatGPT) get none.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { withSourceLine, sourceLine, sourcePath, dataAsOfDay, isSourceLine, pagePathFromUrl }
+import { withSourceLine, sourceLine, sourcePath, dataAsOfDay, dataAsOfHour, isSourceLine, pagePathFromUrl }
   from '../lib/source-line.mjs';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
@@ -213,10 +213,27 @@ describe('wiring: free answers end with the line, the skipped surfaces do not', 
 describe('the instructions point at summarize_for_citation', () => {
   it('the lead names it beside cite_as, with no plan name or price', async () => {
     const { OUTREACH_LEAD } = await import('../lib/agent-outreach.mjs');
-    expect(OUTREACH_LEAD).toContain('(`cite_as` on every result; summarize_for_citation per figure)');
+    expect(OUTREACH_LEAD).toContain('(`cite_as` per result; summarize_for_citation per figure)');
     expect(OUTREACH_LEAD).not.toMatch(/\$|\/mo\b|\bpro\b|developer|starter|per month|one-time/i);
     // served: the lean handshake every surface reads starts with the lead
     const r = await H.init('/mcp', 'claude-ai', { 'user-agent': 'Claude-User' });
     expect(r.msg.result.instructions).toContain('summarize_for_citation per figure');
+  });
+});
+
+describe('Source line carries the hour a grid cite names', () => {
+  const sc = { iso: 'MISO', cite_as: 'DC Hub (dchub.cloud), as of 2026-10-16T04:00Z', provenance: { as_of: '2026-10-16T04:00:00Z' } };
+  it('adds the hour', () => {
+    expect(dataAsOfHour(sc)).toBe('2026-10-16T04:00Z');
+    expect(sourceLine(sc, 'get_grid_data', {})).toMatch(/, as of 2026-10-16T04:00Z$/);
+  });
+  it('a day-only cite stays day-only', () => {
+    const d = { cite_as: 'DC Hub (dchub.cloud), as of 2026-10-16', provenance: { as_of: '2026-10-16' } };
+    expect(dataAsOfHour(d)).toBeNull();
+    expect(sourceLine(d, 'get_grid_data', {})).toMatch(/, as of 2026-10-16$/);
+  });
+  it('an hour on a different day than the data day is not used', () => {
+    const x = { cite_as: 'DC Hub (dchub.cloud), as of 2026-10-17T01:00Z', provenance: { as_of: '2026-10-16' } };
+    expect(sourceLine(x, 'get_grid_data', {})).toMatch(/, as of 2026-10-16$/);
   });
 });
