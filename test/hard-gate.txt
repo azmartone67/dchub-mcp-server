@@ -3,6 +3,7 @@ test/agent-beat.test.mjs
 test/agent-outreach-e2e.test.mjs
 test/agent-outreach.test.mjs
 test/analyst-path-selftag.test.mjs
+test/analyze-parcel-not-covered.test.mjs
 test/analyze-site-email-unlock-teaser.test.mjs
 test/analyze-site-free-line.test.mjs
 test/analyze-site-gated-preview.test.mjs

@@ -193,6 +193,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
@@ -9812,6 +9813,60 @@ export function _lockHostingSubstations(out) {
       const { substation, ...rest } = f; return rest;
     }),
     _locked_fields: ['top_feeders[].substation'], _required_tier: SUBSTATION_DETAIL_MIN_TIER };
+}
+
+// analyze_parcel outside hosted parcel coverage (owner 2026-10-16, lib/parcel-not-covered.mjs):
+// analyze_site's PREVIEW at the point, by the same functions analyze_site's own gate uses for this
+// caller. Keyless: the wall's teaser (verdict band + power band), plus the weakest factor and counts
+// where that wall carries them, under the same _coreHeadlineAllowed rate limit. Any key: the Land &
+// Power preview (Pro too: this is a preview door, so nothing full and no credit spend leaves here).
+// The monthly free full runs are never asked (no /api/v1/mcp/lp-free-runs call).
+export async function _parcelSitePreview(lat, lon, capacityMw) {
+  const c = getCtx() || {};
+  let access = 'wall';
+  try { access = await _lpAccessFor(c, c.tier || ''); } catch (_) { access = c.api_key ? 'preview' : 'wall'; }
+  const keyless = access === 'wall';
+  const label = keyless ? 'keyless' : 'key';
+  if (keyless && !_coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
+    return { access: label, payload: null, reason: 'rate_limited' };
+  }
+  const args = { lat, lon, ...(Number(capacityMw) > 0 ? { capacity_mw: Number(capacityMw) } : {}) };
+  const raw = await callAPI('/api/site-score', args);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.error || raw.success === false) {
+    return { access: label, payload: null, reason: 'site read unavailable' };
+  }
+  if (keyless) {
+    const out = {};
+    const t = _siteEmailUnlockOn() ? _siteTeaser(raw) : null;
+    if (t) out.site_teaser = t;
+    const hl = (_paywallContractOn(c) || _b2KeylessHeadlineOn()) ? _pcLpHeadline('analyze_site', raw) : null;
+    if (hl && hl.weakest_factor) out.limiting_factor = { factor: hl.weakest_factor, band: hl.weakest_factor_band };
+    const n = _b2KeylessHeadlineOn() ? _b2SiteCounts(raw) : null;
+    if (n) out.site_counts = n;
+    return Object.keys(out).length ? { access: label, payload: out } : { access: label, payload: null, reason: 'nothing to band' };
+  }
+  const pv = _lpPreviewResult('analyze_site', { content: [{ type: 'text', text: JSON.stringify(raw) }] });
+  const sc = pv && pv.structuredContent;
+  if (!sc || typeof sc !== 'object' || !sc._preview_only) return { access: label, payload: null, reason: 'site read unavailable' };
+  const payload = _scrubPreviewForParcel(sc);
+  const t = _siteEmailUnlockOn() ? _siteTeaser(raw) : null;
+  if (t) payload.site_teaser = t;
+  return { access: label, payload };
+}
+let _parcelCoverageCache = null;   // { at, block }: a successful read, 10 minutes
+async function _parcelCoverage() {
+  if (_parcelCoverageCache && Date.now() - _parcelCoverageCache.at < 600_000) return _parcelCoverageCache.block;
+  const r = await callAPI(PARCEL_COVERAGE_PATH, {}, { withStatus: true, internal: true, timeout: 8000 });
+  const block = _parcelCoverageBlock(r);
+  if (block.available) _parcelCoverageCache = { at: Date.now(), block };
+  return block;
+}
+export async function _parcelNotCoveredAnswer(lat, lon, capacityMw) {
+  const [preview, coverage] = await Promise.all([
+    _parcelSitePreview(lat, lon, capacityMw).catch(() => ({ access: null, payload: null, reason: 'site read unavailable' })),
+    _parcelCoverage().catch(() => _parcelCoverageBlock(null)),
+  ]);
+  return _buildParcelNotCovered({ lat, lon, capacityMw, preview, coverage });
 }
 
 export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
@@ -27428,7 +27483,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     });
 
   trackedTool(srv, 'analyze_parcel',
-    'Structured read of a parcel BOUNDARY — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (free county/state GIS polygons, rolling out by data-center market — Loudoun County VA first; a point outside hosted coverage returns an honest 404 with the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary or a point on a specific parcel and want it anchored + sized; for a general lat/lon site score use analyze_site; for the interconnection-queue survivor set use get_refined_queue (queue rows carry NO parcel identity, so they never auto-join to hosted parcels).',
+    'Structured read of a parcel BOUNDARY — pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED parcel-boundary layer (free county/state GIS polygons, rolling out by data-center market — Loudoun County VA first; a point outside it returns parcel_not_covered with the analyze_site preview + the coverage list, never a guess). Returns _entity=parcel_analysis: geodesic total_acres, a per-member acreage breakdown, a contiguous flag, representative_point = the centroid of the LARGEST-area member (never the multi-part geometric center, which can land off-parcel on a highway median or river and poison every point-keyed read), and hosted_parcel {parcel_id, county, state, acres_per_source} when the polygon came from the hosted layer. Also returns a site_evaluation_handoff to pipe into analyze_site + get_water_risk at that anchor. Use when you HAVE a boundary or a point on a specific parcel and want it anchored + sized; for a general lat/lon site score use analyze_site; for the interconnection-queue survivor set use get_refined_queue (queue rows carry NO parcel identity, so they never auto-join to hosted parcels).',
     // r-coord-aliases (2026-07-16): geometry was z.any() WITHOUT .optional() —
     // the SDK required it, so the documented lat/lon-only hosted-parcel lookup
     // was rejected at validation (-32602) before the handler ever ran.
@@ -27439,7 +27494,22 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       capacity_mw: N.describe('Optional target load in MW to pass through into the site_evaluation_handoff') },
     async (a) => {
       const { lat, lon } = _extractCoordArgs(a);
-      const data = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body: { geometry: a.geometry, capacity_mw: a.capacity_mw, lat, lng: lon } });
+      const body = { geometry: a.geometry, capacity_mw: a.capacity_mw, lat, lng: lon };
+      let data;
+      if (_parcelFallbackOn()) {
+        // Outside hosted parcel coverage: the site preview + coverage list (lib/parcel-not-covered.mjs).
+        const r = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body, withStatus: true });
+        if (_isParcelNotCovered(r, { geometry: a.geometry, lat, lon })) {
+          const sc = await _parcelNotCoveredAnswer(Number(lat), Number(lon), a.capacity_mw);
+          return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+        }
+        // The same shapes callAPI returns without withStatus.
+        data = r.transport_error ? { error: r.transport_error }
+          : !r.ok ? _upstreamError(r.http_status, r.text)
+          : (r.body !== null ? r.body : { raw: r.text });
+      } else {
+        data = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body });
+      }
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
     });
@@ -27807,7 +27877,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // grid so every candidate is a point we can cite — see the backend module
   // docstring for why tessellation was rejected.
   trackedTool(srv, 'find_sites',
-    'FRONT DOOR CHECK — if the question spans more than one capability ("find 200MW near Dallas with fiber, then rank the markets"), call `execute_plan(intent="<the user\'s question, unchanged>")`. find_sites is the right single call when the user has NO site yet and wants candidates to start from — the first step of data center site selection. THE INVERSE QUERY: every other DC Hub siting tool needs a coordinate you already have — analyze_site scores one, get_composite_site_score grades one, rank_sites orders candidates YOU already enriched, find_alternatives needs a seed facility. This one answers "where should I even be looking?". Returns candidate SEARCH AREAS anchored on real HIFLD substations at or above min_voltage_kv, spatially de-duplicated by cluster_km so a dense metro yields distinct areas instead of 40 near-identical rows, each carrying measured distance to the nearest gas pipeline and fiber route plus state-grain moratorium context, and a next_calls handoff. ★ WHAT A CANDIDATE IS NOT: a search area is NOT a parcel, NOT a listing, and NOT land known to be for sale — DC Hub holds no land-ownership or availability data, and hosted parcel boundaries cover ONE county (Loudoun VA), so analyze_parcel will 404 on most of these points BY DESIGN. Read each as "start looking here", then score the coordinate with analyze_site. ★ READ constraint_coverage BEFORE CALLING THIS A SCREENED LIST: a constraint filters ONLY when its layer actually answered. If a layer errors, the set comes back UNFILTERED with applied:false plus a reason and an instead, the names repeated in top-level unapplied_constraints and an unapplied_constraints_warning — an unevaluable constraint is never a passed constraint. fiber_distance_km is a straight-line CHORD between a route\'s endpoints, NOT the true polyline path; its basis is stamped on every candidate and get_fiber_readiness at the coordinate is the engineered read. hazard/moratorium are STATE grain, never a site verdict. A geography is REQUIRED — pass state, or lat+lon (+radius_km); without one you get a legible 400 (error_code geography_required), never a nationwide scan. Free tier coarsens coordinates to ~11 km and withholds operator/capacity. Answers "where should I even be looking for 200 MW in Ohio" and "which areas near Dallas sit on 230kV with gas within 5 miles". Try: find_sites state=OH min_voltage_kv=230 max_gas_km=8 — or find_sites lat=39.04 lon=-77.48 radius_km=60 min_voltage_kv=500. Do NOT use to score a site you already have (analyze_site), to rank candidates you already enriched (rank_sites), to find similar FACILITIES to a known one (find_alternatives), or for interconnection-queue survivors (get_refined_queue).',
+    'FRONT DOOR CHECK — if the question spans more than one capability ("find 200MW near Dallas with fiber, then rank the markets"), call `execute_plan(intent="<the user\'s question, unchanged>")`. find_sites is the right single call when the user has NO site yet and wants candidates to start from — the first step of data center site selection. THE INVERSE QUERY: every other DC Hub siting tool needs a coordinate you already have — analyze_site scores one, get_composite_site_score grades one, rank_sites orders candidates YOU already enriched, find_alternatives needs a seed facility. This one answers "where should I even be looking?". Returns candidate SEARCH AREAS anchored on real HIFLD substations at or above min_voltage_kv, spatially de-duplicated by cluster_km so a dense metro yields distinct areas instead of 40 near-identical rows, each carrying measured distance to the nearest gas pipeline and fiber route plus state-grain moratorium context, and a next_calls handoff. ★ WHAT A CANDIDATE IS NOT: a search area is NOT a parcel, NOT a listing, and NOT land known to be for sale — DC Hub holds no land-ownership or availability data, and hosted parcel boundaries cover ONE county (Loudoun VA), so analyze_parcel returns parcel_not_covered on most of these points BY DESIGN. Read each as "start looking here", then score the coordinate with analyze_site. ★ READ constraint_coverage BEFORE CALLING THIS A SCREENED LIST: a constraint filters ONLY when its layer actually answered. If a layer errors, the set comes back UNFILTERED with applied:false plus a reason and an instead, the names repeated in top-level unapplied_constraints and an unapplied_constraints_warning — an unevaluable constraint is never a passed constraint. fiber_distance_km is a straight-line CHORD between a route\'s endpoints, NOT the true polyline path; its basis is stamped on every candidate and get_fiber_readiness at the coordinate is the engineered read. hazard/moratorium are STATE grain, never a site verdict. A geography is REQUIRED — pass state, or lat+lon (+radius_km); without one you get a legible 400 (error_code geography_required), never a nationwide scan. Free tier coarsens coordinates to ~11 km and withholds operator/capacity. Answers "where should I even be looking for 200 MW in Ohio" and "which areas near Dallas sit on 230kV with gas within 5 miles". Try: find_sites state=OH min_voltage_kv=230 max_gas_km=8 — or find_sites lat=39.04 lon=-77.48 radius_km=60 min_voltage_kv=500. Do NOT use to score a site you already have (analyze_site), to rank candidates you already enriched (rank_sites), to find similar FACILITIES to a known one (find_alternatives), or for interconnection-queue survivors (get_refined_queue).',
     { state: S.describe('2-letter US state to search, e.g. OH — required unless you pass lat + lon'),
       lat: N.describe('Latitude of a search centre, e.g. 39.04 — use with lon (+ radius_km) instead of state'),
       lon: N.describe('Longitude of a search centre, e.g. -77.48'),
