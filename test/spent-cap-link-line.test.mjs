@@ -86,7 +86,16 @@ describe.each(Object.entries(CLIENTS))('%s: 3 full reports, then the preview end
     expect(r4.sc.overall_score ?? null, 'the score is withheld').toBe(null);
     const lines = lineOf(r4);
     expect(lines, 'exactly one plain Full report line').toHaveLength(1);
-    expect(r4.blocks[r4.blocks.length - 1], 'and it is the last thing the agent reads').toBe(lines[0]);
+    // Item 8 (owner 2026-10-16): a free answer closes with one citable Source line and the link line
+    // is the last thing before it. Clean platforms (ChatGPT) get no Source line, so the link stays last.
+    const SRC_RE = /^Source: DC Hub \(dchub\.cloud[^)]*\)/;
+    if (client === CLIENTS.chatgpt) {
+      expect(r4.blocks.some((b) => SRC_RE.test(b)), 'no Source line on a clean platform').toBe(false);
+      expect(r4.blocks[r4.blocks.length - 1], 'and it is the last thing the agent reads').toBe(lines[0]);
+    } else {
+      expect(r4.blocks[r4.blocks.length - 1], 'the citable source line closes the answer').toMatch(SRC_RE);
+      expect(r4.blocks[r4.blocks.length - 2], 'and the link line is the last thing before it').toBe(lines[0]);
+    }
     const url = LINE_RE.exec(lines[0])[1];
     expect(url, 'the line carries the response\'s own human_url').toBe(r4.sc.human_url);
   });

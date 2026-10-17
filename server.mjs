@@ -177,6 +177,7 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 // Agent outreach front door (owner 2026-10-03): instructions lead, routing lines,
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor } from './lib/agent-outreach.mjs';
+import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -19880,6 +19881,32 @@ function _outreachStep(result, name, args) {
   } catch (_e) { return result; }
 }
 
+// Item 8 (owner 2026-10-16): every FREE answer (keyless, free key, email key)
+// ends with ONE citable line, "Source: DC Hub (dchub.cloud/<path>), as of <date>"
+// (lib/source-line.mjs: path from the result, data date only, text only). It
+// wraps the whole callback chain, OUTSIDE _flagUpstreamError, so no step can
+// append after it; it skips isError and error envelopes, so the flag's verdict
+// cannot change. Skipped: paid tiers; the meta/receipt tools of
+// _RETURN_NUDGE_SKIP (a receipt or a paste-ready citation is not a data answer)
+// and the write tools; the directory profiles /mcp/chatgpt and /mcp/claude (a
+// gated result ends with exactly the neutral partial line, search/fetch keep
+// exactly one text item) and /mcp/core; clean platforms (ChatGPT: one data
+// item). Kill switch DCHUB_SOURCE_LINE=0.
+export function _sourceLineStep(result, name, args) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SOURCE_LINE || '').trim())) return result;
+    if (_RETURN_NUDGE_SKIP.has(name) || WRITE_TOOLS.has(name)) return result;
+    const c = getCtx() || {};
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform()) return result;
+    if (_tierRank(c.tier || 'free') >= _tierRank('starter')) return result;
+    return _withSourceLine(result, name, args);
+  } catch (_e) { return result; }
+}
+function _sourceLineCb(name, fn) {
+  return async (args, extra) => _sourceLineStep(await fn(args, extra), name, args);
+}
+
 // ── Description hygiene (ToolBench 2026-10-09, Grok P1 item 3) ──────────────
 // One short tail per high-use tool: what to call first, what a failure means and
 // what to do next. Every claim here was probed live 2026-10-09 (no match = empty
@@ -22555,12 +22582,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   so the line lands in the block those steps then lay out. It is not at the outer end of the
   //   chain because the three wiring guards (test/bind-notice-once-per-key, block0-is-json-everywhere,
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
-  }, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
+  }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name));
+       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────

@@ -274,7 +274,10 @@ describe('get_fiber_intel keyless wall gets the same treatment (fail 4)', () => 
     expect(t).toContain('get_fiber_intel returned a free preview of Ashburn');
     expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     expect(r.structuredContent.for_your_human.text).toBe(um);
-    expect(t.trimEnd().endsWith('?buy=1')).toBe(true);
+    // Item 8 (owner 2026-10-16): the free answer's closing Source line follows the ask.
+    const blocks = r.content.map((b) => b.text);
+    expect(blocks[blocks.length - 1]).toMatch(/^Source: DC Hub \(dchub\.cloud[^)]*\)(, as of [\d-]+)?$/);
+    expect(blocks.slice(0, -1).join('\n').trimEnd().endsWith('?buy=1')).toBe(true);
   });
   it('names the routes and geometry the gate cut when its markers are on the response', () => {
     const feat = { type: 'Feature', geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1], [2, 2]], _coordinates_total_in_pro: 6 }, properties: {} };
