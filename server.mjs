@@ -25346,9 +25346,11 @@ export const _INSTRUCTIONS_LEAN = (() => {
   // (test/initialize-instructions-length.test.mjs). /mcp/grok adds its count rewrite and the ENDPOINT
   // SCOPE tail, so the shared text loses its repeats: the domain list (OUTREACH_LEAD names it), the
   // "from memory" rule (OUTREACH_LEAD), the human_url description (RELAY_CONTRACT says what to do with it).
+  // 2026-10-17 (owner): /mcp/grok measured 2,063 after the siting clause (mcp#1001) and the citation
+  // aside (mcp#1002); "whose description says" -> "marked" and "on every result" -> "per result" bring it under.
   return OUTREACH_LEAD + 'DC Hub: live, cited data' + (n ? ' (' + n + ' tools)' : '') + '. '
     + (routing ? routing + ' ' : '')
-    + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool whose description says "Use this whenever...". Never reuse a figure from memory or an earlier call; cite `as_of`. '
+    + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool marked "Use this whenever...". Never reuse a figure from memory or an earlier call; cite `as_of`. '
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
