@@ -237,7 +237,9 @@ describe('initialize instructions name no plan for the paid tools', () => {
   it('/mcp and /mcp/grok carry the PAID line and the relay rule (the scan below reads real text)', () => {
     for (const path of ['/mcp', '/mcp/grok']) {
       // v14: the human_url description went (RELAY_CONTRACT, which follows, says what to do with it).
-      expect(served[path], path).toMatch(/PAID: `analyze_site`, [^.]*`export_dataset` need a paid DC Hub plan\. A gated result carries `human_url` \(also `for_your_human\.url`\) and `human_message`\. When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\. /);
+      // Item 1 (owner 2026-10-16): the PAID line is replaced by one neutral line, no plan named.
+      expect(served[path], path).not.toContain('need a paid DC Hub plan');
+      expect(served[path], path).toMatch(/Past that, previews\. A gated result carries `human_url` \(also `for_your_human\.url`\) and `human_message`\. When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\. /);
     }
   });
 

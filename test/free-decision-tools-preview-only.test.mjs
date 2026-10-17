@@ -568,11 +568,12 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     expect(S._INSTR_FREE_TIER).toContain(CLAUSE);
     expect(S._INSTRUCTIONS).toContain(CLAUSE);
     expect(S._INSTRUCTIONS_LEAN).toContain(CLAUSE);
-    // the clause sits inside the FREE TIER block, before the PAID section the lean text appends
+    // the clause sits inside the FREE TIER block, before the closing line the lean text appends
+    // (item 1, owner 2026-10-16: "Past that, previews." replaced the PAID line)
     const lean = S._INSTRUCTIONS_LEAN;
     expect(lean.indexOf('FREE TIER (quote verbatim):')).toBeLessThan(lean.indexOf(CLAUSE));
-    expect(lean.indexOf('PAID: ')).toBeGreaterThan(-1);
-    expect(lean.indexOf(CLAUSE)).toBeLessThan(lean.indexOf('PAID: '));
+    expect(lean.indexOf('Past that, previews. ')).toBeGreaterThan(-1);
+    expect(lean.indexOf(CLAUSE)).toBeLessThan(lean.indexOf('Past that, previews. '));
   });
   it('claim_free_key: free_tier_rule is the pinned B1 sentence, byte for byte, and the clause rides beside it', async () => {
     const r = await callAs({}, 'claim_free_key', {});
