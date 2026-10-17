@@ -13606,7 +13606,7 @@ const TRIAL_HEADER_OVERRIDES = {
       '',
       "The number above is real — but it's a single market with no facility detail, pipeline, or operator landscape. **An agent reasoning from one data point gives incomplete answers.** Give it the full report so it reasons from everything:",
       '',
-      '⚡ **Free, one call, no email — do this first:** call the `claim_free_key` tool now → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the free depth. **Save the key to your MCP config** so every future session reuses it.',
+      '⚡ **Free, one call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `get_market_intel` returns all 300+ markets at the free depth. **Save the key to your MCP config** so every future session reuses it.',
       `💳 **Want full premium depth** (facility detail, pipelines, operator landscape)? Your human pays in one click and THIS session is served in full: ${_rungsText('get_market_intel', 'free', sessionId)}`,
       `→ Prefer a flat plan? **[A paid DC Hub plan](${_developer})** · [free dev key by email](${redeem})`,
       '',
@@ -13891,7 +13891,7 @@ function _freeRungLine(toolName) {
   // A caller holding a key has already taken this rung. Offering it again is
   // noise at best and, on a key that is already identified, wrong.
   if (k) return '';
-  return '⚡ **Free, one call, no email — do this first:** call the `claim_free_key` tool now → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `' + toolName + '` call runs at the free tier. **Save the key to your MCP config** so every future session reuses it.';
+  return '⚡ **Free, one call, with an email — do this first:** call the `claim_free_key` tool with the email address the person gave you (never guess one) → it mints a *durable* `dch_live_` key, auto-applies it to THIS session (no reconnect), and your next `' + toolName + '` call runs at the free tier. **Save the key to your MCP config** so every future session reuses it.';
 }
 
 function siteHeadlineHeader(name, sessionId) {
@@ -19941,8 +19941,12 @@ function _withHygieneTail(name, description) {
   return `${description} ${t}`;
 }
 
+// Raw handlers by tool name, for the few places one tool hands off to another in the same
+// call (bind_email on a keyless session -> claim_free_key with the email; Grok/owner 10-17).
+const _RAW_TOOL_HANDLERS = new Map();
 function trackedTool(srv, name, description, schema, handler) {
   _registeredToolNames.add(name);
+  _RAW_TOOL_HANDLERS.set(name, handler);
   // ── r-mpp-arg-channel (2026-08-17): DECLARE the payment params ─────────────
   // This merge is the entire fix. mppWantsChallenge has read `args.mpp_pay`
   // since 2026-06-21, but the SDK validates arguments with
@@ -25346,9 +25350,11 @@ export const _INSTRUCTIONS_LEAN = (() => {
   // (test/initialize-instructions-length.test.mjs). /mcp/grok adds its count rewrite and the ENDPOINT
   // SCOPE tail, so the shared text loses its repeats: the domain list (OUTREACH_LEAD names it), the
   // "from memory" rule (OUTREACH_LEAD), the human_url description (RELAY_CONTRACT says what to do with it).
+  // 2026-10-17 (owner): /mcp/grok measured 2,063 after the siting clause (mcp#1001) and the citation
+  // aside (mcp#1002); "whose description says" -> "marked" and "on every result" -> "per result" bring it under.
   return OUTREACH_LEAD + 'DC Hub: live, cited data' + (n ? ' (' + n + ' tools)' : '') + '. '
     + (routing ? routing + ' ' : '')
-    + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool whose description says "Use this whenever...". Never reuse a figure from memory or an earlier call; cite `as_of`. '
+    + 'MUST CALL (FRONT DOOR): a multi-capability market, power, fiber or siting question goes to `execute_plan(intent=<the user\'s question, unchanged>)`; a single fact goes to the tool marked "Use this whenever...". Never reuse a figure from memory or an earlier call; cite `as_of`. '
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
@@ -29614,6 +29620,27 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // X-API-Key (the auto-mint identify path). Pass it through only if given.
       const _key = (a.api_key || '').toString().trim();
       if (_key) body.api_key = _key;
+      // KEYLESS MINT+BIND (Grok/owner 2026-10-17, mcp#1004): /api/v1/keys/identify takes
+      // {api_key, email}, so on a session with NO key there is nothing to bind. Instead of
+      // failing, this one call mints a free key with the email bound (claim_free_key's own
+      // path, which sends the email in the mint body) and returns it. A session that holds a
+      // key, or an explicit api_key, takes the bind path below unchanged.
+      let _sessKey = null;
+      try { const _c = getCtx(); _sessKey = _c && _c.api_key; } catch (_) { _sessKey = null; }
+      const _claimImpl = _RAW_TOOL_HANDLERS.get('claim_free_key');
+      if (!_key && !_sessKey && typeof _claimImpl === 'function') {
+        const _minted = await _claimImpl({ email });
+        try {
+          const _lead = 'No key on this session, so `bind_email` minted a free DC Hub key with this email bound (one call). ';
+          if (_minted && Array.isArray(_minted.content) && _minted.content[0] && typeof _minted.content[0].text === 'string') {
+            _minted.content[0] = { ..._minted.content[0], text: _lead + _minted.content[0].text };
+          }
+          if (_minted && _minted.structuredContent && typeof _minted.structuredContent === 'object') {
+            _minted.structuredContent = { ..._minted.structuredContent, bind_email_path: 'keyless_mint_bind' };
+          }
+        } catch (_) { /* the mint result stands as returned */ }
+        return _minted;
+      }
       const r = await callAPIWrite('/api/v1/keys/identify', body);
       // SOFT-FAIL contract: relay any backend ok:false / error calmly; never throw,
       // never isError — the key keeps working, email is optional and gates nothing.
