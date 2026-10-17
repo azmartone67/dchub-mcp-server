@@ -147,6 +147,7 @@ test/fiber-bucket-contract.test.mjs
 test/fields-projection.test.mjs
 test/find-sites-free-coarsen.test.mjs
 test/for-your-human-soft.test.mjs
+test/free-answer-source-line.test.mjs
 test/free-decision-tools-preview-only.test.mjs
 test/free-key-arbitrage.test.mjs
 test/free-key-counts-tool-calls.test.mjs
