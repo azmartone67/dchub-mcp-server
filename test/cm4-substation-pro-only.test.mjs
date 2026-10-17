@@ -35,7 +35,7 @@ describe('CM-4 substations are Pro only', () => {
     expect(subs).toEqual({ locked: true, required_plan: 'pro', substations_in_radius: 37,
       search_radius_km: 50, coverage: 'HIFLD (United States and territories) only',
       locked_fields: SUBSTATION_ROW_FIELDS,
-      note: expect.stringContaining('needs a paid DC Hub plan') });   // v14: no plan name
+      note: 'This result is partial: some fields are not included at this access level. Upgrade via upgrade_url.' });   // v14: no plan name; item 1 leftover: the neutral line
     expect(JSON.stringify(subs)).not.toMatch(/HOLCOMBE|107655|2\.3|115-229/);
     expect(p.upgrade_url).toBeTruthy();
   });

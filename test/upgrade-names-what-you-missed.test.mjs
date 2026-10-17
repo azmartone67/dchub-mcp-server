@@ -126,11 +126,13 @@ async function call(name, args, s) {
 
 // ── reading the prompt ──────────────────────────────────────────────────────
 // Every "This answer hid …" sentence in the response (text and structured).
-const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|They come with a paid DC Hub plan|They come with the DC Hub plan that includes every tool|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
+const HID_RE = /This answer (?:hid (.+?)(?:, and (\d+) more ([a-z]+))?|showed (\d+) of (\d+) ([a-z]+))\.\**\s+(The plans that return them are listed behind the link|This result is partial: some fields are not included at this access level|They come with the DC Hub plan that includes every tool|A free DC Hub key|The payer checks out in one click: \*\*\$10)/g;
 // v14 (owner 2026-10-10): the rung sentences name no plan. The old "They come with DC Hub Developer"
 // / "DC Hub Pro" are not parsed, so a wall that brought them back has no prompt and fails as vacuous.
+// Item 1 leftover (2026-10-17): on /mcp the developer rung states the neutral partial line in place of
+// "They come with a paid DC Hub plan"; the old sentence is not parsed either, for the same reason.
 const RUNG_OF = { 'The plans that return them are listed behind the link': 'pack',
-  'They come with a paid DC Hub plan': 'developer', 'They come with the DC Hub plan that includes every tool': 'pro',
+  'This result is partial: some fields are not included at this access level': 'developer', 'They come with the DC Hub plan that includes every tool': 'pro',
   'A free DC Hub key': 'free_key', 'The payer checks out in one click: **$10': 'pack' };
 function prompts(all) {
   const out = [];
@@ -302,7 +304,7 @@ describe('r-missed-upgrade: the prompt names what this answer hid and the lowest
     const [p] = prompts(res.all);
     expect(p.labels).toEqual(expect.arrayContaining(['projects']));
     expect(p.rung).toBe('developer');
-    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* They come with a paid DC Hub plan → (?:https:\/\/dchub\.cloud\/upgrade\/h\/|the "For your human" link)/);   // one link per wall (Grok audit 2026-10-08): the page, never a /go/c
+    expect(res.text).toMatch(/🔒 \*\*This answer hid projects\.\*\* This result is partial: some fields are not included at this access level → (?:https:\/\/dchub\.cloud\/upgrade\/h\/|the "For your human" link)/);   // one link per wall (Grok audit 2026-10-08): the page, never a /go/c
     expect(res.text).not.toMatch(/\$10 one-time/);
   });
 

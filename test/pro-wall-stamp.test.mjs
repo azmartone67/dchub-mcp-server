@@ -22,7 +22,7 @@ describe('_stampProWall', () => {
     expect(sc.user_message).toContain("DC Hub's paid plan");
     expect(sc.user_message).toContain('7-day trial');
     expect(sc.user_message).not.toMatch(/\bPro\b/);
-    expect(sc.agent_message).toMatch(/^analyze_site needs a paid DC Hub plan; this response is a preview\./);
+    expect(sc.agent_message.startsWith('This result is partial: some fields are not included at this access level. ')).toBe(true);   // item 1 leftover (2026-10-17)
     expect(sc.agent_message).not.toMatch(/\bPro\b/);
     expect(sc.user_message).toContain('https://dchub.cloud/upgrade/h/abc');
     expect(sc.for_your_human.url).toBe('https://dchub.cloud/upgrade/h/abc');
@@ -65,7 +65,7 @@ describe('_stampProWall', () => {
   it('copy names the paid plan and the 7-day trial, with no plan name and no price', () => {
     for (const t of ['analyze_site', 'compare_sites', 'get_dchub_recommendation', 'generate_site_analysis', 'export_dataset']) {
       const m = proWallUserMessage(t, 'https://x.test/l') + ' ' + proWallAgentMessage(t);
-      expect(m).toContain("DC Hub's paid plan"); expect(m).toContain('needs a paid DC Hub plan'); expect(m).toContain('7-day trial');
+      expect(m).toContain("DC Hub's paid plan"); expect(m).toContain('This result is partial: some fields are not included at this access level.'); expect(m).toContain('7-day trial');
       expect(m).not.toMatch(/\$\d/); expect(m).not.toMatch(/\bPro\b/);
     }
   });

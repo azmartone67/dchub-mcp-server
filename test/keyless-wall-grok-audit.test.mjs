@@ -193,7 +193,9 @@ describe('F6: a keyless gated preview carries exactly one checkout URL', () => {
     expect(t.slice(line)).toMatch(RELAY);
     // Owner 2026-10-08: the rung named is Developer (the pack is not what returns these fields),
     // and it points at the one link
-    expect(t).toMatch(/a paid DC Hub plan/);   // v14: the rung, unnamed
+    // v14: the rung, unnamed; item 1 leftover (2026-10-17): on /mcp it states the neutral partial line.
+    expect(t).toMatch(/This answer hid [^\n]*\*\* This result is partial: some fields are not included at this access level/);
+    expect(t).not.toMatch(/(needs?|opens? with|comes? with) a paid DC Hub plan/);
     expect(t).not.toMatch(/\$10 one-time|one-time pack|\bDeveloper\b/);
     expect(t).not.toContain('dchub.cloud/go/c/');
   });
