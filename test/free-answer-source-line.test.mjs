@@ -4,13 +4,13 @@
 // Wiring half: the real server.mjs app on loopback (stub backend, no network): keyless and free-key
 // answers end with it; a paid key, /mcp/claude and a clean platform (ChatGPT) get none.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { withSourceLine, sourceLine, sourcePath, dataAsOfDay, isSourceLine, pagePathFromUrl }
+import { withSourceLine, sourceLine, sourcePath, dataAsOfDay, dataAsOfHour, isSourceLine, pagePathFromUrl }
   from '../lib/source-line.mjs';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
 const J = (o) => JSON.stringify(o);
 const res = (sc, extra = []) => ({ content: [{ type: 'text', text: J(sc) }, ...extra], structuredContent: sc });
-const SRC_RE = /^Source: DC Hub \(dchub\.cloud(\/[^\s)]+)?\)(, as of \d{4}-\d{2}-\d{2})?$/;
+const SRC_RE = /^Source: DC Hub \(dchub\.cloud(\/[^\s)]+)?\)(, as of \d{4}-\d{2}-\d{2}(T\d{2}:\d{2}Z)?)?$/;
 const lastText = (r) => r.content[r.content.length - 1].text;
 const sourceLines = (r) => r.content.filter((b) => typeof b.text === 'string' && SRC_RE.test(b.text));
 
@@ -134,7 +134,20 @@ describe('path selection: the most specific public page', () => {
     expect(sourcePath({}, 'search_facilities', {})).toBe('');
     expect(sourceLine({}, 'search_facilities', {})).toBe('Source: DC Hub (dchub.cloud)');
   });
+  it('an hourly grid read: the Source line names the hour the citation names (MISO)', () => {
+    const miso = { iso: 'MISO', as_of: '2026-10-17T03:00:00Z',
+      provenance: { as_of: '2026-10-16T04:00:00.000Z' },
+      citation: { cite_as: 'DC Hub, dchub.cloud \u2014 PARTIAL preview (tier-gated; not the full dataset) (as of 2026-10-17T03:00Z)', as_of: '2026-10-17T03:00:00Z' } };
+    expect(dataAsOfHour(miso)).toBe('2026-10-17T03:00Z');
+    expect(sourceLine(miso, 'get_grid_intelligence', { iso: 'MISO' })).toBe('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17T03:00Z');
+    // a day-only citation stays day-only; UNMEASURED and retrieval-dated stay undated
+    expect(sourceLine({ iso: 'MISO', citation: { cite_as: 'DC Hub (as of 2026-10-17)' } }, 'get_grid_intelligence', {})).toBe('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17');
+    expect(dataAsOfHour({ ...miso, provenance: { as_of: null } })).toBe(null);
+    expect(dataAsOfHour({ ...miso, provenance: { as_of_kind: 'retrieval' } })).toBe(null);
+  });
   it('isSourceLine recognises the shape and nothing looser', () => {
+    expect(isSourceLine('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17T03:00Z')).toBe(true);
+    expect(isSourceLine('Source: DC Hub (dchub.cloud/grid/miso), as of 2026-10-17T03:00')).toBe(false);
     expect(isSourceLine('Source: DC Hub (dchub.cloud/grid/pjm), as of 2026-10-11')).toBe(true);
     expect(isSourceLine('Source: DC Hub (dchub.cloud)')).toBe(true);
     expect(isSourceLine('Source: DC Hub (dchub.cloud) — live data-center & energy intelligence.')).toBe(false);
