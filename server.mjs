@@ -200,6 +200,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 // Re-exported so tests and the manifest sync see one object.
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
+import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -3693,7 +3694,10 @@ export function _selfTestTelemetryTag(c) {
 // present are rewritten. client_name keeps a raw clientInfo name for forensics
 // and loses only a platform-derived fallback ('chatgpt' from the UA).
 export function _tagOwnTestTelemetry(payload, c) {
-  const tag = _selfTestTelemetryTag(c);
+  // 2026-10-17 (item 11): c.eval_intent is set by execute_plan for the scripted
+  // "live land + power screen ~75-100 MW" prompt family (lib/coverage-gap.mjs). It rides THIS
+  // writer-side tag, not _selfTestTelemetryTag, so no request-time behaviour keys on it.
+  const tag = _selfTestTelemetryTag(c) || ((c && c.eval_intent === true) ? 'dchub-internal' : '');
   if (!tag || !payload || typeof payload !== 'object') return payload;
   const out = { ...payload };
   if ('platform' in out) out.platform = tag;
@@ -20213,6 +20217,13 @@ function trackedTool(srv, name, description, schema, handler) {
     // r-go-tool (2026-10-03): name the running tool on the call ctx before anything
     // can mint a /go/c link (DCHUB_GO_TOOL gates the stamp itself, in _goUrl).
     _goToolMark(name, args);
+    // item 11 (2026-10-17): the scripted ~75-100 MW land+power prompt family is eval traffic.
+    // Mark THIS request's ctx so every telemetry row it writes (the execute_plan call row, the
+    // recipe_lifecycle events, execute_plan_steps) is written as 'dchub-internal' by
+    // _tagOwnTestTelemetry. Telemetry only: routing, walls and the response are untouched.
+    if (name === 'execute_plan' && isEvalIntent(args && args.intent)) {
+      try { getCtx().eval_intent = true; } catch (_e) { /* never block a call */ }
+    }
     // r-cohort: normalize the experiment tag on the ORIGINAL args object,
     // before the tier gate (which may hand the handler a spread COPY via
     // `gate.params || args`) and before any track call fires. Every
@@ -26026,9 +26037,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
+        // item 11: coverage_gap goes to the LOGGED record only (this row + the lifecycle event
+        // below); `out` / the agent envelope never carries it. Mirrored into params so the
+        // existing call-log writer persists it before a dedicated column exists.
+        const _gap = classifyCoverageGap(a && a.intent, executed, fullByEntry);
         trackToolCall({
           timestamp: new Date().toISOString(), tool: 'execute_plan_steps',
+          coverage_gap: _gap,
           params: { intent_class: sc.intent_class, status_counts: counts,
+                    ...(_gap ? { coverage_gap: _gap } : {}),
                     wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
                     constraint_iso: constraintIsoSet.join('|') || null },
           platform: (c && c.platform) || 'unknown', client_name: null,
@@ -26037,6 +26054,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // r-claude-directory: tag the planner row with its arrival source when
           // there is one; the /mcp payload (no source) is unchanged.
           ...(c && c.source ? { source: c.source } : {}),
+          // QA runs carry the same marker the per-call rows send, so the gap count can drop them.
+          ...(_isQaCaller(c) ? { is_qa: true } : {}),
         });
         // r-recipe-lifecycle: the paired terminal event. Carries started_at
         // again so a dropped `started` (track is fire-and-forget) is healed
@@ -26054,6 +26073,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           planner_version: String(replay.planner_version || '') || null,
           steps_planned: seq.length,
           status_counts: counts,
+          coverage_gap: _gap,
         }, c));
       } catch (_e) { /* planner-quality telemetry never blocks the answer */ }
       // r-payload-diet (2026-08-10): every gated step carries its OWN copy of

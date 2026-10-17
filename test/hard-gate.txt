@@ -109,6 +109,7 @@ test/core-no-upgrade-prompts.test.mjs
 test/core-open-world-hints.test.mjs
 test/core-profile.test.mjs
 test/coverage-counts-not-masked.test.mjs
+test/coverage-gap-log-only.test.mjs
 test/daily-quota-gateway.test.mjs
 test/dcpi-confidence-public.test.mjs
 test/dcpi-iso-aggregates-free.test.mjs
