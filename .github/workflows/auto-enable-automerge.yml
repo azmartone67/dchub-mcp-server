@@ -1,0 +1,187 @@
+# Turn on GitHub's native auto-merge (SQUASH) when a PR opens, so nobody has to
+# come back and click merge once the required checks go green. Ported from
+# dchub-backend / dchub-frontend, where it has run since 2026-09-05; this repo
+# never had it, so its PRs were armed (or not) by hand.
+#
+# ★ DOES NOT BYPASS ANY CHECK: auto-merge waits for every REQUIRED check, as a
+#   human clicking Merge would.
+# ★ A PAT, NOT GITHUB_TOKEN: a merge GitHub performs for GITHUB_TOKEN is made by
+#   app/github-actions and starts NO workflow runs, so npm-publish.yml,
+#   publish-image.yml, github-release.yml and the other push lanes would never run
+#   on the merge. Needs the repo secret PR_SUBMIT_TOKEN (or GH_PAT). Without one
+#   this does nothing and says so; it never falls back to GITHUB_TOKEN.
+# ★ `no-automerge` label: never armed, and adding it disarms (hold-guard.yml
+#   covers a human or app arming it).
+# ★ Same-repo head AND author azmartone67 only (SEC-5): this runs on
+#   pull_request_target with a PAT. Unlike the other two repos dependabot is NOT
+#   allowed here, because a major-version bump (express 5, mcp 2.x) would merge
+#   itself on green.
+name: auto-enable-automerge
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # `labeled` is excluded here: it is the disarm job's trigger. Letting it
+    # reach `enable` would arm a PR whenever ANY label is added to it.
+    if: >-
+      github.event.action != 'labeled' &&
+      github.event.pull_request.draft == false &&
+      !contains(github.event.pull_request.labels.*.name, 'no-automerge') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'azmartone67'
+    steps:
+      - name: Enable auto-merge (squash)
+        env:
+          # ★ NOT GITHUB_TOKEN, and in dchub-backend that distinction was
+          #   measured, not assumed. GitHub does not create workflow runs for
+          #   pushes made with GITHUB_TOKEN, so arming with it makes the merge
+          #   happen as app/github-actions and the push to main TRIGGERS
+          #   NOTHING. The absence of a run is indistinguishable from a passing
+          #   one, which is why that bug survives unnoticed; qa-guards.yml
+          #   carries the same finding from the direct-push side.
+          #
+          #   ★ RESOLVED 2026-09-12 — THE TOKEN HERE WORKS. This block used to
+          #     say the situation in THIS repo was untested and untestable
+          #     (nothing could arm until protection existed). Both halves are
+          #     now settled. PR_SUBMIT_TOKEN and GH_PAT still do not exist here
+          #     (re-checked 2026-09-12), so the expression below falls through
+          #     to BACKEND_PAT — and BACKEND_PAT armed #1466 and #1467, each of
+          #     which then merged as azmartone67, NOT as app/github-actions.
+          #     By the oracle below, that is the PAT path: push lanes fire.
+          #
+          #   NO FALLBACK TO GITHUB_TOKEN: that is the broken state and falling
+          #   back would restore the silent bug. If no PAT works the mutation
+          #   fails, the step warns and exits 0, and a human merges — which
+          #   triggers everything. Failing towards "a person clicks merge" is
+          #   the safe direction.
+          GH_TOKEN: ${{ secrets.PR_SUBMIT_TOKEN || secrets.GH_PAT }}
+          #
+          # ── HOW TO TELL THIS IS WORKING ─────────────────────────────────
+          # The failure mode is silent by construction. The tell is WHO merged:
+          #     gh pr view <N> --json mergedBy --jq .mergedBy.login
+          #       azmartone67        -> armed with a PAT, push lanes fire
+          #       app/github-actions -> armed with GITHUB_TOKEN, push lanes
+          #                             are silent and nobody will notice
+          PR_ID: ${{ github.event.pull_request.node_id }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::no PAT available — auto-merge not armed on #${PR_NUM}; a human merges"
+            exit 0
+          fi
+          # ★ THE LABEL IS READ LIVE HERE, NOT FROM THE EVENT PAYLOAD. The
+          # job-level `if` above sees the `opened` payload, which predates a
+          # label that `gh pr create --label` adds in a second call (backend
+          # be#7095 was armed by exactly that gap and merged itself 39 minutes
+          # later). Two reads close it:
+          #   1. BEFORE arming - a label that is already there means never arm.
+          #   2. AFTER arming  - a label that landed in between disarms from
+          #      here. A label that lands after read 2 fires `labeled`, and that
+          #      `disarm` run starts after this job already armed, so it wins.
+          # A failed read fails towards NOT arming (a person merges), never
+          # towards arming blind.
+          READ='query($id: ID!) { node(id: $id) { ... on PullRequest {
+                  state isDraft labels(first: 100) { nodes { name } } } } }'
+          blocked() {  # prints why this PR must not be armed; empty = fine
+            echo "$1" | jq -r '.data.node
+              | if .state != "OPEN" then "state=" + .state
+                elif .isDraft then "draft"
+                elif ([.labels.nodes[].name] | index("no-automerge")) != null
+                  then "no-automerge label"
+                else empty end'
+          }
+          if ! LIVE=$(gh api graphql -f query="$READ" -f id="$PR_ID" 2>&1); then
+            echo "::warning::could not read #${PR_NUM} labels, so NOT arming - $(echo "$LIVE" | head -c 300)"
+            exit 0
+          fi
+          if ! WHY=$(blocked "$LIVE" 2>&1); then
+            echo "::warning::could not parse #${PR_NUM} labels, so NOT arming - $(echo "$LIVE" | head -c 300)"
+            exit 0
+          fi
+          if [ -n "$WHY" ]; then
+            echo "::notice::auto-merge NOT armed on #${PR_NUM} - ${WHY} (read live)"
+            exit 0
+          fi
+          # enablePullRequestAutoMerge is GraphQL-only; there is no REST verb.
+          # Failure must NOT fail the PR — a PR that cannot auto-merge is merely
+          # one a human merges, which is today's behaviour anyway.
+          RESP=$(gh api graphql -f query='
+            mutation($id: ID!) {
+              enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) {
+                pullRequest { number autoMergeRequest { enabledAt mergeMethod } }
+              }
+            }' -f id="$PR_ID" 2>&1) || true
+          if echo "$RESP" | grep -q '"enabledAt"'; then
+            echo "::notice::auto-merge (squash) enabled on #${PR_NUM}"
+          elif echo "$RESP" | grep -qi 'clean status\|not mergeable\|already'; then
+            # Already enabled, or GitHub refuses because the PR is already
+            # mergeable. With guards/preflight/contract required, the normal
+            # answer on a fresh PR is "enabled", so this branch firing
+            # routinely means the required checks have gone away — go read
+            # /repos/{owner}/{repo}/rulesets, not /branches/main/protection.
+            echo "::notice::auto-merge not armed on #${PR_NUM} — $(echo "$RESP" | head -c 200)"
+          else
+            echo "::warning::could not enable auto-merge on #${PR_NUM} — $(echo "$RESP" | head -c 300)"
+          fi
+          # Read 2: the label (or draft flag) may have landed while we armed.
+          if LIVE=$(gh api graphql -f query="$READ" -f id="$PR_ID" 2>&1) \
+             && WHY=$(blocked "$LIVE" 2>&1) && [ -n "$WHY" ]; then
+            case "$WHY" in
+              state=*) ;;  # merged or closed: nothing left to disarm
+              *)
+                gh api graphql -f query='
+                  mutation($id: ID!) {
+                    disablePullRequestAutoMerge(input: {pullRequestId: $id}) {
+                      pullRequest { number autoMergeRequest { enabledAt } }
+                    }
+                  }' -f id="$PR_ID" >/dev/null 2>&1 || true
+                echo "::notice::auto-merge disarmed on #${PR_NUM} - ${WHY} landed while arming"
+                ;;
+            esac
+          fi
+
+  disarm:
+    # The `no-automerge` opt-out for a PR that was ALREADY armed (the label was
+    # added after `opened`, or after a human armed it). Gated on the label NAME
+    # only, which is the same gate `enable` has in this repo (not a draft): a
+    # disarm is the safe direction, it runs a fixed mutation on the event's own
+    # node id, and only a collaborator with triage access can apply a label.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'no-automerge'
+    steps:
+      - name: Disable auto-merge (no-automerge label)
+        env:
+          # Same PAT chain as `enable`, same reason, and the same
+          # NO-GITHUB_TOKEN rule: a mutation made with GITHUB_TOKEN is performed
+          # as app/github-actions, and the PAT is what keeps push lanes firing.
+          GH_TOKEN: ${{ secrets.PR_SUBMIT_TOKEN || secrets.GH_PAT }}
+          PR_ID: ${{ github.event.pull_request.node_id }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Failure must not paint the PR red: an armed PR the label could not
+          # disarm is no worse than it was, and the warning says so.
+          RESP=$(gh api graphql -f query='
+            mutation($id: ID!) {
+              disablePullRequestAutoMerge(input: {pullRequestId: $id}) {
+                pullRequest { number autoMergeRequest { enabledAt } }
+              }
+            }' -f id="$PR_ID" 2>&1) || true
+          if echo "$RESP" | grep -q '"autoMergeRequest":null'; then
+            echo "::notice::auto-merge disabled on #${PR_NUM} (no-automerge label)"
+          else
+            echo "::warning::could not confirm auto-merge is off on #${PR_NUM} — $(echo "$RESP" | head -c 300)"
+          fi
