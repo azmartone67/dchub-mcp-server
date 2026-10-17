@@ -135,6 +135,9 @@ import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList a
          installGrokResultCap as _installGrokResultCap,
          grokServedCount as _grokServedCount, grokInstructions as _grokInstructions,
          GROK_OAUTH_CHALLENGE, GROK_OAUTH_MESSAGE } from './lib/grok-profile.mjs';
+import { MCP_OAUTH_PATH, MCP_OAUTH_SOURCE, MCP_OAUTH_CHALLENGE, MCP_OAUTH_MESSAGE,
+         isMcpOauthRequest as _isMcpOauthRequest,
+         mcpOauthChallengeEligible as _mcpOauthChallengeEligible } from './lib/mcp-oauth-path.mjs';
 // G4 (2026-09-27 Grok audit): 7-day, time-boxed log of what a Grok request
 // carries (header NAMES, UA, clientInfo, session behaviour) — lib/grok-ident-log.mjs.
 import { grokIdentLogActive as _grokIdentLogActive, grokSignals as _grokSignals,
@@ -3955,6 +3958,7 @@ export function _pathSelfTag(req) {
 export function _pathSource(req) {
   const p = _normPath(req);
   if (p === DIRECTORY_OAUTH_PATH) return DIRECTORY_OAUTH_SOURCE;   // ChatGPT OAuth (2026-10-06)
+  if (p === MCP_OAUTH_PATH) return MCP_OAUTH_SOURCE;               // /mcp/oauth (2026-10-17)
   return MCP_SOURCE_PATHS.get(p) || '';
 }
 
@@ -4194,6 +4198,9 @@ export const MCP_PATHS = [
   CORE_PATH,
   // G1/G5 (2026-09-27): the Grok-sized listing and its opt-in OAuth variant.
   GROK_PATH, GROK_OAUTH_PATH,
+  // Item 5 (2026-10-17): the full /mcp profile behind an opt-in OAuth challenge.
+  // See lib/mcp-oauth-path.mjs.
+  MCP_OAUTH_PATH,
   ...MCP_SELF_PATHS.keys(),
   ...MCP_SOURCE_PATHS.keys(),
   ...MCP_PACKS.keys(),
@@ -31656,6 +31663,24 @@ app.post(MCP_PATHS, async (req, res) => {
       return res.status(401).json({
         jsonrpc: '2.0',
         error: { code: -32001, message: DIRECTORY_OAUTH_MESSAGE },
+        id: (req.body && req.body.id) ?? null,
+      });
+    }
+    // Item 5 (owner, 2026-10-17): /mcp/oauth, the same opt-in pattern on the
+    // full /mcp profile. Bare /mcp is never challenged by this. See
+    // lib/mcp-oauth-path.mjs. Kill switch: DCHUB_MCP_OAUTH_DISABLE=1.
+    if (_mcpOauthChallengeEligible({
+          isOauthPath: _isMcpOauthRequest(req),
+          hasCredential: !!apiKey,
+          method: req.body?.method,
+          workosEnabled: _workosEnabled(),
+          disableRaw: process.env.DCHUB_MCP_OAUTH_DISABLE,
+        })) {
+      res.set('WWW-Authenticate', MCP_OAUTH_CHALLENGE);
+      console.log(`[oauth] 401 challenge → ${MCP_OAUTH_PATH} (no credential, method=${req.body?.method})`);
+      return res.status(401).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: MCP_OAUTH_MESSAGE },
         id: (req.body && req.body.id) ?? null,
       });
     }
