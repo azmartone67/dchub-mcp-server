@@ -213,7 +213,7 @@ describe('wiring: free answers end with the line, the skipped surfaces do not', 
 describe('the instructions point at summarize_for_citation', () => {
   it('the lead names it beside cite_as, with no plan name or price', async () => {
     const { OUTREACH_LEAD } = await import('../lib/agent-outreach.mjs');
-    expect(OUTREACH_LEAD).toContain('(`cite_as` on every result; summarize_for_citation per figure)');
+    expect(OUTREACH_LEAD).toContain('(`cite_as` per result; summarize_for_citation per figure)');
     expect(OUTREACH_LEAD).not.toMatch(/\$|\/mo\b|\bpro\b|developer|starter|per month|one-time/i);
     // served: the lean handshake every surface reads starts with the lead
     const r = await H.init('/mcp', 'claude-ai', { 'user-agent': 'Claude-User' });
