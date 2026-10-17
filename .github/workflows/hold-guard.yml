@@ -1,0 +1,62 @@
+name: hold-guard
+
+# A PR carrying the `no-automerge` label stays held, whoever or whatever acts
+# on it.
+#
+# ★ WHY (2026-10-16/17). Held DRAFT PRs were marked ready and then armed or
+#   merged 3-6s later, under the owner's login, four times (be#7139 19:35Z and
+#   19:48Z; mcp#987 19:39Z, 19:48Z, 22:02Z and 00:49Z, which merged at
+#   00:55Z). No workflow, script or Claude session did it; the pattern is a
+#   UI "merge" click. auto-enable-automerge's `no-automerge` opt-out only stops
+#   THAT workflow from arming. It never sees a human or an app arming the PR.
+#
+# What this does, on every event that can start a merge:
+#   1. auto_merge_enabled / ready_for_review / labeled with the label present:
+#      disarm auto-merge and convert the PR back to a draft.
+#   2. The `hold-guard` job FAILS while the label is present. If the owner makes
+#      `hold-guard` a required check, a direct "Merge" click is blocked too.
+#      That is a settings change for the owner, not this file.
+# Removing the label lifts the hold (the job re-runs on `unlabeled` and passes).
+# GITHUB_TOKEN is enough: it only disarms and drafts, and it never merges or
+# pushes.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, auto_merge_enabled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  hold-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read the label live (the payload can be stale)
+        id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          held=$(gh pr view "$PR" --repo "$REPO" --json labels,state \
+            --jq '([.labels[].name] | index("no-automerge") != null) and .state == "OPEN"')
+          echo "held=$held" >> "$GITHUB_OUTPUT"
+          echo "PR #$PR held=$held (event: ${{ github.event.action }})"
+      - name: Disarm auto-merge and return to draft
+        if: steps.read.outputs.held == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr merge "$PR" --repo "$REPO" --disable-auto 2>&1 || true
+          gh pr ready "$PR" --repo "$REPO" --undo 2>&1 || true
+          gh pr view "$PR" --repo "$REPO" --json isDraft,autoMergeRequest \
+            --jq '"after: draft=\(.isDraft) auto_merge=\(.autoMergeRequest != null)"'
+      - name: Fail while held
+        if: steps.read.outputs.held == 'true'
+        run: |
+          echo "::error title=hold-guard::PR carries no-automerge; remove the label to release it"
+          exit 1
