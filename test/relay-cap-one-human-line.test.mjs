@@ -206,7 +206,7 @@ describe('r-relay-cap — production config (inline full on): one human line per
     expect(r3.text).not.toContain(ACK_BOUND);
 
     const r4 = await call(...COMPARE);                    // Pro wall: gated
-    expect(r4.text).toContain('needs a paid DC Hub plan — the preview above is the free taste');     // the gate still says why
+    expect(r4.text).toContain('This result is partial: some fields are not included at this access level. The preview above is the free taste');     // the gate still says why (item 1 leftover: the neutral line)
     expect(payLines(r4.text).length).toBe(1);
     expect(r4.text).not.toContain(TELL);
   }, 60000);

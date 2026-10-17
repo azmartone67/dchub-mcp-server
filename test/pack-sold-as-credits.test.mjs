@@ -259,7 +259,7 @@ describe('a Developer on a Pro-only tool', () => {
     // a wall, and the one rung named is Pro — never the pack, which opens no Pro tool.
     const t = textOf(await s.call('get_dchub_recommendation', { context: '100 MW AI training campus in Texas' }));
     // v14 (owner 2026-10-10): neither plan is named; the line says the caller's plan does not open it.
-    expect(t).toContain('needs a different paid DC Hub plan');
+    expect(t).toContain('🔒 **This result is partial: some fields are not included at this access level.**');   // item 1 leftover (2026-10-17): the neutral line on /mcp
     expect(t).toContain('On your current plan this is the same preview a free key gets');
     expect(t).toContain('the DC Hub plan that includes every tool');
     expect(t.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter)\b/);

@@ -374,7 +374,9 @@ describe('ladder stage 1 — per-seat outcome on the tools it changed', () => {
     expect(r.wall).toBe(false);
     expect(r.text).not.toMatch(/needs full access|needs a different paid plan\n\nYour current/);
     // v14 (owner 2026-10-10): the line names neither the caller's plan nor the one that opens the tool.
-    expect(r.text).toMatch(/needs a different paid DC Hub plan/);
+    // Item 1 leftover (2026-10-17): the 🔒 header states the neutral partial line on /mcp.
+    expect(r.text).toContain('🔒 **This result is partial: some fields are not included at this access level.**');
+    expect(r.text).not.toMatch(/needs a different paid DC Hub plan/);
     expect(r.text).toMatch(/the DC Hub plan that includes every tool/);
     expect(r.text.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter)\b/);
     expect(r.text).not.toMatch(/\$10 one-time|1,000 API credits/);

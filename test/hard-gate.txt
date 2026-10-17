@@ -229,6 +229,7 @@ test/invalid-bearer.test.mjs
 test/invalid-key-anon.test.mjs
 test/invalid-key-visible.test.mjs
 test/invalid-param-hint.test.mjs
+test/item1-wall-neutral-line.test.mjs
 test/key-never-worse-than-anon.test.mjs
 test/keyless-grid-data-honesty.test.mjs
 test/keyless-wall-email-first.test.mjs

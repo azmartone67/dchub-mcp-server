@@ -114,7 +114,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_PATH, DIRECTORY_OAUTH_SOURCE, DIRECTORY_OAUTH_CHALLENGE, DIRECTORY_OAUTH_MESSAGE,
          DIRECTORY_OAUTH_RESOURCE, directoryOauthChallenge as _directoryOauthChallenge,
          installDirectoryResponseFilter as _installDirectoryFilter,
-         applyDirectoryArgDefaults as _applyDirectoryArgDefaults } from './lib/chatgpt-directory.mjs';
+         applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
+         CHATGPT_NOTICE as _WALL_NEUTRAL_LINE } from './lib/chatgpt-directory.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -149,7 +150,8 @@ import { continuationHumanText as _continuationHumanText,
          continuationArmFor as _continuationArmFor } from './lib/continuation.mjs';
 // The upgrade prompt names what THIS answer hid and the lowest rung that opens it.
 import { missedUpgrade as _missedUpgrade, rungFloor as _rungFloor, lowestRung as _lowestRung,
-         relayMissedClause as _relayMissedClause, PLANLESS_WALL_COPY } from './lib/upgrade-missed.mjs';
+         relayMissedClause as _relayMissedClause, PLANLESS_WALL_COPY,
+         PLANLESS_WALL_COPY_NEUTRAL } from './lib/upgrade-missed.mjs';
 // Paywall response contract (growth audit item c) + Grok G3: lib/paywall-contract.mjs.
 import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallContract,
          isGatedResult as _pcIsGated, tagRelayUrl as _pcTagUrl,
@@ -3141,7 +3143,8 @@ export function _maskGasEconomicsBelowPro(out) {
   }
   if (o.burner_tip) { o.burner_tip = _maskBurnerTip(o.burner_tip); masked.push('burner_tip.usd_mmbtu'); }
   o.tier_masked = { tier_required: 'pro', fields: masked,
-    note: 'Numeric gas prices and the full $/MWh table need a paid DC Hub plan, the same rule the REST API applies.' };
+    note: _wallCopy(_WALL_NEUTRAL_LINE,
+      'Numeric gas prices and the full $/MWh table need a paid DC Hub plan, the same rule the REST API applies.') };
   _noteGate('gas_pro');
   return o;
 }
@@ -3245,9 +3248,11 @@ export function _maskRetirementHeadroom(d, sid) {
     _total_available: rows.length,
     _upgrade: {
       tier_required: 'developer',
-      message: 'Preview: every retiring generator, date, fuel and queue project count is here, with substations as a distance band (names and exact distance need a paid DC Hub plan); '
+      message: _wallCopy('Preview: every retiring generator, date, fuel and queue project count is here, with substations as a distance band. '
+        + _WALL_NEUTRAL_LINE + ' The credit pack does not open the MW figures or the substation names. Relay the link in human_url to your human.',
+        'Preview: every retiring generator, date, fuel and queue project count is here, with substations as a distance band (names and exact distance need a paid DC Hub plan); '
         + 'the MW figures need a paid DC Hub plan, the same rule as the REST API. '
-        + 'The credit pack does not open them. Relay the link in human_url to your human.',
+        + 'The credit pack does not open them. Relay the link in human_url to your human.'),
       developer_url: _subCheckoutUrl(DEVELOPER_URL + promoParam(), sid),
       next_tool: 'unlock_more_data',
     },
@@ -8109,6 +8114,23 @@ export function _agentDepthWallPlanless(name) {
   return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_DEPTH_WALL_PLANLESS || ''))
     && _DEPTH_WALL_PLANLESS_TOOLS.has(String(name || ''));
 }
+// Item 1 leftover (owner-approved 2026-10-16/17): wall and gated-result text on /mcp states the
+// neutral partial line (CHATGPT_NOTICE, the line /mcp/claude already ends a gated result with)
+// where it said "needs a paid DC Hub plan". The one offer line and human_url are unchanged.
+// The directory profiles keep the sentence they served: /mcp/chatgpt is FROZEN while the app
+// is in OpenAI review, and /mcp/claude drops that sentence and appends the same neutral line
+// itself (CLAUDE_COMMERCE_EXTRA), so a neutral line here would print twice there. An
+// execute_plan step started on /mcp/chatgpt runs on /mcp and carries `legacy_wall_copy`
+// (LEGACY_WALL_LOOPBACK_HEADER), so its nested results stay byte-identical too.
+export const WALL_NEUTRAL_LINE = _WALL_NEUTRAL_LINE;
+export function _legacyWallCopy(c) {
+  let s = c;
+  if (!s) { try { s = getCtx(); } catch (_) { s = null; } }
+  return !!s && (s.profile === DIRECTORY_PROFILE || s.profile === CLAUDE_PROFILE || s.legacy_wall_copy === true);
+}
+export function _wallCopy(neutral, legacy, c) {
+  return _legacyWallCopy(c) ? legacy : neutral;
+}
 // The tools that may still enter the capped free full-answer (trial_taste) path.
 export function _freeTasteTool(name) {
   return ALWAYS_PARTIAL_PREVIEW.has(name) && !_freePreviewOnlyTool(name);
@@ -8482,6 +8504,7 @@ function _freeDecisionTasteObject(name, parsed, ctx, args) {
   const built = buildFreeDecisionTaste(name, parsed, {
     bandFor: (k, v) => _bandForMaskedScore(k, v, parsed, name, false),
     emailFullCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0,   // item 3
+    legacyWallCopy: _legacyWallCopy(ctx),
   });
   if (!built || !built.envelope) return null;
   _noteGate('free_decision_preview');
@@ -8521,7 +8544,9 @@ function _tasteShapedUpgrade(name, c) {
     tier,
     locked: 'full_depth',
     message: 'Free-tier taste of `' + name + '` - the headline is in `taste`; `withheld` lists what this answer '
-      + 'does not return, with counts. The fields above are in a paid DC Hub plan; the page shows the options. '
+      + 'does not return, with counts. '
+      + _wallCopy(_WALL_NEUTRAL_LINE + ' The page shows the options. ',
+        'The fields above are in a paid DC Hub plan; the page shows the options. ', c)
       + 'Relay the link in human_url to your human.',
     next_tool: 'unlock_more_data',
     next_tool_hint: 'Relay the link in human_url to your human; the page shows the options.',
@@ -8542,7 +8567,8 @@ function _freeDecisionUpgrade(name, c) {
     // Developer first, then Pro; no checkout URL in the prose — the one link a
     // keyless response carries is the relay in human_url (r-one-checkout-url).
     message: 'Free-tier taste of `' + name + '` — the headline is in `taste`; `withheld` lists what this '
-      + 'tier does not return, with counts. Full `' + name + '` opens with a paid DC Hub plan. '
+      + 'tier does not return, with counts. '
+      + _wallCopy(_WALL_NEUTRAL_LINE + ' ', 'Full `' + name + '` opens with a paid DC Hub plan. ', c)
       + 'Relay the link in human_url to your human. '
       + (_email || 'A free key, a trial key or a bound email does not deepen this tool.'),
     next_tool: 'unlock_more_data',
@@ -8925,7 +8951,8 @@ export function _withLpFreeRun(result, fr) {
 export function _withLpFreeRunsSpent(result, fr, tool) {
   if (!result || typeof result !== 'object') return result;
   const msg = `You've used your ${fr.limit} free full site analyses this month (UTC); this is the preview. `
-    + `Full analyses need a paid DC Hub plan; the count resets ${_lpMonthDay(fr.resets_at)}.`;
+    + _wallCopy(_WALL_NEUTRAL_LINE + ` The count resets ${_lpMonthDay(fr.resets_at)}.`,
+      `Full analyses need a paid DC Hub plan; the count resets ${_lpMonthDay(fr.resets_at)}.`);
   const block = {
     reason: 'free_monthly_limit_reached', tool, used: fr.used, limit: fr.limit,
     resets_at: fr.resets_at, required_plan: 'pro',
@@ -9048,26 +9075,29 @@ export function _lpWallResult(name, headline = null) {
   const _b2 = name === 'analyze_site' && !!(headline && (headline.verdict || headline.weakest_factor) && !headline.sites);
   const payload = {
     error: 'pro_required', tool: name, _gated: true, _wall: true, required_plan: 'pro',
-    ..._pcLpHeadlineFields(headline),
+    ..._pcLpHeadlineFields(headline, { neutral: !_legacyWallCopy() }),
     ...(_b2 ? {
       // Keyless gets the band only: interpretation_label can be finer than the
       // three verdict bands, so it is a key's (the preview keeps it).
       interpretation_label: undefined,
       limiting_factor: { factor: headline.weakest_factor,
-                         note: 'The weakest factor is named free; factor bands come with a free key, scores with a paid DC Hub plan.' },
+                         note: _wallCopy('The weakest factor is named free; factor bands come with a free key. ' + _WALL_NEUTRAL_LINE,
+                           'The weakest factor is named free; factor bands come with a free key, scores with a paid DC Hub plan.') },
       ...(headline.site_counts ? { site_counts: headline.site_counts } : {}),
     } : {}),
     message: _b2
       ? '`analyze_site` without a key returns the weakest factor and counts. '
         + 'A free key adds factor bands and substation distance bands: call `claim_free_key`. '
-        + 'Scores and figures need a paid DC Hub plan.'
-      : `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. Without a key it `
+        + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
+      : _wallCopy(`\`${name}\` is Land & Power. ` + _WALL_NEUTRAL_LINE + ' ',
+        `\`${name}\` is Land & Power, and Land & Power details need a paid DC Hub plan. `) + 'Without a key it '
         + 'returns no data: no verdict, score or figure. A free key opens the preview '
         + '(verdicts, bands, names and counts, every score and figure null): call `claim_free_key`.',
     upgrade_url: url, next_tool: 'claim_free_key',
   };
   return {
-    content: [{ type: 'text', text: '🔒 **`' + name + '` is Land & Power, which needs a paid DC Hub plan.** No data without a key. '
+    content: [{ type: 'text', text: _wallCopy('🔒 **`' + name + '` is Land & Power.** ' + _WALL_NEUTRAL_LINE + ' ',
+      '🔒 **`' + name + '` is Land & Power, which needs a paid DC Hub plan.** ') + 'No data without a key. '
       + 'Get a paid DC Hub plan → ' + url + ' · or call `claim_free_key` (one call, no email) for the preview: '
       + 'verdicts and bands, no scores or figures.' }],
     isError: _wallIsError(),
@@ -9367,7 +9397,7 @@ export function proWallUserMessage(name, link) {
   return "DC Hub's paid plan has " + proWhat(name) + '. Start a 7-day trial: ' + link;
 }
 export function proWallAgentMessage(name) {
-  return name + ' needs a paid DC Hub plan; this response is a preview. ' + RELAY_CONTRACT;
+  return _wallCopy(_WALL_NEUTRAL_LINE + ' ', name + ' needs a paid DC Hub plan; this response is a preview. ') + RELAY_CONTRACT;
 }
 export function _stampProWall(result, name, c) {
   try {
@@ -9476,7 +9506,8 @@ export function _substationLockedView(block) {
     search_radius_km: block.search_radius_km ?? null,
     coverage: block.coverage ?? null,
     locked_fields: [...SUBSTATION_ROW_FIELDS],
-    note: 'Substation detail (distance, kV, name, HIFLD id) needs a paid DC Hub plan. Upgrade via upgrade_url.',
+    note: _wallCopy(_WALL_NEUTRAL_LINE + ' Upgrade via upgrade_url.',
+      'Substation detail (distance, kV, name, HIFLD id) needs a paid DC Hub plan. Upgrade via upgrade_url.'),
   };
 }
 
@@ -9677,6 +9708,9 @@ export function _compareSitesTeaser(parsed) {
 }
 export const COMPARE_KEYLESS_MESSAGE = 'Without a key, `compare_sites` returns each site\u2019s verdict band and power band; '
   + 'scores, the pick and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + WALL_NEUTRAL_LINE;
+// What /mcp/chatgpt and /mcp/claude keep serving (_legacyWallCopy).
+export const COMPARE_KEYLESS_MESSAGE_LEGACY = COMPARE_KEYLESS_MESSAGE.slice(0, -WALL_NEUTRAL_LINE.length)
   + 'Scores and figures need a paid DC Hub plan.';
 export const COMPARE_FREE_KEY_LINE = 'Free preview: call `claim_free_key` (one call, no email) and send the key it returns as '
   + 'X-API-Key; `analyze_site` returns a full site report a few times each month.';
@@ -9692,7 +9726,7 @@ export function _withCompareTeaser(result, teaser) {
   const fix = (v) => (typeof v === 'string' ? v.replace(' No data without a key.', '') : v);
   const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
   content.push({ type: 'text', text: [_compareTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
-  const sc = { ...(result.structuredContent || {}), message: COMPARE_KEYLESS_MESSAGE,
+  const sc = { ...(result.structuredContent || {}), message: _wallCopy(COMPARE_KEYLESS_MESSAGE, COMPARE_KEYLESS_MESSAGE_LEGACY),
     site_teaser: teaser, next_tool: 'claim_free_key',
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
   return { ...result, content, structuredContent: sc };
@@ -9716,6 +9750,8 @@ export function _compositeTeaser(parsed) {
 }
 export const COMPOSITE_KEYLESS_MESSAGE = 'Without a key, `get_composite_site_score` returns the verdict band and the power band; '
   + 'the score and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + WALL_NEUTRAL_LINE;
+export const COMPOSITE_KEYLESS_MESSAGE_LEGACY = COMPOSITE_KEYLESS_MESSAGE.slice(0, -WALL_NEUTRAL_LINE.length)
   + 'Scores and figures need a paid DC Hub plan.';
 export function _compositeTeaserLine(t) {
   if (!t) return '';
@@ -9727,7 +9763,7 @@ export function _withCompositeTeaser(result, teaser) {
   const fix = (v) => (typeof v === 'string' ? v.replace(' No data without a key.', '') : v);
   const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
   content.push({ type: 'text', text: [_compositeTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
-  const sc = { ...(result.structuredContent || {}), message: COMPOSITE_KEYLESS_MESSAGE,
+  const sc = { ...(result.structuredContent || {}), message: _wallCopy(COMPOSITE_KEYLESS_MESSAGE, COMPOSITE_KEYLESS_MESSAGE_LEGACY),
     site_teaser: teaser, next_tool: 'claim_free_key',
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
   return { ...result, content, structuredContent: sc };
@@ -9749,6 +9785,8 @@ export function _reportTeaser(parsed) {
 }
 export const REPORT_KEYLESS_MESSAGE = 'Without a key, `generate_site_analysis` returns the verdict band and the power band; '
   + 'the shareable report, scores and the other factor bands are locked. A free key adds names and counts: call `claim_free_key`. '
+  + WALL_NEUTRAL_LINE;
+export const REPORT_KEYLESS_MESSAGE_LEGACY = REPORT_KEYLESS_MESSAGE.slice(0, -WALL_NEUTRAL_LINE.length)
   + 'The report and figures need a paid DC Hub plan.';
 export function _reportTeaserLine(t) {
   if (!t) return '';
@@ -9762,7 +9800,7 @@ export function _withReportTeaser(result, teaser) {
   const fix = (v) => (typeof v === 'string' ? v.replace(' No data without a key.', '') : v);
   const content = result.content.map((b) => (b && b.type === 'text' ? { ...b, text: fix(b.text) } : b));
   content.push({ type: 'text', text: [_reportTeaserLine(teaser), COMPARE_FREE_KEY_LINE].join('\n\n') });
-  const sc = { ...(result.structuredContent || {}), message: REPORT_KEYLESS_MESSAGE,
+  const sc = { ...(result.structuredContent || {}), message: _wallCopy(REPORT_KEYLESS_MESSAGE, REPORT_KEYLESS_MESSAGE_LEGACY),
     site_teaser: teaser, next_tool: 'claim_free_key',
     free_key_unlock: { tool: 'claim_free_key', email_required: false, note: COMPARE_FREE_KEY_LINE } };
   return { ...result, content, structuredContent: sc };
@@ -9855,7 +9893,7 @@ export function _withSiteFreeKeyRoute(result, teaser = null) {
 function _b2WeakestFactorLine(h) {
   return h && h.weakest_factor
     ? 'Free headline: ' + (h.verdict ? 'verdict ' + h.verdict + ', ' : '') + 'weakest factor ' + h.weakest_factor
-      + '. Scores and figures need a paid DC Hub plan.'
+      + '. ' + _wallCopy(_WALL_NEUTRAL_LINE, 'Scores and figures need a paid DC Hub plan.')
     : '';
 }
 // The distance bands dchub-backend routes/substation_band_producer.py
@@ -9894,7 +9932,8 @@ export function _substationFreeViewB2(block) {
     search_radius_km: block.search_radius_km ?? null, coverage: block.coverage ?? null,
     locked_fields: [...SUBSTATION_PRO_FIELDS], tier_required: SUBSTATION_DETAIL_MIN_TIER,
     required_plan: SUBSTATION_DETAIL_MIN_TIER,
-    note: 'Substation names, exact voltage, exact distance and HIFLD id need a paid DC Hub plan (7-day trial): relay the link in human_url.' };
+    note: _wallCopy(_WALL_NEUTRAL_LINE + ' Relay the link in human_url.',
+      'Substation names, exact voltage, exact distance and HIFLD id need a paid DC Hub plan (7-day trial): relay the link in human_url.') };
   if (block.note && rows.length === 0) out.note_coverage = block.note;
   return out;
 }
@@ -10037,7 +10076,7 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
     if (_fb) preview.factor_bands = _fb;
   }
   _noteGate('lp');
-  if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed)));
+  if (withHeadline) Object.assign(preview, _pcLpHeadlineFields(_pcLpHeadline(name, parsed), { neutral: !_legacyWallCopy() }));
   if (name === 'compare_sites') {
     // The pick is made from the scores, so it is Pro with them.
     preview.winner = null;
@@ -10052,7 +10091,8 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
     ...preview,
     ...(_withheldAny ? { _scores_in_pro: true } : {}),
     _gated: true, _preview_only: true, required_plan: 'pro',
-    _preview_note: 'Land & Power details need a paid DC Hub plan: every score, MW, distance, price and '
+    _preview_note: _wallCopy(_WALL_NEUTRAL_LINE + ' Every score, MW, distance, price and ',
+      'Land & Power details need a paid DC Hub plan: every score, MW, distance, price and ')
       + 'report link is null here. Verdicts, bands, names and counts are the preview.',
     upgrade_url: _lpProLink(),
   };
@@ -10082,7 +10122,7 @@ export function _paidPlanProPreview(name, result, planWord, sessionId) {
   const mu = _missedUpgradeFor(preview);
   const lead = (mu && mu.rung === 'pro') ? mu.what + ' ' : '';
   // v14 (owner 2026-10-10): neither the caller's plan nor the one that opens the tool is named.
-  const line = '\n\n🔒 **`' + name + '` needs a different paid DC Hub plan.** ' + lead + 'On your current plan'
+  const line = '\n\n🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE, '`' + name + '` needs a different paid DC Hub plan.') + '** ' + lead + 'On your current plan'
     + ' this is the same preview a free key gets'
     + (proUrl ? '; the full answer comes with the DC Hub plan that includes every tool → ' + proUrl
       : '; the full answer comes with the DC Hub plan that includes every tool')
@@ -10198,7 +10238,7 @@ export function withBindHint(result, name, c) {
       // what captures the email that the whole conversion funnel depends on.
       why: (_freePreviewOnlyTool(name) && !_emailFullDecisionTool(name))
         // Preview on every non-paid seat and no email allowance (get_market_intel): never promise full answers.
-        ? `Bind your human's email (free, no card, one call: bind_email {api_key, email}) for market-change alerts, key recovery and a higher daily call budget on the other tools. It does not open full ${name} answers: that is a preview on every free seat, and full needs a paid DC Hub plan.`
+        ? `Bind your human's email (free, no card, one call: bind_email {api_key, email}) for market-change alerts, key recovery and a higher daily call budget on the other tools. It does not open full ${name} answers: that is a preview on every free seat` + _wallCopy('. ' + _WALL_NEUTRAL_LINE, ', and full needs a paid DC Hub plan.')
         : `Bind your human's email (free, no card, one call: bind_email {api_key, email}) to lift your daily full-data limit to ${IDENTIFIED_DAILY_FULL_CAP} full ${name} answers/day (vs ${TRIAL_DAILY_FULL_CAP} unbound) — plus market-change alerts and key recovery if this session's key is lost.`,
     };
     // r-bind-visible (2026-07-01): the structured-only hint is invisible on most
@@ -11593,7 +11633,8 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
   // structuredContent (sc) is unchanged so machine consumers keep the unlock fields.
   const text = stillPro
     ? ('\n\n---\n' +
-       '🔒 **`' + name + '` needs a paid DC Hub plan — the preview above is the free taste.**\n' +
+       '🔒 **' + _wallCopy(_WALL_NEUTRAL_LINE + ' The preview above is the free taste.',
+         '`' + name + '` needs a paid DC Hub plan — the preview above is the free taste.') + '**\n' +
        '\n\u{1F464} **Tell your human:** to run the full `' + name + '` — ' + _rungsText(name, mint.tier || 'trial') + '\n' +
        '\n_(Separately: the free identified tier for 18+ other DC Hub tools is one call away — `claim_free_key`.)_\n')
     : _refused
@@ -11634,11 +11675,12 @@ function buildAutoMintBlock(mint, name, autoBound, remainingFull) {
     retry_instructions: _refused
       ? ('This trial key is refused until your human’s email is bound: call bind_email with their email (free, no card), then call ' + name + ' again.')
       : (_stillPreview && _emailFullDecisionTool(name))
-      ? (name + ' is free at PREVIEW depth on this key. bind_email with your human\u2019s email opens ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full ' + name + ' answers a day on it; the full answer without a cap needs a paid DC Hub plan (relay the link in human_url to your human).')
+      ? (name + ' is free at PREVIEW depth on this key. bind_email with your human\u2019s email opens ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full ' + name + ' answers a day on it' + _wallCopy('. ' + _WALL_NEUTRAL_LINE + ' Relay the link in human_url to your human.',
+        '; the full answer without a cap needs a paid DC Hub plan (relay the link in human_url to your human).'))
       : _stillPreview
       ? (name + ' is free at PREVIEW depth — this key does not deepen it and neither does bind_email (that raises the daily CALL cap). Calling ' + name + ' again returns the same preview. The complete answer is paid per call (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
       : stillPro
-      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) for get_market_intel and 18+ more tools (not the paid-plan tools). ' + name + ' needs a paid DC Hub plan, or the owner pays per call (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
+      ? ('Add header X-API-Key: ' + mint.api_key + ' (reconnect with it configured) for get_market_intel and 18+ more tools (not the paid-plan tools). ' + _wallCopy(_WALL_NEUTRAL_LINE + ' Or the owner pays per call', name + ' needs a paid DC Hub plan, or the owner pays per call') + ' (a one-time pack of 1,000 API credits) at ' + _meteredUrl + '.')
       : _exhausted
       ? ('Today’s free full ' + name + ' answers are used. \u{1F4B3} a one-time pack of 1,000 credits (' + _meteredUrl + ' — or relay the link in human_url to your human) returns complete answers the moment your human pays. Free: bind_email lifts you to ' + IDENTIFIED_DAILY_FULL_CAP + ' full answers/day.')
       // r-coherence (2026-07-27, shell #38 lane 3): ONE instruction, true under
@@ -11883,7 +11925,8 @@ async function _keyedFreeFacilityResult(result, name, c) {
   if (masked && typeof masked === 'object' && !Array.isArray(masked)) {
     masked._upgrade = {
       tier: 'free',
-      message: 'Free tier: facility capacity (MW), exact coordinates + deep specs need a paid DC Hub plan. You have full discovery — search the global facility map by name/geo. Relay the link in human_url to your human to upgrade.',
+      message: _wallCopy('Free tier: ' + _WALL_NEUTRAL_LINE + ' ', 'Free tier: facility capacity (MW), exact coordinates + deep specs need a paid DC Hub plan. ', c)
+        + 'You have full discovery — search the global facility map by name/geo. Relay the link in human_url to your human to upgrade.',
       next_tool: 'unlock_more_data',
     };
   }
@@ -12377,8 +12420,15 @@ export function _missedUpgradeFor(payload, extraGates, opts) {
     const opens = [...ids].map(_gateOpensFn);
     if (opens.some((f) => !f)) return null;
     const floor = _rungFloor({ keyed: !!c.api_key, tier: c.tier, credits: c._credits_seen });
-    return _missedUpgrade({ payload, maskedLog: st.masked, opens, floor, tool: st.tool || '',
+    const mu = _missedUpgrade({ payload, maskedLog: st.masked, opens, floor, tool: st.tool || '',
       strict: !!(opts && opts.strict) });
+    // Item 1 leftover: the developer rung's "They come with a paid DC Hub plan" becomes the
+    // neutral line on /mcp (the rung, the evidence and the link are unchanged).
+    if (mu && mu.rung === 'developer' && !_legacyWallCopy(c)) {
+      const how = _WALL_NEUTRAL_LINE.replace(/\.$/, '');
+      return { ...mu, how, text: mu.what + ' ' + how + '.' };
+    }
+    return mu;
   } catch (_) { return null; }
 }
 // The one link for a rung, bound like every other checkout link here.
@@ -13545,7 +13595,7 @@ function applyTrialGuardIfFree(toolName, parsed, hasApiKey) {
     const looksDecision = _DECISION_TOOLS.has(toolName) ||
       /"(verdict|recommendation|composite_score|dcpi|build_caution_avoid|time_to_power|suitability)"/.test(blob);
     if (looksDecision) {
-      decisionLine = '\u{1F3AF} **The decision layer is locked.** You’re seeing the raw data free — but the *answer* (the BUILD/CAUTION/AVOID verdict + the why, the full cross-market ranking, multi-site comparison, and time-to-power) needs a paid DC Hub plan. That’s the part worth paying for.\n';
+      decisionLine = '\u{1F3AF} **The decision layer is locked.** You’re seeing the raw data free — but the *answer* (the BUILD/CAUTION/AVOID verdict + the why, the full cross-market ranking, multi-site comparison, and time-to-power) ' + _wallCopy('is not in it. ' + _WALL_NEUTRAL_LINE + '\n', 'needs a paid DC Hub plan. That’s the part worth paying for.\n');
     }
   } catch (e) {}
   // ★ r-data-first (2026-08-26): DATA leads; this nudge trails it, and says
@@ -13854,7 +13904,7 @@ function trialHeader(toolName, sessionId, gapClause, missed) {
     }
     const _link = _missedRungLink(missed.rung, toolName, sessionId);
     if (_link && _agentDepthWallPlanless(toolName)) {
-      return '🔒 **' + missed.what + '** ' + PLANLESS_WALL_COPY + ' → ' + _link + '.' + _free;
+      return '🔒 **' + missed.what + '** ' + _wallCopy(PLANLESS_WALL_COPY_NEUTRAL, PLANLESS_WALL_COPY) + ' → ' + _link + '.' + _free;
     }
     if (_link) {
       return '🔒 **' + missed.what + '** ' + missed.how + ' → ' + _link + _unlockClause + '.' + _free;
@@ -13920,7 +13970,8 @@ function buildSiteHeadlineTease(parsed) {
       factor: _lfLabel,
       score:  lv,
       of:     100,
-      note:   'Lowest-scoring factor = the primary constraint on this site. The full per-factor breakdown needs a paid DC Hub plan.',
+      note:   'Lowest-scoring factor = the primary constraint on this site. '
+        + _wallCopy(_WALL_NEUTRAL_LINE, 'The full per-factor breakdown needs a paid DC Hub plan.'),
     };
     // The WHICH stays free — naming the binding constraint is the hook. The
     // HOW MUCH gates: that number is what a go/no-go is argued from.
@@ -13947,7 +13998,7 @@ function buildSiteHeadlineTease(parsed) {
     ? (_scoreBand(score) || 'UNSCORED') +
       (verdict ? ' (' + verdict + ')' : '') +
       ' — top limiting factor: ' + (_lfLabel || 'unavailable for this location') +
-      '. Exact 0–100 score and the full per-factor breakdown need a paid DC Hub plan. ' +
+      '. ' + _wallCopy(_WALL_NEUTRAL_LINE + ' ', 'Exact 0–100 score and the full per-factor breakdown need a paid DC Hub plan. ') +
       'Source: DC Hub, dchub.cloud.'
     : Math.round(score) + '/100' +
       (verdict ? ' (' + verdict + ')' : '') +
@@ -14569,7 +14620,7 @@ function _buildQuotaHint(toolName) {
           + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day.'
         : 'NOT APPLICABLE: `' + toolName + '` is a preview on every '
         + 'non-paid seat (anonymous, free key, trial, email-bound); no daily full-answer budget is '
-        + 'charged for it. Full needs a paid DC Hub plan.';
+        + 'charged for it. ' + _wallCopy(_WALL_NEUTRAL_LINE, 'Full needs a paid DC Hub plan.');
     } else if (ALWAYS_PARTIAL_PREVIEW.has(toolName) && ANON_FULL_CAP > 0) {
       // ★★★ THE METER MUST ONLY APPEAR WHERE IT IS CHARGED.
       // `_trialDayCounts` is incremented in exactly one place —
@@ -21919,7 +21970,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               credits_pitch: 'A one-time pack of 1,000 API credits, no subscription — the cheapest way to pay per call.',
             } : {
               tier: 'anon_daily_cap',
-              message: _coachHead + ' ' + (_coachMissed ? _coachMissed.text : 'The full `' + name + '` depth comes with a paid DC Hub plan.')
+              message: _coachHead + ' ' + (_coachMissed ? _coachMissed.text : _wallCopy(_WALL_NEUTRAL_LINE, 'The full `' + name + '` depth comes with a paid DC Hub plan.'))
                 + ' A credit pack does not deepen `' + name + '`. For the full answer, relay the link in human_url to your human — that page lists the plans that include it.',
               next_tool: 'claim_free_key',
               wall: 'depth',
@@ -23848,7 +23899,7 @@ export function _authWallGuidance(toolName, status, detail, keyed) {
     ? `${t} needs a free DC Hub key. Call claim_free_key (no email, one call), then call ${t} again.`
     : next === 'bind_email'
       ? `${t} needs a free key with a bound email. Call bind_email with your human's email (no payment), then call ${t} again.`
-      : `${t} needs a paid DC Hub plan. Relay the link in human_url to your human.`;
+      : _wallCopy(_WALL_NEUTRAL_LINE, `${t} needs a paid DC Hub plan.`) + ' Relay the link in human_url to your human.';
   return { message, next_tool: next, tier_required: tierRequired, required_plan: plan };
 }
 export function _guideAuthWall(result, toolName) {
@@ -27907,6 +27958,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // r-claude-directory: a plan run from /mcp/claude keeps its steps in the
       // Claude profile (no key minting, out of the relay readout), same mechanism.
       if (c && c.profile === CLAUDE_PROFILE) headers[CLAUDE_LOOPBACK_HEADER] = _mintClaudeLoopbackToken();
+      // Item 1 leftover: a plan run from /mcp/chatgpt keeps the wall wording it served (frozen profile).
+      if (c && (c.profile === DIRECTORY_PROFILE || c.legacy_wall_copy === true)) headers[LEGACY_WALL_LOOPBACK_HEADER] = _mintLegacyWallLoopbackToken();
       // The step belongs to the caller's session: its signals and tracking rows carry that id, not 'no-session'.
       { const _pst = _mintPlanSessionToken(c && c.session_id); if (_pst) headers[PLAN_SESSION_HEADER] = _pst; }
       const r = await fetch('http://127.0.0.1:' + PORT + '/mcp', {
@@ -31065,6 +31118,27 @@ export function _consumeClaudeLoopbackToken(tok, now = Date.now()) {
   _claudeLoopbackTokens.delete(tok);
   return exp >= now;
 }
+// Item 1 leftover (2026-10-17): an execute_plan step started on /mcp/chatgpt runs on /mcp, so its nested
+// wall text would follow /mcp's neutral copy. This token (same single-use, in-process scheme, its own map)
+// marks the step `legacy_wall_copy` so /mcp/chatgpt output stays byte-identical while the app is in review.
+// It changes the wall wording only: the step's profile, tier and gates are what they were.
+const LEGACY_WALL_LOOPBACK_HEADER = 'x-dchub-legacy-wall-loopback';
+const _legacyWallLoopbackTokens = new Map();
+export function _mintLegacyWallLoopbackToken(now = Date.now()) {
+  if (_legacyWallLoopbackTokens.size > 5000) {
+    for (const [t, exp] of _legacyWallLoopbackTokens) if (exp < now) _legacyWallLoopbackTokens.delete(t);
+  }
+  const tok = randomUUID() + randomUUID();
+  _legacyWallLoopbackTokens.set(tok, now + CORE_LOOPBACK_TTL_MS);
+  return tok;
+}
+export function _consumeLegacyWallLoopbackToken(tok, now = Date.now()) {
+  if (typeof tok !== 'string' || !tok) return false;
+  const exp = _legacyWallLoopbackTokens.get(tok);
+  if (exp === undefined) return false;
+  _legacyWallLoopbackTokens.delete(tok);
+  return exp >= now;
+}
 // execute_plan steps are sessionless loopback calls, so every paywall signal and tracking row a step wrote
 // carried session 'no-session' / null (2026-10-06: all plan-step walls collapsed into one phantom session in the
 // funnel's distinct-session count, and the step calls could not be joined to the caller). Forwarding the caller's
@@ -31273,6 +31347,10 @@ app.post(MCP_PATHS, async (req, res) => {
     delete req.headers[CLAUDE_LOOPBACK_HEADER];
     const _claudeLoopback = !_dirProfile && !_coreProfile && !_coreLoopback && _isLoopbackPeer(req)
       && _consumeClaudeLoopbackToken(_claudeLoopbackTok);
+    // Item 1 leftover: an execute_plan step started on /mcp/chatgpt keeps that profile's wall wording.
+    const _legacyWallTok = req.headers[LEGACY_WALL_LOOPBACK_HEADER];
+    delete req.headers[LEGACY_WALL_LOOPBACK_HEADER];
+    const _legacyWallLoopback = _isLoopbackPeer(req) && _consumeLegacyWallLoopbackToken(_legacyWallTok);
     // An execute_plan step: the caller's session id, from a single-use token minted in this process. Read once and
     // removed so it can never ride further; only honoured from this process.
     const _planSessTok = req.headers[PLAN_SESSION_HEADER];
@@ -32304,6 +32382,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier,
         profile: _coreLoopback ? CORE_PROFILE : (_claudeLoopback ? CLAUDE_PROFILE : _dirProfile),
+        ...(_legacyWallLoopback ? { legacy_wall_copy: true } : {}),
         auth_source: _authChannel, auth_oauth: _bearerResolved,
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
@@ -32520,6 +32599,9 @@ export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE
 // vs durable — is the ONLY input that decides whether the meter may be shown,
 // and it is not reachable any other way from a unit test.
 export { _buildQuotaHint, ctx as _ctxALS };
+// Item 1 leftover (2026-10-17): exported for test/item1-wall-neutral-line.test.mjs, which drives each
+// wall sentence on /mcp (no profile) and inside a /mcp/chatgpt ctx (the frozen copy).
+export { _b2WeakestFactorLine, buildAutoMintBlock };
 // r-quota-contradiction (2026-09-24): exported for test/auto-bind-quota-contradiction.test.mjs
 // — the bind path is the other half of the seat state _buildQuotaHint reads, and
 // sessionMeta is not reachable any other way from a unit test.
