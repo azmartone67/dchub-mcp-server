@@ -108,6 +108,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // _validateToolArgs invalid-args path emit ONE identical machine-readable shape,
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
+import { coverageGaps as _coverageGaps } from './lib/coverage-gap.mjs';
 import { utf8CharsetMiddleware } from './lib/utf8-charset.mjs';
 import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
@@ -26014,17 +26015,23 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       try {
         const counts = {};
         for (const e of executed) counts[e.status] = (counts[e.status] || 0) + 1;
+        // item 11 v1 (2026-10-17): topics the intent asked for that DC Hub has no data for
+        // (lib/coverage-gap.mjs). Telemetry only; sent only when non-empty, and the row carries
+        // is_qa so the count can drop QA runs the same way the funnel does.
+        const _gaps = _coverageGaps(a && a.intent);
         trackToolCall({
           timestamp: new Date().toISOString(), tool: 'execute_plan_steps',
           params: { intent_class: sc.intent_class, status_counts: counts,
                     wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
-                    constraint_iso: constraintIsoSet.join('|') || null },
+                    constraint_iso: constraintIsoSet.join('|') || null,
+                    ...(_gaps.length ? { coverage_gaps: _gaps } : {}) },
           platform: (c && c.platform) || 'unknown', client_name: null,
           api_key: null, tier: null, session_id: (c && c.session_id) || null,
           status: 'success', duration_ms: Date.now() - t0,
           // r-claude-directory: tag the planner row with its arrival source when
           // there is one; the /mcp payload (no source) is unchanged.
           ...(c && c.source ? { source: c.source } : {}),
+          ...(_isQaCaller(c) ? { is_qa: true } : {}),
         });
         // r-recipe-lifecycle: the paired terminal event. Carries started_at
         // again so a dropped `started` (track is fire-and-forget) is healed
