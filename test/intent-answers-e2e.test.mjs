@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 
 const UA = { 'user-agent': 'Claude-User' };
-const VERDICT = { 'columbus-oh': ['BUILD', 71.2], columbus: ['BUILD', 71.2] };
+const VERDICT = { 'columbus-oh': ['BUILD', 71.2], columbus: ['BUILD', 71.2], akron: ['CAUTION', 40], canton: ['CAUTION', 38] };
 
 let H, fence; const out = {};
 async function run(path, name, intent, platform = 'claude-ai', ua = UA) {
@@ -15,6 +15,11 @@ async function run(path, name, intent, platform = 'claude-ai', ua = UA) {
 beforeAll(async () => {
   fence = fenceNetwork();
   H = await startHarness({ extraRoutes: (p) => {
+    // The real canvas answers a Columbus ask with OTHER Ohio metros; those slugs get minted into the plan
+    // and used to outrank the market the user named (Grok 2026-10-18).
+    if (p === '/api/v1/site-selection/canvas') {
+      return { ok: true, markets: [{ market_slug: 'akron', score: 60 }, { market_slug: 'canton', score: 58 }] };
+    }
     const m = /^\/api\/v1\/dcpi\/scores\/([^/]+)$/.exec(p);
     if (m && VERDICT[m[1]]) return { ok: true, market_slug: m[1], verdict: VERDICT[m[1]][0], composite_score: VERDICT[m[1]][1] };
     return undefined;
@@ -49,6 +54,14 @@ describe('execute_plan intent_answer', () => {
     if (a.verdict) expect(a.verdict.subject).toMatch(/columbus/);
     else expect(a.headline).toMatch(/not DCPI-checked/);
     for (const s of checked) if (!/columbus/.test(s)) expect(a.headline).not.toMatch(new RegExp(`${s}.*BUILD`));
+  });
+  it('market check actually checks the market the user named (Grok 2026-10-18: it checked akron + canton)', () => {
+    const a = out.market.sc.intent_answer;
+    const checked = out.market.sc.executed.filter((e) => e.tool === 'get_market_dcpi_rank' && e.status === 'executed').map((e) => e.args.market_slug);
+    expect(checked.some((s) => /^columbus/.test(s))).toBe(true);
+    expect(a.verdict).toMatchObject({ value: 'BUILD', scope: 'market' });
+    expect(a.verdict.subject).toMatch(/columbus/);
+    expect(a.headline).toMatch(/^Columbus/);
   });
 });
 

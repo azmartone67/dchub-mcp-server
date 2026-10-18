@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { cutResultToState, rowState, landSiteStep, annotateFindSites, isLandSiteIntent } from '../lib/siting-scope.mjs';
-import { _execIntentState, _execScopeOut, _planSignals, _sitesRawHint } from '../server.mjs';
+import { _execIntentState, _execScopeOut, _planSignals, _sitesRawHint, _execResolveArgs } from '../server.mjs';
 
 const gen = (name, state) => ({ generator: { name, state }, queue_pressure: { county_state: `X, ${state}` } });
 const RET = { data: [gen('Sherburne', 'MN'), gen('Alamitos', 'CA'), gen('Comanche', 'CO'), gen('Coronado', 'AZ')],
@@ -151,5 +151,27 @@ describe('wiring in server.mjs', () => {
   });
   it('the land step is appended for capacity_search only', () => {
     expect(src).toMatch(/top\.cls\.id === 'capacity_search' \? _landSiteStep\(/);
+  });
+});
+
+describe('the intent-named market outranks minted slugs (Columbus market check)', () => {
+  const hint = { market_slug: '<slug from a step-1 finalist>' };
+  it('puts the named market first and keeps the minted finalists after it', () => {
+    const r = _execResolveArgs(hint, { slug: ['akron', 'canton'], __constraint_slug: 'columbus-oh' }, {}, true);
+    expect(r.fanKey).toBe('market_slug');
+    expect(r.fanVals).toEqual(['columbus-oh', 'akron', 'canton']);
+  });
+  it('a single run with no fan-out takes the named market', () => {
+    expect(_execResolveArgs(hint, { slug: ['akron'], __constraint_slug: 'columbus-oh' }, {}, false).args.market_slug).toBe('columbus-oh');
+  });
+  it('does not duplicate it when a step already minted it', () => {
+    const r = _execResolveArgs(hint, { slug: ['akron', 'columbus-oh'], __constraint_slug: 'columbus-oh' }, {}, true);
+    expect(r.fanVals).toEqual(['columbus-oh', 'akron']);
+  });
+  it('without a named market the minted order is untouched', () => {
+    expect(_execResolveArgs(hint, { slug: ['akron', 'canton'] }, {}, true).fanVals).toEqual(['akron', 'canton']);
+  });
+  it('an explicit caller value still wins over both', () => {
+    expect(_execResolveArgs(hint, { slug: ['akron'], __constraint_slug: 'columbus-oh' }, { market_slug: 'dallas-tx' }, false).args.market_slug).toBe('dallas-tx');
   });
 });

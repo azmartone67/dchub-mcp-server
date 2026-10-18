@@ -18148,7 +18148,15 @@ export function _execResolveArgs(hint, minted, userCtx, wantFanout) {
       else if (/slug|metro|market/.test(ph)) kind = 'slug';
       const fromUser = userCtx && userCtx[k];
       if (fromUser != null && fromUser !== '') { args[k] = String(fromUser); continue; }
-      const vals = kind && minted[kind];
+      let vals = kind && minted[kind];
+      // Grok 2026-10-18 (Columbus market check): a slug minted by an earlier step (the site-selection
+      // canvas handed back akron, canton) used to outrank the market the intent NAMED, so "is Columbus a
+      // good market" read DCPI for two other cities and never for Columbus. The named market goes first;
+      // minted slugs still follow, so a fan-out keeps its finalists after it.
+      if (kind === 'slug' && minted.__constraint_slug && Array.isArray(vals) && vals.length
+          && vals[0] !== minted.__constraint_slug) {
+        vals = [minted.__constraint_slug, ...vals.filter((x) => x !== minted.__constraint_slug)];
+      }
       if (vals && vals.length) {
         if (wantFanout && vals.length > 1 && !fanKey) { fanKey = k; fanVals = vals; }
         else args[k] = vals[0];
