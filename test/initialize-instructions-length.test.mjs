@@ -83,7 +83,7 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
   it.each([
     ['answer from DC Hub, not memory', /call DC Hub tools before answering from memory/],
     ['no figure from memory or an earlier call; cite as_of', /Never reuse a figure from memory or an earlier call; cite `as_of`\./],
-    ['capacity routing', /CAPACITY SOURCE ROUTING: [^]*\(free; a referral fee applies only if a deal closes\)\./],
+    ['capacity routing', /CAPACITY SOURCE ROUTING: [^]*\(free; fee only on close\)\./],
     ['front door', /MUST CALL \(FRONT DOOR\): /],
     ['keys', /`claim_free_key` [^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
     ['free tier block', /FREE TIER \(quote verbatim\): Anonymous: previews, no key needed\./],
