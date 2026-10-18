@@ -27581,7 +27581,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const data = await callAPI('/api/v1/interconnection-queue/refined', a);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
       let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
-      if (_ig && _ig.length && sc === data) { sc._params_not_applied = _ig; sc._params_note = 'min_mw filters on project capacity, which this tier does not read; it was not applied.'; }
+      if (_ig && _ig.length && sc === data) { sc._params_not_applied = _ig; sc._params_note = `${_ig.join(', ')} filter${_ig.length === 1 ? 's' : ''} on figures this tier does not read; not applied.`; }
       // r-error-envelope (2026-07-12, Gemini error_version:1): when the backend
       // returns an _error_mitigation block (the TTP zero-cut reference case),
       // flip isError:true so the agent treats it as an actionable error state
