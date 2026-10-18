@@ -179,7 +179,11 @@ jobs:
           elif echo "$OUT" | grep -qiE "already exists|version.*exists|invalid.*version|duplicate"; then
             echo "::notice::version $VER is already on the registry (no change). Bump server.json's version to publish a refresh — it cascades to every aggregator."
           else
-            echo "::warning::publish did not confirm success — review the log above."
+            # 2026-10-18: a registry 504 used to land here as a warning and the run went
+            # green with nothing published (2.12.39 sat unpublished until a manual rerun).
+            # Anything that is neither "Successfully published" nor a duplicate version fails.
+            echo "::error::publish did not confirm success — nothing was published; review the log above and rerun."
+            exit 1
           fi
 
       # ★2026-10-09 (publish-from-canon, PR 4; owner-approved): also runs right
