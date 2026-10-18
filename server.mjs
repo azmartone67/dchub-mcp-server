@@ -27427,6 +27427,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         const s = (g.status || 'Unknown').replace(/^\([A-Za-z]+\)\s*/, '').split(',')[0]; byStatus[s] = (byStatus[s] || 0) + 1;
       }
       const top = gens.slice().sort((x, y) => (Number(y.capacity_mw) || 0) - (Number(x.capacity_mw) || 0)).slice(0, 25);
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
       const out = {
         count: gens.length,
         total_planned_mw: Math.round(totalMw),
@@ -27436,6 +27437,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — EIA-860M planned generators (dchub.cloud)',
         largest_projects: top,
       };
+      if (_ig && _ig.length) { out._params_not_applied = _ig; out._params_note = 'min_mw filters on project capacity, which this tier does not read; it was not applied.'; }
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
@@ -27578,6 +27580,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       a = _foldIsoArg(a);
       const data = await callAPI('/api/v1/interconnection-queue/refined', a);
       const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
+      if (_ig && _ig.length && sc === data) { sc._params_not_applied = _ig; sc._params_note = 'min_mw filters on project capacity, which this tier does not read; it was not applied.'; }
       // r-error-envelope (2026-07-12, Gemini error_version:1): when the backend
       // returns an _error_mitigation block (the TTP zero-cut reference case),
       // flip isError:true so the agent treats it as an actionable error state
@@ -29043,6 +29047,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         limit:           a.limit           || 10,
         min_capacity_mw: a.min_capacity_mw || 0,
       });
+      // Say the floor was left out (see the normalisation in trackedTool): a silent drop would
+      // read as "every market qualifies".
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
+      if (_ig && _ig.length && d && typeof d === 'object' && !Array.isArray(d)) {
+        d._params_not_applied = _ig;
+        d._params_note = 'min_capacity_mw filters on market MW, which this tier does not read; it was not applied to this ranking.';
+      }
       // A4 (2026-10-03): the backend body carries a descriptive tier:"developer"
       // (mcp_tier1_tools.py, "nothing reads it"), so every caller, anonymous
       // included, was told it sat on Developer. The key stays; it now names the
