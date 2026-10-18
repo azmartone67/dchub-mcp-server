@@ -3490,6 +3490,17 @@ export const _claimVia = () => {
 // Cursor, Cline, anon API, ...). Extend via env DCHUB_CLEAN_PLATFORMS (comma list of
 // platform substrings, e.g. "gemini,perplexity"). Paid/OAuth callers never hit the
 // funnel branches anyway (they get full data); this only cleans the FREE path.
+// ranked_answer / intent_answer ride ONLY the full /mcp profile: bare /mcp and /mcp/oauth, by the request
+// PATH carried in ctx. Never a directory or core profile (ctx.profile) nor any other path (grok, analyst,
+// packs). _isCleanPlatform() alone is not enough: it keys on the CLIENT, so a non-ChatGPT client
+// on /mcp/chatgpt got both blocks (found live 2026-10-18). Unknown context -> no block.
+export function _answerBlocksAllowed() {
+  try {
+    const c = getCtx();
+    return !!c && !c.profile && (c.path === '/mcp' || c.path === MCP_OAUTH_PATH);
+  } catch (_) { return false; }
+}
+
 function _isCleanPlatform() {
   try {
     const p = (getCtx()?.platform || '').toLowerCase();
@@ -26189,11 +26200,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
         answer_guide: _execAnswerGuide(executed),
-        // /mcp/chatgpt (clean platform) is frozen during the OpenAI review: no new fields there.
-        ...(() => { const _ra = _isCleanPlatform() ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
+        // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
+        // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
+        // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
+        ...(() => { const _ra = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
                     return _ra ? { ranked_answer: _ra } : {}; })(),
         // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
-        ...(() => { const _ia = _isCleanPlatform() ? null
+        ...(() => { const _ia = (_isCleanPlatform() || !_answerBlocksAllowed()) ? null
                       : buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
                           constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap }, executed, fullByEntry);
                     return _ia ? { intent_answer: _ia } : {}; })(),
@@ -32175,7 +32188,7 @@ app.post(MCP_PATHS, async (req, res) => {
         auth_refused: _authRefused,   // r-auth-refused: per request, never carried in meta
         auth_unverified: _authUnverifiedFlag,   // r-auth-unverified: same per-request rule
         auth_demoted: _authDemotedFlag,   // r-auth-demoted: same per-request rule
-        source: _pathSource(req),   // r-source-path: rides EVERY request
+        path: _normPath(req), source: _pathSource(req),   // r-source-path: rides EVERY request
         // Stage 0a: raw arg keys, captured BEFORE the SDK strips undeclared ones.
         raw_arg_keys: _rawArgKeysFromBody(req.body) }, async () => {
         await transport.handleRequest(req, res, req.body);
@@ -32196,7 +32209,7 @@ app.post(MCP_PATHS, async (req, res) => {
       await ephServer.connect(ephTransport);
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
-        auth_source: _authChannel, auth_oauth: _bearerResolved, source: _pathSource(req),
+        auth_source: _authChannel, auth_oauth: _bearerResolved, path: _normPath(req), source: _pathSource(req),
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
       }, async () => {
@@ -32334,7 +32347,7 @@ app.post(MCP_PATHS, async (req, res) => {
         // comment on it. It was written that way first and a mutation that
         // deleted it killed no test, which is what unreachable looks like.
         // `auth_refused` is absent here for the same structural reason.
-        source: _pathSource(req),   // r-source-path: rides EVERY request
+        path: _normPath(req), source: _pathSource(req),   // r-source-path: rides EVERY request
         // r46: see sessionMeta.set above for rationale
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker,
@@ -32428,7 +32441,7 @@ app.post(MCP_PATHS, async (req, res) => {
       return ctx.run({
         api_key: apiKey, platform, tier: 'free', session_id: null, profile: _dirProfile,
         auth_source: _authChannel, auth_oauth: _bearerResolved,
-        source: _pathSource(req),   // r-source-path: rides EVERY request
+        path: _normPath(req), source: _pathSource(req),   // r-source-path: rides EVERY request
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
@@ -32566,7 +32579,7 @@ app.get(MCP_PATHS, async (req, res) => {
   if (sid && sessions.has(sid)) {
     touchSession(sid);  // r41
     const meta = sessionMeta.get(sid) || {};
-    return ctx.run({ ...meta, session_id: sid, source: _pathSource(req) }, async () => {
+    return ctx.run({ ...meta, session_id: sid, path: _normPath(req), source: _pathSource(req) }, async () => {
       await sessions.get(sid).handleRequest(req, res);
     });
   }
