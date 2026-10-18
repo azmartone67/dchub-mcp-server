@@ -86,7 +86,7 @@ describe('attachRankedRelay', () => {
 describe('wiring', () => {
   const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
   it('execute_plan emits ranked_answer and the tool chain ends in attachRankedRelay', () => {
-    expect(src).toContain('_isCleanPlatform() ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry)');
+    expect(src).toContain('(_isCleanPlatform() || !_answerBlocksAllowed()) ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry)');
     expect(src).toContain('return attachRankedRelay(_oneLinkWallStepInner(result, name))');
   });
 });
