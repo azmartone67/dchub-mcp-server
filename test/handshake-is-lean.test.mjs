@@ -84,22 +84,26 @@ describe('initialize instructions', () => {
 });
 
 describe('tools/list', () => {
-  it('is smaller than the 2026-10-06 baseline (458,152 bytes) by at least 6.5%', async () => {
+  it('is under half the 2026-10-06 baseline (458,152 bytes) (R1, 2026-10-18)', async () => {
     const { h } = await open('lean-test');
     const r = await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     expect(JSON.parse(r.json).result.tools.length).toBeGreaterThan(80);
     // 2026-10-09 ToolBench: 9 more tools advertise TYPED outputSchemas (each repeats
     // the 6-key envelope), +~8.5KB. Budget moved 8% -> 6.5% under the 2026-10-06
     // baseline; main was 416,019 before this change.
-    expect(r.bytes).toBeLessThan(458152 * 0.935);
+    // R1 (Grok 2026-10-18, live /mcp measured 485,513 bytes): the wire list serves outputSchema as
+    // top-level keys and types, descriptions cut at 1,300, parameter text at 240 (lib/list-slim.mjs).
+    expect(r.bytes).toBeLessThan(458152 * 0.5);
   });
   it('the shared output envelope is terse (it is repeated on ~80 tools)', async () => {
     const { h } = await open('lean-test');
     const r = await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const tools = JSON.parse(r.json).result.tools;
-    const generic = tools.filter((t) => JSON.stringify(t.outputSchema).includes('DC Hub envelope'));
+    const generic = tools.filter((t) => t.outputSchema && '_entity' in (t.outputSchema.properties || {}));
     expect(generic.length).toBeGreaterThan(60);
     expect(JSON.stringify(generic[0].outputSchema).length).toBeLessThan(1700);
+    // and no per-key prose rides the wire (it lives in the registered schema the SDK validates against)
+    expect(JSON.stringify(generic[0].outputSchema)).not.toContain('description');
   });
 });
 
