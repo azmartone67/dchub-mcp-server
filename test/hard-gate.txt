@@ -333,6 +333,7 @@ test/platform-desc-sync.test.mjs
 test/platform-header.test.mjs
 test/platform-recall.test.mjs
 test/portfolio-nudge.test.mjs
+test/power-grid-listing.test.mjs
 test/power-timeline-class.test.mjs
 test/preview-count-returned.test.mjs
 test/pricing-canon-and-go-links.test.mjs

@@ -4078,6 +4078,19 @@ const MCP_PACKS = new Map([
     'get_infra_projects',
   ] }],
 
+  // R2 (Grok MCP platform ranking plan, 2026-10-18): the second, focused server "DC Hub Power & Grid".
+  // 11 listed tools + the 4-tool spine = 15. Same backend, same keys, same gates as /mcp (a listing
+  // scope, not an entitlement scope). The tools are the power-first questions an energy/utility
+  // directory searcher asks: where is power, how long until it is deliverable, what is in the queue,
+  // what does it cost, and does THIS site work. Own path so the registry can list it as its own entry
+  // (a remote URL used by one server is refused for another, see registry-remotes.mjs).
+  ['/mcp/power', { pack: 'power', spine: true, tools: [
+    'get_market_dcpi_rank', 'get_power_availability_timeline',
+    'get_interconnection_queue', 'get_grid_intelligence', 'get_grid_scoreboard',
+    'get_energy_prices', 'compare_isos', 'get_hosting_capacity',
+    'get_retirement_headroom', 'analyze_site', 'find_sites',
+  ] }],
+
   // The Managed Agent pack — a full siting decision from capacity target to
   // verdict. plan_query is excluded deliberately: it is INSPECT-ONLY and at
   // 18,414 b the single heaviest entry in the catalog, and execute_plan is the

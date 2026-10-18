@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "cloud.dchub/power-grid",
+  "title": "DC Hub Power & Grid: Data Center Power Availability, Interconnection Queue & Electricity Prices",
+  "description": "Data center power: grid headroom, interconnection queues, electricity prices, site screening.",
+  "websiteUrl": "https://dchub.cloud",
+  "icons": [
+    {
+      "src": "https://dchub.cloud/icons/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    },
+    {
+      "src": "https://dchub.cloud/icons/icon-192.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "192x192"
+      ]
+    },
+    {
+      "src": "https://dchub.cloud/icons/dchub-logo.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
+  "version": "2.12.37",
+  "repository": {
+    "url": "https://github.com/azmartone67/dchub-mcp-server",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://dchub.cloud/mcp/power"
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "tool": "dchub-registry-refresh",
+      "version": "1.0.0",
+      "toolCount": 15,
+      "license": "CC-BY-4.0 for DCPI scores + methodology and DC Hub's own grid analysis; other layers per https://dchub.cloud/data-sources",
+      "freeTier": true,
+      "deploymentType": "origin",
+      "canonicalRemote": "https://dchub.cloud/mcp",
+      "gatewayNote": "Focused listing of the DC Hub origin: 11 power and grid tools plus the 4-tool shared spine (discover_tools, claim_free_key, unlock_more_data, summarize_for_citation). Same backend, keys and gates as cloud.dchub/mcp-server; this path is a listing scope, not an entitlement scope."
+    }
+  }
+}
