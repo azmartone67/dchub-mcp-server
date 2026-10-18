@@ -29043,6 +29043,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         limit:           a.limit           || 10,
         min_capacity_mw: a.min_capacity_mw || 0,
       });
+      // Say the floor was left out (see the normalisation in trackedTool): a silent drop would
+      // read as "every market qualifies".
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
+      if (_ig && _ig.length && d && typeof d === 'object' && !Array.isArray(d)) {
+        d._params_not_applied = _ig;
+        d._params_note = 'min_capacity_mw filters on market MW, which this tier does not read; it was not applied to this ranking.';
+      }
       // A4 (2026-10-03): the backend body carries a descriptive tier:"developer"
       // (mcp_tier1_tools.py, "nothing reads it"), so every caller, anonymous
       // included, was told it sat on Developer. The key stays; it now names the

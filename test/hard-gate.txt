@@ -358,6 +358,7 @@ test/queue-total-is-derivable-not-paywalled.test.mjs
 test/quota-meter-charged.test.mjs
 test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
+test/rank-markets-unreadable-floor.test.mjs
 test/rank-markets-value-strip.test.mjs
 test/ranked-answer-e2e.test.mjs
 test/ranked-answer.test.mjs

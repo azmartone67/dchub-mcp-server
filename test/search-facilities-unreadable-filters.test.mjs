@@ -205,8 +205,8 @@ describe('the filters reach the backend only for a caller who can read what they
 
   it('other tools that take a capacity filter on other data are left alone', async () => {
     const s = await openSession();
-    const out = await s.call('rank_markets', { criteria: 'most_capacity', min_capacity_mw: 100 });
-    expect(out.text).not.toContain('_params_not_applied');
+    const out = await s.call('get_pipeline', { min_capacity_mw: 100 });
+    expect(out.text).not.toContain('_params_not_applied');   // rank_markets has its own file: rank-markets-unreadable-floor
   });
 
   it('the focused core profile, which delegates to the same tool, follows the same rule', async () => {
@@ -231,7 +231,7 @@ describe('the filters reach the backend only for a caller who can read what they
 
 describe('lib/readable-filters.mjs (pure)', () => {
   it('names exactly the params search_facilities filters capacity and tier on', () => {
-    expect(READ_GATED_FILTERS).toEqual({ search_facilities: GATED });
+    expect(READ_GATED_FILTERS).toEqual({ search_facilities: GATED, rank_markets: ['min_capacity_mw'] });
   });
 
   it('hasReadGatedFilter ignores unset, zero and empty values and other tools', () => {
