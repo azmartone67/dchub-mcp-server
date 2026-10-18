@@ -13,7 +13,7 @@ Partner-authored CI harness, adapted for the live MCP transport. Four checks:
                  (structuredContent.error == "paid_only" with a human_message)
                  OR full data. Both are success — the check is that the paid
                  gate answers coherently, not which side of it the key lands on.
-  4. GAS PRO   — with the Pro key in DC_HUB_API_KEY, get_gas_economics(dallas)
+  4. GAS PRO   — with the Pro key in DC_HUB_API_KEY, get_gas_economics(dallas-fort-worth)
                  and get_gas_intelligence(TX) return prices: no tier_masked
                  block, a numeric burner-tip price and $/MWh.
 
@@ -266,7 +266,7 @@ def gas_pro_problems(econ: dict, intel: dict) -> list:
 
 def check_gas_pro(api_key: str) -> None:
     try:
-        econ = _gas_sc(api_key, "get_gas_economics", {"market": "dallas"})
+        econ = _gas_sc(api_key, "get_gas_economics", {"market": "dallas-fort-worth"})
         intel = _gas_sc(api_key, "get_gas_intelligence", {"region": "TX"})
     except Exception as exc:
         print(f"GAS_PRO_FAIL: transport: {exc}")
@@ -276,7 +276,7 @@ def check_gas_pro(api_key: str) -> None:
         print(f"GAS_PRO_FAIL: {b}")
     if bad:
         sys.exit(5)
-    print(f"gas Pro path OK: dallas burner tip {econ['burner_tip']['usd_mmbtu']} $/MMBtu, "
+    print(f"gas Pro path OK: dallas-fort-worth burner tip {econ['burner_tip']['usd_mmbtu']} $/MMBtu, "
           f"avg CCGT {econ['scenarios_usd_per_mwh'].get('avg_ccgt_6800_btu_kwh')} $/MWh; TX brief unmasked")
 
 
