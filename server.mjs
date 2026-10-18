@@ -206,6 +206,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
+import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
@@ -9691,11 +9692,14 @@ const _SITE_LOCKED_LABELS = { overall_score: 'overall score', fiber_connectivity
   gas_pipeline_access: 'gas pipeline access', market_conditions: 'market conditions',
   risk_resilience: 'risk and resilience' };
 // One plain-text line, for clients that read text only.
-export function _siteTeaserLine(t) {
+export function _siteTeaserLine(t, market) {
   if (!t) return '';
-  return 'Site teaser: verdict ' + (t.verdict || 'not rated') + '; power infrastructure '
+  let m = market;
+  if (m === undefined) { try { m = (getCtx() || {}).analyze_site_market || null; } catch (_) { m = null; } }
+  return 'Site teaser: ' + SITE_VERDICT_LABEL + ' ' + (t.verdict || 'not rated') + '; power infrastructure '
     + (t.power_infrastructure || 'not rated') + '. Locked: '
-    + t.locked.map((k) => _SITE_LOCKED_LABELS[k] || k.replace(/_/g, ' ')).join(', ') + '. ' + t.note;
+    + t.locked.map((k) => _SITE_LOCKED_LABELS[k] || k.replace(/_/g, ' ')).join(', ') + '. ' + t.note
+    + ' ' + _verdictContext(m);
 }
 // The keyed preview / spent branches: structuredContent.site_teaser, the same block in block 0's
 // JSON when block 0 is the JSON payload, and the text line as its own block after it.
@@ -28372,6 +28376,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           ? await callAPI(`/api/v1/dcpi/scores/${encodeURIComponent(slug)}`, {}, { internal: true })
           : null;
         const res = _locationPoint(rawLocation, slug, row);
+        // P1-10: the market the location named, for the teaser to print beside the site verdict.
+        try { const c = getCtx(); const mv = res.ok ? _marketVerdictFromRow(row, slug) : null; if (c && mv) c.analyze_site_market = mv; } catch (_) { /* label only */ }
         if (!res.ok) {
           return { isError: true,
                    content: [{ type: 'text', text: JSON.stringify(res.error) }],
