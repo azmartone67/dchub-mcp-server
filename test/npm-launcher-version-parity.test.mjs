@@ -14,6 +14,11 @@ describe("npm launcher", () => {
     expect(launcher.version).toBe(root.version);
   });
 
+  it("description fits npm's 255-char cap (a longer one is cut mid-sentence on the npm page)", () => {
+    expect(launcher.description.length).toBeGreaterThan(100);
+    expect(launcher.description.length).toBeLessThanOrEqual(255);
+  });
+
   it("is the launcher package, shipping only its bin", () => {
     expect(launcher.name).toBe("dchub-mcp-server");
     expect(launcher.files).toEqual(["bin", "README.md", "LICENSE"]);
