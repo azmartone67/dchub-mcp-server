@@ -106,7 +106,7 @@ for (const session of [true, false]) {
       expect(b0.split(SHORT).length - 1, 'the link once in the text').toBe(1);
       expect(r.sc.user_message).toBe(r.sc.human_message);
       expect(b0.split('\n')).toContain('[Unlock the full site report free](' + SHORT + ')');
-      expect(b0).toContain('Preview: verdict BUILD; power infrastructure BUILD. Missing from this preview: '
+      expect(b0).toContain('Preview: site infrastructure verdict BUILD; power infrastructure BUILD. Missing from this preview: '
         + MISSING.join(', ') + '.');
       expect(pageLinks(r.res)).toEqual([SHORT]);
     });
@@ -280,7 +280,7 @@ describe('power band meaning (Grok replay 2026-10-11)', () => {
 });
 
 describe('powerBandLineStep (teaser line, profile-aware)', () => {
-  const TEXT = 'Site teaser: verdict BUILD; power infrastructure BUILD. Locked: overall score. Scores come with the full site report.';
+  const TEXT = 'Site teaser: site infrastructure verdict BUILD; power infrastructure BUILD. Locked: overall score. Scores come with the full site report.';
   const res = () => ({ content: [{ type: 'text', text: 'wall\n\n' + TEXT + '\n\nclaim_free_key' }] });
   const SKIP = { skipProfiles: ['claude', 'chatgpt'] };
   it('appends the sentence to the teaser line only', () => {

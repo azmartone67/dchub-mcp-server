@@ -121,7 +121,7 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
       note: 'Scores and the other factor bands come with the full site report.',
       unlock_url: 'https://dchub.cloud/u/abcdef',
     });
-    expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD. Locked: overall score, '
+    expect(r.text).toContain('Site teaser: site infrastructure verdict BUILD; power infrastructure BUILD. Locked: overall score, '
       + 'fiber connectivity, gas pipeline access, market conditions, risk and resilience.');
     expect(r.siteHits).toBe(1);
   });
@@ -180,7 +180,7 @@ describe('keyless analyze_site, switch on (default): email unlock + bands-only t
     const r = await call(null);
     expect(r.sc.site_teaser.verdict).toBe(null);
     expect(r.sc.site_teaser.power_infrastructure).toBe('BUILD');
-    expect(r.text).toContain('Site teaser: verdict not rated; power infrastructure BUILD.');
+    expect(r.text).toContain('Site teaser: site infrastructure verdict not rated; power infrastructure BUILD.');
     expect(JSON.stringify(r.sc.site_teaser)).not.toContain('CAUTION');
   });
 
@@ -233,7 +233,7 @@ describe('keyless analyze_site with NO transport session (Grok follow-up 2, 2026
     expect(r.sc.next_tool).toBe('claim_free_key');
     expect(r.sc.free_key_unlock).toMatchObject({ tool: 'claim_free_key', email_required: false });
     expect(r.text).toContain('claim_free_key');
-    expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD.');
+    expect(r.text).toContain('Site teaser: site infrastructure verdict BUILD; power infrastructure BUILD.');
     expect(r.text).not.toContain('Unlock the full site report free by email');
     expect(r.text, 'one claim_free_key ask, not a preview one and a full one').not.toContain('free preview first');
     expect(JSON.stringify(r.res)).not.toContain('free preview first');
@@ -276,7 +276,7 @@ describe('paywall-contract arm on (DCHUB_PAYWALL_CONTRACT=on): the contract rewr
     // Live 10-10 (arm v2): the contract rewrote the agent line to "after your user starts a paid
     // DC Hub plan, retry" and replaced the teaser line with "Free headline: ...". The email wall
     // is left as built: only its links carry the arm.
-    expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD.');
+    expect(r.text).toContain('Site teaser: site infrastructure verdict BUILD; power infrastructure BUILD.');
     expect(r.text).not.toMatch(/starts a paid|Free headline/);
     expect(r.sc.agent_hints).toBeUndefined();
     expect(pageLinks(r.res)).toEqual([link]);
@@ -316,7 +316,7 @@ describe('keyed analyze_site below Pro: preview / spent get the teaser and keep 
       note: 'Scores and the other factor bands come with the full site report.',
     });
     expect(r.sc.overall_score ?? null).toBe(null);
-    expect(r.text).toContain('Site teaser: verdict BUILD; power infrastructure BUILD.');
+    expect(r.text).toContain('Site teaser: site infrastructure verdict BUILD; power infrastructure BUILD.');
     expect(r.text).not.toContain('free by email');
     expect(shortReqs.some((b) => b.relay_url && relayFields(b.relay_url).fields.includes('w-siteruns'))).toBe(false);
     expect(r.signals.map((s) => s.message_shown)).toContain('lp_free_spent');
