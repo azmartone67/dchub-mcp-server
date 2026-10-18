@@ -246,6 +246,7 @@ test/late-key.test.mjs
 test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
+test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
 test/listing-canon.test.mjs
 test/listing-copy.test.mjs
