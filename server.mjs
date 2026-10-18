@@ -138,6 +138,7 @@ import { GROK_PATH, GROK_OAUTH_PATH, GROK_PACK_NAME, GROK_TOOLS, grokToolsList a
          grokServedCount as _grokServedCount, grokInstructions as _grokInstructions,
          GROK_OAUTH_CHALLENGE, GROK_OAUTH_MESSAGE } from './lib/grok-profile.mjs';
 import { MCP_OAUTH_PATH, MCP_OAUTH_SOURCE, MCP_OAUTH_CHALLENGE, MCP_OAUTH_MESSAGE,
+         MCP_OAUTH_RESOURCE, MCP_OAUTH_PRM, mcpOauthChallenge as _mcpOauthChallenge,
          isMcpOauthRequest as _isMcpOauthRequest,
          mcpOauthChallengeEligible as _mcpOauthChallengeEligible } from './lib/mcp-oauth-path.mjs';
 // G4 (2026-09-27 Grok audit): 7-day, time-boxed log of what a Grok request
@@ -30758,6 +30759,16 @@ app.get('/.well-known/oauth-protected-resource/mcp/claude', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   return res.json(CLAUDE_PRM);
 });
+// D1 (2026-10-18): RFC 9728 metadata for /mcp/oauth with its OWN resource, served at the origin like
+// /mcp/claude above. The zone worker (dchub-oauth-meta) answers this path today and names /mcp, so
+// this route is only reached at dchub.cloud once that worker passes the path through or mirrors it.
+// Advertised only while AuthKit bearers are resolved (_workosEnabled).
+app.get('/.well-known/oauth-protected-resource/mcp/oauth', (req, res) => {
+  if (!_workosEnabled() || /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_MCP_OAUTH_DISABLE || ''))) return res.status(404).json({ error: 'not_found' });
+  res.set('Cache-Control', 'no-store');
+  res.set('Access-Control-Allow-Origin', '*');
+  return res.json(MCP_OAUTH_PRM);
+});
 registerOAuthRoutes(app, {
   issuer: process.env.DCHUB_PUBLIC_BASE || 'https://dchub.cloud',
   store: _oauthStore,
@@ -31647,7 +31658,9 @@ app.post(MCP_PATHS, async (req, res) => {
           _claudeProfile ? { audiences: [_WORKOS_AUD, CLAUDE_RESOURCE] }
             // ChatGPT OAuth: accept tokens minted for its own resource too, so
             // flipping DCHUB_CHATGPT_OAUTH_OWN_RESOURCE never strands a client.
-            : (_normPath(req) === DIRECTORY_OAUTH_PATH ? { audiences: [_WORKOS_AUD, DIRECTORY_OAUTH_RESOURCE] } : undefined));
+            : (_normPath(req) === DIRECTORY_OAUTH_PATH ? { audiences: [_WORKOS_AUD, DIRECTORY_OAUTH_RESOURCE] }
+              // /mcp/oauth (D1): same, so flipping DCHUB_MCP_OAUTH_OWN_RESOURCE never strands a client.
+              : (_isMcpOauthRequest(req) ? { audiences: [_WORKOS_AUD, MCP_OAUTH_RESOURCE] } : undefined)));
         if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; _bearerResolved = true; }
       }
     }
@@ -31714,7 +31727,7 @@ app.post(MCP_PATHS, async (req, res) => {
           workosEnabled: _workosEnabled(),
           disableRaw: process.env.DCHUB_MCP_OAUTH_DISABLE,
         })) {
-      res.set('WWW-Authenticate', MCP_OAUTH_CHALLENGE);
+      res.set('WWW-Authenticate', _mcpOauthChallenge());
       console.log(`[oauth] 401 challenge → ${MCP_OAUTH_PATH} (no credential, method=${req.body?.method})`);
       return res.status(401).json({
         jsonrpc: '2.0',

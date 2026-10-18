@@ -22,6 +22,14 @@ jobs:
     # says nothing about a PR's code. Dependabot PRs get no repo secrets and
     # always failed MISSING_KEY_FAIL (#988-#992, 2026-10-16); skip them.
     if: github.actor != 'dependabot[bot]'
+    # ★ INFORMATIONAL ON PRs (2026-10-18). This job judges production, not the PR:
+    #   a slow dchub.cloud endpoint failed it at 01:11Z and 04:38Z and blocked
+    #   mcp#1024, whose files never touch the gas tools. On a pull_request a
+    #   failure is reported (red steps and annotations in the run) but the job
+    #   concludes success, so the required `dchub-checks` context cannot be held
+    #   hostage by production. push-to-main and the nightly schedule stay STRICT:
+    #   that is where live-surface drift is supposed to turn red.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
