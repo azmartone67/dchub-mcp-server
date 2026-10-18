@@ -108,3 +108,33 @@ describe('relay + safety', () => {
     expect(buildIntentAnswer(ctx('how soon can I get 100 MW in ERCOT', 'capacity_search'), [skipped], null, NOW)).toBe(null);
   });
 });
+
+describe('state-scoped steps (Grok 2026-10-18 P0-1 follow-up)', () => {
+  const scope = (state, kept, dropped) => ({ state, kept, dropped_out_of_state: dropped, dropped_state_unreadable: 0 });
+  const retOH0 = step('get_retirement_headroom', { region_iso: 'PJM' }, {
+    data: [], count_returned: 0, _total_available: null, total_retiring_mw: null, meta: { baseline_age: '2026-07' }, scope: scope('OH', 0, 3) });
+  const qOH0 = step('get_refined_queue', { iso: 'PJM' }, {
+    results: [], count_total_matching: null, source_as_of: '2026-08-31', freshness_by_iso: { PJM: { source_as_of: '2026-08-31' } }, scope: scope('OH', 0, 1) });
+  const ctxOH = ctx('find a site for a 150 MW data center in Ohio', 'capacity_search', { constraint_iso: ['PJM'] });
+  it('an empty state cut never quotes the unscoped count as evidence', () => {
+    const a = buildIntentAnswer(ctxOH, [retOH0, qOH0, skipped], null, NOW);
+    const ev = a.evidence.join(' ');
+    expect(ev).not.toMatch(/filed generator retirements near substations/);
+    expect(ev).not.toMatch(/active interconnection-queue projects match/);
+    const ne = a.not_established.join(' ');
+    expect(ne).toContain('No OH retirements in the 3-row slice returned');
+    expect(ne).toContain('not proof there are none');
+    expect(ne).toContain('No OH queue projects in the 1-row slice returned');
+  });
+  it('a non-empty cut reports the slice, not a state total', () => {
+    const r = step('get_retirement_headroom', {}, { data: [{}], count_returned: 1, _total_available: null, scope: scope('AZ', 1, 2) });
+    const a = buildIntentAnswer(ctx('find a site for 100 MW in Phoenix', 'capacity_search'), [r, skipped], null, NOW);
+    expect(a.evidence.join(' ')).toContain('1 filed generator retirement in AZ in the slice returned');
+    expect(a.evidence.join(' ')).toContain('not a AZ total');
+  });
+  it('an unscoped step still quotes its count', () => {
+    const a = buildIntentAnswer(ctx('how soon can I get 100 MW of power in ERCOT', 'capacity_search', { constraint_iso: ['ERCOT'] }), [retire, queue('2026-08-31'), grid, skipped], null, NOW);
+    expect(a.evidence.join(' ')).toContain('1 filed generator retirements near substations');
+    expect(a.evidence.join(' ')).toContain('1433 active interconnection-queue projects match');
+  });
+});

@@ -19,6 +19,16 @@ describe('state cut', () => {
     expect(scope.unscoped_totals.total_retiring_mw).toBe(9000);
     expect(scope.dropped_out_of_state).toBe(3);
   });
+  it('withholds every unscoped total the intent answer could quote', () => {
+    const r = { data: [gen('Coronado', 'AZ')], count_returned: 1, _total_available: 4, _data_total_in_pro: 9, total_retiring_mw: 5 };
+    const { result, scope } = cutResultToState('get_retirement_headroom', r, 'AZ');
+    expect(result._total_available).toBeNull();
+    expect(result._data_total_in_pro).toBeNull();
+    expect(scope.unscoped_totals._total_available).toBe(4);
+    const q = cutResultToState('get_refined_queue', { results: [], count_total_matching: 3081, _results_total_in_pro: 3081, total_queued_mw: 1 }, 'AZ').result;
+    expect(q.count_total_matching).toBeNull();
+    expect(q._results_total_in_pro).toBeNull();
+  });
   it('an empty cut says it is not proof of absence', () => {
     const { result, scope } = cutResultToState('get_retirement_headroom', RET, 'TX');
     expect(result.data).toEqual([]);
@@ -80,6 +90,9 @@ describe('land step', () => {
   it('"site" as a verb is not a land intent', () => {
     expect(isLandSiteIntent('site a 50 MW data center in central Illinois')).toBe(false);
     expect(isLandSiteIntent('find sites in Ohio')).toBe(true);
+    expect(isLandSiteIntent('find a site for a 150 MW data center in Ohio')).toBe(true);
+    expect(isLandSiteIntent('the best site near Dallas')).toBe(true);
+    expect(isLandSiteIntent('we need to site 200 MW in Texas')).toBe(false);
     expect(isLandSiteIntent('powered land near Dallas')).toBe(true);
   });
   it('a power-only intent and an existing find_sites step add nothing', () => {
