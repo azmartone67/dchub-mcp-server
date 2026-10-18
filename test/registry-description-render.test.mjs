@@ -85,7 +85,7 @@ describe('check mode fails when a file differs from the render (must-fail contro
     });
   });
   it('server.json description edited', () => {
-    mutate('server.json', (s) => s.replace('query and cite.', 'query and cite it.'), () => {
+    mutate('server.json', (s) => s.replace('DCPI scores grid power,', 'DCPI scores grid power -'), () => {
       const { ok, out } = run();
       expect(ok).toBe(false);
       expect(out).toMatch(/server\.json description differs from the render/);

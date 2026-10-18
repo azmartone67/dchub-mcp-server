@@ -1107,8 +1107,9 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
 
   // (2) server.json evergreen description must keep the canonical positioning
   const sjDesc = (readJSON('server.json').description || '');
-  if (!/query and cite/i.test(sjDesc))
-    problems.push('server.json: description lost canonical positioning ("… query and cite")');
+  // 2026-10-18: owner-approved lead sentence (Smithery copy) replaced "… query and cite".
+  if (!/^DC Hub is the live data layer for data-center site selection\./.test(sjDesc))
+    problems.push('server.json: description lost canonical positioning ("DC Hub is the live data layer for data-center site selection.")');
 
   // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
   // countries — see QUANTITIES above) must equal the snapshot canon. Scans
