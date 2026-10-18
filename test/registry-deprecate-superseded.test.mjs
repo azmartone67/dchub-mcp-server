@@ -51,3 +51,28 @@ describe('registry deprecate-superseded step', () => {
     expect(verdict(TEXT.replace('- name: Deprecate superseded registry versions', '- name: x'))).toBe('missing');
   });
 });
+
+// 2026-10-18: registry read timeouts/500s failed three runs on the post-check
+// after every status call had succeeded. Reads must go through one retrying
+// helper that retries 5xx/429/timeouts only, and still raises on the last try.
+export function retryVerdict(text) {
+  const step = deprecateStep(text);
+  if (!step) return 'missing';
+  if (!/def get\(url, tries=5\):/.test(step)) return 'no-helper';
+  if ((step.match(/urllib\.request\.urlopen\(/g) || []).length !== 1) return 'raw-read';
+  if (!/e\.code < 500 and e\.code != 429:\s*\n\s*raise/.test(step)) return 'retries-4xx';
+  if (!/if i == tries - 1:\s*\n\s*raise err/.test(step)) return 'swallows-last';
+  return 'ok';
+}
+
+describe('registry deprecate-superseded reads', () => {
+  it('retry transient errors and stay fail-closed', () => {
+    expect(retryVerdict(TEXT)).toBe('ok');
+  });
+  it('controls: each regression is caught', () => {
+    expect(retryVerdict(TEXT.replace('def get(url, tries=5):', 'def fetch(url):'))).toBe('no-helper');
+    expect(retryVerdict(TEXT.replace('d = get(url)', 'd = json.load(urllib.request.urlopen(url, timeout=30))'))).toBe('raw-read');
+    expect(retryVerdict(TEXT.replace('e.code < 500 and e.code != 429', 'False'))).toBe('retries-4xx');
+    expect(retryVerdict(TEXT.replace('raise err', 'return None'))).toBe('swallows-last');
+  });
+});

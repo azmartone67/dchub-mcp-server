@@ -215,16 +215,34 @@ jobs:
           # /versions/<v> (and /versions/latest) directly.
           list_versions() {  # $1 = superseded | active  (per-version truth)
             python3 - "$1" <<'PY'
-          import json, sys, urllib.parse, urllib.request
+          import json, sys, time, urllib.error, urllib.parse, urllib.request
           mode, name = sys.argv[1], "cloud.dchub/mcp-server"
           api = "https://registry.modelcontextprotocol.io/v0.1/servers"
-          one = lambda v: json.load(urllib.request.urlopen(
-              api + "/" + urllib.parse.quote(name, safe="") + "/versions/" + v, timeout=30))
+          # 2026-10-18: the registry read endpoint timed out (runs 39110976153,
+          # 39113566294) and returned 500 (39112536602) after every status call had
+          # already succeeded, failing the run on its own post-check. Retry
+          # transient read errors only (timeout, connection, HTTP 5xx/429); a 4xx
+          # and the last attempt still raise, so this stays fail-closed.
+          def get(url, tries=5):
+              for i in range(tries):
+                  try:
+                      return json.load(urllib.request.urlopen(url, timeout=30))
+                  except urllib.error.HTTPError as e:
+                      if e.code < 500 and e.code != 429:
+                          raise
+                      err = e
+                  except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                      err = e
+                  if i == tries - 1:
+                      raise err
+                  print("registry read retry %d/%d after %r" % (i + 1, tries - 1, err), file=sys.stderr)
+                  time.sleep(2 ** (i + 1))
+          one = lambda v: get(api + "/" + urllib.parse.quote(name, safe="") + "/versions/" + v)
           meta = lambda d: d.get("_meta", {}).get("io.modelcontextprotocol.registry/official", {})
           cursor, seen = None, []
           while True:
               url = api + "?search=cloud.dchub&limit=100" + ("&cursor=" + urllib.parse.quote(cursor) if cursor else "")
-              d = json.load(urllib.request.urlopen(url, timeout=30))
+              d = get(url)
               seen += [s["server"]["version"] for s in d.get("servers", []) if s.get("server", {}).get("name") == name]
               cursor = (d.get("metadata") or {}).get("nextCursor")
               if not cursor:
