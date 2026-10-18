@@ -77,6 +77,7 @@
  */
 
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
+import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 // r-list-swr (2026-07-11): Client + InMemoryTransport are used ONLY to build the
@@ -24764,7 +24765,11 @@ export function _oneLinkWallStep(result, name) {
   // ranked_answer.relay copies the link this step leaves on the finished response (the last word on it).
   return attachRankedRelay(_oneLinkWallStepInner(result, name));
 }
+// intent_answer.relay is attached the same way (lib/intent-answers.mjs), on the finished result.
 function _oneLinkWallStepInner(result, name) {
+  return attachIntentRelay(_oneLinkWallStepCore(result, name));
+}
+function _oneLinkWallStepCore(result, name) {
   try {
     if (!_wallOneLinkOn()) return result;
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
@@ -26187,6 +26192,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // /mcp/chatgpt (clean platform) is frozen during the OpenAI review: no new fields there.
         ...(() => { const _ra = _isCleanPlatform() ? null : buildRankedAnswer(sc.intent, sc.intent_class, executed, fullByEntry);
                     return _ra ? { ranked_answer: _ra } : {}; })(),
+        // siting / power-timing / market-check first answer (item 2); same /mcp/chatgpt freeze.
+        ...(() => { const _ia = _isCleanPlatform() ? null
+                      : buildIntentAnswer({ intent: sc.intent, intent_class: sc.intent_class,
+                          constraint_iso: [...constraintIsoSet], resolution_gap: replay && replay.resolution_gap }, executed, fullByEntry);
+                    return _ia ? { intent_answer: _ia } : {}; })(),
         // r-next-recipe (2026-07-26): the second call is where habit forms —
         // every execution suggests ONE contextual follow-up (Perplexity/Grok
         // converged ask). Static intent_class→recipe map; measurable because
