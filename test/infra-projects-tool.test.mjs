@@ -141,7 +141,8 @@ describe('get_infra_projects', () => {
   });
 
   it('is advertised with exactly get_power_pipeline\'s access tag', async () => {
-    const r = await rpc('tools/list', {});
+    // The canonical catalog: the wire list drops the _meta mirror (lib/list-slim.mjs) and keeps annotations.
+    const r = await S._buildToolsListResult(null);
     const byName = Object.fromEntries((r.tools || []).map((t) => [t.name, t]));
     expect(byName.get_infra_projects, 'get_infra_projects is not in tools/list').toBeTruthy();
     const tag = (n) => JSON.stringify(byName[n]._meta['cloud.dchub/access'])
@@ -168,7 +169,8 @@ describe('get_infra_projects', () => {
 // contradicting it silently. Lift both together when the review closes.
 describe('get_infra_projects tool text (main catalog)', () => {
   it('names the five ISOs, says what is NOT covered, and no longer claims Texas only', async () => {
-    const r = await rpc('tools/list', {});
+    // Canonical text: the wire copy is cut at SLIM_DESC_MAX and this note sits past it.
+    const r = await S._buildToolsListResult(null);
     const t = (r.tools || []).find((x) => x.name === 'get_infra_projects');
     expect(t, 'get_infra_projects is not advertised').toBeTruthy();
     const d = t.description;

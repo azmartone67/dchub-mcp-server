@@ -18,6 +18,7 @@ test/anon-overcap-prose-leaks.test.mjs
 test/anon-seat-fence.test.mjs
 test/anon-top-tools-snapshot.test.mjs
 test/answer-blocks-profile-gate.test.mjs
+test/answer-blocks-stateless.test.mjs
 test/arg-aliases.test.mjs
 test/arg-error-is-not-a-metered-answer.test.mjs
 test/as-of-record-scope.test.mjs
@@ -246,6 +247,7 @@ test/late-key.test.mjs
 test/leaf-catchment.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
+test/list-slim.test.mjs
 test/list-transactions-free-values.test.mjs
 test/listing-canon.test.mjs
 test/listing-copy.test.mjs

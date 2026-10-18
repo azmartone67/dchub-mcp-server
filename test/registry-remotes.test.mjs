@@ -33,8 +33,8 @@ describe('server.json remotes', () => {
     expect(SJ.remotes).toEqual(registryRemotes());
   });
 
-  it('the allowlist is registry + claude + grok, cascade path first', () => {
-    expect(REGISTRY_REMOTE_PATHS).toEqual(['/mcp/registry', '/mcp/claude', '/mcp/grok']);
+  it('the allowlist is registry + claude + grok + oauth, cascade path first', () => {
+    expect(REGISTRY_REMOTE_PATHS).toEqual(['/mcp/registry', '/mcp/claude', '/mcp/grok', '/mcp/oauth']);
     expect(SJ.remotes[0].url).toBe('https://dchub.cloud/mcp/registry');
   });
 

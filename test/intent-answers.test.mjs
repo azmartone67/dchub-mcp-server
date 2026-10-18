@@ -92,6 +92,58 @@ describe('market check', () => {
   });
 });
 
+describe('the Source line never reads fresher than the answer (live 2026-10-18)', () => {
+  // power timing: the grid read is dated 2026-10-18T03:00Z, the queue under it 2026-08-31.
+  const gridFresh = step('get_grid_intelligence', { iso: 'ERCOT' }, {
+    iso: 'ERCOT', as_of: '2026-10-18T03:00:00Z', citation: { as_of: '2026-10-18T03:00:00Z', cite_as: 'DC Hub (dchub.cloud), as of 2026-10-18T03:00Z' },
+    cite_as: 'DC Hub (dchub.cloud) as of 2026-10-18T03:00Z', taste: { band: { constraint: 'BUILD' } } });
+  const dayOf = (src) => (/as of (\d{4}-\d{2}-\d{2})/.exec(src || '') || [])[1] || null;
+
+  it('a stale queue under a fresh grid read: the line carries the queue date, not the grid date', () => {
+    const a = buildIntentAnswer(ctx('how soon can I get 100 MW of power in ERCOT', 'capacity_search', { constraint_iso: ['ERCOT'] }),
+      [retire, queue('2026-08-31'), gridFresh, skipped], null, NOW);
+    expect(a.as_of).toBe('2026-08-31');
+    expect(a.source).toContain('as of 2026-08-31');
+    expect(a.source).not.toContain('2026-10-18');
+  });
+  it('invariant: whatever the mix, the Source date is never later than as_of', () => {
+    const mixes = [
+      [retire, queue('2026-08-31'), gridFresh, skipped],
+      [queue('2026-10-17'), gridFresh],
+      [gridFresh, queue('2026-09-30')],
+      [dcpi('columbus-oh', 'BUILD', 71.2), gridFresh, queue('2026-08-31')],
+    ];
+    for (const ex of mixes) {
+      for (const q of ['how soon can I get 100 MW of power in ERCOT', 'is Columbus a good market for a data center']) {
+        const cls = q.startsWith('is ') ? 'market_ranking' : 'capacity_search';
+        const a = buildIntentAnswer(ctx(q, cls, { constraint_iso: ['ERCOT'] }), ex, null, NOW);
+        if (!a) continue;
+        const d = dayOf(a.source);
+        if (d && a.as_of) expect(d <= a.as_of.slice(0, 10), `${q} ${a.source} vs ${a.as_of}`).toBe(true);
+      }
+    }
+  });
+  it('a tie on the oldest day keeps the line on its own step (the verdict page), not the first dated step', () => {
+    const gridSameDay = step('get_grid_intelligence', { iso: 'PJM' }, { iso: 'PJM', citation: { as_of: '2026-10-17' }, taste: { band: { constraint: 'BUILD' } } });
+    const a = buildIntentAnswer(ctx('is Columbus a good market for a data center', 'market_ranking'),
+      [gridSameDay, dcpi('columbus-oh', 'BUILD', 71.2)], null, NOW);
+    expect(a.source).toContain('dchub.cloud/markets/columbus-oh');
+  });
+  it('a queue dated only in freshness_by_iso still pulls the line off a fresher step', () => {
+    const q = step('get_refined_queue', { iso: 'ERCOT' }, { count_total_matching: 10, freshness_by_iso: { ERCOT: { source_as_of: '2026-08-31' } }, results: [] });
+    const a = buildIntentAnswer(ctx('how soon can I get 100 MW of power in ERCOT', 'capacity_search', { constraint_iso: ['ERCOT'] }),
+      [q, gridFresh, skipped], null, NOW);
+    expect(a.as_of).toBe('2026-08-31');
+    expect(a.source).not.toContain('2026-10-18');
+  });
+  it('when the answer is as fresh as its line, the line is unchanged (market check keeps its DCPI page and date)', () => {
+    const a = buildIntentAnswer(ctx('is Columbus a good market for a data center', 'market_ranking'),
+      [dcpi('columbus-oh', 'BUILD', 71.2)], null, NOW);
+    expect(a.source).toContain('dchub.cloud/markets/columbus-oh');
+    expect(a.source).toContain('as of 2026-10-17');
+  });
+});
+
 describe('relay + safety', () => {
   const base = { structuredContent: { human_url: 'https://dchub.cloud/upgrade/h/abc', human_message: 'm', intent_answer: { kind: 'siting', relay: null, source: 'Source: DC Hub (dchub.cloud)' } } };
   it('copies the existing link, keeps source last', () => {

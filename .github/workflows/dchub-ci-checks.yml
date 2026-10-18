@@ -27,9 +27,11 @@ jobs:
     #   mcp#1024, whose files never touch the gas tools. On a pull_request a
     #   failure is reported (red steps and annotations in the run) but the job
     #   concludes success, so the required `dchub-checks` context cannot be held
-    #   hostage by production. push-to-main and the nightly schedule stay STRICT:
+    #   hostage by production. The flag is on the STEP, not the job: a job-level
+    #   continue-on-error keeps the workflow run green but GitHub still records the
+    #   job's check run as failed, and a failed required context blocks the merge
+    #   (seen on mcp#1032, 2026-10-18). push-to-main and the nightly schedule stay STRICT:
     #   that is where live-surface drift is supposed to turn red.
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,6 +45,7 @@ jobs:
         run: pip install requests cryptography
 
       - name: Run DC Hub CI checks
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         env:
           X_API_KEY: ${{ secrets.DC_HUB_API_KEY }}
           # Web Bot Auth: scripts/web_bot_auth.py signs this step's requests to
