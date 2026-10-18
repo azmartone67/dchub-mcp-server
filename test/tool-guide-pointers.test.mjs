@@ -59,3 +59,21 @@ describe('tool guide pointers', () => {
     for (const t of await wireTools('/mcp/chatgpt')) expect(t.description, t.name).not.toContain('dchub://tool-guides/');
   });
 });
+
+describe('annotations trim (P1-6)', () => {
+  it('the wire drops the repeated upgrade_relay sentence but keeps the access tags and links', async () => {
+    const canon = new Map((await S._buildToolsListResult(null)).tools.map((t) => [t.name, t]));
+    const wire = await wireTools();
+    expect([...canon.values()].filter((t) => t.annotations.upgrade_relay).length).toBeGreaterThan(20);
+    for (const t of wire) {
+      const c = canon.get(t.name).annotations;
+      expect(t.annotations, t.name).not.toHaveProperty('upgrade_relay');
+      expect(t.annotations.pricing_url, t.name).toBe(c.pricing_url);
+      expect(t.annotations.connect_url, t.name).toBe(c.connect_url);
+      expect(t.annotations.access, t.name).toBe(c.access);
+    }
+  });
+  it('the frozen /mcp/chatgpt catalog is not trimmed', async () => {
+    for (const t of await wireTools('/mcp/chatgpt')) expect(JSON.stringify(t.annotations || {}), t.name).not.toMatch(/upgrade_relay/);
+  });
+});
