@@ -223,6 +223,26 @@ describe('an empty result must say WHICH kind of empty it is', () => {
     expect(sc.nearest_published_markets[0].distance_km).toBeGreaterThan(0);
     expect(sc.no_match_reason).toBeUndefined();
   });
+
+  // Grok 2026-10-18 P2-13: Phoenix read "0 feeders" and was taken as "no capacity".
+  it('not covered: the HEADLINE and coverage_status say so, not just no_data_reason', async () => {
+    routes.feeders = { feeders: [], count: 0, limit: 4000 };
+    const { sc } = await call({ lat: 33.45, lon: -112.07 });
+    expect(sc.coverage_status).toBe('utility_not_covered');
+    expect(sc.headline).toMatch(/^Utility not covered/);
+    expect(sc.headline).toMatch(/not zero available capacity/);
+    expect(sc.headline).not.toMatch(/No published feeder hosting capacity matched/);
+  });
+  it('covered but filtered out: coverage_status says covered_no_match and the headline is untouched', async () => {
+    const { sc } = await call({ lat: 41.73, lon: -71.28, capacity_type: 'load' });
+    expect(sc.coverage_status).toBe('covered_no_match');
+    expect(sc.headline).not.toMatch(/Utility not covered/);
+  });
+  it('a covered area with feeders says covered', async () => {
+    const { sc } = await call({ lat: 41.73, lon: -71.28 });
+    expect(sc.coverage_status).toBe('covered');
+    expect(sc.headline).not.toMatch(/Utility not covered/);
+  });
 });
 
 describe('modes + refusals', () => {
