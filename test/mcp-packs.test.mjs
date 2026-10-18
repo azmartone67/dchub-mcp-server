@@ -55,6 +55,7 @@ const EXPECTED = {
   fiber: 11,
   gas: 10,
   deals: 16,
+  power: 15,   // R2 2026-10-18: DC Hub Power & Grid, 11 listed + the 4-tool spine
 };
 
 async function listTools(path) {
