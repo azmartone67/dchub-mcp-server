@@ -204,6 +204,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
+import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
@@ -18528,6 +18529,48 @@ export function _execInjectGeo(tool, args, sig) {
   }
   return set;
 }
+// P0-1 (Grok 2026-10-18): a state-less tool (retirement headroom, refined queue) hands back rows
+// from everywhere. When the intent resolved to one state, cut them to it and say so on the step.
+// The state an intent is about: the planner's own state/place signal, else the ONE city the intent
+// names (its _CITY_ISO_META slug ends in the state: phoenix-az, dallas-tx). Two cities in two states
+// (a comparison) resolve to nothing: a cut to one of them would drop the other's rows.
+// Zod strips an undeclared argument before the handler, and find_sites must not DECLARE target_mw (the
+// /mcp/chatgpt catalog is frozen and tools/list is size-guarded). The call-time hook below sees the raw
+// body first and parks the figure here for the handler to report as unapplied.
+const _sitesArgHint = new AsyncLocalStorage();
+export function _sitesRawHint(body) {
+  const p = body && body.method === 'tools/call' && body.params;
+  if (!p || p.name !== 'find_sites' || !p.arguments || typeof p.arguments !== 'object') return null;
+  const raw = p.arguments.target_mw != null ? p.arguments.target_mw : p.arguments.capacity_mw;
+  const n = typeof raw === 'number' ? raw : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN);
+  return Number.isFinite(n) ? { target_mw: n } : null;
+}
+export function _execIntentState(intentText, sig) {
+  const direct = sig && (sig.state || sig.stateFromPlace);
+  if (direct) return String(direct).toUpperCase();
+  const t = String(intentText || '').toLowerCase();
+  const states = new Set();
+  for (const [city, meta] of Object.entries(_CITY_ISO_META)) {
+    if (!_execCityHit(city, meta, t)) continue;
+    const m = /-([a-z]{2})$/.exec(String(meta.slug || ''));
+    if (m) states.add(m[1].toUpperCase()); else return null;
+  }
+  return states.size === 1 ? [...states][0] : null;
+}
+export function _execScopeOut(tool, out, sig, intentText) {
+  const st = _execIntentState(intentText, sig);
+  if (!st || !out || !(out.ok || out.gated)) return null;
+  let scope = null;
+  if (out.result && typeof out.result === 'object') {
+    const r = _cutResultToState(tool, out.result, st);
+    if (r.scope) { out.result = r.result; scope = r.scope; }
+  }
+  if (out.full && typeof out.full === 'object') {
+    const r = _cutResultToState(tool, out.full, st);
+    if (r.scope) { out.full = r.result; scope = scope || r.scope; }
+  }
+  return scope;
+}
 export const _EXEC_ISO_ARG = { get_grid_intelligence: 'iso',
   get_interconnection_queue: 'iso', get_refined_queue: 'iso',
   get_retirement_headroom: 'region_iso' };
@@ -19915,6 +19958,11 @@ export function _planQuery(intent, context) {
   try {
     const cp = _capacityProcurementStep(text, d, seq.map((x) => x.tool));
     if (cp) seq.push({ ...cp, step: seq.length + 1 });
+  } catch (_e) { /* routing must never throw */ }
+  // P0-1 (Grok 2026-10-18): a land / site intent with a resolved geography gets the land step.
+  try {
+    const ls = top.cls.id === 'capacity_search' ? _landSiteStep(text, { ...d, state: _execIntentState(text, d) || d.state }, seq.map((x) => x.tool)) : null;
+    if (ls) seq.push({ ...ls, step: seq.length + 1 });
   } catch (_e) { /* routing must never throw */ }
   // ★★★2026-08-19 [margin<1 => run both classes]. The router ALREADY detects a
   //  two-class question: when the top two scores are within 1 point it docks
@@ -25903,12 +25951,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
             if (isoKey && constraintIso && _EXEC_IS_RTO(constraintIso)
                 && args[isoKey] == null) args[isoKey] = constraintIso;
             const geo = _execInjectGeo(s.tool, args, _sig);
-            return _execLoopbackCall(s.tool, args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS)).then((out) => ({ s, args, out, geo }));
+            return _execLoopbackCall(s.tool, args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS)).then((out) => ({ s, args, out, geo, scope: _execScopeOut(s.tool, out, _sig, a && a.intent) }));
           }));
-          for (const { s, args, out, geo } of results) {
+          for (const { s, args, out, geo, scope } of results) {
             calls += 1;
             const entry = { step: s.step, tool: s.tool, args,
                             ...(geo && geo.length ? { geo_injected: geo } : {}),
+                            ...(scope ? { state_scope: scope } : {}),
                             status: out.ok ? 'executed'
                                   : (out.gated ? 'gated_preview'
                                   : (out.timed_out ? 'timed_out' : 'failed')),
@@ -25975,9 +26024,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           // and because this retry is sequential AFTER the parallel wave, its budget
           // STACKED on the wave's rather than sharing it.
           const out2 = await _execLoopbackCall(s.tool, r2.args, c, _execStepBudget(Date.now() - t0, DEADLINE_MS));
+          const scope2 = _execScopeOut(s.tool, out2, _sig, a && a.intent);
           calls += 1;
           const entry2 = { step: s.step, tool: s.tool, args: r2.args,
                            ...(geo2.length ? { geo_injected: geo2 } : {}),
+                           ...(scope2 ? { state_scope: scope2 } : {}),
                            status: out2.ok ? 'executed'
                                  : (out2.gated ? 'gated_preview'
                                  : (out2.timed_out ? 'timed_out' : 'failed')),
@@ -28239,8 +28290,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       limit: LIMIT },
     async (a) => withFreshness(
       { content: [{ type: 'text',
-        text: JSON.stringify(await _findSitesForCaller(
-          await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx())) }] },
+        text: JSON.stringify(_annotateFindSites(await _findSitesForCaller(
+          await callAPI('/api/v1/sites/find', _foldCoordArgs(a)), getCtx()), _sitesArgHint.getStore() || {})) }] },
       'find_sites'));
 
   trackedTool(srv, 'analyze_site', 'Call when the user has one location (lat/lon, or a market name for a market-level read) and asks if it suits a data center. Returns a 0-100 composite, verdict, power/gas/fiber/market/risk sub-scores, nearby infrastructure and power cost; capacity_mw adds a capacity_context block and does NOT move overall_score. Keyless returns the verdict band, the power band, the weakest factor and counts; a free key adds factor bands, substation distance bands and a few free full site reports each month; other scores and figures need a paid DC Hub plan. Ex: "Score 33.45,-112.07 for 100 MW."',
@@ -31469,6 +31520,8 @@ app.post(MCP_PATHS, async (req, res) => {
       const _am = !_coreProfile && req.body && req.body.params
         && Object.prototype.hasOwnProperty.call(ARG_ALIASES, req.body.params.name)
         ? ARG_ALIASES[req.body.params.name] : null;
+      const _sh = _sitesRawHint(req.body);
+      if (_sh) _sitesArgHint.enterWith(_sh);
       const _args = req.body && req.body.params && req.body.params.arguments;
       if (_am && _args && typeof _args === 'object' && !Array.isArray(_args)) {
         for (const [guess, real] of Object.entries(_am)) {
