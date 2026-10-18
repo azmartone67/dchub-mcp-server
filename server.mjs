@@ -209,6 +209,7 @@ import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEma
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
+import { hasReadGatedFilter, dropUnreadableFilters } from './lib/readable-filters.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
@@ -20876,6 +20877,19 @@ function trackedTool(srv, name, description, schema, handler) {
       // short-circuit is untouched).
       const _confirmedPro = (_gateTier === 'paid' && PRO_ONLY_TOOLS.has(name))
         ? await _paidKeyIsProOrAbove(c.api_key) : undefined;
+      // Capacity and facility-tier filters on search_facilities are applied only for a caller
+      // whose answer carries those fields (lib/readable-filters.mjs). The backend answers this
+      // server's own credential at full depth, so a filter the caller supplies would otherwise
+      // narrow the result by a field the output mask then hides. Normalised on the ORIGINAL
+      // args (several branches below call handler(args) directly), once, before the gate.
+      // Same paid-call test as the anonymous wall: paid depth, a live pack balance, or a
+      // payment on this call; the lookup runs only when such a filter is present.
+      if (hasReadGatedFilter(name, args)) {
+        let _canRead = _isPaidDepthTier(_gateTier);
+        if (!_canRead) { try { _canRead = await _anonWallPaidCall(c, extra, _mppArgs); } catch (_) { _canRead = false; } }
+        const _ignored = dropUnreadableFilters(name, args, _canRead);
+        if (_ignored.length) { try { c._params_not_applied = _ignored; } catch (_) { /* ctx is best-effort */ } }
+      }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
@@ -26304,7 +26318,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // silently ignored. Map it through (callAPI drops undefined values).
       const p = { ...a };
       if (p.query !== undefined) { p.q = p.query; delete p.query; }
-      return { content: [{ type: 'text', text: _markUnverifiedText(await callAPI('/api/v1/facilities', p)) }] };
+      const _out = await callAPI('/api/v1/facilities', p);
+      // Say which filters were not applied (see the normalisation in trackedTool): a silent
+      // drop would read as "no facility matched".
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
+      if (_ig && _ig.length && _out && typeof _out === 'object' && !Array.isArray(_out)) {
+        _out._params_not_applied = _ig;
+        _out._params_note = 'Capacity and facility-tier filters apply to callers who can read those fields; they were not applied to this search.';
+      }
+      return { content: [{ type: 'text', text: _markUnverifiedText(_out) }] };
     });
 
   trackedTool(srv, 'get_facility', 'Full metadata for one facility — name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers "who operates this data center and how big is it", "how many fiber carriers are in that building". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',

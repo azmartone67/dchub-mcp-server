@@ -410,6 +410,7 @@ test/schema-dialect-neutral.test.mjs
 test/schema-optionality.test.mjs
 test/scoreboard-feed-timeout.test.mjs
 test/scoreboard-freshness.test.mjs
+test/search-facilities-unreadable-filters.test.mjs
 test/selection-triggers.test.mjs
 test/server-json-route.test.mjs
 test/session-release-covers-every-map.test.mjs
