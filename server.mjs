@@ -32509,6 +32509,7 @@ app.post(MCP_PATHS, async (req, res) => {
         profile: _coreLoopback ? CORE_PROFILE : (_claudeLoopback ? CLAUDE_PROFILE : _dirProfile),
         ...(_legacyWallLoopback ? { legacy_wall_copy: true } : {}),
         auth_source: _authChannel, auth_oauth: _bearerResolved,
+        path: _normPath(req),   // _answerBlocksAllowed() reads this: a stateless call without it got NO ranked/intent answer
         auth_refused: _authRefusal(_keyPresented, apiKey, validation),   // r-auth-refused
         auth_unverified: _authUnverified(_keyPresented, validation),   // r-auth-unverified
         auth_demoted: _authDemoted(_keyPresented, validation),   // r-auth-demoted
