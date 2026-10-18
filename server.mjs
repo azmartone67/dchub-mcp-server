@@ -27927,12 +27927,17 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         attribution: 'Cite as: DC Hub (dchub.cloud), from utility-published hosting-capacity GIS.',
       };
 
+      // P2-13 (Grok 2026-10-18, Phoenix = 0 feeders): say which kind of answer this is in a field a reader
+      // cannot miss, not only in no_data_reason further down.
+      out.coverage_status = feeders.length ? 'covered'
+        : (allFeeders.length ? 'covered_no_match' : 'utility_not_covered');
       // An empty result must never read as "no capacity here" when the real
       // answer is "no utility publishes here" — name which one it is.
       if (!feeders.length) {
         if (allFeeders.length) {
           out.no_match_reason = `This area HAS published hosting capacity (${allFeeders.length} distinct feeders), but none matched your filters (${[wantType ? `capacity_type=${wantType}` : null, minMw != null ? `min_mw=${minMw}` : null].filter(Boolean).join(', ')}). Available types here: ${[...new Set(allFeeders.map((f) => f.capacity_type))].join(', ')}.`;
         } else {
+          out.headline = 'Utility not covered: no utility publishes feeder hosting-capacity GIS for this area. That is a coverage gap, not zero available capacity.';
           out.no_data_reason = 'No utility publishes hosting-capacity GIS for this area. That is a COVERAGE gap, not a finding of zero available capacity — do not report it as "no capacity".';
           if (mode === 'point') {
             await loadCoverage();
