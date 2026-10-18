@@ -27486,6 +27486,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           existing_assets: 'get_infrastructure, get_grid_intelligence',
         },
       };
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
+      if (_ig && _ig.length) { out._params_not_applied = _ig; out._params_note = 'min_capacity filters on pipeline capacity, which this tier does not read; it was not applied.'; }
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
@@ -27543,6 +27545,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         source: 'DC Hub — GEM Global Integrated Power Tracker (CC-BY, dchub.cloud)',
         largest_units: top,
       };
+      let _ig = null; try { _ig = getCtx()._params_not_applied; } catch (_) { _ig = null; }
+      if (_ig && _ig.length) { out._params_not_applied = _ig; out._params_note = 'min_mw filters on unit capacity, which this tier does not read; it was not applied.'; }
       return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }], structuredContent: out };
     });
 
