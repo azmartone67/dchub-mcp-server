@@ -252,13 +252,9 @@ describe('routing_hint reaches a real plan_query response', () => {
   }, 30000);
 
   it('the hint is declared in the tool schema, so an agent can find it', async () => {
-    const res = await fetch(`http://127.0.0.1:${PORT}/mcp`, { method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) });
-    const raw = await res.text();
-    const j = raw.includes('data: ')
-      ? raw.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('') : raw;
-    const t = JSON.parse(j).result.tools.find((x) => x.name === 'plan_query');
+    // The registered (canonical) schema declares the field's inner shape; the wire list
+    // advertises top-level keys only (lib/list-slim.mjs), so the nested check reads canonical.
+    const t = (await S._buildToolsListResult(null)).tools.find((x) => x.name === 'plan_query');
     expect(Object.keys(t.outputSchema.properties)).toContain('routing_hint');
     // and the new field is declared INSIDE it — an undeclared field is one an
     // agent can only find by accident. Optional fields render as

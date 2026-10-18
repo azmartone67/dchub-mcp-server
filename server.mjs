@@ -96,6 +96,7 @@ import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mpp
 // Web Bot Auth: sign this process's own requests to dchub.cloud (no-op without
 // WEB_BOT_AUTH_PRIVATE_JWK). See lib/web-bot-auth.mjs.
 import './lib/web-bot-auth-preload.mjs';
+import { slimToolsList as _slimToolsList, slimTool as _slimTool } from './lib/list-slim.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
 import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog } from './lib/log-redact.mjs';
@@ -15673,7 +15674,7 @@ const _TOOLSLIST_TTL_MS = 10 * 60 * 1000;    // SWR window (tuner cadence is 30 
 async function _buildToolsListResult(descOverrides) {
   const t0 = Date.now();
   const [clientT, serverT] = InMemoryTransport.createLinkedPair();
-  const srv = createServer(descOverrides);
+  const srv = createServer(descOverrides, undefined, undefined, { canonicalList: true });
   const probe = new McpProbeClient({ name: 'dchub-toolslist-cache', version: SERVER_VERSION });
   await srv.connect(serverT);
   await probe.connect(clientT);
@@ -30542,6 +30543,9 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
       }
       if (res && Array.isArray(res.tools)) res.tools = _claimKeyFirst(res.tools);   // claim_free_key first (see above)
+      // R1 (2026-10-18): the wire list is slimmed (lib/list-slim.mjs); the cache probe asks for the
+      // canonical list instead, so the directory/pack projections keep reading full schemas.
+      if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile && process.env.DCHUB_LIST_SLIM_DISABLE !== '1') res.tools = res.tools.map(_slimTool);
       return res;
     });
   } else {
@@ -32418,7 +32422,9 @@ app.post(MCP_PATHS, async (req, res) => {
         try {
           const _cachedList = await _toolsListCached(platform, _descOverrides);
           if (_cachedList) {
-            return _writeRpcResult(req, res, body.id, _pack ? _packFilter(_cachedList, _pack) : _cachedList);
+            // R1: directory and core profiles keep their frozen projections; every other wire list is slimmed.
+            const _slim = (_dirProfile || _coreProfile || process.env.DCHUB_LIST_SLIM_DISABLE === '1') ? ((x) => x) : _slimToolsList;
+            return _writeRpcResult(req, res, body.id, _pack ? _slim(_packFilter(_cachedList, _pack)) : _slim(_cachedList));
           }
           if (_pack) throw new Error('cache returned no result');
         } catch (e) {
