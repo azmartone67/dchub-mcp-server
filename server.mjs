@@ -96,7 +96,7 @@ import { mppEnabled, isMppTool, mppCredential, mppChallengeError, mppVerify, mpp
 // Web Bot Auth: sign this process's own requests to dchub.cloud (no-op without
 // WEB_BOT_AUTH_PRIVATE_JWK). See lib/web-bot-auth.mjs.
 import './lib/web-bot-auth-preload.mjs';
-import { slimToolsList as _slimToolsList, slimTool as _slimTool } from './lib/list-slim.mjs';
+import { slimToolsList as _slimToolsList, slimTool as _slimTool, TOOL_GUIDE_TOOLS, toolGuideUri } from './lib/list-slim.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
 import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog } from './lib/log-redact.mjs';
@@ -30457,6 +30457,18 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
           '6. **hyperscaler_activity** — hyperscaler_deals + list_transactions + deal_autopsy, all parallel.', '',
           'Treat any factor returned as unavailable as unknown — never estimate. Cite "DC Hub (dchub.cloud)".'].join('\n');
       });
+  // P1-6: the wire tools/list keeps ~1.3 KB per description (lib/list-slim.mjs); the full registered text
+  // of the listed tools is read here, live from the registration, so the pointer never drifts.
+  for (const _gName of TOOL_GUIDE_TOOLS) {
+    _RD(`tool-guide-${_gName.replace(/_/g, '-')}`, toolGuideUri(_gName), `Full guide: ${_gName}`,
+        `The complete, unabridged description of the ${_gName} tool (the tools/list copy is shortened).`,
+        'text/markdown',
+        async () => {
+          const reg = srv._registeredTools && srv._registeredTools[_gName];
+          const text = reg && typeof reg.description === 'string' ? reg.description.replace(/\s+/g, ' ').trim() : '';
+          return `# ${_gName}\n\n${text || '(description unavailable)'}\n`;
+        });
+  }
   _RD('manifest', 'dchub://manifest', 'DC Hub MCP manifest',
       'The machine-readable server manifest — proxies https://dchub.cloud/.well-known/mcp.json at read time.',
       'application/json',
