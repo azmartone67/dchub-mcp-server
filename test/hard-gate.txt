@@ -324,6 +324,7 @@ test/pc-arm-tag-visible-link.test.mjs
 test/peeringdb-licence-g4.test.mjs
 test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
+test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
