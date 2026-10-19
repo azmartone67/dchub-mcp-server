@@ -18,25 +18,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -62,25 +44,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -121,25 +85,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -210,23 +156,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "composite_score": {},
         "overall_score": {},
         "verdict": {},
@@ -269,25 +198,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -309,25 +220,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -358,25 +251,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -397,25 +272,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -448,25 +305,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -490,25 +329,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -529,25 +350,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -565,25 +368,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -640,25 +425,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -676,25 +443,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -715,25 +464,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -772,25 +503,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -858,25 +571,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -930,25 +625,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -961,25 +638,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -992,25 +651,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1034,25 +675,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1090,25 +713,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1146,25 +751,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1182,25 +769,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1234,25 +803,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1287,23 +838,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "scope": {},
         "filter": {},
@@ -1404,23 +938,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "data": {},
         "cite_as": {},
@@ -1452,25 +969,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1509,23 +1008,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "type": {},
         "features": {},
         "total": {}
@@ -1567,25 +1049,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1610,25 +1074,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1652,25 +1098,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1692,25 +1120,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1754,25 +1164,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1806,25 +1198,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -1897,23 +1271,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "ok": {},
         "iso": {},
         "iso_name": {},
@@ -1930,7 +1287,7 @@
   },
   {
     "name": "get_grid_scoreboard",
-    "description": "Use this whenever the user asks how grids compare right now: demand, fuel mix or renewable share. GLOBAL grid scoreboard — 9 US grid operators (the 7 US ISOs PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, plus BPA and TVA) + Great Britain (NESO) + the European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E; the exact live-vs-configured count is in counts_basis.eu_zones_live / eu_zones_configured, measured per call rather than asserted here) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side on each feed's LATEST PUBLISHED reading: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. ★FRESHNESS IS NOT UNIFORM and every row says so: each carries mix_period, mix_age_hours and freshness_basis. The US rows come from EIA hourly RTO, which publishes the FUEL-TYPE BREAKDOWN several hours behind aggregate demand — an overnight mix reading is routinely 18-24h old (it will show near-zero solar) while demand on the same row is ~1-2h old. Answers \"which grid is cleanest right now\", \"how is ERCOT doing at this moment\". Try: get_grid_scoreboard.",
+    "description": "Use this whenever the user asks how grids compare right now: demand, fuel mix or renewable share. GLOBAL grid scoreboard — 9 US grid operators (the 7 US ISOs PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE, plus BPA and TVA) + Great Britain (NESO) + the European bidding zones (Germany, France, Netherlands, Italy/Milan, Spain, Poland, Switzerland, Portugal, the Nordics + Central/Eastern Europe — via ENTSO-E; the exact live-vs-configured count is in counts_basis.eu_zones_live / eu_zones_configured, measured per call rather than asserted here) + Taiwan (Taipower) + Japan (OCCTO areas) + South Korea (KPX) + Brazil SIN (ONS), ranked side-by-side on each feed's LATEST PUBLISHED reading: renewable share %, gas share %, full fuel mix (gas/nuclear/coal/wind/solar/hydro MW), and demand. ★FRESHNESS IS NOT UNIFORM and every row says so: each carries mix_period, mix_age_hours and freshness_basis. Answers \"which grid is cleanest right now\", \"how is ERCOT doing at this moment\". Try: get_grid_scoreboard. Full guide: read resource dchub://tool-guides/get_grid_scoreboard",
     "inputSchema": {
       "type": "object",
       "properties": {}
@@ -1939,23 +1296,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "ok": {},
         "count": {},
         "zones_ranked": {},
@@ -2032,25 +1372,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2111,25 +1433,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2181,25 +1485,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2212,25 +1498,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2257,23 +1525,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "iso": {},
         "as_of": {},
         "project_count": {},
@@ -2319,23 +1570,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "ok": {},
         "iso": {},
         "tier": {},
@@ -2369,25 +1603,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2409,23 +1625,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "narrative": {},
         "market_slug": {},
         "market_name": {},
@@ -2491,23 +1690,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "market": {},
         "stats": {},
@@ -2534,25 +1716,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2597,23 +1761,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "articles": {},
         "data": {},
@@ -2661,25 +1808,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2701,25 +1830,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2766,23 +1877,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "pipeline": {},
         "data": {},
@@ -2822,25 +1916,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2876,25 +1952,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -2952,25 +2010,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3021,23 +2061,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "renewable_installations": {},
         "dc_industry_ppas": {},
@@ -3092,25 +2115,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3135,25 +2140,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3197,25 +2184,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3234,23 +2203,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "status": {},
         "state": {},
         "data": {},
@@ -3308,23 +2260,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "ok": {},
         "success": {},
         "state": {},
@@ -3363,25 +2298,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3402,23 +2319,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "feed_name": {},
         "deals": {},
         "result_count": {},
@@ -3445,25 +2345,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3476,25 +2358,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3553,23 +2417,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "count": {},
         "total_count": {},
@@ -3622,30 +2469,12 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
     "name": "plan_query",
-    "description": "INSPECT-ONLY — returns the plan WITHOUT running it. For a real multi-step DC Hub question call `execute_plan(intent=\"...\")` instead: it uses the SAME deterministic no-LLM planner and then RUNS the sequence server-side, returning the answers in one envelope. Reach for plan_query only to review, log, diff or audit a plan before executing it yourself. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves), execution_strategy.parallel_groups, execution_estimate {estimated_calls, estimated_latency_ms, parallelizable}, alternatives (each with when + rejected_because), coverage_notes, matched_classes} plus a versioned `replay` (schema_version 1): planner_version, decisions:[{id, step, kind, status, decision, rationale, decision_confidence, depends_on}], rejected:[{id, tool, reason}], execution_graph:{waves, parallel_groups} — auditable and machine-readable, safe to log and diff across versions.",
+    "description": "INSPECT-ONLY — returns the plan WITHOUT running it. For a real multi-step DC Hub question call `execute_plan(intent=\"...\")` instead: it uses the SAME deterministic no-LLM planner and then RUNS the sequence server-side, returning the answers in one envelope. Reach for plan_query only to review, log, diff or audit a plan before executing it yourself. Deterministic keyword routing over the tool registry — no LLM, no network, same intent always returns the same plan (free). Returns _entity=query_plan {best_tool, intent_confidence + workflow_confidence (dual 0-1: question-read vs executability), reason, planner_rationale, recommended_sequence:[{step, tool, depends_on, estimated_calls, why, args_hint}], execution_waves (steps grouped into concurrency waves), execution_strategy.parallel_groups, execution_estimate {estimated_calls, estimated_latency_ms, parallelizable}, alternatives (each with when + rejected_because), coverage_notes, matched_classes} plus a versioned `replay` (schema_version 1): planner_version, decisions:[{id, step, kind, status, decision, rationale, decision_confidence, depends_on}], rejected:[{id, tool, reason}], execution_graph:{waves, parallel_groups} — auditable and machine-readable, safe to log and diff… Full guide: read resource dchub://tool-guides/plan_query",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -3665,23 +2494,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "ok": {},
         "intent": {},
         "intent_class": {},
@@ -3734,25 +2546,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3816,23 +2610,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "criteria": {},
         "region": {},
         "results": {},
@@ -3887,25 +2664,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3933,25 +2692,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -3972,25 +2713,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4101,25 +2824,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4203,25 +2908,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4306,25 +2993,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4346,25 +3015,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4418,25 +3069,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4468,25 +3101,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4511,25 +3126,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4550,25 +3147,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4637,23 +3216,6 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        },
         "success": {},
         "count": {},
         "total_matching": {},
@@ -4691,25 +3253,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4739,25 +3283,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4787,25 +3313,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4837,25 +3345,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4896,25 +3386,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -4958,25 +3430,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5032,25 +3486,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5143,25 +3579,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5186,25 +3604,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5229,25 +3629,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5281,25 +3663,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5317,25 +3681,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   },
   {
@@ -5353,25 +3699,7 @@
     "outputSchema": {
       "type": "object",
       "additionalProperties": true,
-      "properties": {
-        "_entity": {
-          "type": "string"
-        },
-        "provenance": {
-          "type": "object"
-        },
-        "quota": {
-          "type": "object"
-        },
-        "citation": {},
-        "site_evaluation_handoff": {},
-        "_return_loop": {
-          "type": "object"
-        },
-        "_front_door": {
-          "type": "object"
-        }
-      }
+      "properties": {}
     }
   }
 ]
