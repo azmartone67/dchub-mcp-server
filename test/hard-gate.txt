@@ -329,6 +329,7 @@ test/persist-config-gemini.test.mjs
 test/persist-config-vscode.test.mjs
 test/pipeline-queue-unreadable-floor.test.mjs
 test/place-name-iso.test.mjs
+test/plan-free-fields.test.mjs
 test/plan-query-retirement-text.test.mjs
 test/plan-query-tier-claims.test.mjs
 test/plan-query.test.mjs

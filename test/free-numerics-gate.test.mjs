@@ -173,8 +173,9 @@ describe.each(Object.keys(CASES))('%s — free tiers get names, verdicts and cou
       if (!p || !K.rows(p)) continue;
       expect(K.kept(p)).toEqual(K.keptWant);
       for (const row of K.rows(p)) {
-        const markers = Object.keys(row).filter((k) => k.endsWith('_in_pro'));
-        expect(markers.length, `${tool} rows carry no _in_pro marker`).toBeGreaterThan(0);
+        // QA B P1 2026-10-19: site_selection_canvas names the withheld field without a plan.
+        const markers = Object.keys(row).filter((k) => k.endsWith(tool === 'site_selection_canvas' ? '_withheld' : '_in_pro'));
+        expect(markers.length, `${tool} rows carry no withheld marker`).toBeGreaterThan(0);
       }
     }
   });
