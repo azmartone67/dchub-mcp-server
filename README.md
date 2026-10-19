@@ -5,21 +5,9 @@
 
 DC Hub returns live data on data center markets, power and grid interconnection, energy prices, fiber and siting. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. Previews need no key; a free key adds a daily allowance of full answers, and some tools need a paid plan ([dchub.cloud/pricing](https://dchub.cloud/pricing)). Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
 
-[![MCP Badge](https://lobehub.com/badge/mcp-full/azmartone67-dchub-mcp-server)](https://lobehub.com/mcp/azmartone67-dchub-mcp-server)
+To start, [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key). Setup for Claude, Cursor, Gemini CLI, VS Code, Cline and others is under [Install](#install) below.
 
-<a href="https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server"><img width="380" height="200" src="https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badge" alt="DC Hub MCP server — Glama" /></a>
-
-**Real-time data-center, power-grid, interconnection-queue, grid-capacity, fiber, natural-gas & hyperscale infrastructure intelligence for AI agents** — live telemetry across PJM, ERCOT, CAISO and every US ISO.
-
-👉 **Try it free in your browser — no signup, no key:** **[dchub.cloud/playground](https://dchub.cloud/playground?ref=registry)** — run live queries against the global facility map, 300+ markets & real-time grids. Then [add the MCP server](https://dchub.cloud/connect) or [grab a free key](https://dchub.cloud/connect#free-key).
-
-One MCP server for facility data, infrastructure and live grid intelligence, in one queryable interface. Built for Claude, Cursor, Gemini CLI, Antigravity, VS Code, Cline, Continue, Windsurf, and any AI assistant doing data center site selection, energy analysis, or market research.
-
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![smithery badge](https://smithery.ai/badge/azmartone67/dchub)](https://smithery.ai/servers/azmartone67/dchub) [![Glama score](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server) [![DC Hub quality](https://dchub.cloud/api/v1/mcp/quality/badge.svg)](https://dchub.cloud/api/v1/mcp/quality) [![Tools](https://img.shields.io/badge/tools-94-blue)](https://dchub.cloud/.well-known/mcp.json) [![Used by](https://img.shields.io/badge/used%20by-Claude%20%C2%B7%20Cursor-green)](https://dchub.cloud/cited-by)
-
-[![Install via Smithery](https://img.shields.io/badge/Smithery-Install-orange)](https://smithery.ai/servers/azmartone67/dchub) [![Install via LobeHub](https://img.shields.io/badge/LobeHub-Install-6C47FF)](https://lobehub.com/mcp/azmartone67-dchub-mcp-server) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub)
-
-> ⭐ **Star this repo** — if DC Hub is useful to your agents, a star helps other builders (and their AI assistants) discover it across the MCP registries. **[→ Star `azmartone67/dchub-mcp-server`](https://github.com/azmartone67/dchub-mcp-server)** &nbsp; [![GitHub stars](https://img.shields.io/github/stars/azmartone67/dchub-mcp-server?style=social)](https://github.com/azmartone67/dchub-mcp-server)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=dchub&config=%7B%22name%22%3A%20%22dchub%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//dchub.cloud/mcp%22%7D) [![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-black?logo=cursor)](https://cursor.com/install-mcp?name=dchub&config=eyJ1cmwiOiAiaHR0cHM6Ly9kY2h1Yi5jbG91ZC9tY3AifQ%3D%3D) [![npm](https://img.shields.io/npm/v/dchub-mcp-server?logo=npm)](https://www.npmjs.com/package/dchub-mcp-server) [![Official MCP Registry](https://img.shields.io/badge/MCP_Registry-cloud.dchub%2Fmcp--server-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub)
 
 ---
 
