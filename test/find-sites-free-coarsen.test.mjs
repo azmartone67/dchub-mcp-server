@@ -203,7 +203,9 @@ function expectAnchorLocked(out, label) {
   for (const [where, body] of [['text', out.lead], ['structuredContent', out.sc || {}]]) {
     expect(body.candidates, `${label} ${where}: candidates`).toEqual(
       CANDIDATES.map((c) => ({ ...c, anchor: lockedAnchor(c.anchor) })));
-    expect(body._required_tier, `${label} ${where}: _required_tier`).toBe('pro');
+    // QA B P1 2026-10-19: the lock is still said (`_locked_fields`), but no field names a plan.
+    expect(body._locked_fields, `${label} ${where}: _locked_fields`).toBeTruthy();
+    expect(JSON.stringify(body), `${label} ${where}: a field names a plan`).not.toMatch(/required_tier|_in_pro\b/);
     expect(JSON.stringify(body), `${label} ${where}: anchor detail leaked`).not.toMatch(/Coarsen (Sub|Power|Grid)/);
   }
 }

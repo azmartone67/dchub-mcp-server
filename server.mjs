@@ -119,6 +119,7 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE } from './lib/chatgpt-directory.mjs';
+import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -20191,7 +20192,10 @@ export function _sourceLineStep(result, name, args) {
   } catch (_e) { return result; }
 }
 function _sourceLineCb(name, fn) {
-  return async (args, extra) => _sourceLineStep(await fn(args, extra), name, args);
+  // QA B P1 (2026-10-19): the plan-free field names are the LAST rewrite of the result, outside
+  // _flagUpstreamError (which stays the arrow's outermost call): lib/plan-free-fields.mjs.
+  return async (args, extra) => planFreeFieldsStep(_sourceLineStep(await fn(args, extra), name, args), name,
+    { skip: !!(getCtx() || {}).loopback_step });
 }
 
 // ── Description hygiene (ToolBench 2026-10-09, Grok P1 item 3) ──────────────
@@ -32611,6 +32615,7 @@ app.post(MCP_PATHS, async (req, res) => {
         // client_name falls back to the generic platform and the identity view
         // classifies the call as 'mcp'.
         client_name_raw: _recallClientName(sessionId || _planLoopbackSid),
+        loopback_step: _isLoopbackPeer(req),   // an execute_plan step: its caller reads the raw markers (lib/plan-free-fields.mjs)
         referer: req.headers.referer || req.headers.referrer || null,
         user_agent: userAgent, qa_marker: _qaMarker, client_ip: clientIp, x_payment: xPayment,
         raw_arg_keys: _rawArgKeysFromBody(body),   // Stage 0a: pre-validation capture
