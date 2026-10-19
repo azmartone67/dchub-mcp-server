@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-16T23:25:00Z",
+  "updated_at": "2026-10-19T17:25:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -418,6 +418,127 @@
       "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub \u2014 Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so"
     },
     {
+      "id": "casdoor-mcp-registry",
+      "name": "Casdoor Public MCP Server Registry",
+      "status": "live",
+      "listing_url": "https://mcp.casdoor.org",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "casdoor/public-mcp-server-registry#8 merged 2026-10-19; DC Hub row (https://dchub.cloud/mcp) in README.md on master and on the rendered site, HTTP 200 confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "hashgraph-awesome-ai-plugins",
+      "name": "HOL awesome-ai-plugins",
+      "status": "live",
+      "listing_url": "https://github.com/hashgraph-online/awesome-ai-plugins#tools--integrations",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "hashgraph-online/awesome-ai-plugins#806 merged 2026-10-16; DC Hub under Tools & Integrations (README L721, 94 tools, https://dchub.cloud/mcp) confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "hol-guard",
+      "name": "HOL Guard MCP contributions",
+      "status": "live",
+      "listing_url": "https://github.com/hashgraph-online/hol-guard/blob/main/contributions/mcp-servers/mcp.dchub.json",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "hashgraph-online/hol-guard#5176 merged 2026-10-19; contribution id mcp.dchub ('DC Hub MCP') on main confirmed 2026-10-19 10:25 MST; no own store page, so the GitHub source file is the listing"
+    },
+    {
+      "id": "milisp-mcp-linker",
+      "name": "milisp mcp-servers (MCP Linker)",
+      "status": "live",
+      "listing_url": "https://github.com/milisp/mcp-servers/blob/main/servers/dchub.json",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "milisp/mcp-servers#3 closed after the maintainer landed the entry in their own commit; servers/dchub.json (io.github.milisp.mcp-linker/dchub, title 'DC Hub') and index.json entry on main confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "eater2-ai-agents-api-library",
+      "name": "AI Agents API Library (eater2)",
+      "status": "live",
+      "listing_url": "https://eater2.github.io/ai_agents_api_library/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "eater2/ai_agents_api_library#5 closed after the maintainer landed the entry; DC Hub row in README.md on main and on the GitHub Pages site (HTTP 200) confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "corpusiq-hermes",
+      "name": "CorpusIQ External MCP Server Catalog",
+      "status": "live",
+      "listing_url": "https://corpusiq.io/docs/hermes/mcp/servers/external",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "CorpusIQ/corpusiq-docs#115 merged 2026-10-19 (corrected DC Hub listing); DC Hub row under Infrastructure/Energy in hermes/mcp/servers/external/index.md and on the rendered docs page (HTTP 200) confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "draggy",
+      "name": "Draggy MCP catalogue",
+      "status": "live",
+      "listing_url": "https://github.com/Lucki74/draggy/blob/main/core/crates/mcp/data/catalogue.json",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "Lucki74/draggy#57 merged 2026-10-18; catalogue entry id 'dchub' / name 'DC Hub' in core/crates/mcp/data/catalogue.json on main confirmed 2026-10-19 10:25 MST; draggy.org has no per-server page, so the GitHub source file is the listing"
+    },
+    {
+      "id": "toolkitly-awesome-ai-tools",
+      "name": "Toolkitly awesome-ai-tools",
+      "status": "live",
+      "listing_url": "https://github.com/ToolkitlyAI/awesome-ai-tools/blob/master/Category/Data_Intelligence.md",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "ToolkitlyAI/awesome-ai-tools#203 merged 2026-10-19; DC Hub row in Category/Data_Intelligence.md on master confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "claude-code-mods",
+      "name": "Claude Code Mods",
+      "status": "live",
+      "listing_url": "https://claudecodemods.com/extensions/dc-hub/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "joeVenner/claude-code-mods#28 merged 2026-10-19 (community entry dc-hub); extension page HTTP 200 titled 'DC Hub, an MCP server for Claude Code' confirmed 2026-10-19 10:25 MST"
+    },
+    {
+      "id": "marcelscruz-public-apis",
+      "name": "marcelscruz public-apis",
+      "status": "live",
+      "listing_url": "https://github.com/marcelscruz/public-apis#environment",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "marcelscruz/public-apis#1437 merged 2026-10-18; DC Hub row under Environment (README L922) on main confirmed 2026-10-19 10:25 MST. publicapis.dev does not show it yet, so link the README"
+    },
+    {
+      "id": "nishkohli96-awesome-apps-and-skills",
+      "name": "nishkohli96 awesome-apps-and-skills",
+      "status": "live",
+      "listing_url": "https://github.com/nishkohli96/awesome-apps-and-skills/blob/main/categories/agents-and-mcp.md#agent-tools--data",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "nishkohli96/awesome-apps-and-skills#5 merged 2026-10-19 10:01 MST; DC Hub under Agent Tools & Data (categories/agents-and-mcp.md L51, https://dchub.cloud/mcp) confirmed 2026-10-19 10:25 MST"
+    },
+    {
       "id": "abordage",
       "name": "abordage awesome-mcp",
       "status": "unverified",
@@ -425,8 +546,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-16",
-      "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README on main still does not show DC Hub as of 2026-10-16 16:19 PT; Flip to live once DC Hub appears on the page"
+      "verified_at": "2026-10-19",
+      "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README on main still does not show DC Hub as of 2026-10-19 10:25 MST; flip to live once DC Hub appears on the page"
     },
     {
       "id": "docker",
