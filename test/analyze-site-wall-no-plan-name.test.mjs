@@ -246,7 +246,7 @@ describe('initialize instructions name no plan for the paid tools', () => {
 
   it('/mcp carries the FREE TIER clause without a plan name', () => {
     // Item 3 (owner draft 2026-10-16): the clause states the email allowance on grid/queue.
-    expect(served['/mcp']).toContain('Grid/queue/market-intel tools: previews on free; an email adds 3 full grid/queue answers/day.');
+    expect(served['/mcp']).toContain('Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.');
   });
 
   // Owner 2026-10-10: no plan name (Pro, Developer, Starter) in the served instructions; URLs and

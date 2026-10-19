@@ -568,7 +568,7 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     for (const t of ['grid', 'queue', 'market-intel']) expect(CLAUSE.toLowerCase()).toContain(t);
     // Item 3 (owner draft 2026-10-16): the clause states the email allowance on grid/queue, from the
     // served cap; with the item-3 switch off it is the 10-08 clause (v13: rung named without a plan name).
-    expect(CLAUSE).toMatch(/previews on free; an email adds 3 full grid\/queue answers\/day\.$/);
+    expect(CLAUSE).toMatch(/previews on free; an email adds 10 full answers\/day each\.$/);
     expect(T.FREE_DECISION_CLAUSE_PREVIEW_ONLY).toMatch(/previews on free; full needs a paid DC Hub plan\.$/);
     for (const c of [CLAUSE, T.FREE_DECISION_CLAUSE_PREVIEW_ONLY]) {
       expect(c).not.toMatch(/\b(Developer|Pro|Starter)\b/);
@@ -613,7 +613,7 @@ describe('copy canon: every emission of the free-tier rule carries the decision-
     expect(hits.length, 'the sentence must still be emitted somewhere (a scan that finds nothing proves nothing)').toBeGreaterThan(3);
     // Item 3: the docs quote the CURRENT clause (lib/free-decision-taste.mjs FREE_DECISION_CLAUSE).
     const missing = hits.filter((p) => !readFileSync(join(ROOT, p), 'utf8').includes(
-      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'previews on free; an email adds 3 full grid/queue answers/day'));
+      p.endsWith('.mjs') ? 'FREE_DECISION_CLAUSE' : 'previews on free; an email adds 10 full answers/day each'));
     expect(missing, 'free-key sentence without the decision-tools clause').toEqual([]);
   });
 });

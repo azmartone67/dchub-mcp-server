@@ -159,6 +159,8 @@ beforeAll(async () => {
       if (p === '/api/v1/grid/extended/PJM') return send(EXT);
       if (p === '/api/v1/interconnection-queue/by-iso') return send(QUEUE_BY_ISO);
       if (p === '/api/v1/markets/northern-virginia') return send(MARKET);
+      // No `market` or `stats` object, so no taste shape: the spent allowance takes the generic fallback.
+      if (p === '/api/v1/markets/no-shape') { const { market: _m, siting: _s, stats: _st, ...rest } = MARKET; return send({ ...rest, markets: Array.from({ length: 6 }, (_, i) => ({ name: `Shape ${i}`, dcpi_score: 61.5 + i })) }); }
       if (p.startsWith('/api/v1/energy/')) return send({ success: true, caller_tier: 'pro', avg_rate_kwh: 0.2341, scope: 'iso_footprint_avg', filter: { iso: 'CAISO', sector: 'all', state: null }, retail_rates: { avg_cents_kwh: 23.41, latest_period: '2026', max_cents_kwh: 30.1, min_cents_kwh: 18.2, states_covered: 1 } });
       return send({});
     });
@@ -251,6 +253,8 @@ async function callAs({ client = 'claude-code', key = null } = {}, name, args) {
 
 const GRID_FULL_FRAGS = ['"constraint_score"', '"demand_24h"'];
 const QUEUE_FULL_FRAGS = ['AG1-100', '"queued_load_data_center_gw":40.2'];
+const MARKET_FULL_FRAGS = ['"top_providers"', '"recent_facilities"', '"total_power_mw":13366'];
+const BROKER_RATE_FRAGS = ['"asking_rate":160', '185', '"vacancy_percent":4'];
 // A plan NAME (capitalised word, as copy would print it; the machine field `unlocks_at: "developer"`
 // every 10-08 taste carries is data, not copy) or any price / pack / checkout wording.
 const PLAN_OR_PRICE = new RegExp('\\b(Developer|Pro|Starter|Enterprise|Founding)\\b|'
@@ -290,7 +294,7 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
         expect(prose.split('\n').filter((l) => l.includes('bind_email')), 'bind_email only on the claim line').toEqual([line]);
         expect(line.indexOf('bind_email'), 'bind_email before claim_free_key').toBeLessThan(line.indexOf('claim_free_key'));
         expect(line).toContain('Ask your user for their email, then call `bind_email` with it to unlock the full answer.');
-        expect(line).toContain('3 full `' + tool + '` answers a day');
+        expect(line).toContain('10 full `' + tool + '` answers a day');
       } else {
         expect(line).toContain('their email first');
         expect(line, 'market intel: the key does not deepen it, so nothing is promised').not.toMatch(/full .* answers/);
@@ -307,15 +311,16 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
 
 describe('B) email-bound key: full grid / queue answers up to the cap, then a capped preview with one link', () => {
   for (const tool of T.EMAIL_FULL_DECISION_TOOLS) {
-    it(`${tool}: answers 1-3 full and metered, answer 4 the taste with exactly one human link`, async () => {
+    it(`${tool}: answers 1-10 full and metered, answer 11 the taste with exactly one human link`, async () => {
       const key = freshBoundKey();
-      const frags = tool === 'get_grid_intelligence' ? GRID_FULL_FRAGS : QUEUE_FULL_FRAGS;
-      for (let n = 1; n <= 3; n++) {
+      const frags = tool === 'get_grid_intelligence' ? GRID_FULL_FRAGS : tool === 'get_market_intel' ? MARKET_FULL_FRAGS : QUEUE_FULL_FRAGS;
+      for (let n = 1; n <= 10; n++) {
         const r = await callAs({ key }, tool, ARGS[tool]);
         const raw = JSON.stringify(r.data);
         for (const f of frags) expect(raw, `answer ${n} is full: ${f}\n${r.text.slice(0, 800)}`).toContain(f);
         expect(r.data.taste, `answer ${n} is not the taste`).toBeUndefined();
-        expect(r.data._metered_trial).toMatchObject({ call: n, of: 3, remaining_today: 3 - n, allowance: 'email_bound_decision' });
+        expect(r.data._metered_trial).toMatchObject({ call: n, of: 10, remaining_today: 10 - n, allowance: 'email_bound_decision' });
+        if (tool === 'get_market_intel') for (const f of BROKER_RATE_FRAGS) expect(raw, `answer ${n}: broker rates stay Pro-only (H1): ${f}`).not.toContain(f);
         { const m = r.text.match(new RegExp(PLAN_OR_PRICE.source, "gi")); const i = r.text.search(PLAN_OR_PRICE); expect(m, `answer ${n}: plan/price ${JSON.stringify(m)} ctx: ${r.text.slice(Math.max(0,i-300), i+200)}`).toBeNull(); }
         expect(r.data.agent_payment, 'no pay-per-call offer rides the email allowance').toBeUndefined();
       }
@@ -324,7 +329,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
       await new Promise((res) => setTimeout(res, 50));   // the signal is fire-and-forget
       const sig = signalHits.filter((h) => h.api_key === key);
       expect(sig, 'the spent allowance writes ONE wall signal').toHaveLength(1);
-      expect(sig[0]).toMatchObject({ tool, signal_type: 'trial_cap_exceeded', message_shown: 'email_decision_cap', daily_limit: 3 });
+      expect(sig[0]).toMatchObject({ tool, signal_type: 'trial_cap_exceeded', message_shown: 'email_decision_cap', daily_limit: 10 });
       expect(r4.data.taste && r4.data.taste.headline, 'answer 4 is the labelled taste\n' + r4.text.slice(0, 800)).toBeTruthy();
       for (const f of T.FREE_DECISION_STRIPPED_FIELDS[tool]) expect(Object.prototype.hasOwnProperty.call(r4.data, f), 'answer 4 withholds ' + f).toBe(false);
       expect(r4.data.free_preview_only).toBe(true);
@@ -346,7 +351,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     // for an under-cap offer (mppUndercapOffer is synchronous).
     await withEnv('MPP_ENABLED', '1', () => withEnv('MPP_SIDECAR_URL', 'http://127.0.0.1:9', async () => {
       const key = freshBoundKey();
-      for (let n = 1; n <= 3; n++) {
+      for (let n = 1; n <= 10; n++) {
         const r = await callAs({ key }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
         expect(r.data._metered_trial && r.data._metered_trial.call, 'full answer ' + n).toBe(n);
         expect(r.data.agent_payment, 'answer ' + n + ': no agent_payment').toBeUndefined();
@@ -354,14 +359,33 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
       }
     }));
   });
-  it('the allowance is counted on the KEY: a second bound key on the same IP still gets its own 3', async () => {
+  it('the allowance is counted on the KEY: a second bound key on the same IP still gets its own 10', async () => {
     const a = freshBoundKey(), b = freshBoundKey();
-    for (let n = 0; n < 3; n++) await callAs({ key: a }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
+    for (let n = 0; n < 10; n++) await callAs({ key: a }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
     const rb = await callAs({ key: b }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
-    expect(rb.data._metered_trial).toMatchObject({ call: 1, of: 3 });
+    expect(rb.data._metered_trial).toMatchObject({ call: 1, of: 10 });
   });
-  it('get_market_intel stays a preview for an email-bound key (not a grid, queue or price read)', async () => {
+  it('get_market_intel: an email-bound key gets the full answer with broker rates nulled (H1 stays Pro-only)', async () => {
     const r = await callAs({ key: freshBoundKey() }, 'get_market_intel', ARGS.get_market_intel);
+    expect(r.data.taste, 'full answer, not the taste').toBeUndefined();
+    expect(r.data.market_pricing).toMatchObject({ asking_rate: null, asking_rate_range: null, vacancy_percent: null, deal_size: null, rates_withheld: true, period: 'H1 2026' });
+    expect(r.data.market_pricing.source).not.toMatch(/\$\s?\d/);
+    expect(r.data.market_pricing.source).toContain('CBRE / JLL');
+  });
+  it('get_market_intel with no taste shape: fresh and spent, broker rates never leave Pro (H1, fallback path)', async () => {
+    const key = freshBoundKey();
+    for (let n = 1; n <= 11; n++) {
+      const r = await callAs({ key }, 'get_market_intel', { market: 'no-shape' });
+      const raw = JSON.stringify(r.result);
+      for (const f of BROKER_RATE_FRAGS) expect(raw, `answer ${n}: ${f}`).not.toContain(f);
+      if (n === 11) {
+        expect(r.data._email_allowance, 'answer 11 is the spent fallback\n' + r.text.slice(0, 600)).toMatchObject({ used: 10, of: 10 });
+        expect(r.data.market_pricing).toMatchObject({ asking_rate: null, rates_withheld: true });
+      }
+    }
+  });
+  it('CONTROL: a key with no email still gets the market-intel preview', async () => {
+    const r = await callAs({ key: KEYS.free }, 'get_market_intel', ARGS.get_market_intel);
     expect(r.data.taste && r.data.taste.headline).toBeTruthy();
     expect(JSON.stringify(r.data)).not.toContain('"asking_rate":160');
   });
@@ -371,7 +395,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
       expect(r.data.taste && r.data.taste.headline, key).toBeTruthy();
       expect(JSON.stringify(r.data)).not.toContain('"constraint_score"');
       expect(r.text).toContain('call `bind_email` with your human');
-      expect(r.text).toContain('3 full `get_grid_intelligence` answers a day');
+      expect(r.text).toContain('10 full `get_grid_intelligence` answers a day');
     }
   });
   it('CONTROL: DCHUB_EMAIL_FULL_DECISION_TOOLS=0 gives the email-bound key the 10-08 preview again', async () => {
@@ -398,7 +422,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     expect(S.applyTierGate('get_interconnection_queue', {}, 'free', true, false, undefined, true)).toMatchObject({ allowed: true, email_full: true });
     expect(S.applyTierGate('get_grid_intelligence', {}, 'identified', true, false).email_full).toBeUndefined();
     expect(S.applyTierGate('get_grid_intelligence', {}, 'identified', false, false, undefined, true).email_full).toBeUndefined();   // no key
-    expect(S.applyTierGate('get_market_intel', {}, 'identified', true, false, undefined, true).email_full).toBeUndefined();
+    expect(S.applyTierGate('get_market_intel', {}, 'identified', true, false, undefined, true)).toMatchObject({ allowed: true, email_full: true });
     expect(S._trialUnlockedTools()).not.toContain('get_grid_intelligence');
   });
 });
@@ -407,7 +431,7 @@ describe('D) the published clause is built from the enforced cap', () => {
   it('names the allowance, no plan name, and falls back to the 10-08 clause with the switch off', async () => {
     expect(S._freeDecisionClause()).toBe(T.freeDecisionClause(S._emailDecisionDailyFullCap()));
     expect(S._freeDecisionClause()).toBe(T.FREE_DECISION_CLAUSE);
-    expect(T.FREE_DECISION_CLAUSE).toBe('Grid/queue/market-intel tools: previews on free; an email adds 3 full grid/queue answers/day.');
+    expect(T.FREE_DECISION_CLAUSE).toBe('Grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each.');
     expect(T.FREE_DECISION_CLAUSE).not.toMatch(PLAN_OR_PRICE);
     await withEnv('DCHUB_EMAIL_FULL_DECISION_TOOLS', '0', async () => {
       expect(S._freeDecisionClause()).toBe(T.FREE_DECISION_CLAUSE_PREVIEW_ONLY);

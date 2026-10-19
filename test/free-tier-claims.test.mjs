@@ -175,7 +175,9 @@ describe("published calls/day claims", () => {
 // canon's full_answers_per_tool_per_day values.
 const FULL_ANSWERS = /(\d+)\s+full answers?(?:\s+per\s+tool)?\s*(?:per\s+|a\s+|\/\s*)day/gi;
 const ANON_WORD = /anonymous|keyless|no signup|no api key|without one|without an? (?:api )?key|no key/gi;
-const KEYED_WORD = /free[ -]key|free tier|claim_?free_?key|unbound key|bind_email|add an email|with an email/gi;
+// "an email adds N full answers/day each" is the decision-tool clause (freeDecisionClause, owner
+// 2026-10-19): the email rung's allowance on the grid/queue/market-intel tools.
+const KEYED_WORD = /free[ -]key|free tier|claim_?free_?key|unbound key|bind_email|add an email|with an email|an email adds/gi;
 const FULL_ANSWER_CANON = new Set(Object.values(SNAP.allowance)
   .map((a) => a && a.full_answers_per_tool_per_day).filter(Number.isFinite));
 
@@ -222,6 +224,9 @@ describe("published full-answers claims", () => {
     expect(tierOf("Without a key this tool returns previews + ")).toBe("anonymous");
     expect(tierOf("Free to start (no key: previews; a free key: previews plus ")).toBe("keyed");
     expect(tierOf("Anonymous: previews plus ")).toBe("anonymous");
+    // The decision-tool clause names the email rung (owner 2026-10-19 wording).
+    expect(tierOf("Grid/queue/market-intel tools: previews on free; an email adds ")).toBe("keyed");
+    expect(tierOf("Grid/queue/market-intel tools: previews on free; ")).toBe("none");
   });
 
   it("every full-answers claim belongs to the free key or the email rung", () => {
