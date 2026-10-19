@@ -210,6 +210,6 @@ describe('registry', () => {
     expect(READ_GATED_FILTERS.get_refined_queue).toEqual(['min_mw']);
     expect(hasReadGatedFilter('get_refined_queue', { min_mw: 100 })).toBe(true);
     expect(hasReadGatedFilter('get_refined_queue', { min_mw: 0 })).toBe(false);
-    expect(Object.keys(READ_GATED_FILTERS).sort()).toEqual(['get_power_pipeline', 'get_refined_queue', 'rank_markets', 'search_facilities']);
+    expect(Object.keys(READ_GATED_FILTERS).sort()).toEqual(['get_global_power', 'get_infra_projects', 'get_power_pipeline', 'get_refined_queue', 'rank_markets', 'search_facilities']);   // global/infra: global-infra-unreadable-floor.test.mjs
   });
 });

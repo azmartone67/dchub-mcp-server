@@ -231,7 +231,7 @@ describe('the filters reach the backend only for a caller who can read what they
 
 describe('lib/readable-filters.mjs (pure)', () => {
   it('names exactly the params search_facilities filters capacity and tier on', () => {
-    expect(READ_GATED_FILTERS).toEqual({ search_facilities: GATED, rank_markets: ['min_capacity_mw'], get_power_pipeline: ['min_mw'], get_refined_queue: ['min_mw'] });
+    expect(READ_GATED_FILTERS).toEqual({ search_facilities: GATED, rank_markets: ['min_capacity_mw'], get_power_pipeline: ['min_mw'], get_refined_queue: ['min_mw'], get_global_power: ['min_mw'], get_infra_projects: ['min_capacity'] });
   });
 
   it('hasReadGatedFilter ignores unset, zero and empty values and other tools', () => {
