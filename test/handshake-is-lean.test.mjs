@@ -99,11 +99,18 @@ describe('tools/list', () => {
     const { h } = await open('lean-test');
     const r = await post(h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const tools = JSON.parse(r.json).result.tools;
-    const generic = tools.filter((t) => t.outputSchema && '_entity' in (t.outputSchema.properties || {}));
-    expect(generic.length).toBeGreaterThan(60);
-    expect(JSON.stringify(generic[0].outputSchema).length).toBeLessThan(1700);
-    // and no per-key prose rides the wire (it lives in the registered schema the SDK validates against)
-    expect(JSON.stringify(generic[0].outputSchema)).not.toContain('description');
+    // The seven envelope stubs are no longer advertised at all (lib/list-slim.mjs WIRE_ENVELOPE_KEYS): they were
+    // identical bare-type entries on every tool. They stay on the registered schema the SDK validates against.
+    const withSchema = tools.filter((t) => t.outputSchema);
+    expect(withSchema.length).toBeGreaterThan(60);
+    for (const t of withSchema) {
+      for (const k of ['_entity', 'provenance', 'quota', 'citation', 'site_evaluation_handoff', '_return_loop', '_front_door']) {
+        expect(t.outputSchema.properties || {}, `${t.name}.${k}`).not.toHaveProperty(k);
+      }
+      // and no per-key prose rides the wire (it lives in the registered schema the SDK validates against)
+      expect(JSON.stringify(t.outputSchema), t.name).not.toContain('description');
+    }
+    expect(JSON.stringify(withSchema.map((t) => t.outputSchema)).length).toBeLessThan(14000);
   });
 });
 

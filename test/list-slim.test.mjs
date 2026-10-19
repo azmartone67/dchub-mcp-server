@@ -1,7 +1,7 @@
 // list-slim.test.mjs - R1 (Grok MCP platform ranking plan, 2026-10-18): the /mcp tools/list is cut by
 // more than half without touching what the server validates or returns.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { slimOutputSchema, slimDescription, stripChangelog, slimToolsList, SLIM_DESC_MAX } from '../lib/list-slim.mjs';
+import { slimOutputSchema, slimDescription, stripChangelog, slimToolsList, SLIM_DESC_MAX, WIRE_ENVELOPE_KEYS } from '../lib/list-slim.mjs';
 
 let S, srv, PORT;
 beforeAll(async () => {
@@ -39,8 +39,20 @@ describe('wire list vs the canonical catalog', () => {
       expect(t.inputSchema.required, t.name).toEqual(c.inputSchema.required);
       for (const k of ['access', 'tier_required', 'maturity', 'readOnlyHint']) expect(t.annotations[k], `${t.name}.${k}`).toEqual(c.annotations[k]);
       expect(t.description.length, t.name).toBeLessThanOrEqual(SLIM_DESC_MAX + 1);
-      expect(Object.keys(t.outputSchema.properties), t.name).toEqual(Object.keys(c.outputSchema.properties));
+      // Every tool-specific output key survives, in order; only the shared envelope stubs are omitted from the wire.
+      expect(Object.keys(t.outputSchema.properties), t.name)
+        .toEqual(Object.keys(c.outputSchema.properties).filter((k) => !WIRE_ENVELOPE_KEYS.includes(k)));
     }
+  });
+  it('the envelope stubs are off the wire but still on the registered schema the SDK validates against', async () => {
+    const canon = (await S._buildToolsListResult(null)).tools;
+    const w = await wire();
+    for (const t of w.tools) for (const k of WIRE_ENVELOPE_KEYS) expect(t.outputSchema.properties, `${t.name}.${k}`).not.toHaveProperty(k);
+    for (const t of canon) for (const k of WIRE_ENVELOPE_KEYS) expect(t.outputSchema.properties, `canonical ${t.name}.${k}`).toHaveProperty(k);
+  });
+  it('the advertised outputSchemas stay small (they were 27.6 KB before the envelope stubs came off)', async () => {
+    const w = await wire();
+    expect(JSON.stringify(w.tools.map((t) => t.outputSchema)).length).toBeLessThan(14000);
   });
   it('the canonical (registered) schemas are the full ones the SDK validates against', async () => {
     const canon = (await S._buildToolsListResult(null)).tools;
@@ -69,9 +81,19 @@ describe('slimming primitives', () => {
     expect(out).toContain('Answers "which market is cheapest right now".');
     expect(out).toContain('Try: my_tool a=1.');
   });
+  it('slimOutputSchema omits exactly the envelope keys and keeps every other key with its type', () => {
+    const props = { _entity: { type: 'string' }, provenance: { type: 'object' }, quota: { type: 'object' }, citation: {}, site_evaluation_handoff: {},
+      _return_loop: { type: 'object' }, _front_door: { type: 'object' }, success: {}, rate: { type: 'number', description: 'x' }, rows: { anyOf: [{ type: 'array' }] } };
+    const o = slimOutputSchema({ type: 'object', properties: props });
+    expect(o.properties).toEqual({ success: {}, rate: { type: 'number' }, rows: {} });
+    expect(o).toMatchObject({ type: 'object', additionalProperties: true });
+  });
+  it('the envelope key list is the seven keys the registered schema shares', () => {
+    expect([...WIRE_ENVELOPE_KEYS].sort()).toEqual(['_entity', '_front_door', '_return_loop', 'citation', 'provenance', 'quota', 'site_evaluation_handoff']);
+  });
   it('slimToolsList does not mutate its input', () => {
-    const input = { tools: [{ name: 'x', description: 'd '.repeat(2000), inputSchema: { type: 'object' }, outputSchema: { type: 'object', properties: { a: { type: 'string', description: 'z' } } } }] };
-    const copy = JSON.stringify(input);
+    const input = { tools: [{ name: 'x', description: 'd '.repeat(2000), inputSchema: { type: 'object' }, outputSchema: { type: 'object', properties: { a: { type: 'string', description: 'z' }, _entity: { type: 'string' }, provenance: { type: 'object' } } } }] };
+    const copy = JSON.stringify(input);   // envelope keys in the input: omitting them from the wire copy must not delete them from it
     slimToolsList(input);
     expect(JSON.stringify(input)).toBe(copy);
   });
