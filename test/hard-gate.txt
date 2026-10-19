@@ -362,6 +362,7 @@ test/rank-defense-staging.test.mjs
 test/rank-markets-count-sort-score.test.mjs
 test/rank-markets-unreadable-floor.test.mjs
 test/rank-markets-value-strip.test.mjs
+test/rank-markets-visible-order.test.mjs
 test/ranked-answer-e2e.test.mjs
 test/ranked-answer.test.mjs
 test/readme-leads-with-dcpi.test.mjs

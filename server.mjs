@@ -209,7 +209,7 @@ import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEma
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
-import { hasReadGatedFilter, dropUnreadableFilters } from './lib/readable-filters.mjs';
+import { hasReadGatedFilter, dropUnreadableFilters, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
@@ -20884,11 +20884,14 @@ function trackedTool(srv, name, description, schema, handler) {
       // args (several branches below call handler(args) directly), once, before the gate.
       // Same paid-call test as the anonymous wall: paid depth, a live pack balance, or a
       // payment on this call; the lookup runs only when such a filter is present.
-      if (hasReadGatedFilter(name, args)) {
+      // The same decision covers a tool whose backend ORDER is a hidden field (READ_ORDERED_TOOLS):
+      // a caller who cannot read it is served the order of published figures (visible_order).
+      if (hasReadGatedFilter(name, args) || READ_ORDERED_TOOLS.has(name)) {
         let _canRead = _isPaidDepthTier(_gateTier);
         if (!_canRead) { try { _canRead = await _anonWallPaidCall(c, extra, _mppArgs); } catch (_) { _canRead = false; } }
         const _ignored = dropUnreadableFilters(name, args, _canRead);
         if (_ignored.length) { try { c._params_not_applied = _ignored; } catch (_) { /* ctx is best-effort */ } }
+        if (READ_ORDERED_TOOLS.has(name) && !_canRead) { try { c._visible_order = true; } catch (_) { /* ctx is best-effort */ } }
       }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
@@ -29050,6 +29053,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         region:          a.region          || 'us',
         limit:           a.limit           || 10,
         min_capacity_mw: a.min_capacity_mw || 0,
+        // a caller who cannot read total_mw is not ranked by it (see READ_ORDERED_TOOLS)
+        visible_order:   (() => { try { return getCtx()._visible_order ? 1 : undefined; } catch (_) { return undefined; } })(),
       });
       // Say the floor was left out (see the normalisation in trackedTool): a silent drop would
       // read as "every market qualifies".
