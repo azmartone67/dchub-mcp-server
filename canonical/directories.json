@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-19T18:00:00Z",
+  "updated_at": "2026-10-19T19:30:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -563,24 +563,24 @@
     {
       "id": "mcpservers-org",
       "name": "mcpservers.org (Awesome MCP Servers)",
-      "status": "unverified",
-      "listing_url": "https://mcpservers.org/search?query=dchub",
+      "status": "live",
+      "listing_url": "https://mcpservers.org/servers/azmartone67/dchub-mcp-server",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
-      "note": "search for dchub returned no server on 2026-10-19 (page is client-rendered, curl gets 403); flip to live once a DC Hub page exists"
+      "note": "page titled \"DC Hub Data Center Power, Grid & Energy Intelligence MCP Server\"; read in a browser 2026-10-19 (curl gets 403); URL from Grok"
     },
     {
       "id": "extops-dev",
       "name": "extops.dev",
-      "status": "unverified",
-      "listing_url": "https://extops.dev",
+      "status": "live",
+      "listing_url": "https://extops.dev/plugins/mcp/cloud.dchub/mcp-server",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
-      "note": "named in Grok's list but no DC Hub page found: the site is a Chrome-extension catalog and its sitemap has no MCP or dchub entry as of 2026-10-19; need the listing URL from Grok"
+      "note": "copies the official registry entry; HTTP 200 and shows 2.12.41 / 94 tools on 2026-10-19"
     },
     {
       "id": "docker",
