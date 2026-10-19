@@ -264,8 +264,33 @@ describe('each wall builder: the neutral line on /mcp, the old sentence on /mcp/
     'the full per-factor breakdown need a paid DC Hub plan.');
   both('keyless decision-layer nudge', () => S().applyTrialGuardIfFree('rank_markets', { markets: [{ name: 'A', verdict: 'BUILD' }] }, false),
     'needs a paid DC Hub plan. That’s the part worth paying for.');
-  both('quota hint on a preview-only tool', () => S()._buildQuotaHint('get_market_intel'),
+  // Growth freeze (owner 2026-10-19): get_market_intel joined the email allowance on /mcp, so the
+  // preview-only quota hint (neutral line) is the one it serves with the allowance switch off. With the
+  // switch on (prod), /mcp states the email allowance and no paid-plan sentence, while /mcp/chatgpt
+  // stays FROZEN on the old sentence either way.
+  const withSwitch = (v, fn) => () => {
+    const k = 'DCHUB_EMAIL_FULL_DECISION_TOOLS', was = process.env[k];
+    process.env[k] = v;
+    try { return fn(); } finally { if (was === undefined) delete process.env[k]; else process.env[k] = was; }
+  };
+  both('quota hint on a preview-only tool (email allowance switch off)', withSwitch('0', () => S()._buildQuotaHint('get_market_intel')),
     'charged for it. Full needs a paid DC Hub plan.');
+  it('quota hint on get_market_intel with the email allowance on: /mcp names the allowance, /mcp/chatgpt is frozen', withSwitch('1', () => {
+    const n = flat(asMcp(() => S()._buildQuotaHint('get_market_intel')));
+    expect(n).toContain('A key with a bound email gets 10 full answers a day.');
+    expect((n.match(FAMILY) || [null])[0], '/mcp: a paid-plan sentence').toBeNull();
+    const l = flat(asChatgpt(() => S()._buildQuotaHint('get_market_intel')));
+    expect(l, '/mcp/chatgpt').toContain('charged for it. Full needs a paid DC Hub plan.');
+    expect(l, '/mcp/chatgpt').not.toContain('bound email gets');
+  }));
+  it('get_market_intel email allowance: open on /mcp, closed on /mcp/chatgpt and its plan steps (review freeze)', withSwitch('1', () => {
+    expect(asMcp(() => S()._emailFullDecisionTool('get_market_intel'))).toBe(true);
+    expect(asChatgpt(() => S()._emailFullDecisionTool('get_market_intel'))).toBe(false);
+    expect(S()._ctxALS.run({ legacy_wall_copy: true }, () => S()._emailFullDecisionTool('get_market_intel'))).toBe(false);
+    expect(asChatgpt(() => S()._emailFullDecisionTool('get_grid_intelligence')), 'grid keeps its allowance there').toBe(true);
+    expect(asMcp(() => S().applyTierGate('get_market_intel', {}, 'free', true, false, undefined, true).email_full)).toBe(true);
+    expect(asChatgpt(() => S().applyTierGate('get_market_intel', {}, 'free', true, false, undefined, true).email_full)).toBeUndefined();
+  }));
   both('auto-trial block on a paid-plan tool', () => S().buildAutoMintBlock({ api_key: 'dch_trial_item1test0123456789', trial_days: 7, daily_calls: 10 }, 'compare_sites', false, null),
     'compare_sites needs a paid DC Hub plan, or the owner pays per call');
 });

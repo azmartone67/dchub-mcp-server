@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OWNER_LINE = 'analyze_site: a free key gets a few free full site reports each month; after that, previews.';
 // Item 3 (owner draft 2026-10-16): the decision-tools clause now states the email allowance.
-const CLAUSE = 'previews on free; an email adds 3 full grid/queue answers/day';
+const CLAUSE = 'previews on free; an email adds 10 full answers/day each';
 
 let S, TC, httpServer, stub, PORT, prevBase;
 

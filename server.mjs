@@ -217,8 +217,8 @@ import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONT
 // Owner 2026-10-08: the three Pro-demand decision tools are previews on every non-paid seat.
 import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_TOOLS as _TASTE_SHAPED_ONLY_LIST, FREE_DECISION_UNLOCKS_AT,
          freeDecisionPreviewOnlyOn, buildFreeDecisionTaste,
-         // Item 3 (owner draft 2026-10-16): email-bound keys get capped full grid/queue answers.
-         EMAIL_FULL_DECISION_TOOLS as _EMAIL_FULL_DECISION_LIST, EMAIL_DECISION_DAILY_FULL_DEFAULT, emailFullDecisionOn,
+         // Item 3 (owner draft 2026-10-16): email-bound keys get capped full grid/queue answers (market intel joined 2026-10-19).
+         EMAIL_FULL_DECISION_TOOLS as _EMAIL_FULL_DECISION_LIST, EMAIL_DECISION_DAILY_FULL_DEFAULT, emailFullDecisionOn, maskBrokerRatesBelowPro as _maskBrokerRatesBelowPro,
          freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
@@ -8176,12 +8176,23 @@ export function _freeTasteTool(name) {
 // email (ctx.email from /keys/validate) gets the FULL get_grid_intelligence and
 // get_interconnection_queue answer up to EMAIL_DECISION_DAILY_FULL_CAP per tool per UTC day,
 // then the labelled taste with one link. Anonymous callers and keys without an email stay
-// preview-only; get_market_intel stays preview-only on every non-paid seat. ONE predicate
+// preview-only (get_market_intel joined the allowance 2026-10-19, owner). ONE predicate
 // for the tool, one for the seat; applyTierGate's `email_full` branch is the only door.
 // Kill switch DCHUB_EMAIL_FULL_DECISION_TOOLS=0 (read per call) restores the 10-08 rule.
-export function _emailFullDecisionTool(name) {
+export function _emailFullDecisionTool(name, c) {
   return _freePreviewOnlyTool(name) && emailFullDecisionOn()
-    && _EMAIL_FULL_DECISION_LIST.includes(String(name || '')) && EMAIL_DECISION_DAILY_FULL_CAP > 0;
+    && _EMAIL_FULL_DECISION_LIST.includes(String(name || '')) && EMAIL_DECISION_DAILY_FULL_CAP > 0
+    && !(String(name || '') === 'get_market_intel' && _chatgptFrozenSeat(c));
+}
+// Growth freeze (owner 2026-10-19) vs the ChatGPT review freeze: /mcp/chatgpt is FROZEN while the
+// app is in OpenAI review, so get_market_intel keeps its 10-08 rule there (a preview on every non-paid
+// seat, the same copy and the same gate). An execute_plan started on /mcp/chatgpt runs its steps on
+// /mcp with `legacy_wall_copy` (LEGACY_WALL_LOOPBACK_HEADER), so those steps are frozen too.
+// Grid/queue are unchanged there (their allowance predates the review submission).
+export function _chatgptFrozenSeat(c) {
+  let s = c;
+  if (!s) { try { s = getCtx(); } catch (_) { s = null; } }
+  return !!s && (s.profile === DIRECTORY_PROFILE || s.legacy_wall_copy === true);
 }
 // A free-class caller holding a key with a bound email. Not the 'identified' tier word:
 // mcp_dev_keys.tier defaults to 'identified' at claim, email or not (routes/email_bound_series).
@@ -17464,7 +17475,7 @@ export const _PLAN_CLASSES = [
       { tool: 'predict_market_trajectory', when: 'The question is where a market is HEADING, not where it stands.',
         rejected_because: 'The intent asked for present-state ranking, not a forward trajectory.' },
     ],
-    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a credit pack); a paid DC Hub plan gets the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
+    coverage_notes: 'rank_markets + get_market_dcpi_rank are free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. Treat any factor returned as unavailable as unknown — never estimate it.',
   },
   {
     // r-planner-v5.2 (2026-07-20): "find N MW in <market>" fell to the unknown
@@ -17582,7 +17593,7 @@ export const _PLAN_CLASSES = [
       { tool: 'rank_markets', when: 'You actually want to rank MANY markets, not compare a specific two.',
         rejected_because: 'The intent named a specific head-to-head — a full ranking answers a broader question than asked.' },
     ],
-    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview on every non-paid seat (no key, a free key, a trial key, a bound email or a credit pack); a paid DC Hub plan gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
+    coverage_notes: 'get_market_dcpi_rank is free-tier friendly; get_market_intel: a preview with no key or a key without a bound email; a key with a bound email gets ' + EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day, then previews; a paid DC Hub plan gets the full answer. If a market name does not resolve to a DCPI slug, fall back to rank_markets and locate each market by name.',
   },
   {
     id: 'grid_headroom', recipe: 'grid_and_queue',
@@ -22309,6 +22320,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           && await _trialFullCallsExceeded(_capId, name, _cap,
                                            c.api_key || c.client_ip, _callerBase);  // r-durable-cap: durable identity = api_key||ip
         if (_cap > 0 && !_tasteExceeded) {
+          // Growth freeze (owner 2026-10-19): the email allowance opens get_market_intel, but never
+          // the broker rates (H1). Fail closed: if the payload cannot be parsed, serve the taste path's
+          // answer instead of an unmasked one.
+          if (_emailFull && name === 'get_market_intel') {
+            try {
+              const _mi = JSON.parse(result.content?.[0]?.text || '');
+              result.content[0] = { ...result.content[0], text: JSON.stringify(_maskBrokerRatesBelowPro(_mi)) };
+            } catch (_) {
+              result.content = [{ type: 'text', text: JSON.stringify({ ok: false, error: 'market_intel_unavailable', retry: true }) }];
+            }
+          }
           // r-metered-visible (2026-07-27 digest wave, "metered trial"): the
           // taste was SILENT — an agent got N full answers with no warning,
           // then slammed into the gate on call N+1 as a surprise (197 distinct
@@ -22406,10 +22428,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           }
           // No taste shape for this payload (the all-ISO queue snapshot): the generic free trim,
           // still with no pack or plan copy in it; the wall steps add the one relay link.
+          // Never less than a free key with no email gets for the same payload: that seat's fallback
+          // is the depth tease's data shape (buildDepthTease -> _teaseDepth, top DEPTH_TEASE_KEEP rows,
+          // no score masking), while _capTrim's trimForTrial nulls row names and bands scores, which
+          // made a spent email-bound key see LESS than the free key (ladder-stage1, get_market_intel).
+          // The tease's _upgrade copy (pack, price) is not taken, only its data shape.
           try {
             const _p = JSON.parse(result.content?.[0]?.text || 'null');
             if (_p && typeof _p === 'object' && !Array.isArray(_p)) {
-              const _t = _capTrim(_p, name);
+              let _t = DEPTH_TEASE_TOOLS.has(name)
+                ? (_contextPackFreeShape(name, _p) || _teaseDepth(_p, DEPTH_TEASE_KEEP))
+                : _capTrim(_p, name);
+              // Broker rates stay Pro-only (H1) on this path too: callAPI read the payload as Pro.
+              if (name === 'get_market_intel') _t = _maskBrokerRatesBelowPro(_t);
               _t.preview_is_partial = true;
               _t._email_allowance = { used: _cap, of: _cap, resets_at: 'next 00:00 UTC' };
               return { content: [{ type: 'text', text: JSON.stringify(_t) }], isError: false,
