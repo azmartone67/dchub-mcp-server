@@ -207,7 +207,7 @@ for (const { tool, path } of CASES) {
 describe('registry', () => {
   it('lists both tools and keeps rank_markets and search_facilities', () => {
     expect(READ_GATED_FILTERS.get_power_pipeline).toEqual(['min_mw']);
-    expect(READ_GATED_FILTERS.get_refined_queue).toEqual(['min_mw']);
+    expect(READ_GATED_FILTERS.get_refined_queue).toEqual(['min_mw', 'max_ttp_months']);
     expect(hasReadGatedFilter('get_refined_queue', { min_mw: 100 })).toBe(true);
     expect(hasReadGatedFilter('get_refined_queue', { min_mw: 0 })).toBe(false);
     expect(Object.keys(READ_GATED_FILTERS).sort()).toEqual(['get_global_power', 'get_infra_projects', 'get_power_pipeline', 'get_refined_queue', 'rank_markets', 'search_facilities']);   // global/infra: global-infra-unreadable-floor.test.mjs
