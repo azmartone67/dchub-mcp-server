@@ -75,7 +75,7 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
         // claim_free_key line (no link, no plan, no price). Where it lands after the ask, the ask is
         // the block right before it; nothing else may come between or after.
         const last = blocks[blocks.length - 1];
-        const ask = /^Free(, one call: call `claim_free_key`|: ask your human for their email first)/.test(last) ? blocks[blocks.length - 2] : last;
+        const ask = /^(Free, one call: call `claim_free_key`|Ask your user for their email, then call `bind_email`)/.test(last) ? blocks[blocks.length - 2] : last;
         expect(ask).toContain(sc.user_message.slice(0, 40));   // the ask is the last block but a bare citation line (and the item-3 claim line)
         if (ask !== last) expect(last).not.toMatch(/https?:\/\//);
       }
