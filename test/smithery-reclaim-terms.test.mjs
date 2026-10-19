@@ -76,9 +76,18 @@ function pyList(name) {
 // of these fails too until it is removed from this list.
 // 2026-09-29 — owner re-added `electricity` (Smithery rank #1 -> #23 after the
 // 09-28 copy, measured by ~/dchub-smithery-watch/rank100.py). It is fenced again.
-const DROPPED_BY_OWNER_0928 = ['energy', 'natural gas', 'hyperscale'];
+// 2026-10-19 (Grok D17): `energy` re-added in the first sentence ("the power, grid and
+// energy infrastructure behind it"), so it leaves this list and is fenced again.
+const DROPPED_BY_OWNER_0928 = ['natural gas', 'hyperscale'];
 
 describe('smithery canonical description keeps the terms we reclaim with it', () => {
+  it('the first sentence carries energy and power wording (Grok D17, query "energy")', () => {
+    const first = DESC.split(/(?<=[.!?])\s+/)[0].toLowerCase();
+    expect(first).toMatch(/\benergy\b/);
+    expect(first).toMatch(/\bpower\b/);
+    expect(first).toContain('site selection');
+  });
+
   it('every RECLAIM term appears in the canonical description (except the owner-dropped set)', () => {
     const missing = pyList('RECLAIM').filter(
       t => !DESC.toLowerCase().includes(t.toLowerCase()));
