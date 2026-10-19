@@ -91,6 +91,7 @@ test/claude-directory-sell-line.test.mjs
 test/claude-directory-shared-scrub-equality.test.mjs
 test/claude-directory-size-cap.test.mjs
 test/claude-passive-arrivals.test.mjs
+test/claude-wall-link-not-logged.test.mjs
 test/client-config-transport-matches-canon.test.mjs
 test/cm4-substation-pro-only.test.mjs
 test/compare-isos-source-composed.test.mjs

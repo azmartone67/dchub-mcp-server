@@ -22749,7 +22749,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     const _pw = _stampProWall(_proWallRaw, name, c);
     if (_pw.wall) status = 'pro_wall';
     // conversion metric step 1: the call row names the exact link this wall handed out.
-    if (status === 'pro_wall' || status === 'lp_wall') _wallLinkTh = _wallLinkTokenHash(_pw.result);
+    // /mcp/claude strips every relay link before the reply leaves (lib/claude-directory.mjs), so no link was
+    // handed out: recording its hash would count a link the caller never saw in the funnel's wall_links.
+    if ((status === 'pro_wall' || status === 'lp_wall') && !_excludedFromRelayReadout(c)) _wallLinkTh = _wallLinkTokenHash(_pw.result);
     return _pw.result;
     } catch (err) {
       status = 'error';
