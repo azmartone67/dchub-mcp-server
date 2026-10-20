@@ -79,8 +79,15 @@ describe('?api_key= on /mcp/claude authenticates exactly like the header', () =>
       expect(o, `first difference at ${i}: header=${a.slice(i - 80, i + 80)} | query=${o.slice(i - 80, i + 80)}`).toBe(a);
     }
     // CONTROL: keyless is the plans notice, so equality above is not "all anonymous".
-    const anon = await H.call(DIR, 'analyze_site', args);
-    expect(anon.msg.result.content.map((c) => c.text)).toEqual([CLAUDE_PLANS_NOTICE]);
+    // (With lazy auth on, a keyless preview is a 401 sign-in challenge instead; the
+    // kill switch shows the preview it replaces. test/claude-directory-lazy-auth.test.mjs.)
+    process.env.DCHUB_CLAUDE_LAZY_AUTH = '0';
+    try {
+      const anon = await H.call(DIR, 'analyze_site', args);
+      expect(anon.msg.result.content.map((c) => c.text)).toEqual([CLAUDE_PLANS_NOTICE]);
+    } finally { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; }
+    const anon401 = await H.call(DIR, 'analyze_site', args);
+    expect(anon401.status).toBe(401);
   }, 60_000);
 
   it('a Bearer carrying a DC Hub key works too', async () => {
@@ -181,15 +188,27 @@ describe('OAuth (AuthKit bearer) on /mcp/claude', () => {
     }
   });
 
-  it('keyless Claude connector calls are served, never challenged (authless with an optional key)', async () => {
+  // Lazy auth (owner 2026-10-20): the anonymous-connector N-call challenge of /mcp
+  // still never runs here; a keyless preview is answered 401 instead (every time,
+  // no N), and a complete keyless answer is served. See claude-directory-lazy-auth.
+  it('keyless Claude connector: initialize served; a preview is a 401 sign-in challenge on every call, not after N', async () => {
     const ua = { 'user-agent': 'Claude-User' };
     const init = await H.init(DIR, 'claude-ai', ua);
     expect(init.status).toBe(200);
-    for (let i = 0; i < 8; i++) {
+    expect(init.headers.get('www-authenticate')).toBeNull();
+    for (let i = 0; i < 4; i++) {
       const r = await H.call(DIR, 'get_news', { query: 'data center' }, ua);
-      expect(r.status, `call ${i + 1}`).toBe(200);
-      expect(r.headers.get('www-authenticate'), `call ${i + 1}`).toBeNull();
+      expect(r.status, `call ${i + 1}`).toBe(401);
+      expect(r.headers.get('www-authenticate'), `call ${i + 1}`).toContain(`resource_metadata="${CLAUDE_PRM_URL}"`);
     }
+    process.env.DCHUB_CLAUDE_LAZY_AUTH = '0';
+    try {
+      for (let i = 0; i < 8; i++) {
+        const r = await H.call(DIR, 'get_news', { query: 'data center' }, ua);
+        expect(r.status, `kill switch call ${i + 1}`).toBe(200);
+        expect(r.headers.get('www-authenticate'), `kill switch call ${i + 1}`).toBeNull();
+      }
+    } finally { delete process.env.DCHUB_CLAUDE_LAZY_AUTH; }
   });
 });
 
