@@ -86,7 +86,8 @@ describe('the output line', () => {
 
 describe('the plans line in server.mjs', () => {
   it('the unlock_more_data description and the /mcp instructions read the output line', () => {
-    const desc = CODE.filter(([, l]) => l.includes("Unlock DC Hub\\'s full depth."));
+    // Owner GO 2026-10-20 (tool search): unlock_more_data now opens "Use this when the user asks how to get full".
+    const desc = CODE.filter(([, l]) => l.includes("Use this when the user asks how to get full (non-preview) DC Hub"));
     expect(desc).toHaveLength(1);
     expect(desc[0][1]).toContain("`after_checkout`. ' + _paidPlansOutputLine() + '.");
     const instr = CODE.filter(([, l]) => /^const _INSTR_TAIL = /.test(l));
@@ -235,7 +236,7 @@ describe('tools/list and initialize: no monthly price on any profile path', () =
     await H.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, sh);
     const instr = (await H.post('/mcp', { jsonrpc: '2.0', id: 77, method: 'resources/read',
       params: { uri: 'dchub://instructions' } }, sh)).msg.result.contents[0].text;
-    expect(instr).toContain('💳 a one-time pack of 1,000 API credits');   // v14: no amount either
+    expect(instr).toContain('a one-time pack of 1,000 API credits');   // v14: no amount either; owner GO 2026-10-20: no card emoji
     expect(instr).not.toMatch(/\$\d/);
     expect(instr).toContain('; Paid plans: on the page behind the human_url link) to relay to your human');
     expect(instr).not.toMatch(/dchub\.cloud\/(?:pricing|plans)/);

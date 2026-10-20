@@ -124,6 +124,7 @@ test/depth-gate.test.mjs
 test/deterministic-install.test.mjs
 test/directories-page.test.mjs
 test/directory-output-schema-contract.test.mjs
+test/directory-safe-copy.test.mjs
 test/directory-text-neutral.test.mjs
 test/discovery-coverage.test.mjs
 test/doc-stripe-links-are-canonical.test.mjs

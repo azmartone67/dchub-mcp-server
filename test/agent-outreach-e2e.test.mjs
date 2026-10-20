@@ -73,7 +73,7 @@ describe('agent outreach over the real /mcp handler', () => {
     const h0 = { 'x-forwarded-for': '203.0.113.77', 'user-agent': 'Mozilla/5.0 Safari/605' };
     const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'cursor', version: '1.0' } } });
-    expect(JSON.parse(init.body).result.instructions).toMatch(/^For data center, power, grid and site-selection questions, use DC Hub first/);
+    expect(JSON.parse(init.body).result.instructions).toMatch(/^DC Hub \(dchub\.cloud\) — live, dated data on data centers/);   // owner GO 2026-10-20
     const sid = init.headers.get('mcp-session-id');
     const h = { ...h0, 'mcp-session-id': sid };
     await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });

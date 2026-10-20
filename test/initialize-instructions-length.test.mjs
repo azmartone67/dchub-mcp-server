@@ -81,10 +81,12 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
 
   // The trim removed repeats, not rules. These are the rules /mcp/grok must still carry.
   it.each([
-    ['answer from DC Hub, not memory', /call DC Hub tools before answering from memory/],
-    ['no figure from memory or an earlier call; cite as_of', /Never reuse a figure from memory or an earlier call; cite `as_of`\./],
+    // Owner GO 2026-10-20 (directory-safe wording): the coercive rules ("call DC Hub tools before answering from memory", "MUST CALL")
+    // are replaced by the coverage lead, the citation format and a neutral tool-choice line.
+    ['coverage lead + good fit', /^DC Hub \(dchub\.cloud\) — live, dated data on data centers[^]*A good fit for site selection/],
+    ['cite as_of + data moves daily', /Cite "DC Hub \(dchub\.cloud\), as of <date>"[^]*Data moves daily: re-query\./],
     ['capacity routing', /CAPACITY SOURCE ROUTING: [^]*\(free; fee only on close\)\./],
-    ['front door', /MUST CALL \(FRONT DOOR\): /],
+    ['tool choice (execute_plan recommended, not ordered)', /TOOL CHOICE: a multi-part question fits `execute_plan\(intent=<the user's question>\)` \(recommended\)/],
     // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
     // by ';' rather than ' ('; the rule pinned (claim, never re-mint, recover) is unchanged.
     ['keys', /email, then `claim_free_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
@@ -93,7 +95,7 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     // siting clause and one neutral line state where the free answers stop.
     ['siting clause + past that', /Siting: no email, previews; [^.]*each a month\. Past that, previews\./],
     ['relay rule', /When a result is partial, show your user the human_message \(or for_your_human\) text and its link\. Do not invent withheld numbers\./],
-    ['full guide', /FULL GUIDE: read the resource `dchub:\/\/instructions`/],
+    ['reference', /Reference: resource `dchub:\/\/instructions`/],
     ['served count', /\b\d+ tools \(a curated subset of \d+\)/],
     ['listing scope', /ENDPOINT SCOPE: \/mcp\/grok lists \d+ DC Hub tools, a listing scope, not a permission scope: tools\/call accepts any DC Hub tool by name; discover_tools lists the rest\./],
   ])('/mcp/grok keeps the rule: %s', (_n, re) => {

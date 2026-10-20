@@ -60,45 +60,34 @@ describe('front-door routing lives in the tool-description channel', () => {
     }
   });
 
-  it('each routed tool names execute_plan and says when it is the better call', () => {
+  // Owner GO 2026-10-20 (directory-safe wording + tool search): the "FRONT DOOR CHECK — ... call
+  // execute_plan" preamble was an order, and Anthropic's Software Directory Policy (2.D/2.E) and OpenAI's
+  // guidelines bar descriptions that steer which tool the model calls. Each routed tool now OPENS with its
+  // own "Use this when ..." trigger and names execute_plan only as the option for a broader question.
+  it('each routed tool names execute_plan as the option for a broader question', () => {
     for (const t of ROUTED) {
       const d = descOf(t);
-      expect(d, `${t} never mentions the front door`).toContain('execute_plan');
-      expect(d, `${t} mentions execute_plan but not as a routing decision`)
-        .toMatch(/FRONT DOOR CHECK/);
+      expect(d, `${t} never mentions execute_plan`).toContain('execute_plan');
+      expect(d, `${t} still carries the order`).not.toMatch(/FRONT DOOR|call `execute_plan[^`]*` instead|\bFIRST\b/);
     }
   });
 
-  // ── the anti-gaming half ────────────────────────────────────────────
-  it('each routed tool ALSO keeps the direct single lookup legitimate', () => {
-    // Without this, the honest fix and the metric-gaming fix look identical
-    // to CI. A lookup is a legitimate use and free by design.
+  it('each routed tool opens with its own direct trigger', () => {
     for (const t of ROUTED) {
-      const d = descOf(t);
-      expect(d, `${t} routes to the planner without saying when to stay direct`)
-        .toMatch(/IS the right call|call .* directly|stay here/i);
+      expect(descOf(t).startsWith('Use this when '), `${t} does not open with its trigger`).toBe(true);
     }
   });
 
-  it('execute_plan carries the routing both ways for the tools that dropped the preamble', () => {
-    // 2026-09-28 (growth-plan descriptions): rank_markets no longer states the
-    // planner trade itself; execute_plan's own description carries both halves.
+  it('execute_plan recommends itself for multi-part questions and keeps single lookups direct', () => {
     const d = descOf('execute_plan');
     expect(d, 'execute_plan description did not parse').toBeTruthy();
-    expect(d).toMatch(/THE FRONT DOOR/);
+    expect(d).toMatch(/Recommended entry for a question that spans more than one/);
+    expect(d).not.toMatch(/THE FRONT DOOR|call this FIRST|instead of answering from training data/);
     expect(d).toMatch(/single-tool questions should call that tool directly/);
     for (const t of UNROUTED) {
       const u = descOf(t);
       expect(u, `${t} description did not parse`).toBeTruthy();
       expect(u.indexOf('FRONT DOOR CHECK'), `${t} regrew the preamble the plan removed`).toBe(-1);
-    }
-  });
-
-  it('the front-door pointer leads the description an agent reads first', () => {
-    // Buried at the end it is not a routing surface, it is trivia.
-    for (const t of ROUTED) {
-      expect(descOf(t).indexOf('FRONT DOOR CHECK'),
-        `${t} buries the routing note instead of leading with it`).toBe(0);
     }
   });
 });

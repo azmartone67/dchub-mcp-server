@@ -92,7 +92,8 @@ describe('/mcp/grok initialize instructions state the served tool count', () => 
     const instr = init.json.result.instructions;
     // 2026-10-06 (item 7): the handshake is the lean text, which states the count once as "(N tools)";
     // the full-catalog "N tools over" sentence is in the long form, the resource dchub://instructions.
-    expect(instr).toMatch(new RegExp(`\\(${TOTAL} tools\\)`));
+    // Owner GO 2026-10-20 (directory-safe wording): the lean text states the count as "DC Hub: N tools."
+    expect(instr).toMatch(new RegExp(`DC Hub: ${TOTAL} tools\\.`));
     expect(S._INSTRUCTIONS).toMatch(new RegExp(`\\b${TOTAL} tools over\\b`));
     expect(instr).not.toContain('curated subset');
     expect(instr).toBe(S._INSTRUCTIONS_LEAN);

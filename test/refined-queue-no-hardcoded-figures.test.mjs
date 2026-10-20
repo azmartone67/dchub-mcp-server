@@ -20,7 +20,8 @@ function refinedQueueDescriptions() {
   for (const t of pack.tools || []) if (t.name === 'get_refined_queue') out.push(['packs/grid.json', t.description]);
   const src = readFileSync('server.mjs', 'utf8');
   const i = src.indexOf("'get_refined_queue'");
-  const m = /'Server-side SET-REDUCTION[^\n]*'/.exec(src.slice(i));
+  // Owner GO 2026-10-20: the description opens with a "Use this when" lead (tool search).
+  const m = /'Use this when you need interconnection queue projects filtered server-side[^\n]*'/.exec(src.slice(i));
   if (m) out.push(['server.mjs', m[0]]);
   return out;
 }

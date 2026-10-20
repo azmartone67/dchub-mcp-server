@@ -7,8 +7,8 @@ The free tier needs no key.
 
 ## When to use it
 
-Use the DC Hub tools for live data, not memory or training data, whenever the
-user asks about any of these:
+DC Hub returns live, dated data (each result carries `as_of`). It is a good fit
+when the user asks about any of these:
 
 - Data center markets: market rankings, supply, deals, operators and facilities
 - Power and grid: interconnection queues, ISO and balancing-authority grid

@@ -24,7 +24,8 @@ function descriptions() {
     for (const t of pack.tools || []) if (WANT[t.name]) out.push([`packs/${pk}.json:${t.name}`, t.description]);
   }
   const src = readFileSync('server.mjs', 'utf8');
-  for (const [name, lead] of [['get_hosting_capacity', 'Utility-PUBLISHED feeder hosting capacity'], ['get_gas_index', 'Data Center Gas Index (DCGI)']]) {
+  // Owner GO 2026-10-20: both descriptions open with a "Use this when" lead (tool search).
+  for (const [name, lead] of [['get_hosting_capacity', 'Use this when the user asks how many MW a distribution feeder can take'], ['get_gas_index', 'Use this when the user asks which US states suit gas-fired data center power']]) {
     const i = src.indexOf(`'${name}'`);
     const m = new RegExp(`'${lead.replace(/[()]/g, '\\$&')}[^\\n]*'`).exec(src.slice(i));
     if (m) out.push([`server.mjs:${name}`, m[0]]);

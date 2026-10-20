@@ -57,7 +57,8 @@ describe('the routing sentence', () => {
     // routing sentence must still come before any other instruction.
     expect(i, p).toBeGreaterThan(0);
     expect(INSTR[p].slice(0, i).trim().endsWith('.'), p).toBe(true);
-    expect(i, p).toBeLessThan(INSTR[p].indexOf('FRONT DOOR'));   // the lean handshake (2026-10-06) has no 'Multi-layer' paragraph; FRONT DOOR is its next instruction
+    // Owner GO 2026-10-20: 'MUST CALL (FRONT DOOR)' became the neutral 'TOOL CHOICE' line, still the next instruction.
+    expect(i, p).toBeLessThan(INSTR[p].indexOf('TOOL CHOICE'));
     expect(i, p).toBeLessThan(1500);
   });
 

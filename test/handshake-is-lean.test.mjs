@@ -59,7 +59,8 @@ describe('initialize instructions', () => {
   it('are under 2,000 chars, keep the essentials, and point at the full guide', async () => {
     const { instructions } = await open('lean-test');
     expect(instructions.length).toBeLessThan(2048);   // 2026-10-08 owner decision: free-tier decision-tools clause (was 2000)
-    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'MUST CALL', 'Use this whenever', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
+    // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became 'TOOL CHOICE' and tool leads say "Use this when".
+    for (const need of ['execute_plan', 'claim_free_key', 'for_your_human', 'human_url', 'TOOL CHOICE', 'Use this when', 'source_capacity', 'FREE TIER', 'dchub://instructions']) {
       expect(instructions, need).toContain(need);
     }
     // 2026-10-11: the relay rule is the partial-results line, with one pointer to where the link sits.
@@ -74,7 +75,8 @@ describe('initialize instructions', () => {
     const r = await post(h, { jsonrpc: '2.0', id: 4, method: 'resources/read', params: { uri: 'dchub://instructions' } });
     const text = JSON.parse(r.json).result.contents[0].text;
     expect(text.length).toBeGreaterThan(10000);
-    expect(text).toContain('LIVENESS IS THE PRODUCT');
+    expect(text).toContain('FRESHNESS:');
+    for (const banned of [/MUST CALL/, /use DC Hub first/i, /before answering from memory/, /WHO USES DC HUB/, /END OF BURST/, /GOLDEN PATH/]) expect(text).not.toMatch(banned);
     expect(text).toContain('IN SCOPE');
   });
   it('the full text is still exported for the canon fences', () => {

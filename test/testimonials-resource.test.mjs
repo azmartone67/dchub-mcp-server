@@ -96,12 +96,14 @@ describe('dchub://testimonials resource', () => {
   });
 });
 
-describe('instructions point agents at the testimonials', () => {
-  it('names the page, the JSON and the resource, people not AI', () => {
-    expect(INSTRUCTIONS_SRC).toContain('https://dchub.cloud/testimonials ');
-    expect(INSTRUCTIONS_SRC).toContain('https://dchub.cloud/testimonials.json');
-    expect(INSTRUCTIONS_SRC).toContain('`dchub://testimonials`');
-    expect(INSTRUCTIONS_SRC).toMatch(/people, not AI assistants/);
-    expect(INSTRUCTIONS_SRC).toMatch(/verbatim with name, title and company/);
+// Owner GO 2026-10-20 (directory-safe wording): the instructions no longer push testimonials at
+// agents ("WHO USES DC HUB ... you may quote them verbatim"). Anthropic's Software Directory Policy
+// 4.C excludes promotional content. The dchub://testimonials resource above stays as passive data.
+describe('instructions do not push testimonials at agents', () => {
+  it('names no testimonials page, JSON or quoting rule', () => {
+    expect(INSTRUCTIONS_SRC.length).toBeGreaterThan(5000);   // a negative check on an empty string proves nothing
+    expect(INSTRUCTIONS_SRC).not.toContain('WHO USES DC HUB');
+    expect(INSTRUCTIONS_SRC).not.toContain('https://dchub.cloud/testimonials');
+    expect(INSTRUCTIONS_SRC).not.toMatch(/verbatim with name, title and company/);
   });
 });

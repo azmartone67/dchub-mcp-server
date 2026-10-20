@@ -764,7 +764,8 @@ describe('initialize instructions mention the program', () => {
     const inst = S._INSTRUCTIONS;
     const i = inst.indexOf('CAPACITY SOURCE:');
     expect(i).toBeGreaterThan(-1);
-    const sentence = inst.slice(i, inst.indexOf('LIVENESS IS THE PRODUCT', i));
+    // Owner GO 2026-10-20: the next section heading is FRESHNESS (was LIVENESS IS THE PRODUCT).
+    const sentence = inst.slice(i, inst.indexOf('FRESHNESS:', i));
     expect(sentence).toContain('source_capacity');
     expect(sentence).toContain('request_capacity_intro');
     expect(sentence).toContain('accept_capacity_terms');
@@ -1431,7 +1432,8 @@ describe('request_capacity_intro — the requirement carries kW, regions and cou
 describe('the descriptions state the deal registration', () => {
   it('source_capacity leads with size and location, and says when the provider identity is released', () => {
     const d = TOOLS[READ].description;
-    expect(d.startsWith('Use when your human needs data-center CAPACITY to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro).')).toBe(true);
+    // Owner GO 2026-10-20 (tool search): the description opens "Use this when" with the domain words.
+    expect(d.startsWith('Use this when the user needs data center or colocation capacity to buy or lease: search DC Hub Capacity Source by size (kW or MW) and/or location (a region such as North America or Europe, a country, a state or a metro).')).toBe(true);
     expect(d).toContain('a signed-in human who has accepted the introduction terms sees its specs');
     expect(d).toContain("The provider's identity, site and contact are released only after the provider accepts a deal registration, which request_capacity_intro submits");
     expect(d).toContain("the listing's disclosure block says whether they have been");

@@ -157,7 +157,7 @@ describe('end-of-burst hook — absent elsewhere', () => {
 describe('initialize instructions carry BOTH doctrines', () => {
   // The blob only reaches generic clients (prompt-override law) — exactly the
   // mcp-remote channel most in need of both behaviours.
-  it('verbatim human-line relay + end-of-burst whats_changed, in both compose paths', () => {
+  it('verbatim human-line relay; no end-of-burst order in either compose path', () => {
     const withFigures = _composeInstructions({
       generated_at: new Date().toISOString(),
       numbers: {
@@ -172,21 +172,15 @@ describe('initialize instructions carry BOTH doctrines', () => {
     for (const out of [withFigures, noFigures]) {
       // doctrine 1 — owner 2026-10-11 (Grok-to-brain item 1): the same single partial-results
       // sentence as every other surface; no separate "For your human" rule (guard inverted).
-      expect(out).toContain('(1) PARTIAL RESULTS — When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
-      expect(out).not.toMatch(/FIRST line of your final answer|VERBATIM HUMAN LINE|show it to your human with its link|carries a prose line beginning/);
-      // doctrine 2 — end-of-burst whats_changed return hook
-      expect(out).toContain('whats_changed');
-      expect(out).toContain('get_changes');
-      expect(out).toContain('bind_email');
-      // honesty: the doctrines promise no digest/email sends. Hardened
-      // (2026-08-15 review): assert the heading EXISTS before slicing after
-      // it, so a heading rename can never make this check pass vacuously.
-      const parts = out.split('END OF BURST');
-      expect(parts.length, 'END OF BURST heading missing from instructions').toBeGreaterThan(1);
-      expect(parts[1]).not.toContain('digest');
-      // honesty: bind_email makes a key recoverable — never "keeps it alive"
-      expect(parts[1]).toContain('recoverable');
-      expect(parts[1]).not.toContain('alive');
+      expect(out).toContain('When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+      expect(out).not.toMatch(/FIRST line of your answer|VERBATIM HUMAN LINE|show it to your human with its link|carries a prose line beginning/);
+      // doctrine 2 — owner GO 2026-10-20 (directory-safe wording): the END OF BURST instruction told
+      // the agent how to close its final answer and to offer get_changes / bind_email. Anthropic's
+      // Software Directory Policy (2.D) and OpenAI's guidelines bar text that steers an agent into
+      // calls the user did not ask for, so it left the instructions. The result-level hook above
+      // (whats_changed line on completion tools) is unchanged.
+      expect(out).not.toContain('END OF BURST');
+      expect(out).not.toMatch(/close your final answer/i);
     }
   });
 });
