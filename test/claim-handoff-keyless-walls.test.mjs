@@ -183,7 +183,7 @@ describe('tools/list: claim_free_key leads the full catalog', () => {
       params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claim-handoff-test', version: '1.0' } } });
     const ins = init.json.result.instructions;
     expect(ins.length).toBeLessThanOrEqual(2048);
-    expect(ins).toContain('KEYS: `claim_free_key` (no email) returns a key; save it, never re-mint;');
+    expect(ins).toContain('KEYS: get your human\'s email, then `claim_free_key`; save it, never re-mint;');
   });
 });
 
@@ -194,7 +194,11 @@ describe('the pure line', () => {
       const t = L.claimHandoffText({ status, allowance: allow });
       expect(t).toContain('`claim_free_key`');
       expect(t).toContain('X-API-Key');
-      expect(t).toMatch(status === 'trial_used' ? /their email first/ : /no email/);
+      // Onboarding item 1 (2026-10-20): every status asks for the email first; the limit line keeps the
+      // no-email claim as the fallback, in words, so a human who declines is not stranded.
+      expect(t).toMatch(status === 'trial_used' ? /their email first/ : /ask your human for an email, pass it to `claim_free_key`/);
+      if (status !== 'trial_used') expect(t).toMatch(/without one also works/);
+      expect(t).not.toMatch(/one call, no email/);
       expect(t).not.toMatch(/https?:\/\/|dchub\.cloud/);
       expect(t).not.toMatch(PLAN_WORD);
       expect(t).not.toMatch(/\$\d|unlock/i);
@@ -229,7 +233,7 @@ describe('keyless limit: anon_daily_cap', () => {
     expect(isJson(r.blocks[0]), 'block 0 stays the JSON a client parses').toBe(true);
     const prose = proseBlocks(r.blocks);
     expect(prose.length).toBeGreaterThan(0);
-    expect(prose[0], 'the handoff is the first prose block').toMatch(/^This IP has used today's anonymous allowance\. Free, one call, no email: call `claim_free_key`/);
+    expect(prose[0], 'the handoff is the first prose block').toMatch(/^This IP has used today's anonymous allowance\. Free, one call: ask your human for an email, pass it to `claim_free_key`/);
     expect(prose[0]).toContain('X-API-Key');
     expect(prose[0]).not.toMatch(/https?:\/\//);
     expect(prose[0]).not.toMatch(PLAN_WORD);

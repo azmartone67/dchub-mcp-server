@@ -25749,7 +25749,11 @@ export const _INSTRUCTIONS_LEAN = (() => {
     // v13 (2026-10-10): "no key gives previews" dropped; the FREE TIER block below already says it
     // ("Anonymous: previews, no key needed"), and the longer paid-plan wording needs the room
     // under the 2,048-char handshake budget (test/handshake-is-lean.test.mjs).
-    + 'KEYS: `claim_free_key` (no email) returns a key; save it, never re-mint; `recover_my_key` re-sends a lost one.'
+    // Onboarding item 1 (owner 2026-10-20): the handshake is the first text every agent reads, and it
+    // said "(no email)", so 189 of 191 claims in 30d came without one (2 at claim, 0 later). It now asks
+    // for the email first (the tool takes it; its description says the no-email claim still works).
+    // /mcp/grok sits near its 2,000 headroom line, so the line is only 4 chars longer than before.
+    + 'KEYS: get your human\'s email, then `claim_free_key`; save it, never re-mint; `recover_my_key` re-sends a lost one.'
     + _INSTR_FREE_TIER + ' '
     // v13 (owner 2026-10-10): no plan name in tool text; the instructions line follows the walls.
     // 2026-10-11: the partial-results line names human_message only, so the handshake says where the link sits.

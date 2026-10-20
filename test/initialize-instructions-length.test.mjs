@@ -85,7 +85,9 @@ describe('initialize instructions fit the 2,048-character client budget', () => 
     ['no figure from memory or an earlier call; cite as_of', /Never reuse a figure from memory or an earlier call; cite `as_of`\./],
     ['capacity routing', /CAPACITY SOURCE ROUTING: [^]*\(free; fee only on close\)\./],
     ['front door', /MUST CALL \(FRONT DOOR\): /],
-    ['keys', /`claim_free_key` [^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
+    // Onboarding item 1 (2026-10-20): the line now leads with the email ask, so the tool name is followed
+    // by ';' rather than ' ('; the rule pinned (claim, never re-mint, recover) is unchanged.
+    ['keys', /email, then `claim_free_key`[^.]*never re-mint; `recover_my_key` re-sends a lost one\./],
     ['free tier block', /FREE TIER \(quote verbatim\): Anonymous: previews, no key needed\./],
     // Item 1 (owner 2026-10-16): the "PAID: <tools> need a paid DC Hub plan" line is gone; the
     // siting clause and one neutral line state where the free answers stop.
