@@ -33,6 +33,11 @@ import {
   relayMissedClause, relayPlanName, hiddenFieldsPhrase, fieldLabel, RUNGS,
 } from '../lib/upgrade-missed.mjs';
 import { continuationHumanText } from '../lib/continuation.mjs';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 // ── seats ────────────────────────────────────────────────────────────────────
 // A fresh free and pack key per tool, so one tool's daily counters cannot

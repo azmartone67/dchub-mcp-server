@@ -3,6 +3,11 @@
 // #744: block 0 is exactly the JSON; the prose that followed it is in the blocks after.
 // Real registered handler, stubbed backend, no network.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const BASE = 'https://backend.market-intel-block.test';
 const MARKET = { ok: true, slug: 'ashburn', name: 'Ashburn', facility_count: 412, total_mw: 5123.4,

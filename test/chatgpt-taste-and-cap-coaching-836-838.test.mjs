@@ -26,6 +26,11 @@ import { isGatedResult } from '../lib/paywall-contract.mjs';
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
 process.env.DCHUB_LEAN_RESPONSES = '0';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const BASE = 'https://backend.chatgpt-taste-836-838.test';
 const INTERNAL = 'chatgpt-taste-836-838-internal-key';

@@ -5,6 +5,11 @@
 // in the handler on a backend `_upgrade` key the keyless backend never sends, so its test
 // passed and the live response did not change. This test feeds the REAL keyless shape.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const BASE = 'https://backend.context-pack-tease-human-link.test';
 const RELAY = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}/;

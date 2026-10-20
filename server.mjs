@@ -121,6 +121,8 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep } from './lib/lean-response.mjs';
+import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
+import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -10478,6 +10480,47 @@ export function _contextPackFreeShape(name, parsed) {
     _cite: parsed._cite,
   };
 }
+// The context pack's `_free_preview` is the backend-built free shape the teasing paths read. On an
+// answer that is served in full it is only a duplicate, and its presence made attribution label the
+// full answer partial. Removed from the JSON text and structuredContent; anything else passes through.
+export function _dropServedFreePreview(result, name) {
+  try {
+    if (!CONTEXT_PACK_TOOLS.has(name) || !result || !Array.isArray(result.content)) return result;
+    const b0 = result.content[0];
+    if (!b0 || typeof b0.text !== 'string' || !b0.text.includes('"_free_preview"')) return result;
+    const parsed = JSON.parse(b0.text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.tier !== 'full') return result;
+    const { _free_preview: _fp, ...out } = parsed;
+    const sc = result.structuredContent;
+    const sc2 = (sc && typeof sc === 'object' && !Array.isArray(sc) && '_free_preview' in sc)
+      ? (({ _free_preview: _x, ...rest }) => rest)(sc) : sc;
+    return { ...result, content: [{ ...b0, text: JSON.stringify(out) }, ...result.content.slice(1)],
+             ...(sc2 !== undefined ? { structuredContent: sc2 } : {}) };
+  } catch (_) { return result; }
+}
+// Top-20 metros free applies on every profile but the frozen ChatGPT directory profile (/mcp/chatgpt),
+// whose served bytes stay as reviewed.
+function _topMetroFreeCall(name, args) {
+  const c = getCtx() || {};
+  if (c.profile === DIRECTORY_PROFILE) return null;
+  return _topMetroFreeCallRaw(name, args);
+}
+// Top-20 metros free: the handler's full answer, made safe to hand any caller. The context pack
+// drops its `_free_preview` copy and dates every section; market intel withholds the broker rates;
+// each says why it is open (no plan, no price). Fails closed on a body it cannot parse.
+export function _topMetroFullResult(result, name) {
+  let parsed;
+  try { parsed = JSON.parse(result?.content?.[0]?.text ?? 'null'); } catch (_) { parsed = null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { content: [{ type: 'text', text: JSON.stringify({ ok: false, error: 'market_briefing_unavailable', retry: true }) }] };
+  }
+  let out = parsed;
+  if (CONTEXT_PACK_TOOLS.has(name)) out = _datePackSections(out);
+  if (name === 'get_market_intel') out = _maskBrokerRatesBelowPro(out);
+  out = { ...out, access: 'full', access_basis: TOP_METRO_ACCESS_BASIS };
+  return { ...result, content: [{ type: 'text', text: JSON.stringify(out) }, ...(result.content || []).slice(1)],
+           structuredContent: out };
+}
 // Build the depth-teased response (or null if the payload isn't JSON to trim).
 // Exported for test/anon-seat-fence.test.mjs — the tease envelope must carry
 // the data its own message claims to show.
@@ -11093,6 +11136,15 @@ export function _trialFullRemaining(ipKey, tool, cap, durableId, callerCapBase) 
     const id = durableId || ipKey || 'anon';
     const cn = _trialDayCounts.get(`${id}:${CALLER_CAP_TOOL}:${day}`) || 0;
     return Math.min(perTool, Math.max(0, callerCap - cn));
+  } catch (_) { return 0; }
+}
+
+// Full answers already charged today to one bucket (identity + tool), this call included once it
+// has been charged. A pure read of the same Map the cap decides from.
+export function _fullCallsUsedToday(id, tool) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    return _trialDayCounts.get(`${id || 'anon'}:${tool}:${day}`) || 0;
   } catch (_) { return 0; }
 }
 
@@ -14929,7 +14981,9 @@ function _stampEntityCb(toolName, fn) {
     //   It reads c.tier after the handler ran, so a paid lift inside the call
     //   counts. See _gateToolLocation.
     const _pre = await _gateToolLocation(await fn(args, extra), toolName, getCtx());
-    let r = await _gateToolNumerics(_pre, toolName, getCtx());
+    // Top-20 metros free (lib/top-metros.mjs): the detailed DCPI scores are part of the open briefing.
+    let r = (_topMetroFreeCall(toolName, args) && !_isPaidDepthTier(_nodeTier((getCtx() || {}).tier)))
+      ? _pre : await _gateToolNumerics(_pre, toolName, getCtx());
     // r-relay-names-missed: the numerics gate stripped more than the relay line,
     // composed inside fn, knew about; name the final set.
     if (r !== _pre) r = _refreshRelayLine(r);
@@ -15356,8 +15410,11 @@ export function _splitQueueRow(row) {
     const n = Number(v); return Number.isFinite(n) ? n : null;
   };
   const isoKey = String(r.iso || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const basis = r.queued_load_total_gw_basis || _QUEUE_TOTAL_BASIS[isoKey] || 'unclassified';
-  const stored = f(r.queued_load_total_gw);
+  const basis = r.queue_kind || r.queued_load_total_gw_basis || _QUEUE_TOTAL_BASIS[isoKey] || 'unclassified';
+  // item 2c: a row renamed by lib/queue-kind-fields.mjs carries the total under its kind's own name.
+  const stored = f(r.queued_load_total_gw != null ? r.queued_load_total_gw
+    : basis === 'large_load' ? r.queued_large_load_gw
+    : basis === 'mixed_connection_queue' ? r.queued_connections_gw : r.queued_total_gw);
   const second = f(r.queued_load_data_center_gw);
   const gen = f(r.queued_generation_gw);
   const out = { basis, generation_gw: null, large_load_gw: null, dc_load_gw: null,
@@ -16958,8 +17015,10 @@ export const _TOOL_OUTPUT_SCHEMAS = {
     // queue and on NESO/IESO/AESO a mixed connections queue. Read
     // queued_load_total_gw_basis before using it.
     queued_generation_gw: _oNum('Generation interconnection queue in this ISO, GW (US ISOs; ERCOT\'s generation queue, not its large-load queue). null on NESO/IESO/AESO'),
-    queued_load_total_gw: _oNum('Meaning depends on queued_load_total_gw_basis: generation_queue = the generation queue (deprecated alias of queued_generation_gw, removed after 2026-11-15); large_load = ERCOT\'s large-load (demand) queue; mixed_connection_queue = NESO/IESO/AESO connections queue (generation AND demand). GW'),
-    queued_load_total_gw_basis: _oStr('What queued_load_total_gw measures on this row: generation_queue | large_load | mixed_connection_queue'),
+    // Agent QA A item 2c (2026-10-20): queued_load_total_gw is no longer served (lib/queue-kind-fields.mjs).
+    queue_kind: _oStr('What this row\'s queue total measures: generation_queue | large_load | mixed_connection_queue | unclassified'),
+    queued_large_load_gw: _oNum('ERCOT\'s large-load (demand) interconnection queue, GW. Not generation.'),
+    queued_connections_gw: _oNum('A mixed connections queue (generation AND demand in one figure), GW: NESO, IESO, AESO'),
     queued_generation_gw_basis_note: _oStr('What queued_generation_gw counts on this row: status filter and MW column, e.g. "Active only, summer MW". Present on the US generation-queue ISOs other than ERCOT; compare totals from other trackers only on the same basis'),
     queued_generation_pending_revision_gw: _oNum('MISO only: GW of applications in Pending Revision Approval (summer MW), reported beside the active total and NOT part of queued_generation_gw. null on every other ISO, and null on the free preview like the other GW figures'),
     queued_generation_pending_revision_gw_basis: _oStr('What queued_generation_pending_revision_gw counts: the MISO status, MW column, and that it is excluded from queued_generation_gw. Present only when the figure is'),
@@ -21053,6 +21112,19 @@ function trackedTool(srv, name, description, schema, handler) {
         if (READ_ORDERED_TOOLS.has(name) && !_canRead) { try { c._visible_order = true; } catch (_) { /* ctx is best-effort */ } }
       }
       const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
+      // ── Top-20 metros free (owner decision 2026-10-20; DCHUB_TOP_METROS_FREE=0 kills it) ──
+      // "make the full market briefing (grid, risk, time-to-power) free for the top 20 metros":
+      // get_market_context / get_market_intel / get_market_dcpi_rank on a market in
+      // lib/top-metros.mjs return the full answer to every caller, keyless included, before any
+      // wall, preview, trim, tease, taste, cap or credit charge below. Broker lease rates stay withheld (licensed). The numeric
+      // DCPI gate in _stampEntityCb skips the same calls. A paid-depth caller already gets the
+      // full answer and keeps its own path (broker rates included where its plan has them).
+      if (_topMetroFreeCall(name, args) && !_isPaidDepthTier(_gateTier)) {
+        const _tm = _noDataGuard(await handler(gate.params || args));
+        if (_tm && _tm.isError === true) return _tm;
+        status = 'top_metro_free';
+        return withCitation(_topMetroFullResult(_tm, name), name);
+      }
       // r-pack5 (2026-06-16): a prepaid-credit holder ($5/1000 pack) gets FULL
       // data on gated flagship tools, burning value-tiered credits. ABOVE the
       // free-taste logic, BELOW paid (paid/enterprise already short-circuited in
@@ -22509,11 +22581,17 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               const _mtRemaining = _keyedFree
                 ? _keyedFullRemaining(c, name, _cap, _callerBase)
                 : _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip, _callerBase);
-              const _mtCall = Math.min(_cap, Math.max(1, _cap - _mtRemaining));
+              // Agent QA A item 2b (2026-10-20): `call` is THIS tool's own count on the bucket the
+              // call was charged to. It used to be cap - remaining, and remaining is the smaller of
+              // the per-tool and the all-tools caller budgets, so a first call could read "2 of 10"
+              // after other tools spent the caller budget. `counted` says which bucket that is.
+              const _mtCall = Math.min(_cap, Math.max(1, _fullCallsUsedToday(_capId, name)));
               _mtParsed._metered_trial = {
                 call: _mtCall,
                 of: _cap,
                 remaining_today: _mtRemaining,
+                counted: (c.api_key && _capId === c.api_key)
+                  ? 'per API key, per UTC day, on this tool' : 'per IP address, per UTC day, on this tool',
                 ...(_emailFull ? { allowance: 'email_bound_decision', resets_at: 'next 00:00 UTC' } : {}),
                 // ladder stage 1: only a grandfathered Starter key is metered here;
                 // unlimited depth on the pair is Developer now, not Pro. The wording says
@@ -22913,7 +22991,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // anon-trim branches above already returned for most of those). Wrapped +
       // idempotent — never alters content[] and never blocks the response.
       // #1241: embed an in-context claim at the value moment (grid/fiber, flag-gated).
-      const _valued = await _maybeEmbedValueClaim(result, name, c);
+      // Agent QA A item 2a (2026-10-20): a context pack served in full no longer carries the backend's
+      // `_free_preview` copy, which attribution read as proof of withholding (a tier:"full" answer with
+      // every section was labelled "PARTIAL preview (tier-gated)").
+      const _valued = await _maybeEmbedValueClaim(_dropServedFreePreview(result, name), name, c);
       // r-undercap-ask (2026-07-12, A/B via DCHUB_GRID_UNDERCAP_ASK, default on):
       // the identified-free UNDER-cap grid/fiber "wow" call previously carried only a
       // bind hint — while an ANON caller got the stronger $10 one-click (upstream
@@ -27789,8 +27870,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         await callAPI(a.iso ? '/api/v1/interconnection-queue/by-iso' : '/api/v1/interconnection-queue/snapshot', a), a.iso);
       // r-structured (2026-06-19): structuredContent so agent clients get the
       // queue payload, not just the next_session envelope.
-      const sc = (data && typeof data === 'object' && !Array.isArray(data)) ? data : { data };
-      return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: sc };
+      // Agent QA A item 2c: the load-named queued_load_total_gw leaves under the name of what it measures.
+      const _q = _renameQueueTotals(data);
+      const sc = (_q && typeof _q === 'object' && !Array.isArray(_q)) ? _q : { data: _q };
+      return { content: [{ type: 'text', text: JSON.stringify(_q) }], structuredContent: sc };
     });
 
   trackedTool(srv, 'get_refined_queue',

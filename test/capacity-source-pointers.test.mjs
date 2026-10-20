@@ -21,6 +21,11 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import * as L from '../lib/capacity-source-summary.mjs';
 import { pasteLine, attachCapacity } from '../scripts/ecosystem-sync.mjs';
 import { CAPACITY_BLURB, CAPACITY_LIVE_POINTER, capacityInventoryViolations } from '../lib/capacity-source-summary.mjs';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const BASE = 'http://127.0.0.1:1';
 const SUMMARY = '/api/v1/listings/summary';

@@ -28,6 +28,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import { _freeKeyAllowanceText } from '../lib/tier-canon.mjs';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const K_FREE = 'dch_live_tierclaim_free0001';
 const K_PACK = 'dch_live_tierclaim_packs001';   // identified key holding a live $10 pack balance
