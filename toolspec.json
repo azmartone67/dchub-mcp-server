@@ -143,11 +143,11 @@
           "type": "boolean"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -293,11 +293,11 @@
           "type": "number"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -825,11 +825,11 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -995,11 +995,11 @@
           "type": "boolean"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -1186,11 +1186,11 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -1224,11 +1224,11 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       },
@@ -1512,11 +1512,11 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -1677,11 +1677,11 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -2048,11 +2048,11 @@
           "type": "number"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -2247,11 +2247,11 @@
           "type": "string"
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -2597,11 +2597,11 @@
           ]
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -3203,11 +3203,11 @@
           "maximum": 100000
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }
@@ -3474,11 +3474,11 @@
           "maximum": 500
         },
         "mpp_pay": {
-          "description": "Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.",
+          "description": "Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.",
           "type": "boolean"
         },
         "mpp_credential": {
-          "description": "Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.",
+          "description": "Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human's explicit approval of the charge.",
           "type": "string"
         }
       }

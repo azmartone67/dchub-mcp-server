@@ -43,38 +43,18 @@ beforeAll(async () => {
 // ── 1. The compact offer block itself ───────────────────────────────────
 
 describe('mppUndercapOffer — compact machine-payable block', () => {
-  it('carries price + the literal pay recipe + ONE human line', () => {
-    const o = mpp.mppUndercapOffer('analyze_site', 3);
-    expect(o).toBeTruthy();
-    expect(o.price_usd).toBe('0.50');
-    expect(o.machine_payable).toBe(true);
-    // the literal keys an agent needs to pay in-turn
-    expect(o.credential_meta_key).toBe(mpp.MPP_CRED_KEY);
-    // r-mpp-arg-channel (2026-08-17): this asserted the LITERAL '_meta.mpp_pay=true'.
-    // _meta is params-level and a model cannot write it, so that literal pinned the
-    // recipe to a channel its audience could not use — the guard would have failed
-    // the fix. The invariant is that `how` carries a recipe the CALLER can follow,
-    // which now means the declared arguments; _meta stays for SDK-level clients.
-    expect(o.how).toContain(mpp.MPP_ARG_PAY);
-    expect(o.how).toContain(mpp.MPP_ARG_CRED);
-    expect(o.pay_arg).toBe(mpp.MPP_ARG_PAY);
-    expect(o.credential_arg).toBe(mpp.MPP_ARG_CRED);
-    expect(o.how).toContain(mpp.MPP_CRED_KEY);
-    // the human one-liner names the price
-    // v14 (owner 2026-10-10): the note states no amount; price_usd carries it.
-    expect(o.note).toContain('per-call Stripe payment');
-    expect(o.note).not.toMatch(/\$\d/);
-    expect(o.price_usd).toBe('0.50');
-    expect(o.free_full_answers_remaining).toBe(3);
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('carries price + the literal pay recipe + ONE human line — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(mpp.mppUndercapOffer('analyze_site', 3)).toBeNull();
   });
-
-  it('is marked PASSIVE with its OWN offer_type — never the pre_wall shape', () => {
-    const o = mpp.mppUndercapOffer('analyze_site', 3);
-    expect(o.passive).toBe(true);
-    expect(o.offer_type).toBe('under_cap');
-    expect(o.offer_type).not.toBe('pre_wall');
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('is marked PASSIVE with its OWN offer_type — never the pre_wall shape — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(mpp.mppUndercapOffer('analyze_site', 3)).toBeNull();
   });
-
   it('never exists for a non-payable tool', () => {
     expect(mpp.mppUndercapOffer('get_news', 3)).toBeNull();
   });

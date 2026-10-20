@@ -47,25 +47,22 @@ describe('mpp one-step offer', () => {
     for (const k of need) expect(mpp[k], `missing export ${k}`).toBeDefined();
   });
 
-  it('embeds a ready-to-pay challenge and needs no magic flag', async () => {
-    mode = 'ok';
-    const o = await mpp.mppOffer('get_market_intel');
-    expect(o.protocol).toBe('stripe-mpp');
-    expect(o.challenges).toEqual([CHALLENGE]);
-    expect(o.how).toMatch(/ONE STEP/);
-    expect(o.how).not.toMatch(/mpp_pay=true/);
-    expect(o.pay_now.credential_meta_key).toBe('org.paymentauth/credential');
-    expect(o.pay_now.amount_usd).toBe('0.50');
-    expect(o.pay_now.steps).toHaveLength(3);
-  });
-
-  it('covers the three flagship tools the agent-pay watcher tracks', async () => {
-    mode = 'ok';
-    for (const t of ['get_grid_intelligence', 'get_fiber_intel', 'get_market_intel']) {
-      expect((await mpp.mppOffer(t)).challenges, `${t} must get an inline challenge`).toBeTruthy();
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('embeds a ready-to-pay challenge and needs no magic flag — RETIRED: no passive offer under the human-approval policy', async () => {
+    for (const t of ['get_grid_intelligence', 'get_fiber_intel', 'get_market_intel', 'analyze_site']) {
+      expect(await mpp.mppOffer(t)).toBeNull();
     }
   });
-
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('covers the three flagship tools the agent-pay watcher tracks — RETIRED: no passive offer under the human-approval policy', async () => {
+    for (const t of ['get_grid_intelligence', 'get_fiber_intel', 'get_market_intel', 'analyze_site']) {
+      expect(await mpp.mppOffer(t)).toBeNull();
+    }
+  });
   it('is a no-op when MPP is off or the tool is not payable', async () => {
     process.env.MPP_ENABLED = '0';
     expect(await mpp.mppOffer('analyze_site')).toBeNull();
@@ -73,22 +70,20 @@ describe('mpp one-step offer', () => {
     expect(await mpp.mppOffer('get_news')).toBeNull();
   });
 
-  it('degrades to the two-step hint when the sidecar fails (never throws)', async () => {
-    mode = 'fail';
-    const o = await mpp.mppOffer('analyze_site', 300);
-    expect(o).toBeTruthy();
-    expect(o.challenges).toBeUndefined();
-    expect(o.how).toMatch(/mpp_pay=true/);   // agents can still pay during an outage
-  });
-
-  it('opens a circuit breaker so a sick sidecar cannot tax the hot paywall path', async () => {
-    mode = 'fail';
-    for (let i = 0; i < 3; i++) await mpp.mppOffer('analyze_site', 300);  // trip it
-    hits = 0;
-    for (let i = 0; i < 25; i++) {
-      const o = await mpp.mppOffer('analyze_site', 300);
-      expect(o.challenges).toBeUndefined();
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('degrades to the two-step hint when the sidecar fails (never throws) — RETIRED: no passive offer under the human-approval policy', async () => {
+    for (const t of ['get_grid_intelligence', 'get_fiber_intel', 'get_market_intel', 'analyze_site']) {
+      expect(await mpp.mppOffer(t)).toBeNull();
     }
-    expect(hits, 'breaker open ⇒ zero sidecar calls').toBe(0);
+  });
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('opens a circuit breaker so a sick sidecar cannot tax the hot paywall path — RETIRED: no passive offer under the human-approval policy', async () => {
+    for (const t of ['get_grid_intelligence', 'get_fiber_intel', 'get_market_intel', 'analyze_site']) {
+      expect(await mpp.mppOffer(t)).toBeNull();
+    }
   });
 });

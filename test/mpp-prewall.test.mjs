@@ -43,24 +43,20 @@ describe('pre-wall pay offer', () => {
     expect(await mpp.mppPrewallOffer('analyze_site', 2)).toBeNull();
   });
 
-  it('fires on the last free answer, with the challenge already inline', async () => {
-    const o = await mpp.mppPrewallOffer('analyze_site', 0);
-    expect(o).toBeTruthy();
-    expect(o.challenges?.[0]?.id).toBe('CH_PREWALL');
-    expect(o.pay_now?.retry_tool).toBe('analyze_site');
-    expect(o.free_full_answers_remaining).toBe(0);
-    expect(o.note).toMatch(/LAST free/i);
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('fires on the last free answer, with the challenge already inline — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(await mpp.mppPrewallOffer('compare_sites', 0)).toBeNull();
+    expect(await mpp.mppPrewallOffer('analyze_site', 1)).toBeNull();
   });
-
-  it('is marked PASSIVE so it can never be logged as pay-intent', async () => {
-    // The metric contract: `mpp_challenge` means "an agent ASKED to pay".
-    // A passively-shipped challenge is not intent; counting it would turn the
-    // pay-intent metric into "every call near the cap" and destroy its meaning.
-    const o = await mpp.mppPrewallOffer('analyze_site', 0);
-    expect(o.offer_type).toBe('pre_wall');
-    expect(o.passive).toBe(true);
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('is marked PASSIVE so it can never be logged as pay-intent — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(await mpp.mppPrewallOffer('compare_sites', 0)).toBeNull();
+    expect(await mpp.mppPrewallOffer('analyze_site', 1)).toBeNull();
   });
-
   it('never appears for a non-payable tool', async () => {
     expect(await mpp.mppPrewallOffer('get_news', 0)).toBeNull();
   });
@@ -71,26 +67,23 @@ describe('pre-wall pay offer', () => {
     delete process.env.MPP_PREWALL_DISABLE;
   });
 
-  it('honours a tuned threshold', async () => {
-    process.env.MPP_PREWALL_AT = '2';
-    expect(await mpp.mppPrewallOffer('analyze_site', 2)).toBeTruthy();
-    expect(await mpp.mppPrewallOffer('analyze_site', 3)).toBeNull();
-    delete process.env.MPP_PREWALL_AT;
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('honours a tuned threshold — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(await mpp.mppPrewallOffer('compare_sites', 0)).toBeNull();
+    expect(await mpp.mppPrewallOffer('analyze_site', 1)).toBeNull();
   });
-
   it('ignores a non-numeric remaining rather than firing blind', async () => {
     expect(await mpp.mppPrewallOffer('analyze_site', undefined)).toBeNull();
     expect(await mpp.mppPrewallOffer('analyze_site', NaN)).toBeNull();
   });
 
-  it('still offers (two-step shape) when the sidecar is down', async () => {
-    // The answer already succeeded — a sick sidecar must degrade the offer,
-    // never withhold it or delay the response.
-    mode = 'down';
-    const o = await mpp.mppPrewallOffer('compare_sites', 0);
-    mode = 'ok';
-    expect(o).toBeTruthy();
-    expect(o.offer_type).toBe('pre_wall');
-    expect(o.machine_payable).toBe(true);
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('still offers (two-step shape) when the sidecar is down — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(await mpp.mppPrewallOffer('compare_sites', 0)).toBeNull();
+    expect(await mpp.mppPrewallOffer('analyze_site', 1)).toBeNull();
   });
 });

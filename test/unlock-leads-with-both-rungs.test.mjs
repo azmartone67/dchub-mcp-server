@@ -110,15 +110,15 @@ describe('r-unlock-rungs-first — unlock_more_data leads with both rungs', () =
     expect(env.structuredContent.recommended_subscription).toBe('developer');
   });
 
-  it('with the MPP rail on, the autonomous option follows the human ask', () => {
+  it('with the MPP rail on, no self-pay option is offered (human-approval policy, 2026-10-20)', () => {
     process.env.MPP_ENABLED = '1';
     process.env.MPP_SIDECAR_URL = 'http://127.0.0.1:9';
     const env = unlock({ session_id: SID });
     const text = env.content[0].text;
     expect(text.split('\n')[0].startsWith(HUMAN_FIRST_MARKER)).toBe(true);
-    expect(text.indexOf('mpp_pay=true')).toBeGreaterThan(text.search(LINK_RE));
-    expect(env.structuredContent.machine_pay).toBeTruthy();
-    expect(env.structuredContent.recommended).toBe('mpp');
+    expect(text).not.toContain('mpp_pay=true');
+    expect(env.structuredContent.machine_pay).toBeUndefined();
+    expect(env.structuredContent.recommended).not.toBe('mpp');
   });
 
   it('relay switched off: line one still carries a payable $10 checkout, Developer and Pro', () => {

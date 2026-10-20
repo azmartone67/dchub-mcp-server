@@ -199,11 +199,11 @@ describe.each(CASES.map((c) => [label(c), c]))('%s', (_name, c) => {
       // block and its price field ride (its prose has no amount), and the text carries the MPP line.
       // (The paywall-contract arm serves the plans as data without the MPP block.)
       if (c.mpp === '1-nolink' && c.path === '/mcp' && c.pc === 'off') {
-        expect(sc.machine_pay && sc.machine_pay.price_usd).toBe('0.50');
-        if (!c.args.reason) {
-          expect((sc.plans || []).map((p) => p.id)).toContain('mpp');
-          expect(r.content[0].text).toContain('per-call Stripe payment challenge');
-        }
+        // ★2026-10-20 owner policy: payments need the human's explicit approval, so no self-pay
+        // block, plan or MPP line rides the wall even with the rail armed.
+        expect(sc.machine_pay).toBeUndefined();
+        expect((sc.plans || []).map((p) => p.id)).not.toContain('mpp');
+        expect(r.content[0].text).not.toContain('per-call Stripe payment challenge');
       }
       if (!c.mpp) expect(sc.machine_pay).toBeUndefined();
     } else {
