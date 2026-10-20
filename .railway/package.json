@@ -3,6 +3,6 @@
   "private": true,
   "description": "Railway IaC SDK only; isolated from the app's dependency tree so the shipped image and its lockfile are untouched.",
   "devDependencies": {
-    "railway": "3.11.0"
+    "railway": "3.12.0"
   }
 }
