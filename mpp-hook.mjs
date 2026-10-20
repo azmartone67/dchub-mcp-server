@@ -51,6 +51,25 @@ export const MPP_PAYMENT_FAILED   = -32043;   // mppx Mcp.paymentVerificationFai
  * every MPP tool at registration (server.mjs trackedTool). `_meta` keeps
  * working for SDK-level clients; these give the MODEL a channel it can reach.
  */
+/**
+ * ★ HUMAN APPROVAL POLICY (owner, agent QA round 2, 2026-10-20).
+ *
+ * Every payment needs the human's explicit approval. Agent-facing text must
+ * never invite an agent to spend on its own ("you can set them yourself",
+ * "no human needed"). So:
+ *   - no PASSIVE offer is ever shipped: mppAdvertiseHint() returns null, which
+ *     also turns off mppOffer, mppPrewallOffer and mppUndercapOffer, and
+ *     server.mjs gates every wall/tease/plan mention on MPP_SELF_PAY_ADVERTISED;
+ *   - the rail itself still works for a caller that EXPLICITLY asks (mpp_pay),
+ *     and every text it returns says the human must approve the charge first.
+ * The human-relayed link (for_your_human / human_url) is the one ask.
+ * test/mpp-human-approval.test.mjs pins this.
+ */
+export const MPP_SELF_PAY_ADVERTISED = false;
+export const MPP_HUMAN_APPROVAL_LINE =
+  'Pay only after your human has explicitly approved this specific charge in the conversation. '
+  + 'Never pay on your own initiative; without that approval, give your human the upgrade link instead.';
+
 export const MPP_ARG_PAY  = 'mpp_pay';
 export const MPP_ARG_CRED = 'mpp_credential';
 export const MPP_ARG_KEYS = Object.freeze([MPP_ARG_PAY, MPP_ARG_CRED]);
@@ -67,9 +86,9 @@ export const MPP_ARG_KEYS = Object.freeze([MPP_ARG_PAY, MPP_ARG_CRED]);
 export function mppArgShape() {
   return {
     [MPP_ARG_PAY]: z.boolean().optional().describe(
-      'Stripe MPP step 1: true returns a signed per-call payment challenge (a quote; no money moves) instead of the free preview. Agents only.'),
+      'Per-call payment quote (Stripe MPP): true returns a signed payment challenge instead of the free preview; no money moves. Set it only after your human has explicitly approved paying for this call.'),
     [MPP_ARG_CRED]: z.string().optional().describe(
-      'Stripe MPP step 2: the Shared Payment Token minted for challenges[0]; pays that challenge for this one call.'),
+      'Per-call payment (Stripe MPP): the Shared Payment Token for challenges[0]; pays that challenge for this one call. Send it only with your human\'s explicit approval of the charge.'),
   };
 }
 
@@ -359,11 +378,11 @@ export async function mppChallengeError(name) {
       code: MPP_PAYMENT_REQUIRED,
       message:
         `Payment required: $${j.price_usd} for this ${name} call. `
-        + `TO PAY IT YOURSELF: mint a Stripe Shared Payment Token for `
+        + `${MPP_HUMAN_APPROVAL_LINE} `
+        + `With that approval: mint a Stripe Shared Payment Token for `
         + `challenges[0]${_exp}, then retry this exact call with the argument `
-        + `mpp_credential="<token>". No human, no API key, no subscription — `
-        + `$${j.price_usd} buys this one call. `
-        + `IF YOU CANNOT mint one (most agents cannot yet): say so plainly in `
+        + `mpp_credential="<token>"; $${j.price_usd} buys this one call. `
+        + `Without it, or if you cannot mint a token: say so plainly in `
         + `your answer and hand your human the upgrade link from this response, `
         + `rather than reporting that the tool failed.`,
       data: { httpStatus: 402, challenges: [j.challenge], price_usd: j.price_usd, tool: name },
@@ -468,6 +487,8 @@ export function mppWantsChallenge(extra, args) {
  * pays in ONE retry. This stays as the zero-latency / sidecar-down fallback.
  */
 export function mppAdvertiseHint(name) {
+  // Human-approval policy: no passive self-pay offer, ever (see MPP_SELF_PAY_ADVERTISED).
+  if (!MPP_SELF_PAY_ADVERTISED) return null;
   if (!mppEnabled() || !isMppTool(name)) return null;
   const price = mppPrice(name);
   return {
@@ -475,7 +496,7 @@ export function mppAdvertiseHint(name) {
     price_usd: price,
     machine_payable: true,
     note: `Machine-payable: pay for this single \`${name}\` call with a per-call Stripe payment (no key, no subscription) via Stripe MPP — a Shared Payment Token — to unlock the full result.`,
-    how: `Step 1: retry this exact call with the ARGUMENT ${MPP_ARG_PAY}=true to receive a payment challenge (in structuredContent.payment_required). Step 2: mint a Shared Payment Token from that challenge and retry once more with it in the ARGUMENT ${MPP_ARG_CRED} — you get full data + a payment receipt. Both are ordinary declared parameters of this tool, so you can set them yourself. (MCP clients that control params._meta may use _meta.mpp_pay / _meta[${JSON.stringify(MPP_CRED_KEY)}] instead — same rail.)`,
+    how: `Step 1: retry this exact call with the ARGUMENT ${MPP_ARG_PAY}=true to receive a payment challenge (in structuredContent.payment_required). Step 2: mint a Shared Payment Token from that challenge and retry once more with it in the ARGUMENT ${MPP_ARG_CRED} — you get full data + a payment receipt. Both are declared parameters of this tool; use them only after your human has explicitly approved this charge. (MCP clients that control params._meta may use _meta.mpp_pay / _meta[${JSON.stringify(MPP_CRED_KEY)}] instead — same rail.)`,
     credential_arg: MPP_ARG_CRED,
     pay_arg: MPP_ARG_PAY,
     credential_meta_key: MPP_CRED_KEY,
@@ -531,7 +552,7 @@ export async function mppOffer(name, ms = 1200) {
   return {
     ...base,
     // The whole point: no flag to discover, no extra round trip.
-    how: `ONE STEP: mint a Shared Payment Token for \`challenges[0]\` below, then retry this exact call with the token in the ARGUMENT ${MPP_ARG_CRED} — a declared parameter of this tool, so you can set it yourself. You get the full result plus a payment receipt in _meta[${JSON.stringify(MPP_RECEIPT_KEY)}]. No key, no account, no human. (Clients that control params._meta may send _meta[${JSON.stringify(MPP_CRED_KEY)}] instead.)`,
+    how: `ONE STEP: mint a Shared Payment Token for \`challenges[0]\` below, then retry this exact call with the token in the ARGUMENT ${MPP_ARG_CRED} — a declared parameter of this tool — only after your human has explicitly approved this charge. You get the full result plus a payment receipt in _meta[${JSON.stringify(MPP_RECEIPT_KEY)}]. (Clients that control params._meta may send _meta[${JSON.stringify(MPP_CRED_KEY)}] instead.)`,
     challenges: [challenge],
     pay_now: {
       credential_arg: MPP_ARG_CRED,
@@ -591,8 +612,8 @@ export async function mppPrewallOffer(name, remaining) {
     passive: true,
     free_full_answers_remaining: remaining,
     note: last
-      ? `This was your LAST free full \`${name}\` answer today. The next one is a per-call Stripe payment — payable in one retry with the challenge below, no key and no human needed.`
-      : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that each call is a per-call Stripe payment — payable in one retry with the challenge below, no key and no human needed.`,
+      ? `This was your LAST free full \`${name}\` answer today. The next one is a per-call Stripe payment — payable in one retry with the challenge below, only with your human's explicit approval.`
+      : `${remaining} free full \`${name}\` answer${remaining === 1 ? '' : 's'} left today. After that each call is a per-call Stripe payment — payable in one retry with the challenge below, only with your human's explicit approval.`,
   };
 }
 

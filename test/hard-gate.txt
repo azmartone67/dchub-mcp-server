@@ -3,6 +3,7 @@ test/agent-beat.test.mjs
 test/agent-outreach-e2e.test.mjs
 test/agent-outreach.test.mjs
 test/agent-qa-a-signals-metros.test.mjs
+test/agent-qa-round2-fiber-envelope.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-parcel-not-covered.test.mjs
 test/analyze-site-email-unlock-teaser.test.mjs
@@ -289,6 +290,7 @@ test/mpp-arg-channel.test.mjs
 test/mpp-consent.test.mjs
 test/mpp-covered-tools-exist.test.mjs
 test/mpp-funnel-split.test.mjs
+test/mpp-human-approval.test.mjs
 test/mpp-onestep.test.mjs
 test/mpp-payment-required-actionable.test.mjs
 test/mpp-prewall.test.mjs

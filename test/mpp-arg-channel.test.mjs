@@ -225,42 +225,20 @@ describe('r-mpp-arg-channel: the published recipe names the reachable channel', 
    */
   const bareArgsOnly = (s) => String(s).replace(/_meta(\.|\[)[^\s,)\]]*/g, '‹meta›');
 
-  it('the two-step hint tells the agent to use the payment ARGUMENTS', () => {
-    // The defect was never only plumbing — it was the instruction. An agent that
-    // follows `how` verbatim must land on a channel it can actually write.
-    const hint = mpp.mppAdvertiseHint('analyze_site');
-    const how = bareArgsOnly(hint.how);
-    expect(how, 'the recipe names mpp_pay only in its unreachable _meta form').toContain(mpp.MPP_ARG_PAY);
-    expect(how, 'the recipe names the credential only in its unreachable _meta form').toContain(mpp.MPP_ARG_CRED);
-    expect(hint.credential_arg).toBe(mpp.MPP_ARG_CRED);
-    expect(hint.pay_arg).toBe(mpp.MPP_ARG_PAY);
-    // _meta stays documented for SDK-level clients — this is additive, not a swap.
-    expect(hint.credential_meta_key).toBe(mpp.MPP_CRED_KEY);
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('the two-step hint tells the agent to use the payment ARGUMENTS — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(mpp.mppAdvertiseHint('analyze_site')).toBeNull();
+    expect(await mpp.mppOffer('analyze_site')).toBeNull();
   });
-
-  it('the ONE-STEP offer — the recipe agents actually meet at the wall — does too', async () => {
-    // mppOffer is the primary published surface (agent_payment.how + pay_now.steps).
-    // Stub sidecar so the inline challenge path is the one under test, not the
-    // degraded fallback.
-    const srv = http.createServer((_req, res) => {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, price_usd: '0.50', challenge: { id: 'CH', method: 'stripe' } }));
-    });
-    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-    process.env.MPP_SIDECAR_URL = `http://127.0.0.1:${srv.address().port}`;
-    try {
-      const offer = await mpp.mppOffer('analyze_site');
-      expect(offer.challenges, 'stub sidecar did not mint — this test would assert on the fallback shape').toBeTruthy();
-      expect(bareArgsOnly(offer.how)).toContain(mpp.MPP_ARG_CRED);
-      expect(bareArgsOnly(offer.pay_now.steps.join(' | '))).toContain(mpp.MPP_ARG_CRED);
-      expect(offer.pay_now.credential_arg).toBe(mpp.MPP_ARG_CRED);
-      expect(bareArgsOnly(offer.refresh_challenge)).toContain(mpp.MPP_ARG_PAY);
-    } finally {
-      srv.close();
-      process.env.MPP_SIDECAR_URL = 'http://127.0.0.1:1';
-    }
+  // ★2026-10-20 owner policy: every payment needs the human's explicit approval,
+  // so no passive self-pay offer ships (MPP_SELF_PAY_ADVERTISED=false). This case
+  // used to pin the offer's shape; it now pins that the offer is absent.
+  it('the ONE-STEP offer — the recipe agents actually meet at the wall — does too — RETIRED: no passive offer under the human-approval policy', async () => {
+    expect(mpp.mppAdvertiseHint('analyze_site')).toBeNull();
+    expect(await mpp.mppOffer('analyze_site')).toBeNull();
   });
-
   it('server.mjs advertises the arg names at the wall, not just in _meta prose', () => {
     const src = readFileSync(SERVER, 'utf8');
     // _wallMachinePay is the block seven external agents read in 2026-08 and
