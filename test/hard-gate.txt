@@ -252,6 +252,7 @@ test/ladder-stage1.test.mjs
 test/large-load-passthrough.test.mjs
 test/late-key.test.mjs
 test/leaf-catchment.test.mjs
+test/lean-response.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
 test/list-slim.test.mjs

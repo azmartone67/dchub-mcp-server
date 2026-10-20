@@ -14,6 +14,10 @@
 // HARD gate: deterministic, and its only network is two 127.0.0.1 listeners.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const K_FREE = 'dch_live_retiremw_free00001';
 const K_PACK = 'dch_live_retiremw_packs0001';   // identified key holding a live $10 pack balance

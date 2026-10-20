@@ -3,6 +3,10 @@
 // the wall gets the person's line first; the pack is described as API capacity (the wall pauses
 // anonymous access, it does not sell a plan), and claim_free_key is still offered after it.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 let S, TOOLS, realFetch; const prev = {};
 const SHORT = 'https://dchub.cloud/u/hw2345';

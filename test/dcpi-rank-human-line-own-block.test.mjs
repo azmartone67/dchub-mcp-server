@@ -6,6 +6,10 @@
 //      rung now points at the page that lists the plans.
 // Real registered handler, stubbed backend, no network.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const BASE = 'https://backend.dcpi-own-block.test';
 const SCORES = { ok: true, ghost_field: null, _ghost_field_in_pro: true, market: { slug: 'ashburn', name: 'Ashburn' }, verdict: 'BUILD',
