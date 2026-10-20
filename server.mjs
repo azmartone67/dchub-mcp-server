@@ -693,6 +693,14 @@ function _toolSellsPro(tool) {
 // ★ 2026-10-06 (Grok audit item 2): the default label on a Pro-only tool named neither
 // Pro nor the trial ("Open DC Hub — see what I found"); it now names both, unpriced.
 // v13 (owner 2026-10-10): no plan name in tool text.
+export function _liftDcgiAsOf(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const sc = data.score;
+  if (!sc || typeof sc !== 'object' || !sc.data_as_of || data.as_of) return data;
+  const out = { ...data, as_of: sc.data_as_of };
+  if (sc.data_as_of_basis && !data.as_of_basis) out.as_of_basis = sc.data_as_of_basis;
+  return out;
+}
 export const RELAY_LABEL_PRO = '[🔓 Start a 7-day DC Hub trial]';
 export function _relayLinkLabel(platform, tool) {
   let p = platform;
@@ -26751,6 +26759,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // returns full numbers (free discovery hook); the national ranking masks the
   // numeric fields for non-paid (verdicts stay free) — callAPI forwards the key
   // so keyed/Pro agents get the full scores, and withCitation stamps the cite.
+  // 2026-10-20 (agent panel re-run): the single-state answer carried its data date
+  // only inside `score` (score.data_as_of = the OLDEST of the two DCGI inputs).
+  // A gated answer masks `score` before provenance is built, so the date went with
+  // it and provenance read "as_of: null, UNMEASURED" on a figure the backend dates.
+  // The date of the data is not the withheld number; lift it to the top level.
   trackedTool(srv, 'get_gas_index',
     'Use this when the user asks which US states suit gas-fired data center power: the Data Center Gas Index (DCGI), a per-state score. ★ WITHDRAWN 2026-08-08, RESTORED 2026-08-30 after all three defective terms were repaired: the 20-point interstate-share term was case-blind against EIA TYPEPIPE and scored ~0 for every state; the price was chosen by a non-deterministic tie-break across the EIA industrial (PIN) and electric-power (PEU) series, which carry different margins; and nine states including Texas ran on a hardcoded cost constant because the price loader dropped them on a case-sensitive name lookup. ★ DO NOT COMPARE a DCGI figure published before 2026-08-08 with one published now — they are different indices; the full record is at /api/v1/dcgi/methodology under `corrections`. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason`, never a placeholder score, so treat UNSCORED as absence and not as a low score. `gas_price_series` names which EIA series answered each state. Gas-fired $/MWh figures, withdrawn the same day for a separate defect, were republished 2026-09-27 under one burner-tip price rule (see get_gas_economics). Use get_gas_intelligence for pipeline, operator and parent-midstream data.',
     { state: S.describe('US state abbreviation, e.g. TX, VA, AZ. Returns the DCGI score and verdict, plus `gas_price_series` naming which EIA series priced the state. A state that cannot be priced comes back verdict UNSCORED with dcgi null and an `unscored_reason` — absence, not a low score. Withdrawn 2026-08-08, restored 2026-08-30: do NOT compare against a figure published before 2026-08-08. Use get_gas_intelligence for the per-state pipeline and operator brief'),
@@ -26758,7 +26771,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     async (a) => {
       if (a.state) {
         const st = String(a.state).trim().toUpperCase().slice(0, 2);
-        const data = await callAPI(`/api/v1/dcgi/scores/${st}`, {});
+        const data = _liftDcgiAsOf(await callAPI(`/api/v1/dcgi/scores/${st}`, {}));
         return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
       }
       const data = await callAPI('/api/v1/dcgi/scores', a.limit ? { limit: a.limit } : {});
