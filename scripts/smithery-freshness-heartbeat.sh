@@ -51,6 +51,18 @@ TS="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
 # Convergence budget. Measured at ~60s when the CI lane was written; 20 x 30s
 # gives the re-crawl 9m30s before this is called a failure.
+# ★ 2026-10-19 — Smithery shuts down its proxy, API, CLI and API keys on
+# 2026-10-31 (https://smithery.ai/future). From that day a publish can only
+# fail, so the heartbeat logs that it is retired and exits 0 without calling
+# the CLI. Unload the LaunchAgent (scripts/cloud.dchub.smithery-freshness.plist)
+# after the cut-off; its dead-man feed agent:smithery-freshness stops beating.
+SMITHERY_SHUTDOWN_DATE="${SMITHERY_SHUTDOWN_DATE:-2026-10-31}"
+TODAY_UTC="$(date -u +%F)"
+if [[ ! "$TODAY_UTC" < "$SMITHERY_SHUTDOWN_DATE" ]]; then
+  echo "[$TS] RETIRED: Smithery's API and CLI shut down on $SMITHERY_SHUTDOWN_DATE (https://smithery.ai/future); not publishing. Unload this LaunchAgent." >> "$LOG"
+  exit 0
+fi
+
 CONVERGE_CHECKS="${SMITHERY_CONVERGE_CHECKS:-20}"
 CONVERGE_INTERVAL="${SMITHERY_CONVERGE_INTERVAL:-30}"
 

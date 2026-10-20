@@ -719,8 +719,37 @@ const names = new Set(tools.map((t) => t.name));
   // below records. Spreading over an existing key keeps its position, and this
   // file round-trips through JSON byte-for-byte (asserted by the fence itself:
   // an unchanged tree must produce text identical to what is on disk).
+  // ★2026-10-19 — `packages` links the npm launcher (npm-launcher/, published as
+  // dchub-mcp-server) so the registry entry names the package. Each npm entry's
+  // `version` IS the server.json version: npm-publish.yml publishes exactly that
+  // version on the same merge, and the registry validates the package version
+  // exists on npm (with mcpName == this entry's name) before it accepts a
+  // publish. So it is a parameter of the version, set with it on every render,
+  // and a mismatch on disk is drift in CHECK mode. The identifier must be the
+  // launcher's package name; anything else would point the registry at a
+  // package this repo does not publish.
+  if (Array.isArray(sj.packages)) {
+    const launcher = readJSON('npm-launcher/package.json');
+    for (const p of sj.packages) {
+      if (p.registryType !== 'npm') continue;
+      if (p.identifier !== launcher.name) {
+        problems.push(`${SJ} packages npm identifier ${JSON.stringify(p.identifier)} != npm-launcher/package.json name ${JSON.stringify(launcher.name)}`);
+      }
+      if (launcher.mcpName !== sj.name) {
+        problems.push(`npm-launcher/package.json mcpName ${JSON.stringify(launcher.mcpName)} != ${SJ} name ${JSON.stringify(sj.name)} (the registry rejects the npm package without it)`);
+      }
+      if (p.version !== VERSION) {
+        problems.push(`${SJ} packages npm ${p.identifier} version ${p.version} != ${VERSION}`);
+      }
+    }
+  }
   const healed = JSON.parse(applyQuantities(SJ, JSON.stringify(sj, null, 2) + '\n', QUANTITIES, false));
-  const renderAt = (v) => JSON.stringify({ ...healed, version: v }, null, 2) + '\n';
+  const withPackageVersion = (pkgs, v) => pkgs.map((p) => (p.registryType === 'npm' ? { ...p, version: v } : p));
+  const renderAt = (v) => JSON.stringify({
+    ...healed,
+    version: v,
+    ...(Array.isArray(healed.packages) ? { packages: withPackageVersion(healed.packages, v) } : {}),
+  }, null, 2) + '\n';
   let text = renderAt(VERSION);
 
   // The fence strips `version` before comparing, so which version `text` carries
@@ -1108,8 +1137,12 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
   // (2) server.json evergreen description must keep the canonical positioning
   const sjDesc = (readJSON('server.json').description || '');
   // 2026-10-18: owner-approved lead sentence (Smithery copy) replaced "… query and cite".
-  if (!/^DC Hub is the live data layer for data-center site selection\./.test(sjDesc))
-    problems.push('server.json: description lost canonical positioning ("DC Hub is the live data layer for data-center site selection.")');
+  // 2026-10-19 (registry audit item 3): the official registry's search matches
+  // the NAME only, and the registries that mirror this entry (PulseMCP, the
+  // GitHub MCP registry) show the description as the card text, so it now
+  // leads with the search terms and "query and cite" is back. Both are pinned.
+  if (!/^Data center energy, electricity (and|&) power grid data\b/.test(sjDesc) || !/query and cite/.test(sjDesc))
+    problems.push('server.json: description lost canonical positioning (must start "Data center energy, electricity & power grid data" and keep "query and cite")');
 
   // (3) COVERAGE prose: every phrase quantity (deals, facilities, markets,
   // countries — see QUANTITIES above) must equal the snapshot canon. Scans

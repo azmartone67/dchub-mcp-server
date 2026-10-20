@@ -1,6 +1,7 @@
 # Smithery manifest for DC Hub MCP server.
 # Submission: https://smithery.ai/new — point at azmartone67/dchub-mcp-server.
-# Smithery scans the repo root for this file.
+# (Historical: the current URL-publish flow does not read this file; see the
+# 2026-10-19 shutdown note above `runtime`.)
 #
 # Last refreshed 2026-07-10 (71-tool / v2.4.4 canonical sync). Matches the
 # canonical MCP_SERVER_INFO served by the dchub Cloudflare Worker:
@@ -13,7 +14,7 @@ name: dchub
 displayName: "DC Hub — Power, Energy & Data Center Intelligence"
 description: "Data Center Power Index (DCPI): a daily score of where data centers can get grid power, across 300+ markets. Live electricity, power-grid and energy intelligence for AI agents — and the data centers drawing on it. Real-time utility and grid telemetry from 7 independent feeds: every US ISO (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) plus 40+ EIA balancing authorities, Great Britain, 24 European ENTSO-E bidding zones, Taiwan, Japan, South Korea, Brazil and Australia — fuel mix, renewable share and demand, right now. Plus 182,000 global power generating units across every status (operating, planned, cancelled, shelved, retired — a unit inventory, not a plant count), 13,000 US power plants, 134,000+ substations, 94,000 transmission lines, 33,000 gas pipeline segments, electricity and natural-gas price feeds, renewable-generation data, and live ISO interconnection-queue snapshots with queue depth and per-ISO BUILD/CAUTION/AVOID verdicts. On the demand side: a global data-center facility map across 170+ countries, 300+ markets scored daily with DCPI, 58,000 fiber routes, tax incentives, water risk, per-facility tenants and 1,700+ tracked M&A deals. 94 tools. Every figure is citable and carries an as_of timestamp, and the ingest layer publishes its own freshness at /api/v1/ops/deadman — the only electricity, grid-interconnection and data-center intelligence source an LLM can both query and cite. Free to start (no key: previews; a free key: previews plus 2 full answers per tool per day; with an email: 50/day) — then paid plans: dchub.cloud/pricing."
 homepage: "https://dchub.cloud"
-version: "2.12.41"
+version: "2.12.42"
 keywords:
   - electricity
   - power
@@ -64,6 +65,19 @@ keywords:
   - DCPI
 
 # DC Hub is a remote/hosted Streamable HTTP server, not an npm package.
+#
+# ★ 2026-10-19 — SMITHERY PROXY SHUTDOWN. https://smithery.ai/future says
+# Smithery's MCP Proxy and managed identity shut down on 2026-10-31: run.tools
+# and server.smithery.ai URLs, the Smithery API, CLI, SDKs and API keys all
+# stop working that day, and smithery.ai stays as a public, non-proxied
+# directory whose verified server pages show the DIRECT MCP URL. Our listing's
+# connection URL today is the proxy (https://dchub--azmartone67.run.tools),
+# which forwards to the upstream URL below. That upstream is what the
+# smithery-freshness lane publishes (`smithery mcp publish
+# https://dchub.cloud/mcp -n azmartone67/dchub`), so the URL Smithery can show
+# after the shutdown is already the direct one. Do not point anything at a
+# run.tools URL. This file is not read by the URL-publish flow; it documents
+# the listing and is kept in step with the registry copy.
 runtime: remote
 remote:
   type: streamable-http

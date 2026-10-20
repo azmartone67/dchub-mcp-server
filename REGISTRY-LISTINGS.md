@@ -201,6 +201,14 @@ name, so it cannot inflate any registry's count. Measured before the switch,
 Glama's server page and LobeHub both render this README and so handed out a
 bare `/mcp`: README-driven arrivals were invisible, not absent.
 
+> ★ **2026-10-19: Smithery's MCP Proxy, API, CLI and API keys shut down on
+> 2026-10-31** (https://smithery.ai/future). Every `*.run.tools` URL stops
+> working that day; smithery.ai stays as a non-proxied directory whose verified
+> server pages show the direct MCP URL. Our listing's upstream is
+> `https://dchub.cloud/mcp` (what `smithery-freshness.yml` publishes), and that
+> lane retires itself from 2026-10-31. Any switch below that uses the Smithery
+> CLI must happen before then.
+
 ### How to switch each one
 
 - **Smithery** — republish against the source path:
