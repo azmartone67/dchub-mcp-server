@@ -265,12 +265,18 @@ const relayTokenRaw = (url) => {
   return m ? Buffer.from(m[1], 'base64url').toString('utf8') : '';
 };
 const counterKeysFor = (ip, tool) => [...S._trialDayCounts.keys()].filter((k) => k.startsWith(ip + ':') && k.includes(':' + tool + ':'));
+// #826: a keyed seat's budget is counted on its KEY (plus the per-IP ceiling bucket), not the
+// bare IP, so "counter untouched" has to read every bucket the seat could charge.
+const counterSum = (ids, tool) => [...S._trialDayCounts.entries()]
+  .filter(([k]) => ids.some((id) => id && k.startsWith(id + ':')) && k.includes(':' + tool + ':'))
+  .reduce((a, [, v]) => a + v, 0);
 
 describe('the three decision tools are previews on every non-paid seat (default ON)', () => {
   for (const tool of TOOLS) {
     for (const [seat, who] of SEATS) {
       it(`${tool} / ${seat}: labelled taste, decision scalars absent, counter untouched`, async () => {
         const consumeBefore = consumeHits.length;
+        const keyCountBefore = counterSum([who.key], tool);
         // Item 3 (owner draft 2026-10-16): an email-bound key gets capped FULL grid/queue answers
         // (test/email-bound-decision-full.test.mjs). This row keeps the 10-08 shape as the item-3
         // switch's OFF state, so the taste contract below is still pinned for that seat.
@@ -337,6 +343,8 @@ describe('the three decision tools are previews on every non-paid seat (default 
         }
         // the per-(IP,tool,day) counter is never charged, locally or durably
         expect(counterKeysFor(r.ip, tool)).toEqual([]);
+        expect(counterKeysFor(S.IP_CEILING_PREFIX + r.ip, tool)).toEqual([]);
+        expect(counterSum([who.key], tool)).toBe(keyCountBefore);
         expect(consumeHits.slice(consumeBefore).filter((h) => h.tool === tool)).toEqual([]);
       });
     }
@@ -471,7 +479,10 @@ describe('kill switch DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0 restores the prev
     expect(r.data.taste).toBeUndefined();
     expect(r.data.constraint_score).toBe(49.2);
     expect(r.data._metered_trial && r.data._metered_trial.of).toBeGreaterThan(0);
-    expect(counterKeysFor(r.ip, 'get_grid_intelligence').length).toBeGreaterThan(0);
+    // #826: a keyed caller is charged on its key (and the per-IP ceiling), never the bare IP bucket.
+    expect(counterKeysFor(KEYS.free, 'get_grid_intelligence').length).toBeGreaterThan(0);
+    expect(counterKeysFor(S.IP_CEILING_PREFIX + r.ip, 'get_grid_intelligence').length).toBeGreaterThan(0);
+    expect(counterKeysFor(r.ip, 'get_grid_intelligence')).toEqual([]);
     // the durable consume is write-behind (fire-and-forget POST, server.mjs _fullCapConsume):
     // it lands after the response, so wait for it rather than read the stub synchronously.
     const consumed = () => consumeHits.slice(consumeBefore).some((h) => h.tool === 'get_grid_intelligence');

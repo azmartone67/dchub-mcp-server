@@ -60,6 +60,7 @@ const ROWS = Array.from({ length: 5 }, (_, i) => ({
 }));
 
 let stub;
+let mintN = 0;
 const servers = [];
 const prevEnv = {};
 
@@ -93,10 +94,13 @@ beforeAll(async () => {
     stub = createServer(async (req, res) => {
       const url = new URL(req.url, 'http://_');
       res.setHeader('content-type', 'application/json');
-      if (url.pathname === '/api/v1/keys/auto-mint') { res.end(JSON.stringify({ ...MINT, reused: false })); return; }
+      // #826: the daily full-answer budget is per KEY, so each mint (one per session/IP, as the
+      // backend's ip/ua dedup gives a real caller) is a distinct key. One shared key would make
+      // the control session below inherit session 1's spent budget.
+      if (url.pathname === '/api/v1/keys/auto-mint') { res.end(JSON.stringify({ ...MINT, api_key: TRIAL + 'm' + (++mintN), reused: false })); return; }
       if (url.pathname === '/api/v1/keys/validate') {
         const key = (await readBody(req)).api_key || '';
-        res.end(JSON.stringify(key === TRIAL || key === TRIAL_KEYED
+        res.end(JSON.stringify(key.startsWith(TRIAL) || key === TRIAL_KEYED
           ? { valid: true, tier: 'free', developer_id: null, email: null, source: 'auto_trial' }
           : { valid: false, tier: 'free' }));
         return;

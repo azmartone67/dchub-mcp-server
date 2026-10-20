@@ -6032,6 +6032,51 @@ export function _challengeBudgetKey({ bearer, clientIp, forwardedFor, remoteAddr
 }
 
 
+// ── #829 (owner-approved 2026-10-20): a FRESH key sent as `Authorization: Bearer`
+// must not be 401'd while X-API-Key with the same key works. Measured 2026-10-07:
+// initialize with Bearer <new dch_live_ key> at T+5s -> 401 on every /mcp* path,
+// ~3 min later 200; X-API-Key worked at once. The two channels differ only here:
+// an X-API-Key that does not validate falls back to the anonymous tier, while this
+// gate turns ANY `valid:false` into a 401. Three ways a real key reads `valid:false`
+// for a while, and none of them is "this credential is not a key":
+//   1. the backend hop timed out or 5xx'd (validateKey -> indeterminate, never
+//      cached). That is our outage, not the caller's credential.
+//   2. an earlier `valid:false` is in keyCache for KEY_CACHE_TTL (5 min) on this
+//      replica, from a read before the key row was visible.
+//   3. this replica minted the key moments ago (claim_free_key).
+// So the 401 now needs the backend to have AUTHORITATIVELY rejected the key on a
+// FRESH read (cache dropped first for a DC Hub-shaped key), and never fires for a
+// key this replica minted within RECENT_MINT_TRUST_MS. A junk token still 401s.
+// The re-read is bounded by the per-credential challenge budget (CHALLENGE_MAX).
+export const RECENT_MINT_TRUST_MS = Math.max(0, parseInt(process.env.DCHUB_RECENT_MINT_TRUST_MS || '600000', 10));
+const _recentMints = new Map();   // api_key -> minted-at ms (this replica only)
+export function _noteMintedKey(k) {
+  if (!k || RECENT_MINT_TRUST_MS <= 0) return;
+  if (_recentMints.size > 5000) _recentMints.clear();
+  _recentMints.set(String(k), Date.now());
+}
+export function _recentlyMinted(k) {
+  const at = k ? _recentMints.get(String(k)) : undefined;
+  return typeof at === 'number' && (Date.now() - at) < RECENT_MINT_TRUST_MS;
+}
+const _DCHUB_KEY_SHAPE = /^dch_(live|trial)_[A-Za-z0-9]+$/;
+// true only when the presented Bearer is proven NOT a key: the 401 is allowed.
+export async function _bearerProvenInvalid(bearer) {
+  const b = String(bearer || '').trim();
+  if (!b) return false;
+  if (_recentlyMinted(b)) return false;
+  let v = await validateKey(b);
+  if (v && v.valid) return false;
+  if (!v || !v.key_rejected) return false;            // indeterminate: never 401 on our blip
+  if (_DCHUB_KEY_SHAPE.test(b)) {                     // a cached rejection may predate the row
+    _dropKeyCache(b);
+    v = await validateKey(b);
+    if (v && v.valid) return false;
+    if (!v || !v.key_rejected) return false;
+  }
+  return true;
+}
+
 function _invalidBearerEligible({ authHeader, hasApiKeyHeader, bearerResolved, method, hasSession,
                                  challengesIssued, challengeMax }) {
   if (!/^Bearer\s+\S/i.test(String(authHeader || ''))) return false; // no Bearer credential presented
@@ -11050,6 +11095,51 @@ export function _trialFullRemaining(ipKey, tool, cap, durableId, callerCapBase) 
   } catch (_) { return 0; }
 }
 
+// ── #826 (owner-approved 2026-10-20): a KEYED caller's full-answer budget is
+// counted on the KEY, not on the IP it shares. Hosted agents (ChatGPT, Claude,
+// Grok, Smithery) share egress addresses, so the IP bucket a freshly claimed key
+// used to read was already spent by anonymous traffic from the same NAT, and its
+// first answer reported `remaining_today: 0`. Every door says "Free key: previews
+// plus 2 full answers per tool per day" — per key in the reader's mind, so the
+// counter now matches the copy. Anonymous callers keep the per-IP bucket.
+//
+// Key cycling (mint a key, spend it, mint another) is bounded by a per-IP CEILING
+// across all keys on that address: KEYED_IP_CEILING_MULT x the per-tool cap.
+// It is generous on purpose, because the same shared egress that caused #826
+// carries many honest keys; it exists to stop a loop, not to ration a NAT.
+//   DCHUB_KEYED_IP_FULL_CEILING_MULT=0  disables the ceiling (per-key only).
+export const KEYED_IP_CEILING_MULT = Math.max(0, parseInt(process.env.DCHUB_KEYED_IP_FULL_CEILING_MULT || '10', 10));
+// The ceiling bucket's identity. Prefixed so it can never collide with an api key
+// or with the bare IP the anonymous bucket uses.
+export const IP_CEILING_PREFIX = 'ipceil:';
+
+// The identity whose budget a call spends: the api key when one was presented,
+// else the client IP (anonymous). Never the IP for a keyed caller.
+export function _fullBudgetId(c) {
+  if (c && c.api_key) return c.api_key;
+  return (c && c.client_ip) || null;
+}
+function _ipCeilingId(c) {
+  return (c && c.api_key && c.client_ip && KEYED_IP_CEILING_MULT > 0) ? IP_CEILING_PREFIX + c.client_ip : null;
+}
+// Charge one full answer to the keyed caller's own bucket, then (only if that
+// bucket still had room) to the shared per-IP ceiling. Either being spent gates.
+export async function _keyedFullCallsExceeded(c, tool, cap, callerCapBase) {
+  const id = _fullBudgetId(c);
+  if (await _trialFullCallsExceeded(id, tool, cap, id, callerCapBase)) return true;
+  const ceil = _ipCeilingId(c);
+  if (!ceil || !(cap > 0)) return false;
+  return await _trialFullCallsExceeded(ceil, tool, cap * KEYED_IP_CEILING_MULT, ceil);
+}
+// Pure peek, same buckets: the smaller of the key's remaining and the ceiling's.
+export function _keyedFullRemaining(c, tool, cap, callerCapBase) {
+  const id = _fullBudgetId(c);
+  const r = _trialFullRemaining(id, tool, cap, id, callerCapBase);
+  const ceil = _ipCeilingId(c);
+  if (!ceil || !(cap > 0)) return r;
+  return Math.min(r, _trialFullRemaining(ceil, tool, cap * KEYED_IP_CEILING_MULT, ceil));
+}
+
 // ── r-undercap-offer (2026-08-15): bounded schedule for the compact under-cap
 // pay offer (mppUndercapOffer). The offer rides the FIRST under-cap full answer
 // per (session, tool) — NOT every call (response bloat), and NEVER on:
@@ -13870,8 +13960,10 @@ const TRIAL_HEADER_OVERRIDES = {
     try {
       const _c = getCtx();
       if (_c && _c.client_ip && TRIAL_DAILY_FULL_CAP > 0) {
-        _remaining = _trialFullRemaining(_c.client_ip, 'get_grid_intelligence', TRIAL_DAILY_FULL_CAP,
-                                         _c.api_key || _c.client_ip);
+        _remaining = _c.api_key   // #826: keyed callers spend the key's budget
+          ? _keyedFullRemaining(_c, 'get_grid_intelligence', TRIAL_DAILY_FULL_CAP)
+          : _trialFullRemaining(_c.client_ip, 'get_grid_intelligence', TRIAL_DAILY_FULL_CAP,
+                                _c.api_key || _c.client_ip);
       }
     } catch (_) {}
     return '🔒 **`get_grid_intelligence` returned a preview** — full per-ISO depth (all 7 US ISOs + queue + time-to-power) is one click: 💳 ' + _rungsText('get_grid_intelligence', 'free', sessionId) +
@@ -14731,7 +14823,11 @@ function _buildQuotaHint(toolName) {
       // it has headroom forever, so it never claims a key and never converts.
       if (_durable) {
         q.full_answers_cap_today = ANON_FULL_CAP;
-        q.full_answers_remaining_today = _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP, (c && (c.api_key || c.client_ip)));
+        // #826: a keyed caller reads its key's bucket; a session-bound anon seat
+        // (no key on ctx yet) is still charged on the IP by the auto-mint cascade.
+        q.full_answers_remaining_today = (c && c.api_key)
+          ? _keyedFullRemaining(c, toolName, ANON_FULL_CAP)
+          : _trialFullRemaining(c && c.client_ip, toolName, ANON_FULL_CAP, (c && (c.api_key || c.client_ip)));
       } else {
         q.full_answers_cap_today = null;
         q.full_answers_remaining_today = null;
@@ -21556,12 +21652,18 @@ function trackedTool(srv, name, description, schema, handler) {
               // ★ AWAIT: the call is async now. Without it this is a Promise,
               // which is truthy, and EVERY call would gate. See the source
               // guard in test/full-cap-enforce.test.mjs.
-              && await _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP,
-                                               c.api_key || c.client_ip);  // r-durable-cap: durable identity = api_key||ip
+              // #826: once the trial key is bound to this ctx the answer is the KEY's, so it is
+              // charged on the key (plus the per-IP ceiling) exactly as that key's later calls
+              // are; a seat with no key on ctx stays on the anonymous per-IP bucket.
+              && (c.api_key
+                ? await _keyedFullCallsExceeded(c, name, ANON_FULL_CAP)
+                : await _trialFullCallsExceeded(c.client_ip, name, ANON_FULL_CAP,
+                                                c.api_key || c.client_ip));  // r-durable-cap: durable identity = api_key||ip
             // Only claim a remaining-count for tools the cap actually governs —
             // a non-taste tool must not advertise "N more full answers today".
             const _remainingFull = (_freeTasteTool(name) && ANON_FULL_CAP > 0)
-              ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip)
+              ? (c.api_key ? _keyedFullRemaining(c, name, ANON_FULL_CAP)   // #826: same bucket as the charge
+                           : _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip))
               : null;
             const { text: _autoMintText, sc: _autoMintSC } = buildAutoMintBlock(_mint, name, _mintBound, _remainingFull);
             // 2026-06-07 HIGH-INTENT CLAIM: bump per-(session,tool) counter +
@@ -22018,7 +22120,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // r-honest-cap (2026-07-01): pure PEEK here — this hard-wall response
         // consumes no full answer, so no increment; the count is already honest.
         const _remainingFull2 = (_freeTasteTool(name) && ANON_FULL_CAP > 0)
-          ? _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip)
+          ? (c.api_key ? _keyedFullRemaining(c, name, ANON_FULL_CAP)   // #826: keyed seat reads its key
+                       : _trialFullRemaining(c.client_ip, name, ANON_FULL_CAP, c.api_key || c.client_ip))
           : null;
         const { text: _autoMintText2, sc: _autoMintSC2 } = buildAutoMintBlock(_mint2, name, _mint2Bound, _remainingFull2);
         // MCP-C (2026-06-06): write tool_requested-tagged signal here too.
@@ -22351,14 +22454,19 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // on the API KEY like the paid taste (the allowance belongs to the bound key); the caller's
         // all-tools budget stays the email tier's (callerCapBase), not a multiple of this small cap.
         const _emailFull = gate.email_full === true;
-        const _capId = (_paidTaste || _emailFull) ? (c.api_key || c.client_ip) : c.client_ip;
+        // #826: a keyed free/trial caller spends its OWN key's budget (plus the per-IP
+        // ceiling against key cycling); only a keyless seat falls back to the IP bucket.
+        const _keyedFree = !_paidTaste && !_emailFull && !!c.api_key;
+        const _capId = (_paidTaste || _emailFull) ? (c.api_key || c.client_ip) : _fullBudgetId(c);
         const _cap = _paidTaste ? PAID_DAILY_FULL_CAP
                    : _emailFull ? EMAIL_DECISION_DAILY_FULL_CAP
                    : _bound ? IDENTIFIED_DAILY_FULL_CAP : TRIAL_DAILY_FULL_CAP;
         const _callerBase = _emailFull ? IDENTIFIED_DAILY_FULL_CAP : undefined;
         const _tasteExceeded = _cap > 0
-          && await _trialFullCallsExceeded(_capId, name, _cap,
-                                           c.api_key || c.client_ip, _callerBase);  // r-durable-cap: durable identity = api_key||ip
+          && (_keyedFree
+            ? await _keyedFullCallsExceeded(c, name, _cap, _callerBase)
+            : await _trialFullCallsExceeded(_capId, name, _cap,
+                                            c.api_key || c.client_ip, _callerBase));  // r-durable-cap: durable identity = api_key||ip
         if (_cap > 0 && !_tasteExceeded) {
           // Growth freeze (owner 2026-10-19): the email allowance opens get_market_intel, but never
           // the broker rates (H1). Fail closed: if the payload cannot be parsed, serve the taste path's
@@ -22382,7 +22490,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           try {
             const _mtParsed = JSON.parse(result.content?.[0]?.text || '{}');
             if (_mtParsed && typeof _mtParsed === 'object' && !Array.isArray(_mtParsed)) {
-              const _mtRemaining = _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip, _callerBase);
+              const _mtRemaining = _keyedFree
+                ? _keyedFullRemaining(c, name, _cap, _callerBase)
+                : _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip, _callerBase);
               const _mtCall = Math.min(_cap, Math.max(1, _cap - _mtRemaining));
               _mtParsed._metered_trial = {
                 call: _mtCall,
@@ -22641,7 +22751,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             // key is built from the FIRST arg (client_ip); the durable id is only
             // used for hydration, so read with the same client_ip or you read a
             // different bucket and always see a full allowance.
-            const _rem = _trialFullRemaining(c.client_ip, name, _cap, c.api_key || c.client_ip);
+            // #826: same bucket the charge above used (the key's, for a keyed caller).
+            const _rem = _keyedFree
+              ? _keyedFullRemaining(c, name, _cap)
+              : _trialFullRemaining(_capId, name, _cap, c.api_key || c.client_ip);
             const _pre = await mppPrewallOffer(name, _rem);
             if (_pre) {
               const _p = JSON.parse(result.content?.[0]?.text || '{}');
@@ -29841,6 +29954,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       const r = await callAPIWrite('/api/v1/keys/claim', body);
       const key = r && (r.api_key || r.key);
+      if (key) { try { _noteMintedKey(key); } catch (_) {} }   // #829: never 401 our own fresh mint
       // r-held-key: remember the mint for this fingerprint (free dch_live_ only).
       if (key) { try { _rememberHeldKey(_fp, key, (r && r.tier) || 'free'); } catch (_) {} }
       if (!key) {
@@ -32268,8 +32382,7 @@ app.post(MCP_PATHS, async (req, res) => {
           challengesIssued: _challengesIssued(_ibKey),
           challengeMax: CHALLENGE_MAX,
         })) {
-      const _bv = await validateKey(_bearer);
-      if (!_bv.valid) {
+      if (await _bearerProvenInvalid(_bearer)) {   // #829: proven-not-a-key only
         res.set('WWW-Authenticate', CLAUDE_INVALID_TOKEN_CHALLENGE);
         _bumpChallengeIssued(_ibKey);
         return res.status(401).json({
@@ -32298,8 +32411,7 @@ app.post(MCP_PATHS, async (req, res) => {
           challengesIssued: _challengesIssued(_ibKey),
           challengeMax: CHALLENGE_MAX,
         })) {
-      const _bv = await validateKey(_bearer);
-      if (!_bv.valid) {
+      if (await _bearerProvenInvalid(_bearer)) {   // #829: proven-not-a-key only
         res.set('WWW-Authenticate',
           'Bearer error="invalid_token", '
           + 'error_description="Token is not a valid DC Hub api key or AuthKit access token", '
