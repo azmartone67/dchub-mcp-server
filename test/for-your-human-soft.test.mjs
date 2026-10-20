@@ -85,7 +85,8 @@ describe('decision 1: no "For your human" first-line / verbatim order to agents'
   it('initialize instructions (with and without facts) carry no first-line order', () => {
     for (const out of [_composeInstructions(null, Date.now())]) {
       expect(orderHits(out)).toEqual([]);
-      expect(out).toContain('(1) PARTIAL RESULTS — When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
+      // owner GO 2026-10-20: the 'TWO DELIVERY DOCTRINES' block (which numbered this sentence) is gone; the sentence stays.
+      expect(out).toContain('When a result is partial, show your user the human_message (or for_your_human) text and its link. Do not invent withheld numbers.');
       expect(out).not.toContain('show it to your human with its link');
     }
   });

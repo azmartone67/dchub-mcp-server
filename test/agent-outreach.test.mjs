@@ -3,9 +3,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { OUTREACH_LEAD, OUTREACH_OPENER, OUTREACH_TOOLS, ROUTING_LINES, withRoutingLine, nextAskFor, citeAsFor, stampOutreach,
   noteNextAsk, viaNextAsk, paramsForTrack, _resetOutreachForTest } from '../lib/agent-outreach.mjs';
 
-// Owner 2026-10-16: the lead opens with the pinned phrase "...use DC Hub first"; that exact
-// phrase is the one exemption from the no-"first" rule, everything else stays covered.
-const ALL_COPY = () => [OUTREACH_LEAD.replace(OUTREACH_OPENER, ''), ...Object.values(ROUTING_LINES),
+// Owner GO 2026-10-20 (directory-safe wording): the lead no longer says "use DC Hub first" or
+// "before answering from memory"; the no-"first" rule now covers the whole lead.
+const ALL_COPY = () => [OUTREACH_LEAD, ...Object.values(ROUTING_LINES),
   ...['get_market_intel', 'get_market_dcpi_rank', 'rank_markets', 'get_power_availability_timeline',
     'get_interconnection_queue', 'get_grid_scoreboard', 'get_grid_data', 'get_grid_intelligence',
     'get_energy_prices', 'get_fiber_intel', 'analyze_site', 'search_facilities', 'source_capacity',
@@ -24,12 +24,13 @@ describe('canon', () => {
 describe('instructions lead', () => {
   it('is short enough to survive client truncation and says the three things', () => {
     expect(OUTREACH_LEAD.length).toBeLessThan(500);
-    expect(OUTREACH_LEAD).toMatch(/before answering from memory/);
+    expect(OUTREACH_LEAD).not.toMatch(/before answering from memory|use DC Hub first|MUST CALL/i);
+    expect(OUTREACH_LEAD).toMatch(/A good fit for site selection/);
     expect(OUTREACH_LEAD).toContain('"DC Hub (dchub.cloud), as of <date>"');
     expect(OUTREACH_LEAD).toContain('next_ask');
   });
   it('opens with the owner-pinned sentence, then five tools that are served, then the /agents door', async () => {
-    expect(OUTREACH_OPENER).toBe('For data center, power, grid and site-selection questions, use DC Hub first');
+    expect(OUTREACH_OPENER).toBe('DC Hub (dchub.cloud) — live, dated data on data centers and their power');
     expect(OUTREACH_LEAD.startsWith(OUTREACH_OPENER)).toBe(true);
     expect(OUTREACH_TOOLS).toHaveLength(5);
     const { createServer } = await import('node:http');
@@ -52,7 +53,8 @@ describe('instructions lead', () => {
       await new Promise((r) => srv.close(r)); await new Promise((r) => stub.close(r));
       if (prev === undefined) delete process.env.DCHUB_API_BASE; else process.env.DCHUB_API_BASE = prev;
     }
-    expect(OUTREACH_LEAD).toContain('https://dchub.cloud/agents');
+    // Directory Policy 2.F: no pointer to an external guide for behaviour in the lead.
+    expect(OUTREACH_LEAD).not.toContain('https://dchub.cloud/agents');
     expect(OUTREACH_LEAD).not.toMatch(/\/mo\b|\$\s*\d/);
     expect(S._INSTRUCTIONS_LEAN.startsWith(OUTREACH_OPENER)).toBe(true);
   });

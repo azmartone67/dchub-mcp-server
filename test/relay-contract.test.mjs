@@ -395,8 +395,10 @@ describe('every gated tool, keyless: the contract holds across the whole catalog
 describe('gate sections never name a pricing page, and never make unlock_more_data THE step', () => {
   it('handshake instructions (lean) and the long form', () => {
     expect(S._INSTRUCTIONS_LEAN).toContain(S.RELAY_CONTRACT);
-    expect(S._INSTRUCTIONS_LEAN).toContain('MUST CALL');
-    expect(S._INSTRUCTIONS_LEAN).toContain('Use this whenever');
+    // Owner GO 2026-10-20 (directory-safe wording): 'MUST CALL' became the neutral 'TOOL CHOICE' line; tool leads say "Use this when".
+    expect(S._INSTRUCTIONS_LEAN).toContain('TOOL CHOICE');
+    expect(S._INSTRUCTIONS_LEAN).toContain('Use this when');
+    expect(S._INSTRUCTIONS_LEAN).not.toContain('MUST CALL');
     expect(S._INSTRUCTIONS_LEAN).not.toContain('unlock_more_data');
     for (const t of [S._INSTRUCTIONS_LEAN, S._INSTRUCTIONS]) {
       expect(stripContract(t).match(BANNED)).toBeNull();
@@ -416,7 +418,7 @@ describe('gate sections never name a pricing page, and never make unlock_more_da
   it('the single-fact tools tell an agent when to call them', () => {
     for (const n of ['get_interconnection_queue', 'get_grid_intelligence', 'get_energy_prices', 'get_fiber_intel',
       'search_facilities', 'get_market_intel']) {
-      expect(TOOLS[n].description, n).toMatch(/Use this whenever/);
+      expect(TOOLS[n].description, n).toMatch(/^Use this when /);   // owner GO 2026-10-20 (tool search)
     }
   });
   it('wall copy in server.mjs no longer tells an agent to call unlock_more_data', () => {

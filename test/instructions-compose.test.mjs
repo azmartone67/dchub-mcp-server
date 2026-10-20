@@ -116,7 +116,8 @@ describe('instructions compose gate', () => {
     for (const bad of [null, undefined, {}, { numbers: null }, 'not-an-object', 42]) {
       const out = _composeInstructions(bad, NOW);
       expect(hasFigures(out), `facts=${JSON.stringify(bad)}`).toBe(false);
-      expect(out).toContain('DC Hub is the live infrastructure data layer');
+      expect(out).toContain('COVERAGE: ');   // owner GO 2026-10-20: was the 'live infrastructure data layer ... instead of guessing' lead
+      expect(out).not.toMatch(/instead of guessing|stale training data|ground truth/);
     }
   });
 

@@ -261,8 +261,9 @@ describe('smithery.yaml canonical-quantity guard', () => {
       // now, so the control puts a count back where search_facilities had one.
       // 2026-09-28 (growth-plan descriptions): search_facilities no longer has
       // a coverage clause at all, so the count is injected into its lead.
-      (orig) => orig.replace('Call when the user wants existing data centers matching filters',
-        'Search 12,650+ global data center facilities across 170+ countries matching filters'),
+      // 2026-10-20 (owner GO, tool search): the lead is now "Use this when ...".
+      (orig) => orig.replace('Use this when the user asks which data centers exist, or who operates in a city, state or country; filters:',
+        'Search 12,650+ global data center facilities across 170+ countries matching filters:'),
       () => {
         const { ok, out } = check();
         expect(ok, 'guard did NOT catch a facility count in server.mjs').toBe(false);

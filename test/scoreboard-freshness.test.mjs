@@ -155,7 +155,8 @@ describe('get_grid_scoreboard tool description', () => {
     .then(fs => fs.readFile(new URL('../server.mjs', import.meta.url), 'utf8'));
   const desc = async () => {
     const src = await readSrc();
-    const a = src.indexOf("'GLOBAL grid scoreboard —");
+    // Owner GO 2026-10-20: the description now opens with a "Use this when" lead; the block starts after it.
+    const a = src.indexOf("GLOBAL grid scoreboard —");
     const b = src.indexOf('Try: get_grid_scoreboard.', a);
     expect(a).toBeGreaterThan(-1);
     expect(b).toBeGreaterThan(a);

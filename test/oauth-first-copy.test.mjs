@@ -45,7 +45,8 @@ const bind  = descAfter('★ WHAT THIS DOES AND DOES NOT DO', 'Returns the unloc
 // anchors on was reworded. The anchor is a slicing boundary, not the thing under
 // test — it is kept to the stable prefix so a future count change cannot break
 // this suite's collection again.
-const instr = descAfter('GOLDEN PATH for your first session', 'If a result comes back as a partial preview');
+// Owner GO 2026-10-20 (directory-safe): the GOLDEN PATH block became the neutral KEYS AND SIGN-IN section.
+const instr = descAfter('KEYS AND SIGN-IN, most durable first', ' PARTIAL RESULTS:');
 
 describe('claim_free_key leads with the identity that retains', () => {
   it('names the durable OAuth path', () => {

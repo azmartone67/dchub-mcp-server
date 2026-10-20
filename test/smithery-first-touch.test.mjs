@@ -64,7 +64,10 @@ describe('saved-work tool descriptions lead with the key requirement', () => {
       const i = SRC.indexOf(`trackedTool(srv, '${tool}', '`);
       expect(i).toBeGreaterThan(-1);
       const desc = SRC.slice(i + `trackedTool(srv, '${tool}', '`.length, i + 400);
-      expect(desc.startsWith('NEEDS A KEY (free):')).toBe(true);
+      // Owner GO 2026-10-20 (tool search): every description opens "Use this when ..."; the key
+      // requirement is the very next sentence, still ahead of what the tool does.
+      expect(desc.startsWith('Use this when')).toBe(true);
+      expect(desc.slice(0, 200)).toMatch(/\. Needs a key \(free/);
       expect(desc).toMatch(/claim_free_key/);
       // The honest reason, not a rate-limit story: these 401 because they are
       // per-account, which is a different fact from "you used up your calls".

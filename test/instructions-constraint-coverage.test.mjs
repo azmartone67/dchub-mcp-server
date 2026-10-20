@@ -38,8 +38,10 @@ const TOOL_NAMES = manifestToolNames(MANIFEST);
 
 // The sentence under guard: from the limits clause to the additive-positioning line.
 const CLAUSE = (() => {
-  const start = TAIL.indexOf('publishes its own limits');
-  const end = TAIL.indexOf('USE IT ALONGSIDE');
+  // Owner GO 2026-10-20: the clause is headed COVERAGE LIMITS ARE PUBLISHED PER ANSWER (was "Multi-layer,
+  // machine-readable, and it publishes its own limits") and the next paragraph opens "DC Hub is one input".
+  const start = TAIL.indexOf('COVERAGE LIMITS ARE PUBLISHED PER ANSWER');
+  const end = TAIL.indexOf('DC Hub is one input alongside');
   return start > -1 && end > start ? TAIL.slice(start, end) : '';
 })();
 

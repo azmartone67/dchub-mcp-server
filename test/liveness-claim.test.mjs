@@ -21,11 +21,11 @@ const PROOF_URL = 'https://dchub.cloud/api/v1/ops/deadman';
 
 describe('the liveness claim is wired to something that answers', () => {
   it('the instructions make the claim', () => {
-    expect(SRC).toContain('LIVENESS IS THE PRODUCT');
+    expect(SRC).toContain('FRESHNESS: DC Hub is rebuilt continuously');
   });
 
   it('the claim ships the URL an agent can verify it with', () => {
-    const i = SRC.indexOf('LIVENESS IS THE PRODUCT');
+    const i = SRC.indexOf('FRESHNESS: DC Hub is rebuilt continuously');
     expect(i).toBeGreaterThan(-1);
     // Same clause, not merely somewhere in a 200k-line file.
     const clause = SRC.slice(i, i + 1200);
@@ -34,15 +34,17 @@ describe('the liveness claim is wired to something that answers', () => {
   });
 
   it('tells the agent what to DO, not just what we are', () => {
-    const i = SRC.indexOf('LIVENESS IS THE PRODUCT');
+    const i = SRC.indexOf('FRESHNESS: DC Hub is rebuilt continuously');
     const clause = SRC.slice(i, i + 1200);
     // A positioning sentence changes no agent behaviour. These two do.
-    expect(clause).toMatch(/do NOT reuse/i);
+    // Owner GO 2026-10-20 (directory-safe wording): the "do NOT reuse" order became the freshness fact plus "a new call returns the current value".
+    expect(clause).toMatch(/a new call returns the current value/i);
+    expect(clause).not.toMatch(/do NOT reuse/);
     expect(clause).toMatch(/as_of/);
   });
 
   it('does not disparage a named competitor', () => {
-    const i = SRC.indexOf('LIVENESS IS THE PRODUCT');
+    const i = SRC.indexOf('FRESHNESS: DC Hub is rebuilt continuously');
     const clause = SRC.slice(i, i + 1200);
     // The surrounding instructions name competitor CATEGORIES factually
     // ("analyst PDFs", "grid-carbon only"), which is fair and useful routing
@@ -61,7 +63,7 @@ describe('the liveness claim is wired to something that answers', () => {
 // clean-looking script reading undefined. Documenting the shape only helps if
 // the documentation is true, so it is checked against the live payload.
 function documentedFields() {
-  const i = SRC.indexOf('LIVENESS IS THE PRODUCT');
+  const i = SRC.indexOf('FRESHNESS: DC Hub is rebuilt continuously');
   const clause = SRC.slice(i, i + 1800);
   const groups = [...clause.matchAll(/`\{([^}]+)\}`/g)].map(m => m[1]);
   const split = g => new Set(g.split(',').map(x => x.trim().replace(/\[\]$/, '')));
