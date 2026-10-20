@@ -1,7 +1,7 @@
 {
-  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs). Only status 'live' renders; 'pending' and 'unverified' stay hidden. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. No prices or facility counts anywhere in this file.",
+  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file.",
   "schema_version": 1,
-  "updated_at": "2026-10-19T19:30:00Z",
+  "updated_at": "2026-10-20T10:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -184,7 +184,8 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-10",
-      "note": "live 2026-10-10 (title 'DC Hub | Cursor Directory', config url https://dchub.cloud/mcp; curl gets Vercel checkpoint 429, verified in a real browser). Copy is stale: says 92 MCP tools and links paid plans at dchub.cloud/pricing; refreshing it needs the listing claimed"
+      "note": "live 2026-10-10 (title 'DC Hub | Cursor Directory', config url https://dchub.cloud/mcp; curl gets Vercel checkpoint 429, verified in a real browser). Copy is stale: says 92 MCP tools and links paid plans at dchub.cloud/pricing; refreshing it needs the listing claimed",
+      "update_request_url": "https://github.com/cursor/community-plugins/issues/462"
     },
     {
       "id": "toolsdk",
@@ -415,7 +416,52 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-16",
-      "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub \u2014 Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so"
+      "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub \u2014 Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so",
+      "update_request_url": "https://github.com/chatmcp/mcpso/issues/5777"
+    },
+    {
+      "id": "pulsemcp",
+      "name": "PulseMCP",
+      "status": "live",
+      "listing_url": "https://www.pulsemcp.com/servers/dchub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-19",
+      "note": "listing seen in PulseMCP search 2026-10-19 (dchub-search-registry-audit-1019); the page answers 403 to scripted reads, so the tracker may show Could not check"
+    },
+    {
+      "id": "policylayer",
+      "name": "PolicyLayer",
+      "status": "live",
+      "listing_url": "https://policylayer.com/tools/cloud-dchub-mcp-server",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-20",
+      "note": "tool pages per DC Hub tool (policylayer.com/tools/cloud-dchub-mcp-server/<tool>); HTTP 200, DC Hub named, checked 2026-10-20"
+    },
+    {
+      "id": "ai-product-index",
+      "name": "AI Product Index",
+      "status": "live",
+      "listing_url": "https://index.percall.dev/l/dc-hub.html",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-20",
+      "note": "registered via 110kc3/seo#154 (closed with the listing); JSON at https://index.percall.dev/listings/dc-hub.json; HTTP 200 checked 2026-10-20"
+    },
+    {
+      "id": "mcpizy",
+      "name": "MCPizy",
+      "status": "live",
+      "listing_url": "https://mcpizy.com/directory/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-20",
+      "note": "HTTP 200, DC Hub named, checked 2026-10-20"
     },
     {
       "id": "casdoor-mcp-registry",
@@ -591,7 +637,8 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
-      "note": "PR to docker/mcp-registry"
+      "note": "docker/mcp-registry#4644 open (awaiting Docker review)",
+      "tracking_url": "https://github.com/docker/mcp-registry/pull/4644"
     },
     {
       "id": "cline",
@@ -602,7 +649,8 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
-      "note": "github.com/cline/mcp-marketplace/issues/1823"
+      "note": "github.com/cline/mcp-marketplace/issues/1823",
+      "tracking_url": "https://github.com/cline/mcp-marketplace/issues/1823"
     },
     {
       "id": "devin",
@@ -647,6 +695,30 @@
       "logo_url": null,
       "verified_at": null,
       "note": "endpoint https://dchub.cloud/mcp/chatgpt"
+    },
+    {
+      "id": "awesome-gis",
+      "name": "awesome-gis (sshuair)",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": "https://github.com/sshuair/awesome-gis/pull/300",
+      "note": "PR #300 open (Cloud Service > SaaS); set listing_url to the README anchor and status live once merged"
+    },
+    {
+      "id": "apa-urban-planning",
+      "name": "APA urban and regional planning resources",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "tracking_url": "https://github.com/APA-Technology-Division/urban-and-regional-planning-resources/pull/107",
+      "note": "PR #107 open (Vendor Data Resources > Infrastructure)"
     }
   ]
 }
