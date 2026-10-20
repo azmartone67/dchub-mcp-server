@@ -23,6 +23,25 @@ describe('energy taste', () => {
     expect(JSON.stringify(env)).not.toMatch(/2026-01-01/);
     expect(env.taste.cite_as).not.toMatch(/as of/);
   });
+  it('carries the backend EIA provenance block and its month-end data date (agent QA 10-20 item 6)', () => {
+    const PROV = { source: 'U.S. Energy Information Administration (EIA), retail sales of electricity',
+      source_url: 'https://www.eia.gov/opendata/browser/electricity/retail-sales', basis_class: 'measured',
+      averaging_period: '2026', data_through_month: '2026-07', as_of: '2026-07-31',
+      as_of_basis: 'last EIA month included in the 2026 average (2026-07)' };
+    const e = T.buildFreeDecisionTaste('get_energy_prices', { ...FULL, provenance: PROV }).envelope;
+    expect(e.as_of).toBe('2026-07-31');
+    expect(e.as_of_basis).toMatch(/last EIA month/);
+    expect(e.provenance).toMatchObject({ source: PROV.source, as_of: '2026-07-31', basis_class: 'measured' });
+    expect(e.taste.headline.as_of).toBe('2026-07-31');
+    expect(e.taste.source_url).toMatch(/^https:\/\/www\.eia\.gov\//);
+    expect(e.taste.cite_as).toMatch(/as of 2026-07-31/);
+    expect(JSON.stringify(e)).not.toMatch(/UNMEASURED - EIA|2026-01-01/);
+  });
+  it('a provenance block without a valid date stays UNMEASURED', () => {
+    const e = T.buildFreeDecisionTaste('get_energy_prices', { ...FULL, provenance: { source: 'EIA', as_of: '2026' } }).envelope;
+    expect(e.as_of).toBeNull();
+    expect(e.as_of_basis).toMatch(/^UNMEASURED/);
+  });
   it('lists what it withholds with counts and never nulls in place', () => {
     const secs = Object.fromEntries(env.withheld.map((w) => [w.section, w.count]));
     expect(secs.rate_range).toBe(2);
