@@ -5583,6 +5583,29 @@ const _PRESENTED_AUTH_SOURCES = new Set(['header', 'bearer', 'query', 'inline_ar
 export function _keyPresentedOnRequest(c) {
   return !!(c && c.api_key && _PRESENTED_AUTH_SOURCES.has(String(c.auth_source || '')));
 }
+// Onboarding item 1 (owner 2026-10-20): the channel a call's credential arrived on, sent to
+// /api/v1/mcp/track as `auth_channel` so the backend can tell HOW a claimed key came back on a
+// later day. The returning-key number is ~0 and the code says why (hosted clients open a fresh
+// session per tool call), but nothing measured which persistence path, if any, ever works:
+//   oauth            a Bearer proven valid (DC Hub AS token or WorkOS/AuthKit JWT)
+//   header | bearer  the key sent by the client config (X-API-Key / Bearer dch_ key)
+//   query            the key in the connector URL (connect_url, ?apiKey=)
+//   inline_argument  the key passed as a tool argument
+//   session_restore  no credential; the session's claimed key restored server-side
+//   session          no credential on the request; a key auto-bound to this session
+//                    (claim_free_key or the inline trial) is what identified it
+//   none             anonymous
+// Telemetry only: reads ctx, changes no precedence, grants nothing. null when ctx has no
+// auth_source (not a /mcp request path), so the backend stores NULL, never a guess.
+const _TRACK_AUTH_CHANNELS = new Set(['header', 'bearer', 'query', 'inline_argument', 'session_restore', 'none']);
+export function _trackAuthChannel(c) {
+  if (!c) return null;
+  if (c.auth_oauth === true) return 'oauth';
+  const src = String(c.auth_source || '');
+  if (!_TRACK_AUTH_CHANNELS.has(src)) return null;
+  if (src === 'none' && c.api_key) return 'session';
+  return src;
+}
 // G-1014-42 item 6 (2026-10-15): name the caller behind an internal-platform
 // skip. `hop` is md5 of ctx.client_ip (X-DC-Client-IP, else the FIRST
 // X-Forwarded-For token, else the socket peer), the same value
@@ -22878,6 +22901,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // when they apply; an older backend ignores both keys.
         ...(_wallLinkTh ? { wall_link_th: _wallLinkTh } : {}),
         ...(_isQaCaller(c) ? { is_qa: true } : {}),
+        // Onboarding item 1 (2026-10-20): which channel the credential came on (see
+        // _trackAuthChannel). An older backend ignores the key.
+        ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
       }).catch(() => {});
       // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs).
       _recordQuotaWallHit(c, name, status);

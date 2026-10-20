@@ -463,6 +463,7 @@ test/tool-maturity-held-during-mcp-freeze.test.mjs
 test/tool-output-has-no-bare-conversion-link.test.mjs
 test/toolspec-is-real.test.mjs
 test/toplevel-attribution.test.mjs
+test/track-auth-channel.test.mjs
 test/typed-iso-is-scope.test.mjs
 test/typed-preview-rank-markets.test.mjs
 test/uncovered-constraints.test.mjs
