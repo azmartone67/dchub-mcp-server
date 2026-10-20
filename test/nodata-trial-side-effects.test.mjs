@@ -11,6 +11,16 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 
+// Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
+// This file exercises the opt-in mint path, so it turns the switch on for itself.
+const __prevAutoTrialMint = process.env.DCHUB_AUTO_TRIAL_MINT;
+beforeAll(() => { process.env.DCHUB_AUTO_TRIAL_MINT = '1'; });
+afterAll(() => {
+  if (__prevAutoTrialMint === undefined) delete process.env.DCHUB_AUTO_TRIAL_MINT;
+  else process.env.DCHUB_AUTO_TRIAL_MINT = __prevAutoTrialMint;
+});
+
+
 const foreign = [];
 const realConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {

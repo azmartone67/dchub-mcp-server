@@ -37,6 +37,16 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as T from '../lib/free-decision-taste.mjs';
+
+// Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
+// This file exercises the opt-in mint path, so it turns the switch on for itself.
+const __prevAutoTrialMint = process.env.DCHUB_AUTO_TRIAL_MINT;
+beforeAll(() => { process.env.DCHUB_AUTO_TRIAL_MINT = '1'; });
+afterAll(() => {
+  if (__prevAutoTrialMint === undefined) delete process.env.DCHUB_AUTO_TRIAL_MINT;
+  else process.env.DCHUB_AUTO_TRIAL_MINT = __prevAutoTrialMint;
+});
+
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -564,7 +574,7 @@ describe('the pure taste builder (lib/free-decision-taste.mjs)', () => {
   it('the Grok relay label for these tools names the paid plan generically, never a plan name or price', () => {
     expect(S._relayLinkLabel('grok', 'get_grid_intelligence')).toBe(S.GROK_RELAY_LABEL_DEV);
     expect(S.GROK_RELAY_LABEL_DEV).not.toMatch(/\$\d|\b(Developer|Pro)\b/);
-    expect(S._relayLinkLabel('claude', 'get_market_intel')).toBe('[🔓 Open DC Hub — see what I found]');
+    expect(S._relayLinkLabel('claude', 'get_market_intel')).toBe('[Open DC Hub: see what I found]');
     expect(S._relayLinkLabel('grok', 'list_transactions')).toBe(S.GROK_RELAY_LABEL);   // control: other tools unchanged
     expect(S._packOpensTool('get_interconnection_queue')).toBe(false);
     // Grok audit 2026-10-08 item 2: the pack opens no depth-tease tool (list_transactions is one), so the

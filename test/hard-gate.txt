@@ -32,6 +32,7 @@ test/auth-refused-identity.test.mjs
 test/auth-source.test.mjs
 test/auth-unverified-identity.test.mjs
 test/auto-bind-quota-contradiction.test.mjs
+test/auto-trial-mint-off-by-default.test.mjs
 test/automint-trial-rungs.test.mjs
 test/b1-free-key-daily-allowance.test.mjs
 test/b2-analyze-site-keyless-headline.test.mjs

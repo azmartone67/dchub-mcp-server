@@ -151,7 +151,7 @@ describe('F2: the arm tag rides the link people see', () => {
     const seen = r.content[0].text.match(RELAY)[0];
     const fyh = r.structuredContent.for_your_human;
     expect(fyh.url).toBe(seen);
-    expect(fyh.markdown).toBe('[🔓 Start a 7-day DC Hub trial](' + seen + ')');
+    expect(fyh.markdown).toBe('[Start a 7-day DC Hub trial](' + seen + ')');
     expect(fyh.render).toBe('verbatim_link_required');
   });
 

@@ -20,6 +20,16 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { CLAUDE_SOURCE, excludedFromRelayReadout, RELAY_READOUT_EXCLUDED_SOURCES, CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
 import { startHarness, fenceNetwork, GUESS_ARGS } from './helpers/claude-directory-harness.mjs';
 
+// Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
+// This file exercises the opt-in mint path, so it turns the switch on for itself.
+const __prevAutoTrialMint = process.env.DCHUB_AUTO_TRIAL_MINT;
+beforeAll(() => { process.env.DCHUB_AUTO_TRIAL_MINT = '1'; });
+afterAll(() => {
+  if (__prevAutoTrialMint === undefined) delete process.env.DCHUB_AUTO_TRIAL_MINT;
+  else process.env.DCHUB_AUTO_TRIAL_MINT = __prevAutoTrialMint;
+});
+
+
 const READOUT_BEACONS = ['/api/v1/mcp/signal-paywall', '/api/v1/mcp/track-paid-hit',
   '/api/v1/mcp/should-mint-claim', '/api/v1/keys/auto-mint', '/api/v1/mcp/high-intent/redeem'];
 const TOOLS = ['get_grid_intelligence', 'get_fiber_intel', 'get_water_risk', 'get_market_intel', 'execute_plan'];
