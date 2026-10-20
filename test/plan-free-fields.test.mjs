@@ -150,6 +150,7 @@ describe('an execute_plan step keeps the raw markers its caller reads', () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     expect(src).toMatch(/loopback_step: _isLoopbackPeer\(req\)/);
-    expect(src).toMatch(/return async \(args, extra\) => planFreeFieldsStep\(_sourceLineStep\(await fn\(args, extra\), name, args\), name,\s*\{ skip: !!\(getCtx\(\) \|\| \{\}\)\.loopback_step \}\)/);
+    // Agent QA A (2026-10-20): leanResponseStep sits between the source line and this rename.
+    expect(src).toMatch(/return planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await fn\(args, extra\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step \}\)/);
   });
 });

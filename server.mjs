@@ -120,6 +120,7 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
          CHATGPT_NOTICE as _WALL_NEUTRAL_LINE } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
+import { leanResponseStep } from './lib/lean-response.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -20339,8 +20340,15 @@ export function _sourceLineStep(result, name, args) {
 function _sourceLineCb(name, fn) {
   // QA B P1 (2026-10-19): the plan-free field names are the LAST rewrite of the result, outside
   // _flagUpstreamError (which stays the arrow's outermost call): lib/plan-free-fields.mjs.
-  return async (args, extra) => planFreeFieldsStep(_sourceLineStep(await fn(args, extra), name, args), name,
-    { skip: !!(getCtx() || {}).loopback_step });
+  // Agent QA A (2026-10-20): leanResponseStep drops the repeated retention blocks and leaves one
+  // human line (lib/lean-response.mjs); it skips the directory / Claude / core profiles and ChatGPT.
+  return async (args, extra) => {
+    const c = getCtx() || {};
+    const leanSkip = !!c.loopback_step || _isCleanPlatform()
+      || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
+    return planFreeFieldsStep(leanResponseStep(_sourceLineStep(await fn(args, extra), name, args), name,
+      { skip: leanSkip }), name, { skip: !!c.loopback_step });
+  };
 }
 
 // ── Description hygiene (ToolBench 2026-10-09, Grok P1 item 3) ──────────────

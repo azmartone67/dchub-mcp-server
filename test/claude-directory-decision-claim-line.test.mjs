@@ -10,6 +10,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { CLAUDE_PLANS_NOTICE } from '../lib/claude-directory.mjs';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const GI = { demand_mw: 95021, demand_period: '2026-10-07T23', generation_mix_period: '2026-10-07T03',
   generation_mix: { NG: { mw: 33582 }, NUC: { mw: 27692 }, WND: { mw: 5943 } }, peak_mw: 95021, min_mw: 74723,

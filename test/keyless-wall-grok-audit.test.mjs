@@ -14,6 +14,10 @@
 // Real registered handlers under a real caller seat; only the backend is stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { isGatedResult } from '../lib/paywall-contract.mjs';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const BASE = 'https://backend.keyless-wall-grok-audit.test';
 const RELAY = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^\s"')\]]*)?/;

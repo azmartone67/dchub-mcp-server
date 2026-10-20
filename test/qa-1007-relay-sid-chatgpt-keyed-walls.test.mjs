@@ -24,6 +24,10 @@
 // restores the empty sid (C2), and the step switched off leaves no user_message (C4).
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const BASE = 'https://backend.qa-1007-relay-sid.test';
 const SECRET = 'qa-1007-internal-key-not-a-real-secret';

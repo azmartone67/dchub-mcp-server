@@ -22,6 +22,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { DIRECTORY_PROFILE, DIRECTORY_OAUTH_SOURCE, scrubToolResult } from '../lib/chatgpt-directory.mjs';
 import { isGatedResult } from '../lib/paywall-contract.mjs';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const BASE = 'https://backend.chatgpt-taste-836-838.test';
 const INTERNAL = 'chatgpt-taste-836-838-internal-key';

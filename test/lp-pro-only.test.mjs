@@ -21,6 +21,10 @@
 // These run the REAL registered handlers (createServer()._registeredTools) under
 // a real caller seat (_ctxALS), with only the backend stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+// This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
+// agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
+// steps; test/lean-response.test.mjs guards the default.
+process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const BASE = 'https://backend.lp-pro-only.test';
 let S, TOOLS, realFetch;
