@@ -1,0 +1,105 @@
+// /mcp/builders (owner 2026-10-20, ecosystem item 8): the upstream program page
+// for gateway and aggregator builders, and the ?via= / X-DCHub-Via attribution
+// that rides every request into /api/v1/mcp/track.
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import {
+  BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, VIA_HEADER,
+  renderBuildersPage, buildersJson, normalizeVia, viaFromRequest, SUGGESTED_TOOLS,
+} from '../lib/builders-page.mjs';
+
+const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
+const EMOJI = /[\p{Extended_Pictographic}️⃣]/u;
+const PRICE = /\$\s?\d|\/mo\b|per month|\b(pro|developer|starter|enterprise) (plan|tier)\b/i;
+const RULE = 'Anonymous: previews, no key needed. Free key: previews plus 2 full answers per tool per day.';
+
+describe('renderBuildersPage', () => {
+  const html = renderBuildersPage({ tools: 94, freeTier: RULE });
+
+  it('covers composition, keyless previews, rate limits, attribution, citation and partner keys', () => {
+    for (const must of ['https://dchub.cloud/mcp', '/mcp/core', 'openapi.json', 'human_message',
+      'per source IP', 'partner key', '?via=', VIA_HEADER, 'DC Hub (dchub.cloud), as of &lt;date&gt;',
+      'dedicated service address', 'partnerships@dchub.cloud', 'https://dchub.cloud/partners', '94 tools']) {
+      expect(html, must).toContain(must);
+    }
+  });
+
+  it('quotes the published free-tier rule it is given, verbatim, and nothing when there is none', () => {
+    expect(html).toContain(RULE);
+    expect(renderBuildersPage({ tools: 94 })).not.toContain('free-tier rule, verbatim');
+  });
+
+  it('names no plan or price, no facility count, and no emoji', () => {
+    expect(html).not.toMatch(PRICE);
+    expect(html).not.toMatch(/\d[\d,]*\+?\s+facilities/i);
+    expect(html).not.toMatch(EMOJI);
+  });
+
+  it('suggests only real tool names', () => {
+    const manifest = JSON.parse(readFileSync(new URL('../mcp-server.json', import.meta.url), 'utf8'));
+    const names = new Set((manifest.tools || []).map((t) => t.name));
+    expect(names.size).toBeGreaterThan(50);
+    for (const [name] of SUGGESTED_TOOLS) expect(names.has(name), name).toBe(true);
+  });
+
+  it('the JSON twin carries the same facts', () => {
+    const j = buildersJson({ tools: 94, freeTier: RULE });
+    expect(j.attribution.header).toBe(`${VIA_HEADER}: <your-name>`);
+    expect(j.keyless.free_tier_rule).toBe(RULE);
+    expect(j.tools).toBe(94);
+    expect(JSON.stringify(j)).not.toMatch(PRICE);
+  });
+});
+
+describe('server wiring', () => {
+  it('serves both paths with a no-script CSP', () => {
+    expect(SRC).toContain('app.get([BUILDERS_PATH, BUILDERS_PATH + \'/\']');
+    expect(SRC).toContain('app.get(BUILDERS_JSON_PATH');
+    expect(BUILDERS_PATH).toBe('/mcp/builders');
+    expect(BUILDERS_JSON_PATH).toBe('/mcp/builders.json');
+    expect(BUILDERS_CSP).toContain("default-src 'none'");
+    expect(BUILDERS_CSP).not.toContain('script-src');
+  });
+
+  it('the builders route is registered before the catch-all GET on MCP_PATHS', () => {
+    const page = SRC.indexOf("app.get([BUILDERS_PATH, BUILDERS_PATH + '/']");
+    const mcp = SRC.indexOf('app.get(MCP_PATHS, async');
+    expect(page).toBeGreaterThan(0);
+    expect(mcp).toBeGreaterThan(page);
+  });
+
+  it('every request runs inside the via store, and trackToolCall forwards it', () => {
+    expect(SRC).toContain('app.use((req, res, next) => viaCtx.run(_viaFromRequest(req), next));');
+    const track = SRC.slice(SRC.indexOf('async function trackToolCall(payload) {'));
+    const body = track.slice(0, track.indexOf("fetch(new URL('/api/v1/mcp/track'"));
+    expect(body).toContain('payload = { ...payload, via: v }');
+  });
+
+  it('CORS lets a browser client send X-DCHub-Via', () => {
+    expect(SRC).toMatch(/Access-Control-Allow-Headers', '[^']*X-DCHub-Via/);
+  });
+});
+
+describe('via attribution', () => {
+  it.each([
+    ['Pipeworx', 'pipeworx'], ['my-gateway_2.0', 'my-gateway_2.0'], [' arcade ', 'arcade'],
+    [['composio', 'x'], 'composio'],
+    ['', null], [null, null], [undefined, null], ['a'.repeat(41), null], ['x@y.com', null],
+    ['https://evil', null], ['dchub', null], ['dchub-qa', null], ['test', null], ['-lead', null],
+  ])('normalizeVia(%j) -> %j', (raw, want) => {
+    expect(normalizeVia(raw)).toBe(want);
+  });
+
+  it('the header wins over the query; a bad header falls back to the query', () => {
+    expect(viaFromRequest({ headers: { 'x-dchub-via': 'arcade' }, query: { via: 'pipeworx' } })).toBe('arcade');
+    expect(viaFromRequest({ headers: { 'x-dchub-via': 'bad name' }, query: { via: 'pipeworx' } })).toBe('pipeworx');
+    expect(viaFromRequest({ headers: {}, query: {} })).toBe(null);
+    expect(viaFromRequest(undefined)).toBe(null);
+  });
+
+  it('matches the backend rule (routes/via_attribution.py) character for character', () => {
+    const lib = readFileSync(new URL('../lib/builders-page.mjs', import.meta.url), 'utf8');
+    expect(lib).toContain("/^[a-z0-9][a-z0-9._-]{0,39}$/");
+    expect(lib).toContain('/^(dchub|dc-hub|qa|test|probe|internal)([._-]|$)/');
+  });
+});

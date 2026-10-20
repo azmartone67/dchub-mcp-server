@@ -215,6 +215,7 @@ import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEma
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
+import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
@@ -3358,6 +3359,13 @@ export function _keyBoundTiers(apiKey) {
 // ── Per-request context (api_key, platform, tier, session_id) ───────────────
 const ctx = new AsyncLocalStorage();
 const getCtx = () => ctx.getStore() || {};
+// 2026-10-20 (ecosystem item 8): the `via` a gateway or partner declared on THIS
+// request (?via=<name> or X-DCHub-Via, lib/builders-page.mjs viaFromRequest).
+// Its own store, set by one middleware for every request, so no ctx.run site has
+// to thread it; trackToolCall forwards it to /api/v1/mcp/track, where the backend
+// counts calls per via (routes/via_attribution.py). A count only, never access.
+const viaCtx = new AsyncLocalStorage();
+export const getVia = () => viaCtx.getStore() || null;
 
 // ★★★ r-connect-url (2026-08-18, the BYO-MCP identity gap): on every
 // bring-your-own-MCP surface — Grok connectors, Claude.ai web, ChatGPT,
@@ -4398,6 +4406,7 @@ function detectPlatformFromInit(body, ua = '', explicitHint = '') {
 async function trackToolCall(payload) {
   // 2026-10-16: our own test callers are written as 'dchub-internal' (see _selfTestTelemetryTag).
   try { payload = _tagOwnTestTelemetry(payload, getCtx()); } catch (_) { /* never block telemetry */ }
+  try { const v = getVia(); if (v && payload && !payload.via) payload = { ...payload, via: v }; } catch (_) { /* never block telemetry */ }
   try {
     await fetch(new URL('/api/v1/mcp/track', API_BASE).toString(), {
       method: 'POST',
@@ -30945,10 +30954,11 @@ const app = express();
 // a bare text/event-stream let clients decode an em dash as Windows-1252 mojibake. First, so it wraps every writer.
 app.use(utf8CharsetMiddleware);
 app.use(express.json({ limit: '4mb' }));
+app.use((req, res, next) => viaCtx.run(_viaFromRequest(req), next));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id, X-API-Key, X-DCHub-Via');
   res.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id, WWW-Authenticate');
   // r-csp (2026-07-23): the ChatGPT App Directory requires a Content-Security-
   // Policy on the MCP endpoint to submit ("you defined a CSP … required to submit
@@ -31348,6 +31358,33 @@ app.get(DIRECTORIES_JSON_PATH, (req, res) => {
     res.json(_directoriesJson(_loadDirectories(), { tools: CANONICAL_TOOL_COUNT }));
   } catch (e) {
     res.status(500).json({ error: 'directories_unavailable' });
+  }
+});
+
+// /mcp/builders (owner 2026-10-20, ecosystem item 8): the upstream program page
+// for gateway and aggregator builders, plus its JSON twin. The free-tier line is
+// the server's own published rule (_INSTR_FREE_TIER), so the page never states a
+// limit the gate does not enforce. Like /mcp/directories: a page, not an endpoint.
+const _buildersOpts = () => ({
+  tools: CANONICAL_TOOL_COUNT,
+  freeTier: String(_INSTR_FREE_TIER || '').replace(/^\s*FREE TIER \(quote verbatim\):\s*/, '').trim() || null,
+});
+app.get([BUILDERS_PATH, BUILDERS_PATH + '/'], (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Content-Security-Policy', BUILDERS_CSP);
+    res.type('html').send(_renderBuildersPage(_buildersOpts()));
+  } catch (e) {
+    res.status(500).type('text').send('builders_unavailable');
+  }
+});
+app.get(BUILDERS_JSON_PATH, (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Access-Control-Allow-Origin', '*');
+    res.json(_buildersJson(_buildersOpts()));
+  } catch (e) {
+    res.status(500).json({ error: 'builders_unavailable' });
   }
 });
 
