@@ -127,7 +127,9 @@ import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE
          applyClaudeArgDefaults as _applyClaudeArgDefaults,
          excludedFromRelayReadout as _excludedFromRelayReadout,
          claudePromptListing as _claudePromptListing, claudePromptText as _claudePromptText,
-         CLAUDE_INVALID_TOKEN_CHALLENGE, CLAUDE_INVALID_TOKEN_MESSAGE } from './lib/claude-directory.mjs';
+         CLAUDE_INVALID_TOKEN_CHALLENGE, CLAUDE_INVALID_TOKEN_MESSAGE,
+         claudeLazyAuthEligible as _claudeLazyAuthEligible,
+         claudeLazyAuthResponse as _claudeLazyAuthResponse } from './lib/claude-directory.mjs';
 import { CORE_PATH, CORE_PROFILE, CORE_TOOL_NAMES, CORE_DELEGATE_TIMEOUT_MS,
          createCoreServer as _createCoreServer, isCoreDelegate as _isCoreDelegate,
          setCanonicalToolNames as _setCoreCanonicalNames,
@@ -31608,7 +31610,16 @@ app.post(MCP_PATHS, async (req, res) => {
     // allowlist and its own filter (lib/claude-directory.mjs).
     const _claudeProfile = _dirProfile === CLAUDE_PROFILE;
     if (_dirProfile) {
-      if (_claudeProfile) _installClaudeFilter(req, res);
+      // Lazy auth (owner 2026-10-20): the filter swaps a keyless preview for a 401
+      // sign-in challenge, but only once the handler below has marked the request
+      // eligible (no credential at all). See lib/claude-directory.mjs.
+      if (_claudeProfile) _installClaudeFilter(req, res, {
+        gatedChallenge: (tool, id) => {
+          if (req._dchubClaudeLazyAuth !== true) return null;
+          console.log(`[oauth] 401 lazy-auth → ${CLAUDE_PATH} (no credential, gated tools/call tool=${String(tool || '').slice(0, 60)})`);
+          return _claudeLazyAuthResponse(id);
+        },
+      });
       else _installDirectoryFilter(req, res, { identity: _normPath(req) === DIRECTORY_OAUTH_PATH });
       delete req.headers['mcp-session-id'];
     }
@@ -32267,6 +32278,16 @@ app.post(MCP_PATHS, async (req, res) => {
           id: (req.body && req.body.id) ?? null,
         });
       }
+    }
+    // Lazy auth on /mcp/claude: decided here, where every credential channel has
+    // been resolved (header, bearer, query, inline argument). Read by the response
+    // filter installed at the top of this handler.
+    if (_claudeProfile) {
+      req._dchubClaudeLazyAuth = _claudeLazyAuthEligible({
+        method: req.body?.method,
+        hasCredential: !!apiKey || !!req.headers['x-api-key'] || !!_bearer,
+        workosEnabled: _workosEnabled(),
+      });
     }
     if (!_claudeProfile && _workosEnabled() && !_invalid401Disabled && _invalidBearerEligible({
           authHeader: req.headers['authorization'],
