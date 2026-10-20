@@ -275,6 +275,36 @@ describe('r-invalid-key-anon — an unresolvable credential must not buy depth',
     expect(junk.rows).toBe(anon.rows);
   });
 
+  // mcp#242: the limit>free-cap path returned a hand-rolled envelope ahead of the keyless
+  // trim, so the machine-readable withholding disclosure (provenance.preview.withheld_fields,
+  // preview_warning, as_of) and the `_upgrade` block vanished exactly where the caller asked
+  // for most and got least.
+  it('#242: anonymous limit=100 carries the same honesty block as limit=25', async () => {
+    const at25 = await callStateless('/mcp', {}, { query: 'Ashburn', limit: 25 });
+    const at100 = await callStateless('/mcp', {}, { query: 'Ashburn', limit: 100 });
+    expect(at25.rows).toBeLessThan(ROWS.length);                  // a real preview, or this proves nothing
+    expect(at100.rows).toBe(at25.rows);
+    for (const r of [at25, at100]) {
+      const prov = r.payload.provenance || {};
+      expect(prov.preview, 'provenance.preview missing').toBeTruthy();
+      expect(prov.preview.withheld_fields).toEqual(['data']);
+      expect(prov.preview.shown).toBe(r.rows);
+      expect(prov.preview_warning).toBeTruthy();
+      // the stub rows carry no timestamps, so as_of itself may be null; what #242 lost was
+      // the whole block, so pin that the fields are emitted and retrieved_at is set.
+      expect(Object.keys(prov)).toEqual(expect.arrayContaining(['as_of', 'as_of_basis', 'retrieved_at']));
+      expect(prov.retrieved_at).toBeTruthy();
+      expect(r.payload._upgrade && r.payload._upgrade.next_tool).toBe('claim_free_key');
+    }
+    expect(at100.payload.provenance.preview).toEqual(at25.payload.provenance.preview);
+    expect(Object.keys(at100.payload).sort()).toEqual(Object.keys(at25.payload).sort());
+  });
+
+  it('#242 control: a valid key at limit=100 still gets every row', async () => {
+    const good = await callStateless('/mcp', { 'x-api-key': GOOD }, { query: 'Ashburn', limit: 100 });
+    expect(good.rows).toBe(ROWS.length);
+  });
+
   it('the SESSIONED path (initialize -> tools/call) is closed as well', async () => {
     // Distinct code path: initialize writes api_key into sessionMeta, and every
     // later call in that session reuses it without re-validating.

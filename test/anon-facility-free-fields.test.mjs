@@ -225,7 +225,11 @@ describe('r-anon-facility-allowlist — facility rows served without a key follo
     const before = facilityLimits.length;
     const out = await (await openSession()).call('search_facilities', { state: 'VA', limit: 100 });
     expect(facilityLimits.slice(before), 'the backend call was not capped').toEqual(['25']);
-    expect(String((out.lead._upgrade_notice || {}).message || ''), 'not the capped-limit branch').toContain('capped results at 25');
+    // mcp#242: a keyless capped call now takes the SAME keyless trim as an uncapped one (it used
+    // to return a hand-rolled `_upgrade_notice` envelope with no honesty block), so it carries
+    // the claim-first `_upgrade` and not the old notice.
+    expect(out.lead._upgrade_notice, 'the hand-rolled capped envelope is back').toBeUndefined();
+    expect((out.lead._upgrade || {}).next_tool, 'not the keyless trim').toBe('claim_free_key');
     expect(out.lead._data_total_in_pro, 'the preview row trim went missing').toBe(ROWS);
     await expectFreeAllowlist(out, 'capped anonymous');
   });

@@ -248,7 +248,8 @@ describe('wiring', () => {
     // r-relay-teaser (2026-09-24) wraps this in _postRelayTeaser(…, getCtx()), a
     // side-effect-only pass; the opt-in step itself must still sit here, on the
     // result every return path has merged into.
-    expect(src).toMatch(/_scrubCommerce\(_postRelayTeaser\(await _withOptinAsk\(_honestCallerTier\(_ensureStructured\(await _stamped\(args, extra\)\), _servedTierCtx\(getCtx\(\)\)\), name, getCtx\(\)\), getCtx\(\)\), name\)/);
+    // mcp#245: _stampTierPair wraps _honestCallerTier (same served-tier ctx).
+    expect(src).toMatch(/_scrubCommerce\(_postRelayTeaser\(await _withOptinAsk\(_stampTierPair\(_honestCallerTier\(_ensureStructured\(await _stamped\(args, extra\)\), _servedTierCtx\(getCtx\(\)\)\), _servedTierCtx\(getCtx\(\)\)\), name, getCtx\(\)\), getCtx\(\)\), name\)/);
   });
 });
 
