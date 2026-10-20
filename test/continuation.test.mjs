@@ -124,6 +124,18 @@ describe('buildContinuation — the machine-readable half', () => {
   });
 });
 
+describe('buildContinuation — mcp#830(c): no claim_free_key hint to a key holder', () => {
+  const how = (o) => o.continuations.find((a) => a.type === 'agent_autonomous').how;
+  it('keyless caller: claim_free_key is still offered', () => {
+    expect(how(buildContinuation({ tool: 'get_interconnection_queue' }))).toMatch(/claim_free_key/);
+  });
+  it('keyed caller: only the agent-payment paths', () => {
+    const h = how(buildContinuation({ tool: 'get_interconnection_queue', keyed: true }));
+    expect(h).not.toMatch(/claim_free_key/);
+    expect(h).toMatch(/mpp_pay/);
+  });
+});
+
 describe('buildContinueUrl — the link into the /continue renderer', () => {
   it('sends only params that page documents, and no markdown', () => {
     const u = buildContinueUrl({ tool: 'get_grid_intelligence', agent: 'Claude', ...FULL });

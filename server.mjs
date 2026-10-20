@@ -112,7 +112,7 @@ import { withNextSession as _withNextSessionImpl, embedClaim as _embedClaim, wit
 // consistent with the backend REST surface. See lib/error-envelope.mjs.
 import { withErrorEnvelope as _withErrorEnvelope } from './lib/error-envelope.mjs';
 import { utf8CharsetMiddleware } from './lib/utf8-charset.mjs';
-import { honestCallerTier as _honestCallerTier } from './lib/honest-tier.mjs';
+import { honestCallerTier as _honestCallerTier, stampTierPair as _stampTierPair } from './lib/honest-tier.mjs';
 import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_PATH, DIRECTORY_OAUTH_SOURCE, DIRECTORY_OAUTH_CHALLENGE, DIRECTORY_OAUTH_MESSAGE,
          DIRECTORY_OAUTH_RESOURCE, directoryOauthChallenge as _directoryOauthChallenge,
@@ -21924,6 +21924,7 @@ function trackedTool(srv, name, description, schema, handler) {
                     const _l = _previewObj ? _extractLocked(_previewObj) : null;
                     const _cont = _buildContinuation({
                       tool: name, tier: _gateTier || 'free', sessionId: _sid,
+                      keyed: !!(c && c.api_key),   // mcp#830(c): no claim_free_key hint to a key holder
                       humanUrl: _humanUrlB,
                       continueUrl: _buildContinueUrl({ tool: name, agent: c.platform, ...(_l || {}) }),
                       ...(_l || {}),
@@ -22286,7 +22287,14 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
           }
         } catch (_) { /* non-object/parse failure → fall through to normal handling */ }
       }
-      if (gate.capped) {
+      // mcp#242: a keyless caller whose limit was capped used to return HERE, ahead of the
+      // keyless trim below, with a hand-rolled envelope: no `_upgrade`, and the provenance
+      // honesty block (preview.withheld_fields / preview_warning / as_of) never built, so
+      // limit=100 disclosed less than limit=25 for the same 3-row preview. The handler
+      // already ran with the capped params, so a keyless seat now takes the SAME trim and
+      // envelope every other limit takes. Keyed callers keep the cap notice.
+      const _anonTrimApplies = ((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name);
+      if (gate.capped && !_anonTrimApplies) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
         if (!c.api_key) parsed = await _freeFacilityRows(parsed, name, c);
@@ -22316,7 +22324,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // protects. Without the exemption the trim truncated the scoreboard's
       // ~22-grid array to a 1-grid teaser (the "2/22 grids" regression).
       // Item 1: a keyed caller in the siting preview seat takes this same keyless trim.
-      if (((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name)) {
+      if (_anonTrimApplies) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -23122,7 +23130,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
   //   email-hint-after-taste) pin the chain's prefix up to _guideAuthWall.
   }, _sourceLineCb(name, async (args, extra) => _flagUpstreamError(_gatedPreviewStep(_bindNoticeOnceStep(_emailHintStep(await _partnerInboxStep(_oneLinkWallStep(_relayContractStep(_splitHumanBlock(_jsonFirstBlock(_guideAuthWall(_claimHandoffStep(_limitedAnswerCopy(_gridDeclutterStep(_outreachStep(_stampSiteEnvelope(await _cleanPlatformWallLineStep(_wallKindStep(await _returnNudgeStep(_withCapacityPointer(_gridSellStep(_humanLineToStructured(_paywallContractStep(_stampIdentitySource(_stampRequestInterpretation(_plainProvenance(_dropVerificationCounts(_stampAttribution(
        withStarterPack(
-         _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
+         _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
        name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name)));

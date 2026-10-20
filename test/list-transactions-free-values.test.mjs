@@ -181,7 +181,9 @@ function expectFreePreview(out, label) {
       expect(row.seller, `${label} ${where} #${i} seller`).toBe(DEALS[i].seller);
       expect(row.date, `${label} ${where} #${i} date`).toBe(DEALS[i].date);
     });
-    expect(body.tier, `${label} ${where}: a free preview still says tier "paid"`).toBe('free');
+    // mcp#245: `tier` is the CALLER's tier (anonymous / free / identified), never the gate.
+    expect(['anonymous', 'free', 'identified'], `${label} ${where}: a free preview still says tier "${body.tier}"`).toContain(body.tier);
+    expect(body.caller_tier, `${label} ${where}: tier and caller_tier disagree`).toBe(body.tier);
     expect(body._locked_fields, `${label} ${where}: _locked_fields`).toEqual(['value', 'value_display', 'mw']);
     // r-missed-upgrade (2026-09-29): the CTA names what this answer hid and the lowest rung that
     // returns it. Grok audit 2026-10-08 item 2: list_transactions is depth-teased below Developer

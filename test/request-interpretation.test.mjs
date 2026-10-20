@@ -212,8 +212,10 @@ describe('wiring', () => {
   const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
 
   it('the dispatcher stamps from the CTX capture, never from `args`', () => {
-    expect(SRC).toMatch(/_stampRequestInterpretation\([\s\S]{0,400}?_ctxRawArgKeys\(name\), _toolParamKeys\(name\)\)/);
-    expect(SRC).not.toMatch(/_stampRequestInterpretation\([\s\S]{0,400}?\), args, _toolParamKeys/);
+    // Window 600: the chain between the two grows as steps are added (396 chars on main
+    // 2026-10-20, 438 with mcp#245's _stampTierPair); the anchor is the call, not the distance.
+    expect(SRC).toMatch(/_stampRequestInterpretation\([\s\S]{0,600}?_ctxRawArgKeys\(name\), _toolParamKeys\(name\)\)/);
+    expect(SRC).not.toMatch(/_stampRequestInterpretation\([\s\S]{0,600}?\), args, _toolParamKeys/);
   });
 
   it('every POST path that can carry a tools/call captures the raw keys', () => {
