@@ -70,9 +70,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ★ 2026-10-19 — SMITHERY SHUTDOWN GATE. https://smithery.ai/future: on
+  # 2026-10-31 Smithery shuts down its MCP Proxy and managed identity. The
+  # Smithery API, CLI, SDKs and API keys stop working that day, so from then on
+  # every step of `republish` (CLI publish, api.smithery.ai PATCH, the reads)
+  # can only fail. smithery.ai stays as a non-proxied directory that shows the
+  # direct MCP URL; there is nothing left for this lane to write. The gate makes
+  # the lane say so once, as a notice, instead of going red every Monday on a
+  # service that no longer exists. Runs before the cut-off are unchanged, so the
+  # publish this lane makes on the 2.12.42 merge still lands while the API is up.
+  shutdown-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      retired: ${{ steps.gate.outputs.retired }}
+    steps:
+      - name: Smithery API still exists? (shut down 2026-10-31)
+        id: gate
+        env:
+          SMITHERY_SHUTDOWN_DATE: '2026-10-31'
+        run: |
+          today=$(date -u +%F)
+          if [[ "$today" > "$SMITHERY_SHUTDOWN_DATE" || "$today" == "$SMITHERY_SHUTDOWN_DATE" ]]; then
+            echo "::notice::Smithery's API, CLI and keys shut down on $SMITHERY_SHUTDOWN_DATE (https://smithery.ai/future). Nothing to publish; this lane is retired. Remove the workflow or its schedule."
+            echo "retired=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "today $today is before the $SMITHERY_SHUTDOWN_DATE Smithery shutdown; the lane runs"
+            echo "retired=false" >> "$GITHUB_OUTPUT"
+          fi
+
   republish:
+    needs: shutdown-gate
     # workflow_run fires on every completion; only a successful release run counts.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      needs.shutdown-gate.outputs.retired != 'true' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       # ★ 2026-08-22: this job never checked the repo out — the publish and

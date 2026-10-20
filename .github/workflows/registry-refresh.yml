@@ -150,6 +150,36 @@ jobs:
       MCP_REGISTRY_DNS_KEY: ${{ secrets.MCP_REGISTRY_DNS_KEY }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      # ★2026-10-19: server.json now carries `packages` (the npm launcher,
+      # dchub-mcp-server, at the server.json version). The registry checks that
+      # each npm package version exists and names this server in `mcpName`
+      # before it accepts a publish, and npm-publish.yml publishes that version
+      # in a separate run on the SAME merge. Publishing first would be refused
+      # and fail this job, so wait for npm to serve the version. Weekly cron
+      # runs find it at once. A version that never appears fails here, naming
+      # npm-publish as the place to look, instead of as a registry 400.
+      - name: Wait for the npm package version server.json names
+        run: |
+          python3 - <<'PY' > "$RUNNER_TEMP/npm-pkgs.txt"
+          import json
+          sj = json.load(open("server.json"))
+          for p in sj.get("packages") or []:
+              if p.get("registryType") == "npm":
+                  print(f'{p["identifier"]}@{p["version"]}')
+          PY
+          if [ ! -s "$RUNNER_TEMP/npm-pkgs.txt" ]; then
+            echo "server.json lists no npm package; nothing to wait for"; exit 0
+          fi
+          while read -r spec; do
+            for i in $(seq 1 40); do
+              if [ "$(npm view "$spec" version 2>/dev/null)" = "${spec##*@}" ]; then
+                echo "npm serves $spec"; continue 2
+              fi
+              echo "waiting for npm to serve $spec ($i/40)"; sleep 30
+            done
+            echo "::error::npm does not serve $spec after 20 minutes. The registry would refuse this publish; check the npm publish run for this commit."
+            exit 1
+          done < "$RUNNER_TEMP/npm-pkgs.txt"
       - name: Publish server.json to the official MCP registry (DNS-auth)
         id: publish
         run: |

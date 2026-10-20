@@ -102,3 +102,26 @@ describe('the references resolve at call time', () => {
     expect(m).toContain('connector URL');
   });
 });
+
+// Owner 2026-10-19: Smithery's MCP proxy (run.tools) shuts down on 2026-10-31; a
+// Smithery-proxied caller is told to connect directly until 2026-11-30.
+describe('Smithery proxy shutdown notice', () => {
+  const realNow = Date.now;
+  const at = (iso, fn) => { Date.now = () => Date.parse(iso); try { return fn(); } finally { Date.now = realNow; } };
+  it('a Smithery caller is told to connect directly to dchub.cloud/mcp before the cut-off', () => {
+    const m = at('2026-10-20T00:00:00Z', () => msg({ session_id: SID, platform: 'smithery' }));
+    expect(m).toContain('Smithery shuts down its MCP proxy on 2026-10-31');
+    expect(m).toContain('https://dchub.cloud/mcp');
+    expect(m).toContain('claim_free_key');   // the normal BYO lead still follows
+  });
+  it('CONTROL: other BYO platforms never see the Smithery line', () => {
+    for (const p of [..._BYO_MCP_PLATFORMS].filter((x) => x !== 'smithery')) {
+      const m = at('2026-10-20T00:00:00Z', () => msg({ session_id: SID, platform: p }));
+      expect(m, p).not.toContain('Smithery shuts down');
+    }
+  });
+  it('the line drops out by itself from 2026-11-30', () => {
+    const m = at('2026-12-01T00:00:00Z', () => msg({ session_id: SID, platform: 'smithery' }));
+    expect(m).not.toContain('Smithery shuts down');
+  });
+});

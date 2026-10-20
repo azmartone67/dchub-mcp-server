@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "cloud.dchub/mcp-server",
-  "title": "DC Hub — Data Center Site Selection & Colocation: Electricity, Power Grid, Gas, Fiber",
-  "description": "DC Hub is the live data layer for data-center site selection. DCPI + capacity to buy or lease.",
+  "title": "DC Hub — Data Center Energy, Electricity & Power Grid Data: Site Selection, Colocation, Gas, Fiber",
+  "description": "Data center energy, electricity & power grid data: DCPI to query and cite, capacity to buy or lease.",
   "websiteUrl": "https://dchub.cloud",
   "icons": [
     {
@@ -27,11 +27,31 @@
       ]
     }
   ],
-  "version": "2.12.41",
+  "version": "2.12.42",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
   },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "dchub-mcp-server",
+      "version": "2.12.42",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DCHUB_API_KEY",
+          "description": "Optional DC Hub API key. Leave unset to use the free tier with no key.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",
