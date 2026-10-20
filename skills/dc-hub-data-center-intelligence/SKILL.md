@@ -7,7 +7,7 @@ metadata: {"version":"2.0.0","server":"DC Hub Intelligence","mcp_endpoint":"http
 
 # DC Hub Intelligence
 
-Live data on the infrastructure behind AI: a global data center facility map, 170+ countries, 300+ markets scored daily (Data Center Power Index, DCPI), 1,700+ tracked deals, live US ISO grid data and interconnection queues. Every answer carries an `as_of` date and a ready `cite_as` line.
+Live data on the infrastructure behind AI: a global data center facility map, 170+ countries, 300+ markets scored daily (Data Center Power Index, DCPI), 1,800+ tracked deals, live US ISO grid data and interconnection queues. Every answer carries an `as_of` date and a ready `cite_as` line.
 
 ## Connect
 
