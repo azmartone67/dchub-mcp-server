@@ -2422,7 +2422,20 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
     try { return _BYO_MCP_PLATFORMS.has(String(_platform || '').trim().toLowerCase()); }
     catch (_) { return false; }
   })();
-  const _byoLead = () => {
+  // Owner 2026-10-19: Smithery shuts down its MCP proxy (run.tools) on 2026-10-31
+  // (https://smithery.ai/future). Clients installed through it break that day whatever the
+  // listing shows, so a Smithery-proxied caller is told to connect directly. Shown until
+  // 2026-11-30, then it drops out by itself.
+  const _smitheryMoveLine = (() => {
+    try {
+      if (String(_platform || '').trim().toLowerCase() !== 'smithery') return '';
+      if (Date.now() >= Date.UTC(2026, 10, 30)) return '';
+      return '\u26A0\uFE0F **Smithery shuts down its MCP proxy on 2026-10-31.** Point your DC Hub connector '
+        + 'directly at **https://dchub.cloud/mcp** (or the connector URL below) so this connection keeps working.\n\n';
+    } catch (_) { return ''; }
+  })();
+  const _byoLead = () => _smitheryMoveLine + _byoLeadBody();
+  const _byoLeadBody = () => {
     const _tail = _isTrial
       ? ' Also call **`bind_email`** so this key is recoverable if you lose it.'
       : '';
