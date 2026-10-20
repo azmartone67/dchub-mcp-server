@@ -89,7 +89,8 @@ describe('agent outreach over the real /mcp handler', () => {
     expect(sc.next_ask && sc.next_ask.tool).toBe('get_grid_intelligence');
     expect(sc.cite_as).toMatch(/^DC Hub \(dchub\.cloud\).*, as of \d{4}-\d{2}-\d{2}$/);
     const text = first.content.map((c) => c.text || '').join('\n');
-    expect(text).toContain(sc.next_ask.question);
+    expect(text).not.toContain(sc.next_ask.question);   // item 1 (10-20): next_ask is structured only
+    expect(text).not.toMatch(/Next question to offer/);
 
     await post(h, { jsonrpc: '2.0', id: 3, method: 'tools/call',
       params: { name: 'get_grid_intelligence', arguments: { region_id: 'ERCOT' } } });

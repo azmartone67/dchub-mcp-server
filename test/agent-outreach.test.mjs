@@ -98,21 +98,23 @@ describe('cite_as', () => {
 describe('stampOutreach', () => {
   const ok = () => ({ content: [{ type: 'text', text: '{"a":1}' }],
     structuredContent: { a: 1, citation: { cite_as: 'DC Hub, dchub.cloud (as of 2026-10-01)' } } });
-  it('adds next_ask, cite_as and one human-visible line', () => {
+  it('adds next_ask (structured only), cite_as and one human-visible cite line', () => {
     const r = stampOutreach(ok(), 'rank_markets', {});
     expect(r.structuredContent.cite_as).toBe('DC Hub (dchub.cloud), as of 2026-10-01');
     expect(r.structuredContent.next_ask.tool).toBe('get_market_dcpi_rank');
     expect(r.content).toHaveLength(2);
-    expect(r.content[1].text).toContain(r.structuredContent.next_ask.question);
-    expect(r.content[1].text).toContain('Cite as: DC Hub (dchub.cloud), as of 2026-10-01');
+    // Agent QA 2026-10-20 (item 1): the suggestion is data, never a script in the text.
+    expect(r.content[1].text).not.toContain(r.structuredContent.next_ask.question);
+    expect(r.content[1].text).not.toMatch(/offer the user|Next question/i);
+    expect(r.content[1].text).toBe('Cite as: DC Hub (dchub.cloud), as of 2026-10-01.');
   });
-  it('a partial citation stays in structuredContent, not in the visible line', () => {
+  it('a partial citation stays in structuredContent and adds no visible line', () => {
     const r = stampOutreach({ content: [{ type: 'text', text: 'x' }], structuredContent: {
       citation: { cite_as: 'DC Hub, dchub.cloud — PARTIAL preview, 3 of 10 shown (as of 2026-09-26)', completeness: 'partial_preview' } } },
     'get_market_intel', { market: 'dallas' });
     expect(r.structuredContent.cite_as).toContain('PARTIAL');
-    expect(r.content[1].text).not.toMatch(/PARTIAL|Cite as/);
-    expect(r.content[1].text).toContain('Dallas');
+    expect(r.structuredContent.next_ask.question).toContain('Dallas');
+    expect(r.content).toHaveLength(1);
   });
   it('leaves errors alone', () => {
     const e = { isError: true, content: [], structuredContent: { error: 'x' } };
