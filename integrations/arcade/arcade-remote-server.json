@@ -1,0 +1,161 @@
+{
+  "$comment": "What an Arcade admin enters under Dashboard > MCP servers > Add Server > Remote MCP. Field names follow docs.arcade.dev/guides/mcp-gateways/add-remote-servers (2026-10-20). Checked by test/arcade-integration.test.mjs.",
+  "id": "dchub",
+  "name": "DC Hub",
+  "type": "remote_mcp",
+  "uri": "https://dchub.cloud/mcp",
+  "transport": "streamable-http",
+  "description": "DC Hub: live, dated data on data centers and their power for AI agents. Data center facilities and operators, market power verdicts (DCPI BUILD/CAUTION/AVOID), live ISO grid data, interconnection queues, energy and gas prices, fiber and subsea routes, site selection and site risk, M&A, and available colocation and powered-land capacity. Every result carries cite_as and as_of.",
+  "keywords": [
+    "data center",
+    "data centre",
+    "colocation",
+    "power grid",
+    "ISO",
+    "interconnection queue",
+    "energy prices",
+    "natural gas",
+    "fiber",
+    "site selection",
+    "powered land",
+    "hyperscale",
+    "M&A"
+  ],
+  "icon": "https://raw.githubusercontent.com/azmartone67/dchub-mcp-server/main/dchub-logo.png",
+  "homepage": "https://dchub.cloud",
+  "documentation": "https://github.com/azmartone67/dchub-mcp-server/tree/main/integrations/arcade",
+  "auth": {
+    "default": "none",
+    "none": {
+      "note": "Keyless. Every tool answers; keyless answers are previews and a gated result carries human_url and human_message. Keyless calls are counted per source IP, and every user of an Arcade gateway shares Arcade egress IPs, so use a key for anything beyond evaluation."
+    },
+    "api_key": {
+      "headers": {
+        "X-API-Key": "${secret:DCHUB_API_KEY}"
+      },
+      "secret": "DCHUB_API_KEY",
+      "note": "One key per Arcade project (the header applies to every user of the gateway). A free key comes from claim_free_key on dchub.cloud/mcp; a partner key from partnerships@dchub.cloud."
+    },
+    "oauth": {
+      "uri": "https://dchub.cloud/mcp/oauth",
+      "protected_resource_metadata": "https://dchub.cloud/.well-known/oauth-protected-resource/mcp",
+      "authorization_server": "https://beloved-stream-52.authkit.app",
+      "dynamic_client_registration": true,
+      "note": "Optional, per end user: register this URI instead of /mcp and Arcade runs the OAuth flow on each user's first call. Not yet exercised end to end from Arcade."
+    }
+  },
+  "headers": {
+    "X-DCHub-Via": "arcade"
+  },
+  "connection": {
+    "timeout_seconds": 60,
+    "retries": 1
+  },
+  "gateway_profiles": {
+    "lean": {
+      "note": "Recommended default for a gateway: one front door plus the single-fact tools agents call most.",
+      "tools": [
+        "execute_plan",
+        "search_facilities",
+        "get_facility",
+        "get_market_intel",
+        "get_market_dcpi_rank",
+        "rank_markets",
+        "get_grid_data",
+        "get_interconnection_queue",
+        "find_sites",
+        "get_fiber_intel",
+        "source_capacity",
+        "summarize_for_citation"
+      ]
+    },
+    "read_only": {
+      "note": "Every read-only tool: the full catalog minus key, email, alert, shortlist, capacity-terms and other write tools. Same set as the /mcp/claude directory profile.",
+      "tools": [
+        "ai_capacity_index",
+        "analyze_parcel",
+        "analyze_site",
+        "cluster_sites_by_latency",
+        "compare_isos",
+        "compare_sites",
+        "deal_autopsy",
+        "discover_tools",
+        "execute_plan",
+        "fetch",
+        "find_alternatives",
+        "find_sites",
+        "generate_site_analysis",
+        "get_backup_status",
+        "get_changes",
+        "get_climate_intel",
+        "get_composite_site_score",
+        "get_disaster_risk",
+        "get_energy_prices",
+        "get_facility",
+        "get_facility_risk_delta",
+        "get_fiber_intel",
+        "get_fiber_readiness",
+        "get_gas_index",
+        "get_global_power",
+        "get_grid_data",
+        "get_grid_intelligence",
+        "get_grid_scoreboard",
+        "get_hosting_capacity",
+        "get_infra_projects",
+        "get_infrastructure",
+        "get_intelligence_index",
+        "get_interconnection_queue",
+        "get_iso_context",
+        "get_market_context",
+        "get_market_dcpi_rank",
+        "get_market_intel",
+        "get_metro_fiber",
+        "get_news",
+        "get_peering_intel",
+        "get_permitting_intel",
+        "get_pipeline",
+        "get_power_availability_timeline",
+        "get_power_pipeline",
+        "get_refined_queue",
+        "get_renewable_energy",
+        "get_retirement_headroom",
+        "get_subsea_cables",
+        "get_tax_incentives",
+        "get_water_risk",
+        "grid_transition_radar",
+        "hyperscaler_deals",
+        "list_transactions",
+        "plan_fiber_leadin",
+        "plan_query",
+        "predict_market_trajectory",
+        "rank_markets",
+        "rank_sites",
+        "score_facility",
+        "search",
+        "search_facilities",
+        "search_intelligence",
+        "semantic_search",
+        "simulate_scenario",
+        "site_selection_canvas",
+        "source_capacity",
+        "summarize_for_citation"
+      ]
+    },
+    "core_endpoint": {
+      "note": "Alternative: register https://dchub.cloud/mcp/core as a second server (id dchub-core). Ten composite read-only tools with a uniform as_of/sources/access envelope.",
+      "uri": "https://dchub.cloud/mcp/core",
+      "tools": [
+        "plan_and_answer",
+        "find_sites",
+        "evaluate_site",
+        "compare_sites",
+        "market_snapshot",
+        "rank_markets",
+        "grid_power",
+        "fiber_connectivity",
+        "facility_lookup",
+        "get_evidence"
+      ]
+    }
+  }
+}

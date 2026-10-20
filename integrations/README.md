@@ -17,6 +17,7 @@ There are three ways in. Pick the row that matches your platform.
 | Platform | Folder | Native path |
 |---|---|---|
 | Claude Desktop / Cursor / Cline / Continue / Windsurf / Zed | [`mcp-clients/`](./mcp-clients/) | MCP server config |
+| Arcade (MCP gateways) | [`arcade/`](./arcade/) | Remote MCP server by URL |
 | OpenAI (GPT-4o / o-series) | [`chatgpt/`](./chatgpt/) | function calling |
 | Anthropic Claude (API) | [`mcp-clients/`](./mcp-clients/) | MCP / tool use |
 | Google Gemini | [`gemini/`](./gemini/) | function calling |
