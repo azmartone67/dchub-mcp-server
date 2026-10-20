@@ -31,6 +31,14 @@ export default defineRailway(() => {
     start: "node server.mjs",
     healthcheck: "/health",
     replicas: { "us-west2": 1 },
+    // 8 GB memory and tracing: owner-approved and applied in Railway 2026-10-20;
+    // declared here so the next apply keeps them. memoryBytes is decimal
+    // (8 GB = 8e9); cpu 32 is the live value the plan reads back (omitting it
+    // plans a change to null).
+    deploy: { limitOverride: { containers: { cpu: 32, memoryBytes: 8_000_000_000 } } },
+    // Needs railway SDK >= 3.12.0 (.railway/package.json) and CLI >= 5.63.0: an older
+    // SDK drops this block and every plan then proposes turning tracing off.
+    tracing: { enabled: true, autoInstrumentation: true },
     env: {
       ANTHROPIC_API_KEY: preserve(),
       DCHUB_ADMIN_KEY: preserve(),
@@ -65,6 +73,24 @@ export default defineRailway(() => {
       OPTIN_CTA_ENABLED: preserve(),
       WORKOS_AUTHKIT_DOMAIN: preserve(),
       WORKOS_CLIENT_ID: preserve(),
+      // Added 2026-10-20: set in Railway after the last sync, so the plan proposed
+      // DELETING them. preserve() keeps the value in Railway, out of git.
+      ACTIVATION_EMAILS_ENABLED: preserve(),
+      BRAIN_AGENT_LOOP_MODEL_B: preserve(),
+      DCHUB_ASK_PAGES: preserve(),
+      DCHUB_B2_SITE_HEADLINE: preserve(),
+      DCHUB_BIND_RECEIPT_ARM: preserve(),
+      DCHUB_CLAUDE_LAZY_AUTH: preserve(),
+      DCHUB_EMAIL_DECISION_TOOL_DAILY_FULL: preserve(),
+      DCHUB_EMAIL_HINT_V1: preserve(),
+      DCHUB_PAID_SELL_LINE: preserve(),
+      DCHUB_PAYWALL_CONTRACT: preserve(),
+      DCHUB_PRO_TRIAL_OFFER: preserve(),
+      DCHUB_QUEUE_MOAT: preserve(),
+      DCHUB_RETURN_NUDGE: preserve(),
+      DCHUB_WALL_ISERROR: preserve(),
+      SMITHERY_API_KEY: preserve(),
+      WEB_BOT_AUTH_PRIVATE_JWK: preserve(),
     },
   });
 
