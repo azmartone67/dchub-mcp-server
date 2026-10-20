@@ -17,6 +17,11 @@
 //   2. The generic helper: for each tool in PARITY_TOOLS, every non-null DATA key
 //      path a keyless caller gets, a free key also gets non-null.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const BASE = 'https://backend.key-never-worse.test';
 let S, TOOLS, realFetch;

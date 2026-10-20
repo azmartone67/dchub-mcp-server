@@ -14,6 +14,11 @@ import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.m
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
 process.env.DCHUB_LEAN_RESPONSES = '0';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const GI = { demand_mw: 95021, demand_period: '2026-10-07T23', generation_mix_period: '2026-10-07T03',
   generation_mix: { NG: { mw: 33582 }, NUC: { mw: 27692 }, WND: { mw: 5943 } }, peak_mw: 95021, min_mw: 74723,

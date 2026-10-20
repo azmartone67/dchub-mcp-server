@@ -11,6 +11,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { CHATGPT_NOTICE, DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
+// This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
+// that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
+// The gate still applies to every other market, so it is tested here with that decision switched
+// off; the open top-20 behaviour is pinned in test/agent-qa-a-signals-metros.test.mjs.
+process.env.DCHUB_TOP_METROS_FREE = '0';
 
 const FREE_KEY = 'dch_live_FREEitem1Key0123456789abcdefg';
 const SHORT = 'https://dchub.cloud/u/item1x';
