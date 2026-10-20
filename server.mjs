@@ -3277,7 +3277,7 @@ export function _maskRetirementHeadroom(d, sid) {
     _upgrade: {
       tier_required: 'developer',
       message: _wallCopy('Preview: every retiring generator, date, fuel and queue project count is here, with substations as a distance band. '
-        + _WALL_NEUTRAL_LINE + ' The credit pack does not open the MW figures or the substation names. Relay the link in human_url to your human.',
+        + _WALL_NEUTRAL_LINE + ' The credit pack does not open the MW figures or the substation names. ' + _humanUrlLine(),
         'Preview: every retiring generator, date, fuel and queue project count is here, with substations as a distance band (names and exact distance need a paid DC Hub plan); '
         + 'the MW figures need a paid DC Hub plan, the same rule as the REST API. '
         + 'The credit pack does not open them. Relay the link in human_url to your human.'),
@@ -3288,7 +3288,7 @@ export function _maskRetirementHeadroom(d, sid) {
   // r-missed-upgrade: the message names what this answer hid and the rung that
   // returns it, from the gate just applied; outside a call ctx the old copy stays.
   const mu = _missedUpgradeFor(out);
-  if (mu) out._upgrade.message = mu.text + ' Relay the link in human_url to your human.';
+  if (mu) out._upgrade.message = mu.text + ' ' + _humanUrlLine();
   return out;
 }
 
@@ -8284,6 +8284,13 @@ export function _emailFullDecisionTool(name, c) {
 // seat, the same copy and the same gate). An execute_plan started on /mcp/chatgpt runs its steps on
 // /mcp with `legacy_wall_copy` (LEGACY_WALL_LOOPBACK_HEADER), so those steps are frozen too.
 // Grid/queue are unchanged there (their allowance predates the review submission).
+// Trust fix 2026-10-20: the human-link line on a gated result is a factual pointer, not an
+// instruction to the agent. /mcp/chatgpt (and its execute_plan steps) keep the reviewed sentence.
+export const HUMAN_URL_LINE = 'Full result for a person: see human_url.';
+export const HUMAN_URL_LINE_FROZEN = 'Relay the link in human_url to your human.';
+export function _humanUrlLine(c) {
+  return _chatgptFrozenSeat(c) ? HUMAN_URL_LINE_FROZEN : HUMAN_URL_LINE;
+}
 export function _chatgptFrozenSeat(c) {
   let s = c;
   if (!s) { try { s = getCtx(); } catch (_) { s = null; } }
@@ -17011,7 +17018,11 @@ export const _TOOL_OUTPUT_SCHEMAS = {
         fuel_type: _oStr('Fuel / technology'),
         capacity_mw: _oNum('Nameplate capacity, MW'),
         queue_status: _oStr('Queue status'),
-        queue_date: _oStr('Queue entry date'),
+        // Trust fix 2026-10-20: on ERCOT rows queue_date holds the GIS projected COD (backend
+        // queue_date_basis 'projected_cod_legacy'); other ISOs publish the queue-entry date there.
+        queue_date: _oStr('Queue entry date; on ERCOT rows: Projected commercial operation date (legacy field name), see projected_cod and queue_entry_date'),
+        projected_cod: _oStr('ERCOT rows: projected commercial operation date from the GIS report'),
+        queue_entry_date: _oStr('ERCOT rows: date the project entered the queue, where published'),
       })),
       z.looseObject({
         total: _oNum('Projects in the full multi-ISO queue, e.g. 5512'),
@@ -22611,6 +22622,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
                 // "Full-fidelity" only when nothing was withheld from THIS payload.
                 note: _meteredTrialNote({
                   paidTaste: _paidTaste, call: _mtCall, cap: _cap, name, bound: _bound,
+                  frozen: _chatgptFrozenSeat(c),   // /mcp/chatgpt keeps the reviewed sentence
                   emailAllowance: _emailFull,   // item 3: no pack, no plan, no price on the email allowance
                   limited: (() => { try { const g = _attrDetectGating(_mtParsed); return !!(g && g.withholding_proven); } catch (_) { return false; } })(),
                 }),
