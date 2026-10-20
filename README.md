@@ -241,6 +241,12 @@ Listed at [smithery.ai/servers/azmartone67/dchub](https://smithery.ai/servers/az
 npx -y @smithery/cli install @azmartone67/dchub --client claude
 ```
 
+Smithery's hosted proxy and CLI shut down on 2026-10-31. After that the listing is a directory entry that points to the direct URL, `https://dchub.cloud/mcp`; connect your client to that URL.
+
+### Arcade
+
+Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `dchub`, URI `https://dchub.cloud/mcp`, plus the header `X-DCHub-Via: arcade`. You can add `X-API-Key: ${secret:DCHUB_API_KEY}` as well. Then choose the tools for your MCP gateway. Setup, gateway tool profiles and auth options are in [`integrations/arcade/`](integrations/arcade/).
+
 ## Privacy and data handling
 
 - **Per-call telemetry (first-party only).** Every tool call is logged to the DC Hub backend (`POST /api/v1/mcp/track`): timestamp, tool name, call parameters, detected client/platform, tier, session id, your API key (if you sent one), status and duration. It is used for rate limits, billing and quality. It is never sent to a third party, and there is no advertising or third-party analytics. Anonymous calls carry no key. Details: [SECURITY.md](SECURITY.md#outbound-network-calls).
