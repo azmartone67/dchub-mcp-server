@@ -166,6 +166,7 @@ test/free-numerics-gate.test.mjs
 test/free-rung-first.test.mjs
 test/free-tier-claims.test.mjs
 test/free-with-email-is-not-a-paid-feature.test.mjs
+test/fresh-key-bearer-829.test.mjs
 test/front-door-nudge.test.mjs
 test/front-door-routing-descriptions.test.mjs
 test/full-cap-enforce.test.mjs
@@ -242,6 +243,7 @@ test/invalid-key-visible.test.mjs
 test/invalid-param-hint.test.mjs
 test/item1-wall-neutral-line.test.mjs
 test/key-never-worse-than-anon.test.mjs
+test/keyed-budget-per-key-826.test.mjs
 test/keyless-grid-data-honesty.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs

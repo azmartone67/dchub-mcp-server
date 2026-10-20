@@ -216,9 +216,13 @@ describe('source guard — an un-awaited call site gates 100% of traffic', () =>
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     const bad = src.split('\n')
       .map((l, i) => [i + 1, l])
-      .filter(([, l]) => l.includes('_trialFullCallsExceeded(')
-        && !l.includes('export async function')
-        && !l.includes('await _trialFullCallsExceeded('));
+      .filter(([, l]) => (l.includes('_trialFullCallsExceeded(')
+          && !l.includes('export async function')
+          && !l.includes('await _trialFullCallsExceeded('))
+        // #826: the keyed wrapper is async too; same truthy-Promise trap.
+        || (l.includes('_keyedFullCallsExceeded(')
+          && !l.includes('export async function')
+          && !l.includes('await _keyedFullCallsExceeded(')));
     expect(bad.map(([n, l]) => `${n}: ${l.trim()}`)).toEqual([]);
   });
 

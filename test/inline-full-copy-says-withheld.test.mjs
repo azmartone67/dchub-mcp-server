@@ -25,6 +25,7 @@ const decode = (raw) => (raw.includes('data: ')
   ? raw.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('') : raw);
 
 let stub, httpServer, PORT, plain = false; const prev = {};
+let mintN = 0;
 beforeAll(async () => {
   await new Promise((resolve) => {
     stub = createServer((req, res) => {
@@ -34,7 +35,9 @@ beforeAll(async () => {
       req.on('end', () => {
         const send = (c, o) => { res.statusCode = c; res.end(JSON.stringify(o)); };
         if (u.pathname.includes('auto-mint')) {
-          return send(200, { ok: true, api_key: 'dch_trial_TESTONLY00000000000000000000', tier: 'free', days_remaining: 7 });
+          // #826: the full-answer budget is per key, so each session's mint is its own key (one
+          // shared key would let the first test spend the control's budget).
+          return send(200, { ok: true, api_key: 'dch_trial_TESTONLY' + String(++mintN).padStart(22, '0'), tier: 'free', days_remaining: 7 });
         }
         if (u.pathname === '/api/v1/mcp/tools/rank_markets') {
           return send(200, { criteria: 'best_overall', region: 'us', result_count: 3,
