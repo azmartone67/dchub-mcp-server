@@ -1,6 +1,6 @@
 # DC Hub MCP Server — Install Guide (for AI agents)
 
-This file tells an AI assistant (Cline, Claude, Cursor, Continue, etc.) exactly how to
+This file tells an AI assistant (Cline, Claude, Cursor, Continue, etc.) how to
 connect to the **DC Hub MCP server**. DC Hub is a **remote, hosted HTTP MCP server** —
 there is **nothing to clone, build, or npm-install**. You connect to a URL.
 
@@ -9,7 +9,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 - **Auth:** none required for the free anonymous tier (previews, no key needed). For higher limits,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
 - **Tools exposed:** 94 (facility search, market intelligence, grid + interconnection,
-  site analysis + board-ready site-risk scoring, M&A deals, infrastructure).
+  site analysis and site-risk scoring, M&A deals, infrastructure).
 
 ## What it does
 
@@ -40,6 +40,10 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
 94 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
+
+Then try one data call with no key: **"Use DC Hub to list data centers in Ashburn, VA, and
+cite the source."** The agent should call `search_facilities` and return facility names with
+a `cite_as` line (`DC Hub, dchub.cloud`). Without a key the result is a preview and says so.
 
 ### Claude Desktop / Claude Code
 
