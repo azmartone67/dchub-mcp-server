@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, VIA_HEADER,
-  renderBuildersPage, buildersJson, normalizeVia, viaFromRequest, SUGGESTED_TOOLS,
+  renderBuildersPage, buildersJson, normalizeVia, viaFromRequest, smitheryProxyVia, SMITHERY_PROXY_VIA, SUGGESTED_TOOLS,
 } from '../lib/builders-page.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
@@ -95,6 +95,23 @@ describe('via attribution', () => {
     expect(viaFromRequest({ headers: { 'x-dchub-via': 'bad name' }, query: { via: 'pipeworx' } })).toBe('pipeworx');
     expect(viaFromRequest({ headers: {}, query: {} })).toBe(null);
     expect(viaFromRequest(undefined)).toBe(null);
+  });
+
+  it('tags Smithery proxy hosts smithery_proxy; a declared via still wins', () => {
+    const r = (headers, query = {}) => viaFromRequest({ headers, query });
+    expect(r({ 'x-forwarded-host': 'dchub--azmartone67.run.tools' })).toBe('smithery_proxy');
+    expect(r({ 'x-forwarded-host': 'dchub.cloud, server.smithery.ai:443' })).toBe('smithery_proxy');
+    expect(r({ host: 'run.tools' })).toBe('smithery_proxy');
+    expect(r({ forwarded: 'for=1.2.3.4;host="dchub--azmartone67.run.tools";proto=https' })).toBe('smithery_proxy');
+    expect(r({ 'x-original-host': 'SERVER.SMITHERY.AI.' })).toBe('smithery_proxy');
+    expect(r({ 'x-forwarded-host': 'dchub.cloud' })).toBe(null);
+    expect(r({ 'x-forwarded-host': 'notrun.tools' })).toBe(null);
+    expect(r({ 'x-forwarded-host': 'run.tools.evil.com' })).toBe(null);
+    expect(r({ referer: 'https://smithery.ai/servers/azmartone67/dchub' })).toBe(null);
+    expect(r({ 'x-dchub-via': 'arcade', 'x-forwarded-host': 'x.run.tools' })).toBe('arcade');
+    expect(r({ 'x-forwarded-host': 'x.run.tools' }, { via: 'pipeworx' })).toBe('pipeworx');
+    expect(smitheryProxyVia(undefined)).toBe(null);
+    expect(normalizeVia(SMITHERY_PROXY_VIA)).toBe('smithery_proxy');   // the backend keeps it
   });
 
   it('matches the backend rule (routes/via_attribution.py) character for character', () => {
