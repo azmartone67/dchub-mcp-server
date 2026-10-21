@@ -1,6 +1,6 @@
 # DC Hub MCP Server — Install Guide (for AI agents)
 
-This file tells an AI assistant (Cline, Claude, Cursor, Continue, etc.) exactly how to
+This file tells an AI assistant (Cline, Claude, Cursor, Continue, etc.) how to
 connect to the **DC Hub MCP server**. DC Hub is a **remote, hosted HTTP MCP server** —
 there is **nothing to clone, build, or npm-install**. You connect to a URL.
 
@@ -9,7 +9,7 @@ there is **nothing to clone, build, or npm-install**. You connect to a URL.
 - **Auth:** none required for the free anonymous tier (previews, no key needed). For higher limits,
   pass an API key via the `X-API-Key` header (see "Optional: API key" below).
 - **Tools exposed:** 94 (facility search, market intelligence, grid + interconnection,
-  site analysis + board-ready site-risk scoring, M&A deals, infrastructure).
+  site analysis and site-risk scoring, M&A deals, infrastructure).
 
 ## What it does
 
@@ -40,6 +40,10 @@ Open the MCP settings file (`cline_mcp_settings.json`) and add this entry under
 Then reload the MCP servers. Verify by asking: **"List the dchub tools"** — you should see
 94 tools including `search_facilities`, `rank_markets`, `get_grid_scoreboard`, and
 `get_interconnection_queue`.
+
+Then try one data call with no key: **"Use DC Hub to list data centers in Ashburn, VA, and
+cite the source."** The agent should call `search_facilities` and return facility names with
+a `cite_as` line (`DC Hub, dchub.cloud`). Without a key the result is a preview and says so.
 
 ### Claude Desktop / Claude Code
 
@@ -122,6 +126,13 @@ claude mcp add dchub --transport http --header "X-API-Key: YOUR_KEY_HERE" https:
 The free tier is the rule quoted above, verbatim from canon (`free_tier` at
 https://dchub.cloud/api/v1/canon/phrases). This file carries no plan table:
 plans, limits and prices live at https://dchub.cloud/pricing.
+
+## Optional: OAuth sign-in
+
+Clients that support MCP OAuth can connect to `https://dchub.cloud/mcp/oauth` instead of
+passing a key. That URL answers `401` with a `WWW-Authenticate` header pointing at
+`https://dchub.cloud/.well-known/oauth-protected-resource/mcp`, and the client runs the
+sign-in flow. The keyless URL `https://dchub.cloud/mcp` needs no sign-in.
 
 ## Verify the connection
 
