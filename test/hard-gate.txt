@@ -209,6 +209,7 @@ test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
 test/grid-sell-line.test.mjs
 test/grid-taste-null-demand-asof.test.mjs
+test/grid-tools-every-grid.test.mjs
 test/grok-bot-self-path.test.mjs
 test/grok-claude-check-nits-1016.test.mjs
 test/grok-ident-log.test.mjs
