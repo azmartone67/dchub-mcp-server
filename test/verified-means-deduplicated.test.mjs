@@ -71,7 +71,7 @@ describe('verified is de-duplication, not analyst verification', () => {
   });
 
   it('both citation surfaces say the facility count is pending corroboration', () => {
-    const say = "DC Hub\\'s facility count is pending corroboration, so responses carry no verified/tracked totals";
+    const say = "DC Hub\\'s platform-wide facility count is pending corroboration, so responses carry no verified/tracked totals";
     expect(src.split(say).length - 1).toBe(2);
     const hits = src.match(/canon\/phrases/g) || [];
     expect(hits.length).toBeGreaterThanOrEqual(3);
