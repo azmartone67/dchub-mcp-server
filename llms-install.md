@@ -127,13 +127,6 @@ The free tier is the rule quoted above, verbatim from canon (`free_tier` at
 https://dchub.cloud/api/v1/canon/phrases). This file carries no plan table:
 plans, limits and prices live at https://dchub.cloud/pricing.
 
-## Optional: OAuth sign-in
-
-Clients that support MCP OAuth can connect to `https://dchub.cloud/mcp/oauth` instead of
-passing a key. That URL answers `401` with a `WWW-Authenticate` header pointing at
-`https://dchub.cloud/.well-known/oauth-protected-resource/mcp`, and the client runs the
-sign-in flow. The keyless URL `https://dchub.cloud/mcp` needs no sign-in.
-
 ## Verify the connection
 
 After adding the config, confirm the server is reachable and reports its tools:
