@@ -203,6 +203,7 @@ test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
 test/grid-intelligence-source-composed.test.mjs
 test/grid-lastfree.test.mjs
+test/grid-provenance-source-own-as-of.test.mjs
 test/grid-queue-by-kind.test.mjs
 test/grid-region-transient-no-sell.test.mjs
 test/grid-region-unresolved.test.mjs
