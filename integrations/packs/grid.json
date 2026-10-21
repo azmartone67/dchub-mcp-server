@@ -1,7 +1,7 @@
 {
   "pack": "grid",
   "endpoint": "https://dchub.cloud/mcp/grid",
-  "version": "2.12.42",
+  "version": "2.12.43",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
@@ -20,7 +20,7 @@
     },
     {
       "name": "get_grid_data",
-      "description": "Use this when the user asks for live electricity grid data (power demand, fuel mix) for one of the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE) via EIA hourly RTO: fuel mix, demand, 24h demand curve. Pass iso=PJM (any of the 7). Raw real-time telemetry for one ISO; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing detail (use get_energy_prices). For non-US grids (GB, EU bidding zones, Taiwan, Australia) use get_grid_scoreboard."
+      "description": "Use this when the user asks for live electricity grid data (power demand, fuel mix) for one grid: the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE), TVA, BPA, 40+ US utility balancing authorities (e.g. AZPS, SOCO, DUK, FPL, or a city: PHOENIX, ATLANTA), Canada (IESO, AESO, HYDROQUEBEC), Great Britain (NGESO), any ENTSO-E bidding zone (EU_DE_LU, EU_FR, EU_NL ...), Taiwan (TAIPOWER), Japan (OCCTO), South Korea (KEPCO-KR), Brazil (ONS), Australia (AEMO) or Singapore (EMA). US ISOs and EIA regions return EIA hourly fuel mix, demand and the 24h curve; other grids return each feed's newest reading per metric, each with its own timestamp. Raw telemetry for one grid; do NOT use for power-availability, time-to-power or interconnection-queue analysis (use get_grid_intelligence), nor for retail/gas pricing (use get_energy_prices). To rank many grids at once use get_grid_scoreboard."
     },
     {
       "name": "get_grid_scoreboard",
@@ -56,7 +56,7 @@
     },
     {
       "name": "compare_isos",
-      "description": "Use this when the user asks to compare two to four US power grids (ISOs) side by side — fuel mix, demand, renewable/gas share, interconnection-queue depth, time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: \"Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now.\" — compare_isos isos=\"PJM,ERCOT,CAISO\". Params: isos is a comma-separated list (2-4 max) drawn from the 7 live US ISOs: \"PJM\" | \"ERCOT\" | \"CAISO\" | \"MISO\" | \"SPP\" | \"NYISO\" | \"ISO-NE\". Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, avg_queue_wait_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. ★avg_time_to_power_months (DCPI per-market estimate, ISO-averaged) and avg_queue_wait_months (proxy from live queue DEPTH) are DIFFERENT measurements — quote whichever you mean by name. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence)."
+      "description": "Use this when the user asks to compare two to four power grids side by side — fuel mix, demand, renewable/gas share, and for the US ISOs interconnection-queue depth and time-to-power — in one call instead of N sequential get_grid_intelligence calls. Example: \"Compare PJM vs ERCOT vs CAISO on gas share, renewable share, and queue depth right now.\" — compare_isos isos=\"PJM,ERCOT,CAISO\"; \"ERCOT vs AESO vs EU_DE_LU\" also works. Params: isos is a comma-separated list (2-4 max): any of the 7 US ISOs (\"PJM\" | \"ERCOT\" | \"CAISO\" | \"MISO\" | \"SPP\" | \"NYISO\" | \"ISO-NE\"), TVA, BPA, a US utility BA, or a non-US grid (IESO, AESO, HYDROQUEBEC, NGESO, EU_<zone>, TAIPOWER, OCCTO, KEPCO-KR, ONS, AEMO, EMA); non-US and non-ISO rows carry null DCPI and queue fields (not tracked, not zero). Returns: {isos[], comparison:{<iso>:{demand_mw, generation_mix_pct, renewable_share_pct, gas_share_pct, constraint_score, excess_power_score, avg_time_to_power_months, avg_queue_wait_months, queue_depth_gw, retail_price_cents_kwh}}, as_of}. ★avg_time_to_power_months (DCPI per-market estimate, ISO-averaged) and avg_queue_wait_months (proxy from live queue DEPTH) are DIFFERENT measurements — quote whichever you mean by name. Do NOT use to rank ALL grids globally (use get_grid_scoreboard) or for the single-ISO deep brief (use get_grid_intelligence)."
     },
     {
       "name": "get_iso_context",

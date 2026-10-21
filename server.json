@@ -27,7 +27,7 @@
       ]
     }
   ],
-  "version": "2.12.42",
+  "version": "2.12.43",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -37,7 +37,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "dchub-mcp-server",
-      "version": "2.12.42",
+      "version": "2.12.43",
       "transport": {
         "type": "stdio"
       },

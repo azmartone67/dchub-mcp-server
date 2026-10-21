@@ -5,6 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { _validateToolArgs, _foldIsoArg } from '../server.mjs';
 
+// get_grid_data left the strict set 2026-10-21 (it serves every live grid); NEISO
+// still folds for it, and the reject/typo paths are pinned on get_iso_context.
 const STRICT = ['get_grid_data', 'get_interconnection_queue', 'get_iso_context'];
 
 describe('NEISO alias on the strict ISO tools', () => {
@@ -16,12 +18,12 @@ describe('NEISO alias on the strict ISO tools', () => {
     }
   }
   it('still rejects a genuinely unknown ISO, and does not hint NYISO for it', () => {
-    const r = _validateToolArgs('get_grid_data', { iso: 'ZZZ' });
+    const r = _validateToolArgs('get_iso_context', { iso: 'ZZZ' });
     expect(r && r.isError).toBe(true);
     expect(JSON.parse(r.content[0].text).error).toBe('invalid_iso');
   });
   it('the real NYISO typo path still suggests NYISO', () => {
-    const r = _validateToolArgs('get_grid_data', { iso: 'NYIS' });
+    const r = _validateToolArgs('get_iso_context', { iso: 'NYIS' });
     const m = JSON.parse(r.content[0].text)._error_mitigation;
     expect(m.deterministic_hint).toContain('did you mean "NYISO"');
   });

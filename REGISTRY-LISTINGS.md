@@ -246,7 +246,7 @@ read, not for a payout or a public claim.
 The data-center, power & energy intelligence layer for AI agents — query AND cite, live.
 
 ## Short description (≤ 300 chars)
-DC Hub is the live data-center, power & energy intelligence MCP: a global data-center facility map, 300+ markets, 7 US ISOs + 43 utility BAs + 31 intl grid regions, live interconnection-queue depth, the tracked construction pipeline, the DCPI power index, renewables, fiber, hyperscaler deals & M&A. 94 tools an agent can query and cite (CC-BY-4.0). Free tier.
+DC Hub is the live data-center, power & energy intelligence MCP: a global data-center facility map, 300+ markets, 7 US ISOs + 41 utility BAs + 39 intl grid regions, live interconnection-queue depth, the tracked construction pipeline, the DCPI power index, renewables, fiber, hyperscaler deals & M&A. 94 tools an agent can query and cite (CC-BY-4.0). Free tier.
 
 ## Long description
 DC Hub is the neutral, real-time data layer for data-center infrastructure — built so AI agents can both **query** it (MCP + REST) and **cite** it (every full-data response carries `Source: DC Hub, CC-BY-4.0`).
@@ -255,7 +255,7 @@ Coverage:
 - **Facilities** — global data-center facility map: search, profiles, scoring, alternatives
 - **Markets** — 300+ markets with the **DCPI** (Data Center Power Index): BUILD/CAUTION/AVOID
 - **Gas** — per-state pipeline + operator presence with live Henry Hub via `get_gas_intelligence` (the DCGI composite was withdrawn 2026-08-08 and restored 2026-08-30 once all three defective terms were repaired — not comparable to pre-08-08 figures; the gas-fired $/MWh was restored 2026-09-27 under one burner-tip price rule)
-- **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 7 US ISOs + 43 US utility BAs + 31 international grid regions; one-call all-ISO scoreboard
+- **Grid / ISO** — live fuel mix, carbon intensity, demand, prices & interconnection-queue depth across 7 US ISOs + 41 US utility BAs + 39 international grid regions; one-call all-ISO scoreboard
 - **Capital** — 1,800+ tracked M&A deals + hyperscaler capex tracker + AI Compute Capacity Index
 - **Site factors** — fiber routes, water-stress, tax incentives, nearby substations/transmission
 - **Capacity Source** — powered land, powered shells, turnkey capacity and colocation to buy or lease: `source_capacity` searches it by size (kW or MW) and location, or browse https://dchub.cloud/listings
@@ -319,7 +319,7 @@ move every few days and a listing is edited by hand perhaps twice a year.
 - `search_facilities` — search the global data-center facility map
 - `get_market_dcpi_rank` — a market's DCPI power score + BUILD/CAUTION/AVOID verdict
 - `get_gas_intelligence` — per-state gas brief: pipeline + operator presence, live Henry Hub (the DCGI score was restored 2026-08-30 and is not comparable to pre-2026-08-08 figures)
-- `get_grid_scoreboard` — all 7 US ISOs + 31 intl grid regions ranked live by carbon / renewables / fuel mix
+- `get_grid_scoreboard` — all 7 US ISOs + 39 intl grid regions ranked live by carbon / renewables / fuel mix
 - `get_interconnection_queue` — interconnection-queue depth + wait by ISO
 - `score_facility` / `analyze_site` — score a lat/lon for data-center suitability
 - `hyperscaler_deals` — AI/hyperscaler capex + M&A tracker
@@ -421,7 +421,7 @@ This is the fix for "listed but unverified / Claude-only reach": Smithery/Cursor
 **Description:**
 > Live **interconnection-queue**, grid-**capacity** & data-center power intelligence for AI agents — query it and cite it. One Streamable-HTTP MCP server, 94 tools, no signup to start.
 >
-> Built for agents answering power, siting and capacity questions: pull live **interconnection-queue** depth, wait times and per-ISO BUILD/CAUTION/AVOID verdicts across 7 US ISOs + 43 US utility BAs + 31 international grid regions; track the **construction capacity pipeline** plus the AI Compute Capacity Index; rank 300+ markets by the DCPI power index; search the global data-center facility map across 170+ countries; score any lat/lon for buildability; compare US + European + GB + Taiwan + Japan + Korea + Brazil grids live (fuel mix, renewables, carbon, demand); and reach hyperscaler $1B+ deals, 1,800+ tracked M&A, gas-vs-grid economics, fiber routes, water-stress & tax incentives. **Capacity Source** adds the supply side: powered land, powered shells, turnkey capacity and colocation to buy or lease — off-market listings included — searched by size and location with `source_capacity`, browsable at https://dchub.cloud/listings.
+> Built for agents answering power, siting and capacity questions: pull live **interconnection-queue** depth, wait times and per-ISO BUILD/CAUTION/AVOID verdicts across 7 US ISOs + 41 US utility BAs + 39 international grid regions; track the **construction capacity pipeline** plus the AI Compute Capacity Index; rank 300+ markets by the DCPI power index; search the global data-center facility map across 170+ countries; score any lat/lon for buildability; compare US + European + GB + Taiwan + Japan + Korea + Brazil grids live (fuel mix, renewables, carbon, demand); and reach hyperscaler $1B+ deals, 1,800+ tracked M&A, gas-vs-grid economics, fiber routes, water-stress & tax incentives. **Capacity Source** adds the supply side: powered land, powered shells, turnkey capacity and colocation to buy or lease — off-market listings included — searched by size and location with `source_capacity`, browsable at https://dchub.cloud/listings.
 >
 > Free to start with no key (previews; limits at https://dchub.cloud/pricing). Add `X-API-Key` for full rows. Every full-data response carries `Source: DC Hub (CC-BY-4.0)` so your agent attributes cleanly. The MCP-native alternative to static PDF research — live JSON, no NDAs.
 **Try it:** `get_interconnection_queue iso=PJM` · `get_power_pipeline` (construction pipeline) · `get_grid_scoreboard` · `get_market_dcpi_rank market=northern-virginia`

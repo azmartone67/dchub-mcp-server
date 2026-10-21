@@ -46,11 +46,18 @@ describe('the exported surface is unchanged', () => {
 // byte must still match.
 function withoutHeld(result) {
   const held = NEW.DIRECTORY_HELD_INPUTS || {};
+  const text = NEW.DIRECTORY_HELD_PARAM_TEXT || {};
   return { ...result, tools: (result.tools || []).map((t) => {
+    if (!t.inputSchema || !t.inputSchema.properties) return t;
+    let properties = t.inputSchema.properties;
+    // 2026-10-21: parameter text held at the reviewed wording (DIRECTORY_HELD_PARAM_TEXT).
+    if (text[t.name]) {
+      properties = { ...properties };
+      for (const [k, d] of Object.entries(text[t.name])) if (properties[k]) properties[k] = { ...properties[k], description: d };
+    }
     const h = held[t.name];
-    if (!h || !t.inputSchema || !t.inputSchema.properties) return t;
-    const properties = Object.fromEntries(Object.entries(t.inputSchema.properties).filter(([k]) => !h.includes(k)));
-    return { ...t, inputSchema: { ...t.inputSchema, properties } };
+    if (h) properties = Object.fromEntries(Object.entries(properties).filter(([k]) => !h.includes(k)));
+    return (properties === t.inputSchema.properties) ? t : { ...t, inputSchema: { ...t.inputSchema, properties } };
   }) };
 }
 function rawWithoutHeld(raw) {
