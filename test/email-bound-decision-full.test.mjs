@@ -263,7 +263,12 @@ async function callAs({ client = 'claude-code', key = null } = {}, name, args) {
 const GRID_FULL_FRAGS = ['"constraint_score"', '"demand_24h"'];
 const QUEUE_FULL_FRAGS = ['AG1-100', '"queued_load_data_center_gw":40.2'];
 const MARKET_FULL_FRAGS = ['"top_providers"', '"recent_facilities"', '"total_power_mw":13366'];
-const BROKER_RATE_FRAGS = ['"asking_rate":160', '185', '"vacancy_percent":4'];
+// The two shapes the fixture's 185 can leak in: the range array and the source text.
+// A bare '185' flaked CI on 2026-10-20: signed links (/upgrade/h/<payload>.<hmac>)
+// carry random hex, and retrieved_at carries milliseconds ("...28.185Z"). The answer
+// is also scanned with its URLs removed.
+const BROKER_RATE_FRAGS = ['"asking_rate":160', '160,185]', '160-185', '"vacancy_percent":4'];
+const _noUrls = (s) => String(s).replace(/https?:\/\/[^\s"\\)]+/g, '<url>');
 // A plan NAME (capitalised word, as copy would print it; the machine field `unlocks_at: "developer"`
 // every 10-08 taste carries is data, not copy) or any price / pack / checkout wording.
 const PLAN_OR_PRICE = new RegExp('\\b(Developer|Pro|Starter|Enterprise|Founding)\\b|'
@@ -329,7 +334,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
         for (const f of frags) expect(raw, `answer ${n} is full: ${f}\n${r.text.slice(0, 800)}`).toContain(f);
         expect(r.data.taste, `answer ${n} is not the taste`).toBeUndefined();
         expect(r.data._metered_trial).toMatchObject({ call: n, of: 10, remaining_today: 10 - n, allowance: 'email_bound_decision' });
-        if (tool === 'get_market_intel') for (const f of BROKER_RATE_FRAGS) expect(raw, `answer ${n}: broker rates stay Pro-only (H1): ${f}`).not.toContain(f);
+        if (tool === 'get_market_intel') for (const f of BROKER_RATE_FRAGS) expect(_noUrls(raw), `answer ${n}: broker rates stay Pro-only (H1): ${f}`).not.toContain(f);
         { const m = r.text.match(new RegExp(PLAN_OR_PRICE.source, "gi")); const i = r.text.search(PLAN_OR_PRICE); expect(m, `answer ${n}: plan/price ${JSON.stringify(m)} ctx: ${r.text.slice(Math.max(0,i-300), i+200)}`).toBeNull(); }
         expect(r.data.agent_payment, 'no pay-per-call offer rides the email allowance').toBeUndefined();
       }
@@ -385,7 +390,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     const key = freshBoundKey();
     for (let n = 1; n <= 11; n++) {
       const r = await callAs({ key }, 'get_market_intel', { market: 'no-shape' });
-      const raw = JSON.stringify(r.result);
+      const raw = _noUrls(JSON.stringify(r.result));
       for (const f of BROKER_RATE_FRAGS) expect(raw, `answer ${n}: ${f}`).not.toContain(f);
       if (n === 11) {
         expect(r.data._email_allowance, 'answer 11 is the spent fallback\n' + r.text.slice(0, 600)).toMatchObject({ used: 10, of: 10 });
