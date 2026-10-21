@@ -53,6 +53,13 @@ beforeAll(async () => {
         if (dukMode === 'empty') return send(200, {});
         return send(200, { demand_mw: 18000, generation_mix: { NG: { mw: 9000 }, NUC: { mw: 6000 } } });
       }
+      // be#7512: a retired balancing authority (main.py retired_answer).
+      if (p === '/api/v1/grid/intelligence/WACM') {
+        return send(200, { code: 'WACM', retired: true, retired_on: '2026-04-01',
+                           successor: 'SPP RTO West balancing authority area (SWPW)',
+                           reason: 'Consolidated into SPP West on 2026-04-01.', metrics: [],
+                           source_url: 'https://spp.org/x.pdf' });
+      }
       if (p === '/api/v1/grid/intelligence/PJM-DOM') {
         return send(200, { region: 'PJM-DOM', source_unavailable: true, temporary: true,
                            retry_after_utc: '2026-10-01T00:00:00Z',
@@ -174,6 +181,18 @@ describe('get_grid_intelligence through the real wrapper (anonymous, trial path)
       expect(result.isError).toBe(true);
     });
   }
+
+  it('a RETIRED balancing authority says retired (not transient, no retry) and sells nothing', async () => {
+    const { result, text, body } = await anonCall('get_grid_intelligence', { region_id: 'WACM' });
+    expect(text).toContain('region retired');
+    expect(text).toContain('2026-04-01');
+    expect(text).toContain('SPP RTO West');
+    expect(text).toContain('region_retired');
+    expect(text).not.toContain('temporarily unavailable');
+    expect(text).not.toContain('transient_backoff');
+    expect(sold(body)).toEqual([]);
+    expect(result.isError).toBe(true);
+  });
 
   it('PJM-DOM source_unavailable keeps its retry_after_utc and sells nothing', async () => {
     const { text, body } = await anonCall('get_grid_intelligence', { region_id: 'PJM-DOM' });
