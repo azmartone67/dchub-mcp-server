@@ -24,6 +24,16 @@
 // restores the empty sid (C2), and the step switched off leaves no user_message (C4).
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
+
+// Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
+// This file exercises the opt-in mint path, so it turns the switch on for itself.
+const __prevAutoTrialMint = process.env.DCHUB_AUTO_TRIAL_MINT;
+beforeAll(() => { process.env.DCHUB_AUTO_TRIAL_MINT = '1'; });
+afterAll(() => {
+  if (__prevAutoTrialMint === undefined) delete process.env.DCHUB_AUTO_TRIAL_MINT;
+  else process.env.DCHUB_AUTO_TRIAL_MINT = __prevAutoTrialMint;
+});
+
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.

@@ -221,14 +221,14 @@ describe('the relay link label on Grok vs everyone else', () => {
   it('Claude keeps its label byte for byte (experiment until 2026-10-01)', async () => {
     const fyh = await gatedAs('claude-ai');
     expect(fyh, 'no relay minted on the Claude path').toBeTruthy();
-    expect(fyh.markdown.startsWith('[🔓 Open DC Hub — see what I found](https://dchub.cloud/upgrade/h/')).toBe(true);
+    expect(fyh.markdown.startsWith('[Open DC Hub: see what I found](https://dchub.cloud/upgrade/h/')).toBe(true);
   });
 
   it('the label helper: grok and connectors-manager only, case-insensitive', () => {
     expect(S._relayLinkLabel('connectors-manager')).toBe(S.GROK_RELAY_LABEL);
     expect(S._relayLinkLabel('Grok')).toBe(S.GROK_RELAY_LABEL);
     for (const p of ['claude', 'chatgpt', 'smithery', 'perplexity', '', null]) {
-      expect(S._relayLinkLabel(p)).toBe('[🔓 Open DC Hub — see what I found]');
+      expect(S._relayLinkLabel(p)).toBe('[Open DC Hub: see what I found]');
     }
   });
 

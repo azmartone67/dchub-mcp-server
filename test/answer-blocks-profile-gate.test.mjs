@@ -4,6 +4,16 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 
+// Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
+// This file exercises the opt-in mint path, so it turns the switch on for itself.
+const __prevAutoTrialMint = process.env.DCHUB_AUTO_TRIAL_MINT;
+beforeAll(() => { process.env.DCHUB_AUTO_TRIAL_MINT = '1'; });
+afterAll(() => {
+  if (__prevAutoTrialMint === undefined) delete process.env.DCHUB_AUTO_TRIAL_MINT;
+  else process.env.DCHUB_AUTO_TRIAL_MINT = __prevAutoTrialMint;
+});
+
+
 const UA = { 'user-agent': 'generic-agent' };
 const row = (market, rank, city, state, dep, score) => ({ market, rank, city, state, score,
   deployable_mw: { value: dep }, ai_ready_mw: { value: 100 }, hyperscale_ready: true });
