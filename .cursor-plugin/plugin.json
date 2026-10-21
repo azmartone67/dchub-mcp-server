@@ -1,6 +1,6 @@
 {
   "name": "dchub",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Live data-center, power-grid, fiber, interconnection-queue & M&A intelligence for AI agents — a global data-center facility map, 94 tools. Remote MCP at https://dchub.cloud/mcp.",
   "author": {
     "name": "Jonathan Martone",
@@ -19,15 +19,5 @@
     "site-selection"
   ],
   "logo": "dchub-logo.png",
-  "mcpServers": "mcp.json",
-  "variables": {
-    "type": "object",
-    "properties": {
-      "DCHUB_API_KEY": {
-        "type": "string",
-        "title": "DC Hub API key",
-        "description": "Optional X-API-Key from https://dchub.cloud/connect. Free tier works without a key; a key raises daily limits."
-      }
-    }
-  }
+  "mcpServers": "mcp.json"
 }
