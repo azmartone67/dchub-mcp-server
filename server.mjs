@@ -29180,6 +29180,31 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         callAPI('/api/v1/interconnection-queue/snapshot', {}, { internal: true }),
         callAPI(`/api/v1/grid/extended/${ISO}`, {}, { internal: true }),
       ]);
+      // 2026-10-21 (be#7512): a balancing authority EIA-930 no longer publishes
+      // (WACM/WAUW into SPP West on 2026-04-01; AEC after 2021-09-01) comes back
+      // from the backend as {retired: true, retired_on, successor, reason}. Without
+      // this branch it had no figures, so the transient check below told the
+      // caller "temporarily unavailable, retry": a retry loop on a region that is
+      // gone. Say it is retired, when, and what replaced it; retrying will not help.
+      if (gi && gi.retired === true) {
+        return { content: [{ type: 'text', text: JSON.stringify({
+          error: 'region retired',
+          detail: `"${raw}" no longer reports to EIA-930 (retired ${gi.retired_on || 'upstream'}). ${gi.reason || ''}`.trim(),
+          requested: raw,
+          retired: true,
+          retired_on: gi.retired_on || null,
+          successor: gi.successor || null,
+          source_url: gi.source_url || null,
+          hint: gi.successor
+            ? `DC Hub publishes no current figures for ${raw}. Its area is now part of: ${gi.successor}.`
+            : `DC Hub publishes no current figures for ${raw}.`,
+          _error_mitigation: {
+            error_code: 'region_retired',
+            severity: 'parameter_adjustment',
+            deterministic_hint: 'Retrying the same region_id will not help: the source stopped publishing it. Pick another region_id.',
+          },
+        }) }] };
+      }
       const out = shapeGridIntelligence(ISO, gi, cmp, qsnap);
       // G-2 (2026-10-06): name what this answer was composed from. The shaper rebuilds the
       // payload from four upstreams and carried none of their provenance, so the caller read
