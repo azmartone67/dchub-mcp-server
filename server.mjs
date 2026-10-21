@@ -217,6 +217,7 @@ import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, a
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
+import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
@@ -3376,6 +3377,17 @@ const getCtx = () => ctx.getStore() || {};
 // counts calls per via (routes/via_attribution.py). A count only, never access.
 const viaCtx = new AsyncLocalStorage();
 export const getVia = () => viaCtx.getStore() || null;
+
+// 2026-10-21: one `session_init` telemetry event per initialize (lib/session-init-event.mjs),
+// so the backend can tell which kind of client opened the session. Fire and forget.
+export function _reportSessionInit(req, { sessionId = null, userAgent = '', clientIp = '', qaMarker = false, platform = '' } = {}) {
+  try {
+    const ev = _sessionInitEventBody({ body: req && req.body, sessionId, userAgent, clientIp,
+      via: getVia(), qaMarker, selfPath: !!_pathSelfTag(req), platform, path: _normPath(req),
+      source: _pathSource(req) });
+    _postSessionInitEvent(ev, { apiBase: API_BASE, internalKey: INTERNAL_KEY });
+  } catch (_) { /* telemetry never touches a handshake */ }
+}
 
 // ★★★ r-connect-url (2026-08-18, the BYO-MCP identity gap): on every
 // bring-your-own-MCP surface — Grok connectors, Claude.ai web, ChatGPT,
@@ -31887,6 +31899,10 @@ async function _serveCore(req, res, o) {
     tier = validation.valid ? validation.tier : 'free';
     apiKey = _effectiveCallerKey(apiKey, validation, { disabled: _invalidKeyAnonDisabled() });
   }
+  if (body.method === 'initialize') {
+    _reportSessionInit(req, { userAgent: o.userAgent, clientIp: o.clientIp, platform,
+      qaMarker: String(req.headers['x-dchub-qa'] || '').trim() === '1' });
+  }
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   const srv = _createCoreServer(McpServer, _coreDeps(), { version: SERVER_VERSION });
   await srv.connect(transport);
@@ -32721,6 +32737,7 @@ app.post(MCP_PATHS, async (req, res) => {
       const _initErr = _initRequestError(body);
       if (_initErr) return _writeRpcError(res, body.id, { code: _initErr.code, message: _initErr.message, data: _initErr.data });
       const platform = detectPlatformFromInit(body, userAgent, platformHeader);
+      _reportSessionInit(req, { userAgent, clientIp, qaMarker: _qaMarker, platform });
       const ephTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       const ephServer = createServer(null, '');
       await ephServer.connect(ephTransport);
@@ -32774,6 +32791,7 @@ app.post(MCP_PATHS, async (req, res) => {
           // referencing it early is a ReferenceError node --check cannot see.
           _rememberPlatform(sid, platform,
                             (body?.params?.clientInfo?.name || '').toString());
+          _reportSessionInit(req, { sessionId: sid, userAgent, clientIp, qaMarker: _qaMarker, platform });
           sessionMeta.set(sid, {
             api_key: apiKey,
             platform,
