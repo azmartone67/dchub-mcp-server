@@ -178,8 +178,8 @@ describe.each(Object.keys(CASES))('%s — free tiers get names, verdicts and cou
       if (!p || !K.rows(p)) continue;
       expect(K.kept(p)).toEqual(K.keptWant);
       for (const row of K.rows(p)) {
-        // QA B P1 2026-10-19: site_selection_canvas names the withheld field without a plan.
-        const markers = Object.keys(row).filter((k) => k.endsWith(tool === 'site_selection_canvas' ? '_withheld' : '_in_pro'));
+        // QA B P1 2026-10-19 (siting) and Grok QA 2026-10-22 item 4 (every tool): the marker names no plan.
+        const markers = Object.keys(row).filter((k) => k.endsWith('_withheld'));
         expect(markers.length, `${tool} rows carry no withheld marker`).toBeGreaterThan(0);
       }
     }
@@ -208,7 +208,7 @@ describe('the rank_markets display string keeps its counts', () => {
       if (!p || !p.results) continue;
       expect(p.results[0].value).toBe('191 fac / 55 ops');
       expect(p.results[0].total_mw).toBeNull();
-      expect(p.results[0]._total_mw_in_pro).toBe(true);
+      expect(p.results[0]._total_mw_withheld).toBe(true);
     }
   });
 });

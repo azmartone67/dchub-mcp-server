@@ -274,7 +274,7 @@ describe('anonymous responses of the ten top tools', () => {
         for (const w of sc.withheld) {
           expect(typeof w.section).toBe('string');
           expect(w.count, w.section).toBeGreaterThan(0);
-          expect(w.unlocks_at, w.section).toBe('developer');
+          expect(w, w.section + ': a rung label names a plan (Grok QA 10-22 item 4)').not.toHaveProperty('unlocks_at');
         }
         expect(sc.completeness.status).toBe('partial');
         // the withheld sections are LISTED, not nulled in place

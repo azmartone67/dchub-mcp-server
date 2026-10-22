@@ -314,7 +314,7 @@ describe('the three decision tools are previews on every non-paid seat (default 
           for (const w of o.withheld) {
             expect(typeof w.section).toBe('string');
             expect(w.count).toBeGreaterThan(0);
-            expect(w.unlocks_at).toBe('developer');
+            expect(w).not.toHaveProperty('unlocks_at');   // Grok QA 10-22 item 4: no plan name on agent output
           }
           for (const f of T.FREE_DECISION_STRIPPED_FIELDS[tool]) {
             expect(Object.prototype.hasOwnProperty.call(o, f), `${where}: decision field "${f}" must be ABSENT (not null)`).toBe(false);
@@ -324,7 +324,7 @@ describe('the three decision tools are previews on every non-paid seat (default 
           expect(o.inline_full).not.toBe(true);
           expect(o._metered_trial).toBeUndefined();
           expect(o.free_preview_only).toBe(true);
-          expect(o.full_unlocks_at).toBe('developer');
+          expect(o).not.toHaveProperty('full_unlocks_at');
         }
         // per-tool headline values come from the fixtures, so the taste is the data, not a label
         if (tool === 'get_grid_intelligence') {
@@ -380,12 +380,14 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
       expect(sc.provenance.preview.withholding_proven).toBe(true);
       expect(sc.provenance.preview.withheld_fields.length).toBeGreaterThan(0);
       // every per-field marker the taste carries is a named withheld field in provenance
-      const marked = Object.keys(r.data).filter((k) => /^_.+_in_pro$/.test(k) && r.data[k] === true).map((k) => k.slice(1, -'_in_pro'.length));
+      // Grok QA 10-22 item 4: the per-field marker on agent output is `_<f>_withheld`, never `_<f>_in_pro`.
+      expect(Object.keys(r.data).filter((k) => /_in_pro$/.test(k))).toEqual([]);
+      const marked = Object.keys(r.data).filter((k) => /^_.+_withheld$/.test(k) && r.data[k] === true).map((k) => k.slice(1, -'_withheld'.length));
       expect(marked.length).toBeGreaterThan(0);
       // detectGating lists up to 12 names: every one it lists is a marker the taste carries
       for (const f of sc.provenance.preview.withheld_fields) expect(marked, f).toContain(f);
       expect(marked).toContain({ get_grid_intelligence: 'constraint_score', get_interconnection_queue: 'projects', get_market_intel: 'top_providers' }[tool]);
-      expect(r.data._withheld_unlocks_at).toBe('developer');
+      expect(r.data).not.toHaveProperty('_withheld_unlocks_at');
       expect(sc.next_ask && typeof sc.next_ask === 'object').toBe(true);
       expect(sc.preview_is_partial).toBe(true);
       if (sc.agent_hints && typeof sc.agent_hints.summary === 'string') {
@@ -400,7 +402,8 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
       // the ladder: Developer first, then Pro; the $10 pack is never what returns these fields
       // the taste's own ladder (content JSON); the cascade's generic `upgrade` object is machine links only
       const up = r.data._upgrade || sc._upgrade || sc.upgrade;
-      expect(up && up.unlocks_at).toBe('developer');
+      expect(up && typeof up === 'object').toBe(true);
+      expect(up).not.toHaveProperty('unlocks_at');
       // v14 (owner 2026-10-10): the rung is described, never named or priced.
       // Item 1 leftover (2026-10-17): the neutral partial line on /mcp, no paid-plan sentence.
       expect(up.message).toMatch(/This result is partial: some fields are not included at this access level\./);

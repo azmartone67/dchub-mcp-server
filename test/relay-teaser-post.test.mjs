@@ -217,7 +217,7 @@ describe('the gateway posts one withheld number for the relay token it minted', 
 
   it('the response is gated and carries a relay link (the path under test is live)', () => {
     expect(sc.for_your_human && sc.for_your_human.url).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\//);
-    expect(body).toContain('_score_in_pro');
+    expect(body).toContain('_score_withheld');   // Grok QA 10-22 item 4: the marker names no plan
   });
 
   it('exactly one post, for THIS response\'s token, with the internal key', () => {
@@ -234,7 +234,7 @@ describe('the gateway posts one withheld number for the relay token it minted', 
     expect(p.label).toMatch(/^[a-z0-9][a-z0-9 ,./()%$&+-]{0,59}$/);
     expect(p.value).toMatch(/^[0-9A-Za-z $%.,/+~-]{1,24}$/);
     // the gate marked this field withheld in the response (escaped inside the text block)
-    expect(body).toContain(`_${p.label.replace(/ /g, '_')}_in_pro`);
+    expect(body).toContain(`_${p.label.replace(/ /g, '_')}_withheld`);   // Grok QA 10-22 item 4
     // and the value posted is not what the agent was shown for it: the field is null there
     expect(body).toMatch(new RegExp(`\\\\?"${p.label.replace(/ /g, '_')}\\\\?":null`));
   });

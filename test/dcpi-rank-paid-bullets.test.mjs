@@ -130,8 +130,8 @@ describe('G-1016-04: get_market_dcpi_rank free previews withhold the paid DCPI b
         for (const frag of LEAKS[slug]) expect(all, `leaked "${frag}"\n${text.slice(0, 400)}`).not.toContain(frag);
         expect(sc.top_opportunities_json).toBeNull();
         expect(sc.top_risks_json).toBeNull();
-        expect(sc._top_opportunities_json_in_pro).toBe(true);
-        expect(sc._top_risks_json_in_pro).toBe(true);
+        expect(sc._top_opportunities_json_withheld).toBe(true);
+        expect(sc._top_risks_json_withheld).toBe(true);
         // the free surface the owner kept: verdict + composite, unchanged
         expect(sc.verdict).toBe('CAUTION');
         expect(typeof sc.composite_score).toBe('number');

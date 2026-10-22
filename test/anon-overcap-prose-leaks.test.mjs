@@ -111,7 +111,7 @@ describe('over-cap keyless get_market_context gets the server-built free shape',
     expect(body.tier).toBe('free');
     expect(body.sections.map((s) => s.id)).toEqual(['hero', 'news']);
     expect(body.locked_sections).toEqual(['grid', 'outlook', 'deals']);
-    expect(body._sections_total_in_developer).toBe(4);
+    expect(body._sections_total_available).toBe(4);   // Grok QA 10-22 item 4: no plan in the key
     const wire = JSON.stringify(body) + text;
     for (const leak of LEAKS) expect(wire, `over-cap wire still carries ${leak}`).not.toContain(leak);
   });

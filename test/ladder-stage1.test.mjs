@@ -46,7 +46,7 @@ const SEATS = [['anon', null], ['free', K_FREE], ['ident', K_IDENT], ['pack', K_
 // lower ≤ upper
 const WITH_DATA_FLOOR = 70;   // measured 77 of 92
 const GRADED_FLOOR = 55;      // measured 65 of 92
-const ROW_LABEL_FLOOR = 2500;   // measured 3180 labelled trimmed lists across the sweep
+const ROW_TOTAL_FLOOR = 3000;   // measured 3620 `_<k>_total_available` totals across the sweep (2026-10-22)
 const LADDER_PAIRS = [['anon', 'free'], ['free', 'ident'], ['ident', 'pack'], ['pack', 'developer'],
   ['developer', 'pro'], ['ident', 'starter'], ['starter', 'developer']];
 const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY'];
@@ -248,24 +248,19 @@ function dataTokens(texts, sc) {
 }
 
 // The documented row-total contract (initialize instructions: "the full count is
-// in the sibling `_..._total_in_pro` field"). Every trimmed list's rung label
-// `_<k>_total_unlocks_at` must sit beside `_<k>_total_in_pro`, and no rung-suffixed
-// total (`_<k>_total_in_free|developer`) may replace it.
+// in the sibling `_..._total_available` field"). Grok QA 2026-10-22 item 4: the
+// marker names no plan, so on the final output a trimmed list carries
+// `_<k>_total_available` and never `_<k>_total_in_pro`, a rung-suffixed total
+// (`_<k>_total_in_free|developer`) or a rung label (`_<k>_total_unlocks_at`).
 function rowTotalScan(texts, sc) {
-  const out = { inPro: 0, labelled: 0, broken: [] };
+  const out = { available: 0, broken: [] };
   const walk = (o, d = 0) => {
     if (d > 14 || !o || typeof o !== 'object') return;
     if (Array.isArray(o)) { o.forEach((x) => walk(x, d + 1)); return; }
     for (const [k, v] of Object.entries(o)) {
-      let m = /^_(.+)_total_in_pro$/.exec(k);
-      if (m && typeof v === 'number') out.inPro++;
-      m = /^_(.+)_total_unlocks_at$/.exec(k);
-      if (m) {
-        out.labelled++;
-        if (typeof o[`_${m[1]}_total_in_pro`] !== 'number') out.broken.push(`${k} without _${m[1]}_total_in_pro`);
-        if (!['free', 'developer', 'pro'].includes(v)) out.broken.push(`${k}=${JSON.stringify(v)}`);
-      }
-      if (/^_(.+)_total_in_(free)$/.test(k)) out.broken.push(`${k} (rung-suffixed total replaces the documented one)`);
+      if (/^_(.+)_total_available$/.test(k) && typeof v === 'number') out.available++;
+      if (/^_(.+)_(total_)?in_(pro|developer|free)$/.test(k)) out.broken.push(`${k} (a marker that names a plan)`);
+      if (/_unlocks_at$/.test(k)) out.broken.push(`${k}=${JSON.stringify(v)} (a rung label)`);
       if (v && typeof v === 'object') walk(v, d + 1);
     }
   };
@@ -446,7 +441,7 @@ describe('ladder stage 1 — no rung gets more than the rung above it, on any to
     const inversions = [];
     let compared = 0;
     const withData = new Set();     // tools where Pro receives backend values
-    let inPro = 0, labelled = 0;    // documented row totals seen / rung labels seen
+    let available = 0;              // documented row totals seen
     const brokenTotals = [];
     const graded = new Set();       // tools where some rung receives FEWER values than Pro
     for (const t of TOOLS) {
@@ -456,7 +451,7 @@ describe('ladder stage 1 — no rung gets more than the rung above it, on any to
         for (const [seat, key] of SEATS) {
           const r = await call(t.name, args, key, spent);
           got[seat] = r.tokens;
-          inPro += r.rowTotals.inPro; labelled += r.rowTotals.labelled;
+          available += r.rowTotals.available;
           for (const x of r.rowTotals.broken) brokenTotals.push(`${t.name} ${seat}${spent ? ' spent' : ''}: ${x}`);
         }
         if (got.pro.size) withData.add(t.name);
@@ -471,11 +466,10 @@ describe('ladder stage 1 — no rung gets more than the rung above it, on any to
       }
     }
     expect(compared).toBe(TOOLS.length * 2 * LADDER_PAIRS.length);
-    // The documented `_..._total_in_pro` contract holds wherever a preview withholds rows.
-    if (process.env.LADDER_DEBUG) console.error(`[ladder] total_in_pro=${inPro} unlocks_at=${labelled}`);
+    // The documented `_..._total_available` contract holds wherever a preview withholds rows.
+    if (process.env.LADDER_DEBUG) console.error(`[ladder] total_available=${available}`);
     expect(brokenTotals, 'row-total contract:\n  ' + brokenTotals.join('\n  ')).toEqual([]);
-    expect(labelled, 'no trimmed list carried a rung label — the contract check is vacuous').toBeGreaterThanOrEqual(ROW_LABEL_FLOOR);
-    expect(inPro, 'every labelled trimmed list carries the documented total').toBeGreaterThanOrEqual(labelled);
+    expect(available, 'no trimmed list carried its documented total — the contract check is vacuous').toBeGreaterThanOrEqual(ROW_TOTAL_FLOOR);
     if (process.env.LADDER_DEBUG) console.error(`[ladder] withData=${withData.size} graded=${graded.size}`);
     // Non-vacuity: the guard only means something where Pro sees data and a
     // lower rung sees less of it. Floors measured 2026-09-29 (see the PR).

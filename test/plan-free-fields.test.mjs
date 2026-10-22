@@ -63,11 +63,16 @@ describe('planFreeFieldsStep (unit)', () => {
     expect(sc.note).toContain('_<field>_total_available');
     expect(JSON.parse(r.content[0].text)).toEqual(sc);
   });
-  it('leaves other tools, errors, the kill switch and an execute_plan step alone', () => {
+  it('leaves the kill switch, an execute_plan step and the own-scrub profiles\' other tools alone', () => {
     const base = LIVE_SHAPED();
-    expect(planFreeFieldsStep(base, 'get_news')).toBe(base);
+    // Grok QA 2026-10-22 item 4: every tool on the canonical surfaces; on the directory / Claude / core
+    // profiles (ownScrub) only the siting family, as before.
+    expect(offenders(planFreeFieldsStep(base, 'get_news'))).toEqual([]);
+    expect(planFreeFieldsStep(base, 'get_news', { ownScrub: true })).toBe(base);
+    expect(offenders(planFreeFieldsStep(base, 'find_sites', { ownScrub: true }))).toEqual([]);
+    // An isError result is rewritten too (a keyless taste is served with isError: true).
     const err = { ...LIVE_SHAPED(), isError: true };
-    expect(planFreeFieldsStep(err, 'find_sites')).toBe(err);
+    expect(offenders(planFreeFieldsStep(err, 'find_sites'))).toEqual([]);
     expect(planFreeFieldsStep(base, 'find_sites', { skip: true })).toBe(base);
     process.env.DCHUB_PLAN_FREE_FIELDS_V1 = '0';
     try { expect(planFreeFieldsStep(base, 'find_sites')).toBe(base); } finally { delete process.env.DCHUB_PLAN_FREE_FIELDS_V1; }
@@ -151,6 +156,7 @@ describe('an execute_plan step keeps the raw markers its caller reads', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     expect(src).toMatch(/loopback_step: _isLoopbackPeer\(req\)/);
     // Agent QA A (2026-10-20): leanResponseStep sits between the source line and this rename.
-    expect(src).toMatch(/return planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await fn\(args, extra\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step \}\)/);
+    expect(src).toMatch(/return planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await fn\(args, extra\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step, ownScrub \}\)/);
+    expect(src).toMatch(/const ownScrub = c\.profile === DIRECTORY_PROFILE \|\| c\.profile === CLAUDE_PROFILE \|\| c\.profile === CORE_PROFILE;/);
   });
 });

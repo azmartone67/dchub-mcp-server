@@ -317,7 +317,7 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     usage.count = 3;
     const r = await call('get_gas_intelligence', { region: 'TX' }, seat());
     const sc = r.structuredContent;
-    expect(sc._dcgi_score_in_pro, 'the depth tease this issue was measured on').toBe(true);
+    expect(sc._dcgi_score_withheld, 'the depth tease this issue was measured on').toBe(true);
     expect(sc._upgrade && sc._upgrade.tier).not.toBe('anon_daily_cap');
     const all = JSON.stringify(r);
     expect(all).not.toMatch(PACK_RE);
@@ -331,7 +331,7 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     const sc = r.structuredContent;
     expect(usage.hits, 'the anon-usage read happened').toBeGreaterThan(0);
     expect(sc._upgrade && sc._upgrade.tier, 'the anon_daily_cap branch did not fire').toBe('anon_daily_cap');
-    expect(sc._dcgi_score_in_pro).toBe(true);
+    expect(sc._dcgi_score_withheld).toBe(true);
     expect(sc._upgrade.pack_opens).toBe(false);
     expect(sc._upgrade.wall).toBe('depth');
     expect(sc._upgrade.remaining_today).toBe(0);

@@ -95,7 +95,7 @@ describe.each(Object.keys(FREE_SEATS))('%s', (label) => {
         expect(rows.map((r) => r.score)).toEqual(want);
         for (const r of rows) {
           expect(r.score).toBe(r[countKey]);
-          expect(r._score_in_pro).toBeUndefined();
+          expect(r._score_in_pro).toBeUndefined(); expect(r._score_withheld).toBeUndefined();
           expect(r.score_band).toBeUndefined();
           // the MW gate from #502 is untouched on the same rows
           expect(r.total_mw).toBeNull();
@@ -109,7 +109,7 @@ describe.each(Object.keys(FREE_SEATS))('%s', (label) => {
       expect(sets.length, `no rows came back — ${text.slice(0, 160)}`).toBeGreaterThan(0);
       for (const rows of sets) for (const r of rows) {
         expect(r.score).toBeNull();
-        expect(r._score_in_pro).toBe(true);
+        expect(r._score_withheld).toBe(true);   // Grok QA 10-22 item 4: the marker names no plan
       }
       for (const v of PAYLOADS[criteria].map((r) => r.score)) expect(text).not.toContain(String(v));
     });
@@ -142,7 +142,7 @@ describe('trimForTrial (the keyless preview trims)', () => {
     '★ %s: score survives the trim', (criteria, want) => {
       const out = S.trimForTrial(payload(criteria, PAYLOADS[criteria]), 'rank_markets');
       expect(out.results.map((r) => r.score)).toEqual(want);
-      for (const r of out.results) { expect(r._score_in_pro).toBeUndefined(); expect(r.score_band).toBeUndefined(); }
+      for (const r of out.results) { expect(r._score_in_pro).toBeUndefined(); expect(r._score_withheld).toBeUndefined(); expect(r.score_band).toBeUndefined(); }
       expect(out.score_basis).toBe(SCORE_BASIS);
     });
 

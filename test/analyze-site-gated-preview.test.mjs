@@ -29,6 +29,14 @@ const SITE = () => ({
   source: 'DC Hub Site Intelligence',
 });
 const FIGURES = ['81.8', '96.9', '64.2', '55.1', '72.3', '48.6'];
+// The serialized result the figure scan reads. request_id is an id, not a figure, and a string that is
+// wholly an ISO-8601 timestamp (retrieved_at, resets_at) is a clock reading: `retrieved_at` stamped at
+// hh:mm:55.1xxZ contains "55.1", which failed smoke on mcp#1110 (run 39847074175, 20:15:55.1Z) and
+// fails origin/main the same way with the clock pinned to :55.150. Every other string, JSON text
+// blocks included, is still scanned whole.
+const ISO_TS = /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)?$/;
+const figureBlob = (res) => JSON.stringify(res, (k, x) => (k === 'request_id' ? undefined
+  : (typeof x === 'string' && ISO_TS.test(x) ? '<ts>' : x)));
 const SHORT = 'https://dchub.cloud/u/abcdef';
 const MISSING = ['overall score', 'fiber connectivity', 'gas pipeline access', 'market conditions', 'risk and resilience'];
 
@@ -138,7 +146,7 @@ for (const session of [true, false]) {
       const all = strings(r.res).map((s) => s.replace(/https?:\/\/\S+/g, '<url>'));
       const bad = all.filter((s) => /\bPro\b|\bpaid\b|\btrial\b|\$\d|Then stop|First line of your answer/i.test(s));
       expect(bad).toEqual([]);
-      const blob = JSON.stringify(r.res, (k, x) => (k === 'request_id' ? undefined : x));   // an id, not a figure
+      const blob = figureBlob(r.res);
       for (const f of FIGURES) expect(blob, f).not.toContain(f);
     });
 
@@ -298,5 +306,14 @@ describe('powerBandLineStep (teaser line, profile-aware)', () => {
     expect(powerBandLineStep(r, 'analyze_site', { profile: 'claude' }, SKIP)).toBe(r);
     expect(powerBandLineStep(r, 'get_facility', { profile: 'mcp' }, SKIP)).toBe(r);
     expect(powerBandLineStep(r, 'analyze_site', { profile: 'mcp' }, { ...SKIP, env: { DCHUB_POWER_BAND_MEANING: '0' } })).toBe(r);
+  });
+});
+
+describe('the figure scan (figureBlob)', () => {
+  it('skips only a whole-string timestamp: a figure anywhere else is still caught', () => {
+    expect(figureBlob({ retrieved_at: '2026-10-22T20:15:55.108Z' })).not.toContain('55.1');
+    expect(figureBlob({ gas_pipeline_access: 55.1 })).toContain('55.1');
+    expect(figureBlob({ note: 'gas pipeline access 55.1 at 2026-10-22T20:15:55.108Z' })).toContain('55.1');
+    expect(figureBlob({ content: [{ type: 'text', text: JSON.stringify({ retrieved_at: '2026-10-22T20:15:55.108Z', s: 55.1 }) }] })).toContain('55.1');
   });
 });

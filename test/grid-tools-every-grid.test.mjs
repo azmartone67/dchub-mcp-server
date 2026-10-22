@@ -40,18 +40,21 @@ describe('shapeLatestGrid', () => {
     expect(r.demand_mw).toBe(11301);
     expect(r.newest_at).toBe('2026-10-21T07:58:46+00:00');
   });
-  it('DCPI and queue fields are null with a basis, never zero', () => {
+  it('DCPI and queue fields are "not_covered" with a basis, never zero and never null (Grok QA 2026-10-22 item 3)', () => {
     const r = shapeLatestGrid('AESO', body);
     for (const k of ['constraint_score', 'excess_power_score', 'avg_time_to_power_months', 'avg_queue_wait_months', 'queue_depth_gw']) {
-      expect(r[k], k).toBeNull();
+      expect(r[k], k).toBe('not_covered');
+      expect(r.not_covered, k).toContain(k);
     }
-    expect(r.not_tracked).toMatch(/not tracked, not zero/);
+    expect(r.not_covered_basis).toMatch(/tracked for the US ISOs only/);
   });
   it('an error, a retired stream or no mix stays honest', () => {
     expect(shapeLatestGrid('X', { error: 'API 404', detail: 'no stored readings' }).error).toBe('API 404');
     expect(shapeLatestGrid('JP_OKINAWA', { retired: true, status: 'source_blocked', reason: 'Imperva 403' }).error).toBe('stream source_blocked');
     const r = shapeLatestGrid('EMA', { iso: 'EMA', demand_mw: 7692, metrics: { demand_mw: { value: 7692 } } });
-    expect(r.renewable_share_pct).toBeNull();
-    expect(r.generation_mix_mw).toBeNull();
+    expect(r.renewable_share_pct).toBe('not_covered');
+    expect(r.generation_mix_mw).toBe('not_covered');
+    expect(r.demand_mw).toBe(7692);
+    expect(r.not_covered).not.toContain('demand_mw');
   });
 });

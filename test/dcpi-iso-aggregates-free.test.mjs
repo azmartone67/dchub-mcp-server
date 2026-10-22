@@ -236,7 +236,7 @@ function expectPreviewLocked(row, label) {
     .toMatch(/ grid$/);
   for (const f of Object.keys(PREVIEW_FIELDS)) {
     expect(row[f], `${label}.${f}`).toBeNull();
-    expect(row[`_${f}_in_pro`], `${label}._${f}_in_pro`).toBe(true);
+    expect(row[`_${f}_withheld`], `${label}._${f}_withheld`).toBe(true);   // Grok QA 10-22 item 4: no plan in the marker
   }
 }
 function expectPreviewFull(row, iso, label) {
@@ -302,7 +302,7 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
     expect(out.lead && out.lead.iso, 'keyless ERCOT: no payload').toBe('ERCOT');
     for (const f of Object.keys(PREVIEW_FIELDS)) {
       expect(Object.prototype.hasOwnProperty.call(out.lead, f), `keyless ERCOT.${f} must be absent`).toBe(false);
-      expect(out.lead[`_${f}_in_pro`], `keyless ERCOT._${f}_in_pro`).toBe(true);
+      expect(out.lead[`_${f}_withheld`], `keyless ERCOT._${f}_withheld`).toBe(true);
     }
     expectNoNeedles(out, 'get_grid_intelligence keyless');
   });

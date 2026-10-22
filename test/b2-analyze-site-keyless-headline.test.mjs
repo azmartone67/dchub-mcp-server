@@ -242,7 +242,7 @@ describe('B2 free key: factor bands + substation distance/kV bands', () => {
     ]);
     expect(subs.substations_in_radius).toBe(2);
     expect(subs.locked_fields).toEqual(['hifld_id', 'name', 'max_kv', 'distance_km']);
-    expect(subs.tier_required).toBe('pro');
+    expect(subs.tier_required).toBeUndefined();   // Grok QA 10-22 item 4: no plan name on agent output
     expect(subs.note).not.toMatch(/\$/);
     const a = all(r);
     expect(a).not.toMatch(/HOLCOMBE|WESTRIDGE|WESTWING|107655|107656|test_sub_/);
