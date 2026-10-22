@@ -477,6 +477,7 @@ test/tool-guide-pointers.test.mjs
 test/tool-maturity-annotation.test.mjs
 test/tool-maturity-held-during-mcp-freeze.test.mjs
 test/tool-output-has-no-bare-conversion-link.test.mjs
+test/tools-list-one-lead.test.mjs
 test/toolspec-is-real.test.mjs
 test/toplevel-attribution.test.mjs
 test/track-auth-channel.test.mjs
