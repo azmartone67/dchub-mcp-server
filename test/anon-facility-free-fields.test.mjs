@@ -221,7 +221,7 @@ describe('r-anon-facility-allowlist — facility rows served without a key follo
     expect(up.tier, 'not the anonymous preview').toBe('anonymous');
     expect(up.next_tool, 'the claim-first CTA went missing').toBe('claim_free_key');
     expect(out.lead.data.length, 'the preview row trim went missing').toBeLessThan(ROWS);
-    expect(out.lead._data_total_in_pro, 'the honest full-length sibling went missing').toBe(ROWS);
+    expect(out.lead._data_total_available, 'the honest full-length sibling went missing').toBe(ROWS);
     await expectFreeAllowlist(out, 'anonymous preview');
   });
 
@@ -234,14 +234,14 @@ describe('r-anon-facility-allowlist — facility rows served without a key follo
     // the claim-first `_upgrade` and not the old notice.
     expect(out.lead._upgrade_notice, 'the hand-rolled capped envelope is back').toBeUndefined();
     expect((out.lead._upgrade || {}).next_tool, 'not the keyless trim').toBe('claim_free_key');
-    expect(out.lead._data_total_in_pro, 'the preview row trim went missing').toBe(ROWS);
+    expect(out.lead._data_total_available, 'the preview row trim went missing').toBe(ROWS);
     await expectFreeAllowlist(out, 'capped anonymous');
   });
 
   it('anonymous over the daily cap (search_facilities) — paid fields gone', async () => {
     const out = await (await openSession({ 'x-forwarded-for': OVER_CAP_IP })).call('search_facilities', { state: 'VA' });
     expect((out.lead._upgrade || {}).tier, 'not the over-cap branch').toBe('anon_daily_cap');
-    expect(out.lead._data_total_in_pro, 'the preview row trim went missing').toBe(ROWS);
+    expect(out.lead._data_total_available, 'the preview row trim went missing').toBe(ROWS);
     await expectFreeAllowlist(out, 'over-cap anonymous');
   });
 

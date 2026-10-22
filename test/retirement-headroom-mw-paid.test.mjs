@@ -171,7 +171,7 @@ describe('be#5886 parity — get_retirement_headroom MW is Developer+', () => {
     expect(b._gated).toBe(true);
     expect(b._preview_only).toBe(true);
     expect(b._locked_fields).toEqual(['data[].generator.capacity_mw', 'data[].queue_pressure.competing_mw', 'total_retiring_mw']);
-    expect(b._upgrade && b._upgrade.tier_required).toBe('developer');
+    expect(b._upgrade && b._upgrade.tier_required).toBeUndefined();   // Grok QA 10-22 item 4: no plan name
     expect(b._upgrade.next_tool).toBe('unlock_more_data');
     // rows are ordered by date then name, not by the MW they hide
     expect(b.data.map((r) => r.generator.name)).toEqual(['Alpha Plant', 'Zeta Station']);

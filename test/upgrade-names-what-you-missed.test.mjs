@@ -185,7 +185,8 @@ function withheldKeys(backend, response) {
   // Owner 2026-10-08: the decision tools' taste withholds a field by LEAVING IT OUT beside its
   // `_<field>_in_pro: true` marker (never a null in place); a marker-backed absence is withheld.
   if (response && typeof response === 'object' && !Array.isArray(response)) {
-    for (const [k] of b) if (!r.has(k) && response['_' + k + '_in_pro'] === true) out.add(k);
+    // Grok QA 2026-10-22 item 4: on agent output the marker is `_<field>_withheld`.
+    for (const [k] of b) if (!r.has(k) && (response['_' + k + '_withheld'] === true || response['_' + k + '_in_pro'] === true)) out.add(k);
   }
   for (const [k, rv] of r) {
     const bv = b.get(k);

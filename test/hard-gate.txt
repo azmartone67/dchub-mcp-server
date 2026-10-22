@@ -1,5 +1,6 @@
 test/404-is-not-a-sales-opportunity.test.mjs
 test/agent-beat.test.mjs
+test/agent-output-names-no-plan.test.mjs
 test/agent-outreach-e2e.test.mjs
 test/agent-outreach.test.mjs
 test/agent-qa-a-signals-metros.test.mjs
@@ -201,6 +202,7 @@ test/go-sid-and-two-rungs.test.mjs
 test/grid-ba-coverage-note.test.mjs
 test/grid-day2-digest.test.mjs
 test/grid-declutter.test.mjs
+test/grid-gating-one-rule.test.mjs
 test/grid-intelligence-source-composed.test.mjs
 test/grid-lastfree.test.mjs
 test/grid-provenance-source-own-as-of.test.mjs
@@ -334,6 +336,7 @@ test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
 test/paid-sell-line.test.mjs
 test/partner-inbox-tools.test.mjs
+test/partner-key-both-headers.test.mjs
 test/payload-diet.test.mjs
 test/paywall-contract.test.mjs
 test/paywall-extras-attribution.test.mjs

@@ -84,6 +84,6 @@ describe('keyless get_market_dcpi_rank', () => {
     const hid = (t) => /this answer hid (.+?)(?:\.|;)/i.exec(t)[1];
     expect(hid(msg)).toBe(hid(line));
     expect(hid(msg)).not.toMatch(/ghost/);          // control: the figure-less marker was in the payload and is not named
-    expect(JSON.parse(r.content[0].text)._ghost_field_in_pro).toBe(true);
+    expect(JSON.parse(r.content[0].text)._ghost_field_withheld).toBe(true);
   });
 });

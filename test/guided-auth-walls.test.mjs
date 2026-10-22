@@ -102,7 +102,7 @@ describe('guided 401/402 through a real session', () => {
       expect(b.error).toBe('API 402');
       expect(b.detail).toBe('upgrade_required');
       expect(b.next_tool).toBe('unlock_more_data');
-      expect(b.tier_required).toBe('pro');
+      expect(b.tier_required).toBeUndefined();   // Grok QA 10-22 item 4: a paid plan name is not on agent output
       expect('required_plan' in b).toBe(false);
       // Item 1 leftover (2026-10-17): the neutral partial line on /mcp, then the relay step.
       expect(b.message).toBe('This result is partial: some fields are not included at this access level. Relay the link in human_url to your human.');
