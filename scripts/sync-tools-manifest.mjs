@@ -1288,6 +1288,23 @@ if (facts) {
     if (euZones) for (const m of txt.matchAll(/~?(\d{1,3})\+?\s+(?:EU|European)[A-Za-z \-]*?zones/g))
       if (Number(m[1]) !== euZones) factProblems.push(`${f}: EU-zone count ${m[1]} != canonical ${euZones}`);
   }
+  // ★2026-10-23: README.md is hand prose, not a render, and its EU-zone count is the
+  // one fact drift the daily mcp-facts-export could not get past: canon moved 24 -> 30
+  // (be#7609), the exporter wrote 30, and the export PR stopped at this guard because
+  // README still said "24 European ENTSO-E zones" (fixed by hand in mcp#1116). --fix
+  // now heals THAT number in README only, keeping its "~" / "+" and wording.
+  // smithery.yaml and mcp-server.json are rendered from these facts, so the render
+  // heals them; Pro price stays check-only (a price is never rewritten by a bot).
+  if (FIX && euZones) {
+    const cur = readCur('README.md');
+    const healed = cur.replace(/(~?)(\d{1,3})(\+?\s+(?:EU|European)[A-Za-z \-]*?zones)/g,
+      (all, tilde, n, rest) => (Number(n) === euZones ? all : `${tilde}${euZones}${rest}`));
+    if (healed !== cur) {
+      pend('README.md', healed);
+      for (let i = factProblems.length - 1; i >= 0; i--)
+        if (factProblems[i].startsWith('README.md: EU-zone count')) factProblems.splice(i, 1);
+    }
+  }
 }
 
 // ---- registered tool count vs EVERY manifest description (Grok A6c, 2026-10-08) ---------
