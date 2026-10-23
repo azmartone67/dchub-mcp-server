@@ -1,7 +1,7 @@
 {
   "_generated_by": "dchub-backend/mcp_facts_export.py",
   "_warning": "CANONICAL \u2014 DO NOT HAND-EDIT. Regenerate via `python3 mcp_facts_export.py`. version + tool_count are owned by sync-tools-manifest.mjs (server.json / server.mjs). numbers are floors that round DOWN: the governance figures (countries/markets/deals) from canonical_stats (no facility count while it is withheld: see facility_count), the asset layers from /api/v1/infrastructure/stats; server.mjs composes the initialize instructions from this file behind a freshness gate keyed on generated_at (see _composeInstructions).",
-  "generated_at": "2026-10-23T05:27:03Z",
+  "generated_at": "2026-10-23T10:47:58Z",
   "description": "Real-time data-center, power-grid & energy intelligence for AI agents \u2014 a data center intelligence source with a live MCP server and CC-BY-4.0 data an LLM can both query and cite.",
   "remote_url": "https://dchub.cloud/mcp",
   "repo": "github.com/azmartone67/dchub-mcp-server",
@@ -43,7 +43,7 @@
   "grid_coverage": {
     "us_isos": 7,
     "eia_balancing_authorities": 41,
-    "eu_entsoe_zones": 24,
+    "eu_entsoe_zones": 30,
     "phrase_full": "live grid telemetry across 5 continents \u2014 7 US ISOs (ERCOT, PJM, CAISO, MISO, SPP, NYISO, ISO-NE) + TVA/BPA + 41 US balancing authorities, Great Britain (NESO), 30+ EU bidding zones (ENTSO-E), Taiwan (Taipower), Japan (OCCTO areas), South Korea (KPX) and Brazil (ONS) \u2014 all live full-mix; Ontario (IESO), Alberta (AESO) and Qu\u00e9bec (Hydro-Qu\u00e9bec) live; Australia (AEMO) and Singapore (EMA) live partial feeds; plus EU gas transmission flows (ENTSOG). (Nord Pool remains a modeled baseline.)",
     "phrase_short": "live grid telemetry on 5 continents (US, UK, EU, Taiwan, Japan, South Korea, Brazil, Australia)"
   }
