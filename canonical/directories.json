@@ -499,13 +499,13 @@
     {
       "id": "milisp-mcp-linker",
       "name": "milisp mcp-servers (MCP Linker)",
-      "status": "live",
+      "status": "unverified",
       "listing_url": "https://github.com/milisp/mcp-servers/blob/main/servers/dchub.json",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-19",
-      "note": "milisp/mcp-servers#3 closed after the maintainer landed the entry in their own commit; servers/dchub.json (io.github.milisp.mcp-linker/dchub, title 'DC Hub') and index.json entry on main confirmed 2026-10-19 10:25 MST"
+      "verified_at": "2026-10-23",
+      "note": "Listing URL and the milisp/mcp-servers repo return 404 as of 2026-10-23 (repo deleted or made private); was confirmed live 2026-10-19 via servers/dchub.json"
     },
     {
       "id": "eater2-ai-agents-api-library",
