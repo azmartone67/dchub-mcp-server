@@ -43,7 +43,9 @@ describe('a taste on a market tool', () => {
   });
   it('states the purpose and forbids guessing an address (consent)', () => {
     const line = run(wall()).content[1].text;
-    expect(line).toMatch(/only to recover the key and to send the alerts they set; no marketing unless they opt in/);
+    // 2026-10-23 owner decision (a): the purpose names the weekly summary and how to stop it.
+    expect(line).toMatch(/used to recover the key, send receipts and any alerts they set, and a weekly summary of what the key looked up/);
+    expect(line).toMatch(/unsubscribe anytime\); no other marketing unless they opt in/);
     expect(line).toMatch(/Never guess or invent an address/);
     expect(line).toMatch(/explicitly/);
   });
