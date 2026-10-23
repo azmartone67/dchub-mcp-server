@@ -97,6 +97,27 @@ describe('tools/list', () => {
     expect(LIST.nextCursor).toBeUndefined();
   });
 
+  it('every parameter carries a JSON-Schema type (the directory portal flags untyped ones)', () => {
+    // 2026-10-23: the portal's tool review listed 6 tools "to fix" for untyped z.any() params.
+    const typed = (p) => ['type', 'anyOf', 'oneOf', 'allOf', '$ref', 'enum', 'const'].some((k) => k in p);
+    const untyped = [];
+    for (const t of LIST.tools) {
+      for (const [k, p] of Object.entries((t.inputSchema && t.inputSchema.properties) || {})) {
+        if (!typed(p)) untyped.push(`${t.name}.${k}`);
+      }
+    }
+    expect(untyped).toEqual([]);
+    const ep = LIST.tools.find((x) => x.name === 'execute_plan').inputSchema.properties;
+    expect(ep.max_steps.type).toBe('integer');
+    expect(ep.context.type).toBe('object');
+    expect(ep.max_steps.description).toMatch(/Max plan steps/);   // description kept, type added
+  });
+
+  it('CONTROL: the types are added on /mcp/claude only; the canonical /mcp schema keeps them untyped', () => {
+    const canon = CANON.find((x) => x.name === 'execute_plan').inputSchema.properties;
+    expect('type' in canon.max_steps).toBe(false);
+  });
+
   it('every canonical /mcp tool is either listed or removed, and none is both', () => {
     const listed = new Set(Object.keys(CLAUDE_TOOLS));
     const removed = new Set(CLAUDE_REMOVED);
