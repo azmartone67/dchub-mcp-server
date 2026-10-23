@@ -193,6 +193,7 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
+import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -20568,9 +20569,22 @@ function _sourceLineCb(name, fn) {
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
     const ownScrub = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
-    return planFreeFieldsStep(leanResponseStep(_sourceLineStep(await fn(args, extra), name, args), name,
+    return planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name), name, args), name,
       { skip: leanSkip }), name, { skip: !!c.loopback_step, ownScrub });
   };
+}
+// Wall-to-paid P3a (2026-10-23): every step that builds or converges the relay link has run inside
+// `fn`; the source line, lean and plan-free-field steps after it never touch the link. So here the
+// parked wall row (lib/wall-link-track.mjs) leaves with the hash of the link this result hands out.
+async function _wallOuterStep(fn, args, extra, name) {
+  const c = getCtx() || {};
+  let out;
+  try {
+    out = await fn(args, extra);
+    return out;
+  } finally {
+    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall);
+  }
 }
 
 // ── Description hygiene (ToolBench 2026-10-09, Grok P1 item 3) ──────────────
@@ -23252,7 +23266,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // (_claimHandoffStep reads it: the limit-hit counter and the handoff share one definition).
       try { c._wallStatus = status; } catch (_) { /* a frozen ctx loses the handoff, never the answer */ }
       // Fire-and-forget telemetry — never block the user response on it
-      trackToolCall({
+      // Wall-to-paid P3a (2026-10-23): a wall row with no link hash yet waits for the outer
+      // wrapper (_sourceLineCb), which hashes the link the FINAL result hands out
+      // (lib/wall-link-track.mjs; a timer sends it unhashed if nothing flushes it).
+      const _trackRow = {
         timestamp:   new Date().toISOString(),
         tool:        name,
         params:      paramsForTrack(args, c.session_id, name),  // + _via_next_ask when this call took the last next_ask
@@ -23282,7 +23299,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // Onboarding item 1 (2026-10-20): which channel the credential came on (see
         // _trackAuthChannel). An older backend ignores the key.
         ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
-      }).catch(() => {});
+      };
+      if (!parkWallTrack(c, _trackRow, trackToolCall)) trackToolCall(_trackRow).catch(() => {});
       // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs).
       _recordQuotaWallHit(c, name, status);
     }

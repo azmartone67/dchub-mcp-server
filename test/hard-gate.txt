@@ -502,6 +502,7 @@ test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
 test/wall-exits.test.mjs
+test/wall-link-every-wall.test.mjs
 test/wall-no-required-plan-all-tools.test.mjs
 test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs

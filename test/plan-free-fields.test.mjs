@@ -156,7 +156,8 @@ describe('an execute_plan step keeps the raw markers its caller reads', () => {
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
     expect(src).toMatch(/loopback_step: _isLoopbackPeer\(req\)/);
     // Agent QA A (2026-10-20): leanResponseStep sits between the source line and this rename.
-    expect(src).toMatch(/return planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await fn\(args, extra\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step, ownScrub \}\)/);
+    // Wall-to-paid P3a (2026-10-23): _wallOuterStep wraps fn only (it flushes the wall row, no rewrite).
+    expect(src).toMatch(/return planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await _wallOuterStep\(fn, args, extra, name\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step, ownScrub \}\)/);
     expect(src).toMatch(/const ownScrub = c\.profile === DIRECTORY_PROFILE \|\| c\.profile === CLAUDE_PROFILE \|\| c\.profile === CORE_PROFILE;/);
   });
 });
