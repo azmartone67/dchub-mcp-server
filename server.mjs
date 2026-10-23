@@ -19158,8 +19158,19 @@ export function _isNonDcName(name) {
 export async function _facilityFetch(id, api) {
   id = String(id || '').trim();
   if (!id) return { content: [{ type: 'text', text: JSON.stringify({ error: 'id is required (use an id from the search tool)' }) }], isError: true };
-  const out = await api('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
-  const d = (out && (out.data || out)) || {};
+  let out = await api('/api/v1/facility/' + encodeURIComponent(id), {}, { internal: true });
+  let d = (out && (out.data || out)) || {};
+  // /api/v1/facility/<id> resolves numeric ids only. search on /mcp and /mcp/claude returns slug
+  // and hex ids (e.g. "equinix-llc-ashburn-ashburn", "6364c613b80ae2b5"), which only
+  // /api/v1/facilities/<id> resolves; measured 2026-10-23, every such id failed here. A miss on
+  // the numeric route tries the plural one, so a numeric id (/mcp/chatgpt) reads exactly as before.
+  if (!(d && (d.name || d.facility_name)) && !/^\d+$/.test(id)) {
+    try {
+      const alt = await api('/api/v1/facilities/' + encodeURIComponent(id), {}, { internal: true });
+      const ad = (alt && (alt.data || alt)) || {};
+      if (ad && (ad.name || ad.facility_name)) { out = alt; d = ad; }
+    } catch (_) { /* keep the miss below */ }
+  }
   // The numeric record carries no connectivity_note (the slug record did):
   // live, 1109 lost "517 on-site fiber carrier(s)". Read the carrier count.
   if (d && d.name && !d.connectivity_note && /^\d+$/.test(id)) {
