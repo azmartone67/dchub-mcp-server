@@ -51,7 +51,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Fields of a signed token's payload (plan|ref|sid|tool|arm for /go/c; sid|tool|tier|ts|kref for /upgrade/h). */
 const goParts = (url) => Buffer.from(url.replace('https://dchub.cloud/go/c/', '').split('.')[0], 'base64url').toString().split('|');
 const relayParts = (url) => {
-  const m = RELAY_RE.exec(String(url || ''));
+  // a /u/ short link resolves to the relay page it was minted for (wall-to-paid P1, 2026-10-23)
+  const m = RELAY_RE.exec(String((S && S._shortLinkTargetOf(url)) || url || ''));
   if (!m) throw new Error('not a long relay link: ' + url);
   return Buffer.from(m[1], 'base64url').toString().split('|');
 };
@@ -254,7 +255,12 @@ describe('C4 — the chatgpt depth wall shows the person a hosted /u/ path', () 
   });
 
   it('a non-clean platform is untouched by the step', async () => {
-    const r = await call('get_interconnection_queue', { iso: 'PJM' }, seat({ platform: 'cursor', client_name_raw: 'cursor' }));
+    // this pins the ChatGPT hosted-path step only; the every-wall short link (wall-to-paid P1,
+    // test/wall-short-link) is switched off so its own /u/ link does not stand in for this one
+    process.env.DCHUB_WALL_SHORT_ALL = '0';
+    let r;
+    try { r = await call('get_interconnection_queue', { iso: 'PJM' }, seat({ platform: 'cursor', client_name_raw: 'cursor' })); }
+    finally { delete process.env.DCHUB_WALL_SHORT_ALL; }
     const sc = r.structuredContent;
     expect(sc.human_url).toMatch(/\/upgrade\/h\//);
     expect(sc.human_url).not.toBe(SHORT);

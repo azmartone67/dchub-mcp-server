@@ -194,6 +194,7 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
+import { shortWallLinkStep, withWallNextAsk } from './lib/short-wall-link.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -9326,6 +9327,9 @@ export function _resetShortLinkStats() {
 function _shortLinkFallback(tag, reason, tool, t0, detail) {
   _SHORT_LINK_STATS.fallback[reason] = (_SHORT_LINK_STATS.fallback[reason] || 0) + 1;
   if (reason === 'kill_switch') return;   // a deliberate switch, not a fault: counted, not logged
+  // Wall-to-paid P1 (2026-10-23): a relay-page mint that failed in this request is not retried by
+  // the outer short-link step (one attempt per request, the person waits for one budget at most).
+  if (tag === 'wall-relay-short') { try { const _c = getCtx(); if (_c) _c._relayShortFailed = true; } catch (_) {} }
   console.error('[' + tag + '] fallback reason=' + reason + ' tool=' + (tool || '')
     + (t0 ? ' ms=' + (Date.now() - t0) : '') + (detail ? ' detail=' + String(detail).slice(0, 120) : ''));
 }
@@ -9448,6 +9452,8 @@ export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch, cop
 // A /u/<code> short link 302s to the long /upgrade/h/ URL and the open is logged there, so
 // a short link resolves through _SHORT_LINK_TARGET (filled by _shortRelayPageLink).
 const _SHORT_LINK_TARGET = new Map();
+// The long /upgrade/h/ URL a /u/ link minted in this process points at (tests decode its token).
+export function _shortLinkTargetOf(url) { return _SHORT_LINK_TARGET.get(String(url || '')) || null; }
 const _RELAY_TOKEN_IN_URL_RE = /\/upgrade\/h\/([A-Za-z0-9_-]+\.[0-9a-f]{32})/;
 export function _relayTokenHash(url) {
   try {
@@ -20530,7 +20536,14 @@ function _outreachStep(result, name, args) {
   try {
     const c = getCtx() || {};
     const directory = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE;
-    const out = stampOutreach(result, name, args, { nextAsk: !directory });
+    // Wall-to-paid P2 (owner 2026-10-23): a walled result's one follow-up is relaying human_url.
+    // Measured 30d: 48 of 75 Claude wall sessions went on to other tools (next_ask named one) and 1
+    // took the wall's step. On a relay wall next_ask names THIS tool again, after the human has the
+    // link (the owner's taste contract still gets a next_ask; it no longer points elsewhere).
+    const sc0 = result && result.structuredContent;
+    const walled = !directory && !!(sc0 && typeof sc0 === 'object' && !Array.isArray(sc0) && _isRelayWall(sc0, c));
+    const input = walled ? withWallNextAsk(result, name) : result;
+    const out = stampOutreach(input, name, args, { nextAsk: !directory });
     const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
     if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool);
     return out;
@@ -20575,12 +20588,21 @@ function _sourceLineCb(name, fn) {
 }
 // Wall-to-paid P3a (2026-10-23): every step that builds or converges the relay link has run inside
 // `fn`; the source line, lean and plan-free-field steps after it never touch the link. So here the
-// parked wall row (lib/wall-link-track.mjs) leaves with the hash of the link this result hands out.
+// parked wall row (lib/wall-link-track.mjs) leaves with the hash of the link this result hands out
+// (the /u/ short link resolves to its token through _SHORT_LINK_TARGET).
 async function _wallOuterStep(fn, args, extra, name) {
   const c = getCtx() || {};
   let out;
   try {
     out = await fn(args, extra);
+    // Wall-to-paid P1 + P4 (2026-10-23): one short /u/ link, no buy=1, human_url first in block 0's
+    // JSON (lib/short-wall-link.mjs). Not on the directory / Claude / core profiles (their wall copy is
+    // fixed: /mcp/chatgpt is frozen for OpenAI's review, /mcp/claude strips links), not on an
+    // execute_plan loopback step, not for a paid-depth seat.
+    if (!c.loopback_step && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE
+        && c.profile !== CORE_PROFILE && !_isPaidDepthTier(c.tier)) {
+      out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)) });
+    }
     return out;
   } finally {
     flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall);

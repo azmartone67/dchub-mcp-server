@@ -171,10 +171,10 @@ describe.each(CASES.map((c) => [label(c), c]))('analyze_site gated answer, %s', 
     }
     expect(sc.required_plan).toBeUndefined();   // owner 2026-10-14: no plan field on the wall
     expect(sc._wall).toBe(true);
-    // Keyless: the /u/ short link the stub minted. Free key, or the short link switched off: the
-    // signed /upgrade/h relay page (one-link wall below Developer, Grok audit 2026-10-08 item 1).
+    // The /u/ short link the stub minted, keyless and (wall-to-paid P1, 2026-10-23) free key alike.
+    // The short link switched off: the signed /upgrade/h relay page (one-link wall below Developer).
     const link = sc.human_url || (sc.for_your_human && sc.for_your_human.url);
-    expect(link).toMatch(c.key || c.short === '0' ? /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?\S*)?$/
+    expect(link).toMatch(c.short === '0' ? /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?\S*)?$/
       : /^https:\/\/dchub\.cloud\/u\/abcdef$/);
     // The text an agent reads offers the trial with that link.
     const text = r.content.map((b) => b.text || '').join('\n');

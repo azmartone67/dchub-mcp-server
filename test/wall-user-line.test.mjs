@@ -384,7 +384,9 @@ describe('the other walls', () => {
     // same link human_url and for_your_human.url carry (they were the relay while the line was a
     // /u/ short of the /go/c metered checkout: two links). No checkout short link is minted.
     expect(line).toContain(r.structuredContent.human_url);
-    expect(r.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/upgrade\/h\//);
+    // the relay page, as its /u/ short where the mint answers (wall-to-paid P1, 2026-10-23)
+    expect(r.structuredContent.human_url).toMatch(/^https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/[2-9a-hj-km-np-z]{6}$)/);
+    expect(r.structuredContent.human_url).not.toBe(SHORT);   // not a /u/ short of the /go/c checkout
     expect(r.structuredContent.for_your_human.url).toBe(r.structuredContent.human_url);
     expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount
     expect(line).not.toMatch(/\$\d/);
@@ -393,6 +395,9 @@ describe('the other walls', () => {
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.copy_version).toBe('v14');
     expect(shortPosts.length).toBe(0);
-    expect(JSON.stringify(r)).not.toMatch(/dchub\.cloud\/(?:go\/c|u)\//);
+    // no checkout link and no /u/ short of one; the one /u/ link is the relay page's (wall-to-paid P1)
+    expect(JSON.stringify(r)).not.toMatch(/dchub\.cloud\/go\/c\//);
+    expect(JSON.stringify(r)).not.toContain(SHORT);
+    expect([...new Set(JSON.stringify(r).match(/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}/g) || [])].length).toBeLessThanOrEqual(1);
   });
 });

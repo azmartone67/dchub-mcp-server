@@ -185,7 +185,8 @@ function pageLinks(r) {
   return [...new Set(all.filter((u) => !ENDPOINT.test(u)).map(base))].filter((u) => !PROVENANCE_PAGES.has(u));
 }
 function tokenFields(url) {
-  const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\.([0-9a-f]{32})/.exec(String(url || ''));
+  // a /u/ short link resolves to the relay page it was minted for (wall-to-paid P1, 2026-10-23)
+  const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\.([0-9a-f]{32})/.exec(String((S && S._shortLinkTargetOf(url)) || url || ''));
   if (!m) return null;
   const sig = createHmac('sha256', INTERNAL).update(m[1]).digest('hex').slice(0, 32);
   expect(sig, 'the token verifies under the internal key').toBe(m[2]);
@@ -368,7 +369,7 @@ describe('#838 — the anonymous over-cap coaching sells the pack only where a c
     if (typeof sc.human_url === 'string') {
       const f = tokenFields(sc.human_url);
       expect(f, 'a relay was minted for the capacity wall').not.toBeNull();
-      expect(S._relayTokenKind(sc.human_url)).toBe('w-capacity');
+      expect(S._relayTokenKind(S._shortLinkTargetOf(sc.human_url) || sc.human_url)).toBe('w-capacity');
     }
   });
 

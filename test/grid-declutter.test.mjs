@@ -84,7 +84,7 @@ describe.each([['control v1', undefined], ['contract v2', 'on']])('keyless grid 
         if (ask !== last) expect(last).not.toMatch(/https?:\/\//);
       }
       expect(URL_COUNT(t, NEWS_URL)).toBe(0);                          // owner 2026-10-08: related_intel is withheld on the taste
-      expect((t.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
+      expect(new Set(t.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6})/g) || []).size).toBe(1);   // one distinct relay link (wall-to-paid P1: it also rides block 0's JSON as human_url)
     } finally { r2(); r1(); }
   });
 

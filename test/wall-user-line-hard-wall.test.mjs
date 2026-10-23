@@ -10,6 +10,7 @@ process.env.DCHUB_LEAN_RESPONSES = '0';
 
 let S, TOOLS, realFetch; const prev = {};
 const SHORT = 'https://dchub.cloud/u/hw2345';
+const RELAY_SHORT = 'https://dchub.cloud/u/hwr234';
 const json = (b, st = 200) => new Response(JSON.stringify(b), { status: st, headers: { 'content-type': 'application/json' } });
 beforeAll(async () => {
   for (const k of ['DCHUB_INTERNAL_KEY', 'DCHUB_ANON_DAILY_CAP', 'DCHUB_API_BASE']) prev[k] = process.env[k];
@@ -17,10 +18,14 @@ beforeAll(async () => {
   process.env.DCHUB_ANON_DAILY_CAP = '30';
   process.env.DCHUB_API_BASE = 'https://backend.hard-wall-line.test';
   realFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     let p = ''; try { p = new URL(String(input && input.url ? input.url : input)).pathname; } catch { /* */ }
     if (p === '/api/v1/mcp/anon-usage') return json({ ok: true, count: 999 });
-    if (p === '/api/v1/relay/short') return json({ ok: true, url: SHORT });
+    // A relay-page mint (body.relay_url, wall-to-paid P1) answers RELAY_SHORT; a /go/c mint answers SHORT.
+    if (p === '/api/v1/relay/short') {
+      let b = {}; try { b = JSON.parse((init && init.body) || '{}'); } catch { /* */ }
+      return json({ ok: true, url: b.relay_url !== undefined ? RELAY_SHORT : SHORT });
+    }
     return json({});
   };
   S = await import('../server.mjs');
@@ -42,7 +47,7 @@ describe('anon_hard_wall', () => {
     const line = r.content[0].text.split('\n')[0];
     // Grok audit 2026-10-08 (one link per wall): below Developer the person's line carries the
     // relay page (the one link the wall ends with), not a /u short of the /go/c pack checkout.
-    expect(line).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\//);
+    expect(line).toMatch(/https:\/\/dchub\.cloud\/(upgrade\/h\/|u\/hwr234)/);   // the relay page, as its /u/ short (wall-to-paid P1)
     expect(line).toContain(r.structuredContent.human_url);
     expect(line).not.toContain(SHORT);
     expect(line).toContain('a one-time pack adds 1,000 API credits');   // v14: no amount

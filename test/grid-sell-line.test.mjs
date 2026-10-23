@@ -70,7 +70,13 @@ describe('gridSellLine (pure)', () => {
 const BASE = 'https://backend.grid-sell.test';
 let S, TOOLS, realFetch, prevInternal;
 const json = (b) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+// This file pins the grid sell step's own output (the ?buy=1 relay link it writes). The outer
+// wall-to-paid step (2026-10-23) then drops buy=1 and swaps in the /u/ short link; that is pinned
+// in test/wall-short-link, so it is switched off here.
+let prevShortAll;
 beforeAll(async () => {
+  prevShortAll = process.env.DCHUB_WALL_SHORT_ALL;
+  process.env.DCHUB_WALL_SHORT_ALL = '0';
   prevInternal = process.env.DCHUB_INTERNAL_KEY;
   process.env.DCHUB_INTERNAL_KEY = 'grid-sell-test-internal-key';
   realFetch = globalThis.fetch;
@@ -102,6 +108,7 @@ beforeAll(async () => {
 afterAll(() => {
   globalThis.fetch = realFetch;
   if (prevInternal === undefined) delete process.env.DCHUB_INTERNAL_KEY; else process.env.DCHUB_INTERNAL_KEY = prevInternal;
+  if (prevShortAll === undefined) delete process.env.DCHUB_WALL_SHORT_ALL; else process.env.DCHUB_WALL_SHORT_ALL = prevShortAll;
 });
 
 let n = 0;
