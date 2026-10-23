@@ -8350,6 +8350,14 @@ export function _freeDecisionClause() {
 // allowance. The durability honesty stays in bind_email, after this line
 // (test/oauth-first-copy.test.mjs). Every figure is read from the enforced canon; a
 // missing rung drops its clause rather than printing "n/a".
+// ★2026-10-23 owner decision (a): a bound email also gets a weekly summary of what its key
+// looked up. ONE purpose sentence, used wherever an email is asked for, and the consent
+// token the backend requires before it enrolls a key (dchub-backend#7627,
+// marketing_send.WEEKLY_SUMMARY_PURPOSE). Sent only by clients that show this sentence.
+export const WEEKLY_SUMMARY_PURPOSE = 'recovery_receipts_weekly_summary_v1';
+export const EMAIL_PURPOSE_TEXT = 'the address is used to recover the key, send receipts and any alerts they set, '
+  + 'and a weekly summary of what the key looked up (only in weeks it was used; unsubscribe anytime); '
+  + 'no other marketing unless they opt in';
 export function _emailBenefitText() {
   const ident = _rungNum('identified');
   const full = _fullAnswersPerToolPerDay('identified');
@@ -8360,6 +8368,7 @@ export function _emailBenefitText() {
   if (freeDecisionPreviewOnlyOn() && emailFullDecisionOn() && EMAIL_DECISION_DAILY_FULL_CAP > 0) {
     parts.push(EMAIL_DECISION_DAILY_FULL_CAP + ' full answers a day each on the grid, queue and market-intel tools instead of previews');
   }
+  parts.push('a weekly summary of what your key looked up (unsubscribe anytime)');
   parts.push('a key that can be recovered (recover_my_key re-sends it to that inbox)');
   return 'WHAT AN EMAIL GETS (free, no card): ' + parts.join('; ') + '.';
 }
@@ -23466,7 +23475,7 @@ const _watchLineOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_
 export function _watchLineCopy(name, emailBound) {
   const site = name === 'analyze_site';
   const steps = [...(emailBound ? [] : ['bind_email']), ...(site ? ['save_site', 'set_site_alert'] : ['set_market_alert'])];
-  const purpose = 'the address is used only to recover the key and to send the alerts they set; no marketing unless they opt in';
+  const purpose = EMAIL_PURPOSE_TEXT;
   const text = '(agent) ' + _WATCH_LINE_MARKER + ' tell your user \u201cI can watch ' + (site ? 'this site' : 'these markets')
     + ' and email you when the power picture changes \u2014 want that?\u201d Only if they say yes and give an email explicitly '
     + '(never guess one): call claim_free_key if you hold no key, then ' + steps.join(', then ')
@@ -25202,7 +25211,7 @@ const _EMAIL_HINT_SITE_TOOLS = new Set(['analyze_site', 'compare_sites', 'find_s
 export function _emailHintCopy(name) {
   const site = _EMAIL_HINT_SITE_TOOLS.has(name);
   const steps = site ? ['bind_email', 'save_site', 'set_site_alert'] : ['bind_email', 'set_market_alert'];
-  const purpose = 'the address is used only to recover the key and to send the alerts they set; no marketing unless they opt in';
+  const purpose = EMAIL_PURPOSE_TEXT;
   const text = '(agent) Optional, only if your human wants to keep this: ask which email they want updates at and tell them '
     + purpose + '. Never guess or invent an address. Once they give one explicitly: call claim_free_key if you hold no key, then '
     + steps.join(', then ') + (site ? ' (channel email)' : ' with channel=email')
@@ -30345,6 +30354,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         body.email = String(a.email).trim().slice(0, 200);
         // Where the email came from (backend be#5836). See lib/retention.mjs emailSourceFor.
         body.email_source = _retEmailSourceFor(getCtx());
+        body.consent_purpose = WEEKLY_SUMMARY_PURPOSE;   // the claim description discloses the summary
       }
       const r = await callAPIWrite('/api/v1/keys/claim', body);
       const key = r && (r.api_key || r.key);
@@ -30615,7 +30625,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     'Use this when the user wants their DC Hub key tied to their email, or a result said an email unlocks more. ' +
     _emailBenefitText() + ' Ask your human for their email first; pass only an address they typed. ' +
     '★ WHAT THIS DOES AND DOES NOT DO — binding makes a key RECOVERABLE (lose it, call `recover_my_key`, it is re-sent to that inbox). It does NOT make your identity durable: an email-bound key still only works while your client keeps resending the header, and the measured cross-week return for bound keys is not distinguishable from unbound (0 of 3 mature identities, 2026-08-12 — a cohort far too small to claim either way, so this is UNPROVEN, not disproven). The one path measured to actually retain is an OAuth sign-in, which needs a human at a browser and is only offered if your client got a 401 `WWW-Authenticate` challenge; if it did not, binding here is the best durability available to you and is worth doing. ' +
-    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets ' + _unboundKeyLadderText() + '; binding restores the FREE tier at ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: the email is used ONLY to recover your key and route upgrade receipts (transactional). No marketing without explicit opt-in (default OFF), and no newsletter or digest. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
+    'Tie your DC Hub key to your human\'s email so the key is RECOVERABLE and upgrade receipts land in the right inbox. Call this once your human shares their email. HONEST LADDER: an unbound key gets ' + _unboundKeyLadderText() + '; binding restores the FREE tier at ' + FREE_TIER.identified_calls_per_day + ' calls/day and makes the key recoverable next session (binding is free — no card). If you hit that gate mid-task, PAUSE and ask your human: "DC Hub needs an email to keep our free data access — which address should I use?" Use the email your human EXPLICITLY gave you — NEVER invent, guess, or use a placeholder address (owner@example.com, user@test.com etc. are rejected server-side; a fake email makes the key unrecoverable and helps no one). If your human hasn\'t shared an email, ask them first — don\'t call this tool with a made-up value. Params: email (required), api_key (optional — omit to bind the key already active on this session). CONSENT/PURPOSE: ' + EMAIL_PURPOSE_TEXT.charAt(0).toUpperCase() + EMAIL_PURPOSE_TEXT.slice(1) + '. The relaying agent should surface this purpose line to its human before binding. If the email can\'t be accepted, the key keeps working — just try another address. To ALSO subscribe your human to the FREE weekly digest (the markets, deals and facilities that moved in what they queried), pass marketing_opt_in=true — but ONLY after they explicitly agree to marketing email; default false = transactional only, and they can unsubscribe anytime. Returns the unlocked benefits + confirmation.',
     { email: Sreq.describe("Your human's real email address (required) — use only an address they explicitly gave; placeholder/fake addresses are rejected"),
       api_key: S.describe('Optional key to bind; omit to bind the key already active on this session'),
       marketing_opt_in: B.describe('Set true ONLY after your human explicitly agrees to marketing email (default false = transactional only)') },
@@ -30630,7 +30640,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       }
       // email_source (backend be#5836): 'oauth' on an OAuth-authenticated
       // request, else 'agent_supplied'. See lib/retention.mjs emailSourceFor.
-      const body = { email, email_source: _retEmailSourceFor(getCtx()) };
+      const body = { email, email_source: _retEmailSourceFor(getCtx()), consent_purpose: WEEKLY_SUMMARY_PURPOSE };
       // api_key OPTIONAL: when omitted, callAPIWrite forwards the session/context
       // X-API-Key (the auto-mint identify path). Pass it through only if given.
       const _key = (a.api_key || '').toString().trim();
@@ -30661,8 +30671,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // never isError — the key keeps working, email is optional and gates nothing.
       const _ok = r && r.ok !== false && !r.error;
       const _consent =
-        'Your email is used only to recover your key and route upgrade receipts (transactional). ' +
-        'No marketing without explicit opt-in. The relaying agent should surface this to its human.';
+        'Purpose: ' + EMAIL_PURPOSE_TEXT + '. ' +
+        'The relaying agent should surface this to its human.';
       if (!_ok) {
         const _msg = (r && (r.message || r.detail)) || 'that email wasn\'t accepted';
         return {
