@@ -427,7 +427,7 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
         expect(up.developer_url).toBeUndefined();
         expect(up.upgrade_url).toBeUndefined();
         expect(JSON.stringify(r.data)).not.toContain('dchub.cloud/go/c/');
-        expect((r.text.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
+        expect(new Set(r.text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6})/g) || []).size).toBe(1);   // one distinct relay link (wall-to-paid P1: it also rides block 0's JSON as human_url)
       }
       // no monthly price anywhere (owner rule 09-27 stands; the plans are named, not priced)
       expect(r.body).not.toMatch(/\$49|\$99/);
@@ -444,7 +444,7 @@ describe('honesty contract on the taste (Grok completeness-contradiction detecto
     expect(line).not.toMatch(/\$10|Free full answers left today/);
     expect(r.text).not.toMatch(/Free full answers left today/);
     expect(JSON.stringify(r.data)).not.toContain('dchub.cloud/go/c/');
-    expect((r.text.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
+    expect(new Set(r.text.match(/https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6})/g) || []).size).toBe(1);   // one distinct relay link (wall-to-paid P1: it also rides block 0's JSON as human_url)
     // the cascade's trial block tells the truth about depth: a trial key does not deepen it
     expect(r.text).not.toMatch(/call `get_grid_intelligence` again now for the full result/);
   });

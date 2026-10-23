@@ -20,7 +20,8 @@ import { isGatedResult } from '../lib/paywall-contract.mjs';
 process.env.DCHUB_LEAN_RESPONSES = '0';
 
 const BASE = 'https://backend.keyless-wall-grok-audit.test';
-const RELAY = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^\s"')\]]*)?/;
+// Wall-to-paid P1 (2026-10-23): the relay page is handed out as its /u/ short link where the mint answers.
+const RELAY = /https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^\s"')\]]*)?|u\/[2-9a-hj-km-np-z]{6})/;
 // Every human checkout / plan surface a person could click.
 const CHECKOUT = /https?:\/\/(?:dchub\.cloud\/(?:go\/[cp]\/|upgrade\/h\/|u\/|pricing|checkout|redeem|signup)|buy\.stripe\.com|checkout\.stripe\.com)[^\s"')\]]*/g;
 let S, TOOLS, realFetch, prevInternal, prevBase;
@@ -176,12 +177,13 @@ describe('F6: a keyless gated preview carries exactly one checkout URL', () => {
           const r = await call(name, args, st);
           if (!isGatedResult(r)) continue;
           gated += 1;
-          const urls = contentText(r).match(CHECKOUT) || [];
+          // distinct URLs: the one relay link also rides block 0's JSON as human_url (wall-to-paid P1)
+          const urls = [...new Set((contentText(r).match(CHECKOUT) || []).map((u) => u.replace(/[.,;:]+$/, "")))];
           expect(urls, `${plat} ${name} ${nth}:\n${contentText(r).slice(-1500)}`).toHaveLength(1);
           // first call: the relay page (relay-first). A repeat in the same session keeps its
           // wall's own /go/c pointer and re-sends no relay (r-relay-cap, owner 2026-09-21).
           expect(urls[0], `${plat} ${name} ${nth}`).toMatch(nth === 'first'
-            ? /^https:\/\/dchub\.cloud\/upgrade\/h\// : /^https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c)\//);
+            ? /^https:\/\/dchub\.cloud\/(?:upgrade\/h\/|u\/)/ : /^https:\/\/dchub\.cloud\/(?:upgrade\/h|go\/c|u)\//);
         }
       }
       expect(gated, `${plat}: no gated preview, the checks above are vacuous`).toBeGreaterThanOrEqual(4);

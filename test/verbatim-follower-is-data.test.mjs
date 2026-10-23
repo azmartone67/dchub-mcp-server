@@ -131,8 +131,10 @@ describe('F7: no content text carries the VERBATIM directive; the line rides as 
   it('the keyless queue preview: the line and its relay URL are in user_message and for_your_human', async () => {
     const r = await call('get_interconnection_queue', { iso: 'PJM' }, seat({ tier: 'free' }));
     const line = humanLine(contentText(r));
-    expect(line).toMatch(/https:\/\/dchub\.cloud\/upgrade\/h\//);
-    const url = line.match(/https:\/\/dchub\.cloud\/upgrade\/h\/[^\s]+/)[0];
+    // the relay page, as its /u/ short where the mint answers (wall-to-paid P1, 2026-10-23)
+    const RELAY_ANY = /https:\/\/dchub\.cloud\/(?:upgrade\/h\/[^\s]+|u\/[2-9a-hj-km-np-z]{6})/;
+    expect(line).toMatch(RELAY_ANY);
+    const url = line.match(RELAY_ANY)[0];
     expect(r.structuredContent.user_message).toBe(line);
     expect(r.structuredContent.show_to_user).toBe(true);
     expect(r.structuredContent.for_your_human.text).toBe(line);
