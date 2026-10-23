@@ -140,6 +140,7 @@ test/ecosystem-sync.test.mjs
 test/edge-gate-recognition.test.mjs
 test/edge-key-flip-evidence.test.mjs
 test/email-ask-wording.test.mjs
+test/email-benefit-leads-1023.test.mjs
 test/email-bound-decision-full.test.mjs
 test/email-hint-after-taste.test.mjs
 test/end-of-burst-hook.test.mjs
