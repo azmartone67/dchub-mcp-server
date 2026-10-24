@@ -1,0 +1,48 @@
+name: agentforge sync
+# 2026-10-23 — keeps DC Hub's AgentForge (agentforge.community) listing equal
+# to the live tools/list and canonical/listing-copy.json. AgentForge has a
+# publish API, so this is a push sink like Smithery: no person in the loop
+# once the owner has created the key.
+#
+# DRY RUN until the repo secret AGENTFORGE_API_KEY exists (a dashboard user key,
+# af_<64 hex>, from agentforge.community/en/dashboard/keys). With it, the first
+# run POSTs the listing and later runs PUT only when something differs; every
+# write is read back from the public API and the run fails if it did not take.
+# All logic and its tests: scripts/agentforge-sync.mjs, test/agentforge-sync.test.mjs.
+on:
+  schedule:
+    - cron: '37 7 * * *'      # daily; a no-op unless tools or copy moved
+  workflow_run:
+    workflows: ['github release']
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - 'canonical/listing-copy.json'
+      - 'scripts/agentforge-sync.mjs'
+      - '.github/workflows/agentforge-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentforge-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+      - name: Publish or update the AgentForge listing
+        env:
+          AGENTFORGE_API_KEY: ${{ secrets.AGENTFORGE_API_KEY }}
+          AGENTFORGE_SERVER_ID: ${{ vars.AGENTFORGE_SERVER_ID }}
+        run: node scripts/agentforge-sync.mjs
