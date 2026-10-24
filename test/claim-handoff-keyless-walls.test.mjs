@@ -347,6 +347,11 @@ describe('what it must not do', () => {
     expect(d.tool).toBe('get_grid_intelligence');
     const plain = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
     expect(plain.structuredContent, 'a real caller never sees the diagnostic').toEqual({ ok: true });
+    // a result with no structuredContent still reports (production's grid preview reaches the step that way)
+    const bare = await S._ctxALS.run({ ...base, qa_marker: true }, async () => S._claimHandoffStep({ content: [{ type: 'text', text: 'x' }] }, 'get_grid_intelligence'));
+    expect(bare.structuredContent._claim_handoff_debug.had_structured).toBe(false);
+    const bare2 = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep({ content: [{ type: 'text', text: 'x' }] }, 'get_grid_intelligence'));
+    expect(bare2.structuredContent, 'and a real caller still gets none').toBeUndefined();
   });
 
   it('the step skips a single-ask or decision PREVIEW wall, but answers a LIMIT on every tool', async () => {
