@@ -730,9 +730,9 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "tracking_url": "https://github.com/docker/mcp-registry/pull/4644",
       "added_at": "2026-10-09",
-      "note": "docker/mcp-registry#4644 open (awaiting Docker review)",
-      "tracking_url": "https://github.com/docker/mcp-registry/pull/4644"
+      "note": "PR 4644 to docker/mcp-registry, open since 2026-08-06 and unreviewed (no third-party entry merged there since 2026-08-21). Meanwhile Docker users can import integrations/docker/catalog.yaml."
     },
     {
       "id": "cline",
