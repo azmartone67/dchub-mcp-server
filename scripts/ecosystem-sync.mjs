@@ -959,6 +959,63 @@ async function readListingPrs() {
   return { read: true, prs };
 }
 
+// ── the /mcp/directories rows (canonical/directories.json) ────────────────
+// ★2026-10-24. /mcp/directories and the /mcp-standing tracker tell the public
+// DC Hub is listed on every row marked "live". dchub-backend
+// routes/mcp_standing_scan.py already opens every one of those pages every 6
+// hours and stores the result (Live / Not found / Updating / Pending), but it
+// only RENDERS a dropped row; nobody was told. This sweep reads that stored
+// measurement from GET /api/v1/mcp/standing and puts a row the scan found
+// missing into the prospecting issue. It does not fetch the pages itself: one
+// measurer, so the page and this issue can never disagree about a listing.
+// It never edits the file; a person flips the row.
+export const DIRECTORIES_FILE = 'canonical/directories.json';
+export const STANDING_PATH = '/api/v1/mcp/standing';
+// The scan runs every 6h; past this the measurement is too old to act on.
+export const DIRECTORY_SCAN_MAX_AGE_H = 14;
+
+/** One stored scan row as an observation. Only a measured miss is drift. */
+export function observeScannedRow(row) {
+  const disp = row?.display;
+  if (disp === 'Not found') {
+    const st = row?.check?.http_status;
+    return { read: true, extra: [`the 6-hourly scan did not find DC Hub on the page${st ? ` (HTTP ${st})` : ''}, but /mcp/directories still shows it live`] };
+  }
+  if (disp === 'Live') return { read: true, info: 'scan found DC Hub' };
+  return null;   // Pending / Updating / Checking: nothing to judge
+}
+
+/** The scan's directory block → rows to report, or why it cannot be used.
+ *  `liveIds` (the rows live in the file on main now) drops rows flipped since
+ *  the scan: milisp went unverified 2026-10-24 00:25Z, 1h after a scan that
+ *  still had it, and must not be reported as shown live. */
+export function directoriesFromStanding(body, now = Date.now(), liveIds = null) {
+  const d = body?.measured?.directories;
+  if (!d || !Array.isArray(d.rows) || !d.rows.length) return { read: false, error: 'standing has no directory scan yet' };
+  const at = Date.parse(d.as_of || '');
+  if (!Number.isFinite(at)) return { read: false, error: 'directory scan has no as_of' };
+  const ageH = (now - at) / 3600000;
+  if (ageH > DIRECTORY_SCAN_MAX_AGE_H) return { read: false, error: `directory scan is ${Math.round(ageH)}h old (scan runs every 6h)` };
+  const rows = [];
+  for (const r of d.rows) {
+    if (liveIds && !liveIds.has(r.id)) continue;
+    const obs = observeScannedRow(r);
+    if (obs) rows.push({ row: { id: r.id, name: r.name, listing_url: r.listing_url }, obs });
+  }
+  return { read: true, rows, asOf: d.as_of };
+}
+
+async function readDirectories() {
+  const r = await fetchText(bust(`${ORIGIN}${STANDING_PATH}`), { ua: SELF_UA, accept: 'application/json', timeoutMs: 30000 });
+  if (!r.ok) return { read: false, error: `${STANDING_PATH} HTTP ${r.status || r.error}` };
+  const file = readJson(DIRECTORIES_FILE);
+  const liveIds = Array.isArray(file?.directories)
+    ? new Set(file.directories.filter((x) => x?.status === 'live').map((x) => x.id)) : null;
+  let body;
+  try { body = JSON.parse(r.text); } catch { return { read: false, error: `${STANDING_PATH} returned no JSON` }; }
+  return directoriesFromStanding(body, Date.now(), liveIds);
+}
+
 async function readRunContext() {
   const runs = {};
   for (const [lane, file] of Object.entries(WORKFLOWS)) {
@@ -977,9 +1034,14 @@ async function readRunContext() {
 }
 
 async function readIssue() {
-  const r = await gh(`/repos/${REPO}/issues?state=open&per_page=100`);
+  // ★2026-10-23 a null here used to reach the workflow as "no issue", which
+  // CREATED one: #1109 opened on 2026-10-22 while #816 was still open. A
+  // failed read now sets issue_lookup=failed and the workflow touches nothing.
+  // The oldest matching issue is the one kept, so a duplicate never takes over.
+  const r = await gh(`/repos/${REPO}/issues?state=open&labels=prospecting&per_page=100`);
   if (!r.ok) return null;
-  const it = (r.json || []).find((i) => i.title === ISSUE_TITLE && !i.pull_request);
+  const it = (r.json || []).filter((i) => i.title === ISSUE_TITLE && !i.pull_request)
+    .sort((a, b) => a.number - b.number)[0];
   return it ? { number: it.number, body: it.body || '' } : { number: null, body: null };
 }
 
@@ -1043,7 +1105,19 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
   } else {
     out.push('None.');
   }
-  const waiting = results.filter((r) => r.verdict.state === 'drift' && !stuck.includes(r.key) && r.kind !== 'ours' && r.kind !== 'watch');
+  const dirs = results.filter((r) => r.kind === 'directory');
+  if (dirs.length) {
+    const changed = dirs.filter((r) => r.verdict.state === 'drift');
+    const unreadDirs = dirs.filter((r) => r.verdict.state === 'unreadable');
+    out.push('', '### /mcp/directories rows that no longer match the page (ours to fix)');
+    out.push(`${dirs.length - changed.length - unreadDirs.length} of ${dirs.length} live rows in \`canonical/directories.json\` were found by the 6-hourly listing scan (\`${STANDING_PATH}\`)`
+      + `${unreadDirs.length ? `; ${unreadDirs.length} could not be read (${unreadDirs.map((r) => esc(r.label)).join(', ')})` : ''}.`);
+    if (changed.length) {
+      out.push('', '| row | what the page shows now | where it is fixed |', '|---|---|---|');
+      for (const r of changed) out.push(line(r));
+    }
+  }
+  const waiting = results.filter((r) => r.verdict.state === 'drift' && !stuck.includes(r.key) && !['ours', 'watch', 'directory'].includes(r.kind));
   if (waiting.length) {
     out.push('', '### Catching up on their own (inside the re-crawl or publish window)');
     for (const r of waiting) out.push(`- ${esc(r.label)}: ${esc(r.verdict.reasons.join('; '))}`);
@@ -1055,12 +1129,12 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
     out.push('', '### Verify-only (watched every full sweep; nobody is asked to act)');
     for (const r of watched) out.push(`- ${where(r)}: ${esc(r.verdict.reasons.join('; '))}. ${esc(r.fix)}`);
   }
-  const unread = results.filter((r) => r.verdict.state === 'unreadable');
+  const unread = results.filter((r) => r.verdict.state === 'unreadable' && r.kind !== 'directory');
   if (unread.length) {
     out.push('', '### Could not read this sweep (not counted as drift, not counted as clean)');
     for (const r of unread) out.push(`- ${esc(r.label)}: ${esc(r.verdict.reasons.join('; '))}`);
   }
-  const ok = results.filter((r) => r.verdict.state === 'in_sync')
+  const ok = results.filter((r) => r.verdict.state === 'in_sync' && r.kind !== 'directory')
     .map((r) => (r.verdict.notes?.length ? `${r.label} (${esc(r.verdict.notes.join('; '))})` : r.label));
   if (ok.length) out.push('', `### In sync\n${ok.join(' · ')}`);
   out.push('', '### Lanes this cycle');
@@ -1205,6 +1279,18 @@ async function main() {
     } else {
       results.push({ key: 'listing_prs', label: 'open listing PRs', kind: 'manual', fix: '', obs: prs, verdict: judge(prs, ssot) });
     }
+    const dirs = await readDirectories();
+    if (dirs.read) {
+      for (const { row, obs } of dirs.rows) {
+        results.push({
+          key: `dir:${row.id}`, label: row.name || row.id, kind: 'directory', url: row.listing_url,
+          fix: `canonical/directories.json row \`${row.id}\``,
+          obs, verdict: judge(obs, null, { kind: 'directory' }),
+        });
+      }
+    } else {
+      results.push({ key: 'directories', label: DIRECTORIES_FILE, kind: 'directory', fix: '', obs: dirs, verdict: judge(dirs, null) });
+    }
   }
 
   // 3. plan
@@ -1233,6 +1319,7 @@ async function main() {
   const unobserved = !canonR.read && !liveR.read;
   const drift = results.filter((r) => r.verdict.state === 'drift');
   const oursDrift = drift.filter((r) => r.kind === 'ours');
+  const dirDrift = drift.filter((r) => r.kind === 'directory');
   const generatedAt = started.toISOString().replace(/\.\d+Z$/, 'Z');
   const report = {
     generated_at: generatedAt, scope, ssot, hours_since_change: hoursSinceChange,
@@ -1261,6 +1348,11 @@ async function main() {
   }
   for (const [lane, p] of Object.entries(plan)) console.log(`  ${p.dispatch ? 'DISPATCH' : 'hold    '} ${WORKFLOWS[lane]}: ${p.why}`);
   if (scope === 'full') console.log(`  stuck (needs a person): ${stuck.length ? stuck.join(', ') : 'none'}${fresh.length ? ` · NEW: ${fresh.join(', ')}` : ''}`);
+  if (scope === 'full') {
+    const dirRows = results.filter((r) => r.kind === 'directory');
+    console.log(`  directories.json: ${dirRows.filter((r) => r.verdict.state === 'in_sync').length}/${dirRows.length} as recorded · `
+      + `${dirDrift.length} changed · ${dirRows.filter((r) => r.verdict.state === 'unreadable').length} unreadable`);
+  }
 
   setOutput('scope', scope);
   setOutput('state', unobserved ? 'unobserved' : (drift.length ? 'drift' : 'ok'));
@@ -1272,6 +1364,8 @@ async function main() {
   setOutput('smithery_why', plan.smithery.why);
   setOutput('stuck_count', stuck.length);
   setOutput('ours_drift_count', oursDrift.length);
+  setOutput('directory_drift_count', dirDrift.length);
+  setOutput('issue_lookup', scope !== 'full' ? 'skipped' : (issue === null ? 'failed' : 'ok'));
   setOutput('newly_stuck', fresh.map((k) => labelOf.get(k) || k).join(', '));
   setOutput('issue_number', issue?.number || '');
   setOutput('issue_title', ISSUE_TITLE);

@@ -19,6 +19,7 @@ import {
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
   metaCardText, jsonLdText, headText, observeGlama,
+  observeScannedRow, directoriesFromStanding, stuckKeys as _stuckKeys, DIRECTORY_SCAN_MAX_AGE_H,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
@@ -606,5 +607,70 @@ describe('facilityFloors: a floor quoted from a listing on /mcp-standing', () =>
     // our own floor beside it is still caught; an unquoted floor is not exempt
     expect(facilityFloors(`${row}. DC Hub tracks 20K+ facilities.`)).toEqual(['20K+']);
     expect(facilityFloors('its description is 20K+ facilities')).toEqual(['20K+']);
+  });
+});
+
+// ── /mcp/directories rows, from the backend's 6-hourly scan (2026-10-24) ──
+describe('directories.json rows via /api/v1/mcp/standing', () => {
+  const plan0 = () => planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW });
+  const T = Date.parse('2026-10-24T01:00:00Z');
+  const standing = (asOf, rows) => ({ measured: { directories: { as_of: asOf, rows } } });
+  const ROWS = [
+    { id: 'kept', name: 'Kept', display: 'Live', listing_url: 'https://kept.dev' },
+    { id: 'gone', name: 'Gone', display: 'Not found', listing_url: 'https://gone.dev', check: { http_status: 404 } },
+    { id: 'pr', name: 'PR', display: 'Pending', listing_url: null },
+    { id: 'upd', name: 'Upd', display: 'Updating', listing_url: 'https://upd.dev' },
+  ];
+
+  it('a row the scan found is in sync; one it did not find is drift with the status', () => {
+    expect(judge(observeScannedRow(ROWS[0]), null).state).toBe('in_sync');
+    const v = judge(observeScannedRow(ROWS[1]), null);
+    expect(v.state).toBe('drift');
+    expect(v.reasons[0]).toMatch(/did not find DC Hub on the page \(HTTP 404\)/);
+  });
+
+  it('pending, updating and checking rows are not judged at all', () => {
+    expect(observeScannedRow(ROWS[2])).toBeNull();
+    expect(observeScannedRow(ROWS[3])).toBeNull();
+    expect(observeScannedRow({ display: 'Checking' })).toBeNull();
+  });
+
+  it('a fresh scan yields the live and missing rows only', () => {
+    const d = directoriesFromStanding(standing('2026-10-23T23:20:59+00:00', ROWS), T);
+    expect(d.read).toBe(true);
+    expect(d.rows.map((r) => r.row.id)).toEqual(['kept', 'gone']);
+  });
+
+  it('a row no longer live in the file is not reported, even if the scan had it', () => {
+    const d = directoriesFromStanding(standing('2026-10-23T23:20:59+00:00', ROWS), T, new Set(['kept']));
+    expect(d.rows.map((r) => r.row.id)).toEqual(['kept']);
+  });
+
+  it('a stale, undated or empty scan is unreadable, never clean', () => {
+    const old = new Date(T - (DIRECTORY_SCAN_MAX_AGE_H + 1) * 3600000).toISOString();
+    expect(directoriesFromStanding(standing(old, ROWS), T)).toMatchObject({ read: false, error: expect.stringMatching(/h old/) });
+    expect(directoriesFromStanding(standing('', ROWS), T).read).toBe(false);
+    expect(directoriesFromStanding(standing('2026-10-23T23:20:59Z', []), T).read).toBe(false);
+    expect(directoriesFromStanding(null, T).read).toBe(false);
+  });
+
+  it('a dropped row is listed in the issue, never as stuck and never under In sync', () => {
+    const mk = (id, obs) => ({ key: `dir:${id}`, label: id, kind: 'directory', url: `https://${id}.dev`, fix: `row ${id}`, obs, verdict: judge(obs, null) });
+    const results = [
+      mk('kept', observeScannedRow(ROWS[0])),
+      mk('gone', observeScannedRow(ROWS[1])),
+    ];
+    expect(_stuckKeys(results, { hoursSinceChange: 99 })).toEqual([]);
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toContain('1 of 2 live rows in `canonical/directories.json` were found by the 6-hourly listing scan');
+    expect(body).toMatch(/\| \[gone\]\(https:\/\/gone\.dev\) \| the 6-hourly scan did not find DC Hub/);
+    expect(body).not.toMatch(/### In sync[\s\S]*kept/);
+  });
+
+  it('with every row found the section says so and lists no table', () => {
+    const results = [{ key: 'dir:k', label: 'k', kind: 'directory', url: 'https://k.dev', fix: '', obs: { read: true }, verdict: { state: 'in_sync', reasons: [] } }];
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toContain('1 of 1 live rows');
+    expect(body).not.toContain('| row | what the page shows now |');
   });
 });
