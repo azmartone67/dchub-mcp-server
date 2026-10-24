@@ -25302,8 +25302,9 @@ function _handoffSkip(result, at, name, err) {
     if (!_isQaCaller(c) || !result || typeof result !== 'object') return result;
     const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
       ? result.structuredContent : null;
-    if (!sc) return result;
-    return { ...result, structuredContent: { ...sc, _claim_handoff_debug: {
+    // A result with no structuredContent yet (production's keyless grid preview reaches this step
+    // that way; the harness's does not) gets one carrying only the diagnostic.
+    return { ...result, structuredContent: { ...(sc || {}), _claim_handoff_debug: {
       at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
       daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
       clean_platform: _isCleanPlatform(), tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
