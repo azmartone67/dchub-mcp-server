@@ -35,7 +35,17 @@ name: registry discovery crawl
 # NOT disabled (deliberately): registry-refresh.yml — its first job is the
 # stale-number GUARD that keeps $324B / wrong facility counts off
 # journalist-facing registry pages. That is correctness, not rank.
+# ── 2026-10-23: WEEKLY DISCOVERY RESTORED (owner) ────────────────────────────
+# The owner chose "weekly discovery, I approve each": this crawl runs again on
+# Monday and refreshes ONE tracking issue (and the disabled-stub scaffold PR);
+# registry-pr-submit.yml stays dispatch-only, so nothing reaches a third-party
+# repo until a person approves it. The crawl now also searches GIS, energy and
+# agent-tool lists, treats every repo in canonical/directories.json and every
+# list with our PR still open as known, and probes AgentForge as a surface.
 on:
+  schedule:
+    - cron: '30 7 * * 1'    # weekly, Monday 07:30 UTC — BEFORE pr-submit's 07:40 slot
+  # ── the r-stop-the-rank-chase history (kept for the record) ──
   #   schedule:
   #     # ★2026-08-30: was 07:40 — TEN MINUTES AFTER registry-pr-submit, which
   #     # meant discovery could not reach the submit run it fed, by construction:

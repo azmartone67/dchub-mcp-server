@@ -25,6 +25,7 @@
 // running with a green check (see openScaffoldPR).
 // ============================================================================
 
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { TARGETS } from './registry-pr-submit.mjs';
 
@@ -79,6 +80,9 @@ const PR_ENABLED = !['1', 'true', 'yes'].includes(String(process.env.DISCOVER_PR
 const DOMAIN_RE = new RegExp([
   'data[\\s-]?cent(er|re)', 'datacent', 'power[\\s-]?grid', 'electric',
   'energy', 'fiber[\\s-]?optic|fibre', 'colocation', 'hyperscale',
+  // 2026-10-23: GIS/geospatial lists are where several live rows came from
+  // (Sparkgeo, Kartoza, iamtekson); a site-selection server fits them.
+  '\\bgis\\b', 'geospatial',
   'telecom', 'interconnect', 'renewab', 'substation', 'megawatt|\\bMW\\b',
   // NOT 'utilit': it matched "testing utilities" on a devtools list and let
   // punkpeye/awesome-mcp-devtools through as a domain match. NOT 'fiber' bare
@@ -107,11 +111,26 @@ const NICHE_RE = new RegExp([
   'swift', 'dotnet|\\.net\\b', '\\bjava\\b', '\\bruby\\b', 'golang|\\bgo\\b',
   'reverse[\\s-]?eng|\\bre-mcp', 'bug[\\s-]?bounty', 'oceanbase',
   'database|postgres|mysql|mongo',
+  // 2026-10-23, from the first widened crawl: single-vendor catalogues.
+  '\\bsap\\b', '\\b1c\\b', 'bitbucket|atlassian', 'ebay', 'papers', '\\bjobs\\b',
 ].join('|'), 'i');
+
+// ★2026-10-23 the widened queries also return single MCP SERVERS (an eBay
+// server, a disassembler) whose description says "MCP server". A candidate
+// must declare itself a collection in its name or description.
+// "list of", not a bare "list": `ls-mcp` ("List MCP Server configurations") is
+// a CLI and `free-proxy-list` a proxy feed. It must also be about MCP or our
+// domain: GitHub search matched "awesome gis" to awesome-pinned-gists.
+const LIST_RE = /awesome|curated|\blist of\b|\bindex\b|registry|directory|catalog|best-of|collection/i;
+const ABOUT_RE = /\bmcp\b|model context protocol/i;
 
 // Verdict for one candidate. Returns {keep, why} — `why` is printed and shown
 // in the tracking issue so a rejection is auditable, never silent.
 export function relevance(nameAndDesc, readmeBody) {
+  if (!LIST_RE.test(nameAndDesc)) return { keep: false, why: 'not a list (name/description name no collection)' };
+  if (!ABOUT_RE.test(nameAndDesc) && !DOMAIN_RE.test(nameAndDesc)) {
+    return { keep: false, why: 'not about MCP or the data-center/energy/GIS domain' };
+  }
   if (DOMAIN_RE.test(nameAndDesc)) return { keep: true, why: 'domain match (name/desc)' };
   const niche = NICHE_RE.exec(nameAndDesc);
   if (niche) return { keep: false, why: `scoped to "${niche[0]}" — excludes a data-center server` };
@@ -169,9 +188,18 @@ const INSTALL_SURFACES = [
   {
     id: 'glama',
     name: 'Glama',
-    url: 'https://glama.ai/api/mcp/v1/servers/azmartone67/dchub-mcp-server',
+    // 2026-10-23: the /api/mcp/v1 read answers 401 now; the public page is 200.
+    url: 'https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server',
     submit: 'https://glama.ai/mcp/servers',
     note: 'read surface; its copy feeds other listings',
+  },
+  {
+    id: 'agentforge',
+    name: 'AgentForge (EU MCP marketplace)',
+    // Full-text discover; the body names DC Hub only when we are listed.
+    url: 'https://agentforge.community/api/v1/discover?q=DC%20Hub&limit=50',
+    submit: 'https://agentforge.community/en/dashboard/publish',
+    note: 'published and kept current by agentforge-sync.yml once AGENTFORGE_API_KEY is set',
   },
 ];
 
@@ -237,6 +265,27 @@ const KNOWN = new Set([
   'win4r/awesome-claude-mcp-servers',
   'mctrinh/awesome-mcp-servers',
 ].map((s) => s.toLowerCase()));
+
+// ★2026-10-23 — every GitHub repo canonical/directories.json already records
+// (a live listing, an open PR or issue that will list us, an update request)
+// is KNOWN too. Without this a list with our PR still open (README does not
+// carry DC Hub yet) is re-proposed every week; directories.json is where the
+// sessions that onboard lists record them, so one record covers both.
+export function directoryRepos(file) {
+  const rows = Array.isArray(file?.directories) ? file.directories : [];
+  const out = new Set();
+  for (const r of rows) {
+    for (const u of [r?.listing_url, r?.tracking_url, r?.update_request_url]) {
+      const m = /^https:\/\/github\.com\/([^/#?]+)\/([^/#?]+)/.exec(String(u || ''));
+      if (m && m[1] !== 'mcp') out.add(`${m[1]}/${m[2]}`.toLowerCase());
+    }
+  }
+  return out;
+}
+try {
+  const dirs = JSON.parse(fs.readFileSync(new URL('../canonical/directories.json', import.meta.url), 'utf8'));
+  for (const r of directoryRepos(dirs)) KNOWN.add(r);
+} catch { /* no file: the literal and TARGETS entries still apply */ }
 
 async function gh(path, opts = {}) {
   const res = await fetch(`https://api.github.com${path}`, {
@@ -435,10 +484,31 @@ if (_IS_MAIN) (async () => {
 
   // 1) search for curated MCP lists. Two complementary queries; dedupe by full_name.
   //    `fork:false` keeps the thousands of list forks out. Sort by stars desc.
+  // ★2026-10-23 widened. The two awesome-mcp* name queries found 59 repos,
+  // every one known or off-domain, while the lists DC Hub actually joined in
+  // October (GIS, energy, agent-tool and API lists) carry other names. These
+  // still pass the same KNOWN, stars, relevance and PRs-enabled gates.
   const queries = [
     'awesome-mcp-servers in:name fork:false',
     'awesome-mcp in:name fork:false',
+    'mcp servers list in:name,description fork:false',
+    'mcp registry in:name fork:false',
+    'awesome ai agents tools in:name fork:false',
+    'awesome gis in:name fork:false',
+    'awesome geospatial in:name fork:false',
+    'awesome energy in:name fork:false',
   ];
+  // Lists where our PR is still open are known: the README does not carry
+  // DC Hub until it merges, so LISTED_RE alone would re-propose them weekly.
+  const ours = await gh(`/search/issues?q=${encodeURIComponent('is:pr is:open author:azmartone67 -user:azmartone67')}&per_page=100`);
+  if (ours.ok) {
+    for (const it of ours.json.items || []) {
+      const repo = String(it.repository_url || '').split('/repos/')[1];
+      if (repo) KNOWN.add(repo.toLowerCase());
+    }
+  } else {
+    console.log(`  ! open-PR lookup failed (${ours.status}); lists with a pending PR may be re-proposed`);
+  }
   const seen = new Map(); // lower(full_name) -> repo
   for (const q of queries) {
     const r = await gh(`/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=40`);
