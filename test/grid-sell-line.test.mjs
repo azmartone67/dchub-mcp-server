@@ -224,7 +224,10 @@ describe('repeat keyless grid call in one session (fail 1)', () => {
     const s = seat();
     const r1 = await grid(s), r2 = await grid(s);
     const t1 = text(r1), t2 = text(r2);
-    expect(t1).toContain('Show your user the next line unchanged');
+    // Item 3 (owner 2026-10-16; full-stack QA 2026-10-24): the first keyless preview's agent line points at
+    // the email ask (an email-bound key gets the full brief); the pay-first line is the switch-off control below.
+    expect(t1).toContain('unlock the full brief free with their email');
+    expect(t1).not.toContain('After they pay, call');
     for (const t of [t1, t2]) {
       expect(t).not.toMatch(/Free full answers left today/);
       expect(t).not.toContain('from earlier in this session');
@@ -238,6 +241,20 @@ describe('repeat keyless grid call in one session (fail 1)', () => {
     expect((t2.match(/dchub\.cloud\/upgrade\/h\//g) || []).length).toBe(1);
     expect((t2.match(/dchub\.cloud\/go\/c\//g) || []).length).toBe(0);
     expect(r2.structuredContent.for_your_human.url).toMatch(/[?&]buy=1$/);
+  });
+});
+
+describe('item 3 switch off: the 10-03 pay-first agent line is restored', () => {
+  it('DCHUB_EMAIL_FULL_DECISION_TOOLS=0 keeps "Show your user the next line unchanged"', async () => {
+    const prev = process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS;
+    process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = '0';
+    try {
+      const t = text(await grid(seat()));
+      expect(t).toContain('Show your user the next line unchanged');
+      expect(t).not.toContain('unlock the full brief free with their email');
+    } finally {
+      if (prev === undefined) delete process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS; else process.env.DCHUB_EMAIL_FULL_DECISION_TOOLS = prev;
+    }
   });
 });
 

@@ -22,6 +22,8 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as T from '../lib/free-decision-taste.mjs';
+import { leanResponseStep } from '../lib/lean-response.mjs';
+import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -313,6 +315,27 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
         expect(line).toContain('their email first');
         expect(line, 'market intel: the key does not deepen it, so nothing is promised').not.toMatch(/full .* answers/);
       }
+    });
+  }
+  // ★ Full-stack QA 2026-10-24: this suite passed while NO production preview carried the email ask.
+  // Production runs lib/lean-response.mjs last (one ask per response), and it kept the human_url
+  // paragraph and dropped the email ask. Run that same step here on the keyless preview.
+  for (const tool of ['get_grid_intelligence', 'get_interconnection_queue']) {
+    it(`${tool}: the email ask survives the production lean step, and the agent line points at it`, async () => {
+      const r = await callAs({}, tool, ARGS[tool]);
+      // Production hands out ONE short link (lib/short-wall-link.mjs) as human_url and in the human line;
+      // the harness has no shortener. Put every relay link in that shape, as production serves it.
+      const SHORT = 'https://dchub.cloud/u/qa1024x';
+      const prod = JSON.parse(JSON.stringify(r.result).replace(/https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9._~%?=&-]+/g, SHORT));
+      expect(prod.structuredContent.human_url, 'fixture carries a human_url').toBe(SHORT);
+      // This file turns lean off at the top (line 30); production runs it, so turn it on for this call.
+      const lean = await withEnv('DCHUB_LEAN_RESPONSES', '1', async () => leanResponseStep(prod, tool));
+      // Prose only: the JSON block can quote the same sentence in a field, which would make this vacuous.
+      const text = proseOf({ result: lean });
+      expect(text, 'email ask kept after lean\n' + text.slice(0, 1500)).toContain(EMAIL_ASK);
+      expect(text, 'no pay-first agent line beside the email ask').not.toContain('After they pay, call');
+      if (tool === 'get_grid_intelligence') expect(text).toContain('unlock the full brief free with their email');
+      expect(lean.structuredContent.human_url, 'the human link stays for the agent to read').toBe(SHORT);
     });
   }
   it('CONTROL: DCHUB_EMAIL_FULL_DECISION_TOOLS=0 restores the 10-08 keyless wall (no handoff line)', async () => {

@@ -8,6 +8,7 @@
 // same harness as test/anon-top-tools-snapshot.test.mjs) with the step on and off and compares.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { leanResponseStep, leanObject, humanLine, LEAN_SKIP_TOOLS } from '../lib/lean-response.mjs';
+import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
 import { createServer } from 'node:http';
 import net from 'node:net';
 
@@ -301,7 +302,11 @@ describe('/mcp end to end: the same anonymous call with the step on and off', ()
       for (const k of ['next_session', 'starter_pack', 'continuation', 'upgrade', 'first_call_nudge', 'watch_offer'])
         expect(scOn, `${tool}: ${k}`).not.toHaveProperty(k);
       expect(on.text).not.toMatch(/Next question to offer|Watch offer|\u{1F9ED}|Try any of these verbatim/u);
-      expect(askParas(on.result).length, `${tool}: ask paragraphs`).toBeLessThanOrEqual(1);
+      // One HUMAN ask. The item-3 email ask (owner 2026-10-16) is the agent's instruction and rides beside it
+      // on the grid / queue previews (full-stack QA 2026-10-24: lean used to drop it from every production preview).
+      const paras = askParas(on.result);
+      expect(paras.filter((p) => !p.includes(EMAIL_ASK)).length, `${tool}: human ask paragraphs`).toBeLessThanOrEqual(1);
+      expect(paras.filter((p) => p.includes(EMAIL_ASK)).length, `${tool}: the email ask, once`).toBeLessThanOrEqual(1);
       if (off.sc.human_url) expect(scOn.human_url, `${tool}: the one human link stays`).toBeTruthy();
       expect(size(on), `${tool}: bytes on vs off`).toBeLessThan(size(off));
     }, 30_000);
