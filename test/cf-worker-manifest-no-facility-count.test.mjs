@@ -315,7 +315,10 @@ describe('the rebuilt worker carries no baked facility count', () => {
       search_facilities: [/which data centers exist/,
         'which of 24,600+ global data center facilities across 170+ countries exist'],
       semantic_search: [/the global facility map/, '24,600+ discovered facilities'],
-      why_dchub: [/Returns DC Hub(?:\\'|')s differentiators/, "Returns DC Hub's differentiators (24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets)"],
+      // 2026-10-24 (second run): live why_dchub is now the coverage summary
+      // ("Returns a factual coverage summary"), so anchor on "Free, no key." —
+      // the one clause both the committed and the live description carry.
+      why_dchub: [/Free, no key\./, 'Covers 24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets. Free, no key.'],
     };
     for (const t of spec) {
       const inj = INJECT[t.name];
