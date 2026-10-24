@@ -61,19 +61,22 @@ describe('registry onboarding cron order', () => {
       .filter((l) => !l.trim().startsWith('#'))
       .filter((l) => /^\s*-\s*cron:/.test(l));
 
-  it('both onboarding workflows are dispatch-only', () => {
-    for (const [name, yaml] of [['registry-discover.yml', discover],
-                                ['registry-pr-submit.yml', submit]]) {
-      expect(
-        activeCrons(yaml),
-        `${name} has regained a schedule. That is allowed — but the ordering ` +
-          `constraint this file was written for comes BACK with it: discovery ` +
-          `feeds submission's TARGETS, so discover must run BEFORE pr-submit ` +
-          `in minutes-of-week. Restore the weeklyCronMinutes() comparison ` +
-          `(see git history for this file) rather than deleting this test.`,
-      ).toEqual([]);
-      expect(yaml, `${name} lost workflow_dispatch — it is now unrunnable`)
-        .toMatch(/^\s*workflow_dispatch:/m);
+  // 2026-10-23 — the owner restored weekly DISCOVERY ("I approve each"), and
+  // kept SUBMISSION dispatch-only: candidates reach a tracking issue and a
+  // disabled-stub PR on our own repo, never a stranger's repo, until a person
+  // acts. So discover has exactly one weekly cron and pr-submit has none.
+  it('discovery runs weekly; submission stays dispatch-only', () => {
+    expect(activeCrons(discover).length, 'registry-discover.yml should carry exactly one active weekly cron').toBe(1);
+    weeklyCronMinutes(activeCrons(discover)[0], 'registry-discover.yml');
+    expect(
+      activeCrons(submit),
+      'registry-pr-submit.yml has regained a schedule. That is allowed only as an owner decision ' +
+        '(2026-10-23: "weekly discovery, I approve each"), and the ordering constraint comes back ' +
+        'with it: discovery feeds TARGETS, so discover must run BEFORE pr-submit in minutes-of-week. ' +
+        'Add that weeklyCronMinutes() comparison here rather than deleting this test.',
+    ).toEqual([]);
+    for (const [name, yaml] of [['registry-discover.yml', discover], ['registry-pr-submit.yml', submit]]) {
+      expect(yaml, `${name} lost workflow_dispatch — it is now unrunnable`).toMatch(/^\s*workflow_dispatch:/m);
     }
   });
 
