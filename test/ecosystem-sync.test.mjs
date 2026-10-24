@@ -19,7 +19,7 @@ import {
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
   metaCardText, jsonLdText, headText, observeGlama,
-  directoryReadPlan, observeDirectory, directoryRows, stuckKeys as _stuckKeys, DIRECTORIES_FILE,
+  observeScannedRow, directoriesFromStanding, stuckKeys as _stuckKeys, DIRECTORY_SCAN_MAX_AGE_H,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
@@ -610,86 +610,67 @@ describe('facilityFloors: a floor quoted from a listing on /mcp-standing', () =>
   });
 });
 
-// ── /mcp/directories rows (2026-10-23) ──────────────────────────────────────
-describe('directories.json sweep', () => {
+// ── /mcp/directories rows, from the backend's 6-hourly scan (2026-10-24) ──
+describe('directories.json rows via /api/v1/mcp/standing', () => {
   const plan0 = () => planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW });
+  const T = Date.parse('2026-10-24T01:00:00Z');
+  const standing = (asOf, rows) => ({ measured: { directories: { as_of: asOf, rows } } });
+  const ROWS = [
+    { id: 'kept', name: 'Kept', display: 'Live', listing_url: 'https://kept.dev' },
+    { id: 'gone', name: 'Gone', display: 'Not found', listing_url: 'https://gone.dev', check: { http_status: 404 } },
+    { id: 'pr', name: 'PR', display: 'Pending', listing_url: null },
+    { id: 'upd', name: 'Upd', display: 'Updating', listing_url: 'https://upd.dev' },
+  ];
 
-  it('reads a GitHub repo row through the README API, whatever the file is called', () => {
-    expect(directoryReadPlan('https://github.com/HA2345567/awesome-autonomus-ai-agents#38-production-mcp-servers--registry'))
-      .toEqual({ via: 'readme', api: '/repos/HA2345567/awesome-autonomus-ai-agents/readme' });
+  it('a row the scan found is in sync; one it did not find is drift with the status', () => {
+    expect(judge(observeScannedRow(ROWS[0]), null).state).toBe('in_sync');
+    const v = judge(observeScannedRow(ROWS[1]), null);
+    expect(v.state).toBe('drift');
+    expect(v.reasons[0]).toMatch(/did not find DC Hub on the page \(HTTP 404\)/);
   });
 
-  it('reads a GitHub blob row as that file at that ref, fragment dropped', () => {
-    expect(directoryReadPlan('https://github.com/iamtekson/awesome-geospatial-data-sources/blob/master/readme.MD#L148'))
-      .toEqual({ via: 'file', api: '/repos/iamtekson/awesome-geospatial-data-sources/contents/readme.MD?ref=master' });
+  it('pending, updating and checking rows are not judged at all', () => {
+    expect(observeScannedRow(ROWS[2])).toBeNull();
+    expect(observeScannedRow(ROWS[3])).toBeNull();
+    expect(observeScannedRow({ display: 'Checking' })).toBeNull();
   });
 
-  it('reads GitHub\'s MCP registry page and every other site as a page', () => {
-    expect(directoryReadPlan('https://github.com/mcp/cloud.dchub/mcp-server').via).toBe('page');
-    expect(directoryReadPlan('https://mcp-hunter.com/server/dc-hub#top')).toEqual({ via: 'page', url: 'https://mcp-hunter.com/server/dc-hub' });
+  it('a fresh scan yields the live and missing rows only', () => {
+    const d = directoriesFromStanding(standing('2026-10-23T23:20:59+00:00', ROWS), T);
+    expect(d.read).toBe(true);
+    expect(d.rows.map((r) => r.row.id)).toEqual(['kept', 'gone']);
   });
 
-  it('refuses a missing or non-https listing_url', () => {
-    expect(directoryReadPlan(null)).toBeNull();
-    expect(directoryReadPlan('http://example.com/x')).toBeNull();
-    expect(directoryReadPlan('not a url')).toBeNull();
+  it('a row no longer live in the file is not reported, even if the scan had it', () => {
+    const d = directoriesFromStanding(standing('2026-10-23T23:20:59+00:00', ROWS), T, new Set(['kept']));
+    expect(d.rows.map((r) => r.row.id)).toEqual(['kept']);
   });
 
-  it('a live row that still names DC Hub is in sync; one that stopped is drift', () => {
-    const live = { id: 'x', status: 'live' };
-    expect(judge(observeDirectory(live, { ok: true, text: '- [DC Hub](https://dchub.cloud/mcp)' }), null).state).toBe('in_sync');
-    const gone = judge(observeDirectory(live, { ok: true, text: '- [Other](https://other.dev)' }), null);
-    expect(gone.state).toBe('drift');
-    expect(gone.reasons[0]).toMatch(/no longer mentions DC Hub/);
-  });
-
-  it('an unverified row that now names DC Hub is reported; one that does not is quiet', () => {
-    const unv = { id: 'y', status: 'unverified' };
-    expect(judge(observeDirectory(unv, { ok: true, text: 'dchub-mcp-server' }), null).reasons[0]).toMatch(/set status live/);
-    expect(judge(observeDirectory(unv, { ok: true, text: 'nothing here' }), null).state).toBe('in_sync');
-  });
-
-  it('a 404, 429 or timeout is unreadable, never drift and never clean', () => {
-    const live = { id: 'x', status: 'live' };
-    expect(judge(observeDirectory(live, { ok: false, status: 429, text: '' }), null)).toEqual({ state: 'unreadable', reasons: ['HTTP 429'] });
-    expect(judge(observeDirectory(live, { ok: false, status: 0, error: 'timeout' }), null).state).toBe('unreadable');
-  });
-
-  it('only live and unverified rows with an https URL are swept', () => {
-    const rows = directoryRows({ directories: [
-      { id: 'a', status: 'live', listing_url: 'https://a.dev/x' },
-      { id: 'b', status: 'pending', listing_url: null },
-      { id: 'c', status: 'unverified', listing_url: 'https://github.com/o/r' },
-      { id: 'd', status: 'live', listing_url: null },
-    ] });
-    expect(rows.map((r) => r.id)).toEqual(['a', 'c']);
-    expect(directoryRows(null)).toEqual([]);
-  });
-
-  it('the real file has rows to sweep', () => {
-    const file = JSON.parse(readFileSync(new URL(`../${DIRECTORIES_FILE}`, import.meta.url), 'utf8'));
-    expect(directoryRows(file).length).toBeGreaterThan(40);
+  it('a stale, undated or empty scan is unreadable, never clean', () => {
+    const old = new Date(T - (DIRECTORY_SCAN_MAX_AGE_H + 1) * 3600000).toISOString();
+    expect(directoriesFromStanding(standing(old, ROWS), T)).toMatchObject({ read: false, error: expect.stringMatching(/h old/) });
+    expect(directoriesFromStanding(standing('', ROWS), T).read).toBe(false);
+    expect(directoriesFromStanding(standing('2026-10-23T23:20:59Z', []), T).read).toBe(false);
+    expect(directoriesFromStanding(null, T).read).toBe(false);
   });
 
   it('a dropped row is listed in the issue, never as stuck and never under In sync', () => {
     const mk = (id, obs) => ({ key: `dir:${id}`, label: id, kind: 'directory', url: `https://${id}.dev`, fix: `row ${id}`, obs, verdict: judge(obs, null) });
     const results = [
-      mk('kept', { read: true, info: 'lists DC Hub' }),
-      mk('dropped', { read: true, extra: ['page no longer mentions DC Hub, but /mcp/directories still shows it live'] }),
-      mk('slow', { read: false, error: 'HTTP 429' }),
+      mk('kept', observeScannedRow(ROWS[0])),
+      mk('gone', observeScannedRow(ROWS[1])),
     ];
     expect(_stuckKeys(results, { hoursSinceChange: 99 })).toEqual([]);
     const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
-    expect(body).toContain('1 of 3 rows in `canonical/directories.json` read as recorded this sweep; 1 could not be read (slow)');
-    expect(body).toMatch(/\| \[dropped\]\(https:\/\/dropped\.dev\) \| page no longer mentions DC Hub/);
+    expect(body).toContain('1 of 2 live rows in `canonical/directories.json` were found by the 6-hourly listing scan');
+    expect(body).toMatch(/\| \[gone\]\(https:\/\/gone\.dev\) \| the 6-hourly scan did not find DC Hub/);
     expect(body).not.toMatch(/### In sync[\s\S]*kept/);
-    expect(body).not.toMatch(/### Could not read this sweep[\s\S]*slow/);
   });
 
-  it('with every row as recorded the section says so and lists no table', () => {
+  it('with every row found the section says so and lists no table', () => {
     const results = [{ key: 'dir:k', label: 'k', kind: 'directory', url: 'https://k.dev', fix: '', obs: { read: true }, verdict: { state: 'in_sync', reasons: [] } }];
     const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
-    expect(body).toContain('1 of 1 rows');
+    expect(body).toContain('1 of 1 live rows');
     expect(body).not.toContain('| row | what the page shows now |');
   });
 });

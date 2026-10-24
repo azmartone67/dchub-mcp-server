@@ -960,112 +960,60 @@ async function readListingPrs() {
 }
 
 // ── the /mcp/directories rows (canonical/directories.json) ────────────────
-// ★2026-10-23. /mcp/directories and the /mcp-standing tracker tell the public
-// DC Hub is listed on every row marked "live", and until now nothing re-read
-// those pages after the day a session added the row: SINKS covers ~10
-// listings, the file carries 55+. Every full sweep now re-reads each live row
-// (and each unverified one, which may have landed since). It never edits the
-// file: a row that stopped listing us is reported for a person to flip, since
-// a single page that renders client-side or changed its markup must not
-// silently delete a real listing.
-//
-// GitHub rows are read through the API, never by guessing a raw path:
-// HA2345567's list is `Readme.md` on `master`, and a raw HEAD/README.md read
-// 404s on a list that does carry DC Hub (measured 2026-10-23).
+// ★2026-10-24. /mcp/directories and the /mcp-standing tracker tell the public
+// DC Hub is listed on every row marked "live". dchub-backend
+// routes/mcp_standing_scan.py already opens every one of those pages every 6
+// hours and stores the result (Live / Not found / Updating / Pending), but it
+// only RENDERS a dropped row; nobody was told. This sweep reads that stored
+// measurement from GET /api/v1/mcp/standing and puts a row the scan found
+// missing into the prospecting issue. It does not fetch the pages itself: one
+// measurer, so the page and this issue can never disagree about a listing.
+// It never edits the file; a person flips the row.
 export const DIRECTORIES_FILE = 'canonical/directories.json';
-const DIRECTORY_CONCURRENCY = 8;
+export const STANDING_PATH = '/api/v1/mcp/standing';
+// The scan runs every 6h; past this the measurement is too old to act on.
+export const DIRECTORY_SCAN_MAX_AGE_H = 14;
 
-/** How to read a row's listing_url: a GitHub README, a GitHub file, or the page itself. */
-export function directoryReadPlan(listingUrl) {
-  let u;
-  try { u = new URL(String(listingUrl || '')); } catch { return null; }
-  if (u.protocol !== 'https:') return null;
-  if (u.hostname === 'github.com') {
-    const parts = u.pathname.split('/').filter(Boolean);
-    // Exactly owner/repo. GitHub's MCP registry page (github.com/mcp/<ns>/<name>)
-    // has three parts and so falls through to a page read.
-    if (parts.length === 2) {
-      return { via: 'readme', api: `/repos/${parts[0]}/${parts[1]}/readme` };
-    }
-    if (parts.length >= 5 && parts[2] === 'blob') {
-      const [owner, repo, , ref, ...file] = parts;
-      return { via: 'file', api: `/repos/${owner}/${repo}/contents/${file.join('/')}?ref=${encodeURIComponent(ref)}` };
-    }
+/** One stored scan row as an observation. Only a measured miss is drift. */
+export function observeScannedRow(row) {
+  const disp = row?.display;
+  if (disp === 'Not found') {
+    const st = row?.check?.http_status;
+    return { read: true, extra: [`the 6-hourly scan did not find DC Hub on the page${st ? ` (HTTP ${st})` : ''}, but /mcp/directories still shows it live`] };
   }
-  u.hash = '';
-  return { via: 'page', url: u.toString() };
+  if (disp === 'Live') return { read: true, info: 'scan found DC Hub' };
+  return null;   // Pending / Updating / Checking: nothing to judge
 }
 
-/** One row's observation from the text read. Identity is the whole test. */
-export function observeDirectory(row, read) {
-  if (!read || !read.ok) {
-    return { read: false, error: read?.status ? `HTTP ${read.status}` : (read?.error || 'not read') };
+/** The scan's directory block → rows to report, or why it cannot be used.
+ *  `liveIds` (the rows live in the file on main now) drops rows flipped since
+ *  the scan: milisp went unverified 2026-10-24 00:25Z, 1h after a scan that
+ *  still had it, and must not be reported as shown live. */
+export function directoriesFromStanding(body, now = Date.now(), liveIds = null) {
+  const d = body?.measured?.directories;
+  if (!d || !Array.isArray(d.rows) || !d.rows.length) return { read: false, error: 'standing has no directory scan yet' };
+  const at = Date.parse(d.as_of || '');
+  if (!Number.isFinite(at)) return { read: false, error: 'directory scan has no as_of' };
+  const ageH = (now - at) / 3600000;
+  if (ageH > DIRECTORY_SCAN_MAX_AGE_H) return { read: false, error: `directory scan is ${Math.round(ageH)}h old (scan runs every 6h)` };
+  const rows = [];
+  for (const r of d.rows) {
+    if (liveIds && !liveIds.has(r.id)) continue;
+    const obs = observeScannedRow(r);
+    if (obs) rows.push({ row: { id: r.id, name: r.name, listing_url: r.listing_url }, obs });
   }
-  const listed = IDENTITY_RE.test(String(read.text || ''));
-  if (row.status === 'live') {
-    return listed
-      ? { read: true, info: 'lists DC Hub' }
-      : { read: true, extra: ['page no longer mentions DC Hub, but /mcp/directories still shows it live'] };
-  }
-  return listed
-    ? { read: true, extra: ['now lists DC Hub: verify the entry, then set status live in canonical/directories.json'] }
-    : { read: true, info: 'still does not list DC Hub' };
-}
-
-/** Rows the sweep re-reads: live and unverified ones with an https listing_url. */
-export function directoryRows(file) {
-  const rows = Array.isArray(file?.directories) ? file.directories : [];
-  return rows.filter((r) => r && (r.status === 'live' || r.status === 'unverified') && directoryReadPlan(r.listing_url));
-}
-
-// GitHub API reads go one at a time: eight in parallel tripped GitHub's
-// secondary rate limit (22 rows answered 403 on 2026-10-23 with 4,869 of the
-// hourly quota left). One retry after a pause covers a limit already tripped.
-let ghChain = Promise.resolve();
-function ghSerial(pathname) {
-  const run = ghChain.then(async () => {
-    let r = await gh(pathname);
-    if (r.status === 403 || r.status === 429) {
-      await sleep(Number(process.env.ECOSYSTEM_GH_RETRY_MS || 8000));
-      r = await gh(pathname);
-    }
-    return r;
-  });
-  ghChain = run.catch(() => {});
-  return run;
-}
-
-async function readDirectoryRow(row) {
-  const plan = directoryReadPlan(row.listing_url);
-  let read;
-  if (plan.via === 'page') {
-    read = await fetchText(plan.url);
-  } else {
-    const r = await ghSerial(plan.api);
-    const content = r.ok && typeof r.json?.content === 'string' ? Buffer.from(r.json.content, 'base64').toString('utf8') : '';
-    // Past 1 MB the contents API sends encoding "none" and an empty body
-    // (punkpeye/awesome-mcp-servers, 2026-10-23); its download_url still serves it.
-    read = content || !r.ok || !r.json?.download_url
-      ? { ok: r.ok && !!content, status: r.status, text: content, error: r.error || (r.ok ? 'empty file body' : undefined) }
-      : await fetchText(r.json.download_url, { ua: SELF_UA, accept: 'text/plain,*/*' });
-  }
-  return observeDirectory(row, read);
+  return { read: true, rows, asOf: d.as_of };
 }
 
 async function readDirectories() {
+  const r = await fetchText(bust(`${ORIGIN}${STANDING_PATH}`), { ua: SELF_UA, accept: 'application/json', timeoutMs: 30000 });
+  if (!r.ok) return { read: false, error: `${STANDING_PATH} HTTP ${r.status || r.error}` };
   const file = readJson(DIRECTORIES_FILE);
-  if (!file) return { read: false, error: `${DIRECTORIES_FILE} unreadable` };
-  const rows = directoryRows(file);
-  const out = new Array(rows.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < rows.length) {
-      const i = next++;
-      out[i] = { row: rows[i], obs: await readDirectoryRow(rows[i]) };
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(DIRECTORY_CONCURRENCY, rows.length) }, worker));
-  return { read: true, rows: out };
+  const liveIds = Array.isArray(file?.directories)
+    ? new Set(file.directories.filter((x) => x?.status === 'live').map((x) => x.id)) : null;
+  let body;
+  try { body = JSON.parse(r.text); } catch { return { read: false, error: `${STANDING_PATH} returned no JSON` }; }
+  return directoriesFromStanding(body, Date.now(), liveIds);
 }
 
 async function readRunContext() {
@@ -1162,7 +1110,7 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
     const changed = dirs.filter((r) => r.verdict.state === 'drift');
     const unreadDirs = dirs.filter((r) => r.verdict.state === 'unreadable');
     out.push('', '### /mcp/directories rows that no longer match the page (ours to fix)');
-    out.push(`${dirs.length - changed.length - unreadDirs.length} of ${dirs.length} rows in \`canonical/directories.json\` read as recorded this sweep`
+    out.push(`${dirs.length - changed.length - unreadDirs.length} of ${dirs.length} live rows in \`canonical/directories.json\` were found by the 6-hourly listing scan (\`${STANDING_PATH}\`)`
       + `${unreadDirs.length ? `; ${unreadDirs.length} could not be read (${unreadDirs.map((r) => esc(r.label)).join(', ')})` : ''}.`);
     if (changed.length) {
       out.push('', '| row | what the page shows now | where it is fixed |', '|---|---|---|');
