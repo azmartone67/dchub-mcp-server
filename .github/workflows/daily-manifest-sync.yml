@@ -264,6 +264,11 @@ jobs:
         # the catalog no longer has exits 1 here rather than silently shipping
         # a listing that references a dead tool.
         run: node scripts/emit-pack-manifests.mjs --fix
+      - name: Regenerate the Docker MCP Toolkit catalog
+        # 2026-10-24: integrations/docker/catalog.yaml is DERIVED from
+        # toolspec.json + canonical/listing-copy.json, so it runs after the
+        # toolspec refresh. Docker users re-fetch it with `docker mcp catalog update`.
+        run: node scripts/build-docker-catalog.mjs --fix
       - name: Commit + open a PR only if a surface drifted
         id: commit
         env:
@@ -322,6 +327,7 @@ jobs:
                  integrations/chatgpt/openapi.json integrations/chatgpt/instructions.txt \
                  integrations/cohere/README.md integrations/copilot/dchub-mcp.yaml \
                  integrations/openrouter/tools.json dxt/manifest.json dchub.dxt \
+                 integrations/docker/catalog.yaml \
                  docs/canonical-workflows.md docs/distribution-targets.md \
                  toolspec.json dchub_mcp_server.py TELEGEOGRAPHY-OUTREACH.md \
                  integrations/gemini/README.md integrations/openrouter/README.md \

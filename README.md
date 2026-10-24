@@ -243,6 +243,17 @@ npx -y @smithery/cli install @azmartone67/dchub --client claude
 
 Smithery's hosted proxy and CLI shut down on 2026-10-31. After that the listing is a directory entry that points to the direct URL, `https://dchub.cloud/mcp`; connect your client to that URL.
 
+### Docker MCP Toolkit
+
+Add DC Hub to Docker Desktop's MCP Toolkit from its catalog file:
+
+```bash
+docker mcp catalog import https://raw.githubusercontent.com/azmartone67/dchub-mcp-server/main/integrations/docker/catalog.yaml
+docker mcp server enable dchub
+```
+
+Details are in [`integrations/docker/`](integrations/docker/).
+
 ### Arcade
 
 Register DC Hub in [Arcade](https://arcade.dev) as a **Remote MCP** server: ID `dchub`, URI `https://dchub.cloud/mcp`, plus the header `X-DCHub-Via: arcade`. You can add `X-API-Key: ${secret:DCHUB_API_KEY}` as well. Then choose the tools for your MCP gateway. Setup, gateway tool profiles and auth options are in [`integrations/arcade/`](integrations/arcade/).

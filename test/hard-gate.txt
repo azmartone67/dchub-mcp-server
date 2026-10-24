@@ -138,6 +138,7 @@ test/directory-safe-copy.test.mjs
 test/directory-text-neutral.test.mjs
 test/discovery-coverage.test.mjs
 test/doc-stripe-links-are-canonical.test.mjs
+test/docker-catalog.test.mjs
 test/ecosystem-sync.test.mjs
 test/edge-gate-recognition.test.mjs
 test/edge-key-flip-evidence.test.mjs
