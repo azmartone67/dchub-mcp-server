@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-10-20T23:27:00Z",
+  "updated_at": "2026-10-24T08:00:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -544,14 +544,14 @@
     {
       "id": "milisp-mcp-linker",
       "name": "milisp mcp-servers (MCP Linker)",
-      "status": "unverified",
-      "listing_url": "https://github.com/milisp/mcp-servers/blob/main/servers/dchub.json",
+      "status": "live",
+      "listing_url": "https://mcp-linker.milisp.dev/servers/dchub",
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-23",
+      "verified_at": "2026-10-24",
       "added_at": "2026-10-19",
-      "note": "Listing URL and the milisp/mcp-servers repo return 404 as of 2026-10-23 (repo deleted or made private); was confirmed live 2026-10-19 via servers/dchub.json"
+      "note": "moved to the MCP Linker site after the milisp/mcp-servers repo went 404 (2026-10-23); page 'DC Hub MCP server \u00b7 MCP Linker', HTTP 200 2026-10-24"
     },
     {
       "id": "eater2-ai-agents-api-library",
@@ -722,6 +722,78 @@
       "note": "PR #16 merged 2026-10-20 12:51 MST; DC Hub entry (vendors.md L15, https://dchub.cloud/) confirmed 2026-10-20 16:26 MST"
     },
     {
+      "id": "mobinx-awesome-mcp-list",
+      "name": "MobinX awesome-mcp-list",
+      "status": "live",
+      "listing_url": "https://github.com/MobinX/awesome-mcp-list/blob/main/README.md#L401",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-24",
+      "added_at": "2026-10-24",
+      "note": "README entry azmartone67/dchub-mcp-server, read 2026-10-24"
+    },
+    {
+      "id": "hanishrao-collective-ai-tools",
+      "name": "hanishrao collective-ai-tools",
+      "status": "live",
+      "listing_url": "https://github.com/hanishrao/collective-ai-tools/blob/main/README.md#L330",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-24",
+      "added_at": "2026-10-24",
+      "note": "README entry 'DC Hub' tagged #mcp, read 2026-10-24"
+    },
+    {
+      "id": "anythingmcp",
+      "name": "AnythingMCP connector",
+      "status": "live",
+      "listing_url": "https://anythingmcp.com/marketplace/dchub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-24",
+      "added_at": "2026-10-24",
+      "note": "AnythingMCP marketplace connector page for DC Hub (hosted proxy at cloud.anythingmcp.com), HTTP 200 2026-10-24"
+    },
+    {
+      "id": "grokbot-dev",
+      "name": "GrokBot.dev",
+      "status": "live",
+      "listing_url": "https://grokbot.dev/plugins/dc-hub/",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-24",
+      "added_at": "2026-10-24",
+      "note": "Grok Bot plugin page 'DC Hub', HTTP 200 2026-10-24"
+    },
+    {
+      "id": "5ire-mcpsvr",
+      "name": "5ire mcpsvr registry",
+      "status": "live",
+      "listing_url": "https://github.com/nanbingxyz/mcpsvr/blob/main/public/servers.json",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-24",
+      "added_at": "2026-10-24",
+      "note": "nanbingxyz/mcpsvr#77 merged 2026-10-22; DC Hub remote server entry in public/servers.json"
+    },
+    {
+      "id": "bytewax-real-time-datasets",
+      "name": "bytewax awesome-public-real-time-datasets",
+      "status": "live",
+      "listing_url": "https://github.com/bytewax/awesome-public-real-time-datasets/blob/main/README.md#L67",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-24",
+      "added_at": "2026-10-24",
+      "note": "bytewax/awesome-public-real-time-datasets#56 merged 2026-10-22; 'DC Hub Grid Prices' under Free > Information"
+    },
+    {
       "id": "docker",
       "name": "Docker MCP Catalog",
       "status": "pending",
@@ -757,7 +829,8 @@
       "logo_url": null,
       "verified_at": null,
       "added_at": "2026-10-09",
-      "note": ""
+      "note": "PR #38 open (hosted HTTP MCP plugin)",
+      "tracking_url": "https://github.com/CognitionAI/devin-marketplace/pull/38"
     },
     {
       "id": "cursor-marketplace",
@@ -820,6 +893,123 @@
       "added_at": "2026-10-20",
       "tracking_url": "https://github.com/APA-Technology-Division/urban-and-regional-planning-resources/pull/107",
       "note": "PR #107 open (Vendor Data Resources > Infrastructure)"
+    },
+    {
+      "id": "zac10ck-awesome-ai-skills",
+      "name": "Zac10ck awesome-ai-skills",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/Zac10ck/awesome-ai-skills/pull/2",
+      "note": "PR #2 open"
+    },
+    {
+      "id": "mcpplayground",
+      "name": "MCPPlayground awesome-mcp-servers",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/MCPPlayground/awesome-mcp-servers/pull/4",
+      "note": "PR #4 open"
+    },
+    {
+      "id": "kilo-marketplace",
+      "name": "Kilo marketplace",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/Kilo-Org/kilo-marketplace/pull/383",
+      "note": "PR #383 open"
+    },
+    {
+      "id": "mcpm-sh",
+      "name": "mcpm.sh registry",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/pathintegral-institute/mcpm.sh/pull/452",
+      "note": "PR #452 open"
+    },
+    {
+      "id": "metorial-index",
+      "name": "Metorial index",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/metorial/metorial-index/pull/48",
+      "note": "PR #48 open"
+    },
+    {
+      "id": "public-apis",
+      "name": "public-apis",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/public-apis/public-apis/pull/6427",
+      "note": "PR #6427 open"
+    },
+    {
+      "id": "jaw9c-awesome-remote-mcp",
+      "name": "jaw9c awesome-remote-mcp-servers",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/jaw9c/awesome-remote-mcp-servers/pull/493",
+      "note": "PR #493 open"
+    },
+    {
+      "id": "archestra-catalog",
+      "name": "Archestra MCP catalog",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/archestra-ai/archestra/issues/8603",
+      "note": "catalog request issue #8603 open"
+    },
+    {
+      "id": "haystack-integrations",
+      "name": "Haystack integrations",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-24",
+      "tracking_url": "https://github.com/deepset-ai/haystack-integrations/pull/668",
+      "note": "PR #668 open"
     }
   ]
 }
