@@ -336,6 +336,19 @@ describe('what it must not do', () => {
     try { expect(S._singleAskWall('get_grid_intelligence')).toBe(false); } finally { delete process.env.DCHUB_GRID_SELL_LINE; }
   });
 
+  it('QA-only diagnostic: a QA-marked call is told where the step skipped; any other caller gets the result unchanged', async () => {
+    const res = () => ({ content: [{ type: 'text', text: '{}' }, { type: 'text', text: 'A free preview.' }], structuredContent: { ok: true } });
+    const base = { session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor', _wallStatus: 'depth_teased', auth_source: 'none' };
+    const qa = await S._ctxALS.run({ ...base, qa_marker: true }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
+    const d = qa.structuredContent._claim_handoff_debug;
+    expect(d, 'QA caller gets the skip point').toBeTruthy();
+    expect(d.at).toBe('s5');                       // depth_teased is not a claim-handoff status
+    expect(d.status).toBe('depth_teased');
+    expect(d.tool).toBe('get_grid_intelligence');
+    const plain = await S._ctxALS.run({ ...base }, async () => S._claimHandoffStep(res(), 'get_grid_intelligence'));
+    expect(plain.structuredContent, 'a real caller never sees the diagnostic').toEqual({ ok: true });
+  });
+
   it('the step skips a single-ask or decision PREVIEW wall, but answers a LIMIT on every tool', async () => {
     const res = () => ({ content: [{ type: 'text', text: '{}' }, { type: 'text', text: 'A free preview. Open the page for the full answer.' }], structuredContent: { ok: true } });
     const run = (name, status = 'trial_used') => S._ctxALS.run({ session_id: 's', client_ip: '198.51.100.9', tier: 'free', platform: 'cursor',
