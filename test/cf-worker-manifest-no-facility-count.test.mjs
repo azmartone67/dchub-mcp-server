@@ -307,8 +307,13 @@ describe('the rebuilt worker carries no baked facility count', () => {
       // growth-plan rewrite (mcp#616): the descriptions no longer name the map,
       // so the count goes in front of a stable opening clause instead.
       // (r-relay-contract 2026-10-06: a routing line now precedes it, so the anchor is no longer ^)
-      search_facilities: [/Call when the user wants existing data centers/,
-        'Search 24,600+ global data center facilities across 170+ countries. Call when the user wants existing data centers'],
+      // 2026-10-24: anchor on a clause BOTH the committed toolspec and the live
+      // description carry. daily-manifest-sync regenerates toolspec.json from the
+      // live server before testing, and the live text ("...which data centers
+      // exist, or who operates...; filters: ...") dropped "Call when the user wants
+      // existing data centers", so this control threw on every daily run from 10-19.
+      search_facilities: [/which data centers exist/,
+        'which of 24,600+ global data center facilities across 170+ countries exist'],
       semantic_search: [/the global facility map/, '24,600+ discovered facilities'],
       why_dchub: [/Returns DC Hub(?:\\'|')s differentiators/, "Returns DC Hub's differentiators (24,600+ facilities + 330,000+ mapped power/grid/gas/fiber assets)"],
     };
