@@ -1,5 +1,5 @@
 {
-  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file.",
+  "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
   "updated_at": "2026-10-20T23:27:00Z",
   "directories": [
@@ -12,6 +12,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "API listing; cloud.dchub/mcp-server, active, isLatest"
     },
     {
@@ -23,6 +24,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "keyed by registry name; the owner/repo path 404s"
     },
     {
@@ -34,6 +36,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "badge https://smithery.ai/badge/azmartone67/dchub answered 500 on 2026-10-09; add badge_url once it renders"
     },
     {
@@ -45,6 +48,7 @@
       "badge_alt": "Glama score badge for DC Hub",
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "connector page also live: https://glama.ai/mcp/connectors/cloud.dchub/mcp-server"
     },
     {
@@ -55,7 +59,8 @@
       "badge_url": "https://lobehub.com/badge/mcp/azmartone67-dchub-mcp-server",
       "badge_alt": "LobeHub listing badge for DC Hub",
       "logo_url": null,
-      "verified_at": "2026-10-09"
+      "verified_at": "2026-10-09",
+      "added_at": "2026-10-09"
     },
     {
       "id": "mcp-hive",
@@ -65,7 +70,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-09"
+      "verified_at": "2026-10-09",
+      "added_at": "2026-10-09"
     },
     {
       "id": "mcp-market",
@@ -76,6 +82,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "description is older copy; /server/dchub 404s"
     },
     {
@@ -86,7 +93,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-09"
+      "verified_at": "2026-10-09",
+      "added_at": "2026-10-09"
     },
     {
       "id": "gemini-cli",
@@ -97,6 +105,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "gallery card azmartone67dchub-mcp-server; no per-extension detail page"
     },
     {
@@ -108,6 +117,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-13",
+      "added_at": "2026-10-09",
       "note": "entry refreshed by TensorBlock/awesome-mcp-servers#3594 (merged 2026-10-13, 94 tools, no pack price); DC Hub line at L246 confirmed 2026-10-13 10:41 PT"
     },
     {
@@ -118,7 +128,8 @@
       "badge_url": null,
       "badge_alt": null,
       "logo_url": null,
-      "verified_at": "2026-10-09"
+      "verified_at": "2026-10-09",
+      "added_at": "2026-10-09"
     },
     {
       "id": "punkpeye",
@@ -129,6 +140,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "listed under Customer Data Platforms (wrong category; move to Location Services agreed 2026-10-09, Grok to open the PR)"
     },
     {
@@ -140,6 +152,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "separate repo from awesome-mcp-servers; PR #1335 merged 2026-10-08; listed with Glama connector badge"
     },
     {
@@ -151,6 +164,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "profile page renders client-side; unclaimed profile and older description copy"
     },
     {
@@ -162,6 +176,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-12",
+      "added_at": "2026-10-09",
       "note": "built-in entry name 'dc-hub' / title 'DC Hub' in the Model Context Protocol Registry extension (raycast/extensions#31889, merged 2026-10-03); no own store page. GitHub source URL accepted as listing_url by owner 2026-10-10. Copy updated to 94 tools by raycast/extensions#32155 (merged 2026-10-10); copy refresh raycast/extensions#32255 merged 2026-10-12"
     },
     {
@@ -173,6 +188,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-09",
+      "added_at": "2026-10-09",
       "note": "GitHub list, not mcphq.com (that domain is parked). Landscape site landscape.mcphq.org did not connect on 2026-10-09"
     },
     {
@@ -184,6 +200,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-10",
+      "added_at": "2026-10-09",
       "note": "live 2026-10-10 (title 'DC Hub | Cursor Directory', config url https://dchub.cloud/mcp; curl gets Vercel checkpoint 429, verified in a real browser). Copy is stale: says 92 MCP tools and links paid plans at dchub.cloud/pricing; refreshing it needs the listing claimed",
       "update_request_url": "https://github.com/cursor/community-plugins/issues/462"
     },
@@ -196,6 +213,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-12",
+      "added_at": "2026-10-12",
       "note": "published as @toolsdk-remote/cloud-dchub-mcp (data-platforms) via toolsdk-ai/toolsdk-mcp-registry#781, merged 2026-10-12; entry present in the page's raw HTML on 2026-10-12 10:36 PT"
     },
     {
@@ -207,6 +225,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-12",
+      "added_at": "2026-10-12",
       "note": "PR #163 merged 2026-10-12; DC Hub row in Data & Databases table (README L119) confirmed 2026-10-12 16:28 PT"
     },
     {
@@ -218,6 +237,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-14",
+      "added_at": "2026-10-12",
       "note": "PR #85 merged 2026-10-12; entry refreshed by PR #205 (merged 2026-10-14, 94 tools); DC Hub under Cloud, ops & data (README L247) confirmed 2026-10-14 10:23 PT"
     },
     {
@@ -229,6 +249,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-13",
+      "added_at": "2026-10-13",
       "note": "PR #22 merged 2026-10-13 (server #101, maintainer follow-up commit a22182c); DC Hub row in Geospatial data access & catalogs (README L179) confirmed 2026-10-13 10:41 PT"
     },
     {
@@ -240,6 +261,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-13",
+      "added_at": "2026-10-13",
       "note": "PR #187 merged 2026-10-12 18:35 PT; DC Hub row in Integrations & APIs (README L273) confirmed 2026-10-13 10:41 PT"
     },
     {
@@ -251,6 +273,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-14",
+      "added_at": "2026-10-14",
       "note": "Maintainer closed our PR #41 after landing DC Hub in their own commit; under Specialised / Vertical (README L324) confirmed 2026-10-14 16:20 PT"
     },
     {
@@ -262,6 +285,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-14",
+      "added_at": "2026-10-14",
       "note": "PR #24 merged 2026-10-14; DC Hub under Production MCP Servers & Registry (Readme.md L291) confirmed 2026-10-14 16:20 PT"
     },
     {
@@ -273,6 +297,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-14",
+      "added_at": "2026-10-14",
       "note": "PR #109 merged 2026-10-14; DC Hub in mcps/catalog.json (Research & Data, id dc-hub) confirmed on GitHub blob 2026-10-14 16:20 PT; no separate store page"
     },
     {
@@ -284,6 +309,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "Chinese-language list; entry refreshed by PR #722 (merged 2026-10-15 07:34 PT, 94 tools); DC Hub row under \u6570\u636e\u5206\u6790\u3001\u5904\u7406\u4e0e\u53ef\u89c6\u5316 (README L884) confirmed 2026-10-15 10:22 PT"
     },
     {
@@ -295,6 +321,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "publisher page for dchub.cloud on the Neuronto ARD registry, read from our own /.well-known/ai-catalog.json (the pre-v0.91 path; /.well-known/ard.json answers 404); 7 declared resources, 7 answering, 94 verified tools, first seen by their crawler 2026-10-11; HTTP 200 confirmed 2026-10-15 12:41 PT"
     },
     {
@@ -306,6 +333,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "MCP Harbor registry at ai.mcpharbor.dev (not the mcpharbor.com parked domain, not youyouhe/mcpharbor); mirror of the official registry entry cloud.dchub/mcp-server: v2.12.37, 94 tools, 'Verified official', synced 2026-10-15 10:24Z; page and /api/v0/servers/cloud.dchub/mcp-server both HTTP 200 on 2026-10-15 12:41 PT"
     },
     {
@@ -317,6 +345,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "Data & Analytics, 94 tools, connects to https://dchub.cloud/mcp/registry; /i/dchub, /i/dchub-mcp-server and /i/dchub-mcp redirect (301) here; HTTP 200 and the page lists 94 tools on 2026-10-15 12:41 PT"
     },
     {
@@ -328,6 +357,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "PR #17 merged 2026-10-15 14:51 PT by iamtekson; DC Hub under Geospatial APIs and Services (readme.MD L148\u2013150, 94 tools, remote MCP) confirmed 2026-10-15 16:17 PT"
     },
     {
@@ -339,6 +369,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "PR #218 merged 2026-10-15 15:17 MST by mike1858; DC Hub under MCP Servers (README L348, 94 tools, gemini extensions install line) confirmed 2026-10-15 16:17 PT"
     },
     {
@@ -350,6 +381,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-15",
       "note": "repo twzrd-sol/awesome-mcp-servers now returns 404 (deleted or private) as of 2026-10-20 10:23 MST; was live via PR #6 merged 2026-10-15"
     },
     {
@@ -361,6 +393,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "PR #101 merged 2026-10-14 15:07 PT by stevecode21; DC Hub under Other Platforms (README L547, 94 tools, remote MCP) confirmed 2026-10-15 16:17 PT"
     },
     {
@@ -372,6 +405,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-15",
+      "added_at": "2026-10-15",
       "note": "server id cloud.dchub-mcp-http (http transport, https://dchub.cloud/mcp, optional X-API-Key) via mcpmux/mcp-servers#355, merged 2026-10-15 14:40 PT by its-mash; detail page HTTP 200 titled 'DC Hub MCP Server' confirmed 2026-10-15 21:25 PT"
     },
     {
@@ -383,6 +417,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-16",
+      "added_at": "2026-10-16",
       "note": "public-api-lists/public-api-lists#528 merged 2026-07-06 by k4sud0n; DC Hub row (https://dchub.cloud/playground) under Environment in README.md on master, page HTTP 200 confirmed 2026-10-16 11:40 PT"
     },
     {
@@ -394,6 +429,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-16",
+      "added_at": "2026-10-16",
       "note": "auto-generated per-repo entry page (GitHub Pages), HTTP 200 titled 'azmartone67/dchub-mcp-server - entry on MCP Servers Live' confirmed 2026-10-16 11:40 PT (a nonexistent repo path on the same site returns 404). DC Hub is NOT in the rotating top-50 README table, so link the entry page, not the repo root"
     },
     {
@@ -405,6 +441,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-16",
+      "added_at": "2026-10-16",
       "note": "imported from the MCP Registry (source mcp_registry, claimed false), endpoint https://dchub.cloud/mcp/registry, probe_status passing, not stale; listing JSON HTTP 200 confirmed 2026-10-16 11:40 PT (an unknown id returns 404). The board has no HTML listing page; this is its documented one-listing URL"
     },
     {
@@ -416,6 +453,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-16",
+      "added_at": "2026-10-16",
       "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub \u2014 Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so",
       "update_request_url": "https://github.com/chatmcp/mcpso/issues/5777"
     },
@@ -428,6 +466,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-20",
       "note": "listing seen in PulseMCP search 2026-10-19 (dchub-search-registry-audit-1019); the page answers 403 to scripted reads, so the tracker may show Could not check"
     },
     {
@@ -439,6 +478,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-20",
       "note": "tool pages per DC Hub tool (policylayer.com/tools/cloud-dchub-mcp-server/<tool>); HTTP 200, DC Hub named, checked 2026-10-20"
     },
     {
@@ -450,6 +490,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-20",
       "note": "registered via 110kc3/seo#154 (closed with the listing); JSON at https://index.percall.dev/listings/dc-hub.json; HTTP 200 checked 2026-10-20"
     },
     {
@@ -461,6 +502,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-20",
       "note": "HTTP 200, DC Hub named, checked 2026-10-20"
     },
     {
@@ -472,6 +514,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "casdoor/public-mcp-server-registry#8 merged 2026-10-19; DC Hub row (https://dchub.cloud/mcp) in README.md on master and on the rendered site, HTTP 200 confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -483,6 +526,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "hashgraph-online/awesome-ai-plugins#806 merged 2026-10-16; DC Hub under Tools & Integrations (README L721, 94 tools, https://dchub.cloud/mcp) confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -494,6 +538,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "hashgraph-online/hol-guard#5176 merged 2026-10-19; contribution id mcp.dchub ('DC Hub MCP') on main confirmed 2026-10-19 10:25 MST; no own store page, so the GitHub source file is the listing"
     },
     {
@@ -505,6 +550,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-23",
+      "added_at": "2026-10-19",
       "note": "Listing URL and the milisp/mcp-servers repo return 404 as of 2026-10-23 (repo deleted or made private); was confirmed live 2026-10-19 via servers/dchub.json"
     },
     {
@@ -516,6 +562,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "eater2/ai_agents_api_library#5 closed after the maintainer landed the entry; DC Hub row in README.md on main and on the GitHub Pages site (HTTP 200) confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -527,6 +574,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "CorpusIQ/corpusiq-docs#115 merged 2026-10-19 (corrected DC Hub listing); DC Hub row under Infrastructure/Energy in hermes/mcp/servers/external/index.md and on the rendered docs page (HTTP 200) confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -538,6 +586,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "Lucki74/draggy#57 merged 2026-10-18; catalogue entry id 'dchub' / name 'DC Hub' in core/crates/mcp/data/catalogue.json on main confirmed 2026-10-19 10:25 MST; draggy.org has no per-server page, so the GitHub source file is the listing"
     },
     {
@@ -549,6 +598,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "ToolkitlyAI/awesome-ai-tools#203 merged 2026-10-19; DC Hub row in Category/Data_Intelligence.md on master confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -560,6 +610,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "joeVenner/claude-code-mods#28 merged 2026-10-19 (community entry dc-hub); extension page HTTP 200 titled 'DC Hub, an MCP server for Claude Code' confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -571,6 +622,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "marcelscruz/public-apis#1437 merged 2026-10-18; DC Hub row under Environment (README L922) on main confirmed 2026-10-19 10:25 MST. publicapis.dev does not show it yet, so link the README"
     },
     {
@@ -582,6 +634,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "nishkohli96/awesome-apps-and-skills#5 merged 2026-10-19 10:01 MST; DC Hub under Agent Tools & Data (categories/agents-and-mcp.md L51, https://dchub.cloud/mcp) confirmed 2026-10-19 10:25 MST"
     },
     {
@@ -593,6 +646,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "README table lists azmartone67/dchub-mcp-server (score 68/100 in SCORES.md); read 2026-10-19"
     },
     {
@@ -604,6 +658,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-14",
       "note": "PR #161 merged 2026-10-14 (entry in repositories.yaml under Data & Analytics > Data APIs), but the generated README on main still does not show DC Hub as of 2026-10-19 10:25 MST; flip to live once DC Hub appears on the page"
     },
     {
@@ -615,6 +670,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "page titled \"DC Hub Data Center Power, Grid & Energy Intelligence MCP Server\"; read in a browser 2026-10-19 (curl gets 403); URL from Grok"
     },
     {
@@ -626,6 +682,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-19",
+      "added_at": "2026-10-19",
       "note": "copies the official registry entry; HTTP 200 and shows 2.12.41 / 94 tools on 2026-10-19"
     },
     {
@@ -637,6 +694,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-20",
       "note": "PR #25 merged 2026-10-19 19:04 MST; DC Hub entry (AWESOME.md L265, https://dchub.cloud/mcp) confirmed 2026-10-20 10:23 MST"
     },
     {
@@ -648,6 +706,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-20",
       "note": "weekly launch board; launched Week 43, 2026 (19 to 25 October); rank read every 6 hours on /mcp-standing"
     },
     {
@@ -659,6 +718,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": "2026-10-20",
+      "added_at": "2026-10-20",
       "note": "PR #16 merged 2026-10-20 12:51 MST; DC Hub entry (vendors.md L15, https://dchub.cloud/) confirmed 2026-10-20 16:26 MST"
     },
     {
@@ -670,6 +730,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-09",
       "note": "docker/mcp-registry#4644 open (awaiting Docker review)",
       "tracking_url": "https://github.com/docker/mcp-registry/pull/4644"
     },
@@ -682,6 +743,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-09",
       "note": "github.com/cline/mcp-marketplace/issues/1823",
       "tracking_url": "https://github.com/cline/mcp-marketplace/issues/1823"
     },
@@ -694,6 +756,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-09",
       "note": ""
     },
     {
@@ -705,6 +768,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-09",
       "note": ""
     },
     {
@@ -716,6 +780,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-09",
       "note": "endpoint https://dchub.cloud/mcp/claude"
     },
     {
@@ -727,6 +792,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-09",
       "note": "endpoint https://dchub.cloud/mcp/chatgpt"
     },
     {
@@ -738,6 +804,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-20",
       "tracking_url": "https://github.com/sshuair/awesome-gis/pull/300",
       "note": "PR #300 open (Cloud Service > SaaS); set listing_url to the README anchor and status live once merged"
     },
@@ -750,6 +817,7 @@
       "badge_alt": null,
       "logo_url": null,
       "verified_at": null,
+      "added_at": "2026-10-20",
       "tracking_url": "https://github.com/APA-Technology-Division/urban-and-regional-planning-resources/pull/107",
       "note": "PR #107 open (Vendor Data Resources > Infrastructure)"
     }

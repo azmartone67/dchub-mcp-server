@@ -130,6 +130,7 @@ test/deal-desk-automint.test.mjs
 test/delete-session-third-callsite.test.mjs
 test/depth-gate.test.mjs
 test/deterministic-install.test.mjs
+test/directories-growth.test.mjs
 test/directories-page.test.mjs
 test/directory-output-schema-contract.test.mjs
 test/directory-safe-copy.test.mjs
