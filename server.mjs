@@ -169,7 +169,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
          isGrokPlatform as _pcIsGrok, grokContractEnabled as _pcGrokOn,
          lpHeadline as _pcLpHeadline, lpHeadlineFields as _pcLpHeadlineFields, scoreBand as _pcScoreBand,
          firstJsonObject as _pcFirstJson } from './lib/paywall-contract.mjs';
-import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
+import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
 import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
@@ -25346,8 +25346,15 @@ export function _claimHandoffStep(result, name) {
     // What the prose says once trialHeader's trailing clause is gone: a mention left over means the
     // response already tells the reader to call the tool (hard wall, Pro walls), and it stays as it is.
     const content = result.content.map((b) => {
-      const t = textOf(b);
-      return t.includes(_CLAIM_ALT_TAIL) ? { ...b, text: t.split(_CLAIM_ALT_TAIL).join('') } : b;
+      let t = textOf(b);
+      if (t.includes(_CLAIM_ALT_TAIL)) t = t.split(_CLAIM_ALT_TAIL).join('');
+      // Item 3: the grid agent line pointed at a payment ("show the next line ... after they pay");
+      // on a decision preview it points at the email ask this step adds (full-stack QA 2026-10-24).
+      if (decisionPreview && t.includes(_GRID_AGENT_PAY_TAIL)) {
+        t = t.split(_GRID_AGENT_SHOW_NEXT + _GRID_AGENT_PAY_TAIL).join(_GRID_AGENT_EMAIL_TAIL)
+          .split(_GRID_AGENT_PAY_TAIL).join(_GRID_AGENT_EMAIL_TAIL);
+      }
+      return t === textOf(b) ? b : { ...b, text: t };
     });
     if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return _handoffSkip(result, 's10', name);
     const line = decisionPreview
