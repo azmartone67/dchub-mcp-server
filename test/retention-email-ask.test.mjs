@@ -55,6 +55,7 @@ let identifyBody = null;
 let claimBody = null;
 let standingHits = 0;
 let claimResponse = null;
+const askEvents = [];   // POST /api/v1/mcp/funnel-event bodies with event=email_ask_shown
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -71,6 +72,12 @@ beforeAll(async () => {
       const url = new URL(req.url, 'http://_');
       res.setHeader('content-type', 'application/json');
       const p = url.pathname;
+      if (p === '/api/v1/mcp/funnel-event') {
+        const b = await readBody(req);
+        if (b && b.event === 'email_ask_shown') askEvents.push({ body: b, key: req.headers['x-internal-key'] });
+        res.end('{"ok":true}');
+        return;
+      }
       if (p === '/api/v1/keys/claim') {
         claimBody = await readBody(req);
         res.end(JSON.stringify(claimResponse || { ok: true, api_key: MINTED, tier: 'identified',
@@ -110,9 +117,11 @@ beforeAll(async () => {
   });
   prevBase = process.env.DCHUB_API_BASE;
   process.env.DCHUB_API_BASE = `http://127.0.0.1:${stub.address().port}`;
-  S = await import('../server.mjs');
+  // Before the import: server.mjs reads DCHUB_INTERNAL_KEY once at load, and the
+  // email_ask_shown emitter sends nothing without it.
   prevSecret = process.env.DCHUB_INTERNAL_KEY;
   process.env.DCHUB_INTERNAL_KEY = SECRET;
+  S = await import('../server.mjs');
   await new Promise((resolve) => { httpServer = S.app.listen(0, '127.0.0.1', resolve); });
   PORT = httpServer.address().port;
 });
@@ -362,6 +371,47 @@ describe('returning-key nudge', () => {
     // and the key's one daily chance was not spent on a call that could not show it
     const next = await s.call(TOOL, { since: '7d' });
     expect(next.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\./);
+  });
+});
+
+// 2026-10-24: one email_ask_shown funnel event per response that carried the
+// line: the denominator for the bind readout. Never for a quiet call, never
+// with the raw key leaving except to the internal endpoint.
+describe('email_ask_shown event', () => {
+  const settle = () => new Promise((r) => setTimeout(r, 150));
+  it('one event per ask, none for the quiet repeat, none for an ineligible key', async () => {
+    process.env.DCHUB_RETURN_NUDGE = 'on';
+    askEvents.length = 0;
+    const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
+    const r = await s.call(TOOL, { since: '7d' });
+    expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\. Add an email/);
+    await settle();
+    expect(askEvents.length).toBe(1);
+    const e = askEvents[0];
+    expect(e.key).toBe(SECRET);
+    expect(e.body).toMatchObject({ event: 'email_ask_shown', tool: TOOL, kind: 'no_email', api_key: OLD_NOEMAIL, is_qa: false });
+    await s.call(TOOL, { since: '7d' });
+    await (await session('/mcp', 'Claude Code', OLD_ALERT)).call(TOOL, { since: '7d' });
+    await settle();
+    expect(askEvents.length).toBe(1);
+  });
+
+  it('kill switch DCHUB_EMAIL_ASK_EVENT=0: the line still shows, no event', async () => {
+    process.env.DCHUB_RETURN_NUDGE = 'on';
+    process.env.DCHUB_EMAIL_ASK_EVENT = '0';
+    try {
+      askEvents.length = 0;
+      const r = await (await session('/mcp', 'Claude Code', OLD_NOEMAIL)).call(TOOL, { since: '7d' });
+      expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\./);
+      await settle();
+      expect(askEvents.length).toBe(0);
+    } finally { delete process.env.DCHUB_EMAIL_ASK_EVENT; }
+  });
+
+  it('body builder refuses keyless callers and unknown kinds', () => {
+    expect(R.emailAskEventBody({ c: {}, name: 'x', kind: 'no_email' })).toBeNull();
+    expect(R.emailAskEventBody({ c: { api_key: 'k' }, name: 'x', kind: 'other' })).toBeNull();
+    expect(R.emailAskEventBody({ c: { api_key: 'k' }, name: 'x', kind: 'moved' }).kind).toBe('moved');
   });
 });
 

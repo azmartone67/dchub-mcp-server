@@ -233,6 +233,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
+         emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
          emailSourceFor as _retEmailSourceFor } from './lib/retention.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
@@ -11415,8 +11416,32 @@ export async function _returnNudgeStep(result, name, env = process.env) {
     }
     const d = _retNudgeDecision({ standing, email: c.email || null, movers, now,
                                  identifiedPerDay: FREE_TIER.identified_calls_per_day });
-    return d && d.kind ? _retPrependTellLine(result, d.line) : result;
+    if (!d || !d.kind) return result;
+    const out = _retPrependTellLine(result, d.line);
+    if (out !== result) _recordEmailAskShown(c, name, d.kind);
+    return out;
   } catch (_) { return result; }
+}
+// One email_ask_shown event per response that carried the line (lib/retention.mjs).
+// Fire and forget; telemetry never touches a response.
+export function _emailAskEventFor(c, name, kind) {
+  try {
+    if (!_retAskEventOn()) return null;
+    const tagged = _tagOwnTestTelemetry({ platform: (c && c.platform) || '' }, c);
+    return _retAskEventBody({ c: c || {}, name, kind, sessionId: _realSession((c || {}).session_id),
+                              isQa: _isQaCaller(c), platform: tagged.platform });
+  } catch (_) { return null; }
+}
+function _recordEmailAskShown(c, name, kind) {
+  try {
+    const body = _emailAskEventFor(c, name, kind);
+    if (!body || !INTERNAL_KEY) return;
+    fetch(new URL('/api/v1/mcp/funnel-event', API_BASE).toString(), {
+      method: 'POST', keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_KEY },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+    }).catch(() => {});
+  } catch (_) { /* telemetry never touches a response */ }
 }
 export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
