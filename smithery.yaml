@@ -217,8 +217,8 @@ pricing:
   free: "Free key (call claim_free_key — no email) — previews plus 2 full answers per tool per day; every tool callable, most as previews; grid/queue/market-intel tools: previews on free; an email adds 10 full answers/day each; analyze_site: a free key gets a few free full site reports each month; after that, previews"
   identified: "Add an email (bind_email) — 50 calls/day, up to 10 full answers per tool per day"
   developer: "500 calls/day; full results on every tool except the tools in gated_tools — see https://dchub.cloud/pricing"
-  pro: "2,000 calls/day + Pro tools, bulk export, historical data — see https://dchub.cloud/pricing"
-  enterprise: "Dedicated support, SLAs, 100,000+ calls/day — see https://dchub.cloud/pricing"
+  pro: "2,000 calls/day + Pro tools (site analysis, comparison, recommendations), PDF reports and GeoJSON export — see https://dchub.cloud/pricing"
+  enterprise: "100,000 calls/day, REST API up to 999,999 records/day, team seats, branded site reports — see https://dchub.cloud/pricing"
 
 # The Pro-only tools: PRO_ONLY_TOOLS in server.mjs (test/smithery-gated-tools.test.mjs keeps them equal).
 gated_tools:
