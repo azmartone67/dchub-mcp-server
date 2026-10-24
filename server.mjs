@@ -13739,6 +13739,13 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = v.map(_stripReasonNumerics);   // r-reasons-strip: every reason, no score
     } else if (k === 'why' && typeof v === 'string') {
       out[k] = _stripWhyFigures(v);           // the band word stays, its score/TTP go
+    } else if (k === 'time_to_power' && v && typeof v === 'object' && !Array.isArray(v)
+               && Object.prototype.hasOwnProperty.call(v, 'time_to_power_band')) {
+      // Grok QA 2026-10-23 follow-up: the siting time_to_power BLOCK (find_sites candidates, analyze_site;
+      // dchub-backend util/site_market_verdict.py). Its key matches the headroom gate, which nulled the
+      // whole block on the live keyless find_sites (measured 2026-10-24 07:0xZ), band included. Trim
+      // inside it instead: the months go (headroom gate, _in_pro marker), the free band stays.
+      out[k] = { ...trimForTrial(v, toolName, _inRate), time_to_power_band: v.time_to_power_band };
     } else if (_gatesHeadroom(k)) {
       _noteWithheld(k, v);
       _noteMaskedKey(k, v);                   // r-relay-names-missed: only a real figure is logged
