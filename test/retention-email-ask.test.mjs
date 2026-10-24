@@ -45,7 +45,7 @@ const STANDING = {
                    top_market: { slug: 'phoenix', name: 'Phoenix' } },
   [OLD_ALERT]:   { found: true, age_days: 30, has_alert: true },
   [OLD_UNKNOWN]: { found: true, age_days: 30 },                  // today's backend: no has_alert
-  [YOUNG]:       { found: true, age_days: 2, has_alert: false },
+  [YOUNG]:       { found: true, age_days: 0.1, has_alert: false },     // claimed this session
   // Not what the backend does for a missing key — here so the anonymous guard
   // is what keeps an anonymous caller quiet, not an empty standing answer.
   '':            { found: true, age_days: 30, has_alert: false },
@@ -291,11 +291,13 @@ describe('returning-key nudge', () => {
     expect(strip(on.first)).toBe(strip(off.first));
   });
 
-  it('no email bound → the "Give me an email" line, prepended, answer intact, once a week', async () => {
+  it('no email bound → the "Add an email" line with the bound rung, prepended, answer intact, once a day', async () => {
     process.env.DCHUB_RETURN_NUDGE = 'on';
     const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
     const r = await s.call(TOOL, { since: '7d' });
-    expect(r.first.split('\n')[0]).toBe('Tell the user: "Welcome back. Give me an email and I\'ll keep this key recoverable and tell you when the markets you ask about change."');
+    expect(_rungNum('identified')).toBeGreaterThan(0);
+    expect(r.first.split('\n')[0]).toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable, raise it to '
+      + _rungNum('identified') + ' calls a day, and tell you when the markets you ask about change."');
     expect(tellCount(r.text)).toBe(1);
     expect(r.first).toContain('"ok":true');
     const again = await s.call(TOOL, { since: '7d' });
@@ -310,12 +312,14 @@ describe('returning-key nudge', () => {
     expect(tellCount(r.text)).toBe(1);
   });
 
-  it('skipped: key with an alert, alert state unknown (today\'s backend), key under 7 days', async () => {
+  it('skipped: key with an alert, key claimed today; alert state unknown no longer blocks the email ask', async () => {
     process.env.DCHUB_RETURN_NUDGE = 'on';
-    for (const k of [OLD_ALERT, OLD_UNKNOWN, YOUNG]) {
+    for (const k of [OLD_ALERT, YOUNG]) {
       const r = await (await session('/mcp', 'Claude Code', k)).call(TOOL, { since: '7d' });
       expect(r.text, k).not.toMatch(/Welcome back/);
     }
+    const u = await (await session('/mcp', 'Claude Code', OLD_UNKNOWN)).call(TOOL, { since: '7d' });
+    expect(u.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\. Add an email/);
   });
 
   it('never for anonymous callers or our own traffic', async () => {
@@ -355,7 +359,7 @@ describe('returning-key nudge', () => {
     expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "/);
     expect(tellCount(r.text)).toBe(1);
     expect(r.text).not.toMatch(/Welcome back/);
-    // and the key's one weekly chance was not spent on a call that could not show it
+    // and the key's one daily chance was not spent on a call that could not show it
     const next = await s.call(TOOL, { since: '7d' });
     expect(next.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\./);
   });
@@ -366,10 +370,10 @@ describe('nudgeDecision (pure)', () => {
   const base = { found: true, age_days: 14, has_alert: false };
   it('fails closed on every missing field', () => {
     expect(R.nudgeDecision({ standing: { ...base, found: false }, now }).kind).toBeNull();
-    expect(R.nudgeDecision({ standing: { found: true, age_days: 14 }, now }).reason).toBe('alert_state_unknown');
-    expect(R.nudgeDecision({ standing: { ...base, age_days: 6.9 }, now }).kind).toBeNull();
+    expect(R.nudgeDecision({ standing: { found: true, age_days: 14 }, email: 'a@b.co', now }).reason).toBe('alert_state_unknown');
+    expect(R.nudgeDecision({ standing: { ...base, age_days: 6.9 }, email: 'a@b.co', now }).reason).toBe('key_younger_than_7d');
     expect(R.nudgeDecision({ standing: base, email: 'a@b.co', now }).reason).toBe('last_seen_unknown');
-    expect(R.nudgeDecision({ standing: { ...base, last_seen_at: '2026-10-05T08:00:00Z' }, now }).reason).toBe('not_first_call_this_week');
+    expect(R.nudgeDecision({ standing: { ...base, last_seen_at: '2026-10-05T08:00:00Z' }, email: 'a@b.co', now }).reason).toBe('not_first_call_this_week');
     const seen3 = { ...base, last_seen_at: '2026-10-02T08:00:00Z', top_market: { slug: 'phoenix', name: 'Phoenix' } };
     expect(R.nudgeDecision({ standing: seen3, email: 'a@b.co', movers: [{ market_slug: 'phoenix', delta_7d: 5 }], now }).reason).toBe('last_check_under_7d');
     const seen9 = { ...seen3, last_seen_at: '2026-09-26T08:00:00Z' };
@@ -378,9 +382,44 @@ describe('nudgeDecision (pure)', () => {
     expect(R.nudgeDecision({ standing: seen9, email: 'a@b.co', movers: [{ market_slug: 'phoenix', delta_7d: 2 }], now }).line)
       .toBe('Tell the user: "Welcome back. Since your last check 9 days ago, Phoenix\'s DCPI score moved +2 points. Want an email next time it moves?"');
   });
-  it('no-email line names the market when known', () => {
-    expect(R.nudgeDecision({ standing: { ...base, top_market: { slug: 'phoenix', name: 'Phoenix' } }, now }).line)
-      .toBe('Tell the user: "Welcome back. Give me an email and I\'ll keep this key recoverable and tell you when Phoenix changes."');
+  it('no-email line names the market when known, and the bound rung when given', () => {
+    const phx = { ...base, top_market: { slug: 'phoenix', name: 'Phoenix' } };
+    expect(R.nudgeDecision({ standing: phx, now }).line)
+      .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable and tell you when Phoenix changes."');
+    expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: 50 }).line)
+      .toBe('Tell the user: "Welcome back. Add an email and I\'ll keep this key recoverable, raise it to 50 calls a day, and tell you when Phoenix changes."');
+    for (const bad of [null, 0, -5, 'n/a', NaN]) {
+      expect(R.nudgeDecision({ standing: phx, now, identifiedPerDay: bad }).line, String(bad)).not.toMatch(/calls a day/);
+    }
+  });
+
+  // Owner 2026-10-24: "ask at the 2nd-day return". The no-email ask fires on a
+  // key's first call of a later UTC day than its claim, not after 7 days.
+  it('2nd-day return: no-email ask on the first call of a later UTC day', () => {
+    const t = Date.parse('2026-10-24T09:00:00Z');
+    const ok = (st) => R.nudgeDecision({ standing: { found: true, ...st }, now: t, identifiedPerDay: 50 });
+    // claimed yesterday 20:00Z, back today 09:00Z (13 h): asks
+    expect(ok({ age_days: 0.5, has_alert: false, last_seen_at: '2026-10-23T20:05:00Z' }).kind).toBe('no_email');
+    // claimed today 03:00Z: not a return yet
+    expect(ok({ age_days: 0.3, has_alert: false }).reason).toBe('key_claimed_today');
+    // claimed yesterday 23:00Z, still going at 01:00Z: one session over midnight, not a return
+    expect(R.nudgeDecision({ standing: { found: true, age_days: 0.1, has_alert: false },
+      now: Date.parse('2026-10-24T01:00:00Z') }).reason).toBe('key_claimed_today');
+    // already called earlier today: the first call of the day had its chance
+    expect(ok({ age_days: 3, has_alert: false, last_seen_at: '2026-10-24T07:00:00Z' }).reason).toBe('not_first_call_today');
+    // last call yesterday: asks again today (one line a day, not a week)
+    expect(ok({ age_days: 3, has_alert: false, last_seen_at: '2026-10-23T23:59:00Z' }).kind).toBe('no_email');
+    // alert state unknown does not block the email ask; an alert does
+    expect(ok({ age_days: 3 }).kind).toBe('no_email');
+    expect(ok({ age_days: 3, has_alert: true }).reason).toBe('has_alert');
+    // missing or junk age stays quiet
+    expect(ok({ has_alert: false }).reason).toBe('key_claimed_today');
+    expect(ok({ age_days: 'x', has_alert: false }).reason).toBe('key_claimed_today');
+  });
+
+  it('UTC day boundaries', () => {
+    expect(R.utcDay(Date.parse('2026-10-23T23:59:59Z'))).toBe('2026-10-23');
+    expect(R.utcDay(Date.parse('2026-10-24T00:00:00Z'))).toBe('2026-10-24');
   });
   it('ISO week boundaries', () => {
     expect(R.isoWeek(Date.parse('2026-10-04T23:59:59Z'))).toBe('2026-W40');
