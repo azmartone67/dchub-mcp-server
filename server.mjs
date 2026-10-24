@@ -25292,22 +25292,41 @@ export function _singleAskWall(name) {
   if (_PAID_SELL_TOOLS.has(name) || _PRO_WALL_TOOLS.has(name)) return _paidSellOn();
   return false;
 }
+// QA-only diagnostic (2026-10-24 full-stack QA): a keyless grid/queue preview on production carried no
+// claim/email line although the harness does, and the step's early returns are silent. A call that
+// carries the QA marker (X-DCHub-QA: 1 or UA dchub-qa-readonly) gets the skip point and the inputs it
+// read in structuredContent._claim_handoff_debug; every other caller gets the result unchanged.
+function _handoffSkip(result, at, name, err) {
+  try {
+    const c = getCtx() || {};
+    if (!_isQaCaller(c) || !result || typeof result !== 'object') return result;
+    const sc = (result.structuredContent && typeof result.structuredContent === 'object' && !Array.isArray(result.structuredContent))
+      ? result.structuredContent : null;
+    if (!sc) return result;
+    return { ...result, structuredContent: { ...sc, _claim_handoff_debug: {
+      at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
+      daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
+      clean_platform: _isCleanPlatform(), tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
+      error: err ? String((err && err.message) || err).slice(0, 200) : undefined,
+    } } };
+  } catch (_) { return result; }
+}
 export function _claimHandoffStep(result, name) {
   try {
-    if (!_claimHandoffOn()) return result;
-    if (!result || typeof result !== 'object' || !Array.isArray(result.content) || !result.content.length) return result;
-    if (_OWN_TELL_TOOLS.has(name)) return result;
+    if (!_claimHandoffOn()) return _handoffSkip(result, 's1', name);
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content) || !result.content.length) return _handoffSkip(result, 's2', name);
+    if (_OWN_TELL_TOOLS.has(name)) return _handoffSkip(result, 's3', name);
     const c = getCtx() || {};
     // Item 3: a keyless arrival on a decision tool is auto-minted a trial key inside the call (the inline
     // auto-mint block), so ctx.api_key is set by the time this runs; auth_source 'none' says the caller
     // came without one. Every other wall keeps the rule below unchanged.
     const decisionArrivedKeyless = _freePreviewOnlyTool(name) && emailFullDecisionOn()
       && c.auth_source === 'none' && !c.daily_quota;
-    if ((c.api_key && !decisionArrivedKeyless) || c.daily_quota) return result;   // a key (or a demoted one this call) took the step
+    if ((c.api_key && !decisionArrivedKeyless) || c.daily_quota) return _handoffSkip(result, 's4', name);   // a key (or a demoted one this call) took the step
     const status = c._wallStatus;
-    if (!_CLAIM_HANDOFF_STATUSES.includes(status)) return result;
-    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
-    if (_isCleanPlatform()) return result;
+    if (!_CLAIM_HANDOFF_STATUSES.includes(status)) return _handoffSkip(result, 's5', name);
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return _handoffSkip(result, 's6', name);
+    if (_isCleanPlatform()) return _handoffSkip(result, 's7', name);
     // A LIMIT is the IP's, answered by a key on every tool. A preview wall that is a depth wall is not:
     // the decision tools and the single-ask copy keep what they say.
     const isLimit = status === 'anon_daily_cap' || status === 'anon_hard_wall';
@@ -25315,21 +25334,21 @@ export function _claimHandoffStep(result, name) {
     // copy, _claimHandoffDecisionText). With the item-3 switch off it is skipped, as on 10-08.
     // Not on the Grok contract: a Grok wall carries no key or header copy (paywall-contract G3).
     const decisionPreview = !isLimit && _freePreviewOnlyTool(name) && emailFullDecisionOn() && !_pcIsGrok(c.platform);
-    if (!isLimit && !decisionPreview && (_singleAskWall(name) || _freePreviewOnlyTool(name))) return result;
+    if (!isLimit && !decisionPreview && (_singleAskWall(name) || _freePreviewOnlyTool(name))) return _handoffSkip(result, 's8', name);
     const textOf = (b) => (b && b.type === 'text' && typeof b.text === 'string') ? b.text : '';
     const proseOf = (t) => { const sp = _splitLeadingJson(t); return sp ? sp.rest : t; };
     // A key literal means the wall already handed the caller one. On a decision preview the wall ALSO named
     // claim_free_key (the trailing clause below) beside that key since 10-08; the item-3 line replaces that
     // clause in place, so it joins what the response already said instead of adding a second offer.
     if (!decisionPreview && (result.content.some((b) => _carriesKeyLiteral(textOf(b)))
-        || _carriesKeyLiteral(JSON.stringify(result.structuredContent || {})))) return result;
+        || _carriesKeyLiteral(JSON.stringify(result.structuredContent || {})))) return _handoffSkip(result, 's9', name);
     // What the prose says once trialHeader's trailing clause is gone: a mention left over means the
     // response already tells the reader to call the tool (hard wall, Pro walls), and it stays as it is.
     const content = result.content.map((b) => {
       const t = textOf(b);
       return t.includes(_CLAIM_ALT_TAIL) ? { ...b, text: t.split(_CLAIM_ALT_TAIL).join('') } : b;
     });
-    if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return result;
+    if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return _handoffSkip(result, 's10', name);
     const line = decisionPreview
       ? _claimHandoffDecisionText({ tool: name, emailCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0 })
       : _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
@@ -25347,7 +25366,7 @@ export function _claimHandoffStep(result, name) {
       return { ...result, content };
     }
     return { ...result, content: [content[0], { type: 'text', text: line }, ...content.slice(1)] };
-  } catch (_) { return result; }   // a hand-off is never worth failing a response over
+  } catch (e) { return _handoffSkip(result, 'threw', name, e); }   // a hand-off is never worth failing a response over
 }
 
 // ── Bind notice, once per key (owner 2026-10-10, warm-keys decisions) ──────────
