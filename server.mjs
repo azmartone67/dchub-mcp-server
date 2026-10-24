@@ -214,7 +214,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
-import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext } from './lib/site-verdict.mjs';
+import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
@@ -9206,7 +9206,9 @@ const _LP_COORD_KEY = /^(lat|lon|lng|latitude|longitude)$/;
 // "measured_point:nearest_hv_substation", "resilience = 100 − NRI risk". They
 // were nulled for carrying a digit, so a free key could not tell which build
 // scored it or what each factor rests on.
-const _LP_KEEP_STR = /^(name|names|carrier|provider|operator|state|state_code|iso|market|market_slug|slug|id|_entity|tool|type|source|license|cite_as|url|period|timestamp|as_of|version|coverage_ratio|deliverable|methodology|methodology_version|scored_factors|overall_basis|basis)$|_basis$/;
+// time_to_power_band (Grok QA 2026-10-23): "over_48_months" is the free DCPI band, not a figure; the months
+// beside it (time_to_power_months) stay withheld.
+const _LP_KEEP_STR = /^(name|names|carrier|provider|operator|state|state_code|iso|market|market_slug|slug|id|_entity|tool|type|source|license|cite_as|url|period|timestamp|as_of|version|coverage_ratio|deliverable|methodology|methodology_version|scored_factors|overall_basis|basis|time_to_power_band)$|_basis$/;
 // Caveats are what an answer does NOT cover: kept whole (never cut to three),
 // with any number in them that equals a figure withheld from the same payload
 // blanked, so a caveat cannot quote a score back.
@@ -12296,6 +12298,16 @@ export function _coarsenFindSites(payload, dp = 1) {
     if (!cand || typeof cand !== 'object' || Array.isArray(cand)) return cand;
     const c2 = _findSitesCoarsenCoords(cand, dp);
     c2.coordinate_precision_km = dp === 2 ? 1.1 : 11.0;
+    // Grok QA 2026-10-23: the verdict and the time-to-power band are free; the months (a paid DCPI figure)
+    // and the distance to the market centre (it would place the exact anchor) are not.
+    if (cand.market && typeof cand.market === 'object' && !Array.isArray(cand.market)) {
+      c2.market = { ...cand.market, distance_km: null };
+    }
+    if (cand.time_to_power && typeof cand.time_to_power === 'object' && !Array.isArray(cand.time_to_power)) {
+      const t = cand.time_to_power;
+      c2.time_to_power = { ...t, time_to_power_months: null,
+        ...(t.time_to_power_months != null ? { _time_to_power_months_withheld: true } : {}) };
+    }
     if (cand.anchor && typeof cand.anchor === 'object' && !Array.isArray(cand.anchor)) {
       c2.anchor = { ..._findSitesCoarsenCoords(cand.anchor, dp), operator: null, capacity_mva: null };
     }
@@ -29012,6 +29024,9 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         resolved_from = res.resolved_from;
       }
       const out = await callAPI('/api/site-score', args);
+      // Grok QA 2026-10-23: the nearest DCPI market the backend read for this point, for the teaser and
+      // the keyless preview to print beside the site band (a coordinate call had no market before).
+      try { const c = getCtx(); if (c) { const m = _withSiteScoreMarket(c.analyze_site_market, out); if (m) c.analyze_site_market = m; } } catch (_) { /* label only */ }
       const payload = (resolved_from && out && typeof out === 'object' && !Array.isArray(out))
         ? { ...out, resolved_from } : out;
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
