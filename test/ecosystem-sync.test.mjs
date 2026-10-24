@@ -19,6 +19,7 @@ import {
   stuckMarker, newlyStuck, resolveScope, renderIssue, pasteLine,
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
   metaCardText, jsonLdText, headText, observeGlama,
+  directoryReadPlan, observeDirectory, directoryRows, stuckKeys as _stuckKeys, DIRECTORIES_FILE,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
@@ -606,5 +607,89 @@ describe('facilityFloors: a floor quoted from a listing on /mcp-standing', () =>
     // our own floor beside it is still caught; an unquoted floor is not exempt
     expect(facilityFloors(`${row}. DC Hub tracks 20K+ facilities.`)).toEqual(['20K+']);
     expect(facilityFloors('its description is 20K+ facilities')).toEqual(['20K+']);
+  });
+});
+
+// ── /mcp/directories rows (2026-10-23) ──────────────────────────────────────
+describe('directories.json sweep', () => {
+  const plan0 = () => planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW });
+
+  it('reads a GitHub repo row through the README API, whatever the file is called', () => {
+    expect(directoryReadPlan('https://github.com/HA2345567/awesome-autonomus-ai-agents#38-production-mcp-servers--registry'))
+      .toEqual({ via: 'readme', api: '/repos/HA2345567/awesome-autonomus-ai-agents/readme' });
+  });
+
+  it('reads a GitHub blob row as that file at that ref, fragment dropped', () => {
+    expect(directoryReadPlan('https://github.com/iamtekson/awesome-geospatial-data-sources/blob/master/readme.MD#L148'))
+      .toEqual({ via: 'file', api: '/repos/iamtekson/awesome-geospatial-data-sources/contents/readme.MD?ref=master' });
+  });
+
+  it('reads GitHub\'s MCP registry page and every other site as a page', () => {
+    expect(directoryReadPlan('https://github.com/mcp/cloud.dchub/mcp-server').via).toBe('page');
+    expect(directoryReadPlan('https://mcp-hunter.com/server/dc-hub#top')).toEqual({ via: 'page', url: 'https://mcp-hunter.com/server/dc-hub' });
+  });
+
+  it('refuses a missing or non-https listing_url', () => {
+    expect(directoryReadPlan(null)).toBeNull();
+    expect(directoryReadPlan('http://example.com/x')).toBeNull();
+    expect(directoryReadPlan('not a url')).toBeNull();
+  });
+
+  it('a live row that still names DC Hub is in sync; one that stopped is drift', () => {
+    const live = { id: 'x', status: 'live' };
+    expect(judge(observeDirectory(live, { ok: true, text: '- [DC Hub](https://dchub.cloud/mcp)' }), null).state).toBe('in_sync');
+    const gone = judge(observeDirectory(live, { ok: true, text: '- [Other](https://other.dev)' }), null);
+    expect(gone.state).toBe('drift');
+    expect(gone.reasons[0]).toMatch(/no longer mentions DC Hub/);
+  });
+
+  it('an unverified row that now names DC Hub is reported; one that does not is quiet', () => {
+    const unv = { id: 'y', status: 'unverified' };
+    expect(judge(observeDirectory(unv, { ok: true, text: 'dchub-mcp-server' }), null).reasons[0]).toMatch(/set status live/);
+    expect(judge(observeDirectory(unv, { ok: true, text: 'nothing here' }), null).state).toBe('in_sync');
+  });
+
+  it('a 404, 429 or timeout is unreadable, never drift and never clean', () => {
+    const live = { id: 'x', status: 'live' };
+    expect(judge(observeDirectory(live, { ok: false, status: 429, text: '' }), null)).toEqual({ state: 'unreadable', reasons: ['HTTP 429'] });
+    expect(judge(observeDirectory(live, { ok: false, status: 0, error: 'timeout' }), null).state).toBe('unreadable');
+  });
+
+  it('only live and unverified rows with an https URL are swept', () => {
+    const rows = directoryRows({ directories: [
+      { id: 'a', status: 'live', listing_url: 'https://a.dev/x' },
+      { id: 'b', status: 'pending', listing_url: null },
+      { id: 'c', status: 'unverified', listing_url: 'https://github.com/o/r' },
+      { id: 'd', status: 'live', listing_url: null },
+    ] });
+    expect(rows.map((r) => r.id)).toEqual(['a', 'c']);
+    expect(directoryRows(null)).toEqual([]);
+  });
+
+  it('the real file has rows to sweep', () => {
+    const file = JSON.parse(readFileSync(new URL(`../${DIRECTORIES_FILE}`, import.meta.url), 'utf8'));
+    expect(directoryRows(file).length).toBeGreaterThan(40);
+  });
+
+  it('a dropped row is listed in the issue, never as stuck and never under In sync', () => {
+    const mk = (id, obs) => ({ key: `dir:${id}`, label: id, kind: 'directory', url: `https://${id}.dev`, fix: `row ${id}`, obs, verdict: judge(obs, null) });
+    const results = [
+      mk('kept', { read: true, info: 'lists DC Hub' }),
+      mk('dropped', { read: true, extra: ['page no longer mentions DC Hub, but /mcp/directories still shows it live'] }),
+      mk('slow', { read: false, error: 'HTTP 429' }),
+    ];
+    expect(_stuckKeys(results, { hoursSinceChange: 99 })).toEqual([]);
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toContain('1 of 3 rows in `canonical/directories.json` read as recorded this sweep; 1 could not be read (slow)');
+    expect(body).toMatch(/\| \[dropped\]\(https:\/\/dropped\.dev\) \| page no longer mentions DC Hub/);
+    expect(body).not.toMatch(/### In sync[\s\S]*kept/);
+    expect(body).not.toMatch(/### Could not read this sweep[\s\S]*slow/);
+  });
+
+  it('with every row as recorded the section says so and lists no table', () => {
+    const results = [{ key: 'dir:k', label: 'k', kind: 'directory', url: 'https://k.dev', fix: '', obs: { read: true }, verdict: { state: 'in_sync', reasons: [] } }];
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toContain('1 of 1 rows');
+    expect(body).not.toContain('| row | what the page shows now |');
   });
 });
