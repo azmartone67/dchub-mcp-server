@@ -231,7 +231,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
          freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
-         returnNudgeEnabled as _retNudgeEnabled, isoWeek as _retIsoWeek, nudgeEligibleCaller as _retNudgeEligible,
+         returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailSourceFor as _retEmailSourceFor } from './lib/retention.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
@@ -11364,9 +11364,14 @@ async function _keyReturning(apiKey) {
 // to the wrong window, is worse than no line. Until the backend adds them the
 // flag can be on and the nudge fires for no one — by design.
 //
-// "At most once a week" is held per replica, in memory: the first call this
-// replica sees from a key in a given ISO week is the only one evaluated.
-const _NUDGE_WEEK = new Map();            // api_key -> ISO week last evaluated
+// UPDATE 2026-10-24: key_standing.py now answers for mcp_dev_keys too, with
+// has_alert, last_seen_at (prev_used_at roll) and top_market. The no-email ask
+// moved to the key's first call of any later UTC day; the email "moved" line
+// keeps its weekly clock inside nudgeDecision.
+//
+// "At most once a day" is held per replica, in memory: the first call this
+// replica sees from a key on a given UTC day is the only one evaluated.
+const _NUDGE_DAY = new Map();             // api_key -> UTC day last evaluated (2nd-day ask, 2026-10-24)
 const _nudgeStandingCache = new Map();    // api_key -> { at, body }
 async function _keyStandingFull(apiKey) {
   const now = Date.now();
@@ -11396,10 +11401,10 @@ export async function _returnNudgeStep(result, name, env = process.env) {
     if (!_retNudgeEligible(c, { directoryProfiles: [DIRECTORY_PROFILE, CLAUDE_PROFILE, CORE_PROFILE],
                                isBot: isBotOrInternalCtx })) return result;
     const now = Date.now();
-    const wk = _retIsoWeek(now);
-    if (_NUDGE_WEEK.get(c.api_key) === wk) return result;
-    if (_NUDGE_WEEK.size > 50000) _NUDGE_WEEK.clear();
-    _NUDGE_WEEK.set(c.api_key, wk);
+    const day = _retUtcDay(now);
+    if (_NUDGE_DAY.get(c.api_key) === day) return result;
+    if (_NUDGE_DAY.size > 50000) _NUDGE_DAY.clear();
+    _NUDGE_DAY.set(c.api_key, day);
     const standing = await _keyStandingFull(c.api_key);
     if (!standing || typeof standing !== 'object') return result;
     let movers = null;
@@ -11408,11 +11413,12 @@ export async function _returnNudgeStep(result, name, env = process.env) {
       const ch = await callAPI('/api/v1/changes/since', { since: '7d', limit: 200 });
       movers = ch && ch.diff && Array.isArray(ch.diff.dcpi_movers) ? ch.diff.dcpi_movers : null;
     }
-    const d = _retNudgeDecision({ standing, email: c.email || null, movers, now });
+    const d = _retNudgeDecision({ standing, email: c.email || null, movers, now,
+                                 identifiedPerDay: FREE_TIER.identified_calls_per_day });
     return d && d.kind ? _retPrependTellLine(result, d.line) : result;
   } catch (_) { return result; }
 }
-export function _resetReturnNudgeState() { _NUDGE_WEEK.clear(); _nudgeStandingCache.clear(); }
+export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
 function _returnRewardAvailableToday(apiKey) {
   try {
