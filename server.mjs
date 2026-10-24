@@ -25307,7 +25307,7 @@ function _handoffSkip(result, at, name, err) {
     return { ...result, structuredContent: { ...(sc || {}), _claim_handoff_debug: {
       at, status: c._wallStatus || null, auth_source: c.auth_source || null, has_key: !!c.api_key,
       daily_quota: !!c.daily_quota, profile: c.profile || null, platform: c.platform || null,
-      clean_platform: _isCleanPlatform(), tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
+      clean_platform: _isCleanPlatform(), had_structured: !!sc, blocks: Array.isArray(result.content) ? result.content.length : null, tool: name || null, free_preview_only: _freePreviewOnlyTool(name || ''), email_decision_on: emailFullDecisionOn(),
       error: err ? String((err && err.message) || err).slice(0, 200) : undefined,
     } } };
   } catch (_) { return result; }
