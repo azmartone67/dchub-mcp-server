@@ -991,6 +991,24 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`${DXT} version ${dxm[2]} != ${VERSION}`);
     if (FIX) pend(DXT, dx.replace(DXRX, `$1${VERSION}$3`));
   }
+
+  // ★2026-10-24 — gemini-extension.json carries the SERVER version (Gemini CLI's
+  // extensions gallery shows it), but no heal owned it, so it froze at 2.12.37
+  // while every other surface moved to 2.12.43 and the gallery listed a stale
+  // build (Grok finding #116894). Same 2-space top-level anchor as the DXT heal;
+  // a missing anchor is a PROBLEM, not a silent no-op.
+  const GEM = 'gemini-extension.json';
+  const gm = readCur(GEM);
+  const GMRX = /^(  "version": ")([^"\n]*)("(?:,)?)$/m;
+  const gmm = GMRX.exec(gm);
+  if (!gmm) {
+    problems.push(`${GEM}: top-level \`"version": "x.y.z"\` key NOT FOUND — this heal `
+      + 'anchors on a 2-space-indented, double-quoted "version" line. If the key moved or '
+      + 'changed shape, re-anchor it here: the Gemini CLI extensions gallery reads it.');
+  } else if (gmm[2] !== VERSION) {
+    problems.push(`${GEM} version ${gmm[2]} != ${VERSION}`);
+    if (FIX) pend(GEM, gm.replace(GMRX, `$1${VERSION}$3`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
