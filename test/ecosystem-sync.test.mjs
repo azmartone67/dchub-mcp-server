@@ -21,6 +21,8 @@ import {
   metaCardText, jsonLdText, headText, observeGlama,
   observeScannedRow, directoriesFromStanding, stuckKeys as _stuckKeys, DIRECTORY_SCAN_MAX_AGE_H,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
+  normToolText, toolTextVerdict, toolTextAnchor, toolTextCopies, staleToolTexts, staleToolReason,
+  toolRecordMap, withManifestTexts,
 } from '../scripts/ecosystem-sync.mjs';
 import { _resolvePlatform } from '../server.mjs';
 
@@ -367,7 +369,7 @@ describe('verify-only listings: watched every full sweep, never a request to any
     for (const [key, s] of Object.entries(SINKS)) {
       expect(s.fix, key).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}|\be-?mail\b/i);
     }
-    for (const key of ['pulsemcp', 'mcpservers_org', 'glama_server', 'glama_duplicate', 'mcp_so', 'mcp_so_secondary']) {
+    for (const key of ['pulsemcp', 'mcpservers_org', 'glama_server', 'glama_duplicate', 'mcp_so', 'mcp_so_secondary', 'mcp_hunter']) {
       expect(SINKS[key].kind, key).toBe('watch');
       expect(SINKS[key].fix, key).toMatch(/^verify-only\. /);
     }
@@ -674,3 +676,113 @@ describe('directories.json rows via /api/v1/mcp/standing', () => {
     expect(body).not.toContain('| row | what the page shows now |');
   });
 });
+
+describe('tool descriptions: a listing with the right names and last week\'s text is drift (Grok #117021)', () => {
+  // Cut from live tools/list and the listings on 2026-10-25: mcp#1150 reworded
+  // analyze_parcel, and Smithery / LobeHub / MCP Hive / MCP Hunter kept the old
+  // text with all 94 names, so every name/count check read in sync.
+  const NEW_PARCEL = 'Use this when the user has a land parcel for a data center site: structured read of its boundary — '
+    + 'pass your own GeoJSON Polygon/MultiPolygon, OR just lat+lon and DC Hub finds the containing parcel in its HOSTED '
+    + 'parcel-boundary layer (free county/state GIS polygons, covering a set of priority data-center counties in VA, IL, '
+    + 'TX, OH, UT, OR, IA and WY; a point outside it returns parcel_not_covered with the analyze_site preview). '
+    + 'Returns total acres, member count and contiguity.';
+  const OLD_PARCEL = NEW_PARCEL.replace('covering a set of priority data-center counties in VA, IL, TX, OH, UT, OR, IA and WY',
+    'rolling out by data-center market — Loudoun County VA first');
+  const SITE = 'Use this when the user has one candidate data center site (lat/lon) and wants a buildability read: '
+    + 'power, fiber, gas and risk in one score. Keyless returns the verdict band and the power band. '
+    + 'Ex: "Score 33.45,-112.07 for 100 MW." Needs BOTH lat and lon in decimal degrees.';
+  const LIVE = [{ name: 'analyze_parcel', description: NEW_PARCEL }, { name: 'analyze_site', description: SITE }];
+
+  it('a record with the old analyze_parcel text is stale; identical, re-spaced or truncated copies are not', () => {
+    expect(staleToolTexts(LIVE, { map: { analyze_parcel: OLD_PARCEL, analyze_site: SITE } })).toEqual(['analyze_parcel']);
+    expect(staleToolTexts(LIVE, { map: { analyze_parcel: NEW_PARCEL, analyze_site: SITE } })).toEqual([]);
+    expect(staleToolTexts(LIVE, { map: { analyze_parcel: NEW_PARCEL.replace(/ /g, '\n  ') } })).toEqual([]);
+    expect(staleToolTexts(LIVE, { map: { analyze_parcel: NEW_PARCEL.slice(0, 260) + '…' } })).toEqual([]);
+    expect(staleToolTexts(LIVE, { map: { analyze_parcel: NEW_PARCEL.slice(0, 200) + ' [shortened]' } })).toEqual([]);
+  });
+
+  it('a tool the listing does not show, or a copy too short to prove anything, is not judged', () => {
+    expect(staleToolTexts(LIVE, { map: {} })).toEqual([]);
+    expect(toolTextVerdict([NEW_PARCEL], 'Use this when')).toBe('unknown');
+  });
+
+  it('a Glama-style page: rendered markdown, an autolinked URL and _emphasis_ are still our text', () => {
+    const live = [{ name: 'set_site_alert', description: 'Use this when the user wants an alert on one data center site. '
+      + 'Ex: set_site_alert type=dcpi_change threshold=5 notify_email=you@firm.com. Returns {ok, alert_id, _entity}. Do NOT use to read a site now.' }];
+    const page = '<tr><td><p>Use this when the user wants an alert on one data center site. Ex: <code>set_site_alert</code> '
+      + 'type=dcpi_change threshold=5 notify_email=<a href="mailto:you@firm.com">you@firm.com</a>. Returns {ok, alert_id, <em>entity</em>}. '
+      + 'Do NOT use to read a site now.</p></td></tr>';
+    expect(staleToolTexts(live, { text: page })).toEqual([]);
+  });
+
+  it('an RSC payload escaped twice (MCP Hive) is read to the end of its own string', () => {
+    const esc = (x) => JSON.stringify(JSON.stringify(x)).slice(1, -1);
+    const rec = (d) => `self.__next_f.push([1,"{\\"tools\\":[{\\"name\\":\\"analyze_parcel\\",\\"description\\":${esc(d).replace(/^\\"|\\"$/g, '')}\\",\\"input_schema\\":{}}]}"])`;
+    expect(staleToolTexts(LIVE, { text: rec(OLD_PARCEL) })).toEqual(['analyze_parcel']);
+    expect(staleToolTexts(LIVE, { text: rec(NEW_PARCEL) })).toEqual([]);
+  });
+
+  it('MCP Hunter markdown: one list item per tool, its Parameters line is not the description', () => {
+    const md = (d) => `## Tools\n- analyze_parcel (read-only): ${d}\n  - Parameters: lat, lon, geometry\n- analyze_site (read-only): ${SITE}\n`;
+    expect(staleToolTexts(LIVE, { text: md(OLD_PARCEL) })).toEqual(['analyze_parcel']);
+    expect(staleToolTexts(LIVE, { text: md(NEW_PARCEL) })).toEqual([]);
+  });
+
+  it('a changelog printing the old text beside the new one is in sync: stale only when every copy is', () => {
+    const page = `<p>Previous value: ${OLD_PARCEL}</p><p>New value: ${NEW_PARCEL}</p>`;
+    // The anchor finds both copies; one is current.
+    expect(toolTextCopies(page, toolTextAnchor(NEW_PARCEL, [NEW_PARCEL, SITE]), NEW_PARCEL)).toHaveLength(2);
+    expect(staleToolTexts(LIVE, { text: page })).toEqual([]);
+  });
+
+  it('our own variants are ours: the mcp-server.json text and the flag-only partial-results sentence', () => {
+    const b2 = SITE.replace('Keyless returns the verdict band and the power band.', 'Keyless returns the verdict band, the power band, the weakest factor and counts.');
+    const live = withManifestTexts([{ name: 'analyze_site', description: SITE }], { tools: [{ name: 'analyze_site', description: b2 }] });
+    expect(live[0].alts).toEqual([b2]);
+    // Glama, 2026-10-25: the manifest's access sentence + the flag sentence + live's coordinates sentence.
+    const glama = b2.replace('Ex:', 'When a result is partial, show your user the human_message (or for_your_human) text and its link. Ex:');
+    expect(staleToolTexts(live, { map: { analyze_site: glama } })).toEqual([]);
+    // Without the manifest variant the access sentence is not one live publishes.
+    expect(staleToolTexts([{ name: 'analyze_site', description: SITE }], { map: { analyze_site: glama } })).toEqual(['analyze_site']);
+    expect(withManifestTexts(LIVE, { tools: [{ name: 'analyze_parcel', description: NEW_PARCEL }] })[0].alts).toBeUndefined();
+  });
+
+  it('normalization covers the encodings listings use', () => {
+    expect(normToolText('a &amp; b’s <b>bold</b> **x** `c` \\u2014 d')).toBe("a & b's bold x c — d");
+    expect(normToolText('see <a href="https://x.test')).toBe('see');
+  });
+
+  it('the anchor is the description\'s plain opening, unique among live tools, or nothing', () => {
+    expect(toolTextAnchor(NEW_PARCEL, [NEW_PARCEL, SITE])).toBe('Use this when the user has a land parcel for a data center site: structured read of its boundary ');
+    expect(toolTextAnchor('Use this when x', ['Use this when x'])).toBeNull();               // too short
+    expect(toolTextAnchor(SITE, [SITE, SITE + ' more'])).toBeNull();                         // not unique
+  });
+
+  it('judge turns stale text into a drift reason, and the planner republishes Smithery on it', () => {
+    const reasons = judge({ read: true, tools: 94, staleTools: ['analyze_parcel', 'find_sites'] }, { tools: 94 }).reasons;
+    expect(reasons).toEqual(['stale tool descriptions: analyze_parcel, find_sites']);
+    expect(staleToolReason(Array.from({ length: 9 }, (_, i) => `t${i}`))).toBe('stale tool descriptions: t0, t1, t2, t3, t4, t5 (+3 more)');
+    expect(judge({ read: true, tools: 94, staleTools: [] }, { tools: 94 }).state).toBe('in_sync');
+    const p = planActions({ healDrift: [], registryBehind: '', smitheryReasons: reasons, openHealPrs: [],
+      runs: { heal: [run(300)], registry: [run(300)], smithery: [run(600)] }, now: NOW });
+    expect(p.smithery).toMatchObject({ dispatch: true });
+    expect(p.smithery.why).toMatch(/stale tool descriptions/);
+  });
+
+  it('toolRecordMap keeps only well-formed records', () => {
+    expect(toolRecordMap([{ name: 'a', description: 'x' }, { name: 'b' }, null, { description: 'y' }])).toEqual({ a: 'x' });
+  });
+
+  it('the readers that can see tool text are wired to it', () => {
+    const src = readFileSync(new URL('../scripts/ecosystem-sync.mjs', import.meta.url), 'utf8');
+    for (const fn of ['readSmithery', 'readLobe', 'readHive', 'readMcpSo', 'readHunter', 'readGlama']) {
+      const start = src.indexOf(`async function ${fn}(`);
+      expect(start, fn).toBeGreaterThan(-1);
+      const body = src.slice(start, src.indexOf('\n}\n', start));
+      expect(body, fn).toMatch(/staleToolTexts\(ssot(?:\?)?\.toolTexts/);
+    }
+    expect(SINKS.glama_server.schema).toMatch(/\/schema$/);
+    expect(SINKS.mcp_hunter).toMatchObject({ kind: 'watch', md: 'https://mcp-hunter.com/server/dc-hub.md' });
+  });
+});
+

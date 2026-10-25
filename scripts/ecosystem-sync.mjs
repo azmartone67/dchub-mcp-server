@@ -61,6 +61,7 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decide, sourceMarker } from './refresh-canon-phrases.mjs';
 import { readFrozen } from './canon-freeze.mjs';
+import { PARTIAL_RESULTS_LINE, PARTIAL_RESULTS_HINT } from '../lib/gated-preview.mjs';
 import { FLOOR_TOLERANCE, ghWarning, FACILITY_COUNT_WITHDRAWN_REASON, FACILITY_MAP_PROSE, FACILITY_COUNT_PENDING_STATUS } from './canon-floor.mjs';
 import { CAPACITY_SUMMARY_PATH, capacityPasteClause, capacityPointersEnabled, capacitySummaryFromHttp, isCapacityLive }
   from '../lib/capacity-source-summary.mjs';
@@ -160,6 +161,7 @@ export const SINKS = {
     fix: 'mirrors the official registry and re-tests the live server on Glama\'s own clock' },
   glama_server: { label: 'Glama server listing', kind: 'watch', scope: 'full',
     url: 'https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server',
+    schema: 'https://glama.ai/mcp/servers/azmartone67/dchub-mcp-server/schema',
     fix: 'verify-only. Glama re-syncs the repo and rebuilds on its own clock (a new count took ~27h to appear on 2026-09-12), and no API can trigger it' },
   pulsemcp: { label: 'PulseMCP', kind: 'watch', scope: 'full',
     url: 'https://www.pulsemcp.com/servers/dchub',
@@ -177,6 +179,9 @@ export const SINKS = {
   mcphive: { label: 'MCP Hive', kind: 'manual', scope: 'full',
     url: 'https://mcp-hive.com/explore?provider=0f32e358-d410-4e19-9e77-e6dd91150386',
     fix: 'provider-authored description. Edit it in the mcp-hive.com provider dashboard' },
+  mcp_hunter: { label: 'MCP Hunter', kind: 'watch', scope: 'full',
+    url: 'https://mcp-hunter.com/server/dc-hub', md: 'https://mcp-hunter.com/server/dc-hub.md',
+    fix: 'verify-only. It shows the tools/list it measured once at submission (2026-10-20), and the maker account has no re-check control; the owner asked MCP Hunter for a re-measure on 2026-10-25' },
   mcp_so: { label: 'mcp.so', kind: 'watch', scope: 'full',
     url: 'https://mcp.so/servers/dchub-mcp-server',
     fix: 'verify-only. mcp.so\'s edit form refuses published listings (owner, 2026-09-24), its GitHub repo has been unmaintained since 2025-03, and mcp.so support was asked to fix it on 2026-09-25' },
@@ -314,6 +319,148 @@ export function bannedClaims(text) {
   const out = new Set();
   for (const m of String(text || '').matchAll(BANNED_RE)) out.add(m[0].replace(/\s/g, ''));
   return [...out];
+}
+
+// ── tool description drift (2026-10-25) ────────────────────────────────────
+// A listing can serve the right 94 tool NAMES with last week's descriptions:
+// mcp#1150 reworded analyze_parcel / find_sites and Smithery, LobeHub, MCP
+// Hive and MCP Hunter kept "Loudoun County VA first" for days, because every
+// check here compared names, counts, floors and banned copy only (Grok
+// #117021). These compare each tool's text on a listing with live tools/list.
+
+/** One description, rendered or escaped any way a listing stores it, reduced
+ *  to its words: JS/JSON escapes, entities, tags, smart quotes and markdown
+ *  (code, bold, _emphasis_) removed, whitespace collapsed to single spaces. */
+export function normToolText(s) {
+  let t = String(s || '');
+  // A payload escaped twice (an RSC string holding JSON) needs two passes.
+  for (let i = 0; i < 3; i++) {
+    const u = t.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\(["'\\/])/g, '$1').replace(/\\[nrt]/g, ' ');
+    if (u === t) break;
+    t = u;
+  }
+  return t
+    .replace(/&(?:amp|#x27|#39|quot|lt|gt|nbsp);/g, (m) => ENTITY[m])
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/<[^>]*$/, '')              // a copy cut inside a tag (an autolinked URL's href)
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Sentences of a normalized description, each with its spaces removed so a
+ *  listing's line wrapping or tag spacing cannot make two copies differ. */
+export function toolSentences(norm) {
+  return String(norm || '').split(/(?<=[.!?])\s+(?=["(A-Z])/).map((x) => x.replace(/\s+/g, '')).filter(Boolean);
+}
+
+// Sentences server.mjs adds to a description only under a flag
+// (gatedPreviewOn): a listing built with the other setting shows them or not.
+const OPTIONAL_TOOL_SENTENCES = [PARTIAL_RESULTS_LINE, PARTIAL_RESULTS_HINT];
+const TOOL_TEXT_MIN = 40;        // a copy shorter than this proves nothing
+const ELLIPSIS_RE = /(?:…|\.\.\.|\[shortened\])$/i;   // MCP Hunter writes [shortened]
+
+/** in_sync when every sentence of the listing's copy is one we publish for the
+ *  tool (`ours`: live text plus any variant: the manifest, a flag sentence), the
+ *  last one allowed to stop early (cards truncate). A sentence we no longer
+ *  publish anywhere is stale. Order and omissions are not judged: a listing
+ *  that leaves a sentence out says nothing false. 'unknown' when too short. */
+export function toolTextVerdict(ours, copy) {
+  const refs = (Array.isArray(ours) ? ours : [ours]).concat(OPTIONAL_TOOL_SENTENCES);
+  const known = new Set(refs.flatMap((r) => toolSentences(normToolText(r))));
+  const c = normToolText(copy).replace(ELLIPSIS_RE, '').trim();
+  if (c.replace(/\s+/g, '').length < TOOL_TEXT_MIN) return 'unknown';
+  const sents = toolSentences(c);
+  for (let i = 0; i < sents.length; i++) {
+    const x = sents[i];
+    if (known.has(x)) continue;
+    if (i === sents.length - 1 && [...known].some((k) => k.startsWith(x))) continue;
+    return 'stale';
+  }
+  return 'in_sync';
+}
+
+/** A raw-text anchor for one live description: its opening, cut before the
+ *  first character a listing might encode differently, and unique among the
+ *  live tools. null when no safe anchor exists. */
+export function toolTextAnchor(desc, allDescs) {
+  const m = /^[A-Za-z0-9 ,.;:()-]+/.exec(String(desc || ''));
+  if (!m || m[0].length < 30) return null;
+  const a = m[0].slice(0, 120);
+  return allDescs.filter((d) => String(d || '').startsWith(a)).length === 1 ? a : null;
+}
+
+// Where a listing's copy of one description ends: the quote closing a JSON
+// string or attribute (escaped once inside an RSC payload: \" ends, \\\" is a
+// quote in the text), a block closer, or the next markdown list item.
+const SEGMENT_END_RE = /(?<!\\)\\?"|<\/(?:p|td|th|div|li|dd|section|article)>|\n\s*- |\n\n/;
+
+/** Every copy of `desc` in a page's raw text (HTML, an RSC payload or markdown). */
+export function toolTextCopies(raw, anchor, desc) {
+  const out = [];
+  if (!anchor) return out;
+  const text = String(raw || '');
+  const cap = String(desc || '').length * 2 + 400;
+  for (let i = text.indexOf(anchor); i !== -1 && out.length < 6; i = text.indexOf(anchor, i + anchor.length)) {
+    const rest = text.slice(i, i + cap);
+    const end = SEGMENT_END_RE.exec(rest.slice(anchor.length));
+    out.push(end ? rest.slice(0, anchor.length + end.index) : rest);
+  }
+  return out;
+}
+
+/** Tools whose description on a listing differs from live tools/list.
+ *  `live` is [{name, description, alts?}]: `alts` are other texts we publish for
+ *  that tool (mcp-server.json, which repo-built listings such as Glama read,
+ *  can carry a flag variant live does not serve), and a copy matching any of
+ *  them is ours. `sink` is { map: {name: description} } for
+ *  a listing that stores tools as records, or { text } for a page. A tool is
+ *  stale only when every copy found is stale, so a changelog printing the old
+ *  text beside the new one stays in sync. Tools not found are not judged. */
+export function staleToolTexts(live, sink) {
+  if (!Array.isArray(live) || !live.length || !sink) return [];
+  const descs = live.map((t) => String(t?.description || ''));
+  const stale = [];
+  for (const t of live) {
+    const desc = String(t?.description || '');
+    let copies;
+    if (sink.map) {
+      copies = Object.prototype.hasOwnProperty.call(sink.map, t.name) ? [sink.map[t.name]] : [];
+    } else {
+      copies = toolTextCopies(sink.text, toolTextAnchor(desc, descs), desc);
+    }
+    const ours = [desc, ...(Array.isArray(t.alts) ? t.alts : [])];
+    const verdicts = copies.map((c) => toolTextVerdict(ours, c)).filter((v) => v !== 'unknown');
+    if (verdicts.length && verdicts.every((v) => v === 'stale')) stale.push(t.name);
+  }
+  return stale;
+}
+
+/** Live tool texts with mcp-server.json's text attached as an alt where it
+ *  differs (anchors still come from live). */
+export function withManifestTexts(texts, manifest) {
+  const m = toolRecordMap(manifest?.tools);
+  return texts.map((t) => (m[t.name] && m[t.name] !== t.description ? { ...t, alts: [m[t.name]] } : t));
+}
+
+/** The drift line for stale tool text, or '' when none. */
+export function staleToolReason(names) {
+  if (!names?.length) return '';
+  const head = names.slice(0, 6).join(', ');
+  return `stale tool description${names.length > 1 ? 's' : ''}: ${head}${names.length > 6 ? ` (+${names.length - 6} more)` : ''}`;
+}
+
+/** Records shaped [{name, description}] (Smithery, LobeHub) as a sink map. */
+export function toolRecordMap(tools) {
+  const map = {};
+  for (const t of Array.isArray(tools) ? tools : []) {
+    if (t && typeof t.name === 'string' && typeof t.description === 'string') map[t.name] = t.description;
+  }
+  return map;
 }
 
 export function semverCmp(a, b) {
@@ -538,6 +685,8 @@ export function judge(obs, ssot, { kind } = {}) {
     reasons.push(`version ${obs.version} (server.json ${ssot.version})`);
   }
   if (obs.banned?.length) reasons.push(`banned pricing copy: ${obs.banned.join(', ')}`);
+  const staleText = staleToolReason(obs.staleTools);
+  if (staleText) reasons.push(staleText);
   for (const r of obs.extra || []) reasons.push(r);
   const verdict = { state: reasons.length ? 'drift' : 'in_sync', reasons };
   if (notes.length) verdict.notes = notes;
@@ -715,6 +864,7 @@ async function mcpToolList(url) {
       read: true,
       count: tools.length,
       names: tools.map((t) => t.name).sort(),
+      texts: tools.map((t) => ({ name: t.name, description: String(t.description || '') })),
       blob: JSON.stringify(tools),
       serverVersion: initBody?.result?.serverInfo?.version || null,
     };
@@ -848,14 +998,22 @@ async function readSmithery(ssot) {
   return {
     read: true, tools: j.tools.length, floors: facilityFloors(blob),
     toolClaims: toolClaims(desc), banned: bannedClaims(blob), extra,
+    staleTools: staleToolTexts(ssot.toolTexts, { map: toolRecordMap(j.tools) }),
   };
 }
 
-async function readGlama(key) {
+async function readGlama(key, ssot) {
   const r = await fetchText(bust(SINKS[key].url));
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   if (!/dchub/i.test(r.text)) return { read: false, error: 'no DC Hub identity on the page' };
-  return observeGlama(r.text);
+  const obs = observeGlama(r.text);
+  // Tool text lives on the listing's schema page, not the overview.
+  if (SINKS[key].schema && ssot?.toolTexts) {
+    const sr = await fetchText(bust(SINKS[key].schema));
+    if (sr.ok) obs.staleTools = staleToolTexts(ssot.toolTexts, { text: sr.text });
+    else obs.info = [obs.info, `schema page unread (HTTP ${sr.status}), tool text not judged`].filter(Boolean).join('; ');
+  }
+  return obs;
 }
 
 /** One Glama page: the badge for the tool count, and floors / banned copy from
@@ -894,7 +1052,7 @@ async function readPulse() {
   return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text) };
 }
 
-async function readLobe() {
+async function readLobe(ssot) {
   const r = await fetchText(bust(SINKS.lobehub.url), { accept: 'application/json' });
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   let j;
@@ -908,10 +1066,11 @@ async function readLobe() {
     floors: facilityFloors(`${prose}\n${JSON.stringify(j.tools || [])}`),
     toolClaims: toolClaims(prose),
     banned: bannedClaims(prose),
+    staleTools: staleToolTexts(ssot?.toolTexts, { map: toolRecordMap(j.tools) }),
   };
 }
 
-async function readHive() {
+async function readHive(ssot) {
   const r = await fetchText(bust(SINKS.mcphive.url));
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   const item = hiveItem(r.text);
@@ -919,15 +1078,27 @@ async function readHive() {
   return {
     read: true, floors: facilityFloors(item.description), toolClaims: toolClaims(item.description),
     banned: bannedClaims(item.description),
+    // The provider page's payload carries every tool's text, beside other providers' records.
+    staleTools: staleToolTexts(ssot?.toolTexts, { text: r.text }),
   };
 }
 
-async function readMcpSo(key) {
+async function readMcpSo(key, ssot) {
   const r = await fetchText(bust(SINKS[key].url));
   if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
   const text = visibleText(r.text);
   if (!IDENTITY_RE.test(text)) return { read: false, error: 'no DC Hub identity on the page' };
-  return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text) };
+  return { read: true, floors: facilityFloors(text), toolClaims: toolClaims(text), banned: bannedClaims(text),
+    staleTools: staleToolTexts(ssot?.toolTexts, { text: r.text }) };
+}
+
+/** MCP Hunter publishes the tools/list it measured once, as markdown beside the
+ *  page: "- name (read-only): description". Only the tool text is judged. */
+async function readHunter(ssot) {
+  const r = await fetchText(bust(SINKS.mcp_hunter.md));
+  if (!r.ok) return { read: false, error: `HTTP ${r.status}${r.error ? ` ${r.error}` : ''}` };
+  if (!IDENTITY_RE.test(r.text)) return { read: false, error: 'no DC Hub identity on the page' };
+  return { read: true, staleTools: staleToolTexts(ssot?.toolTexts, { text: r.text }) };
 }
 
 /** Our open listing PRs on other people's curated lists. Prospecting babysits
@@ -1199,6 +1370,7 @@ async function main() {
   const ssot = {
     tools: liveR.read ? liveR.count : null,
     toolNames: liveR.read ? liveR.names : null,
+    toolTexts: liveR.read ? withManifestTexts(liveR.texts, readJson('mcp-server.json')) : null,
     facilities: c.facilities || null,
     deals: c.deals || null,
     markets: c.markets || null,
@@ -1235,15 +1407,16 @@ async function main() {
     mcp_standing: () => readOurPage('mcp_standing'),
     readme: () => readReadme(),
     gh_description: () => readGhDescription(),
-    glama_connector: () => readGlama('glama_connector'),
-    glama_server: () => readGlama('glama_server'),
+    glama_connector: () => readGlama('glama_connector', ssot),
+    glama_server: () => readGlama('glama_server', ssot),
     pulsemcp: () => readPulse(),
     mcpservers_org: () => readMcpServers(ssot),
     glama_duplicate: () => readGlamaDuplicate(),
-    lobehub: () => readLobe(),
-    mcphive: () => readHive(),
-    mcp_so: () => readMcpSo('mcp_so'),
-    mcp_so_secondary: () => readMcpSo('mcp_so_secondary'),
+    lobehub: () => readLobe(ssot),
+    mcphive: () => readHive(ssot),
+    mcp_hunter: () => readHunter(ssot),
+    mcp_so: () => readMcpSo('mcp_so', ssot),
+    mcp_so_secondary: () => readMcpSo('mcp_so_secondary', ssot),
   };
   const keys = Object.keys(readers).filter((k) => scope === 'full' || SINKS[k].scope === 'core');
   const observe = async (k) => {
