@@ -510,6 +510,7 @@ test/verbatim-follower-is-data.test.mjs
 test/verdict-reasons-trim.test.mjs
 test/verified-means-deduplicated.test.mjs
 test/version-consistency.test.mjs
+test/wall-email-line-prod-transport.test.mjs
 test/wall-exits.test.mjs
 test/wall-link-every-wall.test.mjs
 test/wall-no-required-plan-all-tools.test.mjs

@@ -7,6 +7,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
 process.env.DCHUB_LEAN_RESPONSES = '0';
+// Option A (owner 2026-10-25) rewrites the keyless grid wall's human line to the free email unlock
+// for a real session (test/retention-email-ask, test/wall-email-line-prod-transport). This file pins
+// the grid sell line, which is the copy under that line's kill switch.
+process.env.DCHUB_WALL_EMAIL_TELL = '0';
 
 const NEWS_URL = 'https://news.example/rss/articles/ABCDEF123?oc=5';
 const BASE = 'https://backend.grid-declutter.test';
