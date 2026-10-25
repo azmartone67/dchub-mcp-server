@@ -8068,7 +8068,8 @@ async function _workosFetchEmail(sub) {
   const key = (process.env.WORKOS_API_KEY || '').trim();
   if (!key || typeof sub !== 'string' || !sub.startsWith('user_')) return null;
   try {
-    const r = await fetch(`https://api.workos.com/user_management/users/${encodeURIComponent(sub)}`, {
+    const base = (process.env.WORKOS_API_BASE || 'https://api.workos.com').trim().replace(/\/+$/, '');
+    const r = await fetch(`${base}/user_management/users/${encodeURIComponent(sub)}`, {
       headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(4000),
     });
@@ -8078,6 +8079,25 @@ async function _workosFetchEmail(sub) {
     return (typeof e === 'string' && e.includes('@')) ? e.trim().toLowerCase() : null;
   } catch (_) { return null; }
 }
+// r-agent-registration (2026-10-25): WorkOS Agent Registration
+// (https://workos.com/docs/authkit/agent-registration). A third-party agent
+// registers itself at AuthKit (anonymous, or service_auth with the person's
+// email) and swaps the identity assertion for an access token whose `sub` is
+// `agent_reg_…`. After the claim ceremony (the person signs in to AuthKit and
+// reads a code back to the agent) the token also carries `act.sub` = that
+// person's WorkOS `user_…`, per RFC 8693 delegation.
+// On bare /mcp ONLY (opts.agentRegistration, set by the call site):
+//   · claimed (act.sub is a user_) → the identity is the PERSON: the same
+//     durable key their own OAuth sign-in maps to (so their plan applies), and
+//     their email is looked up by that user_ id (emails captured);
+//   · anonymous (no act) → the identity stays the agent_reg_ id (free tier);
+//   · an `aud` of our AuthKit client_id (WORKOS_CLIENT_ID) is also accepted
+//     for an agent_reg_ subject, because that is the token's aud when the
+//     agent did not ask for resource=https://dchub.cloud/mcp.
+// Every other path, and every non-agent_reg_ token, is exactly as before.
+// Kill switch: DCHUB_AGENT_REGISTRATION=0.
+const AGENT_REG_PREFIX = 'agent_reg_';
+const _agentRegEnabled = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_AGENT_REGISTRATION ?? '1'));
 // r-claude-directory (2026-09-26): `opts.audiences` widens the accepted `aud`
 // for ONE path. /mcp/claude is its own RFC 9728 resource, so a client that read
 // its metadata asks AuthKit for aud https://dchub.cloud/mcp/claude; that path
@@ -8088,7 +8108,8 @@ async function resolveWorkosBearer(token, opts) {
   if (!_workosEnabled() || !_WORKOS_DOMAIN) return null;
   if (!_looksLikeJwt(token)) return null;               // not a JWT → fall through
   const _auds = (opts && Array.isArray(opts.audiences) && opts.audiences.length) ? opts.audiences : null;
-  const _cacheKey = _auds ? token + '\u0000' + _auds.join(',') : token;
+  const _agentReg = !!(opts && opts.agentRegistration) && _agentRegEnabled();
+  const _cacheKey = (_auds ? token + '\u0000' + _auds.join(',') : token) + (_agentReg ? '\u0000agent_reg' : '');
   const cached = _workosTokenCache.get(_cacheKey);
   if (cached && cached.exp > Date.now()) return cached.api_key ? cached : null;
   const jwks = _getWorkosJwks();
@@ -8128,12 +8149,18 @@ async function resolveWorkosBearer(token, opts) {
   }
   // Audience binding — the token must be issued FOR this resource.
   const auds = Array.isArray(payload.aud) ? payload.aud : (payload.aud ? [payload.aud] : []);
-  if (_workosAudEnforce() && !(_auds ? _auds.some((x) => auds.includes(x)) : auds.includes(_WORKOS_AUD))) {
+  const _isAgentReg = _agentReg && typeof payload.sub === 'string' && payload.sub.startsWith(AGENT_REG_PREFIX);
+  const _clientId = (process.env.WORKOS_CLIENT_ID || '').trim();
+  const _agentRegAudOk = _isAgentReg && !!_clientId && auds.includes(_clientId);
+  if (_workosAudEnforce() && !_agentRegAudOk && !(_auds ? _auds.some((x) => auds.includes(x)) : auds.includes(_WORKOS_AUD))) {
     console.log(`[oauth] workos jwt aud mismatch: got=${JSON.stringify(auds)} want=${_auds ? _auds.join('|') : _WORKOS_AUD}`);
     _workosTokenCache.set(_cacheKey, { api_key: null, exp: Date.now() + _WORKOS_NEG_TTL });
     return null;
   }
-  const sub = payload.sub;
+  // r-agent-registration: a claimed agent acts for the person in act.sub.
+  const _actSub = _isAgentReg && payload.act && typeof payload.act.sub === 'string'
+    && payload.act.sub.startsWith('user_') ? payload.act.sub : null;
+  const sub = _actSub || payload.sub;
   if (!sub) return null;
   // Verified identity → durable dev key (get-or-create) via internal endpoint.
   // RESILIENCE (r-workos-mint-retry, 2026-06-21): the JWT is already proven valid
@@ -8167,7 +8194,8 @@ async function resolveWorkosBearer(token, opts) {
   // across replicas and restarts, so it is deliberately not used.)
   if (idn.created === true) _chStage('identity_created');
   _workosTokenCache.set(_cacheKey, out);
-  console.log(`[oauth] workos bearer → durable key ${_keyKind(idn.api_key)} tier=${out.tier}`);
+  console.log(`[oauth] workos bearer → durable key ${_keyKind(idn.api_key)} tier=${out.tier}`
+    + (_isAgentReg ? ` agent_registration=${_actSub ? 'claimed' : 'anonymous'} email=${_email ? 'yes' : 'no'}` : ''));
   return out;
 }
 
@@ -32644,7 +32672,9 @@ app.post(MCP_PATHS, async (req, res) => {
             // flipping DCHUB_CHATGPT_OAUTH_OWN_RESOURCE never strands a client.
             : (_normPath(req) === DIRECTORY_OAUTH_PATH ? { audiences: [_WORKOS_AUD, DIRECTORY_OAUTH_RESOURCE] }
               // /mcp/oauth (D1): same, so flipping DCHUB_MCP_OAUTH_OWN_RESOURCE never strands a client.
-              : (_isMcpOauthRequest(req) ? { audiences: [_WORKOS_AUD, MCP_OAUTH_RESOURCE] } : undefined)));
+              : (_isMcpOauthRequest(req) ? { audiences: [_WORKOS_AUD, MCP_OAUTH_RESOURCE] }
+                // r-agent-registration: WorkOS agent_reg_ tokens are mapped on bare /mcp only.
+                : (_normPath(req) === '/mcp' ? { agentRegistration: true } : undefined))));
         if (_wid && _wid.api_key) { apiKey = _wid.api_key; _workosAuthed = true; _bearerResolved = true; }
       }
     }
