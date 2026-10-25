@@ -17395,15 +17395,15 @@ export const _TOOL_OUTPUT_SCHEMAS = {
   get_energy_prices: z.looseObject({
     ..._ENVELOPE_SHAPE,
     success: _oBool('true when the pricing lookup succeeded'),
-    scope: _oStr('What the figures cover (e.g. the ISO/state scope line)'),
+    scope: _oStr('What the figures cover: iso_footprint_avg | state | national'),
     filter: _oObj({
       iso: _oStr('ISO filter echoed back'),
       state: _oStr('State filter echoed back'),
       sector: _oStr('Sector the rate covers'),
     }, 'Echo of the applied filters'),
-    retail_rate_kwh: _oNum('Retail electricity rate, cents/kWh'),
-    industrial_rate_kwh: _oNum('Industrial electricity rate, cents/kWh'),
-    avg_rate_kwh: _oNum('Average rate, cents/kWh'),
+    retail_rate_kwh: _oNum('Retail electricity rate, DOLLARS/kWh (mirrors avg_rate_kwh)'),
+    industrial_rate_kwh: _oNum('Industrial electricity rate, DOLLARS/kWh'),
+    avg_rate_kwh: _oNum('Average retail rate, DOLLARS/kWh (retail_rates carries cents/kWh)'),
     retail_rates: _oObj({
       avg_cents_kwh: _oNum('Average retail, cents/kWh'),
       min_cents_kwh: _oNum('Minimum, cents/kWh'),
@@ -17411,13 +17411,18 @@ export const _TOOL_OUTPUT_SCHEMAS = {
       latest_period: _oStr('EIA period the rates come from'),
       states_covered: _oNum('States in the aggregate'),
     }, 'Retail-rate aggregate block'),
-    wholesale_price_usd_mwh: _oNum('Wholesale / LMP context, USD/MWh (when served)'),
-    natural_gas_usd_mmbtu: _oNum('Henry Hub-referenced natural gas price, USD/MMBtu (when served)'),
-    grid_status: _oStr('Real-time grid status flag (when served)'),
-    as_of: _oStr('Pricing as-of timestamp'),
+    natural_gas_usd_mmbtu: _oNum('Latest Henry Hub daily spot, USD/MMBtu: one national benchmark, not a state or ISO price; null when withheld'),
+    natural_gas: _oObj({
+      hub: _oStr('Price hub (Henry Hub)'),
+      period: _oStr('Trading day the spot price is for'),
+      as_of: _oStr('When that price was published/loaded'),
+      status: _oStr('served | withheld | unavailable'),
+      reason: _oStr('Why the price is null, when it is'),
+    }, 'Provenance block for natural_gas_usd_mmbtu'),
+    as_of: _oStr('Retail-rate as-of (EIA period basis)'),
     caller_tier: _oStr('Tier the response was served at'),
     gated: _oBool('true when parts of the payload were withheld by tier'),
-  }).describe('Live energy pricing for one US ISO: retail cents/kWh + wholesale + natural gas context — alongside the DC Hub envelope keys.'),
+  }).describe('EIA retail electricity rates (monthly) for one US ISO footprint, state or the US, plus the latest Henry Hub gas spot — alongside the DC Hub envelope keys.'),
 
   list_transactions: z.looseObject({
     ..._ENVELOPE_SHAPE,
@@ -29388,7 +29393,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: JSON.stringify(await callAPI(path)) }] };
     });
 
-  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks about electricity or energy prices for data centers ("what does power/gas cost in <ISO> right now?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both) — live energy PRICING for the 7 US ISOs (PJM, ERCOT, CAISO, MISO, SPP, NYISO, ISO-NE): retail electricity rate (cents/kWh), wholesale/LMP context, Henry Hub-referenced natural-gas price, and a real-time grid-status flag. Example: "What is the retail power price and gas price in ERCOT today?" — get_energy_prices iso=ERCOT. Params: iso (one of the 7 US ISOs; required). Returns: {iso, retail_price_cents_kwh, wholesale_price_usd_mwh, natural_gas_usd_mmbtu, grid_status, as_of}. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh economics (use get_gas_economics); this is the live retail+gas PRICE read for one ISO.',
+  trackedTool(srv, 'get_energy_prices', 'Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state ("what does power cost in ERCOT?", "retail rate in Virginia?"); price alone does not rank sites (the cheapest ISO may have no headroom; execute_plan weighs both). Returns EIA RETAIL electricity rates, which are monthly and not live (about 3 months behind; retail_rates.latest_period names the month), for one ISO footprint (the average of its states), one state, or the US: retail_rates {avg_cents_kwh, min_cents_kwh, max_cents_kwh, latest_period, states_covered} in CENTS/kWh, plus avg_rate_kwh, retail_rate_kwh and industrial_rate_kwh in DOLLARS/kWh (by_sector when no sector is given); and natural_gas_usd_mmbtu, the latest Henry Hub daily spot in $/MMBtu, one national benchmark rather than a state or ISO price, with its own natural_gas.period and as_of. Example: "What is the retail power price and gas price in ERCOT?" — get_energy_prices iso=ERCOT. Params: iso (ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE) or state (e.g. TX); data_type is accepted but does not change the response. At an anonymous or free-key seat the figures come back null with gated: true; an email-bound key opens them. This tool has no wholesale/LMP price and no grid-status flag. Quote with attribution to DC Hub (CC-BY-4.0). Do NOT use for fuel mix / demand / 24h curve (use get_grid_data), for power HEADROOM or time-to-power (use get_grid_intelligence), or for behind-the-meter gas-to-grid $/MWh or regional gas basis (use get_gas_economics).',
     { data_type: S.describe('Optional price type focus, e.g. retail, wholesale, gas'),
       state: S.describe('US state abbreviation for state-level pricing context, e.g. TX'),
       iso: S.describe('ISO/RTO grid region (required for ISO pricing): ERCOT, PJM, MISO, CAISO, SPP, NYISO, ISONE') },
