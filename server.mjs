@@ -212,7 +212,7 @@ import { gatedPreviewStep as _gatedPreviewStepImpl, gatedPreviewOn as _gatedPrev
 import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, decodeGoToken, withUserLine, proWhat, CLAIM_ALT } from './lib/wall-user-line.mjs';
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
-import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
+import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
@@ -10276,12 +10276,12 @@ async function _parcelCoverage() {
   if (block.available) _parcelCoverageCache = { at: Date.now(), block };
   return block;
 }
-export async function _parcelNotCoveredAnswer(lat, lon, capacityMw) {
+export async function _parcelNotCoveredAnswer(lat, lon, capacityMw, gap = null) {
   const [preview, coverage] = await Promise.all([
     _parcelSitePreview(lat, lon, capacityMw).catch(() => ({ access: null, payload: null, reason: 'site read unavailable' })),
     _parcelCoverage().catch(() => _parcelCoverageBlock(null)),
   ]);
-  return _buildParcelNotCovered({ lat, lon, capacityMw, preview, coverage });
+  return _buildParcelNotCovered({ lat, lon, capacityMw, preview, coverage, gap });
 }
 
 export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn()) {
@@ -28720,7 +28720,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         // Outside hosted parcel coverage: the site preview + coverage list (lib/parcel-not-covered.mjs).
         const r = await callAPI('/api/v1/analyze-parcel', {}, { method: 'POST', body, withStatus: true });
         if (_isParcelNotCovered(r, { geometry: a.geometry, lat, lon })) {
-          const sc = await _parcelNotCoveredAnswer(Number(lat), Number(lon), a.capacity_mw);
+          const sc = await _parcelNotCoveredAnswer(Number(lat), Number(lon), a.capacity_mw, _parcelGapFrom(r.body));
           return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
         }
         // The same shapes callAPI returns without withStatus.

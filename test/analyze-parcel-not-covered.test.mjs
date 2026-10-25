@@ -4,12 +4,13 @@
 // /api/v1/parcels/coverage. Real server.mjs app on loopback, stub backend; no network.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
-import { isParcelNotCovered, parcelCoverageBlock, scrubPreviewForParcel } from '../lib/parcel-not-covered.mjs';
+import { isParcelNotCovered, parcelCoverageBlock, scrubPreviewForParcel, parcelGapFrom, buildParcelNotCovered } from '../lib/parcel-not-covered.mjs';
 
 const FREE_KEY = 'dch_trial_FREEparcel0123456789abcdef';
 const UA = { 'user-agent': 'Claude-User' };
 const PHX = { lat: 33.45, lon: -112.07 };          // no hosted parcel
 const LOUDOUN = { lat: 39.04, lon: -77.48 };       // hosted parcel
+const LOOP = { lat: 41.8819, lon: -87.6278 };      // street gap in covered Cook County IL
 const SITE = {
   success: true, lat: 33.45, lon: -112.07, overall_score: 83.7, interpretation: 'Excellent site',
   scores: { power_infrastructure: 91, fiber_connectivity: 64, gas_pipeline_access: 40, market_conditions: 77, risk_resilience: 70 },
@@ -62,6 +63,10 @@ beforeAll(async () => {
         if (parcelMode === 'down') return { status: 503, body: { error: 'parcel lookup unavailable' } };
         if (body && body.geometry) return { ...PARCEL_OK, hosted_parcel: undefined };
         if (body && body.lat === LOUDOUN.lat) return { ...PARCEL_OK };
+        if (body && body.lat === LOOP.lat) return { status: 404, body: { ok: false, _entity: 'error',
+          error: 'no hosted parcel contains that point, but it is inside hosted parcel coverage',
+          coverage_url: '/api/v1/parcels/coverage', in_hosted_coverage: true,
+          nearest_parcel: { county: 'Cook', state: 'IL', distance_m: 13.2 } } };
         return { status: 404, body: { ok: false, _entity: 'error',
           error: 'no hosted parcel contains that point — coverage is rolling out by market (GET /api/v1/parcels/coverage); pass an explicit GeoJSON geometry to analyze any boundary',
           coverage_url: '/api/v1/parcels/coverage' } };
@@ -182,6 +187,27 @@ describe('analyze_parcel: uncovered point -> preview + coverage list', () => {
   });
 });
 
+describe('analyze_parcel: a gap between parcels in a covered county (Grok #117020)', () => {
+  it('says the point is inside coverage, names the county and distance, keeps the preview', async () => {
+    const r = await call(FREE_KEY, LOOP);
+    expect(r.res.isError).toBeFalsy();
+    expect(r.sc.status).toBe('no_parcel_at_point');
+    expect(r.sc.in_hosted_coverage).toBe(true);
+    expect(r.sc.nearest_parcel).toEqual({ county: 'Cook', state: 'IL', distance_m: 13.2 });
+    expect(r.sc.message).toMatch(/inside hosted parcel coverage \(Cook County, IL\)/);
+    expect(r.sc.message).toMatch(/13 m away/);
+    expect(r.sc.message).not.toMatch(/market by market/);
+    expect(r.sc.site_preview).toBeTruthy();
+    expect(r.sc.parcel_coverage.available).toBe(true);
+  });
+  it('a truly uncovered point keeps parcel_not_covered and in_hosted_coverage false', async () => {
+    const r = await call(FREE_KEY, PHX);
+    expect(r.sc.status).toBe('parcel_not_covered');
+    expect(r.sc.in_hosted_coverage).toBe(false);
+    expect(r.sc.nearest_parcel).toBeUndefined();
+  });
+});
+
 describe('analyze_parcel: errors and bad input keep their behaviour', () => {
   it('missing coordinates is still invalid_args (missing_coordinates)', async () => {
     const r = await call(FREE_KEY, { lat: 33.45 });
@@ -227,5 +253,23 @@ describe('lib/parcel-not-covered unit', () => {
   it('scrub drops plan fields and pitch notes', () => {
     const s = scrubPreviewForParcel({ required_plan: 'pro', upgrade_url: 'u', a: { tier_required: 'pro', note: 'needs a paid plan (7-day trial)', x: 1 } });
     expect(s).toEqual({ a: { note: 'Locked in the preview.', x: 1 } });
+  });
+});
+
+describe('lib/parcel-not-covered gap unit', () => {
+  it('parcelGapFrom reads only a well-formed in-coverage body', () => {
+    expect(parcelGapFrom({ in_hosted_coverage: true, nearest_parcel: { county: 'Dallas', state: 'TX', distance_m: 0.94 } }))
+      .toEqual({ county: 'Dallas', state: 'TX', distance_m: 0.9 });
+    expect(parcelGapFrom({ in_hosted_coverage: false, nearest_parcel: { county: 'Dallas', state: 'TX', distance_m: 1 } })).toBeNull();
+    expect(parcelGapFrom({ in_hosted_coverage: true })).toBeNull();
+    expect(parcelGapFrom({ in_hosted_coverage: true, nearest_parcel: { county: '', distance_m: 1 } })).toBeNull();
+    expect(parcelGapFrom({ in_hosted_coverage: true, nearest_parcel: { county: 'Cook', distance_m: 'x' } })).toBeNull();
+    expect(parcelGapFrom(null)).toBeNull();
+  });
+  it('a sub-metre gap reads 1 m, never 0 m', () => {
+    const out = buildParcelNotCovered({ lat: 32.9, lon: -96.6, preview: null, coverage: { available: false },
+      gap: { county: 'Dallas', state: 'TX', distance_m: 0.9 } });
+    expect(out.message).toMatch(/1 m away/);
+    expect(out.status).toBe('no_parcel_at_point');
   });
 });
