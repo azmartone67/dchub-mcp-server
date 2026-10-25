@@ -209,3 +209,24 @@ describe('claim_free_key wiring — every keyed branch ships the artifact', () =
     expect(_BYO_MCP_PLATFORMS.has('chatgpt')).toBe(true);
   });
 });
+
+// 2026-10-25 owner test on Grok: the key in the connector URL alone was keyed
+// (credential_source query, tier identified); the same key ALSO typed into the
+// connector's API-key field got every call refused (key_status invalid), and that
+// field alone sent nothing. And Grok opens a new session per tool call, so
+// "applied to THIS session, no reconnect needed" is false there.
+describe('claim_free_key copy on a per-call-session connector (Grok)', () => {
+  const lead = SRC.slice(SRC.indexOf("const _headerlessLead = (_isByo && CLAIM_CAROT_COPY)"),
+                         SRC.indexOf("const _saveLine = CLAIM_CAROT_COPY"));
+  it('the BYO lead tells the human to leave any key field empty and copy the URL exactly', () => {
+    expect(lead.length).toBeGreaterThan(200);
+    expect(lead).toContain('leave it EMPTY');
+    expect(lead).toContain('a key in both places gets the call refused');
+    expect(lead).toContain('Copy the URL exactly as shown');
+    expect(lead).toContain("_keyHelpUrl(_via)");
+  });
+  it('"applied to THIS session" is not claimed on Grok', () => {
+    expect(SRC).toContain("const _perCallSession = _GROK_RELAY_PLATFORMS.has(_via);");
+    expect(SRC).toContain("(_autoBound && !_perCallSession\n          ? ', **already applied to THIS session");
+  });
+});

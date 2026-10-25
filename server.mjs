@@ -30387,6 +30387,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     async (a) => {
       const _via   = _claimVia();
       const _isByo = _BYO_MCP_PLATFORMS.has(_via);
+      // 2026-10-25: Grok's connector opens a new session for every tool call, so
+      // "applied to THIS session, your next call returns full data" is false
+      // there: the next call is another session, keyed only if the URL is saved.
+      const _perCallSession = _GROK_RELAY_PLATFORMS.has(_via);
       const _ownClientKey = (() => {
         try { const c = getCtx() || {}; return _clientKeyFromNames(c.client_name_raw, c.platform, a && a.client_name); }
         catch (_) { return null; }
@@ -30629,7 +30633,11 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       // URL is present-by-construction, so it leads and bind follows.
       const _headerlessLead = (_isByo && CLAIM_CAROT_COPY)
         ? '**🔗 ONE PASTE KEEPS THIS — give your human the connector URL below.** Your client runs MCP server-side and builds a NEW session for every tool call, so the key you just received is gone by your next call and you cannot apply it yourself. The connector URL is the only state that survives. Ask your human to open their DC Hub connector settings and replace the server URL with:\n\n`' + _cUrl + '`\n\n' +
-          'That is the entire install — no config file, no header, no restart beyond reconnecting. Paste it; do not click it (this is an API endpoint, not a page). Optionally also call `bind_email {email}` so the key is recoverable if that URL is ever lost.\n\n'
+          'That is the entire install — no config file, no header, no restart beyond reconnecting. Paste it; do not click it (this is an API endpoint, not a page). Optionally also call `bind_email {email}` so the key is recoverable if that URL is ever lost.\n\n' +
+          // 2026-10-25 owner test on Grok: the URL alone was keyed (credential_source
+          // query, tier identified); the same key also typed into the connector's
+          // key field got the call refused, and that field alone sent nothing.
+          'If the connector form also has an API key or authentication field, leave it EMPTY: the key in the URL is the one that is sent, and a key in both places gets the call refused. Copy the URL exactly as shown; one changed character makes the key invalid. If it is refused, your human can get a working URL with a Copy button at ' + _keyHelpUrl(_via) + '.\n\n'
         : '';
       const _saveLine = CLAIM_CAROT_COPY
         ? '**🔑 Tell your human to save this key** — it’s the difference between this assistant reconnecting next session vs. starting over anonymous. You (the agent) usually can’t edit your own connector config, so relay this:\n' +
@@ -30673,7 +30681,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       const text =
         (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
-        (_autoBound
+        (_autoBound && !_perCallSession
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
           : '.') + '\n\n' +
         '**Your key:** `' + key + '`\n\n' +
