@@ -231,6 +231,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
          freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
+         WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailTellLine as _retWallEmailTellLine,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
@@ -11392,6 +11393,9 @@ async function _keyStandingFull(apiKey) {
   return body;
 }
 export async function _returnNudgeStep(result, name, env = process.env) {
+  // Option A (owner 2026-10-25): a grid / queue wall's email line goes first, so the
+  // nudge below sees a Tell-the-user line and stays out (one per response).
+  result = _wallEmailTellStep(result, name, env);
   try {
     if (!_retNudgeEnabled(env)) return result;               // flag off: the same object, untouched
     if (!result || result.isError || !Array.isArray(result.content)) return result;
@@ -11442,6 +11446,33 @@ function _recordEmailAskShown(c, name, kind) {
       body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
     }).catch(() => {});
   } catch (_) { /* telemetry never touches a response */ }
+}
+// The wall's email line (lib/retention.mjs WALL_EMAIL_TELL_TOOLS / wallEmailTellLine). Fires only
+// where the link page leads with the free email unlock: a grid / queue tool, the email-full
+// decision on, a caller with no email and no paid depth, a real session (the unlock binds the
+// email onto it), a relay wall that is not a capacity or site-runs wall, a dchub.cloud human_url,
+// and no Tell-the-user line already on the response.
+export function _wallEmailTellStep(result, name, env = process.env) {
+  try {
+    if (!_retWallEmailTellOn(env)) return result;
+    if (!_RET_WALL_EMAIL_TOOLS.includes(name) || !emailFullDecisionOn()) return result;
+    if (!result || result.isError || !Array.isArray(result.content)) return result;
+    if (_isFailureEnvelope(result) || _retHasTellLine(result)) return result;
+    const sc0 = result.structuredContent;
+    if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
+    const c = getCtx() || {};
+    if (_isCleanPlatform() || isBotOrInternalCtx(c)) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isPaidDepthTier(c.tier) || c.tier === 'identified' || c.email) return result;
+    const sid = c.session_id || '';
+    if (!sid || sid === 'no-session') return result;
+    if (!_isRelayWall(sc0, c)) return result;
+    const kind = _wallKindFor(sc0, c, name);
+    if (kind === WALL_KIND_CAPACITY || kind === WALL_KIND_SITERUNS) return result;
+    const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\//.test(sc0.human_url) ? sc0.human_url : '';
+    if (!url) return result;
+    return _retPrependTellLine(result, _retWallEmailTellLine(url));
+  } catch (_) { return result; }
 }
 export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
@@ -30585,7 +30616,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           + 'Show your human this snippet and ask them to save it: the key is then sent on every future session. Do not re-mint each session. Other clients: https://dchub.cloud/connect\n\n'
         : '';
       const text =
-        (_emailAtClaim ? '' : _retClaimLead()) +
+        (_emailAtClaim ? '' : _retClaimLead(_fullAnswersPerToolPerDay('identified'))) +
         '✅ **Free DC Hub dev key minted for `' + cn + '`** — active now' +
         (_autoBound
           ? ', **already applied to THIS session — your next call returns full data, no reconnect needed.**'
