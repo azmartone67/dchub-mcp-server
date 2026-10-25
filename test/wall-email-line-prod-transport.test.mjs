@@ -47,6 +47,12 @@ function readBody(req) {
 }
 
 let S, PORT, httpServer, stub, shortN = 0;
+// The backend's high-intent claim answer (should_mint=true), served while `claim` is set. Production's
+// human_url is the claim's durable view, https://dchub.cloud/relay/<token> (dchub-backend
+// routes/mcp_high_intent_claim.py), never an /upgrade/h link.
+const CLAIM = { should_mint: true, claim_url: 'https://dchub.cloud/claim/abc', claim_token: 't', count: 3,
+                threshold: 2, human_url: 'https://dchub.cloud/c/abc' };
+let claim = null;
 const prev = {};
 beforeAll(async () => {
   await new Promise((resolve) => {
@@ -70,6 +76,7 @@ beforeAll(async () => {
           : { valid: false, tier: 'free' }));
         return;
       }
+      if (p === '/api/v1/mcp/should-mint-claim' && claim) { res.end(JSON.stringify(claim)); return; }
       if (p === '/api/v1/mcp/trial-check') { res.end(JSON.stringify({ trial_used: false, prior_calls: 0 })); return; }
       if (p === '/api/v1/mcp/session-key') { res.statusCode = 404; res.end('{}'); return; }
       res.end(JSON.stringify({ success: true, count: 0, data: [], results: [], items: [] }));
@@ -164,5 +171,62 @@ describe('option A wall line, production transport', () => {
   it('a key with an email bound gets no wall and no line', async () => {
     const r = await wallCall('get_grid_intelligence', EMAIL_KEY);
     expect(r.text).not.toMatch(/held back part of this answer/);
+  });
+});
+
+// The high-intent claim path (backend should-mint-claim answers should_mint=true). Measured live
+// 10-25: ~5 of 12 fresh-session queue walls carried no '→ For your human' line; their one visible
+// line was the '🔒 **This answer hid …** … The page shows the options → /u/…' header in the old
+// wording. Pre-existing (same with DCHUB_WALL_EMAIL_TELL=0): the person's line carried the claim's
+// own link (/relay/<token>), not human_url, so the one-link step wrote human_url into the first
+// pointer it met (the header's /go/c) and left the person's line a phrase, which was then dropped.
+describe('the high-intent claim path keeps the standard human line', () => {
+  // Every prose line that carries the response's human link (block 0's JSON is data, not a line).
+  const linkLines = (r, url) => r.result.content.flatMap((b, i) => {
+    let t = b.text || '';
+    if (i === 0) { try { JSON.parse(t); return []; } catch (_) { /* prose follows */ } }
+    return t.split('\n').filter((l) => l.includes(url));
+  });
+  const CLAIMS = [CLAIM, { ...CLAIM, human_url: 'https://dchub.cloud/relay/c2lkfGdldF9pbnRlcmNvbm5lY3Rpb25fcXVldWU.0a1b2c3d' }];
+  const withClaim = async (c, fn) => { claim = c; try { return await fn(); } finally { claim = null; } };
+
+  it('queue / grid wall with a claim, keyless and free key: one human line, the email unlock; block 0 is JSON', async () => {
+    for (const c of CLAIMS) {
+      for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
+        for (const key of [undefined, FREE_KEY]) {
+          const at = tool + ' ' + (key ? 'free key' : 'keyless') + ' ' + c.human_url;
+          const r = await withClaim(c, () => wallCall(tool, key));
+          expect(r.result.isError, at).toBeFalsy();
+          const b0 = r.result.content[0].text;
+          expect(() => JSON.parse(b0), at).not.toThrow();
+          const url = r.sc.human_url;
+          expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+          expect(humanLines(r.text), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+          expect(linkLines(r, url), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+          expect(R.countTellLines(r.text), at).toBe(0);
+          expect(r.text, at).not.toMatch(/The page shows the options → https:/);
+          expect(r.text, at).not.toMatch(/paid DC Hub plan|plans that include/);
+          expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
+        }
+      }
+    }
+  });
+
+  it('with the email line off (DCHUB_WALL_EMAIL_TELL=0) the claim wall still has its one standard line', async () => {
+    const was = process.env.DCHUB_WALL_EMAIL_TELL;
+    process.env.DCHUB_WALL_EMAIL_TELL = '0';
+    try {
+      for (const c of CLAIMS) {
+        const r = await withClaim(c, () => wallCall('get_interconnection_queue'));
+        const url = r.sc.human_url;
+        expect(() => JSON.parse(r.result.content[0].text), c.human_url).not.toThrow();
+        const lines = humanLines(r.text);
+        expect(lines.length, c.human_url).toBe(1);
+        expect(lines[0].startsWith(HUMAN + ' '), c.human_url).toBe(true);
+        expect(linkLines(r, url), c.human_url).toEqual(lines);
+        expect(r.text, c.human_url).not.toMatch(/held back part of this answer/);
+        expect(R.countTellLines(r.text), c.human_url).toBe(0);
+      }
+    } finally { if (was === undefined) delete process.env.DCHUB_WALL_EMAIL_TELL; else process.env.DCHUB_WALL_EMAIL_TELL = was; }
   });
 });
