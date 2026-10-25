@@ -27,7 +27,7 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 SMITHERY_SLUG = "azmartone67/dchub"
 REPO_SLUG = "azmartone67/dchub-mcp-server"
 LOBEHUB_SLUG = "azmartone67-dchub-mcp-server"
-CURSOR_DIRECTORY_SLUG = "mcp-dchub"
+CURSOR_DIRECTORY_SLUG = "dc-hub"  # 2026-10-25: the kept entry; mcp-dchub is the duplicate (unpublish failed server-side)
 
 # ── CONNECTOR listings ────────────────────────────────────────────────────────
 #

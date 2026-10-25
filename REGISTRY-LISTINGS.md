@@ -340,8 +340,8 @@ move every few days and a listing is edited by hand perhaps twice a year.
 ### PulseMCP (pulsemcp.com/submit)
 - Remote server. Name: "DC Hub — Data Center Intelligence". URL `https://dchub.cloud/mcp`. Use long description + headline tools.
 
-### Cursor Directory (cursor.directory/plugins/mcp-dchub)
-- Already present. Update the description to mention the gas index + grid scoreboard; config snippet:
+### Cursor Directory (cursor.directory/plugins/dc-hub)
+- Already present. dc-hub is the kept entry (description and tags refreshed, verification requested 2026-10-25). The older duplicate mcp-dchub could not be unpublished (cursor.directory row-level-security error); remove it from the owner's account when possible. Config snippet:
   ```json
   { "mcpServers": { "dchub": { "url": "https://dchub.cloud/mcp" } } }
   ```
