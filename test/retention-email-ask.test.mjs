@@ -533,7 +533,12 @@ describe('wall email line (option A, agent half)', () => {
     same({}, wall({ _upgrade: { remaining_today: 0 } }));                 // capacity: checkout stays first
     same({}, wall({ unlock_kind: 'email_cap' }));                         // keyless cap: its own email copy
     same({}, wall({ human_url: 'https://evil.example/u/x' }));
-    same({}, wall({}, null));                                             // no human line: none is added
+    same({}, wall({}, null));                                             // no human line, no linked copy: untouched
+    const repeat = wall({ human_message: 'hit the paid data boundary. ' + URL, user_message: 'x' }, null);
+    const rep = run({}, repeat);                                          // r-relay-cap repeat: no line is added,
+    expect(rep.content).toBe(repeat.content);                             // the text is untouched,
+    expect(rep.structuredContent.human_message).toBe(R.wallEmailLineText(URL));   // the linked copy follows
+    expect(rep.structuredContent.user_message).toBe('x');                 // an unlinked copy is left alone
     same({}, wall({}, HUMAN + ' a line with another link https://dchub.cloud/plans'));
   });
 });
