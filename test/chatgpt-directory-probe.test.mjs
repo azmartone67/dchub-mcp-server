@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
 import {
-  DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, CHATGPT_NOTICE, scrubStructured,
+  CHATGPT_TOOLS as DIRECTORY_TOOLS, DIRECTORY_REMOVED, DIRECTORY_INSTRUCTIONS, CHATGPT_NOTICE, scrubStructured,
   STANDARD_ANNOTATION_KEYS, EMAIL_OR_WEBHOOK_TOOLS,
 } from '../lib/chatgpt-directory.mjs';
 import { PROBE_PATTERNS, probeHits, annotationViolations, GUESS_ARGS, CHATGPT_HEADERS, CHATGPT_META, classifyResponse } from '../scripts/probe-chatgpt-directory.mjs';
