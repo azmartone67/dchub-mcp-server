@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+import { readFileSync } from 'node:fs';
 import * as R from '../lib/retention.mjs';
 import { __test as OAUTH } from '../oauth.mjs';
 import { _freeTierRuleText, _rungNum, _fullAnswersPerToolPerDay } from '../lib/tier-canon.mjs';
@@ -62,6 +63,15 @@ let claimBody = null;
 let standingHits = 0;
 let claimResponse = null;
 const askEvents = [];   // POST /api/v1/mcp/funnel-event bodies with event=email_ask_shown
+// Production payloads (read-only, 2026-10-25): /api/v1/grid/intelligence/MISO and
+// /api/v1/interconnection-queue/by-iso?iso=MISO. The option-A wall test runs the real handler on
+// them: mcp#1143's line passed a hand-built wall and never fired on a real one.
+const FIXTURE = (f) => readFileSync(new URL('./fixtures/' + f, import.meta.url), 'utf8');
+const GRID_MISO = FIXTURE('grid-intelligence-miso.json');
+const QUEUE_MISO = FIXTURE('interconnection-queue-by-iso-miso.json');
+let mintShort = false;   // the option-A tests turn on a /u/ mint; the rest of the file keeps long links
+let shortN = 0;
+const SHORT_ALPHA = '23456789abcdefghjkmnpqrstuvwxyz';
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -78,6 +88,15 @@ beforeAll(async () => {
       const url = new URL(req.url, 'http://_');
       res.setHeader('content-type', 'application/json');
       const p = url.pathname;
+      if (p === '/api/v1/grid/intelligence/MISO') { res.end(GRID_MISO); return; }
+      if (p === '/api/v1/interconnection-queue/by-iso' && url.searchParams.get('iso') === 'MISO') { res.end(QUEUE_MISO); return; }
+      if (p === '/api/v1/relay/short' && mintShort) {
+        await readBody(req);
+        let n = ++shortN, code = '';
+        for (let i = 0; i < 6; i++) { code += SHORT_ALPHA[n % SHORT_ALPHA.length]; n = Math.floor(n / SHORT_ALPHA.length); }
+        res.end(JSON.stringify({ ok: true, url: 'https://dchub.cloud/u/' + code }));
+        return;
+      }
       if (p === '/api/v1/mcp/funnel-event') {
         const b = await readBody(req);
         if (b && b.event === 'email_ask_shown') askEvents.push({ body: b, key: req.headers['x-internal-key'] });
@@ -444,46 +463,78 @@ describe('claim ask: kill switch restores the recovery wording', () => {
 });
 
 describe('wall email line (option A, agent half)', () => {
-  const URL = 'https://dchub.cloud/u/abc123';
-  const wall = (extra = {}) => {
-    // The live shape (production get_grid_intelligence, keyless, 2026-10-25): preview flags,
-    // withheld fields, the _upgrade pointer and the human_url.
-    const sc = { ok: true, tool: 'get_grid_intelligence', free_preview_only: true, preview_is_partial: true,
-                 withheld: ['constraint_score'], _upgrade: { tier: 'free' }, human_url: URL, ...extra };
-    return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+  // The wall's ONE human line, through the real /mcp handler on production payloads, with the /u/
+  // mint answering as production does. Keyless and a free key with no email; both tools.
+  const HUMAN = '→ **For your human:**';
+  const humanLines = (t) => t.split('\n').filter((l) => l.includes(HUMAN) || /^\s*(\*\*)?Tell the user:/.test(l));
+  const wallCall = async (tool, key, extra) => {
+    S._resetReturnNudgeState();
+    return (await session('/mcp', 'Claude Code', key, { 'user-agent': 'Claude-User', ...extra })).call(tool, { iso: 'MISO' });
   };
-  const base = { api_key: 'dch_live_wall_line_0001', session_id: '3f2a9c1e-7b4d-4e2a-9f10-5c6d7e8f9a0b',
-                 tier: 'free', platform: 'claude', client_ua: 'Claude-User' };
-  const run = (c, res, name = 'get_grid_intelligence', env = {}) =>
-    S._ctxALS.run({ ...base, ...c }, () => S._wallEmailTellStep(res, name, env));
-  const first = (res) => res.content[0].text.split('\n')[0];
+  beforeAll(() => { mintShort = true; });
+  afterAll(() => { mintShort = false; });
 
-  it('a free, email-less caller on a grid / queue depth wall gets the one line', () => {
+  it('a free, email-less caller on a real grid / queue wall: the one human line is the email unlock, on the /u/ link', async () => {
+    // Code-default transport (walls and previews isError). The prod transport (both 0, block 0 split
+    // to pure JSON) is test/wall-email-line-prod-transport.test.mjs: DCHUB_PREVIEW_ISERROR is read at load.
     for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
-      const out = run({}, wall({ tool }), tool);
-      expect(first(out), tool).toBe(R.wallEmailTellLine(URL));
-      expect(tellCount(out.content[0].text)).toBe(1);
+      for (const key of [undefined, OLD_UNKNOWN]) {
+        const at = tool + ' ' + (key ? 'free key' : 'keyless');
+        const r = await wallCall(tool, key);
+        const url = r.sc.human_url;
+        expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+        expect(humanLines(r.text), at).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+        expect(tellCount(r.text), at).toBe(0);                       // no Tell-the-user line was added
+        expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
+        expect(r.sc.user_message, at).toBe(R.wallEmailLineText(url));
+        expect(r.text, at).not.toMatch(/paid DC Hub plan|plans that include/);
+      }
     }
   });
 
-  it('never: email bound, identified, no session, other tools, capacity wall, existing Tell line, switch off', () => {
-    const quiet = (out) => expect(out.content[0].text).not.toMatch(/held back part of this answer/);
-    quiet(run({ email: 'a@b.co' }, wall()));
-    quiet(run({ tier: 'identified' }, wall()));
-    quiet(run({ session_id: '' }, wall()));
-    quiet(run({}, wall({ tool: 'get_market_intel' }), 'get_market_intel'));   // its page still sells a plan
-    quiet(run({}, wall({ _upgrade: { remaining_today: 0 } })));               // capacity: checkout stays first
-    quiet(run({}, wall({ human_url: 'https://evil.example/u/x' })));
-    const told = wall(); told.content[0].text = 'Tell the user: "x"\n\n' + told.content[0].text;
-    expect(run({}, told)).toBe(told);
-    quiet(run({}, wall(), 'get_grid_intelligence', { DCHUB_WALL_EMAIL_TELL: '0' }));
+  it('the line is the owner-approved wording, verbatim', () => {
+    expect(R.wallEmailLineText('https://dchub.cloud/u/abc234')).toBe(
+      'DC Hub held back part of this answer. Open this link and enter your email to get it free: https://dchub.cloud/u/abc234');
   });
 
-  it('with the returning-key nudge on, the response still carries exactly one Tell line', async () => {
-    const out = await S._ctxALS.run({ ...base }, () =>
-      S._returnNudgeStep(wall(), 'get_grid_intelligence', { DCHUB_RETURN_NUDGE: 'on' }));
-    expect(first(out)).toBe(R.wallEmailTellLine(URL));
-    expect(tellCount(out.content[0].text)).toBe(1);
+  it('never: email bound, get_market_intel, kill switch; the wall keeps its own one line', async () => {
+    const held = /held back part of this answer/;
+    const bound = await wallCall('get_grid_intelligence', OLD_EMAIL);
+    expect(bound.text).not.toMatch(held);
+    const mi = await wallCall('get_market_intel', undefined);
+    expect(mi.text).not.toMatch(held);
+    process.env.DCHUB_WALL_EMAIL_TELL = '0';
+    try {
+      for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
+        const r = await wallCall(tool, undefined);
+        expect(r.text, tool).not.toMatch(held);
+        expect(humanLines(r.text).length, tool).toBe(1);             // the wall's own line, unchanged
+      }
+    } finally { delete process.env.DCHUB_WALL_EMAIL_TELL; }
+  });
+
+  it('step guards: no session, identified, capacity, keyless cap, foreign link, no human line', () => {
+    const URL = 'https://dchub.cloud/upgrade/h/abc.0123456789abcdef0123456789abcdef';
+    const wall = (extra = {}, line = HUMAN + ' this answer hid x; open ' + URL + ' to see.') => {
+      const sc = { ok: true, tool: 'get_grid_intelligence', free_preview_only: true, preview_is_partial: true,
+                   withheld: ['constraint_score'], _upgrade: { tier: 'free' }, human_url: URL, human_message: 'x', ...extra };
+      return { content: [{ type: 'text', text: JSON.stringify(sc) }, ...(line ? [{ type: 'text', text: line }] : [])], structuredContent: sc };
+    };
+    const base = { api_key: 'dch_live_wall_line_0001', session_id: '3f2a9c1e-7b4d-4e2a-9f10-5c6d7e8f9a0b',
+                   tier: 'free', platform: 'claude', client_ua: 'Claude-User' };
+    const run = (c, res) => S._ctxALS.run({ ...base, ...c }, () => S._wallEmailLineStep(res, 'get_grid_intelligence'));
+    expect(run({}, wall()).content[1].text).toBe(HUMAN + ' ' + R.wallEmailLineText(URL));   // the positive control
+    const tell = run({}, wall({}, 'Tell the user: "open ' + URL + '"'));
+    expect(tell.content[1].text).toBe('Tell the user: "' + R.wallEmailLineText(URL) + '"');  // the paywall contract's form
+    const same = (c, res) => expect(run(c, res)).toBe(res);
+    same({ session_id: '' }, wall());
+    same({ tier: 'identified' }, wall());
+    same({ email: 'a@b.co' }, wall());
+    same({}, wall({ _upgrade: { remaining_today: 0 } }));                 // capacity: checkout stays first
+    same({}, wall({ unlock_kind: 'email_cap' }));                         // keyless cap: its own email copy
+    same({}, wall({ human_url: 'https://evil.example/u/x' }));
+    same({}, wall({}, null));                                             // no human line: none is added
+    same({}, wall({}, HUMAN + ' a line with another link https://dchub.cloud/plans'));
   });
 });
 
