@@ -80,7 +80,7 @@ registry:
       - name: "get_disaster_risk"
         description: "Use this when the user asks about natural-hazard risk for a data center site (US lat/lon) — flood, wildfire, hurricane, earthquake, heat, drought, tornado, etc."
       - name: "get_energy_prices"
-        description: "Use this when the user asks about electricity or energy prices for data centers (\"what does power/gas cost in <ISO> right now?\"); price alone does not rank sites (the cheapest ISO may have no…"
+        description: "Use this when the user asks what electricity or natural gas costs for a data center in a US ISO or state (\"what does power cost in ERCOT?\", \"retail rate in Virginia?\"); price alone does not rank…"
       - name: "get_facility"
         description: "Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning…"
       - name: "get_facility_risk_delta"
