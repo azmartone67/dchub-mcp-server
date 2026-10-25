@@ -11448,8 +11448,9 @@ function _recordEmailAskShown(c, name, kind) {
 // unlock (lib/retention.mjs wallEmailLineText). It rewrites the line the wall already carries
 // (v1 '→ **For your human:**' or the paywall contract's 'Tell the user: "…"', whichever holds the
 // relay link) and the structuredContent copies of it; it never adds a line, so a wall with no human
-// line (r-relay-cap's repeat) is left as it is. Runs inside _oneLinkWallStep, once human_url is the
-// converged relay link; _wallOuterStep's short-link swap then carries the /u/ code into it.
+// line (r-relay-cap's repeat) keeps its text as it is; its structured copies still follow. Runs
+// inside _oneLinkWallStep, once human_url is the converged relay link; _wallOuterStep's short-link
+// swap then carries the /u/ code into it.
 // (mcp#1143 prepended a second line inside _returnNudgeStep, before any human_url existed: it never
 // fired live.) Fires only where the link page leads with the free email unlock: a grid / queue tool,
 // the email-full decision on, a caller with no email and no paid depth, a real session (the unlock
@@ -11492,12 +11493,18 @@ export function _wallEmailLineStep(result, name, env = process.env) {
       wrote = true;
       return { ...b, text: lines.join('\n') };
     });
-    if (!wrote) return result;
+    // The structured copies of the line follow it. On a repeat wall (r-relay-cap: the session's
+    // line was already sent, so the text carries none) human_message is still there for an agent
+    // to show ("show your user the human_message"), so a copy that carries this wall's link is
+    // rewritten too; the text stays as it is.
     const sc = { ...sc0 };
-    for (const k of ['human_message', 'user_message']) if (typeof sc[k] === 'string' && sc[k]) sc[k] = sentence;
+    let copied = false;
+    const take = (v) => typeof v === 'string' && !!v && (wrote || v.includes(base));
+    for (const k of ['human_message', 'user_message']) if (take(sc[k])) { sc[k] = sentence; copied = true; }
     const f = sc.for_your_human;
-    if (f && typeof f === 'object' && !Array.isArray(f) && typeof f.text === 'string') sc.for_your_human = { ...f, text: sentence };
-    return { ...result, content, structuredContent: sc };
+    if (f && typeof f === 'object' && !Array.isArray(f) && take(f.text)) { sc.for_your_human = { ...f, text: sentence }; copied = true; }
+    if (!wrote && !copied) return result;
+    return { ...result, content: wrote ? content : result.content, structuredContent: sc };
   } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
 export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }

@@ -103,7 +103,7 @@ async function post(headers, body) {
 }
 let ipN = 20, rpcId = 10;
 // The live check's shape: initialize, then tools/call, UA Claude-User, X-DCHub-QA: 1.
-async function wallCall(tool, key) {
+async function wallSession(key) {
   const h0 = { 'x-forwarded-for': `198.51.100.${ipN++}`, 'user-agent': 'Claude-User', 'x-dchub-qa': '1',
                ...(key ? { 'x-api-key': key } : {}) };
   const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
@@ -111,11 +111,14 @@ async function wallCall(tool, key) {
   const sid = init.headers.get('mcp-session-id');
   const h = { ...h0, ...(sid ? { 'mcp-session-id': sid } : {}) };
   if (sid) await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });
-  const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name: tool, arguments: { iso: 'MISO' } } });
-  const result = JSON.parse(body).result || {};
-  const text = (result.content || []).map((c) => c.text || '').join('\n');
-  return { sid, result, text, sc: result.structuredContent || {} };
+  return async (tool) => {
+    const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name: tool, arguments: { iso: 'MISO' } } });
+    const result = JSON.parse(body).result || {};
+    const text = (result.content || []).map((c) => c.text || '').join('\n');
+    return { sid, result, text, sc: result.structuredContent || {} };
+  };
 }
+const wallCall = async (tool, key) => (await wallSession(key))(tool);
 const humanLines = (t) => t.split('\n').filter((l) => l.includes(HUMAN) || /^\s*(\*\*)?Tell the user:/.test(l));
 
 describe('option A wall line, production transport', () => {
@@ -135,6 +138,25 @@ describe('option A wall line, production transport', () => {
         expect(R.countTellLines(r.text), at).toBe(0);
         expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
         expect(r.text, at).not.toMatch(/paid DC Hub plan|plans that include/);
+      }
+    }
+  });
+
+  it('a repeat wall in the same session (r-relay-cap) adds no line; its human_message carries the email wording', async () => {
+    for (const key of [undefined, FREE_KEY]) {
+      const call = await wallSession(key);
+      const first = await call('get_interconnection_queue');
+      expect(humanLines(first.text).length, String(key)).toBe(1);
+      for (const tool of ['get_interconnection_queue', 'get_grid_intelligence']) {
+        const at = tool + ' repeat ' + (key ? 'free key' : 'keyless');
+        const r = await call(tool);
+        expect(humanLines(r.text), at).toEqual([]);                 // the session's one line was already sent
+        expect(R.countTellLines(r.text), at).toBe(0);
+        expect(() => JSON.parse(r.result.content[0].text), at).not.toThrow();
+        const url = r.sc.human_url;
+        expect(url, at).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
+        expect(r.sc.human_message, at).toBe(R.wallEmailLineText(url));
+        expect(r.sc.for_your_human && r.sc.for_your_human.text, at).toBe(R.wallEmailLineText(url));
       }
     }
   });
