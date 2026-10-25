@@ -37,6 +37,10 @@ const OLD_EMAIL = 'dch_live_retention_old_email_0001';
 const OLD_ALERT = 'dch_live_retention_old_alert_0001';
 const OLD_UNKNOWN = 'dch_live_retention_old_unknown_01';
 const YOUNG = 'dch_live_retention_young_000001';
+// Keys only the email_ask_shown tests use: events from earlier tests are fire-and-forget
+// and can land late, so these tests count events for their OWN key only.
+const EV_ONE = 'dch_live_retention_event_once_01';
+const EV_OFF = 'dch_live_retention_event_off_001';
 const DAY = 86400000;
 const STANDING = {
   [OLD_NOEMAIL]: { found: true, age_days: 21, has_alert: false },
@@ -46,6 +50,8 @@ const STANDING = {
   [OLD_ALERT]:   { found: true, age_days: 30, has_alert: true },
   [OLD_UNKNOWN]: { found: true, age_days: 30 },                  // today's backend: no has_alert
   [YOUNG]:       { found: true, age_days: 0.1, has_alert: false },     // claimed this session
+  [EV_ONE]:      { found: true, age_days: 21, has_alert: false },
+  [EV_OFF]:      { found: true, age_days: 21, has_alert: false },
   // Not what the backend does for a missing key — here so the anonymous guard
   // is what keeps an anonymous caller quiet, not an empty standing answer.
   '':            { found: true, age_days: 30, has_alert: false },
@@ -378,33 +384,35 @@ describe('returning-key nudge', () => {
 // line: the denominator for the bind readout. Never for a quiet call, never
 // with the raw key leaving except to the internal endpoint.
 describe('email_ask_shown event', () => {
-  const settle = () => new Promise((r) => setTimeout(r, 150));
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  const mine = (k) => askEvents.filter((e) => e.body && e.body.api_key === k);
   it('one event per ask, none for the quiet repeat, none for an ineligible key', async () => {
     process.env.DCHUB_RETURN_NUDGE = 'on';
-    askEvents.length = 0;
-    const s = await session('/mcp', 'Claude Code', OLD_NOEMAIL);
+    const s = await session('/mcp', 'Claude Code', EV_ONE);
     const r = await s.call(TOOL, { since: '7d' });
     expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\. Add an email/);
     await settle();
-    expect(askEvents.length).toBe(1);
-    const e = askEvents[0];
+    expect(mine(EV_ONE).length).toBe(1);
+    const e = mine(EV_ONE)[0];
     expect(e.key).toBe(SECRET);
-    expect(e.body).toMatchObject({ event: 'email_ask_shown', tool: TOOL, kind: 'no_email', api_key: OLD_NOEMAIL, is_qa: false });
+    expect(e.body).toMatchObject({ event: 'email_ask_shown', tool: TOOL, kind: 'no_email', api_key: EV_ONE, is_qa: false });
     await s.call(TOOL, { since: '7d' });
+    await settle();
+    expect(mine(EV_ONE).length).toBe(1);
+    const before = mine(OLD_ALERT).length;
     await (await session('/mcp', 'Claude Code', OLD_ALERT)).call(TOOL, { since: '7d' });
     await settle();
-    expect(askEvents.length).toBe(1);
+    expect(mine(OLD_ALERT).length).toBe(before);
   });
 
   it('kill switch DCHUB_EMAIL_ASK_EVENT=0: the line still shows, no event', async () => {
     process.env.DCHUB_RETURN_NUDGE = 'on';
     process.env.DCHUB_EMAIL_ASK_EVENT = '0';
     try {
-      askEvents.length = 0;
-      const r = await (await session('/mcp', 'Claude Code', OLD_NOEMAIL)).call(TOOL, { since: '7d' });
+      const r = await (await session('/mcp', 'Claude Code', EV_OFF)).call(TOOL, { since: '7d' });
       expect(r.first.split('\n')[0]).toMatch(/^Tell the user: "Welcome back\./);
       await settle();
-      expect(askEvents.length).toBe(0);
+      expect(mine(EV_OFF).length).toBe(0);
     } finally { delete process.env.DCHUB_EMAIL_ASK_EVENT; }
   });
 
