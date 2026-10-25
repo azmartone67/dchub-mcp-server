@@ -25292,6 +25292,17 @@ function _oneLinkValue(v, human, key, depth, seen) {
   return out;
 }
 const _ONE_LINK_POINTER_OBJECT_KEYS = new Set(['type', 'method', 'prompt', 'label', 'hint', 'then', 'note', 'title', 'text', 'description', 'cta', 'kind']);
+// The person's line ('→ **For your human:**' at the start of a line, so never inside block 0's JSON)
+// points at the one link: any other page link on it becomes it. The contract's 'Tell the user: "…"'
+// arm needs none of this: it replaces the content, so its line is the first pointer anyway.
+function _personLineToLink(t, human) {
+  if (typeof t !== 'string' || !t.includes('dchub.cloud/')) return t;
+  const hb = _linkBase(human);
+  return t.split('\n').map((l) => {
+    if (!l.trimStart().startsWith(HUMAN_FIRST_MARKER)) return l;
+    return l.replace(_ONE_LINK_RE_G, (u) => (_linkBase(u) === hb || _keepsOwnLink(u) ? u : human));
+  }).join('\n');
+}
 function _oneLinkText(t, human, seen) {
   if (typeof t !== 'string') return t;
   if (!t.includes('dchub.cloud/') && !_MPP_PROSE_RE.test(t)) return t;
@@ -25522,9 +25533,14 @@ function _oneLinkWallStepCore(result, name) {
     const others = (s.match(_ONE_LINK_RE_G) || []).some((u) => _linkBase(u) !== hb && !_keepsOwnLink(u));
     if (!others && !_MPP_PROSE_RE.test(s)) return result;
     const sc = _oneLinkValue(sc0, human, '', 0);
+    // The person's line carries the one link, whichever link it was built with: on a high-intent
+    // claim it is the claim's own human view (/relay/<token>), so without this the wall's 🔒 header
+    // (earlier in the text) took the link and the person's line kept only a phrase naming it.
+    const content0 = result.content.map((b) => (b && b.type === 'text' && typeof b.text === 'string')
+      ? { ...b, text: _personLineToLink(b.text, human) } : b);
     // "written once" counts the PROSE (what a person reads), not a copy inside block 0's JSON data
-    const seen = { has: result.content.some((b) => b && typeof b.text === 'string' && _proseOf(b.text).includes(hb)) };
-    const content = result.content.map((b) => (b && b.type === 'text' && typeof b.text === 'string')
+    const seen = { has: content0.some((b) => b && typeof b.text === 'string' && _proseOf(b.text).includes(hb)) };
+    const content = content0.map((b) => (b && b.type === 'text' && typeof b.text === 'string')
       ? { ...b, text: _oneLinkText(b.text, human, seen) } : b);
     // A text-only reader (hosted clients) must still find the one link: a repeat wall whose only
     // link was a bare /go/c field in block 0's JSON (r-relay-cap re-sends no relay line) would
