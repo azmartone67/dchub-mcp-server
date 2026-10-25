@@ -14,7 +14,7 @@ import { createServer } from 'node:http';
 import net from 'node:net';
 import * as R from '../lib/retention.mjs';
 import { __test as OAUTH } from '../oauth.mjs';
-import { _freeTierRuleText, _rungNum } from '../lib/tier-canon.mjs';
+import { _freeTierRuleText, _rungNum, _fullAnswersPerToolPerDay } from '../lib/tier-canon.mjs';
 
 const realConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {
@@ -191,7 +191,11 @@ describe('claim_free_key success leads with the email ask', () => {
     const s = await session('/mcp', 'Claude Code');
     const r = await s.call('claim_free_key', { client_name: 'retention-test' });
     const lines = r.first.split('\n');
-    expect(lines[0]).toBe('Tell the user: "I set up a free DC Hub key. If you want it to work in future chats, tell me an email to tie it to. It\'s used only for key recovery and receipts unless you also ask for alerts."');
+    // Option B (owner 2026-10-25): the ask names what the email opens; the number is the canon's.
+    expect(_fullAnswersPerToolPerDay('identified')).toBeGreaterThan(0);
+    expect(lines[0]).toBe('Tell the user: "I set up a free DC Hub key. For grid, queue and market data it shows previews only. '
+      + 'Tell me your email and it unlocks ' + _fullAnswersPerToolPerDay('identified') + ' full answers a day on those, '
+      + 'and keeps working in your future chats. Your email is used only for this key and receipts."');
     expect(lines[1]).toBe('(agent: pass an email only if the user typed it here, then call bind_email. Hosted clients: give the user connect_url to paste as the connector URL.)');
     expect(tellCount(r.text)).toBe(1);
     expect(r.text).not.toContain('One free step so this key is still yours tomorrow');   // one email ask, not two
@@ -420,6 +424,66 @@ describe('email_ask_shown event', () => {
     expect(R.emailAskEventBody({ c: {}, name: 'x', kind: 'no_email' })).toBeNull();
     expect(R.emailAskEventBody({ c: { api_key: 'k' }, name: 'x', kind: 'other' })).toBeNull();
     expect(R.emailAskEventBody({ c: { api_key: 'k' }, name: 'x', kind: 'moved' }).kind).toBe('moved');
+  });
+});
+
+// ── Option B kill switch + option A's wall line (owner 2026-10-25) ───────────
+describe('claim ask: kill switch restores the recovery wording', () => {
+  it('DCHUB_CLAIM_BENEFIT_ASK=0', async () => {
+    process.env.DCHUB_CLAIM_BENEFIT_ASK = '0';
+    try {
+      const r = await (await session('/mcp', 'Claude Code')).call('claim_free_key', { client_name: 'retention-test' });
+      expect(r.first.split('\n')[0]).toBe('Tell the user: "' + R.CLAIM_TELL_TEXT + '"');
+    } finally { delete process.env.DCHUB_CLAIM_BENEFIT_ASK; }
+  });
+  it('no canon number: the line drops it rather than guess', () => {
+    for (const bad of [null, undefined, 0, -1, 2.5, 'ten']) {
+      expect(R.claimBenefitText(bad), String(bad)).toContain('it unlocks full answers on those');
+    }
+  });
+});
+
+describe('wall email line (option A, agent half)', () => {
+  const URL = 'https://dchub.cloud/u/abc123';
+  const wall = (extra = {}) => {
+    // The live shape (production get_grid_intelligence, keyless, 2026-10-25): preview flags,
+    // withheld fields, the _upgrade pointer and the human_url.
+    const sc = { ok: true, tool: 'get_grid_intelligence', free_preview_only: true, preview_is_partial: true,
+                 withheld: ['constraint_score'], _upgrade: { tier: 'free' }, human_url: URL, ...extra };
+    return { content: [{ type: 'text', text: JSON.stringify(sc) }], structuredContent: sc };
+  };
+  const base = { api_key: 'dch_live_wall_line_0001', session_id: '3f2a9c1e-7b4d-4e2a-9f10-5c6d7e8f9a0b',
+                 tier: 'free', platform: 'claude', client_ua: 'Claude-User' };
+  const run = (c, res, name = 'get_grid_intelligence', env = {}) =>
+    S._ctxALS.run({ ...base, ...c }, () => S._wallEmailTellStep(res, name, env));
+  const first = (res) => res.content[0].text.split('\n')[0];
+
+  it('a free, email-less caller on a grid / queue depth wall gets the one line', () => {
+    for (const tool of R.WALL_EMAIL_TELL_TOOLS) {
+      const out = run({}, wall({ tool }), tool);
+      expect(first(out), tool).toBe(R.wallEmailTellLine(URL));
+      expect(tellCount(out.content[0].text)).toBe(1);
+    }
+  });
+
+  it('never: email bound, identified, no session, other tools, capacity wall, existing Tell line, switch off', () => {
+    const quiet = (out) => expect(out.content[0].text).not.toMatch(/held back part of this answer/);
+    quiet(run({ email: 'a@b.co' }, wall()));
+    quiet(run({ tier: 'identified' }, wall()));
+    quiet(run({ session_id: '' }, wall()));
+    quiet(run({}, wall({ tool: 'get_market_intel' }), 'get_market_intel'));   // its page still sells a plan
+    quiet(run({}, wall({ _upgrade: { remaining_today: 0 } })));               // capacity: checkout stays first
+    quiet(run({}, wall({ human_url: 'https://evil.example/u/x' })));
+    const told = wall(); told.content[0].text = 'Tell the user: "x"\n\n' + told.content[0].text;
+    expect(run({}, told)).toBe(told);
+    quiet(run({}, wall(), 'get_grid_intelligence', { DCHUB_WALL_EMAIL_TELL: '0' }));
+  });
+
+  it('with the returning-key nudge on, the response still carries exactly one Tell line', async () => {
+    const out = await S._ctxALS.run({ ...base }, () =>
+      S._returnNudgeStep(wall(), 'get_grid_intelligence', { DCHUB_RETURN_NUDGE: 'on' }));
+    expect(first(out)).toBe(R.wallEmailTellLine(URL));
+    expect(tellCount(out.content[0].text)).toBe(1);
   });
 });
 
