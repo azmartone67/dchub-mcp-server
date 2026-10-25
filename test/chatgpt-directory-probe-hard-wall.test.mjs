@@ -27,7 +27,7 @@
 // who is still let through: a keyless caller who is paying.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
-import { DIRECTORY_TOOLS } from '../lib/chatgpt-directory.mjs';
+import { CHATGPT_TOOLS as DIRECTORY_TOOLS } from '../lib/chatgpt-directory.mjs';
 import { probeHits, GUESS_ARGS, classifyResponse } from '../scripts/probe-chatgpt-directory.mjs';
 import { MPP_CRED_KEY } from '../mpp-hook.mjs';
 

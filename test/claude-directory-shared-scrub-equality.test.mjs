@@ -47,7 +47,10 @@ describe('the exported surface is unchanged', () => {
 function withoutHeld(result) {
   const held = NEW.DIRECTORY_HELD_INPUTS || {};
   const text = NEW.DIRECTORY_HELD_PARAM_TEXT || {};
-  return { ...result, tools: (result.tools || []).map((t) => {
+  // 2026-10-25: CHATGPT_ONLY_REMOVED leaves the ChatGPT profile on purpose (OpenAI tool scan);
+  // drop it from the frozen copy's input too, so the rest must still match byte for byte.
+  const chatgptOnly = new Set(NEW.CHATGPT_ONLY_REMOVED || []);
+  return { ...result, tools: (result.tools || []).filter((t) => !chatgptOnly.has(t.name)).map((t) => {
     if (!t.inputSchema || !t.inputSchema.properties) return t;
     let properties = t.inputSchema.properties;
     // 2026-10-21: parameter text held at the reviewed wording (DIRECTORY_HELD_PARAM_TEXT).

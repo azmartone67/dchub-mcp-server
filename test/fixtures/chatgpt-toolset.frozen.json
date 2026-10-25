@@ -1,8 +1,8 @@
 {
- "_readme": "frz-chatgpt-toolset (owner, 2026-09-26): the /mcp/chatgpt tools/list as submitted to the OpenAI app directory (DC Hub 1.0.0, submitted 2026-09-25 ~18:06 PT, in review). Names, count, titles, descriptions, annotations and input schemas are frozen while the app is in review: adding, removing or renaming a tool, or changing any of these, forces a new review. Captured from live https://dchub.cloud/mcp/chatgpt tools/list. To change it deliberately after the review closes, regenerate this file in the same PR and say so. Regenerated 2026-10-09 after the 1.0.0 rejection (owner): research_task removed (it queues a job, so it is not read-only); count 66. 2026-10-09 (owner): openWorldHint true on the third-party-backed reads for the 1.0.1 resubmission. execute_plan openWorldHint true too (it chains those reads). 2026-10-09 (owner): openWorldHint true on the tools whose backend route calls a third-party host at call time. 2026-10-12 (owner): openWorldHint true on search, semantic_search and search_intelligence: the query text is sent to the embeddings provider (Mistral AI) named in /privacy.",
+ "_readme": "frz-chatgpt-toolset (owner, 2026-09-26): the /mcp/chatgpt tools/list as submitted to the OpenAI app directory (DC Hub 1.0.0, submitted 2026-09-25 ~18:06 PT, in review). Names, count, titles, descriptions, annotations and input schemas are frozen while the app is in review: adding, removing or renaming a tool, or changing any of these, forces a new review. Captured from live https://dchub.cloud/mcp/chatgpt tools/list. To change it deliberately after the review closes, regenerate this file in the same PR and say so. Regenerated 2026-10-09 after the 1.0.0 rejection (owner): research_task removed (it queues a job, so it is not read-only); count 66. 2026-10-09 (owner): openWorldHint true on the third-party-backed reads for the 1.0.1 resubmission. execute_plan openWorldHint true too (it chains those reads). 2026-10-09 (owner): openWorldHint true on the tools whose backend route calls a third-party host at call time. 2026-10-12 (owner): openWorldHint true on search, semantic_search and search_intelligence: the query text is sent to the embeddings provider (Mistral AI) named in /privacy. 2026-10-25 (owner): get_backup_status removed for the new 1.0.1 plugin submission; the OpenAI Plugins tool scan flagged its name as inconsistent with its behavior (it reports data-feed freshness). count 65.",
  "captured_from": "https://dchub.cloud/mcp/chatgpt tools/list",
- "captured_at": "2026-09-26; research_task removed 2026-10-09",
- "count": 66,
+ "captured_at": "2026-09-26; research_task removed 2026-10-09; get_backup_status removed 2026-10-25",
+ "count": 65,
  "tools": [
   {
    "name": "ai_capacity_index",
@@ -420,25 +420,6 @@
    },
    "annotations": {
     "title": "AI Agent Registry",
-    "readOnlyHint": true,
-    "destructiveHint": false,
-    "idempotentHint": true,
-    "openWorldHint": false
-   },
-   "execution": {
-    "taskSupport": "forbidden"
-   }
-  },
-  {
-   "name": "get_backup_status",
-   "title": "Platform Health",
-   "description": "Get per-feed freshness for DC Hub's data ingest: health, record count and refresh interval for each feed.",
-   "inputSchema": {
-    "type": "object",
-    "properties": {}
-   },
-   "annotations": {
-    "title": "Platform Health",
     "readOnlyHint": true,
     "destructiveHint": false,
     "idempotentHint": true,
