@@ -231,7 +231,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
          freeDecisionClause, FREE_DECISION_CLAUSE_PREVIEW_ONLY } from './lib/free-decision-taste.mjs';
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
-         WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailTellLine as _retWallEmailTellLine,
+         WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailLineText as _retWallEmailLineText,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
@@ -11393,9 +11393,6 @@ async function _keyStandingFull(apiKey) {
   return body;
 }
 export async function _returnNudgeStep(result, name, env = process.env) {
-  // Option A (owner 2026-10-25): a grid / queue wall's email line goes first, so the
-  // nudge below sees a Tell-the-user line and stays out (one per response).
-  result = _wallEmailTellStep(result, name, env);
   try {
     if (!_retNudgeEnabled(env)) return result;               // flag off: the same object, untouched
     if (!result || result.isError || !Array.isArray(result.content)) return result;
@@ -11447,17 +11444,24 @@ function _recordEmailAskShown(c, name, kind) {
     }).catch(() => {});
   } catch (_) { /* telemetry never touches a response */ }
 }
-// The wall's email line (lib/retention.mjs WALL_EMAIL_TELL_TOOLS / wallEmailTellLine). Fires only
-// where the link page leads with the free email unlock: a grid / queue tool, the email-full
-// decision on, a caller with no email and no paid depth, a real session (the unlock binds the
-// email onto it), a relay wall that is not a capacity or site-runs wall, a dchub.cloud human_url,
-// and no Tell-the-user line already on the response.
-export function _wallEmailTellStep(result, name, env = process.env) {
+// Option A, the agent half (owner 2026-10-25): the wall's ONE human line names the free email
+// unlock (lib/retention.mjs wallEmailLineText). It rewrites the line the wall already carries
+// (v1 '→ **For your human:**' or the paywall contract's 'Tell the user: "…"', whichever holds the
+// relay link) and the structuredContent copies of it; it never adds a line, so a wall with no human
+// line (r-relay-cap's repeat) is left as it is. Runs inside _oneLinkWallStep, once human_url is the
+// converged relay link; _wallOuterStep's short-link swap then carries the /u/ code into it.
+// (mcp#1143 prepended a second line inside _returnNudgeStep, before any human_url existed: it never
+// fired live.) Fires only where the link page leads with the free email unlock: a grid / queue tool,
+// the email-full decision on, a caller with no email and no paid depth, a real session (the unlock
+// binds the email onto it), a relay wall that is not a capacity, site-runs or keyless-cap wall (that
+// one has its own free email copy), and a dchub.cloud human_url. A wall's isError is a transport
+// choice (_wallIsError), so it is not read; a real failure is _isFailureEnvelope.
+export function _wallEmailLineStep(result, name, env = process.env) {
   try {
     if (!_retWallEmailTellOn(env)) return result;
     if (!_RET_WALL_EMAIL_TOOLS.includes(name) || !emailFullDecisionOn()) return result;
-    if (!result || result.isError || !Array.isArray(result.content)) return result;
-    if (_isFailureEnvelope(result) || _retHasTellLine(result)) return result;
+    if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
+    if (_isFailureEnvelope(result)) return result;
     const sc0 = result.structuredContent;
     if (!sc0 || typeof sc0 !== 'object' || Array.isArray(sc0)) return result;
     const c = getCtx() || {};
@@ -11467,12 +11471,34 @@ export function _wallEmailTellStep(result, name, env = process.env) {
     const sid = c.session_id || '';
     if (!sid || sid === 'no-session') return result;
     if (!_isRelayWall(sc0, c)) return result;
+    const up = (sc0._upgrade && typeof sc0._upgrade === 'object') ? sc0._upgrade : {};
+    if (sc0.unlock_kind === 'email_cap' || up.unlock_kind === 'email_cap') return result;
     const kind = _wallKindFor(sc0, c, name);
     if (kind === WALL_KIND_CAPACITY || kind === WALL_KIND_SITERUNS) return result;
-    const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\//.test(sc0.human_url) ? sc0.human_url : '';
+    const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\/\S+$/.test(sc0.human_url) ? sc0.human_url : '';
     if (!url) return result;
-    return _retPrependTellLine(result, _retWallEmailTellLine(url));
-  } catch (_) { return result; }
+    const base = _linkBase(url);
+    const sentence = _retWallEmailLineText(url);
+    let wrote = false;
+    const content = result.content.map((b) => {
+      if (wrote || !b || b.type !== 'text' || typeof b.text !== 'string') return b;
+      const lines = b.text.split('\n');
+      const k = lines.findIndex((l) => l.includes(base)
+        && (l.includes(HUMAN_FIRST_MARKER) || /^Tell the user: "/.test(l)));
+      if (k < 0) return b;
+      const l = lines[k];
+      const at = l.indexOf(HUMAN_FIRST_MARKER);
+      lines[k] = at >= 0 ? l.slice(0, at) + HUMAN_FIRST_MARKER + ' ' + sentence : 'Tell the user: "' + sentence + '"';
+      wrote = true;
+      return { ...b, text: lines.join('\n') };
+    });
+    if (!wrote) return result;
+    const sc = { ...sc0 };
+    for (const k of ['human_message', 'user_message']) if (typeof sc[k] === 'string' && sc[k]) sc[k] = sentence;
+    const f = sc.for_your_human;
+    if (f && typeof f === 'object' && !Array.isArray(f) && typeof f.text === 'string') sc.for_your_human = { ...f, text: sentence };
+    return { ...result, content, structuredContent: sc };
+  } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
 export function _resetReturnNudgeState() { _NUDGE_DAY.clear(); _nudgeStandingCache.clear(); }
 const _returnRewardDay = new Map();   // api_key:day -> used (1 bonus/key/day)
@@ -25466,7 +25492,8 @@ export function _oneLinkWallStep(result, name) {
 }
 // intent_answer.relay is attached the same way (lib/intent-answers.mjs), on the finished result.
 function _oneLinkWallStepInner(result, name) {
-  return attachIntentRelay(_oneLinkWallStepCore(result, name));
+  // Option A (owner 2026-10-25): the grid / queue wall's human line, once human_url is final.
+  return attachIntentRelay(_wallEmailLineStep(_oneLinkWallStepCore(result, name), name));
 }
 function _oneLinkWallStepCore(result, name) {
   try {
