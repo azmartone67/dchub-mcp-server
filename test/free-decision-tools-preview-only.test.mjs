@@ -674,7 +674,9 @@ describe('get_energy_prices anonymous preview carries the labelled taste (Grok 1
     const sc = r.sc;
     expect(sc.taste.headline).toMatchObject({ value: 23.41, unit: 'cents/kWh', as_of: null, averaging_period: '2026' });
     expect(sc.withheld.map((w) => w.section)).toContain('rate_range');
-    expect(JSON.stringify(sc)).not.toMatch(/30\.1|18\.2/);
+    // The withheld min/max (fixture 18.2 / 30.1) as whole numbers: a bare /30\.1/ also matched
+    // retrieved_at whenever the clock read hh:mm:30.1xx (PR #1146 smoke, 05:26:30.103Z).
+    expect(JSON.stringify(sc)).not.toMatch(/(?<![\d.])(?:30\.1|18\.2)(?![\d])/);
     const msg = (sc._upgrade && sc._upgrade.message) || '';
     expect(msg).toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options/);   // item 1 leftover (2026-10-17)
     expect(msg).not.toMatch(/\$|Developer|Pro\b/);
