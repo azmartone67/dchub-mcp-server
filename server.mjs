@@ -233,7 +233,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailLineText as _retWallEmailLineText,
-         wallEmailTellFreekeyOn as _retWallEmailTellFreekeyOn,
+         wallEmailTellFreekeyOn as _retWallEmailTellFreekeyOn, wallEmailFreekeyLineText as _retWallEmailFreekeyLineText,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
@@ -11556,7 +11556,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\/\S+$/.test(sc0.human_url) ? sc0.human_url : '';
     if (!url) return result;
     const base = _linkBase(url);
-    const sentence = _retWallEmailLineText(url);
+    const sentence = gridQueue ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
     let wrote = false;
     const content = result.content.map((b) => {
       if (wrote || !b || b.type !== 'text' || typeof b.text !== 'string') return b;

@@ -494,7 +494,9 @@ describe('wall email line (option A, agent half)', () => {
 
   it('the line is the owner-approved wording, verbatim', () => {
     expect(R.wallEmailLineText('https://dchub.cloud/u/abc234')).toBe(
-      'DC Hub held back part of this answer. Open this link and enter your email to get it free: https://dchub.cloud/u/abc234');
+      "DC Hub held back part of this answer. Reply with your email and I'll unlock the full data free, "
+      + 'in this chat and future ones. Your email is used only for this key and receipts. '
+      + 'Or open this link: https://dchub.cloud/u/abc234');
   });
 
   it('never: email bound, get_market_intel, kill switch; the wall keeps its own one line', async () => {

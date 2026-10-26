@@ -161,9 +161,11 @@ describe('option A line on a keyless free-key wall, production transport', () =>
     expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
     expect(JSON.parse(b0).human_url).toBe(url);
     expect(freekeyMinted()).toBe(true);                       // the page this line points at leads with the email
-    expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailLineText(url)]);
+    expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailFreekeyLineText(url)]);
     expect(R.countTellLines(r.text)).toBe(0);
-    expect(r.sc.human_message).toBe(R.wallEmailLineText(url));
+    expect(r.sc.human_message).toBe(R.wallEmailFreekeyLineText(url));
+    // No in-chat promise: this wall gives the agent no bind_email instruction.
+    expect(r.text).not.toMatch(/Reply with your email/);
     expect(r.text).not.toMatch(/lowest plan that returns them|paid DC Hub plan|plans that include|\$\d/);
   });
 
@@ -210,6 +212,13 @@ describe('option A line on a keyless free-key wall, production transport', () =>
   it('get_market_intel (preview-only on every free tier, its page sells a plan) gets no email line', async () => {
     const r = await wallCall('get_market_intel');
     expect(r.text).not.toMatch(/held back part of this answer/);
+  });
+});
+
+describe('wallEmailFreekeyLineText', () => {
+  it('is the 10-25 wording, verbatim (the line the owner OK\'d for free-key walls)', () => {
+    expect(R.wallEmailFreekeyLineText('https://dchub.cloud/u/abcdef')).toBe(
+      'DC Hub held back part of this answer. Open this link and enter your email to get it free: https://dchub.cloud/u/abcdef');
   });
 });
 
