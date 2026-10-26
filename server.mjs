@@ -220,6 +220,7 @@ import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectori
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
+import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
 // Item 1 (owner 2026-10-16): the siting tools follow the email (no email = the keyless preview).
 import { NOEMAIL_PREVIEW_TOOLS, SITING_MONTHLY_TOOLS, SITING_FREE_PLANS_PER_MONTH, noEmailPreviewOn,
          sitingFreeClause, sitingFreeRunNote } from './lib/siting-email-seat.mjs';
@@ -31888,6 +31889,27 @@ app.get('/internal/short-link', (req, res) => {
   res.json(_shortLinkStats());
 });
 
+// Challenge state for our own sentinel probe (2026-10-25, lib/challenge-state.mjs):
+// is the anonymous-connector challenge ON, and how much of THIS caller's
+// CHALLENGE_MAX is used. POST under /mcp/ because the zone worker answers every
+// GET below /mcp itself; behind X-Internal-Key; names no IP or session.
+app.post('/mcp/internal/challenge-state', (req, res) => {
+  if (!INTERNAL_KEY || req.headers['x-internal-key'] !== INTERNAL_KEY) return res.sendStatus(403);
+  res.set('Cache-Control', 'no-store');
+  const ck = _challengeCallerKey(req.headers);
+  res.json(_challengeState({
+    workosEnabled: _workosEnabled(),
+    killSwitch: /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_OAUTH_CHALLENGE_DISABLE || '')),
+    claudeAllowed: _challengeClientAllowed('claude-ai'),
+    afterN: CHALLENGE_AFTER_N,
+    max: CHALLENGE_MAX,
+    issued: _challengesIssued(ck.key),
+    callerKeySource: ck.source,
+    replica: process.env.RAILWAY_REPLICA_ID || null,
+    uptimeS: Math.round(process.uptime()),
+  }));
+});
+
 // Lightweight stats endpoint for our own dashboard
 app.get('/internal/sessions', (req, res) => {
   if (req.headers['x-internal-key'] !== INTERNAL_KEY) return res.sendStatus(403);
@@ -32887,9 +32909,8 @@ app.post(MCP_PATHS, async (req, res) => {
     // survive the one-call-per-session pattern it exists to protect, and a
     // coarse key here fails OPEN (serves more). Same expression as `clientIp`
     // below, which is not in scope yet at this point in the handler.
-    const _chCallerKey = (req.headers['x-dc-client-ip'] || '').trim()
-                      || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
-                      || sessionId || '';
+    // lib/challenge-state.mjs: one expression shared with /mcp/internal/challenge-state.
+    const _chCallerKey = _challengeCallerKey(req.headers).key || sessionId || '';
     // r-claude-directory: the anonymous-connector challenge is the /mcp
     // experiment under readout; /mcp/claude does not run it. Keyless callers
     // there are served (authless with an optional key); OAuth starts from the
