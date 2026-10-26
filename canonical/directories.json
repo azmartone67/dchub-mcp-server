@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-10-24T08:00:00Z",
+  "updated_at": "2026-10-26T17:30:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -371,6 +371,18 @@
       "verified_at": "2026-10-15",
       "added_at": "2026-10-15",
       "note": "PR #218 merged 2026-10-15 15:17 MST by mike1858; DC Hub under MCP Servers (README L348, 94 tools, gemini extensions install line) confirmed 2026-10-15 16:17 PT"
+    },
+    {
+      "id": "etewiah-awesome-real-estate",
+      "name": "etewiah awesome-real-estate",
+      "status": "live",
+      "listing_url": "https://github.com/etewiah/awesome-real-estate#readme",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-26",
+      "added_at": "2026-10-26",
+      "note": "README entry 'DC Hub' under Global APIs; PR #96 merged 2026-10-24, entry confirmed in README 2026-10-26"
     },
     {
       "id": "twzrd-sol",
