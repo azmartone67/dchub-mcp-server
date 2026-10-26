@@ -213,7 +213,7 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
-import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity } from './lib/keyless-wall.mjs';
+import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -643,19 +643,34 @@ function _relayWallKindFor(opts) {
 // decided after an early mint gets a fresh token (_wallKindStep swaps the early copies to it).
 // Kept out of buildHumanRelay's body on purpose: test/wall-exits scans its first 3000
 // characters for the render directive.
+// Option D (DCHUB_WALL_ALERT_LINE, default off): the call's market rides LAST as |m-<slug>, and
+// is part of the memo key's base, so two calls naming different markets never share a token.
+// [memo key, token tail, memo base (tool + market)].
+function _relayMarketField() {
+  try {
+    if (!_wallAlertLineOn()) return '';
+    const m = (getCtx() && getCtx()._wallMarket) || '';
+    return (typeof m === 'string' && _WALL_MARKET_SLUG_RE.test(m)) ? 'm-' + m : '';
+  } catch (_) { return ''; }
+}
+function _wallAlertMarket(c) {
+  try { return (_wallAlertLineOn() && c && typeof c._wallMarket === 'string') ? c._wallMarket : ''; } catch (_) { return ''; }
+}
 function _relayMintKey(toolName, opts) {
   const kind = _relayWallKindFor(opts);
   const kref = _relayKeyRef();
-  return [(toolName || '') + (kind && '\u0001' + kind), (kref && '|' + kref) + (kind && '|' + kind)];
+  const mf = _relayMarketField();
+  const base = (toolName || '') + (mf && '\u0002' + mf);
+  return [base + (kind && '\u0001' + kind), (kref && '|' + kref) + (kind && '|' + kind) + (mf && '|' + mf), base];
 }
 // The memo entry for this mint: the exact key, else — for a mint that names no kind — the
 // tool's stamped entry (#833 prefills the memo with { wall: 'depth' } and later reads by tool
 // name alone; a kind-blind mint must reuse that token, not mint a second, unstamped one).
-function _relayMemoHit(memo, key, toolName) {
+function _relayMemoHit(memo, key, base) {
   if (!memo) return undefined;
   if (memo[key]) return memo[key];
   if (key.includes('\u0001')) return undefined;
-  const pre = Object.keys(memo).find((k) => k.startsWith((toolName || '') + '\u0001'));
+  const pre = Object.keys(memo).find((k) => k.startsWith((base || '') + '\u0001'));
   return pre ? memo[pre] : undefined;
 }
 // The signed relay URL for one payload line, for the re-stamp (_restampRelayUrl). Same bytes
@@ -739,8 +754,8 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     // carried in both channels there, so it neither reads nor fills the memo.
     const _offer = (opts && opts.offer === PRO_TRIAL_OFFER) ? PRO_TRIAL_OFFER : '';
     const _memo = _offer ? null : _relayMemo();
-    const [_mk, _tail] = _relayMintKey(toolName, opts);
-    const _hit = _relayMemoHit(_memo, _mk, toolName);
+    const [_mk, _tail, _mb] = _relayMintKey(toolName, opts);
+    const _hit = _relayMemoHit(_memo, _mk, _mb);
     if (_hit) return _hit;
     const _raw = `${sessionId || ''}|${toolName || ''}|${tier || 'free'}|${Math.floor(Date.now() / 1000)}` + _tail;
     const _payload = Buffer.from(_raw).toString('base64url');
@@ -20982,6 +20997,7 @@ function trackedTool(srv, name, description, schema, handler) {
     const t0 = Date.now();
     let status = 'ok';
     try { c._paidBlocked = false; c._emailAsk = ''; } catch (_) { /* set by signalPaywall / the wall builders (option E) for this call only */ }
+    try { c._wallMarket = _wallMarketSlug(args); } catch (_) { /* option D: this call's market; read only behind DCHUB_WALL_ALERT_LINE (_relayMarketField, _wallAlertMarket) */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
@@ -21307,7 +21323,7 @@ function trackedTool(srv, name, description, schema, handler) {
         if (_capLink) {
           const _exitH = _capExitShown(_capWallIdentity(c));   // option C: no exit on the day's first wall
           const _cw = _keylessCapEmailResult({ name, link: _capLink, isError: _wallIsError(), copyVersion: WALL_COPY_VERSION,
-            exitShown: _exitH, perDay: FREE_TIER.identified_calls_per_day,
+            exitShown: _exitH, perDay: FREE_TIER.identified_calls_per_day, market: _wallAlertMarket(c),
             base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
                     limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
           if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
@@ -22782,7 +22798,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             if (_capLinkS) {
               const _exitS = _capExitShown(_capWallIdentity(c));   // option C: no exit on the day's first wall
               const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS, exitShown: _exitS,
-                                                                 perDay: FREE_TIER.identified_calls_per_day });
+                                                                 perDay: FREE_TIER.identified_calls_per_day,
+                                                                 market: _wallAlertMarket(c) });
               _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
             }
@@ -25214,7 +25231,7 @@ function _relayTokenFields(url) {
     const m = /\/upgrade\/h\/([A-Za-z0-9_-]+)\./.exec(String(url || ''));
     if (!m) return null;
     const f = Buffer.from(m[1], 'base64url').toString().split('|');
-    return f.length >= 4 && f.length <= 6 ? f : null;
+    return f.length >= 4 && f.length <= 7 ? f : null;   // 7: |pk- |w- |m- (option D)
   } catch (_) { return null; }
 }
 export function _relayTokenKind(url) {
@@ -25230,7 +25247,9 @@ function _restampRelayUrl(url, kind) {
     const f = _relayTokenFields(url);
     if (!f) return '';
     const kref = f.slice(4).find((x) => /^pk-[0-9a-f]{64}$/.test(x)) || '';
-    const raw = `${f[0]}|${f[1]}|${f[2]}|${Math.floor(Date.now() / 1000)}` + (kref ? '|' + kref : '') + '|' + kind;
+    const mf = f.slice(4).find((x) => /^m-[a-z0-9][a-z0-9-]{0,47}$/.test(x)) || '';   // option D: stays last
+    const raw = `${f[0]}|${f[1]}|${f[2]}|${Math.floor(Date.now() / 1000)}` + (kref ? '|' + kref : '') + '|' + kind
+      + (mf ? '|' + mf : '');
     return _signRelayPayload(raw);
   } catch (_) { return ''; }
 }
@@ -33777,6 +33796,8 @@ export { shapeScoreboardUsRow, SCOREBOARD_RENEWABLE_DEFINITION, SCOREBOARD_STALE
 // vs durable — is the ONLY input that decides whether the meter may be shown,
 // and it is not reachable any other way from a unit test.
 export { _buildQuotaHint, ctx as _ctxALS };
+// Option D (2026-10-26): the relay payload parser and re-stamp, pinned by test/wall-alert-line-d.test.mjs.
+export { _relayTokenFields, _restampRelayUrl };
 // Item 1 leftover (2026-10-17): exported for test/item1-wall-neutral-line.test.mjs, which drives each
 // wall sentence on /mcp (no profile) and inside a /mcp/chatgpt ctx (the frozen copy).
 export { _b2WeakestFactorLine, buildAutoMintBlock };
