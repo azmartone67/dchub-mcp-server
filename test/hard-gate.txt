@@ -5,6 +5,7 @@ test/agent-outreach-e2e.test.mjs
 test/agent-outreach.test.mjs
 test/agent-qa-a-signals-metros.test.mjs
 test/agent-qa-round2-fiber-envelope.test.mjs
+test/agent-registration-bearer.test.mjs
 test/agentforge-sync.test.mjs
 test/analyst-path-selftag.test.mjs
 test/analyze-parcel-not-covered.test.mjs
