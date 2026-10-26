@@ -230,6 +230,11 @@ describe('the pure line', () => {
 });
 
 describe('keyless limit: anon_daily_cap', () => {
+  // Wall email option C wide (owner 2026-10-26) makes this wall email first for a caller with a real
+  // session, and its first wall of the day withholds this line (keyless-wall-email-first pins that).
+  // These cases pin the handoff line on the wall that C leaves in place with the switch off.
+  beforeAll(() => { process.env.DCHUB_KEYLESS_EMAIL_FIRST_ALL = '0'; });
+  afterAll(() => { delete process.env.DCHUB_KEYLESS_EMAIL_FIRST_ALL; });
   it('names claim_free_key in the first prose block, ahead of the execute_plan nudge, and logs the limit hit', async () => {
     const seat = await open({ ip: CAPPED_IP });
     const r = await call(seat, 'search_facilities', { state: 'VA' });

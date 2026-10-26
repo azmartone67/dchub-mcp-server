@@ -213,7 +213,7 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
-import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk } from './lib/keyless-wall.mjs';
+import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity } from './lib/keyless-wall.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -906,9 +906,22 @@ export async function _keylessTrialOfferRelay(c, toolName, tier, wall, hadData,
 // handoff_email_capture grants the email tier onto the session; a keyed caller is not subject
 // to the anonymous per-IP limits). '' when this does not apply: the caller keeps the earlier
 // wall. Kill switch DCHUB_KEYLESS_EMAIL_FIRST=0.
-export async function _keylessCapEmailLink(c, name, tier) {
+// Wall email option C, wide (owner 2026-10-26): every tool's keyless SOFT cap wall (anon_daily_cap,
+// where the walls are) is email first, not only the five land/site tools. The hard wall (10x the cap,
+// ~0 hits a month) keeps its scope: there the pack buys the day (#838). Excluded where the email
+// unlocks nothing: a Pro-only tool, and
+// get_market_intel (dchub-backend handoff_email_capture.unlock_eligible refuses it, so its page
+// would lead with paid options). Those keep the earlier wall. Switch DCHUB_KEYLESS_EMAIL_FIRST_ALL=0
+// restores the land/site-only scope.
+export function _keylessEmailFirstTool(name, { wide = false, env = process.env } = {}) {
+  if (_LAND_SITE_TOOLS.has(name)) return true;
+  if (!wide) return false;
+  if (/^(0|false|no|off)$/i.test(String(env.DCHUB_KEYLESS_EMAIL_FIRST_ALL || '').trim())) return false;
+  return !PRO_ONLY_TOOLS.has(name) && name !== 'get_market_intel';
+}
+export async function _keylessCapEmailLink(c, name, tier, { wide = false } = {}) {
   try {
-    if (!_keylessEmailFirstOn() || !c || c.api_key || !_LAND_SITE_TOOLS.has(name) || !_realSession(c.session_id)) return '';
+    if (!_keylessEmailFirstOn() || !c || c.api_key || !_keylessEmailFirstTool(name, { wide }) || !_realSession(c.session_id)) return '';
     const r = buildHumanRelay(name, tier || 'free', c.session_id, { wall: name === 'analyze_site' ? 'siteruns' : 'freekey' });
     if (!r || !r.url) return '';
     return await _shortRelayPageLink(_pcTagUrl(r.url, _paywallArmFor(c)), name);
@@ -21292,10 +21305,12 @@ function trackedTool(srv, name, description, schema, handler) {
         // 2026-10-16: a keyless land/site caller with a session gets the email unlock first.
         const _capLink = await _keylessCapEmailLink(c, name, tier);
         if (_capLink) {
+          const _exitH = _capExitShown(_capWallIdentity(c));   // option C: no exit on the day's first wall
           const _cw = _keylessCapEmailResult({ name, link: _capLink, isError: _wallIsError(), copyVersion: WALL_COPY_VERSION,
+            exitShown: _exitH, perDay: FREE_TIER.identified_calls_per_day,
             base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
                     limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
-          if (_cw) { _markEmailAsk(c, 'link_exit'); return _cw; }
+          if (_cw) { _markEmailAsk(c, _exitH ? 'link_exit' : 'link'); return _cw; }
         }
         const _sidw = c.session_id || 'no-session';
         const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
@@ -22763,10 +22778,12 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
               binding_limit: 'anon_ip_daily',
             });
             // 2026-10-16: a keyless land/site caller with a session: the same preview, email first.
-            const _capLinkS = await _keylessCapEmailLink(c, name, tier);
+            const _capLinkS = await _keylessCapEmailLink(c, name, tier, { wide: true });
             if (_capLinkS) {
-              const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS });
-              _markEmailAsk(c, 'link_exit');
+              const _exitS = _capExitShown(_capWallIdentity(c));   // option C: no exit on the day's first wall
+              const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS, exitShown: _exitS,
+                                                                 perDay: FREE_TIER.identified_calls_per_day });
+              _markEmailAsk(c, _exitS ? 'link_exit' : 'link');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
             }
             // 2026-07-24 growthfix: mirror the payload into structuredContent.
@@ -25520,6 +25537,9 @@ export function _claimHandoffStep(result, name) {
     if (!_CLAIM_HANDOFF_STATUSES.includes(status)) return _handoffSkip(result, 's5', name);
     if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return _handoffSkip(result, 's6', name);
     if (_isCleanPlatform()) return _handoffSkip(result, 's7', name);
+    // Wall email option C (owner 2026-10-26): the day's first email-first cap wall carries the email
+    // link alone; this line ("claim_free_key, without one also works") is the no-email exit it withholds.
+    if (c._emailAsk === 'link') return _handoffSkip(result, 's7c', name);
     // A LIMIT is the IP's, answered by a key on every tool. A preview wall that is a depth wall is not:
     // the decision tools and the single-ask copy keep what they say.
     const isLimit = status === 'anon_daily_cap' || status === 'anon_hard_wall';

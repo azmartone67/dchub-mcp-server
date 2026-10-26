@@ -152,6 +152,10 @@ afterAll(() => {
 });
 beforeEach(() => {
   for (const k of ['DCHUB_CLEAN_PLATFORM_PREVIEW_SC', 'DCHUB_CAP_COACH_DEPTH']) delete process.env[k];
+  // Wall email option C wide (owner 2026-10-26) makes a keyless soft cap with a real session email
+  // first on every tool. #838's coaching is the wall it replaces, still served with the switch off and
+  // to every caller without a real session; these cases pin that wall. C is in keyless-wall-email-first.
+  process.env.DCHUB_KEYLESS_EMAIL_FIRST_ALL = '0';
   usage.count = 0; usage.hits = 0;
   S.keyCache.clear();
 });
