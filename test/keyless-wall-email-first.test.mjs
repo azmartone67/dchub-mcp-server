@@ -15,6 +15,13 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
+import { _resetCapWallDay } from '../lib/keyless-wall.mjs';
+
+// Wall email option C (owner 2026-10-26): an identity's first cap wall of the UTC day carries the
+// email link alone; the no-email claim_free_key exit returns from its second wall that day.
+const FIRST_LINE = (link) => new RegExp('^Keep going free: show your human this link → '
+  + link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\. One email unlocks \\d+ calls a day and the full answer to this question\\.$');
+const NO_EMAIL_LINE = 'If the user prefers not to give an email, call `claim_free_key` (one call, no email).';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -104,13 +111,30 @@ afterAll(async () => { if (H) await H.stop(); if (fence) fence.restore(); });
 beforeEach(() => {
   anonCount = 0; decideArm = 'offer'; shortFail = false; shortReqs.length = 0; decideReqs.length = 0;
   for (const k of ['DCHUB_KEYLESS_EMAIL_FIRST', 'DCHUB_QUOTA_WALL_EVENT', 'DCHUB_PRO_TRIAL_OFFER',
-                   'DCHUB_PRO_TRIAL_OFFER_KEYLESS', 'DCHUB_GATED_PREVIEW']) delete process.env[k];
+                   'DCHUB_PRO_TRIAL_OFFER_KEYLESS', 'DCHUB_GATED_PREVIEW', 'DCHUB_WALL_NO_EMAIL_EXIT_DELAY',
+                   'DCHUB_KEYLESS_EMAIL_FIRST_ALL']) delete process.env[k];
+  _resetCapWallDay();
 });
 
 describe('A. anonymous hard wall, keyless with a session: email first', () => {
   it('find_sites: one email line + human_url, claim_free_key last, no plan/price/checkout, quota fields', async () => {
     anonCount = 999;
-    const r = await call('find_sites', { state: 'TX', min_mw: 50 });
+    const ip = { 'x-dc-client-ip': '203.0.113.11' };
+    // option C: the day's first wall for this IP carries the email link alone
+    const f = await call('find_sites', { state: 'TX', min_mw: 50 }, { extraHdr: ip });
+    expect(f.status).toEqual(['anon_hard_wall']);
+    expect(f.sc.unlock_kind).toBe('email_cap');
+    expect(f.sc.user_message).toMatch(FIRST_LINE(SHORT));
+    expect(f.text.split('\n')[0]).toMatch(FIRST_LINE(SHORT));
+    expect(f.text).not.toContain('claim_free_key');
+    expect(f.sc.next_tool).toBeUndefined();
+    expect(f.sc.free_key_unlock).toBeUndefined();
+    expect(f.sc.next_step).toBe('human_url');
+    expect(f.sc.human_url).toBe(SHORT);
+    expect(copyViolations(f.res)).toEqual([]);
+    // the second wall that day: the no-email exit is back, exactly as before
+    shortReqs.length = 0;
+    const r = await call('find_sites', { state: 'TX', min_mw: 50 }, { extraHdr: ip });
     expect(r.status).toEqual(['anon_hard_wall']);
     expect(r.sc.unlock_kind).toBe('email_cap');
     expect(r.sc.user_message).toBe('Keep going free by email → ' + SHORT);
@@ -143,7 +167,16 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
     expect(rel && rel.sigOk).toBe(true);
     expect(rel.fields).toContain('w-freekey');
     expect(rel.fields).not.toContain('w-capacity');
-    expect(r.sc.user_message).toBe('Keep going free by email → ' + r.sc.human_url);
+    expect(r.sc.user_message).toMatch(FIRST_LINE(r.sc.human_url));   // option C: the day's first wall
+  });
+
+  it('option C kill switch DCHUB_WALL_NO_EMAIL_EXIT_DELAY=0: the first wall carries the no-email exit', async () => {
+    anonCount = 999;
+    process.env.DCHUB_WALL_NO_EMAIL_EXIT_DELAY = '0';
+    const r = await call('find_sites', { state: 'TX' });
+    expect(r.sc.user_message).toBe('Keep going free by email → ' + SHORT);
+    expect(r.text.split('\n').find((l) => l.includes('claim_free_key'))).toBe(NO_EMAIL_LINE);
+    expect(r.sc.next_tool).toBe('claim_free_key');
   });
 
   it('analyze_site: the relay is born w-siteruns (its own email unlock page)', async () => {
@@ -183,13 +216,62 @@ describe('A. anonymous hard wall, keyless with a session: email first', () => {
   });
 });
 
-describe('A. anonymous soft cap: the preview stays, its nudge is email first', () => {
-  it('site_selection_canvas over the soft cap: _upgrade leads with the email line, data still served', async () => {
+describe('C wide: every tool\'s soft cap is email first, except where the email unlocks nothing', () => {
+  it('search_facilities (not land/site) over the soft cap: email first, relay born w-freekey', async () => {
     anonCount = 50;
-    const r = await call('site_selection_canvas', { state: 'TX', target_mw: 200 });
+    const r = await call('search_facilities', { query: 'ashburn' });
     expect(r.status).toEqual(['anon_daily_cap']);
     const up = r.sc._upgrade || {};
     expect(up.unlock_kind).toBe('email_cap');
+    expect(r.sc.user_message).toMatch(FIRST_LINE(SHORT));
+    const rel = shortReqs.map((b) => relayFields(b.relay_url)).find(Boolean);
+    expect(rel && rel.fields).toContain('w-freekey');
+    expect(copyViolations({ up, line: r.sc.user_message, fyh: r.sc.for_your_human })).toEqual([]);
+  });
+  it('scope: email first everywhere on the soft cap except a Pro-only tool and get_market_intel', () => {
+    const f = H.S._keylessEmailFirstTool;
+    expect(typeof f).toBe('function');
+    expect(f('search_facilities', { wide: true })).toBe(true);
+    expect(f('get_grid_intelligence', { wide: true })).toBe(true);
+    expect(f('get_market_intel', { wide: true })).toBe(false);     // the backend unlock refuses it
+    expect(f('compare_sites', { wide: true })).toBe(false);        // Pro-only: an email unlocks nothing
+    expect(f('find_sites')).toBe(true);                            // land/site: both walls, as before
+    expect(f('search_facilities')).toBe(false);                    // the hard wall keeps its scope
+    expect(f('search_facilities', { wide: true, env: { DCHUB_KEYLESS_EMAIL_FIRST_ALL: '0' } })).toBe(false);
+  });
+  it('switch DCHUB_KEYLESS_EMAIL_FIRST_ALL=0 restores the land/site-only scope', async () => {
+    anonCount = 50;
+    process.env.DCHUB_KEYLESS_EMAIL_FIRST_ALL = '0';
+    const r = await call('search_facilities', { query: 'ashburn' });
+    expect(r.status).toEqual(['anon_daily_cap']);
+    expect((r.sc._upgrade || {}).unlock_kind).not.toBe('email_cap');
+    expect(r.text).not.toContain('Keep going free');
+  });
+  it('the hard wall keeps its land/site scope (the pack buys the day, #838)', async () => {
+    anonCount = 999;
+    const r = await call('search_facilities', { query: 'ashburn' });
+    expect(r.status).toEqual(['anon_hard_wall']);
+    expect(r.sc.unlock_kind).toBeUndefined();
+  });
+});
+
+describe('A. anonymous soft cap: the preview stays, its nudge is email first', () => {
+  it('site_selection_canvas over the soft cap: _upgrade leads with the email line, data still served', async () => {
+    anonCount = 50;
+    const ip = { 'x-dc-client-ip': '203.0.113.12' };
+    const f = await call('site_selection_canvas', { state: 'TX', target_mw: 200 }, { extraHdr: ip });
+    const fu = f.sc._upgrade || {};
+    expect(fu.unlock_kind).toBe('email_cap');
+    expect(fu.message).not.toContain('claim_free_key');            // option C: first wall, no exit
+    expect(fu.next_tool).toBeUndefined();
+    expect(fu.next_step).toBe('human_url');
+    expect(f.sc.user_message).toMatch(FIRST_LINE(SHORT));
+    const r = await call('site_selection_canvas', { state: 'TX', target_mw: 200 }, { extraHdr: ip });
+    expect(r.status).toEqual(['anon_daily_cap']);
+    const up = r.sc._upgrade || {};
+    expect(up.unlock_kind).toBe('email_cap');
+    expect(up.next_tool).toBe('claim_free_key');
+    expect(up.message.endsWith(NO_EMAIL_LINE)).toBe(true);
     expect(up.message.startsWith('Keep going free by email → ' + SHORT)).toBe(true);
     expect(up.remaining_this_month).toBe(0);
     expect(r.sc.human_url).toBe(SHORT);
@@ -272,9 +354,13 @@ describe('C. quota_wall_hit', () => {
   });
 
   // Wall email option E (owner 2026-10-26): the event names the email ask the wall showed.
-  it('option E: the email-first wall reports email_ask link_exit; a wall with no email link reports none', async () => {
+  it('option E: the email-first wall reports link (first wall) then link_exit; a wall with no email link reports none', async () => {
     anonCount = 999;
-    const w = await call('find_sites', { state: 'TX' });
+    const ip = { 'x-dc-client-ip': '203.0.113.13' };
+    const f = await call('find_sites', { state: 'TX' }, { extraHdr: ip });
+    expect(f.events.length).toBe(1);
+    expect(f.events[0].email_ask).toBe('link');
+    const w = await call('find_sites', { state: 'TX' }, { extraHdr: ip });
     expect(w.events.length).toBe(1);
     expect(w.events[0].email_ask).toBe('link_exit');
     const n = await call('search_facilities', { query: 'ashburn' });

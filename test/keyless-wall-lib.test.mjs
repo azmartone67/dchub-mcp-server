@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   QUOTA_WALL_STATUSES, LAND_SITE_TOOLS, nextUtcMonthStart, keylessWallQuota, withKeylessWallQuota,
-  keylessCapEmailResult, keylessSoftCapEmailUpgrade, quotaWallEventBody, markEmailAsk, WALL_ASK_KINDS, sessionIdentity, realSession,
+  keylessCapEmailResult, keylessSoftCapEmailUpgrade, quotaWallEventBody, markEmailAsk, WALL_ASK_KINDS, capExitShown, capWallIdentity, keylessCapEmailOnlyLine, _resetCapWallDay, sessionIdentity, realSession,
   keylessEmailFirstOn, quotaWallEventOn, keylessTrialOfferOn,
 } from '../lib/keyless-wall.mjs';
 
@@ -125,5 +125,48 @@ describe('option E: markEmailAsk + the email_ask field (owner 2026-10-26)', () =
     expect(quotaWallEventBody({ ...base, c: { _emailAsk: 'line' } }).email_ask).toBe('line');
     expect(quotaWallEventBody({ ...base, c: {} })).not.toHaveProperty('email_ask');
     expect(quotaWallEventBody({ ...base, c: { _emailAsk: 'x' } })).not.toHaveProperty('email_ask');
+  });
+});
+
+describe('option C: the no-email exit waits for the second cap wall of the day (owner 2026-10-26)', () => {
+  const day1 = new Date('2026-10-26T09:00:00Z'), day1b = new Date('2026-10-26T23:59:59Z'), day2 = new Date('2026-10-27T00:00:01Z');
+  it('first wall of the UTC day: no exit; the second that day: exit; a new day starts over', () => {
+    _resetCapWallDay();
+    expect(capExitShown('ip-a', { now: day1, env: {} })).toBe(false);
+    expect(capExitShown('ip-a', { now: day1b, env: {} })).toBe(true);
+    expect(capExitShown('ip-b', { now: day1b, env: {} })).toBe(false);   // per identity
+    expect(capExitShown('ip-a', { now: day2, env: {} })).toBe(false);
+  });
+  it('kill switch and an unknown identity always show the exit', () => {
+    _resetCapWallDay();
+    expect(capExitShown('ip-c', { now: day1, env: { DCHUB_WALL_NO_EMAIL_EXIT_DELAY: '0' } })).toBe(true);
+    expect(capExitShown('', { now: day1, env: {} })).toBe(true);
+  });
+  it('identity: the caller IP (hashed), else the session; never the raw IP', () => {
+    const a = capWallIdentity({ client_ip: '203.0.113.9', session_id: 's-1' });
+    expect(a).toMatch(/^ip-[0-9a-f]{64}$/);
+    expect(a).not.toContain('203.0.113.9');
+    expect(capWallIdentity({ session_id: '3f2a9c1e-7b4d-4e2a-9f10-5c6d7e8f9a0b' })).toMatch(/^sk-/);
+    expect(capWallIdentity({})).toBe('');
+  });
+  it('the first-wall line: the approved copy, the per-day number from the caller, no plan or price', () => {
+    const l = keylessCapEmailOnlyLine('https://dchub.cloud/u/abc', 50);
+    expect(l).toBe('Keep going free: show your human this link → https://dchub.cloud/u/abc. One email unlocks 50 calls a day and the full answer to this question.');
+    expect(keylessCapEmailOnlyLine('https://dchub.cloud/u/abc', null)).not.toMatch(/\d+ calls/);
+    expect(l).not.toMatch(/\$|\/mo|Developer|\bPro\b|claim_free_key/);
+  });
+  it('builders: exitShown false drops the claim line and next_tool; true keeps today\'s wall', () => {
+    const off = keylessCapEmailResult({ name: 'find_sites', link: 'https://dchub.cloud/u/x', exitShown: false, perDay: 50 });
+    expect(off.content[0].text).not.toContain('claim_free_key');
+    expect(off.structuredContent.next_tool).toBeUndefined();
+    expect(off.structuredContent.free_key_unlock).toBeUndefined();
+    expect(off.structuredContent.next_step).toBe('human_url');
+    const on = keylessCapEmailResult({ name: 'find_sites', link: 'https://dchub.cloud/u/x' });
+    expect(on.structuredContent.next_tool).toBe('claim_free_key');
+    expect(on.content[0].text).toContain('claim_free_key');
+    const soft = keylessSoftCapEmailUpgrade({ rows: [1], _upgrade: {} }, { name: 'search_facilities', link: 'https://dchub.cloud/u/y', exitShown: false, perDay: 50 });
+    expect(soft._upgrade.message).not.toContain('claim_free_key');
+    expect(soft._upgrade.next_tool).toBeUndefined();
+    expect(soft.rows).toEqual([1]);
   });
 });
