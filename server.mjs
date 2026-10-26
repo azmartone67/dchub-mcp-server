@@ -8357,6 +8357,33 @@ export const HUMAN_URL_LINE_FROZEN = 'Relay the link in human_url to your human.
 export function _humanUrlLine(c) {
   return _chatgptFrozenSeat(c) ? HUMAN_URL_LINE_FROZEN : HUMAN_URL_LINE;
 }
+// ── ChatGPT first full answer (owner 2026-10-26: "please", ships OFF) ──────────────────────
+// A ChatGPT user has no key and no email (the directory profile carries neither), so every
+// grid / queue / market-intel answer on /mcp/chatgpt was the 10-08 preview, forever. With
+// DCHUB_CHATGPT_FIRST_FULL=1 the FIRST call of each of those tools in a ChatGPT conversation
+// (sid oai-<sha256 of _meta["openai/session"]>, r-oai-session-sid) is served full; later calls
+// in that conversation get the unchanged preview. A per-IP ceiling bounds a caller that forges
+// a new conversation id per call. OFF by default: the app is in OpenAI review on the frozen
+// profile, so this is flipped after approval, not before. Broker lease rates stay withheld (H1).
+export const CHATGPT_FIRST_FULL_IP_CAP = Math.max(0, parseInt(process.env.DCHUB_CHATGPT_FIRST_FULL_IP_CAP || '60', 10));
+export const CHATGPT_FIRST_FULL_IP_PREFIX = 'oaiip:';
+const _CHATGPT_FIRST_FULL_IP_BUCKET = 'chatgpt_first_full';
+export function chatgptFirstFullOn() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.DCHUB_CHATGPT_FIRST_FULL || ''));
+}
+export function _chatgptFirstFullCall(name, c) {
+  return chatgptFirstFullOn() && _freePreviewOnlyTool(name)
+    && !!c && c.profile === DIRECTORY_PROFILE && !c.api_key
+    && typeof c.session_id === 'string' && c.session_id.startsWith('oai-');
+}
+// Charges the conversation's one answer for this tool, then (only if it was still free) the
+// per-IP ceiling. true = spent, so the caller gets the preview it would have got anyway.
+export async function _chatgptFirstFullExceeded(c, tool) {
+  if (await _trialFullCallsExceeded(c.session_id, tool, 1, c.session_id, FREE_PREVIEW_ONLY_TOOLS.size)) return true;
+  if (!(CHATGPT_FIRST_FULL_IP_CAP > 0) || !c.client_ip) return false;
+  const ipId = CHATGPT_FIRST_FULL_IP_PREFIX + c.client_ip;
+  return await _trialFullCallsExceeded(ipId, _CHATGPT_FIRST_FULL_IP_BUCKET, CHATGPT_FIRST_FULL_IP_CAP, ipId);
+}
 export function _chatgptFrozenSeat(c) {
   let s = c;
   if (!s) { try { s = getCtx(); } catch (_) { s = null; } }
@@ -21498,7 +21525,13 @@ function trackedTool(srv, name, description, schema, handler) {
         if (_ignored.length) { try { c._params_not_applied = _ignored; } catch (_) { /* ctx is best-effort */ } }
         if (READ_ORDERED_TOOLS.has(name) && !_canRead) { try { c._visible_order = true; } catch (_) { /* ctx is best-effort */ } }
       }
-      const gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
+      let gate = applyTierGate(name, args, _gateTier, !!c.api_key, c.is_trial === true, _confirmedPro, _emailFullSeat(c));
+      // ChatGPT first full answer (DCHUB_CHATGPT_FIRST_FULL, off by default). Charged here, before
+      // the gate is promoted, so a spent allowance leaves the 10-08 preview path byte-identical.
+      if (!gate.trial_taste && !_isPaidDepthTier(_gateTier) && _chatgptFirstFullCall(name, c)
+          && !(await _chatgptFirstFullExceeded(c, name))) {
+        gate = { allowed: true, params: gate.params || args, trial_taste: true, chatgpt_first: true };
+      }
       // ── Top-20 metros free (owner decision 2026-10-20; DCHUB_TOP_METROS_FREE=0 kills it) ──
       // "make the full market briefing (grid, risk, time-to-power) free for the top 20 metros":
       // get_market_context / get_market_intel / get_market_dcpi_rank on a market in
@@ -22752,7 +22785,10 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // limit=100 disclosed less than limit=25 for the same 3-row preview. The handler
       // already ran with the capped params, so a keyless seat now takes the SAME trim and
       // envelope every other limit takes. Keyed callers keep the cap notice.
-      const _anonTrimApplies = ((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name);
+      // ChatGPT first full answer: the one promoted call skips the keyless trim (it is served full
+      // with broker rates masked in the trial_taste block below); every other call is unchanged.
+      const _anonTrimApplies = ((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name)
+        && gate.chatgpt_first !== true;
       if (gate.capped && !_anonTrimApplies) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
@@ -22915,7 +22951,26 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // envelope — it both INCREMENTS the daily counter and stamps a
       // `_metered_trial` receipt, and neither belongs on an answer that
       // returned no data.
-      if (gate.trial_taste && !_resultIsArgError(result)) {
+      // ChatGPT first full answer: already charged at the gate. Served full with the broker rates
+      // masked and one plain meter (no plan, no price, no key: the directory profile carries none).
+      if (gate.chatgpt_first === true && !_resultIsArgError(result)) {
+        status = 'chatgpt_first_full';
+        try {
+          const _cf = _maskBrokerRatesBelowPro(JSON.parse(result.content?.[0]?.text || ''));
+          if (!_cf || typeof _cf !== 'object' || Array.isArray(_cf)) throw new Error('shape');
+          _cf._metered_trial = {
+            call: 1, of: 1, remaining_today: 0,
+            counted: 'per ChatGPT conversation, on this tool',
+            allowance: 'chatgpt_first_answer',
+            note: 'The first `' + name + '` answer in this conversation is the full answer; later calls in it return the preview.',
+          };
+          result.content[0] = { ...result.content[0], text: JSON.stringify(_cf) };
+        } catch (_) {
+          // Fail closed: an unparsable payload is never handed out unmasked.
+          result.content = [{ type: 'text', text: JSON.stringify({ ok: false, error: 'temporarily_unavailable', retry: true }) }];
+        }
+      }
+      if (gate.trial_taste && gate.chatgpt_first !== true && !_resultIsArgError(result)) {
         // r-bind-ladder (2026-06-27): bound (email-captured) callers get the higher
         // IDENTIFIED cap; unbound free keys stay at the base cap — so binding an
         // email buys a real, visible benefit (more full flagship answers/day).
