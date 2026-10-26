@@ -233,6 +233,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailLineText as _retWallEmailLineText,
+         wallEmailTellFreekeyOn as _retWallEmailTellFreekeyOn,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
@@ -11527,10 +11528,15 @@ function _recordEmailAskShown(c, name, kind) {
 // binds the email onto it), a relay wall that is not a capacity, site-runs or keyless-cap wall (that
 // one has its own free email copy), and a dchub.cloud human_url. A wall's isError is a transport
 // choice (_wallIsError), so it is not read; a real failure is _isFailureEnvelope.
+// 2026-10-26: also a keyless free-key wall (WALL_KIND_FREEKEY) of a tool that is not preview-only:
+// that page leads with the free email unlock as well (lib/retention.mjs wallEmailTellFreekeyOn,
+// kill switch DCHUB_WALL_EMAIL_TELL_FREEKEY=0). Every other gate below is the same.
 export function _wallEmailLineStep(result, name, env = process.env) {
   try {
     if (!_retWallEmailTellOn(env)) return result;
-    if (!_RET_WALL_EMAIL_TOOLS.includes(name) || !emailFullDecisionOn()) return result;
+    const gridQueue = _RET_WALL_EMAIL_TOOLS.includes(name) && emailFullDecisionOn();
+    const freekeyOn = !gridQueue && _retWallEmailTellFreekeyOn(env) && !_freePreviewOnlyTool(name);
+    if (!gridQueue && !freekeyOn) return result;
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     if (_isFailureEnvelope(result)) return result;
     const sc0 = result.structuredContent;
@@ -11546,6 +11552,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     if (sc0.unlock_kind === 'email_cap' || up.unlock_kind === 'email_cap') return result;
     const kind = _wallKindFor(sc0, c, name);
     if (kind === WALL_KIND_CAPACITY || kind === WALL_KIND_SITERUNS) return result;
+    if (!gridQueue && kind !== WALL_KIND_FREEKEY) return result;
     const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\/\S+$/.test(sc0.human_url) ? sc0.human_url : '';
     if (!url) return result;
     const base = _linkBase(url);
