@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   QUOTA_WALL_STATUSES, LAND_SITE_TOOLS, nextUtcMonthStart, keylessWallQuota, withKeylessWallQuota,
-  keylessCapEmailResult, keylessSoftCapEmailUpgrade, quotaWallEventBody, sessionIdentity, realSession,
+  keylessCapEmailResult, keylessSoftCapEmailUpgrade, quotaWallEventBody, markEmailAsk, WALL_ASK_KINDS, sessionIdentity, realSession,
   keylessEmailFirstOn, quotaWallEventOn, keylessTrialOfferOn,
 } from '../lib/keyless-wall.mjs';
 
@@ -105,5 +105,25 @@ describe('identity and switches', () => {
     expect(keylessEmailFirstOn({ DCHUB_KEYLESS_EMAIL_FIRST: '0' })).toBe(false);
     expect(quotaWallEventOn({ DCHUB_QUOTA_WALL_EVENT: 'off' })).toBe(false);
     expect(keylessTrialOfferOn({ DCHUB_PRO_TRIAL_OFFER_KEYLESS: 'false' })).toBe(false);
+  });
+});
+
+describe('option E: markEmailAsk + the email_ask field (owner 2026-10-26)', () => {
+  it('kinds equal dchub-backend routes/mcp_funnel_events.WALL_ASK_KINDS', () => {
+    expect([...WALL_ASK_KINDS].sort()).toEqual(['bind_field', 'line', 'link', 'link_exit']);
+  });
+  it('bind_field never replaces a stronger mark; a stronger mark replaces bind_field; junk is ignored', () => {
+    const c = {};
+    markEmailAsk(c, 'bind_field'); expect(c._emailAsk).toBe('bind_field');
+    markEmailAsk(c, 'link_exit'); expect(c._emailAsk).toBe('link_exit');
+    markEmailAsk(c, 'bind_field'); expect(c._emailAsk).toBe('link_exit');
+    markEmailAsk(c, 'no_email'); expect(c._emailAsk).toBe('link_exit');
+    expect(() => markEmailAsk(null, 'line')).not.toThrow();
+  });
+  it('quotaWallEventBody carries email_ask only for a known kind', () => {
+    const base = { name: 'find_sites', status: 'anon_daily_cap' };
+    expect(quotaWallEventBody({ ...base, c: { _emailAsk: 'line' } }).email_ask).toBe('line');
+    expect(quotaWallEventBody({ ...base, c: {} })).not.toHaveProperty('email_ask');
+    expect(quotaWallEventBody({ ...base, c: { _emailAsk: 'x' } })).not.toHaveProperty('email_ask');
   });
 });

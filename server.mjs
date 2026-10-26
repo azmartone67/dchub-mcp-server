@@ -213,7 +213,7 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
-import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody } from './lib/keyless-wall.mjs';
+import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk } from './lib/keyless-wall.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -2571,6 +2571,7 @@ export function buildPaywallExtras(toolName, currentTier, sessionId) {
   // an agent that can self-serve should not have to read past a human-checkout
   // block that converts at 0% to discover it can.
   const machine_pay = _wallMachinePay(toolName);
+  if (_isTrial) _markEmailAsk(getCtx(), 'bind_field');   // option E: the bind_email field below
   return {
     ...(machine_pay ? { machine_pay } : {}),
     ...(for_your_human ? { for_your_human } : {}),
@@ -11533,6 +11534,7 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     const f = sc.for_your_human;
     if (f && typeof f === 'object' && !Array.isArray(f) && take(f.text)) { sc.for_your_human = { ...f, text: sentence }; copied = true; }
     if (!wrote && !copied) return result;
+    _markEmailAsk(c, 'line');   // option E: this wall carried the email line
     return { ...result, content: wrote ? content : result.content, structuredContent: sc };
   } catch (_) { return result; }   // a line's wording is never worth failing a response over
 }
@@ -20939,7 +20941,7 @@ function trackedTool(srv, name, description, schema, handler) {
     _muReset(name);   // r-missed-upgrade: this call's gates and masked keys only
     const t0 = Date.now();
     let status = 'ok';
-    try { c._paidBlocked = false; } catch (_) { /* set by signalPaywall for this call only */ }
+    try { c._paidBlocked = false; c._emailAsk = ''; } catch (_) { /* set by signalPaywall / the wall builders (option E) for this call only */ }
     let _wallLinkTh = null;   // conversion metric step 1: set when this call served a wall
     let tier = c.tier || 'free';   // r-paid-lift: a lift inside this call reassigns it
     // r-scraper-block (2026-05-27): block automated 5-tool-sweep sessions.
@@ -21266,7 +21268,7 @@ function trackedTool(srv, name, description, schema, handler) {
           const _cw = _keylessCapEmailResult({ name, link: _capLink, isError: _wallIsError(), copyVersion: WALL_COPY_VERSION,
             base: { error: 'anon_hard_wall', current_tier: tier || 'free', binding_limit: 'anon_ip_daily_hard',
                     limit: ANON_HARD_WALL_AT, soft_cap: ANON_DAILY_CAP, retry_after: 'UTC midnight' } });
-          if (_cw) return _cw;
+          if (_cw) { _markEmailAsk(c, 'link_exit'); return _cw; }
         }
         const _sidw = c.session_id || 'no-session';
         const _wallMsg = "You've made more than " + ANON_HARD_WALL_AT + " anonymous calls from this IP today ("
@@ -22731,6 +22733,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
             const _capLinkS = await _keylessCapEmailLink(c, name, tier);
             if (_capLinkS) {
               const _em = _keylessSoftCapEmailUpgrade(trimmed, { name, link: _capLinkS });
+              _markEmailAsk(c, 'link_exit');
               return { content: [{ type: 'text', text: JSON.stringify(_em) }], structuredContent: _em };
             }
             // 2026-07-24 growthfix: mirror the payload into structuredContent.

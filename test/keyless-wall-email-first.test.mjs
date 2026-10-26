@@ -271,6 +271,18 @@ describe('C. quota_wall_hit', () => {
     expect(q.events[0].is_qa).toBe(true);
   });
 
+  // Wall email option E (owner 2026-10-26): the event names the email ask the wall showed.
+  it('option E: the email-first wall reports email_ask link_exit; a wall with no email link reports none', async () => {
+    anonCount = 999;
+    const w = await call('find_sites', { state: 'TX' });
+    expect(w.events.length).toBe(1);
+    expect(w.events[0].email_ask).toBe('link_exit');
+    const n = await call('search_facilities', { query: 'ashburn' });
+    expect(n.status).toEqual(['anon_hard_wall']);
+    expect(n.events.length).toBe(1);
+    expect(n.events[0]).not.toHaveProperty('email_ask');
+  });
+
   it('kill switch DCHUB_QUOTA_WALL_EVENT=0 sends none', async () => {
     process.env.DCHUB_QUOTA_WALL_EVENT = '0';
     anonCount = 999;
