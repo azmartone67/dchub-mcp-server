@@ -128,7 +128,9 @@ describe('the guard is wired into both consume sites', () => {
   });
 
   it('the metered trial-taste block is skipped entirely on an arg error', () => {
-    expect(code).toContain('if (gate.trial_taste && !_resultIsArgError(result)) {');
+    // 2026-10-26: the ChatGPT first full answer is served (and charged) above this block, so the
+    // block also skips gate.chatgpt_first; the arg-error skip is unchanged.
+    expect(code).toContain('if (gate.trial_taste && gate.chatgpt_first !== true && !_resultIsArgError(result)) {');
     expect(code).not.toContain('if (gate.trial_taste) {');
   });
 });
