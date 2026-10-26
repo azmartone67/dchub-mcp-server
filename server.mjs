@@ -172,7 +172,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -234,6 +234,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailLineText as _retWallEmailLineText,
          wallEmailTellFreekeyOn as _retWallEmailTellFreekeyOn, wallEmailFreekeyLineText as _retWallEmailFreekeyLineText,
+         wallEmailFreekeyChatOn as _retWallEmailFreekeyChatOn,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
@@ -11617,17 +11618,26 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\/\S+$/.test(sc0.human_url) ? sc0.human_url : '';
     if (!url) return result;
     const base = _linkBase(url);
-    const sentence = gridQueue ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
+    const isHumanLine = (l) => l.includes(base) && (l.includes(HUMAN_FIRST_MARKER) || /^Tell the user: "/.test(l));
+    const texts = result.content.map((b) => (b && b.type === 'text' && typeof b.text === 'string') ? b.text : '');
+    // Free-key wall, in-chat form: only where this step can also place the bind_email agent line (a text
+    // human line to sit above, no bind_email already named, not Grok, whose connector opens a new
+    // session per call so a key minted now is not this chat's), so the in-chat promise never travels
+    // without the instruction that keeps it.
+    const freekeyChat = !gridQueue && _retWallEmailFreekeyChatOn(env) && !_pcIsGrok(c.platform)
+      && texts.some((t) => t.split('\n').some(isHumanLine))
+      && !texts.some((t) => t.includes('`' + 'bind_email' + '`'));
+    const sentence = (gridQueue || freekeyChat) ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
     let wrote = false;
     const content = result.content.map((b) => {
       if (wrote || !b || b.type !== 'text' || typeof b.text !== 'string') return b;
       const lines = b.text.split('\n');
-      const k = lines.findIndex((l) => l.includes(base)
-        && (l.includes(HUMAN_FIRST_MARKER) || /^Tell the user: "/.test(l)));
+      const k = lines.findIndex(isHumanLine);
       if (k < 0) return b;
       const l = lines[k];
       const at = l.indexOf(HUMAN_FIRST_MARKER);
       lines[k] = at >= 0 ? l.slice(0, at) + HUMAN_FIRST_MARKER + ' ' + sentence : 'Tell the user: "' + sentence + '"';
+      if (freekeyChat) lines[k] = _claimHandoffFreekeyText() + '\n\n' + lines[k];
       wrote = true;
       return { ...b, text: lines.join('\n') };
     });

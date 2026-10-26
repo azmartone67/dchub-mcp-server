@@ -18,6 +18,7 @@ import { createServer } from 'node:http';
 import net from 'node:net';
 import { readFileSync } from 'node:fs';
 import * as R from '../lib/retention.mjs';
+import { claimHandoffFreekeyText } from '../lib/claim-handoff.mjs';
 
 const realConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {
@@ -35,6 +36,8 @@ net.Socket.prototype.connect = function connect(...args) {
 const SECRET = 'test-internal-key-not-a-real-secret';
 const FREE_KEY = 'dch_live_wall_line_prod_free_0001';
 const EMAIL_KEY = 'dch_live_wall_line_prod_mail_0001';
+const MINTED_KEY = 'dch_live_wall_line_freekey_mint_0001';
+const claims = [];
 const FIXTURE = (f) => readFileSync(new URL('./fixtures/' + f, import.meta.url), 'utf8');
 const GRID_MISO = FIXTURE('grid-intelligence-miso.json');
 const QUEUE_MISO = FIXTURE('interconnection-queue-by-iso-miso.json');
@@ -76,9 +79,15 @@ beforeAll(async () => {
       }
       if (p === '/api/v1/keys/validate') {
         const key = (await readBody(req)).api_key || '';
-        const known = key === FREE_KEY || key === EMAIL_KEY;
-        res.end(JSON.stringify(known ? { valid: true, tier: 'free', email: key === EMAIL_KEY ? 'jane@firm.com' : null }
+        const known = key === FREE_KEY || key === EMAIL_KEY || key === MINTED_KEY;
+        res.end(JSON.stringify(known ? { valid: true, tier: 'free', email: key === EMAIL_KEY || key === MINTED_KEY ? 'jane@firm.com' : null }
           : { valid: false, tier: 'free' }));
+        return;
+      }
+      // bind_email on a keyless session mints through claim_free_key (email in the mint body).
+      if (p === '/api/v1/keys/claim') {
+        claims.push(await readBody(req));
+        res.end(JSON.stringify({ ok: true, api_key: MINTED_KEY, tier: 'free' }));
         return;
       }
       if (p === '/api/v1/mcp/should-mint-claim' && claim) { res.end(JSON.stringify(claim)); return; }
@@ -115,16 +124,16 @@ async function post(headers, body) {
 }
 let ipN = 20, rpcId = 10;
 // The live check's shape: initialize, then tools/call, UA Claude-User, X-DCHub-QA: 1.
-async function wallSession(key) {
+async function wallSession(key, clientName = 'Claude Code') {
   const h0 = { 'x-forwarded-for': `198.51.100.${ipN++}`, 'user-agent': 'Claude-User', 'x-dchub-qa': '1',
                ...(key ? { 'x-api-key': key } : {}) };
   const init = await post(h0, { jsonrpc: '2.0', id: 1, method: 'initialize',
-    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'Claude Code', version: '1.0' } } });
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: clientName, version: '1.0' } } });
   const sid = init.headers.get('mcp-session-id');
   const h = { ...h0, ...(sid ? { 'mcp-session-id': sid } : {}) };
   if (sid) await post(h, { jsonrpc: '2.0', method: 'notifications/initialized' });
-  return async (tool) => {
-    const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name: tool, arguments: { iso: 'MISO' } } });
+  return async (tool, args = { iso: 'MISO' }) => {
+    const { body } = await post(h, { jsonrpc: '2.0', id: rpcId++, method: 'tools/call', params: { name: tool, arguments: args } });
     const result = JSON.parse(body).result || {};
     const text = (result.content || []).map((c) => c.text || '').join('\n');
     return { sid, result, text, sc: result.structuredContent || {} };
@@ -150,7 +159,7 @@ const lastKind = () => {
 };
 
 describe('option A line on a keyless free-key wall, production transport', () => {
-  it('get_grid_data keyless: one human line, the free email unlock on the /u/ link of a w-freekey token; block 0 is JSON', async () => {
+  it('get_grid_data keyless: one human line (the in-chat email unlock on the /u/ link of a w-freekey token), the bind_email agent line right above it; block 0 is JSON', async () => {
     minted.length = 0;
     const r = await wallCall('get_grid_data');
     expect(r.sid).toBeTruthy();
@@ -161,12 +170,91 @@ describe('option A line on a keyless free-key wall, production transport', () =>
     expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\/[2-9a-hj-km-np-z]{6}$/);
     expect(JSON.parse(b0).human_url).toBe(url);
     expect(freekeyMinted()).toBe(true);                       // the page this line points at leads with the email
-    expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailFreekeyLineText(url)]);
+    const human = HUMAN + ' ' + R.wallEmailLineText(url);
+    expect(humanLines(r.text)).toEqual([human]);
     expect(R.countTellLines(r.text)).toBe(0);
-    expect(r.sc.human_message).toBe(R.wallEmailFreekeyLineText(url));
-    // No in-chat promise: this wall gives the agent no bind_email instruction.
-    expect(r.text).not.toMatch(/Reply with your email/);
+    expect(r.sc.human_message).toBe(R.wallEmailLineText(url));
+    // The agent is told what to do with the reply, once, directly above the person's line.
+    expect(r.text).toContain(claimHandoffFreekeyText() + '\n\n' + human);
+    expect(r.text.split('\n').filter((l) => l.includes('bind_email'))).toEqual([claimHandoffFreekeyText()]);
     expect(r.text).not.toMatch(/lowest plan that returns them|paid DC Hub plan|plans that include|\$\d/);
+  });
+
+  it('the other free-key walls get the same pair', async () => {
+    for (const tool of ['get_water_risk', 'get_energy_prices', 'get_renewable_energy', 'get_refined_queue']) {
+      minted.length = 0;
+      const r = await wallCall(tool);
+      const url = r.sc.human_url;
+      expect(freekeyMinted(), tool).toBe(true);
+      const human = HUMAN + ' ' + R.wallEmailLineText(url);
+      expect(humanLines(r.text), tool).toEqual([human]);
+      expect(r.text, tool).toContain(claimHandoffFreekeyText() + '\n\n' + human);
+      expect(() => JSON.parse(r.result.content[0].text), tool).not.toThrow();
+    }
+  });
+
+  it('end to end: bind_email with the reply mints a key with the email on this session, and the next get_grid_data is not walled', async () => {
+    claims.length = 0;
+    const call = await wallSession();
+    const w = await call('get_grid_data');
+    expect(w.text).toContain(claimHandoffFreekeyText());
+    const b = await call('bind_email', { email: 'jane@firm.com' });
+    expect(claims.length).toBe(1);
+    expect(claims[0].email).toBe('jane@firm.com');
+    expect(b.text).toMatch(/minted a free DC Hub key with this email bound/);
+    expect(b.text).toMatch(/already applied to THIS session/);
+    const r = await call('get_grid_data');
+    expect(r.sc.human_url).toBeFalsy();
+    expect(r.sc.preview_is_partial).toBeFalsy();
+    expect(r.text).not.toMatch(/held back part of this answer/);
+  });
+
+  it('a repeat free-key wall in the same session (no text human line to sit under): link-only wording, no agent line', async () => {
+    const call = await wallSession();
+    const first = await call('get_grid_data');
+    expect(first.text).toContain(claimHandoffFreekeyText());
+    const r = await call('get_water_risk');
+    const url = r.sc.human_url;
+    expect(url).toMatch(/^https:\/\/dchub\.cloud\/u\//);
+    expect(humanLines(r.text)).toEqual([]);                      // the session's one line was already sent
+    expect(r.text).not.toContain('bind_email');
+    expect(r.sc.human_message).toBe(R.wallEmailFreekeyLineText(url));   // never the in-chat promise alone
+  });
+
+  // Step level, on a real handler output: a response that already names `bind_email` keeps the
+  // link-only line (one email ask per response). The input is the production-transport get_grid_data
+  // wall as served with the in-chat form off, re-run through the step with the switch on.
+  it('a free-key wall that already names `bind_email` keeps the link-only line and gets no second ask', async () => {
+    const r = await withEnv('DCHUB_WALL_EMAIL_FREEKEY_CHAT', '0', () => wallCall('get_grid_data'));
+    const url = r.sc.human_url;
+    const ctx = { session_id: r.sid, platform: 'claude', auth_source: 'none', tier: 'anonymous' };
+    const run = (result) => S._ctxALS.run(ctx, () => S._wallEmailLineStep(result, 'get_grid_data'));
+    // control: the same input without the extra mention takes the in-chat pair
+    const plain = run(r.result);
+    const plainText = plain.content.map((b) => b.text || '').join('\n');
+    expect(plainText).toContain(claimHandoffFreekeyText() + '\n\n' + HUMAN + ' ' + R.wallEmailLineText(url));
+    const withAsk = { ...r.result, content: [...r.result.content, { type: 'text', text: 'Then call `bind_email` with your human\'s email.' }] };
+    const out = run(withAsk);
+    const t = out.content.map((b) => b.text || '').join('\n');
+    expect(humanLines(t)).toEqual([HUMAN + ' ' + R.wallEmailFreekeyLineText(url)]);
+    expect(t).not.toContain(claimHandoffFreekeyText());
+  });
+
+  it('DCHUB_WALL_EMAIL_FREEKEY_CHAT=0: mcp#1164 as it was (link-only line, no agent line)', async () => {
+    await withEnv('DCHUB_WALL_EMAIL_FREEKEY_CHAT', '0', async () => {
+      const r = await wallCall('get_grid_data');
+      expect(humanLines(r.text)).toEqual([HUMAN + ' ' + R.wallEmailFreekeyLineText(r.sc.human_url)]);
+      expect(r.text).not.toContain('bind_email');
+      expect(r.text).not.toMatch(/Reply with your email/);
+    });
+  });
+
+  it('Grok (a new session per call, so a key minted now is not this chat\'s): link-only line, no agent line', async () => {
+    const r = await (await wallSession(undefined, 'grok'))('get_grid_data');
+    if (r.sc.human_url) {
+      expect(r.text).not.toMatch(/Reply with your email/);
+      expect(r.text).not.toContain(claimHandoffFreekeyText());
+    }
   });
 
   it('DCHUB_WALL_EMAIL_TELL_FREEKEY=0: the free-key wall keeps its earlier line; grid / queue keep the email line', async () => {
@@ -219,6 +307,15 @@ describe('wallEmailFreekeyLineText', () => {
   it('is the 10-25 wording, verbatim (the line the owner OK\'d for free-key walls)', () => {
     expect(R.wallEmailFreekeyLineText('https://dchub.cloud/u/abcdef')).toBe(
       'DC Hub held back part of this answer. Open this link and enter your email to get it free: https://dchub.cloud/u/abcdef');
+  });
+});
+
+describe('wallEmailFreekeyChatOn', () => {
+  it('on by default; its own switch, the free-key switch or the parent switch turns it off', () => {
+    expect(R.wallEmailFreekeyChatOn({})).toBe(true);
+    for (const k of ['DCHUB_WALL_EMAIL_FREEKEY_CHAT', 'DCHUB_WALL_EMAIL_TELL_FREEKEY', 'DCHUB_WALL_EMAIL_TELL']) {
+      expect(R.wallEmailFreekeyChatOn({ [k]: '0' }), k).toBe(false);
+    }
   });
 });
 
