@@ -723,6 +723,16 @@ export function _relayLinkLabel(platform, tool) {
     : (_toolSellsPro(tool) ? RELAY_LABEL_PRO : RELAY_LABEL_DEFAULT);
 }
 
+// ★ 2026-10-26 (owner): the relay's lead sentence said every wall was DC Hub's "paid data
+// boundary", right above the wall line that now offers the answer FREE for an email
+// (mcp#1163/#1164). An agent relaying for_your_human.message told the person it was paid.
+// Only a tool that really sells a paid plan (_toolSellsPro: Pro-only, Land & Power) keeps
+// "paid data boundary"; every other wall is the caller's free-tier limit, which is true for
+// any free caller whatever the unlock (email or plan). "how to unlock it" is unchanged.
+export function _boundaryPhrase(tool) {
+  return _toolSellsPro(tool) ? 'paid data boundary' : 'free-tier limit';
+}
+
 function buildHumanRelay(toolName, tier, sessionId, opts) {
   try {
     if ((process.env.DCHUB_HUMAN_RELAY || '1') === '0'
@@ -766,7 +776,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     // action). Purely additive — `message` and `url` keep their exact meaning
     // and position for every existing consumer.
     const _relay = {
-      message: 'Your AI assistant hit DC Hub’s paid data boundary'
+      message: 'Your AI assistant hit DC Hub’s ' + _boundaryPhrase(toolName)
         + (toolName ? ' on ' + toolName : '')
         + '. Open this link to see what it found and how to unlock it:',
       url: _url,
@@ -24964,7 +24974,7 @@ export async function _cleanPlatformWallLineStep(result, name) {
     if (!relay) return result;   // no signing secret: nothing to hand a person
     const link = SHORT_LINK_RE.test(relay) ? relay : await _shortRelayPageLink(relay, name);
     const swap = (t) => String(t).split(relay).join(link);
-    const fallbackLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
+    const fallbackLine = 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(name) + (name ? ' on ' + name : '')
       + '. Open ' + link + ' to see what it found and how to unlock it.';
     let line;
     if (um && um.includes(relay)) line = swap(um);
@@ -25066,7 +25076,7 @@ export function _relayContractStep(result, name) {
       url = (r && r.url) || '';
     }
     if (!url) return result;   // no signing secret: nothing to relay, leave the response as it was
-    const relayLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
+    const relayLine = 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(name) + (name ? ' on ' + name : '')
       + '. Open ' + url + ' to see what it found and how to unlock it.';
     // Keyless: r-one-checkout-url already says the relay is the ONE human link and /go/c gives
     // way everywhere in the wall.
