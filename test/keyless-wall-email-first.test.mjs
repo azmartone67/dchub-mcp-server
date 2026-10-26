@@ -369,6 +369,27 @@ describe('C. quota_wall_hit', () => {
     expect(n.events[0]).not.toHaveProperty('email_ask');
   });
 
+  // Option E fix (2026-10-26): the event leaves after the outer response steps, so an ask they add
+  // is on it. Live before this, every wall read email_ask none: the grid/queue email line is written
+  // by _wallEmailLineStep, which runs after the handler that used to send the event.
+  it('option E: a grid / queue wall reports the email line its outer step wrote (line), once', async () => {
+    for (const t of ['get_grid_intelligence', 'get_interconnection_queue']) {
+      const r = await call(t, { iso: 'PJM' });
+      expect(r.status).toEqual(['trial_used']);
+      expect(r.events.length).toBe(1);
+      expect(r.events[0]).toMatchObject({ event: 'quota_wall_hit', tool: t, wall_status: 'trial_used', email_ask: 'line' });
+    }
+  });
+
+  it('option E: DCHUB_WALL_HIT_DEFER=0 sends from the handler again (the line is not on it yet)', async () => {
+    process.env.DCHUB_WALL_HIT_DEFER = '0';
+    try {
+      const r = await call('get_grid_intelligence', { iso: 'PJM' });
+      expect(r.events.length).toBe(1);
+      expect(r.events[0]).not.toHaveProperty('email_ask');
+    } finally { delete process.env.DCHUB_WALL_HIT_DEFER; }
+  });
+
   it('kill switch DCHUB_QUOTA_WALL_EVENT=0 sends none', async () => {
     process.env.DCHUB_QUOTA_WALL_EVENT = '0';
     anonCount = 999;

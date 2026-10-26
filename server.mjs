@@ -213,7 +213,7 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
-import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
+import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -233,6 +233,7 @@ import { FREE_PREVIEW_ONLY_TOOLS as _FREE_DECISION_TOOL_LIST, TASTE_SHAPED_ONLY_
 // Growth plan §3 (retention): the email ask at claim/bind + the returning-key nudge.
 import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _retHasTellLine,
          WALL_EMAIL_TELL_TOOLS as _RET_WALL_EMAIL_TOOLS, wallEmailTellOn as _retWallEmailTellOn, wallEmailLineText as _retWallEmailLineText,
+         wallEmailTellFreekeyOn as _retWallEmailTellFreekeyOn, wallEmailFreekeyLineText as _retWallEmailFreekeyLineText,
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
@@ -737,6 +738,16 @@ export function _relayLinkLabel(platform, tool) {
     : (_toolSellsPro(tool) ? RELAY_LABEL_PRO : RELAY_LABEL_DEFAULT);
 }
 
+// ★ 2026-10-26 (owner): the relay's lead sentence said every wall was DC Hub's "paid data
+// boundary", right above the wall line that now offers the answer FREE for an email
+// (mcp#1163/#1164). An agent relaying for_your_human.message told the person it was paid.
+// Only a tool that really sells a paid plan (_toolSellsPro: Pro-only, Land & Power) keeps
+// "paid data boundary"; every other wall is the caller's free-tier limit, which is true for
+// any free caller whatever the unlock (email or plan). "how to unlock it" is unchanged.
+export function _boundaryPhrase(tool) {
+  return _toolSellsPro(tool) ? 'paid data boundary' : 'free-tier limit';
+}
+
 function buildHumanRelay(toolName, tier, sessionId, opts) {
   try {
     if ((process.env.DCHUB_HUMAN_RELAY || '1') === '0'
@@ -780,7 +791,7 @@ function buildHumanRelay(toolName, tier, sessionId, opts) {
     // action). Purely additive — `message` and `url` keep their exact meaning
     // and position for every existing consumer.
     const _relay = {
-      message: 'Your AI assistant hit DC Hub’s paid data boundary'
+      message: 'Your AI assistant hit DC Hub’s ' + _boundaryPhrase(toolName)
         + (toolName ? ' on ' + toolName : '')
         + '. Open this link to see what it found and how to unlock it:',
       url: _url,
@@ -4577,6 +4588,42 @@ export function _quotaWallEventFor(c, name, status) {
     return _quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
                                  isQa: _isQaCaller(c), platform: tagged.platform });
   } catch (_) { return null; }
+}
+// Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
+// response steps ran, so an ask those steps add (_wallEmailLineStep's 'line', the trial bind_email
+// field's 'bind_field') was never on it: live, every wall read email_ask none. Like the parked
+// wall track (lib/wall-link-track.mjs), the event is parked on the request's context and leaves
+// from _wallOuterStep once the whole chain has run; a 5 s fallback timer sends it if no outer step
+// flushes (it is never lost, at worst it carries the ask marked so far). Switch
+// DCHUB_WALL_HIT_DEFER=0 sends it from the handler again.
+const _WALL_HIT_FLUSH_FALLBACK_MS = 5000;
+function _wallHitDeferOn() { return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_HIT_DEFER || '').trim()); }
+export function _parkQuotaWallHit(c, name, status) {
+  try {
+    if (!_wallHitDeferOn() || !c || typeof c !== 'object') return _recordQuotaWallHit(c, name, status);
+    if (!_QUOTA_WALL_STATUSES.has(String(status || '')) && !c._paidBlocked) return;
+    const e = { name, status, sent: false, timer: null };
+    e.timer = setTimeout(() => _sendParkedWallHit(c, e), _WALL_HIT_FLUSH_FALLBACK_MS);
+    if (e.timer && typeof e.timer.unref === 'function') e.timer.unref();
+    if (!Array.isArray(c._pendingWallHits)) c._pendingWallHits = [];
+    c._pendingWallHits.push(e);
+  } catch (_) { _recordQuotaWallHit(c, name, status); }
+}
+function _sendParkedWallHit(c, e) {
+  if (!e || e.sent) return;
+  e.sent = true;
+  try { if (e.timer) clearTimeout(e.timer); } catch (_) { /* ignore */ }
+  _recordQuotaWallHit(c, e.name, e.status);
+}
+export function _flushQuotaWallHits(c, name) {
+  try {
+    const l = c && Array.isArray(c._pendingWallHits) ? c._pendingWallHits : null;
+    if (!l || !l.length) return;
+    c._pendingWallHits = l.filter((e) => {
+      if (e && !e.sent && e.name === name) { _sendParkedWallHit(c, e); return false; }
+      return !!(e && !e.sent);
+    });
+  } catch (_) { /* telemetry never touches a response */ }
 }
 function _recordQuotaWallHit(c, name, status) {
   try {
@@ -11542,10 +11589,15 @@ function _recordEmailAskShown(c, name, kind) {
 // binds the email onto it), a relay wall that is not a capacity, site-runs or keyless-cap wall (that
 // one has its own free email copy), and a dchub.cloud human_url. A wall's isError is a transport
 // choice (_wallIsError), so it is not read; a real failure is _isFailureEnvelope.
+// 2026-10-26: also a keyless free-key wall (WALL_KIND_FREEKEY) of a tool that is not preview-only:
+// that page leads with the free email unlock as well (lib/retention.mjs wallEmailTellFreekeyOn,
+// kill switch DCHUB_WALL_EMAIL_TELL_FREEKEY=0). Every other gate below is the same.
 export function _wallEmailLineStep(result, name, env = process.env) {
   try {
     if (!_retWallEmailTellOn(env)) return result;
-    if (!_RET_WALL_EMAIL_TOOLS.includes(name) || !emailFullDecisionOn()) return result;
+    const gridQueue = _RET_WALL_EMAIL_TOOLS.includes(name) && emailFullDecisionOn();
+    const freekeyOn = !gridQueue && _retWallEmailTellFreekeyOn(env) && !_freePreviewOnlyTool(name);
+    if (!gridQueue && !freekeyOn) return result;
     if (!result || typeof result !== 'object' || !Array.isArray(result.content)) return result;
     if (_isFailureEnvelope(result)) return result;
     const sc0 = result.structuredContent;
@@ -11561,10 +11613,11 @@ export function _wallEmailLineStep(result, name, env = process.env) {
     if (sc0.unlock_kind === 'email_cap' || up.unlock_kind === 'email_cap') return result;
     const kind = _wallKindFor(sc0, c, name);
     if (kind === WALL_KIND_CAPACITY || kind === WALL_KIND_SITERUNS) return result;
+    if (!gridQueue && kind !== WALL_KIND_FREEKEY) return result;
     const url = typeof sc0.human_url === 'string' && /^https:\/\/dchub\.cloud\/\S+$/.test(sc0.human_url) ? sc0.human_url : '';
     if (!url) return result;
     const base = _linkBase(url);
-    const sentence = _retWallEmailLineText(url);
+    const sentence = gridQueue ? _retWallEmailLineText(url) : _retWallEmailFreekeyLineText(url);
     let wrote = false;
     const content = result.content.map((b) => {
       if (wrote || !b || b.type !== 'text' || typeof b.text !== 'string') return b;
@@ -20851,6 +20904,7 @@ async function _wallOuterStep(fn, args, extra, name) {
     return out;
   } finally {
     flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall);
+    _flushQuotaWallHits(c, name);   // option E: after every step that can add an email ask
   }
 }
 
@@ -23603,8 +23657,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
       };
       if (!parkWallTrack(c, _trackRow, trackToolCall)) trackToolCall(_trackRow).catch(() => {});
-      // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs).
-      _recordQuotaWallHit(c, name, status);
+      // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs). Parked, not sent:
+      // the email ask it names (option E) is marked by steps that run after this handler.
+      _parkQuotaWallHit(c, name, status);
     }
   });
   // r-output-schema-typed: flagship tools advertise their documented data
@@ -24974,7 +25029,7 @@ export async function _cleanPlatformWallLineStep(result, name) {
     if (!relay) return result;   // no signing secret: nothing to hand a person
     const link = SHORT_LINK_RE.test(relay) ? relay : await _shortRelayPageLink(relay, name);
     const swap = (t) => String(t).split(relay).join(link);
-    const fallbackLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
+    const fallbackLine = 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(name) + (name ? ' on ' + name : '')
       + '. Open ' + link + ' to see what it found and how to unlock it.';
     let line;
     if (um && um.includes(relay)) line = swap(um);
@@ -25076,7 +25131,7 @@ export function _relayContractStep(result, name) {
       url = (r && r.url) || '';
     }
     if (!url) return result;   // no signing secret: nothing to relay, leave the response as it was
-    const relayLine = 'Your AI assistant hit DC Hub\u2019s paid data boundary' + (name ? ' on ' + name : '')
+    const relayLine = 'Your AI assistant hit DC Hub\u2019s ' + _boundaryPhrase(name) + (name ? ' on ' + name : '')
       + '. Open ' + url + ' to see what it found and how to unlock it.';
     // Keyless: r-one-checkout-url already says the relay is the ONE human link and /go/c gives
     // way everywhere in the wall.
