@@ -71,6 +71,7 @@ test/challenges-same-resource.test.mjs
 test/chatgpt-directory-probe-hard-wall.test.mjs
 test/chatgpt-directory-probe.test.mjs
 test/chatgpt-directory-resubmission.test.mjs
+test/chatgpt-first-full-answer.test.mjs
 test/chatgpt-oauth-identity-tier.test.mjs
 test/chatgpt-oauth-path.test.mjs
 test/chatgpt-openai-session-sid.test.mjs
