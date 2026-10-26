@@ -213,7 +213,7 @@ import { WALL_COPY_VERSION, SITE_WALL_COPY_VERSION, COUNT_LABEL, SHORT_LINK_RE, 
 import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPrice, _paidPlansOutputLine, _planOnLadder, _freeKeyAllowanceText, _freeTierRuleText, _freeTierRuleForGate, _fullAnswersPerToolPerDay, _freeKeyIsDaily, _freeKeyOfferText, _unboundKeyLadderText, ANALYZE_SITE_FREE_LINE, FOUNDING_URL, PRO_URL } from './lib/tier-canon.mjs';
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
-import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity } from './lib/keyless-wall.mjs';
+import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity } from './lib/keyless-wall.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -4562,6 +4562,42 @@ export function _quotaWallEventFor(c, name, status) {
     return _quotaWallEventBody({ c: c || {}, name, status, paidBlocked: !!(c && c._paidBlocked),
                                  isQa: _isQaCaller(c), platform: tagged.platform });
   } catch (_) { return null; }
+}
+// Option E fix (2026-10-26): the wall event left from the handler's finally, BEFORE the outer
+// response steps ran, so an ask those steps add (_wallEmailLineStep's 'line', the trial bind_email
+// field's 'bind_field') was never on it: live, every wall read email_ask none. Like the parked
+// wall track (lib/wall-link-track.mjs), the event is parked on the request's context and leaves
+// from _wallOuterStep once the whole chain has run; a 5 s fallback timer sends it if no outer step
+// flushes (it is never lost, at worst it carries the ask marked so far). Switch
+// DCHUB_WALL_HIT_DEFER=0 sends it from the handler again.
+const _WALL_HIT_FLUSH_FALLBACK_MS = 5000;
+function _wallHitDeferOn() { return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_HIT_DEFER || '').trim()); }
+export function _parkQuotaWallHit(c, name, status) {
+  try {
+    if (!_wallHitDeferOn() || !c || typeof c !== 'object') return _recordQuotaWallHit(c, name, status);
+    if (!_QUOTA_WALL_STATUSES.has(String(status || '')) && !c._paidBlocked) return;
+    const e = { name, status, sent: false, timer: null };
+    e.timer = setTimeout(() => _sendParkedWallHit(c, e), _WALL_HIT_FLUSH_FALLBACK_MS);
+    if (e.timer && typeof e.timer.unref === 'function') e.timer.unref();
+    if (!Array.isArray(c._pendingWallHits)) c._pendingWallHits = [];
+    c._pendingWallHits.push(e);
+  } catch (_) { _recordQuotaWallHit(c, name, status); }
+}
+function _sendParkedWallHit(c, e) {
+  if (!e || e.sent) return;
+  e.sent = true;
+  try { if (e.timer) clearTimeout(e.timer); } catch (_) { /* ignore */ }
+  _recordQuotaWallHit(c, e.name, e.status);
+}
+export function _flushQuotaWallHits(c, name) {
+  try {
+    const l = c && Array.isArray(c._pendingWallHits) ? c._pendingWallHits : null;
+    if (!l || !l.length) return;
+    c._pendingWallHits = l.filter((e) => {
+      if (e && !e.sent && e.name === name) { _sendParkedWallHit(c, e); return false; }
+      return !!(e && !e.sent);
+    });
+  } catch (_) { /* telemetry never touches a response */ }
 }
 function _recordQuotaWallHit(c, name, status) {
   try {
@@ -20836,6 +20872,7 @@ async function _wallOuterStep(fn, args, extra, name) {
     return out;
   } finally {
     flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall);
+    _flushQuotaWallHits(c, name);   // option E: after every step that can add an email ask
   }
 }
 
@@ -23586,8 +23623,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
       };
       if (!parkWallTrack(c, _trackRow, trackToolCall)) trackToolCall(_trackRow).catch(() => {});
-      // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs).
-      _recordQuotaWallHit(c, name, status);
+      // 2026-10-16: one quota_wall_hit per walled call (lib/keyless-wall.mjs). Parked, not sent:
+      // the email ask it names (option E) is marked by steps that run after this handler.
+      _parkQuotaWallHit(c, name, status);
     }
   });
   // r-output-schema-typed: flagship tools advertise their documented data
