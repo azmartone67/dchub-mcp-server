@@ -1145,6 +1145,62 @@ export const STANDING_PATH = '/api/v1/mcp/standing';
 // The scan runs every 6h; past this the measurement is too old to act on.
 export const DIRECTORY_SCAN_MAX_AGE_H = 14;
 
+// ── upstream stalls (2026-10-27) ────────────────────────────────────────
+// A listing can be behind because the DIRECTORY has stopped updating, not
+// because of anything on our side. Measured 2026-10-27: geminicli.com's gallery
+// data file was last modified Fri 16 Oct 2026 02:36 UTC (2,198 entries, newest
+// lastUpdated 2026-10-15) and every entry was frozen, ours at lastUpdated
+// 2026-10-07. Nobody can fix that per listing, so a row whose directory has a
+// measurably stale data file is listed as "waiting on the directory", not as a
+// fix item, and does not hold the prospecting issue open. The stall is MEASURED
+// every sweep from the file's Last-Modified header, never remembered: when the
+// directory updates, the note disappears on its own, and if the card is still
+// behind after that the row is a fix item again.
+export const UPSTREAM_DATA = Object.freeze({
+  'gemini-cli': Object.freeze({
+    url: 'https://geminicli.com/extensions.json',
+    label: "the Gemini CLI gallery's data file",
+    staleAfterDays: 3,
+    tracked: 'https://github.com/google-gemini/gemini-cli/issues/29791',
+  }),
+});
+
+/** { stalled, since, ageDays } from a Last-Modified value, or null when it
+ *  cannot be judged (missing, unparseable, or in the future). Unknown is never
+ *  "stalled": the row then stays a fix item. */
+export function upstreamStall(lastModified, now = Date.now(), staleAfterDays = 3) {
+  const at = Date.parse(lastModified || '');
+  if (!Number.isFinite(at) || at > now) return null;
+  const ageDays = (now - at) / 86400000;
+  return { stalled: ageDays > staleAfterDays, since: new Date(at).toISOString().slice(0, 10), ageDays: Math.floor(ageDays) };
+}
+
+async function fetchLastModified(url, timeoutMs = 20000) {
+  try {
+    const r = await fetch(url, { method: 'HEAD', headers: { 'User-Agent': BROWSER_UA }, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) });
+    const lm = r.headers.get('last-modified');
+    return { ok: r.ok && !!lm, status: r.status, lastModified: lm || null };
+  } catch (e) {
+    return { ok: false, status: 0, lastModified: null, error: String(e?.message || e) };
+  }
+}
+
+/** Mark rows whose directory data file is stalled. Only rows with something to
+ *  fix are looked up, and each data file is read once per sweep. `lm` is
+ *  injectable for tests. */
+export async function annotateUpstream(rows, now = Date.now(), lm = fetchLastModified) {
+  const seen = new Map();
+  for (const { row, obs } of rows) {
+    const cfg = UPSTREAM_DATA[row.id];
+    if (!cfg || !obs?.fieldReview?.actionable?.length) continue;
+    if (!seen.has(cfg.url)) seen.set(cfg.url, await lm(cfg.url));
+    const got = seen.get(cfg.url);
+    const stall = got?.ok ? upstreamStall(got.lastModified, now, cfg.staleAfterDays) : null;
+    if (stall?.stalled) obs.upstream = { ...stall, label: cfg.label, tracked: cfg.tracked, url: cfg.url };
+  }
+  return rows;
+}
+
 /** What a Live listing page SHOWS, as the backend scan measured it (dchub-backend
  *  routes/mcp_standing_scan.py `listing_fields`, 2026-10-27). Two tiers:
  *    actionable  version_behind, endpoint_retired. Someone can fix them and they
@@ -1174,7 +1230,7 @@ export function scanFieldReview(row, canon = null) {
 /** Rows whose page shows something fixable (behind version, retired URL). This is
  *  the number the workflow reads to keep the prospecting issue open. */
 export function fieldActionCount(results) {
-  return results.filter((r) => r.kind === 'directory' && r.obs?.fieldReview?.actionable?.length).length;
+  return results.filter((r) => r.kind === 'directory' && r.obs?.fieldReview?.actionable?.length && !r.obs?.upstream?.stalled).length;
 }
 
 /** One stored scan row as an observation. Only a measured miss is drift; a field
@@ -1325,9 +1381,11 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
     }
   }
   const fieldRows = results.filter((r) => r.kind === 'directory' && r.obs?.fieldReview);
-  const fieldAct = fieldRows.filter((r) => r.obs.fieldReview.actionable.length);
+  const fieldActAll = fieldRows.filter((r) => r.obs.fieldReview.actionable.length);
+  const fieldWait = fieldActAll.filter((r) => r.obs.upstream?.stalled);
+  const fieldAct = fieldActAll.filter((r) => !r.obs.upstream?.stalled);
   const fieldLook = fieldRows.filter((r) => r.obs.fieldReview.review.length);
-  if (fieldAct.length || fieldLook.length) {
+  if (fieldAct.length || fieldLook.length || fieldWait.length) {
     out.push('', '### Listing details that differ from canon (from the same 6-hourly scan)');
     out.push('Only fields a page shows are compared; a page that does not show a version, tool count or URL is not listed. '
       + 'A listing that is live is still live.');
@@ -1335,6 +1393,13 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
       out.push('', '| listing | what the page shows now | fix |', '|---|---|---|');
       for (const r of fieldAct) {
         out.push(`| ${where(r)} | ${esc(r.obs.fieldReview.actionable.join('; '))} | ${esc('refresh request or listing edit at the directory; the source is server.json in this repo')} |`);
+      }
+    }
+    if (fieldWait.length) {
+      out.push('', 'Waiting on the directory (nothing to fix on the listing; not counted, never holds this issue open):');
+      for (const r of fieldWait) {
+        const u = r.obs.upstream;
+        out.push(`- ${where(r)}: ${esc(r.obs.fieldReview.actionable.join('; '))}. ${esc(u.label)} has not changed since ${u.since} (${u.ageDays} days), so every entry in it is frozen. Tracked at ${u.tracked}. This line goes away when the directory updates; if the card is still behind after that, the row returns as a fix item.`);
       }
     }
     if (fieldLook.length) {
@@ -1508,6 +1573,7 @@ async function main() {
     }
     const dirs = await readDirectories();
     if (dirs.read) {
+      await annotateUpstream(dirs.rows);
       for (const { row, obs } of dirs.rows) {
         results.push({
           key: `dir:${row.id}`, label: row.name || row.id, kind: 'directory', url: row.listing_url,
