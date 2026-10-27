@@ -7,6 +7,7 @@ import { MCP_PATHS } from '../server.mjs';
 import {
   DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP,
   loadDirectories, liveDirectories, directoriesJson, renderDirectoriesPage,
+  viewUrl, REGISTRY_HUMAN_URL,
 } from '../lib/directories-page.mjs';
 
 const DATA = loadDirectories();
@@ -49,6 +50,23 @@ describe('renderDirectoriesPage', () => {
       const shown = html.includes(`data-id="${d.id}"`);
       expect(shown, `${d.id} (${d.status})`).toBe(d.status === 'live');
     }
+  });
+
+  it('sends a reader to the registry search page, never to its raw JSON API', () => {
+    const out = renderDirectoriesPage({ directories: [
+      { id: 'official-registry', name: 'Official MCP Registry', status: 'live',
+        listing_url: 'https://registry.modelcontextprotocol.io/v0/servers?search=cloud.dchub/mcp-server&version=latest' },
+      { id: 'other', name: 'Other Dir', status: 'live', listing_url: 'https://example.com/other?x=1' },
+    ] }, { tools: 1 });
+    expect(out).toContain(`href="${REGISTRY_HUMAN_URL}"`);
+    expect(out).not.toContain('registry.modelcontextprotocol.io/v0');
+    expect(out).toContain('href="https://example.com/other?x=1"');
+    expect(html).not.toContain('registry.modelcontextprotocol.io/v0');
+    // the data file keeps the API URL: the scanner reads version and tools from it
+    const row = DATA.directories.find((r) => r.id === 'official-registry');
+    expect(row.listing_url).toMatch(/^https:\/\/registry\.modelcontextprotocol\.io\/v0\//);
+    expect(viewUrl(row.listing_url)).toBe(REGISTRY_HUMAN_URL);
+    expect(viewUrl(null)).toBe(null);
   });
 
   it('pending rows are hidden even when they carry a listing URL', () => {
