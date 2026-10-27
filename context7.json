@@ -9,5 +9,8 @@
     "sdk",
     "integrations"
   ],
+  "excludeFiles": [
+    "SMITHERY-LISTING-PASTE.md"
+  ],
   "rules": []
 }

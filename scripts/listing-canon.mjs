@@ -50,6 +50,9 @@ export function renderContext7(L) {
     projectTitle: L.name,
     description: L.short_description,
     excludeFolders: ['test', 'submissions', 'node_modules', 'sdk', 'integrations'],
+    // Context7 indexed this runbook's example of the dead Smithery proxy URL
+    // (POST dchub--azmartone67.run.tools -> 401) as a usage snippet. Filenames only, no paths.
+    excludeFiles: ['SMITHERY-LISTING-PASTE.md'],
     rules: [],
   };
   return JSON.stringify(doc, null, 2) + '\n';
