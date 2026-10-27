@@ -789,7 +789,7 @@ describe('upstream stall', () => {
     expect(body).toMatch(/\| \[mcp-market\]\(https:\/\/mcp-market\.dev\) \| shows v2\.12\.29, canon is v2\.12\.43 \|/);
     expect(body).not.toMatch(/\| \[gemini-cli\]/);
     expect(body).toContain('Waiting on the directory (nothing to fix on the listing; not counted, never holds this issue open):');
-    expect(body).toMatch(/- \[gemini-cli\]\(https:\/\/gemini-cli\.dev\): shows v2\.12\.29, canon is v2\.12\.43\. the Gemini CLI gallery's data file has not changed since 2026-10-16 \(11 days\)/);
+    expect(body).toMatch(/- \[gemini-cli\]\(https:\/\/gemini-cli\.dev\): shows v2\.12\.29, canon is v2\.12\.43\. The Gemini CLI gallery's data file has not changed since 2026-10-16 \(11 days\)/);
     expect(body).toContain('Tracked at https://github.com/google-gemini/gemini-cli/issues/29791');
     expect(body).toContain('if the card is still behind after that, the row returns as a fix item');
   });

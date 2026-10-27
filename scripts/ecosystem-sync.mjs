@@ -1399,7 +1399,7 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
       out.push('', 'Waiting on the directory (nothing to fix on the listing; not counted, never holds this issue open):');
       for (const r of fieldWait) {
         const u = r.obs.upstream;
-        out.push(`- ${where(r)}: ${esc(r.obs.fieldReview.actionable.join('; '))}. ${esc(u.label)} has not changed since ${u.since} (${u.ageDays} days), so every entry in it is frozen. Tracked at ${u.tracked}. This line goes away when the directory updates; if the card is still behind after that, the row returns as a fix item.`);
+        out.push(`- ${where(r)}: ${esc(r.obs.fieldReview.actionable.join('; '))}. ${esc(u.label.charAt(0).toUpperCase() + u.label.slice(1))} has not changed since ${u.since} (${u.ageDays} days), so every entry in it is frozen. Tracked at ${u.tracked}. This line goes away when the directory updates; if the card is still behind after that, the row returns as a fix item.`);
       }
     }
     if (fieldLook.length) {
