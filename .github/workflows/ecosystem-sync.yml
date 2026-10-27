@@ -121,11 +121,12 @@ jobs:
           STUCK: ${{ steps.observe.outputs.stuck_count }}
           OURS: ${{ steps.observe.outputs.ours_drift_count }}
           DIRS: ${{ steps.observe.outputs.directory_drift_count }}
+          FIELDS: ${{ steps.observe.outputs.field_review_count }}
           NEWLY: ${{ steps.observe.outputs.newly_stuck }}
         run: |
           gh label create prospecting --color 5319e7 \
             --description "A listing we cannot update by API; needs a person" 2>/dev/null || true
-          if [ "${STUCK:-0}" != "0" ] || [ "${OURS:-0}" != "0" ] || [ "${DIRS:-0}" != "0" ]; then
+          if [ "${STUCK:-0}" != "0" ] || [ "${OURS:-0}" != "0" ] || [ "${DIRS:-0}" != "0" ] || [ "${FIELDS:-0}" != "0" ]; then
             if [ -n "$ISSUE" ]; then
               gh issue edit "$ISSUE" --body-file ecosystem-sync.issue.md
               if [ -n "$NEWLY" ]; then

@@ -1145,14 +1145,50 @@ export const STANDING_PATH = '/api/v1/mcp/standing';
 // The scan runs every 6h; past this the measurement is too old to act on.
 export const DIRECTORY_SCAN_MAX_AGE_H = 14;
 
-/** One stored scan row as an observation. Only a measured miss is drift. */
-export function observeScannedRow(row) {
+/** What a Live listing page SHOWS, as the backend scan measured it (dchub-backend
+ *  routes/mcp_standing_scan.py `listing_fields`, 2026-10-27). Two tiers:
+ *    actionable  version_behind, endpoint_retired. Someone can fix them and they
+ *                keep the prospecting issue open.
+ *    review      version_ahead, tools_other_count. Listed for a look, never
+ *                opens or holds the issue: a list page prints other servers' tool
+ *                counts, and "ahead" is a question about our own publishing.
+ *  A field the page does not show is not in `review` at all, so it never lands
+ *  here. Null when the scan row carries nothing to report (an older backend). */
+export function scanFieldReview(row, canon = null) {
+  const f = row?.check?.fields;
+  const codes = Array.isArray(f?.review) ? f.review : [];
+  if (!codes.length) return null;
+  const cv = canon?.version ? `v${canon.version}` : 'canon';
+  const msg = {
+    version_behind: () => `shows v${f.version?.shown}, canon is ${cv}`,
+    endpoint_retired: () => `lists a retired connection URL (${(f.endpoint?.retired || []).join(', ') || 'a Smithery proxy URL'})`,
+    version_ahead: () => `shows v${f.version?.shown}, ahead of the published ${cv}`,
+    tools_other_count: () => `prints ${(f.tools?.claimed || []).join('/')} tools near our name (canon ${canon?.tools ?? '?'}); may be another server's count`,
+  };
+  const pick = (names) => codes.filter((c) => names.includes(c) && msg[c]).map((c) => msg[c]());
+  const actionable = pick(['version_behind', 'endpoint_retired']);
+  const review = pick(['version_ahead', 'tools_other_count']);
+  return actionable.length || review.length ? { actionable, review } : null;
+}
+
+/** Rows whose page shows something fixable (behind version, retired URL). This is
+ *  the number the workflow reads to keep the prospecting issue open. */
+export function fieldActionCount(results) {
+  return results.filter((r) => r.kind === 'directory' && r.obs?.fieldReview?.actionable?.length).length;
+}
+
+/** One stored scan row as an observation. Only a measured miss is drift; a field
+ *  mismatch on a found page rides along as `fieldReview` and is not drift. */
+export function observeScannedRow(row, canon = null) {
   const disp = row?.display;
   if (disp === 'Not found') {
     const st = row?.check?.http_status;
     return { read: true, extra: [`the 6-hourly scan did not find DC Hub on the page${st ? ` (HTTP ${st})` : ''}, but /mcp/directories still shows it live`] };
   }
-  if (disp === 'Live') return { read: true, info: 'scan found DC Hub' };
+  if (disp === 'Live') {
+    const fieldReview = scanFieldReview(row, canon);
+    return fieldReview ? { read: true, info: 'scan found DC Hub', fieldReview } : { read: true, info: 'scan found DC Hub' };
+  }
   return null;   // Pending / Updating / Checking: nothing to judge
 }
 
@@ -1170,7 +1206,7 @@ export function directoriesFromStanding(body, now = Date.now(), liveIds = null) 
   const rows = [];
   for (const r of d.rows) {
     if (liveIds && !liveIds.has(r.id)) continue;
-    const obs = observeScannedRow(r);
+    const obs = observeScannedRow(r, d.canon || null);
     if (obs) rows.push({ row: { id: r.id, name: r.name, listing_url: r.listing_url }, obs });
   }
   return { read: true, rows, asOf: d.as_of };
@@ -1286,6 +1322,24 @@ export function renderIssue({ ssot, results, stuck, plan, generatedAt, scope }) 
     if (changed.length) {
       out.push('', '| row | what the page shows now | where it is fixed |', '|---|---|---|');
       for (const r of changed) out.push(line(r));
+    }
+  }
+  const fieldRows = results.filter((r) => r.kind === 'directory' && r.obs?.fieldReview);
+  const fieldAct = fieldRows.filter((r) => r.obs.fieldReview.actionable.length);
+  const fieldLook = fieldRows.filter((r) => r.obs.fieldReview.review.length);
+  if (fieldAct.length || fieldLook.length) {
+    out.push('', '### Listing details that differ from canon (from the same 6-hourly scan)');
+    out.push('Only fields a page shows are compared; a page that does not show a version, tool count or URL is not listed. '
+      + 'A listing that is live is still live.');
+    if (fieldAct.length) {
+      out.push('', '| listing | what the page shows now | fix |', '|---|---|---|');
+      for (const r of fieldAct) {
+        out.push(`| ${where(r)} | ${esc(r.obs.fieldReview.actionable.join('; '))} | ${esc('refresh request or listing edit at the directory; the source is server.json in this repo')} |`);
+      }
+    }
+    if (fieldLook.length) {
+      out.push('', 'For a look (not counted, never holds this issue open):');
+      for (const r of fieldLook) out.push(`- ${where(r)}: ${esc(r.obs.fieldReview.review.join('; '))}`);
     }
   }
   const waiting = results.filter((r) => r.verdict.state === 'drift' && !stuck.includes(r.key) && !['ours', 'watch', 'directory'].includes(r.kind));
@@ -1524,7 +1578,8 @@ async function main() {
   if (scope === 'full') {
     const dirRows = results.filter((r) => r.kind === 'directory');
     console.log(`  directories.json: ${dirRows.filter((r) => r.verdict.state === 'in_sync').length}/${dirRows.length} as recorded · `
-      + `${dirDrift.length} changed · ${dirRows.filter((r) => r.verdict.state === 'unreadable').length} unreadable`);
+      + `${dirDrift.length} changed · ${dirRows.filter((r) => r.verdict.state === 'unreadable').length} unreadable · `
+      + `${fieldActionCount(results)} with a field to fix`);
   }
 
   setOutput('scope', scope);
@@ -1538,6 +1593,7 @@ async function main() {
   setOutput('stuck_count', stuck.length);
   setOutput('ours_drift_count', oursDrift.length);
   setOutput('directory_drift_count', dirDrift.length);
+  setOutput('field_review_count', fieldActionCount(results));
   setOutput('issue_lookup', scope !== 'full' ? 'skipped' : (issue === null ? 'failed' : 'ok'));
   setOutput('newly_stuck', fresh.map((k) => labelOf.get(k) || k).join(', '));
   setOutput('issue_number', issue?.number || '');
