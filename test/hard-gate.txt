@@ -94,6 +94,7 @@ test/claude-directory-auth.test.mjs
 test/claude-directory-capacity-source.test.mjs
 test/claude-directory-catalog.test.mjs
 test/claude-directory-decision-claim-line.test.mjs
+test/claude-directory-grid-data-installed-capacity.test.mjs
 test/claude-directory-lazy-auth.test.mjs
 test/claude-directory-probe.test.mjs
 test/claude-directory-readout.test.mjs
