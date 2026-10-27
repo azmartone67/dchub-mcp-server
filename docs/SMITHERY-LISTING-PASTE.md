@@ -89,7 +89,7 @@ electricity, power, energy, utility, utilities, power grid, electricity grid, ut
 ## 4 · While you are in there — the install config field
 
 The live listing is an `external_shttp` proxy
-(`dchub--azmartone67.run.tools` → `https://dchub.cloud/mcp`) and its page
+(Smithery's own proxy URL, in front of `https://dchub.cloud/mcp`) and its page
 payload carries **`configSchema: {}`**. Our `smithery.yaml` declares an
 optional `apiKey` that injects as the `X-API-Key` header, but that listing type
 ignores it — so **no Smithery user can supply a DC Hub key at install, and every
@@ -130,15 +130,8 @@ listability scan ending that same day (1,042 calls on 08-20 → 710 on 08-21 →
 There was no serving break to find, and looking for one cost a day.
 
 ★ **It counts arrivals at THEIR gateway, so it is not evidence about us.** The
-registry record's `deploymentUrl` is `https://dchub--azmartone67.run.tools` — an
-authenticated proxy in front of our keyless server:
-
-```
-POST https://dchub--azmartone67.run.tools
-→ 401 {"error":"invalid_token","error_description":"Missing Authorization header"}
-   www-authenticate: … resource_metadata=…/.well-known/oauth-protected-resource
-   → {"authorization_servers":["https://auth.smithery.ai/azmartone67/dchub"]}
-```
+registry record's `deploymentUrl` is Smithery's own proxy URL — an
+authenticated proxy in front of our keyless server. An unauthenticated POST to it was answered with HTTP 401 `invalid_token` ("Missing Authorization header"), plus a `www-authenticate` header that points at an OAuth protected-resource document naming Smithery's own authorization server. The proxy URL is not reproduced here: it stops working on 2026-10-31, and an example request against a dead host is not something to copy.
 
 Post-Arcade, an account with no credits is told *"Your access to MCP servers is
 paused."* So a flat `useCount` is consistent with a wall **they** put in front
