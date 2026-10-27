@@ -20,6 +20,7 @@ import {
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
   metaCardText, jsonLdText, headText, observeGlama,
   observeScannedRow, directoriesFromStanding, stuckKeys as _stuckKeys, DIRECTORY_SCAN_MAX_AGE_H,
+  scanFieldReview, fieldActionCount,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
   normToolText, toolTextVerdict, toolTextAnchor, toolTextCopies, staleToolTexts, staleToolReason,
   toolRecordMap, withManifestTexts,
@@ -674,6 +675,66 @@ describe('directories.json rows via /api/v1/mcp/standing', () => {
     const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
     expect(body).toContain('1 of 1 live rows');
     expect(body).not.toContain('| row | what the page shows now |');
+  });
+});
+
+// ── field review: what a Live page shows vs canon (2026-10-27) ──────────────
+describe('field review from the backend scan', () => {
+  const plan0 = () => planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW });
+  const CANON = { version: '2.12.43', tools: 94 };
+  const live = (id, review, fields = {}) => ({
+    id, name: id, display: 'Live', listing_url: `https://${id}.dev`,
+    check: { result: 'live', fields: { version: { shown: null, state: 'not_shown' }, tools: { claimed: [], state: 'not_shown' }, endpoint: { state: 'not_shown', retired: [] }, ...fields, review } },
+  });
+  const behind = live('gemini', ['version_behind', 'tools_other_count'], { version: { shown: '2.12.29', state: 'behind' }, tools: { claimed: [92], state: 'other_count' } });
+  const retired = live('ctx7', ['endpoint_retired'], { endpoint: { state: 'retired', retired: ['dchub--azmartone67.run.tools'] } });
+  const ahead = live('glama', ['version_ahead'], { version: { shown: '2.12.47', state: 'ahead' } });
+  const mk = (row) => { const obs = observeScannedRow(row, CANON); return { key: `dir:${row.id}`, label: row.id, kind: 'directory', url: row.listing_url, fix: `row ${row.id}`, obs, verdict: judge(obs, null) }; };
+
+  it('behind and retired are actionable; ahead and another tool count are for a look', () => {
+    expect(scanFieldReview(behind, CANON)).toEqual({
+      actionable: ['shows v2.12.29, canon is v2.12.43'],
+      review: ['prints 92 tools near our name (canon 94); may be another server\'s count'],
+    });
+    expect(scanFieldReview(retired, CANON).actionable[0]).toMatch(/retired connection URL \(dchub--azmartone67\.run\.tools\)/);
+    expect(scanFieldReview(ahead, CANON)).toEqual({ actionable: [], review: ['shows v2.12.47, ahead of the published v2.12.43'] });
+  });
+
+  it('a row with no fields, or an older backend without them, reports nothing', () => {
+    expect(scanFieldReview({ display: 'Live' }, CANON)).toBeNull();
+    expect(scanFieldReview(live('x', []), CANON)).toBeNull();
+    expect(observeScannedRow({ display: 'Live', listing_url: 'u' }, CANON)).toEqual({ read: true, info: 'scan found DC Hub' });
+  });
+
+  it('a field mismatch is never drift: the row stays in sync and is never stuck', () => {
+    const r = mk(behind);
+    expect(r.verdict.state).toBe('in_sync');
+    expect(_stuckKeys([r], { hoursSinceChange: 99 })).toEqual([]);
+  });
+
+  it('the canon in the scan block reaches the messages', () => {
+    const body = { measured: { directories: { as_of: '2026-10-27T01:00:00Z', canon: CANON, rows: [behind] } } };
+    const d = directoriesFromStanding(body, Date.parse('2026-10-27T02:00:00Z'));
+    expect(d.rows[0].obs.fieldReview.actionable[0]).toContain('canon is v2.12.43');
+  });
+
+  it('only actionable rows count toward holding the issue open', () => {
+    expect(fieldActionCount([mk(ahead)])).toBe(0);
+    expect(fieldActionCount([mk(ahead), mk(behind), mk(retired)])).toBe(2);
+    expect(fieldActionCount([{ kind: 'ours', obs: { fieldReview: { actionable: ['x'] } } }])).toBe(0);
+  });
+
+  it('the issue lists actionable rows in a table and review rows under "for a look"', () => {
+    const body = renderIssue({ ssot: SSOT, results: [mk(behind), mk(ahead)], stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toContain('### Listing details that differ from canon');
+    expect(body).toMatch(/\| \[gemini\]\(https:\/\/gemini\.dev\) \| shows v2\.12\.29, canon is v2\.12\.43 \|/);
+    expect(body).toMatch(/For a look \(not counted, never holds this issue open\):[\s\S]*- \[glama\]\(https:\/\/glama\.dev\): shows v2\.12\.47, ahead/);
+    expect(body).not.toMatch(/### In sync[\s\S]*gemini/);
+  });
+
+  it('with no field findings the section is absent', () => {
+    const body = renderIssue({ ssot: SSOT, results: [mk(live('ok', []))], stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).not.toContain('Listing details that differ from canon');
   });
 });
 
