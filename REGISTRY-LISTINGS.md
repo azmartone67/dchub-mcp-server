@@ -191,6 +191,15 @@ field for the endpoint (its `glama.json` schema's only property is
 the distinction that was actually blocking a decision: all four registries
 report zero today, and nothing separated *zero* from *unmeasured*.
 
+★ **2026-10-27 (owner, from Grok's registry audit): the bare `https://dchub.cloud/mcp`
+is now ALSO listed in `remotes`, LAST** (`lib/registry-remotes.mjs`, v2.12.44).
+`remotes[0]` stays `/mcp/registry`, so PulseMCP / Glama (which mirror
+`remotes[0]`) and the cascade attribution tag are unchanged. The accepted cost: a
+client that picks the bare `/mcp` from the registry's list is indistinguishable from
+direct traffic. No other registry entry holds `/mcp`
+(`io.github.pipeworx-io/dchub` points at `gateway.pipeworx.io`), so the
+one-server-per-remote rule does not refuse it.
+
 ★ `_meta.canonicalRemote` stays `https://dchub.cloud/mcp`, and `/mcp` keeps
 serving every existing install unchanged. Only the URL new listings hand out is
 tagged. A human copying from GitHub is not a *registry* arrival — so the

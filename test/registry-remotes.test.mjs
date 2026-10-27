@@ -33,12 +33,17 @@ describe('server.json remotes', () => {
     expect(SJ.remotes).toEqual(registryRemotes());
   });
 
-  it('the allowlist is registry + claude + grok + oauth, cascade path first', () => {
-    expect(REGISTRY_REMOTE_PATHS).toEqual(['/mcp/registry', '/mcp/claude', '/mcp/grok', '/mcp/oauth']);
+  it('the allowlist is registry + claude + grok + oauth + bare /mcp, cascade path first, /mcp last', () => {
+    expect(REGISTRY_REMOTE_PATHS).toEqual(['/mcp/registry', '/mcp/claude', '/mcp/grok', '/mcp/oauth', '/mcp']);
     expect(SJ.remotes[0].url).toBe('https://dchub.cloud/mcp/registry');
+    // PulseMCP and Glama mirror remotes[0]; the bare path must never displace it.
+    expect(SJ.remotes[SJ.remotes.length - 1].url).toBe('https://dchub.cloud/mcp');
+    // the bare remote IS the declared canonical one; both must read the same
+    const canon = SJ._meta?.['io.modelcontextprotocol.registry/publisher-provided']?.canonicalRemote;
+    expect(canon).toBe('https://dchub.cloud/mcp');
   });
 
-  it('never advertises /mcp/chatgpt (OpenAI review) or bare /mcp', () => {
+  it('never advertises /mcp/chatgpt (OpenAI review)', () => {
     const urls = SJ.remotes.map((r) => r.url);
     for (const p of Object.keys(REGISTRY_REMOTE_EXCLUDED)) {
       expect(urls, p).not.toContain(`https://dchub.cloud${p}`);
@@ -51,7 +56,7 @@ describe('server.json remotes', () => {
     for (const r of SJ.remotes) {
       expect(Object.keys(r).sort()).toEqual(['type', 'url']);
       expect(r.type).toBe('streamable-http');
-      expect(r.url).toMatch(/^https:\/\/dchub\.cloud\/mcp\/[a-z]+$/);
+      expect(r.url).toMatch(/^https:\/\/dchub\.cloud\/mcp(\/[a-z]+)?$/);
     }
   });
 
