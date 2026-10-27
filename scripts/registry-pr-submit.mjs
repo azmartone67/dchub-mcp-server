@@ -198,6 +198,162 @@ export const TARGETS = [
     alphabetical: false,
     entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
   },
+  // ── AUTO-DISCOVERED sacridini/Awesome-Geospatial (★5346) — VET BEFORE ENABLING ──
+  // Long list of geospatial tools and resources
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-geospatial', upstream: 'sacridini/Awesome-Geospatial', base: 'master', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED composio-community/awesome-claude-plugins (★1965) — VET BEFORE ENABLING ──
+  // A curated list of Plugins that let you extend Claude Code with custom commands, agents, hooks, and M
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-claude-plugins', upstream: 'composio-community/awesome-claude-plugins', base: 'master', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED agentic-community/mcp-gateway-registry (★1014) — VET BEFORE ENABLING ──
+  // Enterprise-ready MCP Gateway & Registry that centralizes AI development tools with secure OAuth auth
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'mcp-gateway-registry', upstream: 'agentic-community/mcp-gateway-registry', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED chrieke/awesome-geospatial-companies (★894) — VET BEFORE ENABLING ──
+  // :globe_with_meridians: List & Map of 800+ companies for geospatial jobs (GIS, Earth Observation, UAV
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-geospatial-companies', upstream: 'chrieke/awesome-geospatial-companies', base: 'master', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED joewdavies/awesome-frontend-gis (★877) — VET BEFORE ENABLING ──
+  // Geospatial resources for web development :earth_africa: 🗺️
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-frontend-gis', upstream: 'joewdavies/awesome-frontend-gis', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED Dominic789654/awesome-deepseek-harness (★400) — VET BEFORE ENABLING ──
+  // A curated list of plugins, skills, MCP servers, patch/profile layers, orchestrators & UIs for DeepSe
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-deepseek-harness', upstream: 'Dominic789654/awesome-deepseek-harness', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED tolkonepiu/best-of-mcp-servers (★159) — VET BEFORE ENABLING ──
+  // 🏆  A ranked list of MCP servers. Updated weekly.
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'best-of-mcp-servers', upstream: 'tolkonepiu/best-of-mcp-servers', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED subinium/awesome-claude-code (★120) — VET BEFORE ENABLING ──
+  // Curated list of tools, skills, plugins, and MCP servers for Claude Code
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-claude-code', upstream: 'subinium/awesome-claude-code', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED hfangcat/Awesome-Geospatial-Embeddings (★119) — VET BEFORE ENABLING ──
+  // A curated list of papers that focus on how to represent Earth data in embedding space — spatial, tem
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-geospatial-embeddings', upstream: 'hfangcat/Awesome-Geospatial-Embeddings', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED h4ckf0r0day/awesome-ai-web-scraping (★117) — VET BEFORE ENABLING ──
+  // A curated list of AI-powered web scraping tools, LLM-friendly crawlers, MCP servers, and infrastruct
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-ai-web-scraping', upstream: 'h4ckf0r0day/awesome-ai-web-scraping', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED PlagueHO/github-copilot-assets-library (★83) — VET BEFORE ENABLING ──
+  // A list of GitHub Copilot assets, such as prompt files, chat modes, MCP servers and methods collected
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'github-copilot-assets-library', upstream: 'PlagueHO/github-copilot-assets-library', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
+  // ── AUTO-DISCOVERED jerr0328/awesome-geospatial-list (★41) — VET BEFORE ENABLING ──
+  // A curated list of geospatial tools, data, tutorials, information, and more
+  // TODO(human): confirm the README path + set the exact `section` header for
+  // this list, then set enabled:true. Left disabled so the submit loop skips it
+  // — a wrong section would blind-insert our entry in the wrong place.
+  {
+    key: 'awesome-geospatial-list', upstream: 'jerr0328/awesome-geospatial-list', base: 'main', path: 'README.md',
+    enabled: false,
+    listedRe: /dchub|dc[\s-]?hub/i,
+    section: '### TODO: set the exact section header from this list',
+    alphabetical: false,
+    entry: `- [DC Hub](${REPO_URL}): ${DESC}`,
+  },
 ];
 
 // REFRESH targets: curated lists that ALREADY list DC Hub but with STALE counts.
