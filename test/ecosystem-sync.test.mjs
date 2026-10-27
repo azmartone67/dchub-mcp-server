@@ -20,7 +20,7 @@ import {
   mcpserversRecord, observeMcpServers, glamaDeprecation, observeGlamaDuplicate,
   metaCardText, jsonLdText, headText, observeGlama,
   observeScannedRow, directoriesFromStanding, stuckKeys as _stuckKeys, DIRECTORY_SCAN_MAX_AGE_H,
-  scanFieldReview, fieldActionCount,
+  scanFieldReview, fieldActionCount, upstreamStall, annotateUpstream, UPSTREAM_DATA,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
   normToolText, toolTextVerdict, toolTextAnchor, toolTextCopies, staleToolTexts, staleToolReason,
   toolRecordMap, withManifestTexts,
@@ -735,6 +735,72 @@ describe('field review from the backend scan', () => {
   it('with no field findings the section is absent', () => {
     const body = renderIssue({ ssot: SSOT, results: [mk(live('ok', []))], stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
     expect(body).not.toContain('Listing details that differ from canon');
+  });
+});
+
+// ── upstream stall: the directory itself stopped updating (2026-10-27) ──────
+describe('upstream stall', () => {
+  const plan0 = () => planActions({ healDrift: [], runs: null, openHealPrs: [], now: NOW });
+  const CANON = { version: '2.12.43', tools: 94 };
+  const NOW_MS = Date.parse('2026-10-27T07:00:00Z');
+  const LM_OLD = 'Fri, 16 Oct 2026 02:36:07 GMT';
+  const LM_NEW = 'Tue, 27 Oct 2026 03:00:00 GMT';
+  const row = (id, review, fields) => ({ id, name: id, display: 'Live', listing_url: `https://${id}.dev`, check: { result: 'live', fields: { version: { shown: '2.12.29', state: 'behind' }, tools: { claimed: [], state: 'not_shown' }, endpoint: { state: 'not_shown', retired: [] }, ...fields, review } } });
+  const gem = () => row('gemini-cli', ['version_behind']);
+  const mkd = (r) => ({ row: { id: r.id, name: r.name, listing_url: r.listing_url }, obs: observeScannedRow(r, CANON) });
+  const toResult = ({ row: rw, obs }) => ({ key: `dir:${rw.id}`, label: rw.id, kind: 'directory', url: rw.listing_url, fix: `row ${rw.id}`, obs, verdict: judge(obs, null) });
+
+  it('stalled only past the threshold; unknown or future is never stalled', () => {
+    expect(upstreamStall(LM_OLD, NOW_MS, 3)).toEqual({ stalled: true, since: '2026-10-16', ageDays: 11 });
+    expect(upstreamStall(LM_NEW, NOW_MS, 3).stalled).toBe(false);
+    expect(upstreamStall('Sat, 24 Oct 2026 07:00:00 GMT', NOW_MS, 3).stalled).toBe(false);   // exactly 3 days
+    expect(upstreamStall('Sat, 24 Oct 2026 06:59:00 GMT', NOW_MS, 3).stalled).toBe(true);    // just past it
+    for (const bad of [null, '', 'not a date', 'Mon, 02 Nov 2026 00:00:00 GMT']) expect(upstreamStall(bad, NOW_MS, 3)).toBeNull();
+  });
+
+  it('a behind row in a stalled directory is marked; a fresh data file leaves it a fix item', async () => {
+    const stalled = await annotateUpstream([mkd(gem())], NOW_MS, async () => ({ ok: true, lastModified: LM_OLD }));
+    expect(stalled[0].obs.upstream).toMatchObject({ stalled: true, since: '2026-10-16', tracked: UPSTREAM_DATA['gemini-cli'].tracked });
+    const fresh = await annotateUpstream([mkd(gem())], NOW_MS, async () => ({ ok: true, lastModified: LM_NEW }));
+    expect(fresh[0].obs.upstream).toBeUndefined();
+  });
+
+  it('a failed or header-less read never marks a row as waiting', async () => {
+    for (const got of [{ ok: false, status: 0 }, { ok: true, lastModified: null }, { ok: true, lastModified: 'garbage' }]) {
+      const out = await annotateUpstream([mkd(gem())], NOW_MS, async () => got);
+      expect(out[0].obs.upstream).toBeUndefined();
+    }
+  });
+
+  it('only rows with something to fix, in a known directory, trigger a read', async () => {
+    let calls = 0;
+    const lm = async () => { calls += 1; return { ok: true, lastModified: LM_OLD }; };
+    await annotateUpstream([mkd(row('gemini-cli', [], {})), mkd(row('other', ['version_behind'])), mkd(row('gemini-cli', ['version_ahead']))], NOW_MS, lm);
+    expect(calls).toBe(0);
+    await annotateUpstream([mkd(gem()), mkd(gem())], NOW_MS, lm);
+    expect(calls).toBe(1);   // one read per data file per sweep
+  });
+
+  it('a stalled row does not count and is not in the fix table', async () => {
+    const rows = await annotateUpstream([mkd(gem()), mkd(row('mcp-market', ['version_behind']))], NOW_MS, async () => ({ ok: true, lastModified: LM_OLD }));
+    const results = rows.map(toResult);
+    expect(fieldActionCount(results)).toBe(1);   // mcp-market only
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toMatch(/\| \[mcp-market\]\(https:\/\/mcp-market\.dev\) \| shows v2\.12\.29, canon is v2\.12\.43 \|/);
+    expect(body).not.toMatch(/\| \[gemini-cli\]/);
+    expect(body).toContain('Waiting on the directory (nothing to fix on the listing; not counted, never holds this issue open):');
+    expect(body).toMatch(/- \[gemini-cli\]\(https:\/\/gemini-cli\.dev\): shows v2\.12\.29, canon is v2\.12\.43\. the Gemini CLI gallery's data file has not changed since 2026-10-16 \(11 days\)/);
+    expect(body).toContain('Tracked at https://github.com/google-gemini/gemini-cli/issues/29791');
+    expect(body).toContain('if the card is still behind after that, the row returns as a fix item');
+  });
+
+  it('only a stalled row: the section lists it as waiting, the count is zero, no table', async () => {
+    const rows = await annotateUpstream([mkd(gem())], NOW_MS, async () => ({ ok: true, lastModified: LM_OLD }));
+    const results = rows.map(toResult);
+    expect(fieldActionCount(results)).toBe(0);
+    const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
+    expect(body).toContain('Waiting on the directory');
+    expect(body).not.toContain('| listing | what the page shows now | fix |');
   });
 });
 
