@@ -59,6 +59,17 @@ jobs:
           case "$CODE" in
             2??) echo "### Context7 refresh requested: $LIBRARY (HTTP $CODE)" >> "$GITHUB_STEP_SUMMARY" ;;
             429) echo "::warning::Context7 rate limit for $LIBRARY (HTTP 429); not refreshed this run." ;;
+            # 2026-10-27: Context7 allows one refresh per library every 10 days and
+            # answers 400 {"error":"too-early"} inside that window. We release
+            # almost daily, so with a real key this leg was red after most
+            # releases for a state that needs no action. ONLY that body is
+            # softened; any other 400 still fails the run.
+            400) if jq -e '.error == "too-early"' resp.json >/dev/null 2>&1; then
+                   echo "::notice::Context7 refreshed $LIBRARY too recently (HTTP 400 too-early); skipped, nothing to do."
+                   echo "### Context7 refresh skipped (too early): $LIBRARY" >> "$GITHUB_STEP_SUMMARY"
+                 else
+                   echo "::error::Context7 refresh for $LIBRARY failed: HTTP 400"; exit 1
+                 fi ;;
             *)   echo "::error::Context7 refresh for $LIBRARY failed: HTTP $CODE"; exit 1 ;;
           esac
 
