@@ -235,13 +235,7 @@ Or one command: `gemini mcp add --transport http dchub https://dchub.cloud/mcp/g
 
 ### Smithery.ai
 
-Listed at [smithery.ai/servers/azmartone67/dchub](https://smithery.ai/servers/azmartone67/dchub). Add via Smithery CLI:
-
-```
-npx -y @smithery/cli install @azmartone67/dchub --client claude
-```
-
-Smithery's hosted proxy and CLI shut down on 2026-10-31. After that the listing is a directory entry that points to the direct URL, `https://dchub.cloud/mcp`; connect your client to that URL.
+Listed at [smithery.ai/servers/azmartone67/dchub](https://smithery.ai/servers/azmartone67/dchub). Smithery's hosted proxy and CLI shut down on 2026-10-31, so installing through the Smithery CLI stops working that day. The listing then becomes a directory entry that points to the direct URL, `https://dchub.cloud/mcp`; connect your client to that URL (per-client setup above).
 
 ### Docker MCP Toolkit
 

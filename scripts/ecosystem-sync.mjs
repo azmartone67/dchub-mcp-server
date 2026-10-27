@@ -86,6 +86,17 @@ export const WORKFLOWS = {
   registry: 'registry-refresh.yml',
   smithery: 'smithery-freshness.yml',
 };
+// ★2026-10-27. Smithery's API, CLI and keys stop on 2026-10-31 (smithery.ai/future).
+// Its registry read would only ever answer "unreadable" from that day, and the
+// issue would list it under "Could not read this sweep" on every full sweep for
+// a service that no longer exists. A retired sink is not read at all. The
+// smithery-freshness lane has its own dated shutdown gate for the publish side.
+export const SINK_RETIRED_FROM = Object.freeze({ smithery: '2026-10-31' });
+export function sinkRetired(key, now = Date.now()) {
+  const from = SINK_RETIRED_FROM[key];
+  return !!from && new Date(now).toISOString().slice(0, 10) >= from;
+}
+
 export const COOLDOWN_MIN = { heal: 45, registry: 45, smithery: 120 };
 // A lane that just FAILED is not retried every cycle. Its log names the fix.
 export const FAILURE_BACKOFF_H = { heal: 6, registry: 6, smithery: 24 };
@@ -189,6 +200,12 @@ export const SINKS = {
     url: 'https://mcp.so/servers/dchub-backend',
     fix: 'verify-only. Same form. mcp.so support was asked on 2026-09-25 to merge it into the primary listing' },
 };
+
+/** The sinks one sweep reads: the scope's sinks, minus any that have been retired. */
+export function sinksToRead(keys, scope, now = Date.now()) {
+  return keys.filter((k) => (scope === 'full' || SINKS[k].scope === 'core') && !sinkRetired(k, now));
+}
+
 
 const IDENTITY_RE = /dc ?hub|dchub/i;
 
@@ -1537,7 +1554,7 @@ async function main() {
     mcp_so: () => readMcpSo('mcp_so', ssot),
     mcp_so_secondary: () => readMcpSo('mcp_so_secondary', ssot),
   };
-  const keys = Object.keys(readers).filter((k) => scope === 'full' || SINKS[k].scope === 'core');
+  const keys = sinksToRead(Object.keys(readers), scope);
   const observe = async (k) => {
     const obs = await readers[k]();
     return {

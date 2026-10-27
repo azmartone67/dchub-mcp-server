@@ -21,6 +21,7 @@ import {
   metaCardText, jsonLdText, headText, observeGlama,
   observeScannedRow, directoriesFromStanding, stuckKeys as _stuckKeys, DIRECTORY_SCAN_MAX_AGE_H,
   scanFieldReview, fieldActionCount, upstreamStall, annotateUpstream, UPSTREAM_DATA,
+  sinkRetired, SINK_RETIRED_FROM, sinksToRead,
   COOLDOWN_MIN, FAILURE_BACKOFF_H, PULL_GRACE_H, SELF_TAG, WORKFLOWS, SINKS, FLOOR_TOLERANCE,
   normToolText, toolTextVerdict, toolTextAnchor, toolTextCopies, staleToolTexts, staleToolReason,
   toolRecordMap, withManifestTexts,
@@ -801,6 +802,30 @@ describe('upstream stall', () => {
     const body = renderIssue({ ssot: SSOT, results, stuck: [], plan: plan0(), generatedAt: 't', scope: 'full' });
     expect(body).toContain('Waiting on the directory');
     expect(body).not.toContain('| listing | what the page shows now | fix |');
+  });
+});
+
+describe('retired sinks (Smithery shuts down 2026-10-31)', () => {
+  it('Smithery is read until its shutdown day and never after', () => {
+    expect(sinkRetired('smithery', Date.parse('2026-10-30T23:59:59Z'))).toBe(false);
+    expect(sinkRetired('smithery', Date.parse('2026-10-31T00:00:00Z'))).toBe(true);
+    expect(sinkRetired('smithery', Date.parse('2026-12-01T12:00:00Z'))).toBe(true);
+  });
+  it('the sweep reads Smithery before the shutdown and not after, in either scope', () => {
+    const keys = ['official', 'smithery', 'mcp_so', 'glama_server'];
+    const before = Date.parse('2026-10-30T12:00:00Z'), after = Date.parse('2026-10-31T12:00:00Z');
+    expect(sinksToRead(keys, 'core', before)).toContain('smithery');
+    expect(sinksToRead(keys, 'full', before)).toContain('smithery');
+    expect(sinksToRead(keys, 'core', after)).not.toContain('smithery');
+    expect(sinksToRead(keys, 'full', after)).not.toContain('smithery');
+    expect(sinksToRead(keys, 'full', after)).toEqual(['official', 'mcp_so', 'glama_server']);   // nothing else dropped
+    expect(sinksToRead(keys, 'core', after)).toEqual(['official']);                            // core scope unchanged
+  });
+  it('no other sink is ever retired by this rule', () => {
+    expect(Object.keys(SINK_RETIRED_FROM)).toEqual(['smithery']);
+    for (const k of ['official', 'glama_server', 'mcp_so', 'readme', 'nonexistent']) {
+      expect(sinkRetired(k, Date.parse('2030-01-01T00:00:00Z'))).toBe(false);
+    }
   });
 });
 
