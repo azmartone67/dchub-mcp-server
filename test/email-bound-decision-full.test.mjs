@@ -58,6 +58,11 @@ const ARGS = {
   get_market_intel: { market: 'northern-virginia' },
 };
 // Fixture keys — test values only, never real credentials.
+// The DATA the caller got, without the provenance / citation envelope: the envelope names the fields it
+// withheld (provenance.preview.withheld_fields, evidence.coverage.withheld_fields) on purpose, so a quoted
+// field name there is the disclosure, not a leak. Since content[0] carries the stamped provenance too,
+// the guard reads the data alone.
+const dataOutsideEnvelope = (d) => { const { provenance, citation, ...rest } = d || {}; return JSON.stringify(rest); };
 const KEYS = {
   free:  'dch_live_freedecisiontest0000001',
   trial: 'dch_trial_freedecisiontest000001',
@@ -430,7 +435,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     for (const key of [KEYS.free, 'dch_live_identnoemail0000000001']) {
       const r = await callAs({ key }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
       expect(r.data.taste && r.data.taste.headline, key).toBeTruthy();
-      expect(JSON.stringify(r.data)).not.toContain('"constraint_score"');
+      expect(dataOutsideEnvelope(r.data)).not.toContain('"constraint_score"');
       expect(r.text).toContain('call `bind_email` with your human');
       expect(r.text).toContain('10 full `get_grid_intelligence` answers a day');
     }
@@ -439,7 +444,7 @@ describe('B) email-bound key: full grid / queue answers up to the cap, then a ca
     await withEnv('DCHUB_EMAIL_FULL_DECISION_TOOLS', '0', async () => {
       const r = await callAs({ key: freshBoundKey() }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
       expect(r.data.taste && r.data.taste.headline).toBeTruthy();
-      expect(JSON.stringify(r.data)).not.toContain('"constraint_score"');
+      expect(dataOutsideEnvelope(r.data)).not.toContain('"constraint_score"');
       expect(r.data._taste_note).toContain('a bound email does not deepen it');
     });
   });
