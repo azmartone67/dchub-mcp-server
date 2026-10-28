@@ -450,6 +450,7 @@ test/retirement-headroom-mw-paid.test.mjs
 test/retirement-region-error-reaches-agent.test.mjs
 test/retrieval-envelope.test.mjs
 test/return-affordance-anon.test.mjs
+test/route-back.test.mjs
 test/routing-hint.test.mjs
 test/save-site-coords.test.mjs
 test/schema-dialect-neutral.test.mjs

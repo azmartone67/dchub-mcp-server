@@ -77,6 +77,7 @@
  */
 
 import { buildRankedAnswer, attachRankedRelay } from './lib/ranked-answer.mjs';
+import { createRouteBackRegistry, buildRouteBack, routeBackEnabled, ROUTE_BACK_PATH, ROUTE_BACK_TIMEOUT_MS } from './lib/route-back.mjs';
 import { buildIntentAnswer, attachIntentRelay } from './lib/intent-answers.mjs';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -6747,6 +6748,15 @@ function _withStatusTransportError(err) {
 export const _capacitySummary = createCapacitySummaryCache({
   fetchSummary: () => ctx.exit(() => callAPI(CAPACITY_SUMMARY_PATH, {},
     { withStatus: true, timeout: CAPACITY_SUMMARY_TIMEOUT_MS })),
+});
+
+// execute_plan route_back (owner 2026-10-28, lib/route-back.mjs): the Works with registry, read from the
+// backend twin in the background and served from memory. Armed by a serving process only (listen callback
+// below), so every test that imports this module stays off the network. Public data, read outside the
+// caller's context for the same reason as the capacity summary.
+export const _routeBackRegistry = createRouteBackRegistry({
+  fetchTwin: () => ctx.exit(() => callAPI(ROUTE_BACK_PATH, { light: 1 },
+    { withStatus: true, timeout: ROUTE_BACK_TIMEOUT_MS })),
 });
 
 // The tools whose results may carry a capacity_source pointer. Their
@@ -25473,7 +25483,11 @@ const _ONE_LINK_POINT_KEYS = new Set(['upgrade_url', 'unlock_url', 'human_url'])
 // out of), so those keys are left alone; docs_url and the like ARE pointers and go.
 const _ONE_LINK_KEEP_KEYS = new Set(['citation', 'provenance', 'source', 'sources', 'source_url', 'cite_as', 'license', 'license_url',
   'method_url', 'methodology', 'methodology_url',   // a field's method page (#833 taste descriptors) is provenance, not a pointer
-  'partner_inbox']);
+  'partner_inbox',
+  // route_back (owner 2026-10-28, lib/route-back.mjs): its `where` is the Works with page, the plain
+  // who-owns-what map, not a checkout, plan or upgrade pointer. Without this the one-link rule drops the
+  // field from every keyless response, which is where nearly every plan runs. Only present when a need matched.
+  'route_back']);
 function _wallOneLinkOn() {
   return !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_WALL_ONE_LINK || ''));
 }
@@ -26901,6 +26915,15 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         }
       }
       const sc = _planQuery(a && a.intent, a.context);
+      // route_back (owner 2026-10-28): for an intent that asks for something DC Hub does not hold, name who
+      // owns it, from the Works with registry. In-memory read, no network, no tool call; omitted entirely
+      // when no need matches. Same surfaces as ranked_answer: no new fields on the directory profiles.
+      let _rb = null;
+      try {
+        if (routeBackEnabled() && !_isCleanPlatform() && _answerBlocksAllowed()) {
+          _rb = buildRouteBack(a && a.intent, _routeBackRegistry.get());
+        }
+      } catch (_e) { _rb = null; }
       // r-recipe-lifecycle (2026-07-30): mint the execution id and declare the
       // recipe STARTED before any step runs. The paired `completed` event
       // fires from the planner-quality telemetry block below; if this run
@@ -27133,7 +27156,10 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
           params: { intent_class: sc.intent_class, status_counts: counts,
                     ...(_gap ? { coverage_gap: _gap } : {}),
                     wall_ms: Date.now() - t0, constraint_rejects: rejectedMints.length,
-                    constraint_iso: constraintIsoSet.join('|') || null },
+                    constraint_iso: constraintIsoSet.join('|') || null,
+                    // which needs the response named a route back for (ids from the registry); absent when none.
+                    // Read by dchub-backend routes/planner_quality.py route_back_summary.
+                    ...(_rb ? { route_back_need: _rb.need_ids.join('|') } : {}) },
           platform: (c && c.platform) || 'unknown', client_name: null,
           api_key: null, tier: null, session_id: (c && c.session_id) || null,
           status: 'success', duration_ms: Date.now() - t0,
@@ -27217,7 +27243,8 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         totals: { steps_run: calls, ms: Date.now() - t0,
                   tier_note: c && c.api_key ? 'steps ran under your key (normal quota + tier depth)' : 'anonymous — steps returned free-preview depth; claim_free_key raises it' },
         replay,
-        answer_guide: _execAnswerGuide(executed),
+        answer_guide: _execAnswerGuide(executed) + (_rb ? ' ' + _rb.sentence : ''),
+        ...(_rb ? { route_back: _rb.entries } : {}),
         // No new fields on the frozen/directory surfaces. _isCleanPlatform() only knows ChatGPT-IDENTIFIED
         // clients; getCtx().profile is set for every directory path (/mcp/chatgpt, /mcp/claude, /mcp/grok,
         // /mcp/core, the oauth twins), so a non-ChatGPT client on those paths gets neither block.
@@ -33893,6 +33920,9 @@ if (process.argv.includes('--stdio') || process.env.MCP_TRANSPORT === 'stdio') {
     // in the background, so the first session after a deploy can already carry
     // the live clause. Never awaited; a 404 simply leaves it unknown.
     if (capacityPointersEnabled()) { _capacitySummary.arm(); _capacitySummary.refresh(); }
+    // execute_plan route_back: read the Works with registry once in the background so the first plan after
+    // a deploy can already carry it; never awaited, and a failed read leaves the field out.
+    if (routeBackEnabled()) { _routeBackRegistry.arm(); _routeBackRegistry.refresh(); }
     // r-list-swr: warm the generic tools/list cache at boot so the FIRST
     // scanner probe after a deploy (5-7 deploys/day) is already served warm.
     _toolsListCached('__warmup__', null)

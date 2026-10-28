@@ -1,0 +1,105 @@
+{
+  "title": "DC Hub Works with: who owns what, where DC Hub sends the reader",
+  "page": "https://dchub.cloud/partners#works-with",
+  "schema": 1,
+  "partners": [
+    {
+      "id": "datacenterhawk",
+      "name": "datacenterHawk",
+      "owns": "Market intelligence on colocation supply, demand and lease and sale transactions: datasets, analytics and expert research on one platform.",
+      "dchub_supplies": "Live grid, interconnection-queue and power context for the same markets, dated and source-named.",
+      "route_back": "Leasing comps and market supply research: use datacenterHawk.",
+      "needs": [
+        "lease_comps_research",
+        "research_reports"
+      ]
+    },
+    {
+      "id": "dcbyte",
+      "name": "DC Byte",
+      "owns": "Market analytics, hyperscaler and supplier analytics, a site selector, consultancy and reports on global data centre coverage.",
+      "dchub_supplies": "Power-side evidence (grid headroom, queue position, time to power) to read beside its supply data.",
+      "route_back": "Supply and pipeline analytics across its markets: use DC Byte.",
+      "needs": [
+        "research_reports"
+      ]
+    },
+    {
+      "id": "dcd",
+      "name": "Data Center Dynamics (DCD)",
+      "owns": "Industry news, long reads, whitepapers and live events such as DCD Connect.",
+      "dchub_supplies": "Dated, cited power and grid figures a story or briefing can link to.",
+      "route_back": "News, events and DCD research: go to DCD.",
+      "needs": [
+        "news_editorial",
+        "research_reports"
+      ]
+    },
+    {
+      "id": "dcf",
+      "name": "Data Center Frontier (DCF)",
+      "owns": "News and analysis on hyperscale, colocation, power, cooling and AI infrastructure, plus podcasts, webinars, white papers and the DCF Trends Summit.",
+      "dchub_supplies": "A live market power card and cited grid figures to embed beside a story.",
+      "route_back": "Reporting and analysis: go to Data Center Frontier.",
+      "needs": [
+        "news_editorial"
+      ]
+    },
+    {
+      "id": "baxtel",
+      "name": "Baxtel",
+      "owns": "A map and directory of data center facilities, with news, datasets, a colocation inventory service and property-selling and site-selection services.",
+      "dchub_supplies": "Power and grid context for the sites a directory lists, with the source named on every figure.",
+      "route_back": "Facility and provider listings: use Baxtel.",
+      "needs": [
+        "colocation_procurement"
+      ]
+    },
+    {
+      "id": "cbre",
+      "name": "CBRE",
+      "owns": "Commercial real estate services across leasing, sales, capital markets and research, with a Data Center Solutions offering.",
+      "dchub_supplies": "A cited power and queue figure to sit beside a market view between report editions.",
+      "route_back": "Representation, market reports and deal execution: work with CBRE.",
+      "needs": [
+        "brokerage_deal_execution",
+        "research_reports",
+        "colocation_procurement"
+      ]
+    },
+    {
+      "id": "jll",
+      "name": "JLL",
+      "owns": "Data center real estate and infrastructure advisory, from site selection and utility power procurement to facility operations, with published market reports.",
+      "dchub_supplies": "A cited power and queue figure to sit beside a market view between report editions.",
+      "route_back": "Representation, market reports and deal execution: work with JLL.",
+      "needs": [
+        "brokerage_deal_execution",
+        "research_reports",
+        "colocation_procurement"
+      ]
+    }
+  ],
+  "needs": [
+    {
+      "id": "lease_comps_research",
+      "label": "verified lease comps, rents, vacancy and absorption research"
+    },
+    {
+      "id": "research_reports",
+      "label": "paid market research and analyst reports"
+    },
+    {
+      "id": "news_editorial",
+      "label": "news and editorial reporting"
+    },
+    {
+      "id": "brokerage_deal_execution",
+      "label": "brokerage, tenant or landlord representation, LOI negotiation and deal execution"
+    },
+    {
+      "id": "colocation_procurement",
+      "label": "running a colocation procurement or RFP"
+    }
+  ]
+}
