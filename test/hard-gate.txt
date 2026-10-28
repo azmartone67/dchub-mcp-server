@@ -270,6 +270,8 @@ test/invalid-param-hint.test.mjs
 test/item1-wall-neutral-line.test.mjs
 test/key-never-worse-than-anon.test.mjs
 test/keyed-budget-per-key-826.test.mjs
+test/keyless-full-trial-http.test.mjs
+test/keyless-full-trial.test.mjs
 test/keyless-grid-data-honesty.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs

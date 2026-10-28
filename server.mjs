@@ -214,6 +214,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
+import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -8460,6 +8461,46 @@ export async function _chatgptFirstFullExceeded(c, tool) {
   if (!(CHATGPT_FIRST_FULL_IP_CAP > 0) || !c.client_ip) return false;
   const ipId = CHATGPT_FIRST_FULL_IP_PREFIX + c.client_ip;
   return await _trialFullCallsExceeded(ipId, _CHATGPT_FIRST_FULL_IP_BUCKET, CHATGPT_FIRST_FULL_IP_CAP, ipId);
+}
+// ── Keyless full-answer trial (owner 2026-10-28: "do 1", ships OFF) ──────────────────────────
+// lib/keyless-full-trial.mjs decides the seat; this is the wiring. A keyless caller on /mcp,
+// /mcp/claude or /mcp/core gets the answer a FREE KEY gets on get_facility / get_grid_data /
+// get_market_dcpi_rank, DCHUB_KEYLESS_FULL_TRIAL_CAP per tool per IP per UTC day; past it, the
+// unchanged preview. Never /mcp/chatgpt (frozen), never a key, a bot, or a QA caller (a QA caller
+// sees it only through the test-only ctx override, and is then charged and tagged nothing).
+export function _keylessFullTrialSeat(name, c, env = process.env) {
+  return _kftSeatFor(name, c, {
+    env, directoryProfile: DIRECTORY_PROFILE, allowedProfiles: [CLAUDE_PROFILE, CORE_PROFILE],
+    // The QA markers other gates read; /mcp/core carries the header as qa_header (its ctx has no
+    // qa_marker, and adding one would change other QA-only branches there).
+    isQa: (x) => _isQaCaller(x) || x.qa_header === true || !!_selfTestTelemetryTag(x),
+    isBot: isBotOrInternalCtx,
+  });
+}
+// The counter identity: the per-IP identity the keyless cap wall uses (capWallIdentity).
+export function _keylessFullTrialId(c) {
+  return KEYLESS_FULL_TRIAL_ID_PREFIX + _capWallIdentity({ client_ip: c && c.client_ip });
+}
+// Charges one full answer to (IP, tool, UTC day) on the same store the anonymous full-answer
+// counters use: the in-process _trialDayCounts Map, floored by the awaited durable peek and
+// mirrored by the write-behind consume (POST /api/v1/mcp/full-cap/consume), so it holds across
+// replicas and restarts the way theirs does. Per tool only, and a spent bucket is not charged
+// further. true = charged (serve the full answer); false = spent (serve today's preview).
+export async function _keylessFullTrialCharge(c, tool, cap) {
+  try {
+    if (!(cap > 0)) return false;
+    const id = _keylessFullTrialId(c);
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${id}:${tool}:${day}`;
+    const hydrating = _hydrateOnce(key, key, id, tool, cap);
+    if (FULL_CAP_PEEK_MS > 0) await hydrating;
+    const n = _trialDayCounts.get(key) || 0;
+    if (n >= cap) return false;
+    _trialDayCounts.set(key, n + 1);
+    if (_trialDayCounts.size > 50000) _trialDayCounts.clear();  // unbounded-growth guard
+    _fullCapConsume(id, tool, cap);
+    return true;
+  } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
 }
 export function _chatgptFrozenSeat(c) {
   let s = c;
@@ -21946,6 +21987,23 @@ function trackedTool(srv, name, description, schema, handler) {
           structuredContent: { payment_failed: true, protocol: 'x402', tool: name, error: _x402err },
         };
       }
+      // Keyless full-answer trial (DCHUB_KEYLESS_FULL_TRIAL, default OFF). A keyless seat in the
+      // trial (_keylessFullTrialSeat) takes the gate a FREE KEY gets on this tool, so the answer is
+      // the free key's: same allow, same masks below (facility fields, DCPI figures, location).
+      // Only where that gate is a plain answer (not a taste, a cap or a preview of its own), only
+      // under the anonymous daily cap, and only while the (IP, tool, day) budget has room; anything
+      // else falls through to today's path untouched. Off, nothing here runs.
+      if (_gateTier === 'free' && !c.api_key && !gate.trial_taste) {
+        const _kftSeat = _keylessFullTrialSeat(name, c);
+        if (_kftSeat) {
+          const _kftGate = applyTierGate(name, args, 'free', true, false, undefined, false);
+          if (_kftGate.allowed && !_kftGate.trial_taste && !_kftGate.paid_taste && !_kftGate.email_full
+              && !_kftGate.capped && !(await _anonOverCap(c.client_ip))
+              && (_kftSeat === 'observe' || await _keylessFullTrialCharge(c, name, _keylessFullTrialCap()))) {
+            gate = { ..._kftGate, keyless_full_trial: true, keyless_full_trial_charged: _kftSeat === 'charge' };
+          }
+        }
+      }
       if (!gate.allowed) {
         // ladder stage 1: a Developer / grandfathered Starter key on a Pro-only tool
         // (get_dchub_recommendation — Land & Power answered above) gets the free
@@ -22789,6 +22847,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // fetch "no-such-facility-zzz-000" said "No DC Hub facility has that id"
       // with no isError (2026-09-25, 23:18Z, a caller past the anonymous cap).
       if (result && result.isError === true) return result;
+      // Keyless full-answer trial: the funnel tag (mcp_call_log.status / mcp_tool_calls.gate_status),
+      // on a charged answer only. A QA observer is tagged nothing.
+      if (gate.keyless_full_trial_charged === true) status = KEYLESS_FULL_TRIAL_STATUS;
       // Item 1: execute_plan skips the keyless trim (FREE_FULL_TOOLS; its steps already ran
       // keyless above), so the keyed caller's bind_email / human-link line is stamped here.
       if (_sitingPreview && name === 'execute_plan') {
@@ -22820,7 +22881,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // preview an anon already receives, PLUS a remaining_today:0 escalation. No 429,
       // isError stays false — anon callers already get trimmed previews, so this just
       // adds the "claim_free_key to keep going" nudge.
-      if (!c.api_key && await _anonOverCap(c.client_ip)) {
+      if (!c.api_key && gate.keyless_full_trial !== true && await _anonOverCap(c.client_ip)) {
         try {
           let parsed;
           try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = null; }
@@ -22896,8 +22957,9 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // envelope every other limit takes. Keyed callers keep the cap notice.
       // ChatGPT first full answer: the one promoted call skips the keyless trim (it is served full
       // with broker rates masked in the trial_taste block below); every other call is unchanged.
+      // The keyless full-answer trial's promoted call skips it too (it takes the free key's masks below).
       const _anonTrimApplies = ((!c.api_key && tier === 'free') || _sitingPreview) && !FREE_FULL_TOOLS.has(name)
-        && gate.chatgpt_first !== true;
+        && gate.chatgpt_first !== true && gate.keyless_full_trial !== true;
       if (gate.capped && !_anonTrimApplies) {
         let parsed;
         try { parsed = JSON.parse(result.content?.[0]?.text || '{}'); } catch { parsed = {}; }
@@ -23043,7 +23105,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
       // power_mw / coords-beyond-latlng / specs / internal dropped — so claiming a
       // key is still full discovery, not the whole proprietary dataset. Paid/dev+
       // (tier != 'free') and non-discovery tools skip this. Fail-soft to raw.
-      if (c.api_key && (tier === 'free' || tier === 'identified') && KEYED_FACILITY_MASK.has(name)) {
+      // The keyless full-answer trial's promoted call is served this same free-key projection.
+      if ((c.api_key || gate.keyless_full_trial === true) && (tier === 'free' || tier === 'identified') && KEYED_FACILITY_MASK.has(name)) {
         try {
           const _masked = await _keyedFreeFacilityResult(result, name, c);
           if (_masked) return _masked;
@@ -23670,6 +23733,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
         // when they apply; an older backend ignores both keys.
         ...(_wallLinkTh ? { wall_link_th: _wallLinkTh } : {}),
         ...(_isQaCaller(c) ? { is_qa: true } : {}),
+        // Keyless full-answer trial: the served full answer, beside its status (an older backend ignores it).
+        ...(status === KEYLESS_FULL_TRIAL_STATUS ? { keyless_full_trial: true } : {}),
         // Onboarding item 1 (2026-10-20): which channel the credential came on (see
         // _trackAuthChannel). An older backend ignores the key.
         ...(_trackAuthChannel(c) ? { auth_channel: _trackAuthChannel(c) } : {}),
@@ -32537,6 +32602,8 @@ async function _serveCore(req, res, o) {
     client_name_raw: null,
     referer: req.headers.referer || req.headers.referrer || null,
     user_agent: o.userAgent, client_ip: o.clientIp,
+    // The X-DCHub-QA header, read only by the keyless full-answer trial's QA exclusion.
+    qa_header: String(req.headers['x-dchub-qa'] || '').trim() === '1',
     // No per-call payment rails on the core profile.
     x_payment: null,
   }, async () => {
