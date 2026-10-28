@@ -14029,6 +14029,12 @@ function trimForTrial(parsed, toolName, _inRate = false) {
       out[k] = _maskPricingBlock(v);          // owner 2026-10-20: the exemption keeps the block, never its rates
     } else if (_NEVER_CUT_KEY_RE.test(k) || _PUBLIC_SUBTREE_KEYS.has(k)) {
       out[k] = v;                             // never-cut: byte-identical
+    } else if (toolName === 'site_selection_canvas' && (k === 'inputs' || k === 'applied_filters')) {
+      // Grok 2026-10-23 item 7: these two blocks are the caller's OWN arguments echoed back (capacity_mw,
+      // region, max_months, verdicts, limit). The metric-key sweep nulled capacity_mw and max_months on an
+      // anonymous call (and marked them withheld), so the same inputs echoed differently keyless and keyed.
+      // Withhold only DC Hub's data, never what the caller sent. Exact keys, this tool only.
+      out[k] = v;
     } else if (toolName === 'get_dchub_recommendation' && k === 'available_categories') {
       // Grok 2026-10-07: the four category names are DC Hub's own description menu,
       // not product data. Trimming 4 -> 3 behind `_available_categories_total_in_pro`
