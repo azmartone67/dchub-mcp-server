@@ -12412,6 +12412,14 @@ const _FACILITY_FREE_FIELDS = new Set([
   // dropped both, so search_facilities showed the row with no marker at all.
   // A label is not a paid field; every tier keeps it.
   'v', 'listing', 'verification', 'source_class',
+  // 2026-10-28: the row's own citable date and what it dates (backend
+  // /api/v1/facilities free arm, util/facility_as_of.row_as_of). A provenance
+  // label, not a paid field: keyless search_facilities answered as_of null /
+  // UNMEASURED because list rows carried no date and this mask would have
+  // dropped one. verified_at is PeeringDB rows only. The collection-level
+  // provenance.as_of stays null (lib/attribution.mjs: per-record dates are not
+  // promoted); an agent cites the row's own as_of.
+  'as_of', 'as_of_basis', 'verified_at',
 ]);
 
 // r-unverified-agent-surfaces (2026-09-28): the backend (util/unverified_
