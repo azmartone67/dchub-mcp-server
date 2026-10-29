@@ -196,6 +196,7 @@ import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNext
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
 import { shortWallLinkStep, withWallNextAsk } from './lib/short-wall-link.mjs';
+import { withNextCall } from './lib/next-call.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -20955,8 +20956,12 @@ function _sourceLineCb(name, fn) {
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
     const ownScrub = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
-    return planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name), name, args), name,
+    const _done = planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name), name, args), name,
       { skip: leanSkip }), name, { skip: !!c.loopback_step, ownScrub });
+    // Brain block 2026-10-28 (item 4): every data answer names the next call (lib/next-call.mjs), in block 0's
+    // JSON and structuredContent, never as a new text block. Not on the frozen directory / Claude / core profiles,
+    // a clean platform, or an execute_plan loopback step.
+    return (c.loopback_step || ownScrub || _isCleanPlatform()) ? _done : withNextCall(_done, name);
   };
 }
 // Wall-to-paid P3a (2026-10-23): every step that builds or converges the relay link has run inside
