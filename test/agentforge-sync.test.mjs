@@ -61,6 +61,13 @@ describe('listingDrift', () => {
     expect(d.join(' | ')).toMatch(/tools: 2 listed, 2 live; missing search_facilities; retired retired_tool/);
   });
 
+  it('a tag-only difference is drift; order and case do not matter; no tags field means no comparison', () => {
+    expect(listingDrift(remoteOf({ tags: [...want.tags].reverse().map((g) => g.toUpperCase()) }), want)).toEqual([]);
+    expect(listingDrift(remoteOf({ tags: want.tags.slice(0, 8) }), want)).toEqual(['tags differ from TAGS in agentforge-sync.mjs']);
+    expect(listingDrift(remoteOf({ tags: [] }), want)).toEqual(['tags differ from TAGS in agentforge-sync.mjs']);
+    expect(listingDrift(remoteOf(), want)).toEqual([]);
+  });
+
   it('with no tool list it falls back to total_tools, and an empty listing is drift', () => {
     expect(listingDrift(remoteOf({ tools: [], total_tools: 2 }), want)).toEqual([]);
     expect(listingDrift(remoteOf({ tools: [], total_tools: 1 }), want)).toEqual(['total_tools 1 (live 2)']);

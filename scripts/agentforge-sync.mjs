@@ -84,6 +84,13 @@ export function listingDrift(remote, want) {
   if (remote.long_description != null && norm(remote.long_description) !== norm(want.long_description)) {
     out.push('long description differs from listing-copy.json');
   }
+  // Tags are searched on AgentForge, so a tag-only change must count as drift. Without this the
+  // 2026-10-29 TAGS change (#1208) read "drift: none" and was never written. If the API does not
+  // return tags we cannot compare, so say nothing rather than rewrite on every run.
+  if (Array.isArray(remote.tags) && Array.isArray(want.tags)) {
+    const tagSet = (a) => [...new Set(a.map((t) => norm(t).toLowerCase()))].sort().join(',');
+    if (tagSet(remote.tags) !== tagSet(want.tags)) out.push('tags differ from TAGS in agentforge-sync.mjs');
+  }
   const have = toolNames(remote.tools);
   const wantNames = toolNames(want.tools);
   if (have.length || Number.isInteger(remote.total_tools)) {
