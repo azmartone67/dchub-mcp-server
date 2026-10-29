@@ -196,6 +196,7 @@ import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNext
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
 import { shortWallLinkStep, withWallNextAsk } from './lib/short-wall-link.mjs';
+import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
@@ -3426,6 +3427,7 @@ const getCtx = () => ctx.getStore() || {};
 // counts calls per via (routes/via_attribution.py). A count only, never access.
 const viaCtx = new AsyncLocalStorage();
 export const getVia = () => viaCtx.getStore() || null;
+export const VIA_FUNNEL_CHANNELS = new Set(['x', 'linkedin', 'substack', 'reddit', 'media', 'mcp-wall']);   // = dchub-backend routes/via_funnel.py CHANNELS
 
 // 2026-10-21: one `session_init` telemetry event per initialize (lib/session-init-event.mjs),
 // so the backend can tell which kind of client opened the session. Fire and forget.
@@ -6963,6 +6965,11 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // shared egress IP and could not match the same caller's REST claim. X-DC-Client-IP is a custom header
   // Railway leaves alone; the backend honours it only because this request also carries X-Internal-Key.
   if (c.client_ip)  headers['X-DC-Client-IP'] = c.client_ip;
+  // 2026-10-28 (owner, social-link channels): an agent's claim_free_key / bind_email reaches the backend from
+  // here, with no browser cookie, so the channel on the connector URL (?via=x|linkedin|substack|reddit|media|
+  // mcp-wall) is forwarded as X-DCHub-Via and counted as that channel's unlock / key (dchub-backend
+  // routes/via_funnel.py). Only these closed-set names; any other via keeps counting where it did.
+  { const _v = getVia(); if (_v && VIA_FUNNEL_CHANNELS.has(_v)) headers['X-DCHub-Via'] = _v; }
   try {
     const resp = await fetch(url.toString(), {
       method: opts.method || 'POST',
@@ -20956,8 +20963,12 @@ function _sourceLineCb(name, fn) {
     const leanSkip = !!c.loopback_step || _isCleanPlatform()
       || c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
     const ownScrub = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE;
-    return planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name), name, args), name,
+    const _done = planFreeFieldsStep(leanResponseStep(_sourceLineStep(await _wallOuterStep(fn, args, extra, name), name, args), name,
       { skip: leanSkip }), name, { skip: !!c.loopback_step, ownScrub });
+    // Brain block 2026-10-28 (item 4): every data answer names the next call (lib/next-call.mjs), in block 0's
+    // JSON and structuredContent, never as a new text block. Not on the frozen directory / Claude / core profiles,
+    // a clean platform, or an execute_plan loopback step.
+    return (c.loopback_step || ownScrub || _isCleanPlatform()) ? _done : withNextCall(_done, name);
   };
 }
 // Wall-to-paid P3a (2026-10-23): every step that builds or converges the relay link has run inside
@@ -26725,6 +26736,22 @@ export const _INSTRUCTIONS_LEAN = (() => {
 // 40 characters under the 2,048 budget. DCHUB_CLAIM_KEY_FIRST=0 restores registration order.
 export const CLAIM_KEY_TOOL_NAME = 'claim_free_key';
 const _claimKeyFirstOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CLAIM_KEY_FIRST || ''));
+// ── execute_plan ahead of claim_free_key (owner, Brain note 2026-10-28, item 2) ──────────────────────
+// The front door of every discovery surface says "start with execute_plan(intent=<the user's question>)",
+// so the served tools/list leads with it; claim_free_key stays second (the 2026-10-14 growth push is kept).
+// Only a list that already carries claim_free_key is touched: the full /mcp catalog. A profile that does
+// not list it keeps its own order, which leaves the frozen /mcp/chatgpt toolset (OpenAI review, hold)
+// and /mcp/grok (already execute_plan first) exactly as they were. DCHUB_EXECUTE_PLAN_FIRST=0 restores
+// the claim-first order.
+export const FRONT_DOOR_TOOL_NAME = 'execute_plan';
+const _frontDoorFirstOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_EXECUTE_PLAN_FIRST || ''));
+export function _frontDoorFirst(tools) {
+  if (!Array.isArray(tools) || !_frontDoorFirstOn()) return tools;
+  if (!tools.some((t) => t && t.name === CLAIM_KEY_TOOL_NAME)) return tools;
+  const i = tools.findIndex((t) => t && t.name === FRONT_DOOR_TOOL_NAME);
+  if (i <= 0) return tools;
+  return [tools[i], ...tools.slice(0, i), ...tools.slice(i + 1)];
+}
 export function _claimKeyFirst(tools) {
   if (!Array.isArray(tools) || !_claimKeyFirstOn()) return tools;
   const i = tools.findIndex((t) => t && t.name === CLAIM_KEY_TOOL_NAME);
@@ -31713,7 +31740,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         t.inputSchema = applyOneOfAnyOf(stripSchemaDialect(t.inputSchema), t.name);
         if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
       }
-      if (res && Array.isArray(res.tools)) res.tools = _claimKeyFirst(res.tools);   // claim_free_key first (see above)
+      if (res && Array.isArray(res.tools)) res.tools = _frontDoorFirst(_claimKeyFirst(res.tools));   // execute_plan, then claim_free_key (see above)
       // R1 (2026-10-18): the wire list is slimmed (lib/list-slim.mjs); the cache probe asks for the
       // canonical list instead, so the directory/pack projections keep reading full schemas.
       if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile && process.env.DCHUB_LIST_SLIM_DISABLE !== '1') res.tools = res.tools.map(_slimTool);

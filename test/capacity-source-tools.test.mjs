@@ -1634,7 +1634,7 @@ describe('browse-path access block → next_steps', () => {
     const fixture = listWithItems(2);   // no access block of either name
     const payload = JSON.parse((await browseResult(fixture)).content[0].text);
     expect(Object.keys(payload)).toEqual(
-      [...Object.keys(fixture), 'citation', 'provenance', '_source', '_cite']);
+      [...Object.keys(fixture), 'citation', 'provenance', '_source', '_cite', 'next_call']);   // next_call: lib/next-call.mjs, on every data answer (Brain block 2026-10-28 item 4)
     for (const [i, item] of payload.items.entries()) {
       expect(Object.keys(item), 'item ' + i).toEqual(Object.keys(fixture.items[i]));
     }

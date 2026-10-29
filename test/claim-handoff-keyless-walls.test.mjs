@@ -138,24 +138,26 @@ async function call(seat, name, args) {
 }
 const proseBlocks = (blocks) => blocks.filter((t) => !isJson(t));
 
-describe('tools/list: claim_free_key leads the full catalog', () => {
-  it('is first on /mcp, with every other tool in its old relative order and the count unchanged', async () => {
+describe('tools/list: execute_plan, then claim_free_key, lead the full catalog', () => {
+  it('claim_free_key is second on /mcp (execute_plan first), every other tool in its old relative order, the count unchanged', async () => {
     const seat = await open();
     const r = await post(seat.h, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = r.json.result.tools.map((t) => t.name);
     expect(names.length).toBe(94);
-    expect(names[0]).toBe('claim_free_key');
+    expect(names[0]).toBe('execute_plan');
+    expect(names[1]).toBe('claim_free_key');
     expect(new Set(names).size).toBe(names.length);
     // registration order, from the one canonical catalog, minus the tool that moved
     const reg = Object.keys(S.createServer()._registeredTools);
     expect(reg.length).toBe(94);
     expect(reg.indexOf('claim_free_key'), 'the fixture is vacuous if it was already first').toBeGreaterThan(40);
-    expect(names.slice(1)).toEqual(reg.filter((n) => n !== 'claim_free_key'));
+    expect(names.slice(2)).toEqual(reg.filter((n) => n !== 'claim_free_key' && n !== 'execute_plan'));
   });
 
   it('the cached stateless list is the same order (the path Smithery-style hosts read)', async () => {
     const r = await S._buildToolsListResult(null);
-    expect(r.tools[0].name).toBe('claim_free_key');
+    expect(r.tools[0].name).toBe('execute_plan');
+    expect(r.tools[1].name).toBe('claim_free_key');
     expect(r.tools.length).toBe(94);
   });
 
