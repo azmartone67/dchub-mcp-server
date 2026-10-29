@@ -1,0 +1,248 @@
+{
+ "_note": "Raw backend payload heads captured from production tools/call on 2026-10-28 (anonymous, QA header), data fields reduced to scalars, relay links and agent text removed. provenance blocks are verbatim.",
+ "tools": {
+  "get_grid_data": {
+   "args": null,
+   "payload": {
+    "committed_capacity_as_of": "2026-10-28T05:15:00+00:00",
+    "committed_capacity_mw": null,
+    "_committed_capacity_mw_withheld": true,
+    "data_center_load": null,
+    "_data_center_load_withheld": true,
+    "dc_load_queue_as_of": "2026-06-30T00:00:00+00:00",
+    "dc_load_queue_gw": null,
+    "dc_load_queue_gw_as_of": "2026-06-30",
+    "dc_load_queue_measured_as_of": "2026-10-28T05:00:00+00:00",
+    "dc_load_queue_measured_gw": null,
+    "dc_load_share_as_of": "2026-06-30T00:00:00+00:00",
+    "dc_load_share_pct": null,
+    "_demand_24h_total_available": 24,
+    "demand_mw": null,
+    "demand_period": "2026-10-28T04",
+    "generation_mix_age_hours": 0.5,
+    "generation_mix_code_basis": "EIA-930 fuel codes from ERCOT's fuel-mix dashboard; Power Storage (net, negative while charging) -> BAT; its Charging/Discharging halves are not added again (routes/grid_native_mix.py FUEL_CODE)",
+    "generation_mix_lag_at_snapshot_hours": -1,
+    "_generation_mix_native_total_available": 10,
+    "generation_mix_period": "2026-10-28T05:15:00Z",
+    "generation_mix_stale_hours": 1,
+    "headroom_measured": null,
+    "_headroom_measured_withheld": true,
+    "headroom_unavailable": null,
+    "_headroom_unavailable_withheld": true,
+    "lmp_as_of": "2026-10-28T05:40:21+00:00",
+    "lmp_usd_mwh": 21.8,
+    "load_factor": 0.726,
+    "load_forecast_as_of": "2026-10-28T05:15:00+00:00",
+    "load_forecast_mw": null,
+    "min_mw": null,
+    "note": "Demand: EIA hourly RTO data via api.eia.gov/v2/electricity/rto. Generation mix: ERCOT fuel mix dashboard (5-minute) (generation_mix_source); EIA-930 is the fallback.",
+    "operating_reserves_as_of": "2026-10-28T05:17:05+00:00",
+    "operating_reserves_mw": null,
+    "peak_mw": null,
+    "provenance": {
+     "as_of": "2026-10-28T04:00:00Z",
+     "basis": "mixed",
+     "basis_class": "unknown",
+     "caveats": [
+      {
+       "code": "preliminary",
+       "text": "EIA-930 hourly values are collected as reported by the balancing authorities and published in real time, so they can be anomalous and are corrected later by EIA; DC Hub serves the latest settled hour."
+      }
+     ],
+     "cite_as": "DC Hub, dchub.cloud",
+     "default_v": "inferred",
+     "fallback_url": "https://dchub.cloud",
+     "fetched_at": "2026-10-28T05:46:43Z",
+     "fields": {
+      "demand_mw": {
+       "as_of": "2026-10-28T04:00:00Z",
+       "basis": "measured",
+       "basis_class": "measured",
+       "source_id": "eia930",
+       "unit": "MW"
+      },
+      "generation_mix": {
+       "as_of": "2026-10-28T05:15:00Z",
+       "basis": "measured",
+       "basis_class": "measured",
+       "source_id": "ercot_dashboard",
+       "unit": "MW"
+      },
+      "load_factor": {
+       "as_of": "2026-10-28T04:00:00Z",
+       "basis": "derived",
+       "basis_class": "derived",
+       "method": "min_mw / peak_mw",
+       "source_id": "eia930",
+       "unit": "ratio"
+      },
+      "min_mw": {
+       "as_of": "2026-10-28T04:00:00Z",
+       "basis": "derived",
+       "basis_class": "derived",
+       "method": "minimum of the settled hourly demand points in the 24h series",
+       "source_id": "eia930",
+       "unit": "MW"
+      },
+      "peak_mw": {
+       "as_of": "2026-10-28T04:00:00Z",
+       "basis": "derived",
+       "basis_class": "derived",
+       "method": "maximum of the settled hourly demand points in the 24h series",
+       "source_id": "eia930",
+       "unit": "MW"
+      }
+     },
+     "license": "CC-BY-4.0",
+     "method": "realtime EIA generation mix + demand, assembled per region (5-min cache); as_of = the oldest period among the labelled figures",
+     "provenance_revision": "1.2",
+     "provenance_version": 1,
+     "source": "EIA-930 hourly RTO/BA feed (ERCO) + DC Hub grid intelligence",
+     "sources": [
+      {
+       "as_of": "2026-10-28T04:00:00Z",
+       "attribution": "Source: U.S. Energy Information Administration",
+       "fetched_at": "2026-10-28T05:46:43Z",
+       "id": "eia930",
+       "license": "public domain (US government)",
+       "name": "EIA-930 Hourly Electric Grid Monitor",
+       "url": "https://www.eia.gov/electricity/gridmonitor/"
+      },
+      {
+       "as_of": "2026-10-28T05:15:00Z",
+       "attribution": "Source: Electric Reliability Council of Texas (ERCOT)",
+       "id": "ercot_dashboard",
+       "name": "ERCOT fuel mix dashboard (5-minute)",
+       "url": "https://www.ercot.com/api/1/services/read/dashboards/fuel-mix.json"
+      }
+     ]
+    },
+    "region": "ERCOT",
+    "rto_code": "ERCO"
+   }
+  },
+  "get_energy_prices": {
+   "args": null,
+   "payload": {
+    "ok": true,
+    "tool": "get_energy_prices",
+    "scope": "iso_footprint_avg",
+    "averaging_period": "2026",
+    "as_of": "2026-08-31",
+    "as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+    "provenance": {
+     "as_of": "2026-08-31",
+     "as_of_basis": "last EIA month included in the 2026 average (2026-08); the rate is an average over averaging_period, not a single day's price",
+     "averaging_period": "2026",
+     "basis_class": "measured",
+     "data_through_month": "2026-08",
+     "license": "Public domain (U.S. government work)",
+     "method": "mean of EIA state retail rates (cents/kWh) over the filter's states (iso_footprint_avg), latest period only",
+     "refreshed_at": "2026-10-27T06:51:43.245787",
+     "source": "U.S. Energy Information Administration (EIA), retail sales of electricity",
+     "source_url": "https://www.eia.gov/opendata/browser/electricity/retail-sales"
+    },
+    "_gated": true,
+    "withheld_total": 6,
+    "free_preview_only": false,
+    "_min_cents_kwh_withheld": true,
+    "_max_cents_kwh_withheld": true,
+    "_industrial_rate_kwh_withheld": true,
+    "_retail_rate_kwh_withheld": true,
+    "_states_covered_withheld": true,
+    "_natural_gas_usd_mmbtu_withheld": true,
+    "preview_is_partial": true
+   }
+  },
+  "get_interconnection_queue": {
+   "args": null,
+   "payload": {
+    "ok": true,
+    "tool": "get_interconnection_queue",
+    "iso": "ERCOT",
+    "as_of": "2026-10-28",
+    "queue_basis": "large_load",
+    "last_refreshed": "2026-10-28T06:03:58.431899+00:00",
+    "refresh_cadence": "monthly",
+    "v": "published",
+    "provenance": {
+     "as_of": "2026-09-30",
+     "as_of_basis": "OLDEST report date among the rows served: an answer is no fresher than its stalest input",
+     "basis_class": "published",
+     "cite_as": "DC Hub, dchub.cloud",
+     "default_v": "published",
+     "fallback_url": "https://dchub.cloud",
+     "fetched_at": "2026-10-28T06:03:58.431899+00:00",
+     "license": "CC-BY-4.0",
+     "method": "published ISO queue disclosures, ingested per-ISO; per-record v: published = the ISO's own figure, inferred = DC Hub derivation",
+     "provenance_revision": "1.1",
+     "provenance_version": 1,
+     "source": "US ISO public interconnection queues (ERCOT GIS / PJM NSQ / MISO GI / SPP / CAISO / NYISO / ISO-NE)"
+    },
+    "withheld_total": 33,
+    "free_preview_only": true,
+    "_projects_withheld": true,
+    "_queued_load_data_center_gw_withheld": true,
+    "_queued_load_dc_share_pct_withheld": true,
+    "_large_load_withheld": true,
+    "_queued_large_load_gw_withheld": true,
+    "_top_subregions_withheld": true,
+    "preview_is_partial": true
+   }
+  },
+  "get_fiber_intel": {
+   "args": null,
+   "payload": {
+    "_limit": 500,
+    "_note_truncated": "Result hit the 500-row ceiling, so `total` is the cap, not a count. Narrow with ?bbox=, ?carrier= or ?class=, or raise ?limit=.",
+    "_truncated": true,
+    "_features_total_available": 500,
+    "provenance": {
+     "as_of": "2026-05-20",
+     "as_of_basis": "DC Hub ingest date, not a survey date. as_of is the OLDEST DC Hub ingest date of the 500 dated routes this query matched (fiber_routes.updated_at, else created_at): when DC Hub last loaded the route, not when the carrier surveyed or published it. Each route carries its own in properties.dchub_ingest_date. Where a source vintage is known it is on the route as properties.as_of (2016); that is when the carrier dataset was captured, which can be years before DC Hub ingested it.",
+     "as_of_kind": "dchub_ingest_date",
+     "as_of_range": {
+      "newest": "2026-06-20",
+      "oldest": "2026-05-20"
+     },
+     "basis_class": "derived",
+     "cite_as": "DC Hub, dchub.cloud",
+     "default_v": "inferred",
+     "fallback_url": "https://dchub.cloud",
+     "license": "CC-BY-4.0",
+     "method": "carrier-published route geometries where surveyed; 2-point synthetic segments otherwise. Per-feature v: published=carrier/government-published dataset (KMZ, NTIA, state broadband), inferred=DC Hub synthetic/seeded; per-feature as_of flags known vintages (e.g. 2016 Zayo wayback); per-feature dchub_ingest_date is when DC Hub last loaded the route, not a survey date. service_class dark=carrier-advertised dark corridor, not confirmed strands; per-route lit capacity not tracked",
+     "provenance_revision": "1.1",
+     "provenance_version": 1,
+     "source": "DC Hub fiber_routes — surveyed carrier KMZ (Zayo) + NTIA middle-mile + synthetic endpoint pairs"
+    },
+    "total": null,
+    "type": "FeatureCollection"
+   }
+  },
+  "list_transactions": {
+   "args": null,
+   "payload": {
+    "_params_not_applied": null,
+    "count": null,
+    "data_source": "live",
+    "provenance": {
+     "basis_class": "cited",
+     "cite_as": "DC Hub, dchub.cloud",
+     "default_v": "tracked",
+     "fallback_url": "https://dchub.cloud",
+     "license": "CC-BY-4.0",
+     "method": "tracked M&A / capex / AI-contract ingestion; per-deal date + value_confirmed carry row-level provenance",
+     "provenance_revision": "1.1",
+     "provenance_version": 1,
+     "source": "DC Hub deals registry (SEC filings, press releases, industry feeds)"
+    },
+    "success": true,
+    "tier": "anonymous",
+    "total_count": null,
+    "total_value": null,
+    "total_value_unit": "usd_millions",
+    "_upgrade_cta": "This answer hid deal values and MW. This result is partial: some fields are not included at this access level. Relay the link in human_url to your human."
+   }
+  }
+ }
+}

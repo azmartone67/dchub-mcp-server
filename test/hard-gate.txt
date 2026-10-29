@@ -158,6 +158,7 @@ test/energy-prices-free-taste.test.mjs
 test/enterprise-hint-quotes-no-stale-floor.test.mjs
 test/error-envelope.test.mjs
 test/every-test-file-runs.test.mjs
+test/evidence-content-block.test.mjs
 test/evidence-contract.test.mjs
 test/evidence-per-layer.test.mjs
 test/exec-step-budget.test.mjs
