@@ -43,7 +43,7 @@ const SELF_UA = `${SELF_TAG}/1.0 (+https://github.com/azmartone67/dchub-mcp-serv
 export const LISTING_NAME = 'DC Hub';
 // AgentForge categories (GET /api/v1/docs): "data" is the form's Data & Analytics.
 export const CATEGORY = 'data';
-export const TAGS = ['data-center', 'site-selection', 'power-grid', 'energy', 'interconnection-queue', 'fiber', 'infrastructure', 'gis'];
+export const TAGS = ['data-center', 'datacenter', 'colocation', 'site-selection', 'power-grid', 'energy', 'electricity', 'natural-gas', 'interconnection-queue', 'fiber', 'infrastructure', 'gis'];
 export const DOCS_URL = 'https://dchub.cloud/developers';
 export const SOURCE_URL = 'https://github.com/azmartone67/dchub-mcp-server';
 
