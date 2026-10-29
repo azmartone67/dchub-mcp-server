@@ -26731,6 +26731,22 @@ export const _INSTRUCTIONS_LEAN = (() => {
 // 40 characters under the 2,048 budget. DCHUB_CLAIM_KEY_FIRST=0 restores registration order.
 export const CLAIM_KEY_TOOL_NAME = 'claim_free_key';
 const _claimKeyFirstOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_CLAIM_KEY_FIRST || ''));
+// ── execute_plan ahead of claim_free_key (owner, Brain note 2026-10-28, item 2) ──────────────────────
+// The front door of every discovery surface says "start with execute_plan(intent=<the user's question>)",
+// so the served tools/list leads with it; claim_free_key stays second (the 2026-10-14 growth push is kept).
+// Only a list that already carries claim_free_key is touched: the full /mcp catalog. A profile that does
+// not list it keeps its own order, which leaves the frozen /mcp/chatgpt toolset (OpenAI review, hold)
+// and /mcp/grok (already execute_plan first) exactly as they were. DCHUB_EXECUTE_PLAN_FIRST=0 restores
+// the claim-first order.
+export const FRONT_DOOR_TOOL_NAME = 'execute_plan';
+const _frontDoorFirstOn = () => !/^(0|false|no|off)$/i.test(String(process.env.DCHUB_EXECUTE_PLAN_FIRST || ''));
+export function _frontDoorFirst(tools) {
+  if (!Array.isArray(tools) || !_frontDoorFirstOn()) return tools;
+  if (!tools.some((t) => t && t.name === CLAIM_KEY_TOOL_NAME)) return tools;
+  const i = tools.findIndex((t) => t && t.name === FRONT_DOOR_TOOL_NAME);
+  if (i <= 0) return tools;
+  return [tools[i], ...tools.slice(0, i), ...tools.slice(i + 1)];
+}
 export function _claimKeyFirst(tools) {
   if (!Array.isArray(tools) || !_claimKeyFirstOn()) return tools;
   const i = tools.findIndex((t) => t && t.name === CLAIM_KEY_TOOL_NAME);
@@ -31719,7 +31735,7 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
         t.inputSchema = applyOneOfAnyOf(stripSchemaDialect(t.inputSchema), t.name);
         if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
       }
-      if (res && Array.isArray(res.tools)) res.tools = _claimKeyFirst(res.tools);   // claim_free_key first (see above)
+      if (res && Array.isArray(res.tools)) res.tools = _frontDoorFirst(_claimKeyFirst(res.tools));   // execute_plan, then claim_free_key (see above)
       // R1 (2026-10-18): the wire list is slimmed (lib/list-slim.mjs); the cache probe asks for the
       // canonical list instead, so the directory/pack projections keep reading full schemas.
       if (res && Array.isArray(res.tools) && !(opts && opts.canonicalList) && !getCtx()?.profile && process.env.DCHUB_LIST_SLIM_DISABLE !== '1') res.tools = res.tools.map(_slimTool);
