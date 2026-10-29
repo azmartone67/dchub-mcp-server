@@ -196,6 +196,7 @@ import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNext
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
 import { shortWallLinkStep, withWallNextAsk } from './lib/short-wall-link.mjs';
+import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
 // Owner decision 2026-09-28: provenance.verification_counts never reaches tool
 // output (agents quoted it as the withdrawn facility count). lib/verification-counts.mjs.
@@ -9617,7 +9618,7 @@ export async function _shortRelayLink(longUrl, tool, fetchImpl = fetch) {
 // Postgres connection per mint (dchub-backend#6869 reuses it). A longer budget would only make
 // the person wait longer for the same long link; /internal/short-link shows whether they stop.
 const _RELAY_SHORT_TIMEOUT_MS = 1000;
-const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&]{1,200})?$/;
+const _RELAY_LONG_RE = /^https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(\?[a-z0-9_=&-]{1,200})?$/;
 export async function _shortRelayPageLink(relayUrl, tool, fetchImpl = fetch, copyVersion = WALL_COPY_VERSION) {
   const TAG = 'wall-relay-short';
   let t0 = 0;
@@ -20974,7 +20975,11 @@ async function _wallOuterStep(fn, args, extra, name) {
     // execute_plan loopback step, not for a paid-depth seat.
     if (!c.loopback_step && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE
         && c.profile !== CORE_PROFILE && !_isPaidDepthTier(c.tier)) {
-      out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)) });
+      // Brain block 2026-10-28 (items 5, 6): the wall's relay link says which wall it came from
+      // (?via=mcp-wall&wall=<type>, lib/wall-tag.mjs), tagged on the LONG url before it is shortened.
+      const _wallType = wallTagOn() ? wallTypeForResult(c._wallStatus, out) : null;
+      out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)), wall: _wallType });
+      if (_wallType) out = tagResultLinks(out, _wallType);   // any long relay link the step did not swap
     }
     return out;
   } finally {

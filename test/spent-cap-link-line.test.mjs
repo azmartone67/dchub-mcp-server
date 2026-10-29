@@ -23,7 +23,7 @@ const CLIENTS = {
   claude: { name: 'claude-ai', ua: 'Claude-User' },
   chatgpt: { name: 'openai-mcp', ua: 'openai-mcp/1.0' },
 };
-const LINE_RE = /^Full report: (https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}|u\/[2-9a-hj-km-np-z]{6}))$/;
+const LINE_RE = /^Full report: (https:\/\/dchub\.cloud\/(?:upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[a-z0-9_=&-]+)?|u\/[2-9a-hj-km-np-z]{6}))$/;
 
 let H, fence;
 let used = 0, LIMIT = 3, counterDown = false;

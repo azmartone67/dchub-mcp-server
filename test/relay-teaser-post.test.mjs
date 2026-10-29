@@ -222,7 +222,7 @@ describe('the gateway posts one withheld number for the relay token it minted', 
 
   it('exactly one post, for THIS response\'s token, with the internal key', () => {
     expect(teaserPosts).toHaveLength(1);
-    const tok = sc.for_your_human.url.split('/upgrade/h/')[1];
+    const tok = sc.for_your_human.url.split('/upgrade/h/')[1].split('?')[0];   // the wall tag (?via=mcp-wall&wall=) is not part of the token
     expect(teaserPosts[0].body.token).toBe(tok);
     expect(teaserPosts[0].key).toBe(process.env.DCHUB_INTERNAL_KEY || '');
   });
