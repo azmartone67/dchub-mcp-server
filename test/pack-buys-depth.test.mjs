@@ -95,6 +95,19 @@ describe('flag on', () => {
       expect(S._packOpensTool(t), t).toBe(false);
     }
   });
+  it('the over-cap coaching sells the pack only where the pack now buys a full answer', () => {
+    // off: the 10-08 canon, a decision / depth-tease tool never sells the pack and says it does not deepen
+    expect(S._capCoachSellsPack(DECISION)).toBe(false);
+    expect(S._capCoachSellsPack(DEPTH)).toBe(false);
+    expect(S._capCoachSellsPack(RATIONED)).toBe(true);
+    process.env.DCHUB_PACK_BUYS_DEPTH = '1';
+    expect(S._capCoachSellsPack(DECISION)).toBe(true);
+    expect(S._capCoachSellsPack(DEPTH)).toBe(true);
+    expect(S._capCoachSellsPack(RATIONED)).toBe(true);
+    // never for a Pro-only tool or on a directory profile, which keep their own commerce rules
+    expect(S._capCoachSellsPack('analyze_site')).toBe(false);
+    expect(S._capCoachSellsPack(DECISION, { profile: DIRECTORY_PROFILE })).toBe(false);
+  });
   it('a tool that is not paid-class is not touched', () => {
     process.env.DCHUB_PACK_BUYS_DEPTH = '1';
     expect(S._packDepthTool('search')).toBe(false);

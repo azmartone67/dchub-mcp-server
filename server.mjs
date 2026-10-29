@@ -13017,7 +13017,9 @@ export function _depthTeasedTool(tool) {
   const t = String(tool || '');
   return DEPTH_TEASE_TOOLS.has(t) || _freePreviewOnlyTool(t) || PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t);
 }
-export function _capCoachSellsPack(tool) {
+export function _capCoachSellsPack(tool, c = getCtx()) {
+  // DCHUB_PACK_BUYS_DEPTH: where the credit cascade now serves a full answer, the coaching may sell the pack.
+  if (_packDepthTool(tool, c)) return true;
   if (!_capCoachOnDepthOn()) return true;
   return !_depthTeasedTool(tool);
 }
