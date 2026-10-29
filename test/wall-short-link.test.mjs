@@ -136,9 +136,14 @@ describe('over the real app (stub backend, no network)', () => {
   it('the skips are wired: directory / Claude / core profiles, loopback and paid seats never reach either step', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
-    expect(src).toContain("if (!c.loopback_step && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE\n"
-      + "        && c.profile !== CORE_PROFILE && !_isPaidDepthTier(c.tier)) {\n"
-      + "      out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)) });");
+    // the call sits inside the skip condition; 2026-10-28 it also carries the wall tag (lib/wall-tag.mjs)
+    const head = "if (!c.loopback_step && c.profile !== DIRECTORY_PROFILE && c.profile !== CLAUDE_PROFILE\n"
+      + "        && c.profile !== CORE_PROFILE && !_isPaidDepthTier(c.tier)) {\n";
+    const call = "out = await shortWallLinkStep(out, { mint: (u) => (c._relayShortFailed ? u : _shortRelayPageLink(u, name)), wall: _wallType });";
+    expect(src).toContain(head);
+    expect(src.split(head).length - 1, 'one skip block').toBe(1);
+    expect(src.indexOf(call) - src.indexOf(head), 'the step is the first call inside the skip block').toBeGreaterThan(0);
+    expect(src.indexOf(call) - src.indexOf(head)).toBeLessThan(1400);
     expect(src).toContain('const walled = !directory && !!(sc0 && typeof sc0 === \'object\' && !Array.isArray(sc0) && _isRelayWall(sc0, c));');
     expect(src).toContain('const directory = c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE;');
   });

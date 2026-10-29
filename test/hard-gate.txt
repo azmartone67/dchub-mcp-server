@@ -536,6 +536,7 @@ test/wall-no-required-plan-all-tools.test.mjs
 test/wall-no-required-plan-compare-composite.test.mjs
 test/wall-no-required-plan-e2e.test.mjs
 test/wall-short-link.test.mjs
+test/wall-tag.test.mjs
 test/wall-transport.test.mjs
 test/wall-user-line-hard-wall.test.mjs
 test/wall-user-line.test.mjs
