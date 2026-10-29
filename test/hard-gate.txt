@@ -353,6 +353,7 @@ test/origin-edge-key.test.mjs
 test/own-test-telemetry-tag.test.mjs
 test/p0-1-substation-detail-pro.test.mjs
 test/p0-1-substation-tail-doors.test.mjs
+test/pack-buys-depth.test.mjs
 test/pack-canon-all-tools.test.mjs
 test/pack-is-not-an-unlock.test.mjs
 test/pack-sold-as-credits.test.mjs

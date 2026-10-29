@@ -12972,7 +12972,30 @@ function _noteMaskedKey(key, value) {
 // those walls — the agent said "$10" and the page said "Developer". No
 // grandfathering of existing balances for MCP depth (owner). Pro-only tools were
 // never opened (ladder stage 1, 2026-09-29).
-export function _packOpensTool(tool) {
+// Owner 2026-10-29 ("pack buys full answers"): behind DCHUB_PACK_BUYS_DEPTH (default OFF, byte-identical
+// when off) a credit may pay for one full answer on a decision tool or a depth-tease tool, the tools
+// the 10-08 canon above kept out of the pack. Never a Pro-only or Land & Power tool, never on the
+// directory / Claude / core profiles (their commerce rules are theirs). The price of one such answer
+// is DCHUB_PACK_DEPTH_CREDITS credits (default 20: a $10 pack = 50 full answers); at the normal 1
+// credit a pack would buy ~1,000 full grid answers and make the Developer plan pointless.
+// The agent-facing wall copy and the backend relay page still say "the pack does not deepen this
+// tool" until the follow-up PRs land: do not set the flag before they do.
+export function _packBuysDepthOn(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String(env.DCHUB_PACK_BUYS_DEPTH || ''));
+}
+export function _packDepthCredits(env = process.env) {
+  const n = Number(env.DCHUB_PACK_DEPTH_CREDITS);
+  return Number.isInteger(n) && n >= 1 && n <= 1000 ? n : 20;
+}
+export function _packDepthTool(tool, c = getCtx()) {
+  if (!_packBuysDepthOn()) return false;
+  if (c && (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE)) return false;
+  const t = String(tool || '');
+  return PAID_ONLY_TOOLS.has(t) && !PRO_ONLY_TOOLS.has(t) && !LP_TOOLS.has(t)
+    && (DEPTH_TEASE_TOOLS.has(t) || _freePreviewOnlyTool(t));
+}
+export function _packOpensTool(tool, c = getCtx()) {
+  if (_packDepthTool(tool, c)) return true;
   // Owner 2026-10-08 (#833): the decision tools are previews on every non-paid seat, the pack
   // included (lib/free-decision-taste.mjs); its kill switch restores their pack path.
   if (_freePreviewOnlyTool(tool)) return false;
@@ -12994,7 +13017,9 @@ export function _depthTeasedTool(tool) {
   const t = String(tool || '');
   return DEPTH_TEASE_TOOLS.has(t) || _freePreviewOnlyTool(t) || PRO_ONLY_TOOLS.has(t) || LP_TOOLS.has(t);
 }
-export function _capCoachSellsPack(tool) {
+export function _capCoachSellsPack(tool, c = getCtx()) {
+  // DCHUB_PACK_BUYS_DEPTH: where the credit cascade now serves a full answer, the coaching may sell the pack.
+  if (_packDepthTool(tool, c)) return true;
   if (!_capCoachOnDepthOn()) return true;
   return !_depthTeasedTool(tool);
 }
@@ -14396,7 +14421,7 @@ const CREDIT_HEAVY = new Set([
   'get_market_context',   // RAG v1 (2026-07-03): full 4000-token pack = heavy synthesis
   'get_iso_context',      // RAG v1 part 2: grid-side context pack, same class
 ]);
-const _creditCost = (tool) => (CREDIT_HEAVY.has(tool) ? 5 : 1);
+export const _creditCost = (tool, c = getCtx()) => (_packDepthTool(tool, c) ? _packDepthCredits() : (CREDIT_HEAVY.has(tool) ? 5 : 1));
 // The pack is sold as credits (owner, 2026-09-21): say the rule where an agent
 // decides to buy, read off CREDIT_HEAVY and _creditCost so it cannot drift.
 export const _creditRuleText = () => '1 credit per paid-tool call; the ' + CREDIT_HEAVY.size
