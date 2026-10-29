@@ -50,8 +50,13 @@ const PREVIEW_FIELDS = { avg_time_to_power_months: 'avg_time_to_power_months', a
   retail_price_cents_kwh: 'avg_kwh_cents', grid_emergencies_30d: 'sum_emergency_30d' };
 const SCOREBOARD_FIELDS = { avg_queue_wait_months: 'avg_queue_wait_months', avg_curtailment_pct: 'avg_curtailment_pct',
   grid_emergencies_30d: 'sum_emergency_30d' };
+// The emergency-count needles are key-suffixed, not a bare `":913`. A bare one matched ANY JSON value
+// that starts 913-919: the stub pins mix_period at 2026-09-21T06, so the served `mix_age_hours` and
+// `demand_age_hours` grow with the wall clock and read 913-923 for about 11 hours on 2026-10-29,
+// failing this HARD gate on every PR in that window with no leak anywhere.
 const NEEDLES = ROWS.flatMap((r) => [String(r.avg_queue_wait_months), String(r.avg_kwh_cents),
-  String(r.avg_curtailment_pct), String(r.avg_time_to_power_months), `":${r.sum_emergency_30d}`]);
+  String(r.avg_curtailment_pct), String(r.avg_time_to_power_months),
+  `emergencies_30d":${r.sum_emergency_30d}`, `emergency_30d":${r.sum_emergency_30d}`]);
 // A numeric needle matches only as a whole number, not inside a longer run: the
 // same boundary as anon-facility-free-fields (#597). Every answer carries
 // per-request retrieved_at timestamps and signed links, and a bare substring
