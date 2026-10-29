@@ -1046,6 +1046,18 @@
       "added_at": "2026-10-24",
       "tracking_url": "https://github.com/deepset-ai/haystack-integrations/pull/668",
       "note": "PR #668 open"
+    },
+    {
+      "id": "muse-directory",
+      "name": "Muse Directory",
+      "status": "live",
+      "listing_url": "https://musedirectory.ai/connector/dc-hub",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-10-29",
+      "added_at": "2026-10-29",
+      "note": "Independent directory of Meta Muse connectors (not affiliated with Meta); listing first dated 2026-10-28; Muse's own Connectors list does not carry DC Hub"
     }
   ]
 }
