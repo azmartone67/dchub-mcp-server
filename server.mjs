@@ -3426,6 +3426,7 @@ const getCtx = () => ctx.getStore() || {};
 // counts calls per via (routes/via_attribution.py). A count only, never access.
 const viaCtx = new AsyncLocalStorage();
 export const getVia = () => viaCtx.getStore() || null;
+export const VIA_FUNNEL_CHANNELS = new Set(['x', 'linkedin', 'substack', 'reddit', 'media', 'mcp-wall']);   // = dchub-backend routes/via_funnel.py CHANNELS
 
 // 2026-10-21: one `session_init` telemetry event per initialize (lib/session-init-event.mjs),
 // so the backend can tell which kind of client opened the session. Fire and forget.
@@ -6963,6 +6964,11 @@ async function callAPIWrite(path, body = {}, opts = {}) {
   // shared egress IP and could not match the same caller's REST claim. X-DC-Client-IP is a custom header
   // Railway leaves alone; the backend honours it only because this request also carries X-Internal-Key.
   if (c.client_ip)  headers['X-DC-Client-IP'] = c.client_ip;
+  // 2026-10-28 (owner, social-link channels): an agent's claim_free_key / bind_email reaches the backend from
+  // here, with no browser cookie, so the channel on the connector URL (?via=x|linkedin|substack|reddit|media|
+  // mcp-wall) is forwarded as X-DCHub-Via and counted as that channel's unlock / key (dchub-backend
+  // routes/via_funnel.py). Only these closed-set names; any other via keeps counting where it did.
+  { const _v = getVia(); if (_v && VIA_FUNNEL_CHANNELS.has(_v)) headers['X-DCHub-Via'] = _v; }
   try {
     const resp = await fetch(url.toString(), {
       method: opts.method || 'POST',
