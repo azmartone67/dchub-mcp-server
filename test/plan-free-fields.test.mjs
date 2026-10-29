@@ -157,7 +157,9 @@ describe('an execute_plan step keeps the raw markers its caller reads', () => {
     expect(src).toMatch(/loopback_step: _isLoopbackPeer\(req\)/);
     // Agent QA A (2026-10-20): leanResponseStep sits between the source line and this rename.
     // Wall-to-paid P3a (2026-10-23): _wallOuterStep wraps fn only (it flushes the wall row, no rewrite).
-    expect(src).toMatch(/return planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await _wallOuterStep\(fn, args, extra, name\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step, ownScrub \}\)/);
+    expect(src).toMatch(/const _done = planFreeFieldsStep\(leanResponseStep\(_sourceLineStep\(await _wallOuterStep\(fn, args, extra, name\), name, args\), name,\s*\{ skip: leanSkip \}\), name, \{ skip: !!c\.loopback_step, ownScrub \}\)/);
+    // item 4 (2026-10-28): next_call is added after the plan-free step, not on a loopback step or a frozen profile
+    expect(src).toMatch(/return \(c\.loopback_step \|\| ownScrub \|\| _isCleanPlatform\(\)\) \? _done : withNextCall\(_done, name\);/);
     expect(src).toMatch(/const ownScrub = c\.profile === DIRECTORY_PROFILE \|\| c\.profile === CLAUDE_PROFILE \|\| c\.profile === CORE_PROFILE;/);
   });
 });
