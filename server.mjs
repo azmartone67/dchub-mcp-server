@@ -123,7 +123,7 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep } from './lib/lean-response.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
-import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
+import { topMetroFreeCall as _topMetroFreeCallRaw, datePackSections as _datePackSections, openScoresDefinition as _openScoresDefinition, TOP_METRO_ACCESS_BASIS } from './lib/top-metros.mjs';
 // r-claude-directory (2026-09-26): /mcp/claude, the Claude Connectors Directory
 // profile. Same scrub as /mcp/chatgpt, its own allowlist; /mcp is untouched.
 import { CLAUDE_PATH, CLAUDE_PROFILE, CLAUDE_SOURCE, CLAUDE_PRM, CLAUDE_RESOURCE, isClaudeTool as _isClaudeTool,
@@ -10871,6 +10871,7 @@ export function _topMetroFullResult(result, name) {
   let out = parsed;
   if (CONTEXT_PACK_TOOLS.has(name)) out = _datePackSections(out);
   out = _maskBrokerRatesBelowPro(out);   // any tool: a market_pricing block is masked below paid
+  out = _openScoresDefinition(out);      // the open scores must not be called a paid field
   out = { ...out, access: 'full', access_basis: TOP_METRO_ACCESS_BASIS };
   return { ...result, content: [{ type: 'text', text: JSON.stringify(out) }, ...(result.content || []).slice(1)],
            structuredContent: out };
