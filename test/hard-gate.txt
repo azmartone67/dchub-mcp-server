@@ -13,6 +13,7 @@ test/analyze-site-email-unlock-teaser.test.mjs
 test/analyze-site-free-line.test.mjs
 test/analyze-site-gated-preview.test.mjs
 test/analyze-site-location.test.mjs
+test/analyze-site-site-context.test.mjs
 test/analyze-site-wall-no-plan-name.test.mjs
 test/anchor-contract.test.mjs
 test/annotation-hints-every-surface.test.mjs

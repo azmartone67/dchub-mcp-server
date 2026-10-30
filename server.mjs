@@ -9374,6 +9374,68 @@ export function _withLpFreeRunsSpent(result, fr, tool) {
   return out;
 }
 
+// ── Nearby site context on analyze_site (owner 2026-10-29) ───────────────────
+// The Land & Power map's 14 "nearby site context" blocks (carrier hotels, data
+// centers, rail, water, flood zone, substation and its queue, incentives and
+// zoning, energy cost, cloud latency, carriers in the building, air permitting,
+// market, climate, grid) ride analyze_site as `site_context`, gated like the rest
+// of Land & Power: the full body when _lpAccessFor opens it (Pro and up, a
+// grandfathered pack) or on a free monthly full run; below that the backend's
+// preview (dchub-backend ?view=preview): which blocks the point has, never a
+// value. The view is chosen HERE, from the caller, so any path that runs the
+// handler (a wall headline, a plan step) gets the preview unless the caller is
+// entitled. The backend masks market rates by the end user's own key.
+// Kill switch: DCHUB_SITE_CONTEXT=0.
+export const SITE_CONTEXT_PATH = '/api/v1/land-power/site-context';
+export const SITE_CONTEXT_TIMEOUT_MS = 6000;
+export function _siteContextOn(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.DCHUB_SITE_CONTEXT || ''));
+}
+export async function _siteContextView(c) {
+  if (c && c._lpFreeRunFull === true) return 'full';
+  try { return (await _lpAccessFor(c || {}, (c && c.tier) || '')) === 'full' ? 'full' : 'preview'; }
+  catch (_) { return 'preview'; }
+}
+// The answer, checked against the view asked for; any other shape is dropped.
+export function _siteContextShape(r, view) {
+  if (!r || typeof r !== 'object' || Array.isArray(r) || r.ok !== true || r.gated === true) return null;
+  if (view === 'preview') return _siteContextPreviewOnly(r) || null;
+  if (r.view !== undefined || !r.errors || typeof r.errors !== 'object') return null;
+  return { ...r, view: 'full' };
+}
+export async function _siteContextFor(lat, lon, c = getCtx()) {
+  if (!_siteContextOn()) return null;
+  const la = Number(lat), lo = Number(lon);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+  const view = await _siteContextView(c);
+  try {
+    const r = await callAPI(SITE_CONTEXT_PATH, { lat: la, lng: lo, ...(view === 'preview' ? { view } : {}) },
+      { timeout: SITE_CONTEXT_TIMEOUT_MS });
+    return _siteContextShape(r, view);
+  } catch (_) { return null; }
+}
+// A preview path keeps site_context only as the backend's preview; a full body
+// that reached one is dropped, never trimmed (the LP preview keeps names).
+export function _siteContextPreviewOnly(sc) {
+  return (sc && typeof sc === 'object' && sc.view === 'preview' && Array.isArray(sc.blocks)) ? sc : undefined;
+}
+export function _siteContextLine(p) {
+  const ans = p.blocks.filter((b) => b && b.status === 'answered').map((b) => b.title);
+  const na = p.blocks.filter((b) => b && b.status === 'not_available').map((b) => b.title);
+  return `Nearby site context at this point: ${ans.length} of ${p.blocks.length} blocks have an answer`
+    + (ans.length ? ` (${ans.join(', ')})` : '')
+    + (na.length ? `; not available here: ${na.join(', ')}` : '')
+    + '. Their values are part of the full site analysis.';
+}
+// The keyless wall: the preview as structured data, plus one line for a text-only client.
+export function _withSiteContextPreview(result, sc) {
+  const p = _siteContextPreviewOnly(sc);
+  if (!p || !result || typeof result !== 'object') return result;
+  const out = { ...result, structuredContent: { ...(result.structuredContent || {}), site_context: p } };
+  if (Array.isArray(out.content)) out.content = [...out.content, { type: 'text', text: _siteContextLine(p) }];
+  return out;
+}
+
 // A pack paid before the Land & Power cutover still opens it; one bought now does not.
 function _lpGrandfatheredPack(cr) {
   return !!cr && (cr.credits || 0) > 0 && cr.lp_grandfathered === true;
@@ -10480,6 +10542,14 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
   let parsed = null;
   try { parsed = JSON.parse(result?.content?.[0]?.text || ''); } catch (_) {}
   if (!parsed || typeof parsed !== 'object') return _lpWallResult(name);
+  // Nearby site context: never through the generic masker (it keeps names, and a
+  // substation's or a carrier's name is Pro). Only the backend's preview survives.
+  let _scPrev;
+  if (!Array.isArray(parsed) && Object.prototype.hasOwnProperty.call(parsed, 'site_context')) {
+    _scPrev = _siteContextPreviewOnly(parsed.site_context);
+    parsed = { ...parsed };
+    delete parsed.site_context;
+  }
   // B2 (merge on/after 2026-10-19): below Pro, analyze_site's substations are
   // the free view (distance band + kV band), not the CM-4 lock.
   const _subsView = _b2KeylessHeadlineOn() ? _substationFreeViewB2 : _substationLockedView;
@@ -10488,6 +10558,7 @@ export function _lpPreviewResult(name, result, withHeadline = _paywallContractOn
   // P0-1 (mcp#702): no substation name or exact kV anywhere else in the preview.
   const preview = _stripSubstationDetail(_lpPreviewPayload(parsed));
   if (_subsFree !== undefined) preview.nearest_substations = _subsFree;
+  if (_scPrev) preview.site_context = _scPrev;
   if (name === 'analyze_site' && _b2KeylessHeadlineOn()) {
     const _fb = _b2FactorBands(parsed);
     if (_fb) preview.factor_bands = _fb;
@@ -21598,6 +21669,7 @@ function trackedTool(srv, name, description, schema, handler) {
           const _cmpo = name === 'get_composite_site_score' && _compositeKeylessPreviewOn();
           let _cmpoTeaser = null;
           let _siteLoc = null;   // the handler's resolved location, for the stored claim request (P3)
+          let _scWall;           // analyze_site's nearby site context preview, when the handler ran
           if ((_pcOn || _b2 || _emailOn || _noSid || _cmp || _cmpo) && _coreHeadlineAllowed(c.client_ip || c.session_id || 'anon')) {
             try {
               const _raw = _noDataGuard(await handler(args));
@@ -21606,6 +21678,8 @@ function trackedTool(srv, name, description, schema, handler) {
               if (_cmp) _cmpTeaser = _compareSitesTeaser(_parsedHl);
               if (_cmpo) _cmpoTeaser = _compositeTeaser(_parsedHl);
               _siteLoc = _parsedHl && _parsedHl.location;
+              // Nearby site context: the backend's preview only (the handler asked for it).
+              if (name === 'analyze_site') _scWall = _siteContextPreviewOnly(_parsedHl && _parsedHl.site_context);
               _hl = (_pcOn || _b2) ? _pcLpHeadline(name, _parsedHl) : null;
               // r-upgrade-h-first: the one number the wall may show is a COUNT the free
               // preview already keeps (nearby.substations_50km), measured by this very
@@ -21639,13 +21713,13 @@ function trackedTool(srv, name, description, schema, handler) {
               : await _keylessTrialOfferRelay(c, name, tier, 'siteruns', !!_teaser);
             const _ew = await _lpWallEmailResult(name, _offRelay || _emailRelay, _hl, _teaser, { keyLink: _keyLink });
             if (_ew && _keyLink) _storeSiteClaimRequest(c, _ew.structuredContent && _ew.structuredContent.request_id, args, _siteLoc);
-            if (_ew) return _withKeylessWallQuota(_withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink));
+            if (_ew) return _withSiteContextPreview(_withKeylessWallQuota(_withSiteFreeKeyRouteIfKeyLink(_ew, _keyLink)), _scWall);
           }
           if (_cmpTeaser) return _withCompareTeaser(await _lpWallResultV11(name, _hl), _cmpTeaser);
           if (_cmpoTeaser) return _withCompositeTeaser(await _lpWallResultV11(name, _hl), _cmpoTeaser);
           if (_gsaTeaser) return _withReportTeaser(await _lpWallResultV11(name, _hl), _gsaTeaser);
-          if (_noSid) return _withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser);
-          return await _lpWallResultV11(name, _hl);
+          if (_noSid) return _withSiteContextPreview(_withSiteFreeKeyRoute(await _lpWallResultV11(name, _hl), _teaser), _scWall);
+          return _withSiteContextPreview(await _lpWallResultV11(name, _hl), _scWall);
         }
         if (_lpAccess === 'preview') {
           // Free monthly full runs (owner 2026-10-10): spend one if one is left.
@@ -21654,8 +21728,11 @@ function trackedTool(srv, name, description, schema, handler) {
             _fr = await _lpFreeRun(c, name, 'consume');
             if (_fr && _fr.allowed === true) {
               let _full;
+              // The run opens the full site context too (_siteContextView reads this flag).
+              c._lpFreeRunFull = true;
               try { _full = _noDataGuard(await handler(args)); }
               catch (e) { await _lpFreeRun(c, name, 'release', _fr.charge_ref); throw e; }
+              finally { delete c._lpFreeRunFull; }
               // An error or a non-answer does not spend the month's run (or the pack's report).
               if (!_full || _full.isError === true) { await _lpFreeRun(c, name, 'release', _fr.charge_ref); return _full; }
               status = 'lp_free_full';
@@ -29528,12 +29605,24 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
         if (!args.state && res.state) args.state = res.state;
         resolved_from = res.resolved_from;
       }
+      // Nearby site context, beside the score (both run at once when the point is known;
+      // a candidate_id's lat/lon args are ignored for the mint's, so it waits for the score).
+      const _scP = a.candidate_id ? null : _siteContextFor(args.lat, args.lon);
       const out = await callAPI('/api/site-score', args);
       // Grok QA 2026-10-23: the nearest DCPI market the backend read for this point, for the teaser and
       // the keyless preview to print beside the site band (a coordinate call had no market before).
       try { const c = getCtx(); if (c) { const m = _withSiteScoreMarket(c.analyze_site_market, out); if (m) c.analyze_site_market = m; } } catch (_) { /* label only */ }
-      const payload = (resolved_from && out && typeof out === 'object' && !Array.isArray(out))
+      let payload = (resolved_from && out && typeof out === 'object' && !Array.isArray(out))
         ? { ...out, resolved_from } : out;
+      let _sc = await _scP;
+      if (!_sc && a.candidate_id && out && typeof out === 'object' && !Array.isArray(out)) {
+        // candidate_id: the point is the frozen mint's, which the score echoes.
+        const _loc = (out.location && typeof out.location === 'object') ? out.location : out;
+        _sc = await _siteContextFor(_loc.lat, _loc.lon ?? _loc.lng);
+      }
+      if (_sc && payload && typeof payload === 'object' && !Array.isArray(payload) && !payload.error) {
+        payload = { ...payload, site_context: _sc };
+      }
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     });
 
