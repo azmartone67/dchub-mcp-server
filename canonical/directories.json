@@ -310,7 +310,7 @@
       "logo_url": null,
       "verified_at": "2026-10-15",
       "added_at": "2026-10-15",
-      "note": "Chinese-language list; entry refreshed by PR #722 (merged 2026-10-15 07:34 PT, 94 tools); DC Hub row under 数据分析、处理与可视化 (README L884) confirmed 2026-10-15 10:22 PT"
+      "note": "Chinese-language list; entry refreshed by PR #722 (merged 2026-10-15 07:34 PT, 94 tools); DC Hub row under \u6570\u636e\u5206\u6790\u3001\u5904\u7406\u4e0e\u53ef\u89c6\u5316 (README L884) confirmed 2026-10-15 10:22 PT"
     },
     {
       "id": "neuronto-ard",
@@ -358,7 +358,7 @@
       "logo_url": null,
       "verified_at": "2026-10-15",
       "added_at": "2026-10-15",
-      "note": "PR #17 merged 2026-10-15 14:51 PT by iamtekson; DC Hub under Geospatial APIs and Services (readme.MD L148–150, 94 tools, remote MCP) confirmed 2026-10-15 16:17 PT"
+      "note": "PR #17 merged 2026-10-15 14:51 PT by iamtekson; DC Hub under Geospatial APIs and Services (readme.MD L148\u2013150, 94 tools, remote MCP) confirmed 2026-10-15 16:17 PT"
     },
     {
       "id": "piebald-gemini-cli",
@@ -466,7 +466,7 @@
       "logo_url": null,
       "verified_at": "2026-10-16",
       "added_at": "2026-10-16",
-      "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub — Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so",
+      "note": "listed per chatmcp/mcpso#816 (closed 2026-10-16 09:50 PT by idoubi as listed); page HTTP 200 titled 'Dc Hub \u2014 Data Center Intelligence MCP Server' with dchub.cloud links confirmed 2026-10-16 16:19 PT. Page description is older copy; refresh needs the listing updated on mcp.so",
       "update_request_url": "https://github.com/chatmcp/mcpso/issues/5777"
     },
     {
@@ -563,7 +563,7 @@
       "logo_url": null,
       "verified_at": "2026-10-24",
       "added_at": "2026-10-19",
-      "note": "moved to the MCP Linker site after the milisp/mcp-servers repo went 404 (2026-10-23); page 'DC Hub MCP server · MCP Linker', HTTP 200 2026-10-24"
+      "note": "moved to the MCP Linker site after the milisp/mcp-servers repo went 404 (2026-10-23); page 'DC Hub MCP server \u00b7 MCP Linker', HTTP 200 2026-10-24"
     },
     {
       "id": "eater2-ai-agents-api-library",
