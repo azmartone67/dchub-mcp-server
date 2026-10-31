@@ -219,8 +219,11 @@ describe('smithery-freshness-heartbeat.sh — the beat can go red', () => {
    * ★ SMITHERY_BIN exists for exactly this: the script PREPENDS /usr/local/bin
    * to PATH, where the real `smithery` lives, so a PATH-only stub would publish
    * for real against the live listing.
+   * ★ shutdownDate defaults far in the future: the script retires itself from
+   * SMITHERY_SHUTDOWN_DATE (2026-10-31) on, so without the pin every case below
+   * read the RETIRED early-exit instead of the beat logic once that day came.
    */
-  async function heartbeat({ publishRc, convergeRc }) {
+  async function heartbeat({ publishRc, convergeRc, shutdownDate = '9999-12-31' }) {
     const bin = join(tmp, `smithery-${publishRc}`);
     writeFileSync(bin, `#!/bin/sh\necho '{"status":"PENDING"}'\nexit ${publishRc}\n`);
     chmodSync(bin, 0o755);
@@ -240,6 +243,7 @@ describe('smithery-freshness-heartbeat.sh — the beat can go red', () => {
         AGENT_BEAT_URL: `http://127.0.0.1:${port}/beat`,
         AGENT_BEAT_ENV: join(tmp, 'nonexistent.env'),
         DCHUB_ADMIN_KEY: 'test-key',
+        SMITHERY_SHUTDOWN_DATE: shutdownDate,
       },
     });
     return { ...r, log: readFileSync(log, 'utf8'), beat: beats[before] };
@@ -290,6 +294,15 @@ describe('smithery-freshness-heartbeat.sh — the beat can go red', () => {
       seen.push((await heartbeat(c)).beat.status);
     }
     expect(new Set(seen).size, `statuses collapsed: ${seen.join(',')}`).toBeGreaterThan(2);
+  });
+
+  it('on or after the shutdown date it retires: logs RETIRED, never runs the CLI, sends no beat, exit 0', async () => {
+    // rc 7/7 is used by no other case, so the log file (keyed by rc, appended) is its own.
+    const r = await heartbeat({ publishRc: 7, convergeRc: 7, shutdownDate: '2000-01-01' });
+    expect(r.log).toMatch(/RETIRED: Smithery's API and CLI shut down on 2000-01-01/);
+    expect(r.log, 'the CLI ran after retirement').not.toContain('{"status":"PENDING"}');
+    expect(r.beat, 'a retired lane still beat').toBeUndefined();
+    expect(r.code).toBe(0);
   });
 });
 
