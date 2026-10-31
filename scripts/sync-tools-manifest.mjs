@@ -1009,6 +1009,24 @@ const names = new Set(tools.map((t) => t.name));
     problems.push(`${GEM} version ${gmm[2]} != ${VERSION}`);
     if (FIX) pend(GEM, gm.replace(GMRX, `$1${VERSION}$3`));
   }
+
+  // ★2026-10-31 — .claude-plugin/plugin.json is the Claude Code plugin manifest
+  // (installed via .claude-plugin/marketplace.json). It sat at 2.12.37 like the
+  // gemini manifest did, because nothing healed it. Same 2-space top-level anchor;
+  // a missing anchor is a PROBLEM, not a silent no-op.
+  const CCP = '.claude-plugin/plugin.json';
+  const ccp = readCur(CCP);
+  const CCPRX = /^(  "version": ")([^"\n]*)("(?:,)?)$/m;
+  const ccpm = CCPRX.exec(ccp);
+  if (!ccpm) {
+    problems.push(`${CCP}: top-level \`"version": "x.y.z"\` key NOT FOUND — this heal `
+      + 'anchors on a 2-space-indented, double-quoted "version" line. If the key moved or '
+      + 'changed shape, re-anchor it here: Claude Code reads it to decide whether an '
+      + 'installed plugin is stale.');
+  } else if (ccpm[2] !== VERSION) {
+    problems.push(`${CCP} version ${ccpm[2]} != ${VERSION}`);
+    if (FIX) pend(CCP, ccp.replace(CCPRX, `$1${VERSION}$3`));
+  }
 }
 
 // smithery tool-count comments + README/llms-install "N tools"
@@ -1039,6 +1057,8 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  // the listing copy Cursor reviews, and it sat at "91 tools" since
                  // it landed on 09-13 (#416) because no loop scanned it.
                  '.cursor-plugin/plugin.json',
+                 // ★2026-10-31: the Claude Code plugin manifest says "N tools" too.
+                 '.claude-plugin/plugin.json',
                  // ★2026-08-11 — the GitHub repo DESCRIPTION. It is METADATA, not
                  // a file, so no guard that walks the working tree could ever see
                  // it: git grep returns nothing and COVERAGE could not list it.
@@ -1214,6 +1234,8 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     'integrations/packs/site.json',
     // ★2026-09-26: Cursor Marketplace listing copy (see the count loop above).
     '.cursor-plugin/plugin.json',
+    // ★2026-10-31: Claude Code plugin manifest, same reason.
+    '.claude-plugin/plugin.json',
   ];
   // ★2026-09-19. ASSET_QUANTITIES was applied to server.mjs ALONE, so every
   // registry-INGESTED file published the asset layers hand-typed and unwatched.
