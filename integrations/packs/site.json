@@ -24,7 +24,7 @@
     },
     {
       "name": "get_facility",
-      "description": "Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers \"who operates this data center and how big is it\", \"how many fiber carriers are in that building\". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities)."
+      "description": "Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers \"who operates this data center and how big is it\", \"how many fiber carriers are in that building\". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-digital-realty-iad38-ashburn-5754e62d. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities)."
     },
     {
       "name": "get_market_dcpi_rank",
