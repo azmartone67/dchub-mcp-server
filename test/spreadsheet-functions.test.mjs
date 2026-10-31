@@ -56,7 +56,15 @@ describe('manifest.xml points at hosted files that exist', () => {
   it('every resource URL is under https://dchub.cloud/addins/excel/ and names a file in excel/', () => {
     const urls = [...xml.matchAll(/DefaultValue="(https:\/\/dchub\.cloud\/addins\/excel\/[^"]+)"/g)].map((m) => m[1]);
     expect(urls.length).toBeGreaterThanOrEqual(3);
-    for (const u of urls) expect(fs.existsSync(path.join(SP, 'excel', u.split('/addins/excel/')[1]))).toBe(true);
+    for (const u of urls) {
+      // Cloudflare Pages serves x.html at /x and 308s /x.html there, so an HTML page is
+      // referenced extensionless (no redirect hop for the Office runtime); a file name
+      // with an extension is served as is.
+      const rel = u.split('/addins/excel/')[1];
+      expect(rel.endsWith('.html')).toBe(false);
+      const file = path.extname(rel) ? rel : rel + '.html';
+      expect(fs.existsSync(path.join(SP, 'excel', file))).toBe(true);
+    }
   });
   it('namespace DCHUB, one GUID id', () => {
     expect(xml).toMatch(/id="Functions\.Namespace" DefaultValue="DCHUB"/);
