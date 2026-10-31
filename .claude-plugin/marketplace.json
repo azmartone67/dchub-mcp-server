@@ -1,0 +1,25 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dchub",
+  "description": "DC Hub: live, cited data center, power grid, energy and fiber data for site selection, as a Claude Code plugin (remote MCP plus workflow skills).",
+  "owner": {
+    "name": "DC Hub",
+    "email": "jonathan@dchub.cloud",
+    "url": "https://dchub.cloud"
+  },
+  "plugins": [
+    {
+      "name": "dchub",
+      "source": "./",
+      "description": "Live data center market, power/grid, energy and fiber intelligence for site selection: the DC Hub MCP server plus skills for site screens, time-to-power memos, market comparisons and capacity sourcing.",
+      "author": {
+        "name": "Jonathan Martone",
+        "email": "jonathan@dchub.cloud",
+        "url": "https://dchub.cloud"
+      },
+      "homepage": "https://dchub.cloud",
+      "category": "data",
+      "keywords": ["mcp", "data-center", "power", "grid", "energy", "fiber", "site-selection", "colocation"]
+    }
+  ]
+}

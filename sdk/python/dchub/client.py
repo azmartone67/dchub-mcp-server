@@ -17,27 +17,51 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 
-__all__ = ["DCHub"]
+__all__ = ["DCHub", "check_via", "CLIENT_NAME"]
 
 _DEFAULT_ENDPOINT = "https://dchub.cloud/mcp"
+SDK_VERSION = "0.2.0"  # = pyproject.toml; not bumped: PyPI "dchub" is a different package (see sdk/COMPOSE.md)
+
+# 2026-10-31: the client name was "dchub-python-sdk". server.mjs _INTERNAL_SELF_TAG
+# (and the backend's normalize_write_platform) rewrite any name containing "dchub",
+# "test", "check"... to platform 'dchub-internal', so every SDK call was excluded
+# from usage counts. Neither the name nor the User-Agent may contain those words.
+CLIENT_NAME = "dc-sdk-python"
+_USER_AGENT = f"{CLIENT_NAME}/{SDK_VERSION}"
+
+# Partner attribution (https://dchub.cloud/mcp/builders): sent as X-DCHub-Via.
+VIA_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
+
+
+def check_via(via):
+    if via in (None, ""):
+        return None
+    if not isinstance(via, str) or not VIA_RE.match(via):
+        raise ValueError(f"via must match {VIA_RE.pattern} (lowercase letters, digits, . _ -; max 40), got {via!r}")
+    return via
 
 
 class DCHub:
     def __init__(self, api_key: str | None = None, endpoint: str | None = None,
-                 timeout: int = 60):
+                 timeout: int = 60, via: str | None = None):
         self.endpoint = endpoint or os.environ.get("DCHUB_ENDPOINT", _DEFAULT_ENDPOINT)
         self.api_key = api_key if api_key is not None else os.environ.get("DCHUB_API_KEY")
+        self.via = check_via(via if via is not None else os.environ.get("DCHUB_VIA"))
         self.timeout = timeout
         self._session_id: str | None = None
 
     # --- transport ---------------------------------------------------------
     def _headers(self) -> dict:
         h = {"Content-Type": "application/json",
-             "Accept": "application/json, text/event-stream"}
+             "Accept": "application/json, text/event-stream",
+             "User-Agent": _USER_AGENT}
         if self.api_key:
             h["X-API-Key"] = self.api_key
+        if self.via:
+            h["X-DCHub-Via"] = self.via
         if self._session_id:
             h["Mcp-Session-Id"] = self._session_id
         return h
@@ -73,7 +97,7 @@ class DCHub:
             return
         self._post({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                     "params": {"protocolVersion": "2024-11-05", "capabilities": {},
-                               "clientInfo": {"name": "dchub-python-sdk", "version": "1.0"}}})
+                               "clientInfo": {"name": CLIENT_NAME, "version": SDK_VERSION}}})
         try:
             self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
         except Exception:
@@ -126,11 +150,26 @@ class DCHub:
         raw = parsed[0] if len(parsed) == 1 else parsed
         return self._clean(raw)
 
-    def tools(self) -> list[str]:
-        """List all available tool names."""
+    def call_raw(self, tool: str, arguments: dict | None = None) -> dict:
+        """Call a tool and return the MCP result unchanged ({content, isError, ...})."""
+        self._ensure_session()
+        resp = self._post({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                           "params": {"name": tool, "arguments": arguments or {}}})
+        if "error" in resp:
+            e = resp["error"]
+            return {"content": [{"type": "text", "text": f"DC Hub error {e.get('code')}: {e.get('message')}"}],
+                    "isError": True}
+        return resp.get("result", {})
+
+    def list_tools(self) -> list[dict]:
+        """Full tool definitions from tools/list."""
         self._ensure_session()
         resp = self._post({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-        return [t["name"] for t in resp.get("result", {}).get("tools", [])]
+        return resp.get("result", {}).get("tools", [])
+
+    def tools(self) -> list[str]:
+        """List all available tool names."""
+        return [t["name"] for t in self.list_tools()]
 
     # --- convenience methods ----------------------------------------------
     def market(self, slug: str):
@@ -138,11 +177,16 @@ class DCHub:
         return self.call("get_market_intel", market=slug)
 
     def search(self, q: str | None = None, state: str | None = None,
-               country: str | None = None, limit: int = 5):
-        """Search facilities by free-text / state / country."""
+               country: str | None = None, limit: int = 5, query: str | None = None):
+        """Search facilities by free-text / state / country.
+
+        `q` is the short name; the tool's declared argument is `query`. Sending `q`
+        through was an undeclared argument, dropped before the handler, so the
+        search came back unfiltered (the Node SDK was fixed the same way)."""
         args = {"limit": limit}
-        if q:
-            args["q"] = q
+        text = query if query is not None else q
+        if text:
+            args["query"] = text
         if state:
             args["state"] = state
         if country:
