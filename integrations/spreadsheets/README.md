@@ -21,7 +21,7 @@ file `Cells` with `google-sheets/Cells.gs`, an HTML file `Sidebar` with
 manifest). Reload the sheet, then Extensions → DC Hub → Set API key.
 
 **Excel (web, Windows, Mac):** Home → Add-ins → More add-ins → My add-ins → Upload My Add-in
-→ choose `excel/manifest.xml` (download it from https://dchub.cloud/addins/excel/manifest.xml).
+→ choose `excel/manifest.xml` (download it from https://dchub.cloud/addins/excel/manifest.xml; install guide: https://dchub.cloud/spreadsheets).
 Then Home → DC Hub key.
 
 ## Files

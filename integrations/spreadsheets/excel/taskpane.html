@@ -28,15 +28,6 @@
   <div id="s"></div>
   <p>Formulas: <code>=DCHUB.GRID("PJM")</code>, <code>=DCHUB.DCPI("phoenix")</code>, <code>=DCHUB.FACILITIES("Ashburn",10)</code>, <code>=DCHUB.ENERGY_RATE("VA")</code>.</p>
   <p>Source: DC Hub, dchub.cloud. Cite with the as-of date.</p>
-<script>
-  Office.onReady(function () {
-    document.getElementById("save").onclick = async function () {
-      var k = document.getElementById("k").value.trim();
-      if (k) await OfficeRuntime.storage.setItem("dchub_api_key", k);
-      else await OfficeRuntime.storage.removeItem("dchub_api_key");
-      document.getElementById("s").textContent = (k ? "Key saved." : "Key cleared.") + " Recalculate (Ctrl+Alt+F9) to refresh.";
-    };
-  });
-</script>
+<script src="taskpane.js"></script>
 </body>
 </html>

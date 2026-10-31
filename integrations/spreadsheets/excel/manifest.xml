@@ -12,7 +12,7 @@
   <Description DefaultValue="Live data center, power grid and energy data as Excel formulas: =DCHUB.GRID, =DCHUB.DCPI, =DCHUB.FACILITIES, =DCHUB.ENERGY_RATE."/>
   <IconUrl DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
   <HighResolutionIconUrl DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
-  <SupportUrl DefaultValue="https://dchub.cloud/addins/"/>
+  <SupportUrl DefaultValue="https://dchub.cloud/spreadsheets"/>
   <AppDomains>
     <AppDomain>https://dchub.cloud</AppDomain>
   </AppDomains>
@@ -96,7 +96,7 @@
         <bt:Url id="Functions.Script.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.js"/>
         <bt:Url id="Functions.Metadata.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.json"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://dchub.cloud/addins/excel/taskpane.html"/>
-        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://dchub.cloud/addins/"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://dchub.cloud/spreadsheets"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="Functions.Namespace" DefaultValue="DCHUB"/>
