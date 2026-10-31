@@ -29490,9 +29490,26 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     { facility_id: S.describe('A DC Hub facility id or canonical slug to resolve the market context'),
       market: S.describe('Alternatively, a market name or slug (e.g. "northern-virginia")'),
       since: S.describe('Look-back window, e.g. "7d" or "30d" (default 7d)') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/facility-risk-delta', {
-      facility_id: a.facility_id, market: a.market, since: a.since,
-    })) }] }));
+    async (a) => {
+      // risk-delta-resolve (2026-10-30): the backend matches only a numeric id or
+      // canonical_slug, while get_facility also resolves other slugs, including its
+      // own advertised example (equinix-dc1-ashburn -> id 9465). The natural chain
+      // get_facility -> get_facility_risk_delta on the same id answered the first and
+      // 400'd no_market_context on the second (4 of the 5 errored trials, 10-07..10-18).
+      // Resolve through the same paths get_facility uses, then retry with the numeric id.
+      let fid = a.facility_id;
+      const _hit = await _resolveFacilityRef(fid, (q) => callAPI('/api/v1/facilities', { query: q, limit: 20 }, { internal: true }));
+      if (_hit) fid = _hit.slug;
+      const ask = (id) => callAPI('/api/v1/facility-risk-delta', { facility_id: id, market: a.market, since: a.since });
+      let out = await ask(fid);
+      if (fid && !a.market && out && out.detail === 'no_market_context') {
+        const f = await callAPI(`/api/v1/facilities/${encodeURIComponent(String(fid))}`, { include_nearby: false, include_power: false }, { internal: true });
+        const rec = (f && !f.error) ? (f.data || f.facility || f) : null;
+        const num = rec ? rec.id : null;
+        if ((typeof num === 'number' || (typeof num === 'string' && num)) && String(num) !== String(fid)) out = await ask(String(num));
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
 
   trackedTool(srv, 'save_site', 'Use this when the user wants to save a data-center site to track it. Needs a key (free, via claim_free_key); keyless returns auth_required. Save a candidate data-center site to your DC Hub account to track it across sessions. Give lat + lon (plus optional name, state, market, target_mw, notes). Returns the saved site id. Pass `market` and DC Hub snapshots the site\'s DCPI baseline at save time, so every later list_saved_sites / get_changes shows how ITS score and verdict moved since you saved it. Builds a persistent shortlist an agent can revisit + monitor — after saving, pass the returned id to set_site_alert so DC Hub emails you when that site’s DCPI/capacity/nearby-facilities move (no re-checking). Answers "remember this parcel for me", "keep this candidate so I can come back to it next session". Try: save_site lat=39.04 lon=-77.48 name="Ashburn parcel" market=northern-virginia target_mw=100. Do NOT use to read back the shortlist (use list_saved_sites), download it (use export_dataset), or score a site (use score_facility); this WRITES one site to your account.',
     { lat: N.describe('Site latitude in decimal degrees (-90 to 90), e.g. 39.04'),
