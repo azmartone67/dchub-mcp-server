@@ -223,6 +223,7 @@ import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verd
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
 import { BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, renderBuildersPage as _renderBuildersPage, buildersJson as _buildersJson, viaFromRequest as _viaFromRequest } from './lib/builders-page.mjs';
+import { PARTNER_PATH, PARTNER_CSP, renderPartnerPage as _renderPartnerPage } from './lib/partner-intake-page.mjs';
 import { hasReadGatedFilter, dropUnreadableFilters, READ_ORDERED_TOOLS } from './lib/readable-filters.mjs';
 import { sessionInitEventBody as _sessionInitEventBody, postSessionInitEvent as _postSessionInitEvent } from './lib/session-init-event.mjs';
 import { challengeCallerKey as _challengeCallerKey, challengeState as _challengeState } from './lib/challenge-state.mjs';
@@ -32344,6 +32345,19 @@ app.get(BUILDERS_JSON_PATH, (req, res) => {
     res.json(_buildersJson(_buildersOpts()));
   } catch (e) {
     res.status(500).json({ error: 'builders_unavailable' });
+  }
+});
+
+// /mcp/partner (owner 2026-10-30): "Building with DC Hub? Tell us", the intake form. A page
+// like /mcp/directories: the form posts same-origin to the backend, which stores it and emails
+// the key. The page carries one inline script, allowed by hash, and nothing else.
+app.get([PARTNER_PATH, PARTNER_PATH + '/'], (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Content-Security-Policy', PARTNER_CSP());
+    res.type('html').send(_renderPartnerPage());
+  } catch (e) {
+    res.status(500).type('text').send('partner_unavailable');
   }
 });
 
