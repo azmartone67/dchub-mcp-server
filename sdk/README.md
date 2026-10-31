@@ -11,6 +11,8 @@ Both expose the same surface: `.market(slug)`, `.search(...)`, `.grid(iso)`,
 | [Node](node/) | `npm i ./sdk/node` | `import { DCHub } from "dchub"; await new DCHub().market("northern-virginia")` |
 | [Vercel AI SDK](ai-sdk/) | `npm i ./sdk/ai-sdk ai @ai-sdk/mcp` | `import { withDCHubTools } from "dchub-ai-sdk"` → pass `tools` to `generateText` |
 
+**Building an MCP server?** [COMPOSE.md](COMPOSE.md) registers DC Hub tools inside it (`registerDCHubTools`, `dchub_tool_definitions`) with `via` attribution.
+
 Set `DCHUB_API_KEY` (sent as `X-API-Key`) for full-tier data; the free tier works
 without one (some fields masked). Get a key:
 ```bash

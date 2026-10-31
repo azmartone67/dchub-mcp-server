@@ -15,6 +15,28 @@
  * Zero runtime dependencies (uses global fetch, Node >= 18).
  */
 const DEFAULT_ENDPOINT = "https://dchub.cloud/mcp";
+export const SDK_VERSION = "0.2.0";
+
+// ★2026-10-31: the client name was "dchub-node-sdk". server.mjs _INTERNAL_SELF_TAG
+// (and the backend's normalize_write_platform) rewrite any name containing "dchub",
+// "test", "check"... to platform 'dchub-internal', so every SDK call was counted as
+// our own traffic and excluded from usage metrics. Neither the name nor the
+// User-Agent may contain those words (a "dchub-" UA is also the backend's internal
+// bypass), so both say "dc-sdk-node" and the UA carries no URL.
+export const CLIENT_NAME = "dc-sdk-node";
+const USER_AGENT = `${CLIENT_NAME}/${SDK_VERSION}`;
+
+// Partner attribution (the convention served at https://dchub.cloud/mcp/builders):
+// a `via` name rides every request as X-DCHub-Via and is counted per day.
+export const VIA_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/;
+
+export function checkVia(via) {
+  if (via === undefined || via === null || via === "") return undefined;
+  if (typeof via !== "string" || !VIA_RE.test(via)) {
+    throw new TypeError(`via must match ${VIA_RE} (lowercase letters, digits, . _ -; max 40), got ${JSON.stringify(via)}`);
+  }
+  return via;
+}
 
 function parseBody(raw) {
   raw = raw.trim();
@@ -48,9 +70,10 @@ function clean(result) {
 }
 
 export class DCHub {
-  constructor({ apiKey, endpoint, timeout = 60000 } = {}) {
+  constructor({ apiKey, endpoint, timeout = 60000, via } = {}) {
     this.endpoint = endpoint || process.env.DCHUB_ENDPOINT || DEFAULT_ENDPOINT;
     this.apiKey = apiKey !== undefined ? apiKey : process.env.DCHUB_API_KEY;
+    this.via = checkVia(via !== undefined ? via : process.env.DCHUB_VIA);
     this.timeout = timeout;
     this.sessionId = null;
   }
@@ -59,8 +82,10 @@ export class DCHub {
     const h = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
+      "User-Agent": USER_AGENT,
     };
     if (this.apiKey) h["X-API-Key"] = this.apiKey;
+    if (this.via) h["X-DCHub-Via"] = this.via;
     if (this.sessionId) h["Mcp-Session-Id"] = this.sessionId;
     return h;
   }
@@ -87,12 +112,33 @@ export class DCHub {
       jsonrpc: "2.0", id: 1, method: "initialize",
       params: {
         protocolVersion: "2024-11-05", capabilities: {},
-        clientInfo: { name: "dchub-node-sdk", version: "1.0" },
+        clientInfo: { name: CLIENT_NAME, version: SDK_VERSION },
       },
     });
     try {
       await this._post({ jsonrpc: "2.0", method: "notifications/initialized" });
     } catch { /* best effort */ }
+  }
+
+  /** Call a tool and return the MCP result unchanged ({content, isError, ...}),
+   * for servers that pass DC Hub results straight through (see compose.mjs). */
+  async callRaw(tool, args = {}) {
+    await this._ensureSession();
+    const resp = await this._post({
+      jsonrpc: "2.0", id: 3, method: "tools/call",
+      params: { name: tool, arguments: args },
+    });
+    if (resp.error) {
+      return { content: [{ type: "text", text: `DC Hub error ${resp.error.code}: ${resp.error.message}` }], isError: true };
+    }
+    return resp.result;
+  }
+
+  /** Full tool definitions from tools/list ({name, description, inputSchema, annotations}). */
+  async listTools() {
+    await this._ensureSession();
+    const resp = await this._post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+    return resp.result?.tools ?? [];
   }
 
   /** Call any DC Hub MCP tool; returns the cleaned data payload. */
@@ -116,9 +162,7 @@ export class DCHub {
 
   /** List all available tool names. */
   async tools() {
-    await this._ensureSession();
-    const resp = await this._post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-    return (resp.result?.tools ?? []).map((t) => t.name);
+    return (await this.listTools()).map((t) => t.name);
   }
 
   /** Market intelligence for a market slug, e.g. "northern-virginia". */
