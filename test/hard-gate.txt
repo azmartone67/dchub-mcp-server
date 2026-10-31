@@ -361,6 +361,7 @@ test/pack-sold-as-credits.test.mjs
 test/paid-lift-in-session.test.mjs
 test/paid-sell-line.test.mjs
 test/partner-inbox-tools.test.mjs
+test/partner-intake-page.test.mjs
 test/partner-key-both-headers.test.mjs
 test/payload-diet.test.mjs
 test/paywall-contract.test.mjs
