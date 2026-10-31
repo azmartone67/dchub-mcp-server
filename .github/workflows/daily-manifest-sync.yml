@@ -320,7 +320,7 @@ jobs:
                  submissions/mcp.so.md submissions/official-mcp-registry.md submissions/pulsemcp.md \
                  submissions/smithery.md canonical/problem_taxonomy.json \
                  canonical/tool_maturity.json \
-                 llms-install.md REGISTRY-LISTINGS.md .cursor-plugin/plugin.json \
+                 llms-install.md REGISTRY-LISTINGS.md .cursor-plugin/plugin.json .claude-plugin/plugin.json \
                  skills/README.md skills/dc-hub-data-center-intelligence/SKILL.md \
                  scripts/tier3_presence.sh scripts/smithery_description.txt \
                  integrations/README.md integrations/chatgpt/README.md \

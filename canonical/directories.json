@@ -881,6 +881,18 @@
       "note": ""
     },
     {
+      "id": "claude-code-plugin-marketplace",
+      "name": "Claude Code plugin marketplace (self-hosted)",
+      "status": "pending",
+      "listing_url": null,
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": null,
+      "added_at": "2026-10-31",
+      "note": "install: /plugin marketplace add azmartone67/dchub-mcp-server then /plugin install dchub@dchub (.claude-plugin/marketplace.json); next: submit to anthropics/claude-plugins-official (owner)"
+    },
+    {
       "id": "claude-directory",
       "name": "Claude connectors directory",
       "status": "pending",
