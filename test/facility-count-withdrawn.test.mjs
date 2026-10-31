@@ -52,7 +52,7 @@ const PUBLIC_EXACT = new Set([
   'docs/canonical-workflows.md', 'docs/distribution-targets.md', 'docs/contextual-triggers.md',
   'docs/one-click-install.md', 'docs/contacts.md', 'docs/pilot-pack.md',
 ]);
-const PUBLIC_PREFIX = ['canonical/', 'integrations/', 'skills/'];
+const PUBLIC_PREFIX = ['canonical/', 'integrations/', 'skills/', 'plugins/'];
 // A scan that silently lost these would pass while looking at nothing.
 const MUST_SCAN = ['README.md', 'smithery.yaml', 'dxt/manifest.json', 'canonical/github_description.txt',
   'integrations/chatgpt/openapi.json', 'REGISTRY-LISTINGS.md', 'server.mjs', 'mcp-server.json'];

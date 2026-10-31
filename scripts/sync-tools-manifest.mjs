@@ -1014,7 +1014,7 @@ const names = new Set(tools.map((t) => t.name));
   // (installed via .claude-plugin/marketplace.json). It sat at 2.12.37 like the
   // gemini manifest did, because nothing healed it. Same 2-space top-level anchor;
   // a missing anchor is a PROBLEM, not a silent no-op.
-  const CCP = '.claude-plugin/plugin.json';
+  const CCP = 'plugins/dchub/.claude-plugin/plugin.json';
   const ccp = readCur(CCP);
   const CCPRX = /^(  "version": ")([^"\n]*)("(?:,)?)$/m;
   const ccpm = CCPRX.exec(ccp);
@@ -1058,7 +1058,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
                  // it landed on 09-13 (#416) because no loop scanned it.
                  '.cursor-plugin/plugin.json',
                  // ★2026-10-31: the Claude Code plugin manifest says "N tools" too.
-                 '.claude-plugin/plugin.json',
+                 'plugins/dchub/.claude-plugin/plugin.json',
                  // ★2026-08-11 — the GitHub repo DESCRIPTION. It is METADATA, not
                  // a file, so no guard that walks the working tree could ever see
                  // it: git grep returns nothing and COVERAGE could not list it.
@@ -1235,7 +1235,7 @@ for (const f of ['smithery.yaml', 'README.md', 'llms-install.md',
     // ★2026-09-26: Cursor Marketplace listing copy (see the count loop above).
     '.cursor-plugin/plugin.json',
     // ★2026-10-31: Claude Code plugin manifest, same reason.
-    '.claude-plugin/plugin.json',
+    'plugins/dchub/.claude-plugin/plugin.json',
   ];
   // ★2026-09-19. ASSET_QUANTITIES was applied to server.mjs ALONE, so every
   // registry-INGESTED file published the asset layers hand-typed and unwatched.
