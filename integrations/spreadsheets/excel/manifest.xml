@@ -25,7 +25,7 @@
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://dchub.cloud/addins/excel/taskpane.html"/>
+    <SourceLocation DefaultValue="https://dchub.cloud/addins/excel/taskpane"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -95,7 +95,7 @@
       <bt:Urls>
         <bt:Url id="Functions.Script.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.js"/>
         <bt:Url id="Functions.Metadata.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.json"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://dchub.cloud/addins/excel/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://dchub.cloud/addins/excel/taskpane"/>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://dchub.cloud/spreadsheets"/>
       </bt:Urls>
       <bt:ShortStrings>
