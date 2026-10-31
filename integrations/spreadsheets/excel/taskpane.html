@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DC Hub for Excel</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<script src="cells.js"></script>
+<script src="functions.js"></script>
+<style>
+  body { font-family: "Instrument Sans", "Segoe UI", Arial, sans-serif; background: #0b0f17; color: #e8edf5; padding: 16px; margin: 0; }
+  h1 { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+  h1 span { background: linear-gradient(90deg, #4f8cff, #36d1b5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p { font-size: 13px; color: #aab4c4; line-height: 1.45; }
+  input { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #2a3446; background: #121927; color: #e8edf5; }
+  button { margin-top: 10px; padding: 8px 14px; border: 0; border-radius: 6px; background: #4f8cff; color: #fff; font-weight: 700; cursor: pointer; }
+  a { color: #36d1b5; }
+  code { color: #e8edf5; }
+  #s { font-size: 12px; margin-top: 8px; color: #36d1b5; }
+</style>
+</head>
+<body>
+  <h1>DC Hub <span>for Excel</span></h1>
+  <p>Paste your DC Hub API key. It is stored on this device only and sent only to dchub.cloud.</p>
+  <p>No key yet? <a href="https://dchub.cloud/signup" target="_blank" rel="noopener">Get a free key</a>. Without one, formulas return previews.</p>
+  <input id="k" type="password" autocomplete="off" placeholder="your DC Hub key">
+  <button id="save">Save</button>
+  <div id="s"></div>
+  <p>Formulas: <code>=DCHUB.GRID("PJM")</code>, <code>=DCHUB.DCPI("phoenix")</code>, <code>=DCHUB.FACILITIES("Ashburn",10)</code>, <code>=DCHUB.ENERGY_RATE("VA")</code>.</p>
+  <p>Source: DC Hub, dchub.cloud. Cite with the as-of date.</p>
+<script src="taskpane.js"></script>
+</body>
+</html>

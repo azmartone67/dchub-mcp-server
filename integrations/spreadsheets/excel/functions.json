@@ -1,0 +1,40 @@
+{
+  "functions": [
+    {
+      "id": "GRID", "name": "GRID",
+      "description": "Live grid data for an ISO or grid code from DC Hub (dchub.cloud).",
+      "result": { "type": "any" },
+      "parameters": [
+        { "name": "iso", "description": "Grid code, e.g. PJM, ERCOT, CAISO", "type": "string" },
+        { "name": "field", "description": "Field to return (default demand_mw)", "type": "string", "optional": true }
+      ]
+    },
+    {
+      "id": "DCPI", "name": "DCPI",
+      "description": "DCPI power verdict for a data center market from DC Hub (dchub.cloud), CC BY 4.0.",
+      "result": { "type": "any" },
+      "parameters": [
+        { "name": "market", "description": "Market slug, e.g. phoenix, northern-virginia", "type": "string" },
+        { "name": "field", "description": "Field to return (default verdict; e.g. composite_score)", "type": "string", "optional": true }
+      ]
+    },
+    {
+      "id": "FACILITIES", "name": "FACILITIES",
+      "description": "Data center facilities matching a search, as a table, from DC Hub (dchub.cloud).",
+      "result": { "type": "any", "dimensionality": "matrix" },
+      "parameters": [
+        { "name": "query", "description": "Free text, e.g. Ashburn or an operator name", "type": "string" },
+        { "name": "limit", "description": "Rows to return (default 10, max 100)", "type": "number", "optional": true }
+      ]
+    },
+    {
+      "id": "ENERGY_RATE", "name": "ENERGY_RATE",
+      "description": "Retail electricity rate for a US state from DC Hub (dchub.cloud), sourced from EIA.",
+      "result": { "type": "any" },
+      "parameters": [
+        { "name": "state", "description": "Two-letter state code, e.g. VA", "type": "string" },
+        { "name": "field", "description": "Field to return (default retail_rate_kwh)", "type": "string", "optional": true }
+      ]
+    }
+  ]
+}
