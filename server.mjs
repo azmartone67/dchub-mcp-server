@@ -27497,13 +27497,13 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       return { content: [{ type: 'text', text: _markUnverifiedText(_out) }] };
     });
 
-  trackedTool(srv, 'get_facility', 'Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers "who operates this data center and how big is it", "how many fiber carriers are in that building". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-iad8. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',
+  trackedTool(srv, 'get_facility', 'Use this when the user asks about one data center facility: name, operator, address, lat/lon, power capacity (MW total/used), cooling type, fiber providers (count + carrier list), commissioning year, status, the DCPI verdict for its market, and peer facilities nearby. Answers "who operates this data center and how big is it", "how many fiber carriers are in that building". Try: get_facility id=equinix-dc1-ashburn — or get_facility slug=digital-realty-digital-realty-iad38-ashburn-5754e62d. Returns ONE facility in full; do NOT use to search or list many facilities (use search_facilities).',
     // r-slug-alias (2026-07-02, friction audit): the description advertises
     // `slug=` and search_facilities returns `slug` fields, but the handler read
     // ONLY facility_id — the natural search→detail chain sent slug, fid
     // resolved '', and the backend 404'd on /api/v1/facilities/ for EVERY tier.
     { facility_id: ID.describe('Facility id from a prior search_facilities/search result (numeric or string), e.g. equinix-dc1-ashburn'),
-      slug: S.describe('Facility slug from a prior search result, e.g. digital-realty-iad8'),
+      slug: S.describe('Facility slug from a prior search result, e.g. digital-realty-digital-realty-iad38-ashburn-5754e62d'),
       id: ID.describe('Alias for facility_id — a facility id/slug from a prior search result'),
       name: S.describe('Facility name as a fallback lookup when no id/slug is known, e.g. "QTS Ashburn"'),
       include_nearby: B.describe('Include peer facilities near this one in the response (default true)'),
