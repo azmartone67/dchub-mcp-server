@@ -489,6 +489,7 @@ test/smithery-reclaim-terms.test.mjs
 test/snapshot-repairs-missing-keys.test.mjs
 test/source-capacity-match.test.mjs
 test/spent-cap-link-line.test.mjs
+test/spreadsheet-functions.test.mjs
 test/standing-intent-capacity.test.mjs
 test/starter-pack.test.mjs
 test/step-slim-keeps-honesty.test.mjs

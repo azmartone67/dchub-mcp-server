@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>8254ec3d-b268-4eef-b62f-2224f1babb28</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>DC Hub</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="DC Hub"/>
+  <Description DefaultValue="Live data center, power grid and energy data as Excel formulas: =DCHUB.GRID, =DCHUB.DCPI, =DCHUB.FACILITIES, =DCHUB.ENERGY_RATE."/>
+  <IconUrl DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+  <HighResolutionIconUrl DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+  <SupportUrl DefaultValue="https://dchub.cloud/addins/"/>
+  <AppDomains>
+    <AppDomain>https://dchub.cloud</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="SharedRuntime" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://dchub.cloud/addins/excel/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <Runtimes>
+          <Runtime resid="Taskpane.Url" lifetime="long"/>
+        </Runtimes>
+        <AllFormFactors>
+          <ExtensionPoint xsi:type="CustomFunctions">
+            <Script>
+              <SourceLocation resid="Functions.Script.Url"/>
+            </Script>
+            <Page>
+              <SourceLocation resid="Taskpane.Url"/>
+            </Page>
+            <Metadata>
+              <SourceLocation resid="Functions.Metadata.Url"/>
+            </Metadata>
+            <Namespace resid="Functions.Namespace"/>
+          </ExtensionPoint>
+        </AllFormFactors>
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <FunctionFile resid="Taskpane.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="DCHub.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="DCHub.TaskpaneButton">
+                  <Label resid="Button.Label"/>
+                  <Supertip>
+                    <Title resid="Button.Label"/>
+                    <Description resid="Button.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ButtonId1</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.js"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.json"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://dchub.cloud/addins/excel/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://dchub.cloud/addins/"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Functions.Namespace" DefaultValue="DCHUB"/>
+        <bt:String id="GetStarted.Title" DefaultValue="DC Hub formulas are ready"/>
+        <bt:String id="Group.Label" DefaultValue="DC Hub"/>
+        <bt:String id="Button.Label" DefaultValue="DC Hub key"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="Type =DCHUB.GRID(&quot;PJM&quot;) in a cell. Open DC Hub key on the Home tab to add your free key."/>
+        <bt:String id="Button.Tooltip" DefaultValue="Add your DC Hub API key"/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
