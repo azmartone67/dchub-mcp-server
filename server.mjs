@@ -194,6 +194,7 @@ import { composeGridProvenance, composeCompareProvenance } from './lib/grid-prov
 // next_ask + dated cite_as on every result, next_ask follow-through telemetry.
 import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNextAsk, paramsForTrack, nextAskFor, ALWAYS_LOAD_TOOLS, ALWAYS_LOAD_META_KEY } from './lib/agent-outreach.mjs';
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
+import { withNewsFooter as _withNewsFooter } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
 import { shortWallLinkStep, withWallNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
@@ -21039,6 +21040,27 @@ function _outreachStep(result, name, args) {
 // gated result ends with exactly the neutral partial line, search/fetch keep
 // exactly one text item) and /mcp/core; clean platforms (ChatGPT: one data
 // item). Kill switch DCHUB_SOURCE_LINE=0.
+// Brain 2026-10-30: a free key's get_news answer carries ONE line pointing at the free monthly full
+// site analysis (lib/news-footer.mjs), because the only repeat free account measured reads news and
+// nothing else. It is a new trailing text item, added inside the handler so the Source line
+// (_sourceLineStep) still ends the answer. Only a keyed caller below the paid tiers, and only while
+// the free monthly runs are on (the line promises them). A pack buyer is a paid read (CLAUDE.md:
+// read _getCredits), so no nudge. Not on the directory / Claude / core profiles, a clean platform or
+// an execute_plan loopback step. Kill switch DCHUB_NEWS_FOOTER=0. Fail-soft: any throw returns the result.
+export async function _newsFooterStep(result) {
+  try {
+    if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_NEWS_FOOTER || '').trim())) return result;
+    const c = getCtx() || {};
+    if (!c.api_key || c.loopback_step || !_lpFreeRunsOn()) return result;
+    if (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE) return result;
+    if (_isCleanPlatform()) return result;
+    if (_tierRank(c.tier || 'free') >= _tierRank('starter')) return result;
+    let credits = 0;
+    try { credits = Number((await _getCredits(c)).credits) || 0; } catch (_) { credits = 0; }
+    if (credits > 0) return result;
+    return _withNewsFooter(result);
+  } catch (_e) { return result; }
+}
 export function _sourceLineStep(result, name, args) {
   try {
     if (/^(0|false|no|off)$/i.test(String(process.env.DCHUB_SOURCE_LINE || '').trim())) return result;
@@ -28391,7 +28413,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
       date_to: S.describe('Latest published date, ISO-8601 (YYYY-MM-DD)'),
       limit: LIMIT,
       min_relevance: N.describe('Minimum relevance score 0-1 to include an item, e.g. 0.5') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
+    async (a) => _newsFooterStep({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/news', a)) }] }));
 
   // 2026-07-03: semantic (meaning-based) search over news + M&A deals + 21k+
   // facilities via the RAG layer (Cohere embeddings + pgvector). For fuzzy /
