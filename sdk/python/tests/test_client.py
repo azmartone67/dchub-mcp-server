@@ -1,5 +1,5 @@
 """Live tests for the DC Hub Python SDK (free tier; gate-graceful)."""
-from dchub import DCHub
+from dchub.mcp import DCHub
 
 
 def test_tools_list_is_38():
