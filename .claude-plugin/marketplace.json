@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "dchub",
-      "source": "./",
+      "source": "./plugins/dchub",
       "description": "Live data center market, power/grid, energy and fiber intelligence for site selection: the DC Hub MCP server plus skills for site screens, time-to-power memos, market comparisons and capacity sourcing.",
       "author": {
         "name": "Jonathan Martone",

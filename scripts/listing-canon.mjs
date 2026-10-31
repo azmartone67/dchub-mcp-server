@@ -82,7 +82,7 @@ export function withSubmissionHeader(md) {
 // "82-tool" and "70-tool" beside a 94-tool server (measured 2026-10-14). Dated history
 // (docs/outreach-emails.md, submissions/*.md) is deliberately not here. scripts/sync-tools-manifest.mjs
 // heals and checks these; test/listing-canon.test.mjs fails on them; one list, so they cannot diverge.
-export const COUNT_CLAIM_MANIFESTS = Object.freeze(['gemini-extension.json', '.cursor-plugin/plugin.json', '.claude-plugin/plugin.json', 'dxt/manifest.json', 'kiro-power/plugin.json']);
+export const COUNT_CLAIM_MANIFESTS = Object.freeze(['gemini-extension.json', '.cursor-plugin/plugin.json', 'plugins/dchub/.claude-plugin/plugin.json', 'dxt/manifest.json', 'kiro-power/plugin.json']);
 export const COUNT_CLAIM_DOCS = Object.freeze(['integrations/PROMPT.md', 'integrations/README.md', 'TELEGEOGRAPHY-OUTREACH.md',
   'docs/contacts.md', 'docs/distribution-targets.md']);
 export const COUNT_CLAIM_FILES = Object.freeze([...COUNT_CLAIM_MANIFESTS, ...COUNT_CLAIM_DOCS]);
