@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   BUILDERS_PATH, BUILDERS_JSON_PATH, BUILDERS_CSP, VIA_HEADER,
   renderBuildersPage, buildersJson, normalizeVia, viaFromRequest, smitheryProxyVia, SMITHERY_PROXY_VIA, SUGGESTED_TOOLS,
+  COMPOSE_KIT,
 } from '../lib/builders-page.mjs';
 
 const SRC = readFileSync(new URL('../server.mjs', import.meta.url), 'utf8');
@@ -40,6 +41,31 @@ describe('renderBuildersPage', () => {
     const names = new Set((manifest.tools || []).map((t) => t.name));
     expect(names.size).toBeGreaterThan(50);
     for (const [name] of SUGGESTED_TOOLS) expect(names.has(name), name).toBe(true);
+  });
+
+  it('links the published compose kit for both languages, at the versions in sdk/', () => {
+    for (const must of ['npm i dchub', 'dchub/compose', 'registerDCHubTools', 'https://www.npmjs.com/package/dchub',
+      'pip install &quot;dchub&gt;=0.3.0&quot;', 'dchub_tool_definitions', 'https://pypi.org/project/dchub/',
+      'sdk/COMPOSE.md', '<h2>7. Building an MCP server? Compose DC Hub in code</h2>',
+      // the call each snippet makes, not just the import line
+      'await registerDCHubTools(server, { via: &quot;&lt;your-name&gt;&quot; });',
+      'defs = dchub_tool_definitions(via=&quot;&lt;your-name&gt;&quot;)']) {
+      expect(html, must).toContain(must);
+    }
+    expect(html, 'nothing on the page is commented out').not.toContain('<!--');
+    const pkg = JSON.parse(readFileSync(new URL('../sdk/node/package.json', import.meta.url), 'utf8'));
+    const pyproject = readFileSync(new URL('../sdk/python/pyproject.toml', import.meta.url), 'utf8');
+    expect(pkg.name).toBe('dchub');
+    expect(COMPOSE_KIT.node.version).toBe(pkg.version);
+    expect(pyproject).toMatch(new RegExp(`^version = "${COMPOSE_KIT.python.version.replace(/\./g, '\\.')}"$`, 'm'));
+    expect(html).toContain(`npm dchub ${pkg.version}`);
+    expect(html).toContain(`PyPI dchub ${COMPOSE_KIT.python.version}`);
+    // The names the snippets use are the ones the SDKs export.
+    expect(readFileSync(new URL('../sdk/node/compose.mjs', import.meta.url), 'utf8')).toMatch(/export (async )?function registerDCHubTools\b/);
+    expect(readFileSync(new URL('../sdk/python/dchub/compose.py', import.meta.url), 'utf8')).toMatch(/^def dchub_tool_definitions\(/m);
+    const j = buildersJson({ tools: 94 });
+    expect(j.compose_kit.node.version).toBe(pkg.version);
+    expect(j.compose_kit.python.install).toBe(COMPOSE_KIT.python.install);
   });
 
   it('the JSON twin carries the same facts', () => {
