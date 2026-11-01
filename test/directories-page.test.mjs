@@ -126,10 +126,11 @@ describe('routes', () => {
     expect(MCP_PATHS).not.toContain(DIRECTORIES_JSON_PATH);
   });
 
-  it('page CSP allows inline style and https images, still no script', () => {
-    expect(DIRECTORIES_CSP).toContain("style-src 'unsafe-inline'");
+  it('page CSP allows inline style, https images and only the same-origin site nav script', () => {
+    expect(DIRECTORIES_CSP).toContain("style-src 'self' 'unsafe-inline'");
     expect(DIRECTORIES_CSP).toContain('img-src https:');
-    expect(DIRECTORIES_CSP).not.toMatch(/script-src/);
+    const scriptSrc = DIRECTORIES_CSP.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
+    expect(scriptSrc).toBe("script-src 'self'");
     expect(DIRECTORIES_CSP).toContain("default-src 'none'");
   });
 });
