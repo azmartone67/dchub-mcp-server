@@ -195,7 +195,19 @@ describe.each(Object.keys(CASES))('%s — free tiers get names, verdicts and cou
   it.each([['developer'], ['paid']])('a %s key keeps today\'s full answer', async (tier) => {
     const r = await call(tool, K.args, seat(tier, 'dch_live_' + tier + '_numerics'));
     const { text } = channels(r);
+    if (tool === 'rank_markets') {
+      // Owner 2026-10-31: on rank_markets total_mw and the DCPI sub-scores are Pro and above, for
+      // every seat below Pro (Developer included); Pro keeps them (below).
+      for (const f of K.figures) expect(carries(text, f), `${tool}: ${tier} still carries ${f}`).toBe(false);
+      return;
+    }
     expect(K.figures.some((f) => carries(text, f)), `${tool}: ${tier} lost the figures`).toBe(true);
+  });
+
+  it('a pro key keeps today\'s full answer', async () => {
+    const r = await call(tool, K.args, seat('pro', 'dch_live_pro_numerics'));
+    const { text } = channels(r);
+    for (const f of K.figures) expect(carries(text, f), `${tool}: pro lost ${f}`).toBe(true);
   });
 });
 

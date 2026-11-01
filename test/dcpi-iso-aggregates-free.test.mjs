@@ -32,8 +32,9 @@ const K_PACK = 'dch_live_dcpiiso_packs0001';    // identified key holding a live
 const K_STARTER = 'dch_live_dcpiiso_start0001';
 const K_DEV = 'dch_live_dcpiiso_devel0001';
 const K_PRO = 'dch_live_dcpiiso_propro001';
+const K_EMAIL = 'dch_live_dcpiiso_email0001';   // identified key with a bound email: grid tools' 10 full briefs a day
 const KEY_TIER = { [K_FREE]: 'free', [K_IDENT]: 'identified', [K_TRIAL]: 'trial', [K_PACK]: 'identified',
-  [K_STARTER]: 'starter', [K_DEV]: 'developer', [K_PRO]: 'pro' };
+  [K_STARTER]: 'starter', [K_DEV]: 'developer', [K_PRO]: 'pro', [K_EMAIL]: 'identified' };
 const ENV_KEYS = ['DCHUB_API_BASE', 'DCHUB_INTERNAL_KEY'];
 const prevEnv = {};
 
@@ -89,7 +90,7 @@ beforeAll(async () => {
       if (url.pathname === '/api/v1/keys/validate') {
         const key = (await readBody(req)).api_key || '';
         res.end(JSON.stringify(KEY_TIER[key]
-          ? { valid: true, tier: KEY_TIER[key], developer_id: 'dev_dcpiiso', email: null }
+          ? { valid: true, tier: KEY_TIER[key], developer_id: 'dev_dcpiiso', email: key === K_EMAIL ? 'qa-dcpiiso@example.com' : null }
           : { valid: false, tier: 'free' }));
         return;
       }
@@ -275,6 +276,23 @@ function expectPreviewLocked(row, label) {
     expect(row[`_${f}_withheld`], `${label}._${f}_withheld`).toBe(true);   // Grok QA 10-22 item 4: no plan in the marker
   }
 }
+// Below Pro on get_grid_intelligence: the brief is there (demand, market counts, curtailment),
+// and every DCPI figure in it is withheld with its marker.
+function expectGridIntelDcpiWithheld(out, label) {
+  const row = out.lead;
+  expectPreviewLocked(row, label);
+  for (const f of ['constraint_score', 'excess_power_score']) {
+    expect(row[f], `${label}.${f}`).toBeNull();
+    expect(row[`_${f}_withheld`], `${label}._${f}_withheld`).toBe(true);
+  }
+  expect(row.market_count, `${label}.market_count`).toBe(BY_ISO.ERCOT.market_count);
+  expect(row.demand_mw, `${label}.demand_mw (not a DCPI field)`).toBe(50000);
+  expect(row.curtailment_pct, `${label}.curtailment_pct (not in the owner's list)`).toBe(BY_ISO.ERCOT.avg_curtailment_pct);
+  expectNoBelowProNeedles(out, label);
+  for (const v of [BY_ISO.ERCOT.avg_excess, BY_ISO.ERCOT.avg_constraint]) {
+    expect(leaks(out.text, String(v)), `${label}: sub-score ${v} leaked`).toBe(false);
+  }
+}
 function expectPreviewFull(row, iso, label) {
   expect(row && row.iso_name, `${label}: the DCPI-joined row is missing`).toBe(`${iso} grid`);
   for (const [f, src] of Object.entries(PREVIEW_FIELDS)) {
@@ -349,7 +367,7 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
   });
 
   for (const [key, label] of [[K_STARTER, 'starter'], [K_DEV, 'developer']]) {
-    it(`compare_isos: ${label} gets the DCPI aggregates withheld (owner 2026-10-31); get_grid_intelligence stays whole`, async () => {
+    it(`compare_isos: ${label} and get_grid_intelligence get the DCPI aggregates withheld (owner 2026-10-31)`, async () => {
       const cmp = await callTool(key, 'compare_isos', { isos: 'PJM,ERCOT' });
       for (const iso of ['PJM', 'ERCOT']) {
         const row = (cmp.lead.comparison || {})[iso];
@@ -358,11 +376,15 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
         expect(row.market_count, `${label} compare_isos ${iso}.market_count`).toBe(BY_ISO[iso].market_count);
       }
       expectNoBelowProNeedles(cmp, `compare_isos ${label}`);
-      // An email-bound free key reads get_grid_intelligence in full (owner 2026-10-16, item 3), DCPI
-      // aggregates included, so a paying key is not served less there (_dcpiSubscoresBelowPro scope).
-      expectPreviewFull((await callTool(key, 'get_grid_intelligence', { iso: 'ERCOT' })).lead, 'ERCOT', `${label} get_grid_intelligence`);
+      // Owner 2026-10-31 (second ruling): get_grid_intelligence withholds them below Pro too, for
+      // every seat, so the email-bound free key's full brief and the paying key's agree.
+      expectGridIntelDcpiWithheld((await callTool(key, 'get_grid_intelligence', { iso: 'ERCOT' })), `${label} get_grid_intelligence`);
     });
   }
+
+  it('get_grid_intelligence: an email-bound free key reads its full brief with the DCPI aggregates withheld', async () => {
+    expectGridIntelDcpiWithheld(await callTool(K_EMAIL, 'get_grid_intelligence', { iso: 'ERCOT' }), 'email get_grid_intelligence');
+  });
 
   it('compare_isos and get_grid_intelligence: pro is unchanged', async () => {
     const cmp = await callTool(K_PRO, 'compare_isos', { isos: 'PJM,ERCOT' });

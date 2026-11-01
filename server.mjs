@@ -1608,7 +1608,9 @@ function _gridDeclutterOn(env = process.env) {
   return !/^(0|false|no|off)$/i.test(String((env && env.DCHUB_GRID_DECLUTTER) || ''));
 }
 const _NEXT_Q_RE = /Next question to offer the user: "[^"]*" \(DC Hub tool: [a-z_0-9]+\)\.\s*/g;
-const _RETRY_HINT_RE = /\(agent: after purchase retry the same call\. Multi-step question: execute_plan\.\)\s*/g;
+// Both forms of lib/paywall-contract.mjs buildAgentHints: the purchase form, and the Pro-rung form a
+// preview takes once a withheld field opens only at Pro (the DCPI sub-scores, owner 2026-10-31).
+const _RETRY_HINT_RE = /\(agent: (?:after purchase retry the same call\.|after your user starts a paid DC Hub plan, retry the same call(?:\.|; until then use the free headline above\.)) Multi-step question: execute_plan\.\)\s*/g;
 export function _gridDeclutterStep(result, name) {
   try {
     if ((name !== 'get_grid_intelligence' && name !== 'get_fiber_intel') || !_gridDeclutterOn()) return result;
@@ -13037,6 +13039,9 @@ function _noteMaskedKey(key, value) {
     const st = _muState();
     const k = String(key || '');
     if (st && k && !st.masked.includes(k) && st.masked.length < 64) st.masked.push(k);
+    // Owner 2026-10-31: a DCPI sub-score, wherever a gate hid it, opens at Pro (or, on the tools
+    // the pack opens them on, the pack), so the rung a line names for it is that one.
+    if (st && _DCPI_PRO_GATE_KEYS.has(k)) st.gates.add('dcpi_pro');
   } catch (_) { /* never break a gate */ }
 }
 // The pack's credit cascade serves a gated tool in full for a credit balance.
@@ -13139,7 +13144,7 @@ export function _anonTrimOpensForSeat(tool, seat) {
 const _GATE_OPENS = {
   any_key:       (s) => !!s.keyed,                        // _maskGasIntelligenceAnonymous
   gas_pro:       (s) => _tierIsProOrAbove(s.tier),        // _maskGasEconomicsBelowPro
-  dcpi_pro:      (s) => _tierIsProOrAbove(s.tier),        // _dcpiSubscoresBelowPro (owner 2026-10-31)
+  dcpi_pro:      (s) => _dcpiProOpensForSeat(s),           // _dcpiSubscoresBelowPro (owner 2026-10-31)
   retirement_mw: (s) => _retirementMwFull(s.tier)         // _maskRetirementHeadroom
                    || _retirementPackOpens(s.tier, s.credits),
   unpaid_read:   (s) => !_isUnpaidSeat(s.tier, s.credits),// _dealsForCaller / scoreboard
@@ -13646,61 +13651,111 @@ function _dcpiPaidDetail(k, v) {
 }
 
 // ── DCPI sub-scores are Pro and above (owner 2026-10-31; was any paid plan) ──
-// Free for everyone stays the verdict and composite_score. Starter and Developer now
-// get the sub-scores, the risk/opportunity bullets and the per-ISO aggregates the way
-// a free key does: nulled, `_<k>_in_pro`, the band kept. dchub-backend
-// (dcpi/subscores-pro-1031) refuses them to Starter/Developer over REST, but answers
-// this server's X-Internal-Key in full, so the rule is applied here.
-// FIELDS ONLY: _isPaidDepthTier is untouched (it gates row depth on every tool) and no
-// tool joins PRO_ONLY_TOOLS. A $10-pack balance keeps them (backend pack_opens).
-// By key name, on the DCPI tools whose free path already withholds these fields from every
-// keyed free seat (keyless, free key, email-bound key), so Starter/Developer drop to the free
-// level and never below it (test/ladder-stage1: no rung gets more than the rung above it).
-// Left whole, because a free seat reads them in full there by an owner grant: get_grid_intelligence,
-// get_market_intel (email: 10 full answers a day), find_sites, site_selection_canvas, execute_plan
-// (email: monthly full runs), predict_market_trajectory (email full answers), and the top-20 metros
-// on every tool (2026-10-20). The names are the DCPI vocabulary (the backend scrubs them by name
-// too, util/dcpi_subscore_scrub.py SUB_SCORE_KEYS). The per-ISO
-// aggregates: _DCPI_ISO_PAID_KEYS and the raw avg_excess / avg_constraint. A market row's
-// own queue_wait_months goes with its ISO average: on a published row it often equals
-// time_to_power_months (houston 36.3 / 36.3). Curtailment, reserve margin and stranded MW
-// are not in the owner's list and stay, on every tool alike (scoreboard included).
-const _DCPI_PRO_KEYS = new Set(['excess_power_score', 'constraint_score', 'time_to_power_months',
-  'queue_wait_months', 'avg_excess', 'avg_constraint', ..._DCPI_ISO_PAID_KEYS]);
+// Free for everyone: the BUILD/CAUTION/AVOID verdict, composite_score and the bands. Every
+// caller below Pro (keyless, free key, email-bound key, Starter, Developer) gets the
+// sub-scores, the risk/opportunity bullets, the narrative and the per-ISO DCPI aggregates
+// withheld: nulled, `_<k>_in_pro` (renamed `_<k>_withheld` on the way out), the band kept.
+// On EVERY tool, so no rung is ever below the rung under it (test/ladder-stage1): the
+// email allowances (grid/queue/market intel 10 a day, find_sites candidates, monthly
+// site_selection_canvas and execute_plan runs) still open the rest of those answers, just
+// not these fields. dchub-backend serves this server's X-Internal-Key in full, so the rule
+// is applied here, at the one place every return path of a call has merged.
+// FIELDS ONLY: _isPaidDepthTier is untouched (it gates row depth) and no tool joins
+// PRO_ONLY_TOOLS. Kept as they are, by owner instruction (2026-10-31): a $10-pack balance keeps
+// the fields on any seat (CLAUDE.md: a free-tier gate reads _getCredits), a 'paid' key whose plan
+// cannot be read fails open, and the top-20 metros stay whole for every caller (2026-10-20).
+// THE NAMES. The sub-scores are the DCPI vocabulary (the backend scrubs them by name too,
+// util/dcpi_subscore_scrub.py SUB_SCORE_KEYS). Two kinds:
+//   strong:  names only DCPI uses; withheld wherever they sit.
+//   row:     names other layers use too (a queue's time to power, an energy price); withheld
+//            inside a DCPI row (an object carrying a DCPI marker or verdict, or under a
+//            `dcpi` container), and anywhere on the four tools whose whole answer is DCPI.
+// A market row's own queue_wait_months goes with its ISO average: on a published row it often
+// equals time_to_power_months (houston 36.3 / 36.3). Curtailment, reserve margin and stranded
+// MW are not in the owner's list and stay, on every tool alike. Deltas and trend slopes of a
+// sub-score (get_facility_risk_delta's delta, list_saved_sites' excess_power_delta_window) are
+// not the sub-score and stay; the current value beside them goes.
+const _DCPI_PRO_STRONG_KEYS = new Set(['excess_power_score', 'constraint_score', 'avg_excess',
+  'avg_constraint', 'avg_excess_power']);
+const _DCPI_PRO_ROW_KEYS = new Set(['time_to_power_months', 'queue_wait_months', ..._DCPI_ISO_PAID_KEYS]);
+const _DCPI_PRO_KEYS = new Set([..._DCPI_PRO_STRONG_KEYS, ..._DCPI_PRO_ROW_KEYS]);
+const _DCPI_ROW_MARKERS = new Set([..._DCPI_PRO_STRONG_KEYS, 'composite_score', 'dcpi_verdict', 'dcpi_url',
+  'dcpi_composite', 'dcpi_computed_at', 'excess_power_score_band', 'constraint_score_band',
+  'excess_power_band', 'constraint_band', 'time_to_power_band']);
+const _DCPI_CONTAINER_RE = /(^|_)dcpi(_|$)/i;
+// A sub-score under a key that does not say so: the value is the excess-power score.
+const _DCPI_NAMED_SUBSCORES = Object.freeze({ dcpi_market_health: new Set(['now']) });
+// The four tools whose whole answer is DCPI: a row-kind name is DCPI anywhere in them.
 export const DCPI_PRO_FIELD_TOOLS = new Set(['get_market_dcpi_rank', 'rank_markets', 'compare_isos',
   'get_grid_scoreboard']);
-// c.tier, never the gate tier (which folds starter/developer into 'paid' off the Pro-only set).
-// 'paid' is ambiguous (Developer, Pro and Founding all write it): resolved per key, and
-// left whole when there is no key to resolve, the way _paidKeyIsProOrAbove fails open.
-export async function _dcpiBelowProPaidSeat(c) {
-  const t = String((c && c.tier) || '').trim().toLowerCase();
-  if (t === 'starter' || t === 'developer') return true;
-  if (t !== 'paid' || !c.api_key) return false;
-  try { return !(await _paidKeyIsProOrAbove(c.api_key)); } catch (_) { return false; }
+// rank_markets rows: MW and cents/kWh are Pro too (dchub-backend _RANK_TEASE_NULL, #8130).
+const _RANK_PRO_ROW_KEYS = new Set(['total_mw', 'avg_kwh_cents']);
+// rank_markets `score` is the DCPI composite on ai_ready (free) and a count on these two (free);
+// on every other criterion it is total_mw or a weighting of it (backend _rank_markets_score).
+const _RANK_FREE_SCORE_CRITERIA = new Set(['ai_ready', 'most_operators', 'fastest_growing']);
+// Tools whose answer is the caller's own words or DC Hub's own catalog, never a DCPI read.
+const _DCPI_PRO_EXEMPT_TOOLS = new Set(['summarize_for_citation', 'report_finding', 'read_inbox',
+  'plan_query', 'discover_tools', 'why_dchub', 'get_agent_registry']);
+const _isDcpiVerdictWord = (v) => typeof v === 'string' && _DCPI_VERDICTS.has(v.trim().toUpperCase());
+function _isDcpiRow(node) {
+  for (const k of Object.keys(node)) if (_DCPI_ROW_MARKERS.has(k)) return true;
+  return _isDcpiVerdictWord(node.verdict);
+}
+// Prose that states a sub-score figure keeps its sentence; the number goes. The same
+// names util/dcpi_subscore_scrub.py drops sentences for, narrowed to a figure stated AS that
+// sub-score: "excess-power 65.8/100", "the constraint score of 62", "the 62/100 constraint
+// score", "Time to power: ~33 months", "queue wait ~36 months", "~9mo to power". A figure
+// with a unit after it (MW, GW, %, cents) is something else and stays.
+const _DCPI_PROSE_RULES = [
+  [/\b(excess[- ]power|grid[- ]constraint|constraint)((?:\s+(?:score|index))?)(?:\s+(?:of|at|is|was|=))?\s*:?\s*~?\s*(\d+(?:\.\d+)?)(\s*\/\s*100)?(?![\d.,]*\s*(?:MW|GW|kW|%|¢|cents|\$|\/\s*MWh))/gi,
+    (m, name, word, _n, per100) => ((/^constraint$/i.test(name) && !word && !per100) ? m : `${name}${word} withheld`)],
+  [/\b\d+(?:\.\d+)?\s*\/\s*100\s+(excess[- ]power|(?:grid[- ])?constraint)/gi, (_m, name) => `withheld ${name}`],
+  [/\b(time[- ]to[- ]power|queue[- ]wait)(?:\s*(?:of|is|at|:))?\s*~?\s*\d+(?:\.\d+)?(?:\s*[-–]\s*\d+(?:\.\d+)?)?\s*(?:months?|mo)\b/gi,
+    (_m, name) => `${name} withheld`],
+  [/(?:~\s*)?\b\d+(?:\.\d+)?\s*(?:months?|mo)\s+to\s+power\b/gi, () => 'time to power withheld'],
+  // the ISO pack's DCPI line states the per-ISO retail price (retail_price_cents_kwh's own figure)
+  [/\b(avg power cost)\s*~?\s*\$?\d+(?:\.\d+)?\s*(?:\u00a2|cents)\s*\/\s*kWh/gi, (_m, name) => `${name} withheld`],
+];
+export function _scrubDcpiProse(s) {
+  if (typeof s !== 'string' || !/\d/.test(s)) return s;
+  let out = s;
+  for (const [re, fn] of _DCPI_PROSE_RULES) out = out.replace(re, fn);
+  return out;
 }
 // Pure: the payload with every DCPI Pro field nulled. `masked` collects the keys that held
-// a figure (logged only once the seat is known to be below Pro).
-export function _dcpiProShape(node, toolName = '', masked = [], inRate = false, depth = 0) {
+// a figure (logged only once the seat is known to be below Pro). `inDcpi`: under a `dcpi`
+// container, where a row-kind name is DCPI whatever its row carries.
+export function _dcpiProShape(node, toolName = '', masked = [], inRate = false, depth = 0, inDcpi = false, parentKey = '') {
   if (!node || typeof node !== 'object' || depth > 40) return { value: node, changed: false };
   if (Array.isArray(node)) {
     let changed = false;
     const next = node.map((x) => {
-      const g = _dcpiProShape(x, toolName, masked, inRate, depth + 1);
+      if (typeof x === 'string') {
+        const s = _scrubDcpiProse(x);
+        if (s !== x) changed = true;
+        return s;
+      }
+      const g = _dcpiProShape(x, toolName, masked, inRate, depth + 1, inDcpi, parentKey);
       if (g.changed) changed = true;
       return g.value;
     });
     return changed ? { value: next, changed } : { value: node, changed: false };
   }
+  const rowKind = inDcpi || DCPI_PRO_FIELD_TOOLS.has(toolName) || _isDcpiRow(node);
+  const named = _DCPI_NAMED_SUBSCORES[parentKey];
   let out = null;
   const set = (k, v) => { if (!out) out = { ...node }; out[k] = v; };
   for (const [k, v] of Object.entries(node)) {
-    if (_DCPI_PRO_KEYS.has(k) && (_isFigure(v) || _isMetricRow(v))) {
+    const isPro = _DCPI_PRO_STRONG_KEYS.has(k) || (rowKind && _DCPI_PRO_ROW_KEYS.has(k)) || (named && named.has(k));
+    if (isPro && (_isFigure(v) || _isMetricRow(v))) {
       const n = _isMetricRow(v) ? v.value : Number(v);
       if (!masked.includes(k)) masked.push(k);
       set(k, _isMetricRow(v) ? { ...v, value: null } : null);
       set(`_${k}_in_pro`, true);
-      // the band beside a masked input score, as the free trims leave it (_bandForMaskedScore)
-      if ((k === 'excess_power_score' || k === 'constraint_score') && node[`${k}_band`] == null) {
+      // the band beside a masked input score, as the free trims leave it (_bandForMaskedScore);
+      // a forecast row names its band `excess_power_band`, and keeps that one
+      const short = k.replace(/_score$/, '');
+      if ((k === 'excess_power_score' || k === 'constraint_score') && node[`${k}_band`] == null && node[`${short}_band`] == null) {
         const b = _bandForMaskedScore(k, n, node, toolName, inRate);
         if (b) set(`${k}_band`, b);
       }
@@ -13708,55 +13763,142 @@ export function _dcpiProShape(node, toolName = '', masked = [], inRate = false, 
       if (!masked.includes(k)) masked.push(k);
       set(k, null);
       set(`_${k}_in_pro`, true);
+    } else if (k === 'narrative' && v != null && v !== '' && _isDcpiRow(node)) {
+      // a DCPI row's analyst read restates the sub-scores; Pro and above (owner 2026-10-31,
+      // get_market_dcpi_rank; dchub-backend #8130 moves the narrative payload to Pro too)
+      if (!masked.includes(k)) masked.push(k);
+      set(k, null);
+      set('_narrative_in_pro', true);
     } else if (k === 'verdict_reasons' && Array.isArray(v)) {
       const next = v.map((r) => ((r && _DCPI_PRO_KEYS.has(r.component)) ? _stripReasonNumerics(r, true) : r));
       if (next.some((r, i) => r !== v[i])) set(k, next);
+    } else if (typeof v === 'string') {
+      const s = _scrubDcpiProse(v);
+      if (s !== v) set(k, s);
     } else if (v && typeof v === 'object') {
-      const g = _dcpiProShape(v, toolName, masked, inRate || _RATE_CONTAINER_RE.test(k), depth + 1);
+      const g = _dcpiProShape(v, toolName, masked, inRate || _RATE_CONTAINER_RE.test(k), depth + 1,
+        inDcpi || _DCPI_CONTAINER_RE.test(k), k);
       if (g.changed) set(k, g.value);
     }
   }
   if (!out) return { value: node, changed: false };
   return { value: out, changed: true };
 }
-// rank_markets carries the sub-scores on its rows only; its `value` ("BUILD · 86.4 excess-power
-// · ~9mo to power") restates them, and keeps its free words (_stripRankValues).
+// One rank_markets row below Pro: the DCPI names, then MW and cents/kWh, then a `score` that is
+// MW, then the display string's MW and price (_freeRankValue: "5793 MW", "~$13.04/MWh").
+function _rankRowBelowPro(row, criteria, masked) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return { value: row, changed: false };
+  const g = _dcpiProShape(row, 'rank_markets', masked, false, 1);
+  let out = g.changed ? g.value : null;
+  const set = (k, v) => { if (!out) out = { ...row }; out[k] = v; };
+  for (const k of _RANK_PRO_ROW_KEYS) {
+    if (_isFigure(row[k])) { if (!masked.includes(k)) masked.push(k); set(k, null); set(`_${k}_in_pro`, true); }
+  }
+  if (!_RANK_FREE_SCORE_CRITERIA.has(criteria) && _isFigure(row.score)) {
+    if (!masked.includes('score')) masked.push('score');
+    set('score', null); set('_score_in_pro', true);
+  }
+  if (typeof row.value === 'string') {
+    const val = _freeRankValue(row.value);
+    if (val !== row.value) set('value', val);
+  }
+  return out ? { value: out, changed: true } : { value: row, changed: false };
+}
 function _dcpiProShapeTool(payload, toolName, masked) {
   if (toolName !== 'rank_markets') return _dcpiProShape(payload, toolName, masked);
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { value: payload, changed: false };
+  const criteria = String(payload.criteria || '').trim().toLowerCase();
   let out = null;
   for (const key of _RANK_ROW_KEYS) {
     if (!Array.isArray(payload[key])) continue;
-    const g = _dcpiProShape(payload[key], toolName, masked, false, 1);
-    if (g.changed) { if (!out) out = { ...payload }; out[key] = g.value; }
+    let changed = false;
+    const next = payload[key].map((r) => { const g = _rankRowBelowPro(r, criteria, masked); if (g.changed) changed = true; return g.value; });
+    if (changed) { if (!out) out = { ...payload }; out[key] = next; }
   }
-  return out ? { value: _stripRankValues(out), changed: true } : { value: payload, changed: false };
+  return out ? { value: out, changed: true } : { value: payload, changed: false };
 }
+// The seat test, after the walk found something to withhold. 'paid' is ambiguous (Developer,
+// Pro and Founding all write it) and is resolved per key; with no key to resolve it is left
+// whole, the way _paidKeyIsProOrAbove fails open. THE PACK, kept as it is (owner 2026-10-31):
+// a call the pack's credits paid for keeps the fields, and so does a free-class seat holding a
+// balance on the tools whose free gate already reads that balance for these fields
+// (_gateToolNumerics, the ISO-aggregate masks, _sitingSeat). Everywhere else every free seat,
+// the pack included, already read the fields alike, so the pack holder is gated with them: the
+// pack is Developer depth paid per call and never rises above Developer (test/ladder-stage1).
+// Starter and Developer are not looked up, as before this change.
+const _DCPI_PACK_OPENS_TOOLS = new Set([...DCPI_PRO_FIELD_TOOLS, 'site_selection_canvas', 'find_sites', 'execute_plan']);
+const _DCPI_FREE_CLASS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
+export async function _dcpiBelowProSeat(c, name = '', creditsPaid = false) {
+  const t = String((c && c.tier) || '').trim().toLowerCase();
+  if (_tierIsProOrAbove(t)) return false;
+  if (t === 'paid') {
+    if (!c.api_key) return false;
+    try { return !(await _paidKeyIsProOrAbove(c.api_key)); } catch (_) { return false; }
+  }
+  if (!_DCPI_FREE_CLASS.has(t)) return true;                 // starter, developer, anything unranked
+  if (creditsPaid) return false;
+  if (!_DCPI_PACK_OPENS_TOOLS.has(name)) return true;
+  let credits = 0;
+  try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
+  return !(credits > 0);
+}
+// The rung test for the `dcpi_pro` gate: Pro and above, or a pack balance on a free-class seat on
+// the tools the pack opens these fields on (the same rule _dcpiBelowProSeat applies).
+function _dcpiProOpensForSeat(s) {
+  if (_tierIsProOrAbove(s && s.tier)) return true;
+  let tool = '';
+  try { tool = String(((getCtx() || {})._mu || {}).tool || ''); } catch (_) { tool = ''; }
+  return _DCPI_PACK_OPENS_TOOLS.has(tool) && _DCPI_FREE_CLASS.has(String((s && s.tier) || '').toLowerCase())
+    && Number(s && s.credits) > 0;
+}
+const _DCPI_PRO_GATE_KEYS = new Set([..._DCPI_PRO_KEYS, ..._DCPI_PAID_DETAIL_KEYS, 'narrative']);
 // The last step of trackedTool. One line names what was hidden and the one rung that
 // opens it, by the missed-rung link (no plan name, no price: v14, owner 2026-10-10).
-export async function _dcpiSubscoresBelowPro(result, name, c, args) {
+// THE RELAY LINE. A free seat's full answer (an email allowance, a free tool) carries no relay
+// line today, and the asks it does carry (digest, pack, welcome-back) stay: this step adds its
+// own line and does not start a relay line. Where an earlier gate already started one, or the
+// seat pays, the `dcpi_pro` gate joins it, so the rung that line names is the one that returns
+// every field it names (Pro), not the rung below. A free trim that hid a sub-score itself notes
+// the same gate (_noteMaskedKey), so its own line names Pro too.
+export async function _dcpiSubscoresBelowPro(result, name, c, args, opts = {}) {
   if (!result || typeof result !== 'object') return result;
+  if (_DCPI_PRO_EXEMPT_TOOLS.has(name)) return result;
   // Owner 2026-10-20: the top-20 metros' full briefing (detailed DCPI scores included) is open to
-  // every caller, keyless too. A paying key is never served less than that (lib/top-metros.mjs).
-  if (!DCPI_PRO_FIELD_TOOLS.has(name)) return result;
+  // every caller, keyless too (lib/top-metros.mjs). Kept as is (owner 2026-10-31).
   try { if (_topMetroFreeCall(name, args)) return result; } catch (_) { /* not a top-metro call */ }
-  // Every other seat returns before the walk: a free seat has its own trims, Pro reads everything.
+  // Pro and above read everything: no walk.
   const t = String((c && c.tier) || '').trim().toLowerCase();
-  if (!(t === 'starter' || t === 'developer' || (t === 'paid' && c.api_key))) return result;
+  if (_tierIsProOrAbove(t) || (t === 'paid' && !(c && c.api_key))) return result;
+  let st = null;
+  try { st = _muState(); } catch (_) { st = null; }
+  const priorGates = !!(st && st.gates && st.gates.size > 0);
+  const paying = !_DCPI_FREE_CLASS.has(t);
   const masked = [];
   let gated;
   try { gated = _rewriteResultJson(result, (p) => _dcpiProShapeTool(p, name, masked)); } catch (_) { return result; }
-  if (gated === result) return result;                 // no DCPI Pro field in this answer
-  if (!(await _dcpiBelowProPaidSeat(c))) return result;
+  if (gated === result) return result;                 // nothing left to withhold
+  if (!(await _dcpiBelowProSeat(c, name, !!opts.creditsPaid))) return result;
+  const join = paying || priorGates;
+  const mark = (st && Array.isArray(st.masked)) ? st.masked.length : -1;
+  const gatesBefore = (st && st.gates) ? new Set(st.gates) : null;
   _noteGate('dcpi_pro');
   for (const k of masked) _noteMaskedKey(k, 0);
+  // a relay line composed earlier in this call now names these fields too (same url and arm)
+  if (join) { try { gated = _refreshRelayLine(gated); } catch (_) {} }
   const url = _missedRungLink('pro', name, (c && c.session_id) || '');
   // strict: name only the keys this step nulled (a reason's `_value_in_pro` would read as "deal values")
   const mu = _missedUpgradeFor(gated.structuredContent || null, ['dcpi_pro'], { strict: true });
+  if (!join && st && mark >= 0 && gatesBefore) {           // read for this line only; no relay line starts here
+    st.masked.length = mark;
+    st.gates = gatesBefore;
+  }
+  // The directory / Claude / core profiles keep their fixed wall copy (/mcp/chatgpt is frozen for
+  // OpenAI's review, /mcp/claude strips links): the fields are withheld there too, with no line.
+  if (c && (c.profile === DIRECTORY_PROFILE || c.profile === CLAUDE_PROFILE || c.profile === CORE_PROFILE)) return gated;
   const what = (mu && mu.rung === 'pro') ? mu.text
     : 'This answer hid the DCPI sub-scores. They come with the DC Hub plan that includes every tool.';
   const line = '\n\n\u{1F512} ' + what.replace(/\.$/, '') + (url ? ' → ' + url : '.')
-    + ' The verdict and composite score are in this answer.';
+    + ' The verdict, composite score and bands are not withheld.';
   return { ...gated, content: [...(Array.isArray(gated.content) ? gated.content : []), { type: 'text', text: line }] };
 }
 
@@ -23931,7 +24073,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     // handed out: recording its hash would count a link the caller never saw in the funnel's wall_links.
     if ((status === 'pro_wall' || status === 'lp_wall') && !_excludedFromRelayReadout(c)) _wallLinkTh = _wallLinkTokenHash(_pw.result);
     // Owner 2026-10-31: DCPI sub-scores are Pro and above; every return path of this call has merged here.
-    return await _dcpiSubscoresBelowPro(_pw.result, name, c, args);
+    return await _dcpiSubscoresBelowPro(_pw.result, name, c, args, { creditsPaid: status === 'credits_full' });
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown
@@ -27670,7 +27812,7 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
   // verdict + 0-100 composite_score + per-component breakdown.
   // Maps directly to /api/v1/dcpi/scores/<slug>.
   trackedTool(srv, 'get_market_dcpi_rank',
-    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, CC BY 4.0. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word analyst read on the market, quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score are free; numeric sub-scores and the narrative are on paid plans or a credit pack.',
+    'Use this when the user asks where a data center can get grid power, how fast, or whether a market is a BUILD, CAUTION or AVOID (e.g. "Where can a 100 MW data center get power fastest?"): DCPI scores 300+ markets daily on Excess Power and Grid Constraint, CC BY 4.0. DCPI rank for one market: BUILD/CAUTION/AVOID verdict, 0-100 composite_score (verdict-aware), excess_power_score, constraint_score, time_to_power_months. INCLUDES a `narrative` block with a ~100-word analyst read on the market, quote it directly with attribution to DC Hub (CC-BY-4.0). Use to answer "should I build here?" with structured reasoning + ready-to-cite prose across 300+ scored markets worldwide. Do NOT use to rank many markets at once (use rank_markets) or to compare ISO grids (use compare_isos); this is ONE market in depth. Verdict and composite score are free; numeric sub-scores and the narrative come with the DC Hub plan that includes every tool.',
     { market_slug: Sreq.describe('Market slug (metro), e.g. northern-virginia, dallas, phoenix — valid slugs come from rank_markets / get_market_dcpi_rank') },
     async (a) => {
       const data = await callAPI(`/api/v1/dcpi/scores/${slugify(a.market_slug) || ''}`, {});

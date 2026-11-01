@@ -129,9 +129,12 @@ beforeAll(async () => {
         return;
       }
       if (p === '/api/v1/changes/since') {
+        // Owner 2026-10-31: a mover's excess_power_score is a DCPI sub-score (Pro and above), so a free
+        // answer that carries one is partial and the nudge stays out of it. This file pins the nudge on
+        // a full answer: the movers carry their move (delta_7d), not the score.
         res.end(JSON.stringify({ ok: true, diff: { dcpi_movers: [
-          { market_slug: 'phoenix', market: 'Phoenix', excess_power_score: 61.2, delta_7d: -3.4 },
-          { market_slug: 'dallas', market: 'Dallas', excess_power_score: 70.1, delta_7d: 1.2 } ] } }));
+          { market_slug: 'phoenix', market: 'Phoenix', delta_7d: -3.4 },
+          { market_slug: 'dallas', market: 'Dallas', delta_7d: 1.2 } ] } }));
         return;
       }
       if (p === '/api/v1/mcp/trial-check') { res.end(JSON.stringify({ trial_used: false, prior_calls: 0 })); return; }

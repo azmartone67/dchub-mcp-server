@@ -118,15 +118,30 @@ describe.each(Object.keys(FREE_SEATS))('%s', (label) => {
 });
 
 describe('paid callers', () => {
-  // Owner 2026-10-31: the DCPI sub-scores are Pro and above. Below Pro (Developer, and a collapsed
-  // 'paid' key whose plan this stub does not name), ai_ready's value keeps its verdict word only;
-  // the other criteria carry no DCPI figure and keep their full string (MW stays Developer depth).
-  it.each([['developer'], ['paid']])('%s: ai_ready keeps the verdict word only, the other criteria keep the full value', async (tier) => {
+  // Owner 2026-10-31: the DCPI sub-scores are Pro and above, and so are rank_markets' MW and
+  // cents/kWh (dchub-backend #8130 _RANK_TEASE_NULL). Below Pro (Developer, and a collapsed 'paid'
+  // key whose plan this stub does not name) every row reads as the free one does: the value keeps
+  // its free words, total_mw / avg_kwh_cents / the sub-scores are withheld, and `score` stays only
+  // where it is the composite (ai_ready) or a published count (most_operators).
+  it.each([['developer'], ['paid']])('%s: every criterion keeps only its free words; MW and cents/kWh withheld', async (tier) => {
     for (const criteria of Object.keys(PAYLOADS)) {
-      const { sets } = resultSets(await call(criteria, seat(tier, 'dch_live_' + tier + '_value_strip')));
+      const { sets, text, sc } = resultSets(await call(criteria, seat(tier, 'dch_live_' + tier + '_value_strip')));
       expect(sets.length).toBeGreaterThan(0);
-      const want = criteria === 'ai_ready' ? WANT.ai_ready : PAYLOADS[criteria].map((r) => r.value);
-      for (const rows of sets) expect(rows.map((r) => r.value)).toEqual(want);
+      for (const rows of sets) {
+        expect(rows.map((r) => r.value), `${tier} ${criteria}`).toEqual(WANT[criteria].slice(0, rows.length));
+        for (const r of rows) {
+          for (const k of ['total_mw', 'avg_kwh_cents', 'excess_power_score', 'constraint_score', 'time_to_power_months']) {
+            expect(r[k] ?? null, `${tier} ${criteria}.${k}`).toBeNull();
+          }
+          const keepsScore = criteria === 'ai_ready' || criteria === 'most_operators';
+          if (keepsScore) expect(r.score, `${tier} ${criteria}.score`).not.toBeNull();
+          else expect(r.score ?? null, `${tier} ${criteria}.score is MW`).toBeNull();
+        }
+      }
+      for (const fig of HIDDEN[criteria]) {
+        expect(text, `${tier} ${criteria}: text channel still carries ${fig}`).not.toContain(fig);
+        expect(sc, `${tier} ${criteria}: structuredContent still carries ${fig}`).not.toContain(fig);
+      }
     }
   });
   it('pro keeps the full value string', async () => {

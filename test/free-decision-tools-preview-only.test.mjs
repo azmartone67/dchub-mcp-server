@@ -476,7 +476,12 @@ describe('paid seats are untouched', () => {
       const g = await callAs({ key }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
       expect(g.data.taste).toBeUndefined();
       expect(g.data.withheld).toBeUndefined();
-      expect(g.data.constraint_score).toBe(49.2);
+      // Owner 2026-10-31: the DCPI sub-scores are Pro and above (Developer reads the rest whole).
+      if (seat === 'pro') expect(g.data.constraint_score).toBe(49.2);
+      else {
+        expect(g.data.constraint_score).toBeNull();
+        expect(Object.keys(g.data).some((k) => /^_constraint_score_(withheld|in_pro)$/.test(k))).toBe(true);
+      }
       expect(g.data.capacity_auction_price_usd_mw_day).toBe(333.44);
       expect(g.data.queue_depth_gw).toBe(135.1);
       const q = await callAs({ key }, 'get_interconnection_queue', ARGS.get_interconnection_queue);
@@ -499,7 +504,9 @@ describe('kill switch DCHUB_FREE_DECISION_TOOLS_PREVIEW_ONLY=0 restores the prev
     const consumeBefore = consumeHits.length;
     const r = await callAs({ key: KEYS.free }, 'get_grid_intelligence', ARGS.get_grid_intelligence);
     expect(r.data.taste).toBeUndefined();
-    expect(r.data.constraint_score).toBe(49.2);
+    // the full brief, with the DCPI sub-scores withheld below Pro (owner 2026-10-31)
+    expect(r.data.constraint_score).toBeNull();
+    expect(r.data.capacity_auction_price_usd_mw_day).toBe(333.44);
     expect(r.data._metered_trial && r.data._metered_trial.of).toBeGreaterThan(0);
     // #826: a keyed caller is charged on its key (and the per-IP ceiling), never the bare IP bucket.
     expect(counterKeysFor(KEYS.free, 'get_grid_intelligence').length).toBeGreaterThan(0);
@@ -703,7 +710,9 @@ describe('depth walls name no plan and no price to the agent (Grok 10-08 item 2)
       const all = (r.result.content || []).map((c) => c.text).join('\n');
       // Item 1 leftover (2026-10-17): the older header is the rung form (no "The page shows the options"),
       // and its rung sentence is the neutral partial line on /mcp.
-      expect(all).toMatch(/🔒 \*\*This answer hid [^\n]*\*\* This result is partial: some fields are not included at this access level →/);
+      // Owner 2026-10-31: the hidden fields include DCPI sub-scores, which open at Pro only, so the
+      // rung sentence is the one for the plan that includes every tool (still no plan name).
+      expect(all).toMatch(/🔒 \*\*This answer hid [^\n]*\*\* (This result is partial: some fields are not included at this access level|They come with the DC Hub plan that includes every tool) →/);
       expect(all).not.toMatch(/This result is partial: some fields are not included at this access level\. The page shows the options →/);
       expect(all.replace(/https?:\/\/\S+/g, '')).not.toMatch(/\b(Developer|Pro|Starter|Enterprise)\b/);
     } finally { delete process.env.DCHUB_DEPTH_WALL_PLANLESS; }

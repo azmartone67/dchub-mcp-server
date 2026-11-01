@@ -295,9 +295,13 @@ async function call(tool, args, key, spent) {
 
 // full: every value Pro saw · preview: some · none: no backend value at all
 // (a wall, or a structure-only preview)
+// Owner 2026-10-31: the DCPI sub-scores are Pro and above on every tool, for every seat below Pro
+// (test/dcpi-subscores-pro-only.test.mjs pins that). The stub's constraint_score is one, so it is
+// not part of the depth this table pins: a below-Pro seat is still "full" without it.
+const DCPI_PRO_ONLY_TOKENS = new Set(['n:' + GENERIC.constraint_score]);
 function outcome(res, proTokens) {
   if (!res.tokens.size) return 'none';
-  for (const t of proTokens) if (!res.tokens.has(t)) return 'preview';
+  for (const t of proTokens) if (!DCPI_PRO_ONLY_TOKENS.has(t) && !res.tokens.has(t)) return 'preview';
   return 'full';
 }
 
