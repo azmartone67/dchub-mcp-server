@@ -218,7 +218,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
-import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX } from './lib/keyless-full-trial.mjs';
+import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -8527,6 +8527,67 @@ export async function _keylessFullTrialCharge(c, tool, cap) {
     _fullCapConsume(id, tool, cap);
     return true;
   } catch (_) { return false; }   // fail closed: an unreadable counter serves today's preview
+}
+// ── The daily site lane (owner 2026-11-01, lib/keyless-full-trial.mjs keylessSiteFullSeat) ──
+// The FULL analyze_site answer DCHUB_KEYLESS_SITE_FULL_CAP times per IP per UTC day: keyless from
+// the Land & Power wall, or a key below Pro once its monthly free runs are spent. Charged on the
+// trial's counter (bucket analyze_site) and logged with the trial's status, so the funnel's
+// keyless_full_trial block shows it by tool. A failed answer gives the in-process count back
+// (the durable mirror keeps it; it only floors a fresh replica).
+export function _keylessSiteFullSeat(name, c, keyed = false, env = process.env) {
+  return _ksfSeatFor(name, c, {
+    env, keyed, directoryProfile: DIRECTORY_PROFILE, allowedProfiles: [CLAUDE_PROFILE, CORE_PROFILE],
+    isQa: (x) => _isQaCaller(x) || x.qa_header === true || !!_selfTestTelemetryTag(x),
+    isBot: isBotOrInternalCtx,
+  });
+}
+function _keylessFullTrialDayKey(c, tool) {
+  return `${_keylessFullTrialId(c)}:${tool}:${new Date().toISOString().slice(0, 10)}`;
+}
+function _keylessFullTrialRefund(c, tool) {
+  try {
+    const key = _keylessFullTrialDayKey(c, tool);
+    const n = _trialDayCounts.get(key) || 0;
+    if (n > 0) _trialDayCounts.set(key, n - 1);
+  } catch (_) { /* a lost refund costs the caller one run, never an extra one */ }
+}
+// One line and one block on a full answer from the daily lane. No plan name or price (mcp#891).
+export function _withKeylessSiteRun(result, used, cap, keyed) {
+  if (!result || typeof result !== 'object') return result;
+  const remaining = Math.max(0, cap - used);
+  const tail = remaining > 0
+    ? `${remaining} left today.`
+    : 'That was the last one today: the next analyze_site call returns the preview until UTC midnight.';
+  const note = keyed
+    ? `Free daily full site analysis ${used} of ${cap} today (UTC), after this key's monthly runs. ${tail}`
+    : `Free full site analysis without a key: ${used} of ${cap} today (UTC). ${tail}`
+      + ' A free key (claim_free_key) adds monthly full analyses of its own.';
+  const block = { used, limit: cap, remaining, resets: 'UTC midnight', basis: 'per caller network (IP), UTC day' };
+  const out = { ...result };
+  if (Array.isArray(out.content) && out.content[0] && out.content[0].type === 'text') {
+    out.content = [...out.content, { type: 'text', text: note }];
+  }
+  out.structuredContent = { ...(out.structuredContent || {}), daily_site_runs: block };
+  return out;
+}
+// null = not served here (no seat, spent, over the anonymous cap): the caller's path runs on.
+// Otherwise { result, charged }: the full answer with its note, or the error the handler gave.
+export async function _keylessSiteFull(c, name, args, handler, keyed = false) {
+  const seat = _keylessSiteFullSeat(name, c, keyed);
+  if (!seat) return null;
+  if (!keyed && await _anonOverCap(c.client_ip)) return null;
+  const cap = _keylessSiteFullCap();
+  const charged = seat === 'charge';
+  if (charged && !(await _keylessFullTrialCharge(c, name, cap))) return null;
+  let full;
+  // Opens the full site context too (_siteContextView reads this flag).
+  c._lpFreeRunFull = true;
+  try { full = _noDataGuard(await handler(args)); }
+  catch (e) { if (charged) _keylessFullTrialRefund(c, name); throw e; }
+  finally { delete c._lpFreeRunFull; }
+  if (!full || full.isError === true) { if (charged) _keylessFullTrialRefund(c, name); return { result: full, charged: false }; }
+  const used = charged ? (_trialDayCounts.get(_keylessFullTrialDayKey(c, name)) || 1) : 0;
+  return { result: _withKeylessSiteRun(withCitation(full, name), used, cap, keyed), charged };
 }
 export function _chatgptFrozenSeat(c) {
   let s = c;
@@ -21882,6 +21943,13 @@ function trackedTool(srv, name, description, schema, handler) {
         // keyless headline; any failure serves the plain wall.
         const _pcOn = _paywallContractOn(c);
         if (_lpAccess === 'wall') {
+          // The daily site lane (owner 2026-11-01): a keyless caller's first analyze_site runs of
+          // the UTC day are the full answer; past them, the wall below, unchanged.
+          const _ksf = await _keylessSiteFull(c, name, args, handler);
+          if (_ksf) {
+            if (_ksf.charged) status = KEYLESS_FULL_TRIAL_STATUS;
+            return _ksf.result;
+          }
           status = 'lp_wall';
           // Email unlock (owner 2026-10-10): the one link this wall serves, minted first so the
           // signal below can say which arm it was. Undefined (switch off, no signing secret,
@@ -22012,6 +22080,12 @@ function trackedTool(srv, name, description, schema, handler) {
             }
           }
           if (_fr && _fr.allowed === false && _fr.limit > 0) {
+            // The daily site lane (owner 2026-11-01): a spent key gets the same daily runs as no key.
+            const _ksf = await _keylessSiteFull(c, name, args, handler, true);
+            if (_ksf) {
+              if (_ksf.charged) status = KEYLESS_FULL_TRIAL_STATUS;
+              return _ksf.result;
+            }
             // The allowance is spent: a paywall encounter, so it writes the signal lp_wall writes.
             status = 'lp_free_spent';
             signalPaywall({
