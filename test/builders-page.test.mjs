@@ -78,13 +78,16 @@ describe('renderBuildersPage', () => {
 });
 
 describe('server wiring', () => {
-  it('serves both paths with a no-script CSP', () => {
+  it('serves both paths with a CSP that allows only the same-origin site nav script', () => {
     expect(SRC).toContain('app.get([BUILDERS_PATH, BUILDERS_PATH + \'/\']');
     expect(SRC).toContain('app.get(BUILDERS_JSON_PATH');
     expect(BUILDERS_PATH).toBe('/mcp/builders');
     expect(BUILDERS_JSON_PATH).toBe('/mcp/builders.json');
     expect(BUILDERS_CSP).toContain("default-src 'none'");
-    expect(BUILDERS_CSP).not.toContain('script-src');
+    const scriptSrc = BUILDERS_CSP.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
+    expect(scriptSrc).toBe("script-src 'self'");
+    expect(BUILDERS_CSP).not.toContain('unsafe-eval');
+    expect(renderBuildersPage({ tools: 94 })).toContain('<script src="/js/dchub-nav.js" defer></script>');
   });
 
   it('the builders route is registered before the catch-all GET on MCP_PATHS', () => {

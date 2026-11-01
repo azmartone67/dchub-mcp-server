@@ -59,12 +59,11 @@ describe('renderPartnerPage', () => {
 });
 
 describe('PARTNER_CSP', () => {
-  it('allows the one inline script by its hash and nothing broader', () => {
+  it('allows the one inline script by its hash and the same-origin site nav, nothing broader', () => {
     const csp = PARTNER_CSP();
     const hash = createHash('sha256').update(PARTNER_SCRIPT).digest('base64');
-    expect(csp).toContain(`script-src 'sha256-${hash}'`);
     const scriptSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBe(`script-src 'sha256-${hash}'`);
+    expect(scriptSrc).toBe(`script-src 'self' 'sha256-${hash}'`);
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("connect-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
