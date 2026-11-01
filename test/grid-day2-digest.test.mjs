@@ -45,9 +45,12 @@ beforeAll(async () => {
           citation: 'Source: the publisher (link: ' + NEWS_URL + '); copyright stays with the publisher',
           license: { id: 'publisher-copyright', reuse: 'link_only', source_url: NEWS_URL, url: NEWS_URL, terms: 'T' } }] });
     }
+    // Owner 2026-10-31: the DCPI per-ISO aggregates (avg_constraint / avg_excess / time to power) are
+    // Pro and above, so a free brief that carries them is partial and this ask does not fire on it
+    // (test/dcpi-iso-aggregates-free.test.mjs). This file pins the ask on a full answer: the stub
+    // returns the counts only.
     if (p === '/api/v1/dcpi/iso-comparison') {
-      return json({ isos: [{ iso: 'ERCOT', avg_constraint: 46.5, avg_excess: 60, avg_time_to_power_months: 30,
-        market_count: 5, build_count: 3 }] });
+      return json({ isos: [{ iso: 'ERCOT', market_count: 5, build_count: 3 }] });
     }
     return json({});
   };
