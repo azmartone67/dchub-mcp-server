@@ -5,13 +5,13 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>8254ec3d-b268-4eef-b62f-2224f1babb28</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>DC Hub</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="DC Hub"/>
+  <DisplayName DefaultValue="DC Hub for Excel"/>
   <Description DefaultValue="Live data center, power grid and energy data as Excel formulas: =DCHUB.GRID, =DCHUB.DCPI, =DCHUB.FACILITIES, =DCHUB.ENERGY_RATE."/>
-  <IconUrl DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
-  <HighResolutionIconUrl DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+  <IconUrl DefaultValue="https://dchub.cloud/icons/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://dchub.cloud/icons/icon-64.png"/>
   <SupportUrl DefaultValue="https://dchub.cloud/spreadsheets"/>
   <AppDomains>
     <AppDomain>https://dchub.cloud</AppDomain>
@@ -88,9 +88,9 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16" DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
-        <bt:Image id="Icon.32" DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
-        <bt:Image id="Icon.80" DefaultValue="https://dchub.cloud/icons/icon-192.png"/>
+        <bt:Image id="Icon.16" DefaultValue="https://dchub.cloud/icons/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://dchub.cloud/icons/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://dchub.cloud/icons/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Functions.Script.Url" DefaultValue="https://dchub.cloud/addins/excel/functions.js"/>
