@@ -130,7 +130,7 @@ describe('routes', () => {
     expect(DIRECTORIES_CSP).toContain("style-src 'self' 'unsafe-inline'");
     expect(DIRECTORIES_CSP).toContain('img-src https:');
     const scriptSrc = DIRECTORIES_CSP.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBe("script-src 'self'");
+    expect(scriptSrc).toBe("script-src 'self' https://static.cloudflareinsights.com");
     expect(DIRECTORIES_CSP).toContain("default-src 'none'");
   });
 });

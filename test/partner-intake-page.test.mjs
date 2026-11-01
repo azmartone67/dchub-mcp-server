@@ -63,9 +63,9 @@ describe('PARTNER_CSP', () => {
     const csp = PARTNER_CSP();
     const hash = createHash('sha256').update(PARTNER_SCRIPT).digest('base64');
     const scriptSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBe(`script-src 'self' 'sha256-${hash}'`);
+    expect(scriptSrc).toBe(`script-src 'self' 'sha256-${hash}' https://static.cloudflareinsights.com`);
     expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com");
     expect(csp).toContain("frame-ancestors 'none'");
   });
 

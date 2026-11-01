@@ -85,7 +85,7 @@ describe('server wiring', () => {
     expect(BUILDERS_JSON_PATH).toBe('/mcp/builders.json');
     expect(BUILDERS_CSP).toContain("default-src 'none'");
     const scriptSrc = BUILDERS_CSP.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBe("script-src 'self'");
+    expect(scriptSrc).toBe("script-src 'self' https://static.cloudflareinsights.com");
     expect(BUILDERS_CSP).not.toContain('unsafe-eval');
     expect(renderBuildersPage({ tools: 94 })).toContain('<script src="/js/dchub-nav.js" defer></script>');
   });
