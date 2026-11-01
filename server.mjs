@@ -751,8 +751,12 @@ export function _relayLinkLabel(platform, tool) {
 // Only a tool that really sells a paid plan (_toolSellsPro: Pro-only, Land & Power) keeps
 // "paid data boundary"; every other wall is the caller's free-tier limit, which is true for
 // any free caller whatever the unlock (email or plan). "how to unlock it" is unchanged.
+// Owner 2026-10-31 (DCPI sub-scores Pro and above): a Starter or Developer key now meets a
+// withheld field on tools it reads in full; the caller is paying, so its limit is not "free-tier".
 export function _boundaryPhrase(tool) {
-  return _toolSellsPro(tool) ? 'paid data boundary' : 'free-tier limit';
+  let paid = _toolSellsPro(tool);
+  if (!paid) { try { paid = _tierRank(String((getCtx() || {}).tier || '')) >= _tierRank('starter'); } catch (_) { paid = false; } }
+  return paid ? 'paid data boundary' : 'free-tier limit';
 }
 
 function buildHumanRelay(toolName, tier, sessionId, opts) {
@@ -13135,6 +13139,7 @@ export function _anonTrimOpensForSeat(tool, seat) {
 const _GATE_OPENS = {
   any_key:       (s) => !!s.keyed,                        // _maskGasIntelligenceAnonymous
   gas_pro:       (s) => _tierIsProOrAbove(s.tier),        // _maskGasEconomicsBelowPro
+  dcpi_pro:      (s) => _tierIsProOrAbove(s.tier),        // _dcpiSubscoresBelowPro (owner 2026-10-31)
   retirement_mw: (s) => _retirementMwFull(s.tier)         // _maskRetirementHeadroom
                    || _retirementPackOpens(s.tier, s.credits),
   unpaid_read:   (s) => !_isUnpaidSeat(s.tier, s.credits),// _dealsForCaller / scoreboard
@@ -13638,6 +13643,121 @@ const _DCPI_PAID_DETAIL_KEYS = new Set(['top_risks_json', 'top_opportunities_jso
 function _dcpiPaidDetail(k, v) {
   if (!_DCPI_PAID_DETAIL_KEYS.has(k)) return false;
   return Array.isArray(v) ? v.length > 0 : (v != null && v !== '');
+}
+
+// ── DCPI sub-scores are Pro and above (owner 2026-10-31; was any paid plan) ──
+// Free for everyone stays the verdict and composite_score. Starter and Developer now
+// get the sub-scores, the risk/opportunity bullets and the per-ISO aggregates the way
+// a free key does: nulled, `_<k>_in_pro`, the band kept. dchub-backend
+// (dcpi/subscores-pro-1031) refuses them to Starter/Developer over REST, but answers
+// this server's X-Internal-Key in full, so the rule is applied here.
+// FIELDS ONLY: _isPaidDepthTier is untouched (it gates row depth on every tool) and no
+// tool joins PRO_ONLY_TOOLS. A $10-pack balance keeps them (backend pack_opens).
+// By key name, on the DCPI tools whose free path already withholds these fields from every
+// keyed free seat (keyless, free key, email-bound key), so Starter/Developer drop to the free
+// level and never below it (test/ladder-stage1: no rung gets more than the rung above it).
+// Left whole, because a free seat reads them in full there by an owner grant: get_grid_intelligence,
+// get_market_intel (email: 10 full answers a day), find_sites, site_selection_canvas, execute_plan
+// (email: monthly full runs), predict_market_trajectory (email full answers), and the top-20 metros
+// on every tool (2026-10-20). The names are the DCPI vocabulary (the backend scrubs them by name
+// too, util/dcpi_subscore_scrub.py SUB_SCORE_KEYS). The per-ISO
+// aggregates: _DCPI_ISO_PAID_KEYS and the raw avg_excess / avg_constraint. A market row's
+// own queue_wait_months goes with its ISO average: on a published row it often equals
+// time_to_power_months (houston 36.3 / 36.3). Curtailment, reserve margin and stranded MW
+// are not in the owner's list and stay, on every tool alike (scoreboard included).
+const _DCPI_PRO_KEYS = new Set(['excess_power_score', 'constraint_score', 'time_to_power_months',
+  'queue_wait_months', 'avg_excess', 'avg_constraint', ..._DCPI_ISO_PAID_KEYS]);
+export const DCPI_PRO_FIELD_TOOLS = new Set(['get_market_dcpi_rank', 'rank_markets', 'compare_isos',
+  'get_grid_scoreboard']);
+// c.tier, never the gate tier (which folds starter/developer into 'paid' off the Pro-only set).
+// 'paid' is ambiguous (Developer, Pro and Founding all write it): resolved per key, and
+// left whole when there is no key to resolve, the way _paidKeyIsProOrAbove fails open.
+export async function _dcpiBelowProPaidSeat(c) {
+  const t = String((c && c.tier) || '').trim().toLowerCase();
+  if (t === 'starter' || t === 'developer') return true;
+  if (t !== 'paid' || !c.api_key) return false;
+  try { return !(await _paidKeyIsProOrAbove(c.api_key)); } catch (_) { return false; }
+}
+// Pure: the payload with every DCPI Pro field nulled. `masked` collects the keys that held
+// a figure (logged only once the seat is known to be below Pro).
+export function _dcpiProShape(node, toolName = '', masked = [], inRate = false, depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 40) return { value: node, changed: false };
+  if (Array.isArray(node)) {
+    let changed = false;
+    const next = node.map((x) => {
+      const g = _dcpiProShape(x, toolName, masked, inRate, depth + 1);
+      if (g.changed) changed = true;
+      return g.value;
+    });
+    return changed ? { value: next, changed } : { value: node, changed: false };
+  }
+  let out = null;
+  const set = (k, v) => { if (!out) out = { ...node }; out[k] = v; };
+  for (const [k, v] of Object.entries(node)) {
+    if (_DCPI_PRO_KEYS.has(k) && (_isFigure(v) || _isMetricRow(v))) {
+      const n = _isMetricRow(v) ? v.value : Number(v);
+      if (!masked.includes(k)) masked.push(k);
+      set(k, _isMetricRow(v) ? { ...v, value: null } : null);
+      set(`_${k}_in_pro`, true);
+      // the band beside a masked input score, as the free trims leave it (_bandForMaskedScore)
+      if ((k === 'excess_power_score' || k === 'constraint_score') && node[`${k}_band`] == null) {
+        const b = _bandForMaskedScore(k, n, node, toolName, inRate);
+        if (b) set(`${k}_band`, b);
+      }
+    } else if (_dcpiPaidDetail(k, v)) {
+      if (!masked.includes(k)) masked.push(k);
+      set(k, null);
+      set(`_${k}_in_pro`, true);
+    } else if (k === 'verdict_reasons' && Array.isArray(v)) {
+      const next = v.map((r) => ((r && _DCPI_PRO_KEYS.has(r.component)) ? _stripReasonNumerics(r, true) : r));
+      if (next.some((r, i) => r !== v[i])) set(k, next);
+    } else if (v && typeof v === 'object') {
+      const g = _dcpiProShape(v, toolName, masked, inRate || _RATE_CONTAINER_RE.test(k), depth + 1);
+      if (g.changed) set(k, g.value);
+    }
+  }
+  if (!out) return { value: node, changed: false };
+  return { value: out, changed: true };
+}
+// rank_markets carries the sub-scores on its rows only; its `value` ("BUILD · 86.4 excess-power
+// · ~9mo to power") restates them, and keeps its free words (_stripRankValues).
+function _dcpiProShapeTool(payload, toolName, masked) {
+  if (toolName !== 'rank_markets') return _dcpiProShape(payload, toolName, masked);
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { value: payload, changed: false };
+  let out = null;
+  for (const key of _RANK_ROW_KEYS) {
+    if (!Array.isArray(payload[key])) continue;
+    const g = _dcpiProShape(payload[key], toolName, masked, false, 1);
+    if (g.changed) { if (!out) out = { ...payload }; out[key] = g.value; }
+  }
+  return out ? { value: _stripRankValues(out), changed: true } : { value: payload, changed: false };
+}
+// The last step of trackedTool. One line names what was hidden and the one rung that
+// opens it, by the missed-rung link (no plan name, no price: v14, owner 2026-10-10).
+export async function _dcpiSubscoresBelowPro(result, name, c, args) {
+  if (!result || typeof result !== 'object') return result;
+  // Owner 2026-10-20: the top-20 metros' full briefing (detailed DCPI scores included) is open to
+  // every caller, keyless too. A paying key is never served less than that (lib/top-metros.mjs).
+  if (!DCPI_PRO_FIELD_TOOLS.has(name)) return result;
+  try { if (_topMetroFreeCall(name, args)) return result; } catch (_) { /* not a top-metro call */ }
+  // Every other seat returns before the walk: a free seat has its own trims, Pro reads everything.
+  const t = String((c && c.tier) || '').trim().toLowerCase();
+  if (!(t === 'starter' || t === 'developer' || (t === 'paid' && c.api_key))) return result;
+  const masked = [];
+  let gated;
+  try { gated = _rewriteResultJson(result, (p) => _dcpiProShapeTool(p, name, masked)); } catch (_) { return result; }
+  if (gated === result) return result;                 // no DCPI Pro field in this answer
+  if (!(await _dcpiBelowProPaidSeat(c))) return result;
+  _noteGate('dcpi_pro');
+  for (const k of masked) _noteMaskedKey(k, 0);
+  const url = _missedRungLink('pro', name, (c && c.session_id) || '');
+  // strict: name only the keys this step nulled (a reason's `_value_in_pro` would read as "deal values")
+  const mu = _missedUpgradeFor(gated.structuredContent || null, ['dcpi_pro'], { strict: true });
+  const what = (mu && mu.rung === 'pro') ? mu.text
+    : 'This answer hid the DCPI sub-scores. They come with the DC Hub plan that includes every tool.';
+  const line = '\n\n\u{1F512} ' + what.replace(/\.$/, '') + (url ? ' → ' + url : '.')
+    + ' The verdict and composite score are in this answer.';
+  return { ...gated, content: [...(Array.isArray(gated.content) ? gated.content : []), { type: 'text', text: line }] };
 }
 
 // ★ r-preview-rows (2026-08-26): the free-tier preview was ONE row. "You're
@@ -23810,7 +23930,8 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     // /mcp/claude strips every relay link before the reply leaves (lib/claude-directory.mjs), so no link was
     // handed out: recording its hash would count a link the caller never saw in the funnel's wall_links.
     if ((status === 'pro_wall' || status === 'lp_wall') && !_excludedFromRelayReadout(c)) _wallLinkTh = _wallLinkTokenHash(_pw.result);
-    return _pw.result;
+    // Owner 2026-10-31: DCPI sub-scores are Pro and above; every return path of this call has merged here.
+    return await _dcpiSubscoresBelowPro(_pw.result, name, c, args);
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown

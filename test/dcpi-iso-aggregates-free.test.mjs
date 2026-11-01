@@ -13,8 +13,10 @@
 // carried avg_queue_wait_months 37.5791 for PJM; the keyless compare_isos
 // preview carried retail_price_cents_kwh 8.6421 and grid_emergencies_30d 913.
 //
-// ★Paid tiers are pinned unchanged, and so is an identified key holding a live
-// $10 pack balance. The scoreboard is ONE cached entry served to every caller,
+// ★Pro is pinned unchanged, and so is an identified key holding a live $10 pack
+// balance. Owner 2026-10-31: the DCPI aggregates are Pro and above, so Starter and
+// Developer now get them withheld too (_dcpiSubscoresBelowPro), the market counts kept;
+// see also test/dcpi-subscores-pro-only.test.mjs. The scoreboard is ONE cached entry served to every caller,
 // so its mask runs on the way out; the cold, fresh-hit and stale paths are each
 // driven here, and the cache is shown to still hold the full rows.
 //
@@ -229,6 +231,35 @@ function expectScoreboardFull(out, label) {
   }
 }
 
+// Owner 2026-10-31: a Starter / Developer key loses the owner's DCPI aggregates by name
+// (`_<k>_withheld`: queue wait, 30-day emergencies) and keeps the market counts. Curtailment
+// is not in the owner's list and stays, as it does on compare_isos / get_grid_intelligence.
+const BELOW_PRO_WITHHELD = ['avg_queue_wait_months', 'grid_emergencies_30d'];
+const BELOW_PRO_NEEDLES = NEEDLES.filter((n) => !ROWS.some((r) => String(r.avg_curtailment_pct) === n));
+function expectNoBelowProNeedles(out, label) {
+  for (const needle of BELOW_PRO_NEEDLES) {
+    expect(leaks(out.text, needle), `${label}: "${needle}" reached the text`).toBe(false);
+    expect(leaks(JSON.stringify(out.sc || {}), needle), `${label}: "${needle}" reached structuredContent`).toBe(false);
+  }
+}
+function expectScoreboardDcpiWithheld(out, label) {
+  for (const [where, body] of scoreboardBodies(out)) {
+    const grids = enriched(body);
+    expect(grids.length, `${label} ${where}: no grid carried dcpi_detail`).toBe(ISOS.length);
+    for (const g of grids) {
+      const row = BY_ISO[normIso(g.iso)];
+      for (const f of BELOW_PRO_WITHHELD) {
+        expect(g.dcpi_detail[f], `${label} ${where} ${g.iso}.${f}`).toBeNull();
+        expect(g.dcpi_detail[`_${f}_withheld`], `${label} ${where} ${g.iso}._${f}_withheld`).toBe(true);
+      }
+      expect(g.dcpi_detail.avg_curtailment_pct, `${label} ${where} ${g.iso}.avg_curtailment_pct`).toBe(row.avg_curtailment_pct);
+      expect(g.dcpi_detail.build_markets, `${label} ${where} ${g.iso}.build_markets`).toBe(row.build_count);
+      expect(g.dcpi_detail.total_markets, `${label} ${where} ${g.iso}.total_markets`).toBe(row.market_count);
+    }
+  }
+  expectNoBelowProNeedles(out, label);
+}
+
 async function until(pred, ms = 3000) {
   const end = Date.now() + ms;
   while (!pred() && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
@@ -280,12 +311,17 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
     });
   }
 
-  for (const [key, label] of [[K_STARTER, 'starter'], [K_DEV, 'developer'], [K_PRO, 'pro']]) {
-    it(`get_grid_scoreboard: ${label} is unchanged`, async () => {
-      expectScoreboardFull(await callTool(key, 'get_grid_scoreboard'), label);
+  for (const [key, label] of [[K_STARTER, 'starter'], [K_DEV, 'developer']]) {
+    it(`get_grid_scoreboard: ${label} gets the DCPI aggregates withheld (owner 2026-10-31: Pro and above)`, async () => {
+      expectScoreboardDcpiWithheld(await callTool(key, 'get_grid_scoreboard'), label);
       expect(creditHits.get(key) || 0, `${label}: a paid tier should not need the pack-balance lookup`).toBe(0);
     });
   }
+
+  it('get_grid_scoreboard: pro is unchanged', async () => {
+    expectScoreboardFull(await callTool(K_PRO, 'get_grid_scoreboard'), 'pro');
+    expect(creditHits.get(K_PRO) || 0, 'pro: a paid tier should not need the pack-balance lookup').toBe(0);
+  });
 
   it('get_grid_scoreboard: an identified key holding a live $10 pack balance is unchanged', async () => {
     expectScoreboardFull(await callTool(K_PACK, 'get_grid_scoreboard'), 'identified + pack');
@@ -312,11 +348,25 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
     expectNoNeedles(out, 'get_grid_intelligence keyless');
   });
 
-  for (const [key, label] of [[K_STARTER, 'starter'], [K_PRO, 'pro']]) {
-    it(`compare_isos and get_grid_intelligence: ${label} is unchanged`, async () => {
+  for (const [key, label] of [[K_STARTER, 'starter'], [K_DEV, 'developer']]) {
+    it(`compare_isos: ${label} gets the DCPI aggregates withheld (owner 2026-10-31); get_grid_intelligence stays whole`, async () => {
       const cmp = await callTool(key, 'compare_isos', { isos: 'PJM,ERCOT' });
-      for (const iso of ['PJM', 'ERCOT']) expectPreviewFull((cmp.lead.comparison || {})[iso], iso, `${label} compare_isos ${iso}`);
+      for (const iso of ['PJM', 'ERCOT']) {
+        const row = (cmp.lead.comparison || {})[iso];
+        expectPreviewLocked(row, `${label} compare_isos ${iso}`);
+        for (const f of ['constraint_score', 'excess_power_score']) expect(row[f], `${label} compare_isos ${iso}.${f}`).toBeNull();
+        expect(row.market_count, `${label} compare_isos ${iso}.market_count`).toBe(BY_ISO[iso].market_count);
+      }
+      expectNoBelowProNeedles(cmp, `compare_isos ${label}`);
+      // An email-bound free key reads get_grid_intelligence in full (owner 2026-10-16, item 3), DCPI
+      // aggregates included, so a paying key is not served less there (_dcpiSubscoresBelowPro scope).
       expectPreviewFull((await callTool(key, 'get_grid_intelligence', { iso: 'ERCOT' })).lead, 'ERCOT', `${label} get_grid_intelligence`);
     });
   }
+
+  it('compare_isos and get_grid_intelligence: pro is unchanged', async () => {
+    const cmp = await callTool(K_PRO, 'compare_isos', { isos: 'PJM,ERCOT' });
+    for (const iso of ['PJM', 'ERCOT']) expectPreviewFull((cmp.lead.comparison || {})[iso], iso, `pro compare_isos ${iso}`);
+    expectPreviewFull((await callTool(K_PRO, 'get_grid_intelligence', { iso: 'ERCOT' })).lead, 'ERCOT', 'pro get_grid_intelligence');
+  });
 });

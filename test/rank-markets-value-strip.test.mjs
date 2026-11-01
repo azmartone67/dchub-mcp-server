@@ -117,10 +117,21 @@ describe.each(Object.keys(FREE_SEATS))('%s', (label) => {
   });
 });
 
-describe('paid callers are untouched', () => {
-  it.each([['developer'], ['paid']])('%s keeps the full value string', async (tier) => {
+describe('paid callers', () => {
+  // Owner 2026-10-31: the DCPI sub-scores are Pro and above. Below Pro (Developer, and a collapsed
+  // 'paid' key whose plan this stub does not name), ai_ready's value keeps its verdict word only;
+  // the other criteria carry no DCPI figure and keep their full string (MW stays Developer depth).
+  it.each([['developer'], ['paid']])('%s: ai_ready keeps the verdict word only, the other criteria keep the full value', async (tier) => {
     for (const criteria of Object.keys(PAYLOADS)) {
       const { sets } = resultSets(await call(criteria, seat(tier, 'dch_live_' + tier + '_value_strip')));
+      expect(sets.length).toBeGreaterThan(0);
+      const want = criteria === 'ai_ready' ? WANT.ai_ready : PAYLOADS[criteria].map((r) => r.value);
+      for (const rows of sets) expect(rows.map((r) => r.value)).toEqual(want);
+    }
+  });
+  it('pro keeps the full value string', async () => {
+    for (const criteria of Object.keys(PAYLOADS)) {
+      const { sets } = resultSets(await call(criteria, seat('pro', 'dch_live_pro_value_strip')));
       expect(sets.length).toBeGreaterThan(0);
       for (const rows of sets) expect(rows.map((r) => r.value)).toEqual(PAYLOADS[criteria].map((r) => r.value));
     }
