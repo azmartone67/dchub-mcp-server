@@ -8,7 +8,7 @@
   <Version>1.0.1.0</Version>
   <ProviderName>DC Hub</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="DC Hub"/>
+  <DisplayName DefaultValue="DC Hub for Excel"/>
   <Description DefaultValue="Live data center, power grid and energy data as Excel formulas: =DCHUB.GRID, =DCHUB.DCPI, =DCHUB.FACILITIES, =DCHUB.ENERGY_RATE."/>
   <IconUrl DefaultValue="https://dchub.cloud/icons/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://dchub.cloud/icons/icon-64.png"/>
