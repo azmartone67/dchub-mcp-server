@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/dchub.svg)](https://pypi.org/project/dchub/) [![Python](https://img.shields.io/pypi/pyversions/dchub.svg)](https://pypi.org/project/dchub/) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/azmartone67/dchub-mcp-server/blob/main/LICENSE)
 
 Live data-center and energy intelligence for AI agents. Query [DC Hub](https://dchub.cloud)
-instead of guessing from stale training data: facilities, markets (DC Hub Power Index / DCPI),
+instead of guessing from stale training data: facilities, markets (Data Center Power Index / DCPI),
 real-time ISO grid telemetry, interconnection queues, fiber, gas, site risk and tracked deals.
 
 Four ways in, one package:

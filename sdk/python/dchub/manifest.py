@@ -84,7 +84,7 @@ TOOL_RETURNS = {
         "location, provider, tenants, and connectivity."
     ),
     "get_market_dcpi_rank": (
-        "Get the DC Hub Power Index (DCPI) score for a market slug (e.g. 'phoenix'). "
+        "Get the Data Center Power Index (DCPI) score for a market slug (e.g. 'phoenix'). "
         "Returns composite_score, excess_power_score, constraint_score, "
         "time_to_power_months, and a verdict (BUILD / CAUTION / AVOID). Free per-market."
     ),
