@@ -341,9 +341,10 @@ describe('r-teaser-parity — DCPI per-ISO aggregates stay paid', () => {
     expect(creditHits.get(K_PRO) || 0, 'pro: a paid tier should not need the pack-balance lookup').toBe(0);
   });
 
-  it('get_grid_scoreboard: an identified key holding a live $10 pack balance is unchanged', async () => {
-    expectScoreboardFull(await callTool(K_PACK, 'get_grid_scoreboard'), 'identified + pack');
-    expect(creditHits.get(K_PACK), 'the pack balance was never read').toBeGreaterThan(0);
+  // Owner 2026-10-31 ("Pro only"): a pack balance no longer opens the DCPI aggregates; the
+  // pack holder reads the scoreboard the way Starter / Developer do.
+  it('get_grid_scoreboard: an identified key holding a live $10 pack balance loses the DCPI aggregates', async () => {
+    expectScoreboardDcpiWithheld(await callTool(K_PACK, 'get_grid_scoreboard'), 'identified + pack');
   });
 
   for (const [key, label] of [[null, 'keyless'], [K_IDENT, 'identified']]) {

@@ -189,6 +189,11 @@ describe.each(Object.keys(CASES))('%s — free tiers get names, verdicts and cou
     credits = 500;
     const r = await call(tool, K.args, seat('free', 'dch_live_pack_holder_numerics'));
     const { text } = channels(r);
+    if (tool === 'rank_markets') {
+      // Owner 2026-10-31 ("Pro only"): the pack does not open total_mw or the DCPI sub-scores.
+      for (const f of K.figures) expect(carries(text, f), `${tool}: the pack holder still carries ${f}`).toBe(false);
+      return;
+    }
     expect(K.figures.some((f) => carries(text, f)), `${tool}: the pack holder lost the figures`).toBe(true);
   });
 

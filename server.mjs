@@ -13819,37 +13819,23 @@ function _dcpiProShapeTool(payload, toolName, masked) {
 }
 // The seat test, after the walk found something to withhold. 'paid' is ambiguous (Developer,
 // Pro and Founding all write it) and is resolved per key; with no key to resolve it is left
-// whole, the way _paidKeyIsProOrAbove fails open. THE PACK, kept as it is (owner 2026-10-31):
-// a call the pack's credits paid for keeps the fields, and so does a free-class seat holding a
-// balance on the tools whose free gate already reads that balance for these fields
-// (_gateToolNumerics, the ISO-aggregate masks, _sitingSeat). Everywhere else every free seat,
-// the pack included, already read the fields alike, so the pack holder is gated with them: the
-// pack is Developer depth paid per call and never rises above Developer (test/ladder-stage1).
+// whole, the way _paidKeyIsProOrAbove fails open. THE PACK does not open these fields (owner
+// 2026-10-31, "Pro only"): a call the pack's credits paid for, or a free seat holding a balance,
+// is gated like every other seat below Pro. The pack still opens everything else it opens.
 // Starter and Developer are not looked up, as before this change.
-const _DCPI_PACK_OPENS_TOOLS = new Set([...DCPI_PRO_FIELD_TOOLS, 'site_selection_canvas', 'find_sites', 'execute_plan']);
 const _DCPI_FREE_CLASS = new Set(['', 'anonymous', 'anon', 'free', 'identified', 'trial']);
-export async function _dcpiBelowProSeat(c, name = '', creditsPaid = false) {
+export async function _dcpiBelowProSeat(c) {
   const t = String((c && c.tier) || '').trim().toLowerCase();
   if (_tierIsProOrAbove(t)) return false;
   if (t === 'paid') {
     if (!c.api_key) return false;
     try { return !(await _paidKeyIsProOrAbove(c.api_key)); } catch (_) { return false; }
   }
-  if (!_DCPI_FREE_CLASS.has(t)) return true;                 // starter, developer, anything unranked
-  if (creditsPaid) return false;
-  if (!_DCPI_PACK_OPENS_TOOLS.has(name)) return true;
-  let credits = 0;
-  try { credits = Number((await _getCredits(c || {})).credits) || 0; } catch (_) { credits = 0; }
-  return !(credits > 0);
+  return true;
 }
-// The rung test for the `dcpi_pro` gate: Pro and above, or a pack balance on a free-class seat on
-// the tools the pack opens these fields on (the same rule _dcpiBelowProSeat applies).
+// The rung test for the `dcpi_pro` gate: Pro and above only (the pack never opens it).
 function _dcpiProOpensForSeat(s) {
-  if (_tierIsProOrAbove(s && s.tier)) return true;
-  let tool = '';
-  try { tool = String(((getCtx() || {})._mu || {}).tool || ''); } catch (_) { tool = ''; }
-  return _DCPI_PACK_OPENS_TOOLS.has(tool) && _DCPI_FREE_CLASS.has(String((s && s.tier) || '').toLowerCase())
-    && Number(s && s.credits) > 0;
+  return _tierIsProOrAbove(s && s.tier);
 }
 const _DCPI_PRO_GATE_KEYS = new Set([..._DCPI_PRO_KEYS, ..._DCPI_PAID_DETAIL_KEYS, 'narrative']);
 // The last step of trackedTool. One line names what was hidden and the one rung that
@@ -13860,7 +13846,7 @@ const _DCPI_PRO_GATE_KEYS = new Set([..._DCPI_PRO_KEYS, ..._DCPI_PAID_DETAIL_KEY
 // seat pays, the `dcpi_pro` gate joins it, so the rung that line names is the one that returns
 // every field it names (Pro), not the rung below. A free trim that hid a sub-score itself notes
 // the same gate (_noteMaskedKey), so its own line names Pro too.
-export async function _dcpiSubscoresBelowPro(result, name, c, args, opts = {}) {
+export async function _dcpiSubscoresBelowPro(result, name, c, args) {
   if (!result || typeof result !== 'object') return result;
   if (_DCPI_PRO_EXEMPT_TOOLS.has(name)) return result;
   // Owner 2026-10-20: the top-20 metros' full briefing (detailed DCPI scores included) is open to
@@ -13877,7 +13863,7 @@ export async function _dcpiSubscoresBelowPro(result, name, c, args, opts = {}) {
   let gated;
   try { gated = _rewriteResultJson(result, (p) => _dcpiProShapeTool(p, name, masked)); } catch (_) { return result; }
   if (gated === result) return result;                 // nothing left to withhold
-  if (!(await _dcpiBelowProSeat(c, name, !!opts.creditsPaid))) return result;
+  if (!(await _dcpiBelowProSeat(c))) return result;
   const join = paying || priorGates;
   const mark = (st && Array.isArray(st.masked)) ? st.masked.length : -1;
   const gatesBefore = (st && st.gates) ? new Set(st.gates) : null;
@@ -24073,7 +24059,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
     // handed out: recording its hash would count a link the caller never saw in the funnel's wall_links.
     if ((status === 'pro_wall' || status === 'lp_wall') && !_excludedFromRelayReadout(c)) _wallLinkTh = _wallLinkTokenHash(_pw.result);
     // Owner 2026-10-31: DCPI sub-scores are Pro and above; every return path of this call has merged here.
-    return await _dcpiSubscoresBelowPro(_pw.result, name, c, args, { creditsPaid: status === 'credits_full' });
+    return await _dcpiSubscoresBelowPro(_pw.result, name, c, args);
     } catch (err) {
       status = 'error';
       // r-failsoft (2026-07-11): don't rethrow. The SDK stringifies a rethrown

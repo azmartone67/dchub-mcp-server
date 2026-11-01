@@ -79,6 +79,7 @@ const K_PAID_DEV = 'dch_live_dcpipro_paiddev0000001';   // 'paid' literal, plan 
 const K_PAID_PRO = 'dch_live_dcpipro_paidpro0000001';   // 'paid' literal, plan Pro
 const K_PRO = 'dch_live_dcpipro_propro00000001';
 const K_EMAIL = 'dch_live_dcpipro_email000000001';   // identified, email bound: the email allowances
+const K_PACK_FREE = 'dch_live_dcpipro_packfree000001';   // free key holding a $10-pack balance
 const VALIDATE = {
   [K_FREE]: { valid: true, tier: 'free', developer_id: 'd_f', email: null },
   [K_STARTER]: { valid: true, tier: 'starter', developer_id: 'd_s', email: 's@example.com', tier_detail: { users_plan: 'starter' } },
@@ -86,6 +87,7 @@ const VALIDATE = {
   [K_PAID_DEV]: { valid: true, tier: 'paid', developer_id: 'd_pd', email: 'pd@example.com', tier_detail: { users_plan: 'developer' } },
   [K_PAID_PRO]: { valid: true, tier: 'paid', developer_id: 'd_pp', email: 'pp@example.com', tier_detail: { users_plan: 'pro' } },
   [K_EMAIL]: { valid: true, tier: 'identified', developer_id: 'd_e', email: 'e@example.com' },
+  [K_PACK_FREE]: { valid: true, tier: 'identified', developer_id: 'd_pk', email: 'pk@example.com' },
   [K_PRO]: { valid: true, tier: 'pro', developer_id: 'd_p', email: 'p@example.com', tier_detail: { users_plan: 'pro' } },
 };
 
@@ -391,14 +393,22 @@ describe('owner 2026-10-31: DCPI sub-scores are Pro and above', () => {
     }
   });
 
-  it('a pack balance on a free seat keeps the fields (owner: the pack behaviour is unchanged)', async () => {
+  it('a pack balance does not open the fields (owner 2026-10-31: Pro only)', async () => {
     const r = { content: [{ type: 'text', text: JSON.stringify(ROW) }] };
-    const below = await S._dcpiSubscoresBelowPro(r, 'get_market_dcpi_rank', { tier: 'identified', api_key: K_EMAIL }, { market_slug: 'boise' });
-    expect(JSON.parse(below.content[0].text).excess_power_score, 'control: no pack, withheld').toBeNull();
     const K_PACK = 'dch_live_dcpipro_packs000000001';   // not read before: the balance cache is per key
     PACK.add(K_PACK);
-    const pack = await S._dcpiSubscoresBelowPro(r, 'get_market_dcpi_rank', { tier: 'identified', api_key: K_PACK }, { market_slug: 'boise' });
-    expect(pack, 'a pack holder was gated').toBe(r);
+    for (const tool of ['get_market_dcpi_rank', 'site_selection_canvas', 'find_sites', 'execute_plan']) {
+      const pack = await S._dcpiSubscoresBelowPro(r, tool, { tier: 'identified', api_key: K_PACK }, { market_slug: 'boise' });
+      expect(pack, `${tool}: a pack holder kept the fields`).not.toBe(r);
+      expect(JSON.parse(pack.content[0].text).excess_power_score, tool).toBeNull();
+    }
+  });
+
+  it('a pack holder through the real call path: credits spent, sub-scores still withheld', async () => {
+    PACK.add(K_PACK_FREE);
+    const out = await call(K_PACK_FREE, 'get_market_dcpi_rank', { market_slug: 'boise' });
+    expectBelowPro(out, 'pack', { paying: false });
+    expect(out.lead.verdict, 'pack: the verdict stays').toBe(ROW.verdict);
   });
 
   it('the directory / Claude / core profiles: the fields are withheld too, with no added line (their wall copy is fixed)', async () => {
