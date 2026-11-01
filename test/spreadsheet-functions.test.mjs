@@ -66,6 +66,17 @@ describe('manifest.xml points at hosted files that exist', () => {
       expect(fs.existsSync(path.join(SP, 'excel', file))).toBe(true);
     }
   });
+  // AppSource rejects the upload unless each icon slot is its exact size (2026-11-01:
+  // "Icon size should be 32*32" / "64*64" for a 192px icon). The files are the
+  // frontend's /icons/icon-<n>.png, so the URL names the size.
+  it('each icon slot names an icon of its own size', () => {
+    expect(xml).toMatch(/<IconUrl DefaultValue="https:\/\/dchub\.cloud\/icons\/icon-32\.png"\/>/);
+    expect(xml).toMatch(/<HighResolutionIconUrl DefaultValue="https:\/\/dchub\.cloud\/icons\/icon-64\.png"\/>/);
+    const imgs = [...xml.matchAll(/<bt:Image id="Icon\.(\d+)" DefaultValue="([^"]+)"\/>/g)];
+    expect(imgs.length).toBe(3);
+    for (const [, n, url] of imgs) expect(url, `Icon.${n}`).toBe(`https://dchub.cloud/icons/icon-${n}.png`);
+    expect(xml).not.toContain('icon-192');
+  });
   it('namespace DCHUB, one GUID id', () => {
     expect(xml).toMatch(/id="Functions\.Namespace" DefaultValue="DCHUB"/);
     expect(xml).toMatch(/<Id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}<\/Id>/);
