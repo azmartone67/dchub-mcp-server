@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-import dchub.client as client_mod
-from dchub import DCHub, CLIENT_NAME, check_via, dchub_tool_definitions, STARTER_TOOLS
+import dchub.mcp as client_mod
+from dchub.mcp import DCHub, CLIENT_NAME, check_via
+from dchub import dchub_tool_definitions, STARTER_TOOLS
 
 ROOT = Path(__file__).resolve().parents[3]
 

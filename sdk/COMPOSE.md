@@ -29,6 +29,8 @@ Try it: `node sdk/node/examples/compose-demo.mjs my-name` (from the repo root).
 
 ## Python
 
+`pip install "dchub>=0.3.0"`
+
 ```python
 from dchub.compose import dchub_tool_definitions
 

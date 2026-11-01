@@ -1,6 +1,6 @@
 """Compose DC Hub into your own MCP server (Python).
 
-    from dchub.compose import dchub_tool_definitions
+    from dchub.compose import dchub_tool_definitions   # pip install "dchub>=0.3.0"
 
     for t in dchub_tool_definitions(via="acme-energy"):   # 5 starter tools
         t["name"], t["description"], t["inputSchema"]     # register these on your server
@@ -14,7 +14,7 @@ handlers; see sdk/COMPOSE.md.
 """
 from __future__ import annotations
 
-from .client import DCHub, check_via
+from .mcp import DCHub, check_via
 
 __all__ = ["dchub_tool_definitions", "STARTER_TOOLS", "DESCRIPTION_PREFIX"]
 

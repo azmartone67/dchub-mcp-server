@@ -2,23 +2,37 @@
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
+# Source of the PyPI package "dchub". 0.1.0-0.2.0 were built outside this repo;
+# 0.3.0 keeps that API (REST DCHub, LangChain/smolagents tools) unchanged and
+# adds dchub.mcp (MCP client, also dchub.DCHubMCP) and dchub.compose.
 [project]
 name = "dchub"
-version = "0.2.0"
-description = "DC Hub Python SDK — live data-center, power & gas intelligence over MCP."
+version = "0.3.0"
+description = "Python SDK, MCP client, compose kit and LangChain/smolagents tools for DC Hub data-center & energy intelligence."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "DC Hub" }]
-keywords = ["data-center", "energy", "mcp", "grid", "infrastructure"]
-dependencies = []          # stdlib only (urllib) — zero runtime deps
+authors = [{ name = "DC Hub (dchub.cloud)" }]
+keywords = ["data-center", "energy", "grid", "dcpi", "infrastructure", "ai-agents", "mcp", "langchain", "smolagents"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = ["requests>=2.25"]
+
+[project.optional-dependencies]
+langchain = ["langchain-core>=0.2", "pydantic>=2"]
+agents = ["smolagents>=1.0"]
+test = ["pytest>=7"]
 
 [project.urls]
 Homepage = "https://dchub.cloud"
+Playground = "https://dchub.cloud/playground"
+MCP = "https://dchub.cloud/mcp"
 Repository = "https://github.com/azmartone67/dchub-mcp-server"
-
-[project.optional-dependencies]
-test = ["pytest>=7"]
 
 [tool.setuptools]
 packages = ["dchub"]
