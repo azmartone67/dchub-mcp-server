@@ -24,6 +24,9 @@
 // restores the empty sid (C2), and the step switched off leaves no user_message (C4).
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
+// This file pins the analyze_site wall / preview, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 // Owner 2026-10-20: gated answers mint no key by default (DCHUB_AUTO_TRIAL_MINT).
 // This file exercises the opt-in mint path, so it turns the switch on for itself.

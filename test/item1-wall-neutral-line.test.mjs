@@ -11,6 +11,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { CHATGPT_NOTICE, DIRECTORY_PROFILE } from '../lib/chatgpt-directory.mjs';
 import { CLAUDE_PROFILE } from '../lib/claude-directory.mjs';
+// This file pins the analyze_site wall / preview, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 // This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
 // that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
 // The gate still applies to every other market, so it is tested here with that decision switched

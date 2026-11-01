@@ -16,6 +16,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createHash, createHmac } from 'node:crypto';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { _resetCapWallDay } from '../lib/keyless-wall.mjs';
+// This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 // Wall email option C (owner 2026-10-26): an identity's first cap wall of the UTC day carries the
 // email link alone; the no-email claim_free_key exit returns from its second wall that day.

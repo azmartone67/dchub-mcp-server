@@ -22079,13 +22079,17 @@ function trackedTool(srv, name, description, schema, handler) {
               return _withLpFreeRun(withCitation(_full, name), _fr);
             }
           }
-          if (_fr && _fr.allowed === false && _fr.limit > 0) {
-            // The daily site lane (owner 2026-11-01): a spent key gets the same daily runs as no key.
+          // The daily site lane (owner 2026-11-01): a key whose monthly runs did not serve this call
+          // (spent, switched off, or the counter did not answer) gets the same daily runs as no key,
+          // so a key is never worse off than no key. Its own counter meters it.
+          if (LP_FREE_RUN_TOOLS.has(name) && c.api_key) {
             const _ksf = await _keylessSiteFull(c, name, args, handler, true);
             if (_ksf) {
               if (_ksf.charged) status = KEYLESS_FULL_TRIAL_STATUS;
               return _ksf.result;
             }
+          }
+          if (_fr && _fr.allowed === false && _fr.limit > 0) {
             // The allowance is spent: a paywall encounter, so it writes the signal lp_wall writes.
             status = 'lp_free_spent';
             signalPaywall({

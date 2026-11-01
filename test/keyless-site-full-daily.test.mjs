@@ -183,11 +183,19 @@ describe('a free key: monthly runs first, then the daily lane', () => {
     expect(isFull(r3)).toBe(false);
     expect(r3.sc.free_monthly_runs).toMatchObject({ reason: 'free_monthly_limit_reached' });
   });
-  it('the monthly counter down: the preview (fails closed), not the daily lane', async () => {
+  it('the monthly counter down: the daily lane still serves (its own counter), never more than the cap', async () => {
     counterDown = true;
-    const r = await call({ key: FREE_KEY, ip: freshIp() });
-    expect(isFull(r)).toBe(false);
-    expect(r.charges).toEqual([]);
+    const ip = freshIp();
+    const r = await call({ key: FREE_KEY, ip });
+    expect(isFull(r)).toBe(true);
+    expect(r.charges).toHaveLength(1);
+    await call({ key: FREE_KEY, ip });
+    expect(isFull(await call({ key: FREE_KEY, ip }))).toBe(false);
+  });
+  it('DCHUB_LP_FREE_RUNS=0 (monthly runs off): a key still gets the daily runs, like no key', async () => {
+    process.env.DCHUB_LP_FREE_RUNS = '0';
+    try { expect(isFull(await call({ key: FREE_KEY, ip: freshIp() }))).toBe(true); }
+    finally { delete process.env.DCHUB_LP_FREE_RUNS; }
   });
 });
 

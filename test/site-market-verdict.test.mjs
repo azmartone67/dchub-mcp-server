@@ -10,6 +10,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { startHarness, fenceNetwork, PRO_KEY } from './helpers/claude-directory-harness.mjs';
 import { marketVerdictFromSiteScore, withSiteScoreMarket, marketVerdictSentence, marketVerdictFromRow } from '../lib/site-verdict.mjs';
+// This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const FREE_KEY = 'dch_live_SITEMVfree0123456789abcdef';
 const METROS = {

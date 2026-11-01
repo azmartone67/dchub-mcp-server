@@ -280,6 +280,7 @@ test/keyed-budget-per-key-826.test.mjs
 test/keyless-full-trial-http.test.mjs
 test/keyless-full-trial.test.mjs
 test/keyless-grid-data-honesty.test.mjs
+test/keyless-site-full-daily.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
