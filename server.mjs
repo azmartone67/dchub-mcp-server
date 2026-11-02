@@ -196,6 +196,7 @@ import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNext
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
+import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, withAnswerMarkers as _withAnswerMarkers } from './lib/answer-markers.mjs';
 import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
@@ -21453,7 +21454,10 @@ async function _wallOuterStep(fn, args, extra, name) {
     }
     return out;
   } finally {
-    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall);
+    // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
+    // whether it showed the email ask (lib/answer-markers.mjs), for the session-ordered log.
+    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall,
+      _answerMarkersOn() ? (r) => { const m = _answerMarkers(r); return m ? (p) => _withAnswerMarkers(p, m) : null; } : null);
     _flushQuotaWallHits(c, name);   // option E: after every step that can add an email ask
   }
 }
