@@ -33,7 +33,7 @@ describe('composeCompareProvenance', () => {
     expect(p.sources[3]).not.toHaveProperty('as_of');
     expect(p.license).toBe(LICENSE_COMPOSITE);
     expect(p.sources.map((s) => s.license)).toEqual(
-      ['public domain (US government)', 'public domain (US government)', 'CC-BY-4.0', undefined]);
+      ['public domain (US government)', 'public domain (US government)', 'CC-BY-4.0 after 30 days; current values per DC Hub Terms 5.2', undefined]);
     expect(p).not.toHaveProperty('as_of');
   });
   it('a telemetry block that states no as_of gets none (never invented)', () => {

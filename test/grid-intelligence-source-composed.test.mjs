@@ -43,7 +43,7 @@ describe('composeGridProvenance', () => {
     expect(p.license).not.toMatch(/CC-BY/);               // never the blanket claim over third-party data
     const by = Object.fromEntries(p.sources.map((s) => [s.id, s.license]));
     expect(by.eia930).toBe('public domain (US government)');
-    expect(by.dcpi).toBe('CC-BY-4.0');                    // DC Hub-computed scores
+    expect(by.dcpi).toBe('CC-BY-4.0 after 30 days; current values per DC Hub Terms 5.2');  // CC BY 30 days after the day (owner 2026-11-01)
     expect(by.iso_queues).toBeUndefined();                // the ISOs' terms are theirs: none claimed
     expect(by.gridstatus).toBeUndefined();
   });
