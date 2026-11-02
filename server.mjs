@@ -173,7 +173,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -218,7 +218,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
-import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun } from './lib/keyless-full-trial.mjs';
+import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -21356,7 +21356,12 @@ function _outreachStep(result, name, args) {
     // link (the owner's taste contract still gets a next_ask; it no longer points elsewhere).
     const sc0 = result && result.structuredContent;
     const walled = !directory && !!(sc0 && typeof sc0 === 'object' && !Array.isArray(sc0) && _isRelayWall(sc0, c));
-    const input = walled ? withWallNextAsk(result, name) : result;
+    // Guided first query (owner 2026-11-02): the wall's next_ask is a free answer from another tool
+    // (lib/short-wall-link.mjs wallFreeNext; DCHUB_WALL_FREE_NEXT=0 restores the same-tool ask).
+    const input = walled ? withWallNextAsk(result, name, {
+      market: (typeof c._wallMarket === 'string' && c._wallMarket) || '',
+      siteFree: !c.api_key && _wfnSiteFullOn(),
+    }) : result;
     const out = stampOutreach(input, name, args, { nextAsk: !directory });
     const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
     if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool);
@@ -26242,12 +26247,22 @@ export function _claimHandoffStep(result, name) {
       return t === textOf(b) ? b : { ...b, text: t };
     });
     if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return _handoffSkip(result, 's10', name);
-    const line = decisionPreview
+    let line = decisionPreview
       ? _claimHandoffDecisionText({ tool: name, emailCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0 })
       : _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
     const b0 = content[0];
     const t0 = textOf(b0);
     const sp0 = t0 ? _splitLeadingJson(t0) : null;
+    // Answer first (owner 2026-11-02): on a grid / queue preview the free figure goes before the email
+    // ask, and the ask says it can be skipped. The taste is read from structuredContent, else from block
+    // 0's JSON (production's keyless preview reaches this step without structuredContent; see above).
+    if (decisionPreview && _RET_WALL_EMAIL_TOOLS.includes(name) && _answerFirstOn()) {
+      const scA = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : null;
+      let dataA = scA && scA.taste ? scA : null;
+      if (!dataA && sp0 && sp0.json) { try { dataA = typeof sp0.json === 'string' ? JSON.parse(sp0.json) : sp0.json; } catch (_) { dataA = null; } }
+      const answer = dataA ? _answerFirstText({ iso: dataA.iso || dataA.region_id, taste: dataA.taste }) : null;
+      if (answer) line = answer + '\n\n' + line + _ANSWER_FIRST_SKIP;
+    }
     if (sp0 && sp0.rest && sp0.rest.trim()) {
       // JSON and prose still in one block (this step runs before _splitHumanBlock): the line goes
       // between them, behind the "---" rule the split step already looks for, so it becomes the first

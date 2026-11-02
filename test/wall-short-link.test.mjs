@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { splitLeadingJson } from '../lib/facility-location.mjs';
-import { dropBuyParam, shortWallLinkStep, withWallNextAsk, WALL_NEXT_ASK_QUESTION } from '../lib/short-wall-link.mjs';
+import { dropBuyParam, shortWallLinkStep, withWallNextAsk, wallFreeNext, WALL_NEXT_ASK_QUESTION, WALL_FREE_NEXT_LEAD } from '../lib/short-wall-link.mjs';
 
 // Same as test/agent-output-names-no-plan.test.mjs PLAN_PROSE (importing that file would re-run its suite here).
 const PLAN_PROSE = /\b(Pro|Developer|Starter|Founder|Enterprise)\s+(plan|tier|seat|subscription|key|rung|users?|callers?|only)\b|\bDC Hub (Pro|Developer|Starter|Founder|Enterprise)\b|\b(in|with|on|needs|requires|upgrade to) (Pro|Developer|Starter|Enterprise)\b|\$\s?\d+(\.\d+)?\s*(\/|per)\s*mo(nth)?\b/;
@@ -85,7 +85,35 @@ describe('lib/short-wall-link', () => {
     const w = wall();
     expect(await shortWallLinkStep(w, { mint: async () => 'x', env: { DCHUB_WALL_SHORT_ALL: '0' } })).toBe(w);
   });
-  it('withWallNextAsk: next_ask names the same tool after the relay, in sc and block 0', () => {
+  // Guided first query (owner 2026-11-02, "free tool next"): with opts the wall's next_ask names another
+  // tool whose answer is free; without opts, or with DCHUB_WALL_FREE_NEXT=0, it is P2's same-tool ask.
+  it('wallFreeNext: never the walled tool, always a free-answer tool', () => {
+    const FREE = new Set(['get_market_dcpi_rank', 'rank_markets', 'analyze_site']);
+    const tools = ['get_grid_intelligence', 'get_interconnection_queue', 'get_market_intel', 'get_market_dcpi_rank',
+      'rank_markets', 'get_fiber_intel', 'get_fiber_readiness', 'analyze_site', 'list_transactions', 'get_dchub_recommendation'];
+    for (const t of tools) for (const market of ['', 'midland-tx']) for (const siteFree of [false, true]) {
+      const a = wallFreeNext(t, { market, siteFree });
+      expect(a.tool, t).not.toBe(t);
+      expect(FREE.has(a.tool), t + ' -> ' + a.tool).toBe(true);
+      expect(a.question.startsWith(WALL_FREE_NEXT_LEAD)).toBe(true);
+      expect(a.question).toContain(a.tool);
+      expect(a.after).toBe('human_url');
+      expect(a.question).not.toMatch(/https?:\/\/|\$\s?\d|\b(Developer|Pro|Starter|Enterprise)\b/);
+    }
+    expect(wallFreeNext('get_grid_intelligence', { market: 'midland-tx' }).tool).toBe('get_market_dcpi_rank');
+    expect(wallFreeNext('get_grid_intelligence', { market: 'midland-tx' }).question).toContain('for midland-tx');
+    expect(wallFreeNext('get_grid_intelligence', {}).tool).toBe('rank_markets');
+    expect(wallFreeNext('get_fiber_intel', { siteFree: true }).tool).toBe('analyze_site');
+    expect(wallFreeNext('get_fiber_intel', { siteFree: false, market: 'columbus' }).tool).toBe('get_market_dcpi_rank');
+  });
+  it('withWallNextAsk with opts: the free next ask in sc and block 0; DCHUB_WALL_FREE_NEXT=0 restores P2', () => {
+    const r = withWallNextAsk(wall(), 'get_grid_intelligence', { market: 'dallas' });
+    expect(r.structuredContent.next_ask.tool).toBe('get_market_dcpi_rank');
+    expect(JSON.parse(r.content[0].text).next_ask).toEqual(r.structuredContent.next_ask);
+    const off = withWallNextAsk(wall(), 'get_grid_intelligence', { market: 'dallas', env: { DCHUB_WALL_FREE_NEXT: '0' } });
+    expect(off.structuredContent.next_ask).toEqual({ tool: 'get_grid_intelligence', question: WALL_NEXT_ASK_QUESTION, after: 'human_url' });
+  });
+  it('withWallNextAsk without opts: next_ask names the same tool after the relay, in sc and block 0', () => {
     const r = withWallNextAsk(wall(), 'get_grid_intelligence');
     const want = { tool: 'get_grid_intelligence', question: WALL_NEXT_ASK_QUESTION, after: 'human_url' };
     expect(r.structuredContent.next_ask).toEqual(want);
@@ -94,6 +122,19 @@ describe('lib/short-wall-link', () => {
 });
 
 describe('over the real app (stub backend, no network)', () => {
+  it('guided first query: a walled answer\'s next_call is a free tool, not itself; DCHUB_WALL_FREE_NEXT=0 is the control', async () => {
+    for (const [t, a, want] of [['rank_markets', { criteria: 'ai_ready', limit: 10 }, 'get_market_dcpi_rank'],
+      ['list_transactions', { since: '2026-01-01', limit: 3 }, 'rank_markets']]) {
+      const sc = (await call('/mcp', t, a)).structuredContent || {};
+      expect(sc.human_url, t + ' is walled in the stub').toBeTruthy();
+      expect(sc.next_ask && sc.next_ask.tool, t).toBe(want);
+      expect(sc.next_call && sc.next_call.tool, t + ' next_call').toBe(want);
+      process.env.DCHUB_WALL_FREE_NEXT = '0';
+      let off;
+      try { off = (await call('/mcp', t, a)).structuredContent || {}; } finally { delete process.env.DCHUB_WALL_FREE_NEXT; }
+      expect(off.next_call && off.next_call.tool, t + ' control: P2 loops to itself').toBe(t);
+    }
+  });
   it('P1/P4/P2 /mcp keyless data-tool wall: /u/ link first in block 0, nothing long left, no plan or price', async () => {
     mintTargets = [];
     const res = await call('/mcp', 'get_grid_intelligence', { iso: 'ERCOT' });
@@ -105,10 +146,12 @@ describe('over the real app (stub backend, no network)', () => {
     expect(Object.keys(b0)[0]).toBe('human_url');
     expect(b0.human_url).toBe(sc.human_url);
     expect(res.content[0].text).not.toMatch(PLAN_PROSE);
-    expect(b0.next_ask && b0.next_ask.tool, 'block 0 next_ask names the same tool').toBe('get_grid_intelligence');
+    expect(b0.next_ask && b0.next_ask.tool, 'block 0 next_ask names a free tool, not the walled one').toBe('rank_markets');
     expect(JSON.stringify(res)).not.toMatch(/\/upgrade\/h\/|buy=1/);
     expect(res.content.some((b) => b.type === 'text' && b.text.includes('For your human') && b.text.includes(sc.human_url))).toBe(true);
-    expect(sc.next_ask && sc.next_ask.tool).toBe('get_grid_intelligence');
+    expect(sc.next_ask && sc.next_ask.tool).toBe('rank_markets');
+    expect(sc.next_call && sc.next_call.tool, 'next_call is set').toBeTruthy();
+    expect(sc.next_call.tool, 'next_call does not loop to the walled tool').not.toBe('get_grid_intelligence');
     // every copy agrees: one distinct relay link in the whole reply
     if (sc.for_your_human && sc.for_your_human.url) expect(sc.for_your_human.url).toBe(sc.human_url);
     if (typeof sc.user_message === 'string') expect(sc.user_message).toContain(sc.human_url);
