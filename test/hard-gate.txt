@@ -281,7 +281,6 @@ test/keyless-full-trial-http.test.mjs
 test/keyless-full-trial.test.mjs
 test/keyless-grid-data-honesty.test.mjs
 test/keyless-site-full-daily.test.mjs
-test/lean-keeps-daily-site-note.test.mjs
 test/keyless-wall-email-first.test.mjs
 test/keyless-wall-grok-audit.test.mjs
 test/keyless-wall-lib.test.mjs
@@ -289,6 +288,7 @@ test/ladder-stage1.test.mjs
 test/large-load-passthrough.test.mjs
 test/late-key.test.mjs
 test/leaf-catchment.test.mjs
+test/lean-keeps-daily-site-note.test.mjs
 test/lean-response.test.mjs
 test/licence-coherence.test.mjs
 test/license-per-layer-envelope.test.mjs
