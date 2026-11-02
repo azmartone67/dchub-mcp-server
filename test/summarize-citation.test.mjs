@@ -54,6 +54,18 @@ afterAll(() => {
 
 const CC = /CC-BY-4\.0/;
 
+describe('DCPI licence timing (owner 2026-11-01, Terms 5.2 #dcpi-current-data)', () => {
+  it('a DCPI citation states the 30-day timing, never a bare CC-BY grant', () => {
+    const b = _citationBlock({ subject: 'Ashburn DCPI verdict', layer: 'dcpi' });
+    expect(b.license).toMatch(/^CC-BY-4\.0 30 days after the day it describes/);
+    expect(b.license).toContain('https://dchub.cloud/terms#dcpi-current-data');
+    expect(b.license).toMatch(/Sub-scores are licensed separately/);
+  });
+  it('the grid analysis layer keeps its CC-BY grant', () => {
+    expect(_citationBlock({ subject: 'x', layer: 'grid_analysis' }).license).toMatch(/^CC-BY-4\.0 — /);
+  });
+});
+
 describe('summarize_for_citation — the licence is per layer', () => {
   it('grants CC-BY only on the layers that are DC Hub derived work', () => {
     for (const layer of _CITE_GRANTED_LAYERS) {
