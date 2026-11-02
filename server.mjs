@@ -119,7 +119,7 @@ import { DIRECTORY_PATH, DIRECTORY_PROFILE, isDirectoryTool as _isDirectoryTool,
          DIRECTORY_OAUTH_RESOURCE, directoryOauthChallenge as _directoryOauthChallenge,
          installDirectoryResponseFilter as _installDirectoryFilter,
          applyDirectoryArgDefaults as _applyDirectoryArgDefaults,
-         CHATGPT_NOTICE as _WALL_NEUTRAL_LINE } from './lib/chatgpt-directory.mjs';
+         CHATGPT_NOTICE as _WALL_NEUTRAL_LINE, rawBodyMessages as _rawBodyMessages } from './lib/chatgpt-directory.mjs';
 import { planFreeFieldsStep } from './lib/plan-free-fields.mjs';
 import { leanResponseStep } from './lib/lean-response.mjs';
 import { renameQueueTotals as _renameQueueTotals } from './lib/queue-kind-fields.mjs';
@@ -218,7 +218,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
-import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap } from './lib/keyless-full-trial.mjs';
+import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -8564,8 +8564,16 @@ export function _withKeylessSiteRun(result, used, cap, keyed) {
       + ' A free key (claim_free_key) adds monthly full analyses of its own.';
   const block = { used, limit: cap, remaining, resets: 'UTC midnight', basis: 'per caller network (IP), UTC day' };
   const out = { ...result };
+  // The one figure still withheld in this run (the backend's DCPI rule), said plainly so the run
+  // does not read as complete. Named, not priced.
+  const sc0 = result.structuredContent;
+  const ttp = sc0 && typeof sc0 === 'object' ? sc0.time_to_power : null;
+  const ttpLine = ttp && typeof ttp === 'object' && ttp._time_to_power_months_withheld === true
+    ? ' Time to power is shown as a band' + (ttp.time_to_power_band ? ` (${ttp.time_to_power_band})` : '')
+      + '; the estimate in months is not part of the free run.'
+    : '';
   if (Array.isArray(out.content) && out.content[0] && out.content[0].type === 'text') {
-    out.content = [...out.content, { type: 'text', text: note }];
+    out.content = [...out.content, { type: 'text', text: note + ttpLine }];
   }
   out.structuredContent = { ...(out.structuredContent || {}), daily_site_runs: block };
   return out;
@@ -25493,6 +25501,8 @@ function _relayWithholds(sc) {
 // True when the response withholds something or says so. A full taste answer that
 // withholds nothing and a free-class answer with no wall marker are NOT walls.
 export function _isRelayWall(sc, c) {
+  // The daily site lane's free run is not a wall, though a Pro field inside it stays withheld.
+  if (_isKeylessSiteRun(sc)) return false;
   // The paywall contract's own completeness verdict: a full answer is not a wall, whatever pointer rides it.
   const cs = sc.completeness && typeof sc.completeness === 'object' ? sc.completeness.status : null;
   if (cs === 'full') return false;
@@ -33191,8 +33201,11 @@ app.post(MCP_PATHS, async (req, res) => {
       // sign-in challenge, but only once the handler below has marked the request
       // eligible (no credential at all). See lib/claude-directory.mjs.
       if (_claudeProfile) _installClaudeFilter(req, res, {
-        gatedChallenge: (tool, id) => {
+        gatedChallenge: (tool, id, raw) => {
           if (req._dchubClaudeLazyAuth !== true) return null;
+          // The daily site lane's free run carries one withheld Pro field, so the filter reads it as a
+          // preview; a sign-in prompt in its place would take away the run the caller was given.
+          if (_rawBodyMessages(raw).some((m) => m && m.result && _isKeylessSiteRun(m.result.structuredContent))) return null;
           console.log(`[oauth] 401 lazy-auth → ${CLAUDE_PATH} (no credential, gated tools/call tool=${String(tool || '').slice(0, 60)})`);
           return _claudeLazyAuthResponse(id);
         },
