@@ -25,6 +25,15 @@ describe('buildNextCall', () => {
       expect(nc.connect).toBe(N.NEXT_CALL_CONNECT);
     }
   });
+  // Muse check 2026-11-02: grid's wall named unlock_more_data (a checkout) as next_tool while its next_ask
+  // was the free next answer; the free ask now wins. An ask without free: true still ranks last.
+  it('a free next answer (next_ask.free) outranks next_tool and _upgrade.next_tool; a plain next_ask does not', () => {
+    const sc = { next_tool: 'unlock_more_data', _upgrade: { next_tool: 'unlock_more_data' } };
+    expect(N.buildNextCall('get_grid_intelligence', { ...sc, next_ask: { tool: 'rank_markets', free: true } }).tool).toBe('rank_markets');
+    expect(N.buildNextCall('get_grid_intelligence', { ...sc, next_ask: { tool: 'rank_markets' } }).tool).toBe('unlock_more_data');
+    expect(N.buildNextCall('get_grid_intelligence', { ...sc, next_ask: { tool: 'rank_markets', free: 'yes' } }).tool).toBe('unlock_more_data');
+    expect(N.buildNextCall('x', { next_tool: 'bind_email', next_ask: { tool: 'Not A Tool', free: true } }).tool).toBe('bind_email');
+  });
   it('ignores a next_tool that is not a tool name', () => {
     for (const bad of ['', 'Has Space', '9tool', 'x', 5, null, {}, 'a'.repeat(80)]) {
       expect(N.buildNextCall('x', { next_tool: bad }).tool, String(bad)).toBe('execute_plan');

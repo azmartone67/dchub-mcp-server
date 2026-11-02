@@ -11,7 +11,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { splitLeadingJson } from '../lib/facility-location.mjs';
-import { dropBuyParam, shortWallLinkStep, withWallNextAsk, wallFreeNext, WALL_NEXT_ASK_QUESTION, WALL_FREE_NEXT_LEAD } from '../lib/short-wall-link.mjs';
+import { dropBuyParam, shortWallLinkStep, withWallNextAsk, wallFreeNext, withFreeNextAgentLine, freeNextAgentTail, WALL_NEXT_ASK_QUESTION, WALL_FREE_NEXT_LEAD } from '../lib/short-wall-link.mjs';
+import { paidAgentLine } from '../lib/paid-sell-line.mjs';
+import { fiberAgentLine, gridAgentLine } from '../lib/grid-sell-line.mjs';
 
 // Same as test/agent-output-names-no-plan.test.mjs PLAN_PROSE (importing that file would re-run its suite here).
 const PLAN_PROSE = /\b(Pro|Developer|Starter|Founder|Enterprise)\s+(plan|tier|seat|subscription|key|rung|users?|callers?|only)\b|\bDC Hub (Pro|Developer|Starter|Founder|Enterprise)\b|\b(in|with|on|needs|requires|upgrade to) (Pro|Developer|Starter|Enterprise)\b|\$\s?\d+(\.\d+)?\s*(\/|per)\s*mo(nth)?\b/;
@@ -98,6 +100,7 @@ describe('lib/short-wall-link', () => {
       expect(a.question.startsWith(WALL_FREE_NEXT_LEAD)).toBe(true);
       expect(a.question).toContain(a.tool);
       expect(a.after).toBe('human_url');
+      expect(a.free, t + ' marks the ask free for next_call').toBe(true);
       expect(a.question).not.toMatch(/https?:\/\/|\$\s?\d|\b(Developer|Pro|Starter|Enterprise)\b/);
     }
     expect(wallFreeNext('get_grid_intelligence', { market: 'midland-tx' }).tool).toBe('get_market_dcpi_rank');
@@ -112,6 +115,36 @@ describe('lib/short-wall-link', () => {
     expect(JSON.parse(r.content[0].text).next_ask).toEqual(r.structuredContent.next_ask);
     const off = withWallNextAsk(wall(), 'get_grid_intelligence', { market: 'dallas', env: { DCHUB_WALL_FREE_NEXT: '0' } });
     expect(off.structuredContent.next_ask).toEqual({ tool: 'get_grid_intelligence', question: WALL_NEXT_ASK_QUESTION, after: 'human_url' });
+  });
+  // Muse check 2026-11-02: every cut-short answer's agent line ended "After they pay, call <tool> again",
+  // naming the walled tool while next_ask / next_call named the free one.
+  it('withFreeNextAgentLine: the pay tail names the free tool; grid\'s brief tail and other text are left alone', () => {
+    const lines = [paidAgentLine('rank_markets', 3), paidAgentLine('rank_markets', 0, true, 'https://dchub.cloud/u/abc234'),
+      fiberAgentLine('Columbus'), fiberAgentLine('Columbus', true, 'https://dchub.cloud/u/abc234')];
+    for (const line of lines) {
+      const name = line.split(' ')[0];
+      expect(line, 'the real line carries the old tail').toContain('After they pay, call ' + name + ' again');
+      const [b] = withFreeNextAgentLine([{ type: 'text', text: line }], name, 'get_market_dcpi_rank');
+      expect(b.text).not.toMatch(/\bpay\b/i);
+      expect(b.text).toContain(freeNextAgentTail(name, 'get_market_dcpi_rank'));
+      expect(b.text.indexOf('get_market_dcpi_rank')).toBeLessThan(b.text.lastIndexOf(name + ' again'));
+      expect(b.text).not.toMatch(PLAN_PROSE);
+    }
+    const grid = gridAgentLine('PJM', 22);
+    expect(withFreeNextAgentLine([{ type: 'text', text: grid }], 'get_grid_intelligence', 'rank_markets')[0].text).toBe(grid);
+    const same = [{ type: 'text', text: lines[0] }];
+    expect(withFreeNextAgentLine(same, 'rank_markets', 'rank_markets')).toBe(same);
+    expect(withFreeNextAgentLine(same, 'get_fiber_intel', 'analyze_site')[0].text, 'another tool\'s line is not touched').toBe(lines[0]);
+  });
+  it('withWallNextAsk rewrites the pay tail only with the free next answer on', () => {
+    const r0 = { content: [{ type: 'text', text: JSON.stringify({ human_url: 'https://dchub.cloud/u/abc234', next_ask: null }) },
+      { type: 'text', text: paidAgentLine('rank_markets', 3) }], structuredContent: { human_url: 'https://dchub.cloud/u/abc234' } };
+    const on = withWallNextAsk(r0, 'rank_markets', { market: '' });
+    expect(on.content[1].text).toContain(freeNextAgentTail('rank_markets', 'get_market_dcpi_rank'));
+    expect(on.content[1].text).not.toContain('After they pay');
+    const off = withWallNextAsk(r0, 'rank_markets', { market: '', env: { DCHUB_WALL_FREE_NEXT: '0' } });
+    expect(off.content[1].text).toContain('After they pay, call rank_markets again');
+    expect(withWallNextAsk(r0, 'rank_markets').content[1].text).toContain('After they pay, call rank_markets again');
   });
   it('withWallNextAsk without opts: next_ask names the same tool after the relay, in sc and block 0', () => {
     const r = withWallNextAsk(wall(), 'get_grid_intelligence');
@@ -152,6 +185,7 @@ describe('over the real app (stub backend, no network)', () => {
     expect(sc.next_ask && sc.next_ask.tool).toBe('rank_markets');
     expect(sc.next_call && sc.next_call.tool, 'next_call is set').toBeTruthy();
     expect(sc.next_call.tool, 'next_call does not loop to the walled tool').not.toBe('get_grid_intelligence');
+    expect(sc.next_call.tool, 'next_call is the free next answer, not the wall\'s unlock tool').toBe(sc.next_ask.tool);
     // every copy agrees: one distinct relay link in the whole reply
     if (sc.for_your_human && sc.for_your_human.url) expect(sc.for_your_human.url).toBe(sc.human_url);
     if (typeof sc.user_message === 'string') expect(sc.user_message).toContain(sc.human_url);
