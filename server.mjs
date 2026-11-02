@@ -245,7 +245,8 @@ import { claimLead as _retClaimLead, bindLead as _retBindLead, hasTellLine as _r
          returnNudgeEnabled as _retNudgeEnabled, utcDay as _retUtcDay, nudgeEligibleCaller as _retNudgeEligible,
          nudgeDecision as _retNudgeDecision, prependTellLine as _retPrependTellLine,
          emailAskEventOn as _retAskEventOn, emailAskEventBody as _retAskEventBody,
-         emailSourceFor as _retEmailSourceFor } from './lib/retention.mjs';
+         emailSourceFor as _retEmailSourceFor, maskEmail as _retMaskEmail,
+         watchOneCallOn as _retWatchOneCallOn, WATCH_SOURCE as _RET_WATCH_SOURCE } from './lib/retention.mjs';
 // Capacity Source distribution layer (2026-09-14): dormant until listings exist.
 import { CAPACITY_SUMMARY_PATH, CAPACITY_SUMMARY_TIMEOUT_MS, CAPACITY_POINTER_KEY, CAPACITY_POINTER_META_KEY,
   capacityPointersEnabled, createCapacitySummaryCache, isCapacityLive, matchCapacityMarkets,
@@ -29926,11 +29927,43 @@ function createServer(descOverrides, instructionsTail, instructionsRewrite, opts
     { since: S.describe('Delta window for per-site movement: "24h", "7d" (default) or an ISO-8601 timestamp — pass your cached generated_at from last session') },
     async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPI('/api/v1/lp/saved', { since: a.since })) }] }));
 
-  trackedTool(srv, 'set_market_alert', 'Use this when the user wants alerts on a data center market\'s DCPI power score: subscribes to movement alerts (free with a key) — get notified when its Excess-Power / Constraint score moves. On the free tier, email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel="email". Webhook delivery (channel="webhook" + destination=<https URL>) needs a paid DC Hub plan. Lets an agent MONITOR markets, not just query them. Answers "tell me when this market moves", "ping me if Northern Virginia\u2019s power score changes". Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
+  trackedTool(srv, 'set_market_alert', 'Use this when the user wants alerts on a data center market\'s DCPI power score: subscribes to movement alerts (free with a key) — get notified when its Excess-Power / Constraint score moves. On the free tier, email alerts are delivered to the email your human bound via bind_email (call bind_email first; the destination is forced to that address). Set channel="email". One call: pass `email` (an address your human typed here) with channel="email" and DC Hub binds it to this key first (minting a free key if this session has none), then arms the watch; no separate claim_free_key or bind_email. Alerts send when the market\u2019s verdict flips or its scores move past the threshold, so a quiet market sends nothing. Webhook delivery (channel="webhook" + destination=<https URL>) needs a paid DC Hub plan. Lets an agent MONITOR markets, not just query them. Answers "tell me when this market moves", "ping me if Northern Virginia\u2019s power score changes". Try: set_market_alert market=northern-virginia channel=webhook destination=https://hooks.example.com/dc. Do NOT use to read a market right now (use get_market_dcpi_rank); this SUBSCRIBES to future movement.',
     { market: Sreq.describe('Market slug (metro) to watch, e.g. northern-virginia — valid slugs come from rank_markets / get_market_dcpi_rank'),
       channel: Sreq.describe('Delivery channel: "email" (free, sent to your bound email) or "webhook" (paid plan)'),
-      destination: S.describe('For channel="webhook", the https URL to POST alerts to (paid plan); ignored for email (forced to bound address)') },
-    async (a) => ({ content: [{ type: 'text', text: JSON.stringify(await callAPIWrite('/api/v1/alerts/subscribe', { market: a.market, channel: a.channel, destination: a.destination })) }] }));
+      destination: S.describe('For channel="webhook", the https URL to POST alerts to (paid plan); ignored for email (forced to bound address)'),
+      email: S.describe("Optional, channel=\"email\" only: your human's email, typed by them here. Binds it to the key (a free key is minted if this session has none) and arms the watch in one call") },
+    async (a) => {
+      const body = { market: a.market, channel: a.channel, destination: a.destination };
+      // Watch step 1 (owner 2026-11-02, lib/retention.mjs WATCH_SOURCE): with `email` on an email
+      // watch, run bind_email first. On a keyless session bind_email mints a free key with the email
+      // bound and puts it on the session for LATER calls, not this one, so the new key rides in the
+      // subscribe body (the backend reads body.api_key when no X-API-Key header came).
+      const _email = (a.email || '').toString().trim().slice(0, 200);
+      let _watch = null;
+      if (_email && String(a.channel || '').trim().toLowerCase() === 'email' && _retWatchOneCallOn()) {
+        const _bindImpl = _RAW_TOOL_HANDLERS.get('bind_email');
+        const _b = typeof _bindImpl === 'function' ? await _bindImpl({ email: _email }) : null;
+        const _bsc = (_b && _b.structuredContent) || {};
+        const _minted = typeof _bsc.api_key === 'string' && _bsc.api_key ? _bsc.api_key : null;
+        if (_bsc.ok === false || (!_minted && _bsc.bound !== true)) {
+          const _msg = String(_bsc.message || 'that email was not accepted').slice(0, 240);
+          return { content: [{ type: 'text', text: JSON.stringify({ ok: false, error: 'email_not_bound',
+            message: 'No watch was set: ' + _msg + '. Ask your human to check the address, then call set_market_alert again.' }) }] };
+        }
+        if (_minted) body.api_key = _minted;
+        body.source = _RET_WATCH_SOURCE;
+        _watch = {
+          one_call: true,
+          email: _retMaskEmail(_email),
+          key_minted: !!_minted,
+          ...(_minted ? { api_key: _minted, connect_url: _bsc.connect_url || null,
+            save_key: 'Save api_key (or give your human connect_url): it is the key this watch is on.' } : {}),
+        };
+      }
+      const r = await callAPIWrite('/api/v1/alerts/subscribe', body);
+      const out = _watch ? { ...(r && typeof r === 'object' ? r : { raw: r }), watch: _watch } : r;
+      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+    });
 
   // MOVE-4 (2026-06-26): one-call retention opt-in. The weekly-digest offer
   // previously existed only as a hand-built curl agents summarized away → the
