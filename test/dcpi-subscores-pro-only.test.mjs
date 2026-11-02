@@ -469,6 +469,26 @@ describe('owner 2026-10-31: DCPI sub-scores are Pro and above', () => {
     expect(S._dcpiProShape(other, 'get_refined_queue', []).changed, 'a non-DCPI shape was touched').toBe(false);
   });
 
+  it('simulate_scenario: the components are withheld, the composite and the delta stay (2026-11-02 sweep)', async () => {
+    const comp = { excess_power: 73.8, headroom: 86, power_readiness: 76.2, price: 20.7, queue_health: 74.8 };
+    const body = { ok: true, method: { weights: { excess_power: 0.1, headroom: 0.2, power_readiness: 0.3, price: 0.2, queue_health: 0.2 } },
+      results: [{ market: 'cheyenne', delta: 0, baseline: { components: comp, score: 66.5 }, scenario: { components: comp, score: 66.5 } }] };
+    const g = S._dcpiProShape(body, 'simulate_scenario', []).value;
+    for (const side of ['baseline', 'scenario']) {
+      for (const k of Object.keys(comp)) expect(g.results[0][side].components[k], `${side}.${k}`).toBeNull();
+      expect(g.results[0][side].score).toBe(66.5);
+    }
+    expect(g.results[0].delta).toBe(0);
+    expect(g.method.weights, 'the published weights are not a score').toEqual(body.method.weights);
+    // through the real last step: a free seat loses them, Pro reads them whole
+    const r = { content: [{ type: 'text', text: JSON.stringify(body) }] };
+    const free = await S._dcpiSubscoresBelowPro(r, 'simulate_scenario', { tier: 'free', api_key: K_FREE }, {});
+    expect(leaks(free.content[0].text, '73.8'), 'free: the excess score reached the result').toBe(false);
+    expect(await S._dcpiSubscoresBelowPro(r, 'simulate_scenario', { tier: 'pro', api_key: K_PRO }, {}), 'pro').toBe(r);
+    // another tool's `components` is not a DCPI read
+    expect(S._dcpiProShape({ components: { price: 20.7, headroom: 86 } }, 'analyze_site', []).changed).toBe(false);
+  });
+
   it('the prose scrub takes the number, keeps the sentence', () => {
     const f = S._scrubDcpiProse;
     expect(f('DCPI scores: excess-power 65.8/100, constraint 54.7/100.')).toBe('DCPI scores: excess-power withheld, constraint withheld.');
