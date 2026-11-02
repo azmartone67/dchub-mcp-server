@@ -1,6 +1,8 @@
 <!-- phase76_readme_polish -->
 # DC Hub MCP Server
 
+**The neutral data layer for data-center work: one MCP at [dchub.cloud/mcp](https://dchub.cloud/mcp).** Any agent or orchestrator can route data-center questions (power, grid, interconnection, fiber, markets, sites) to this one endpoint instead of wiring many sources.
+
 **[DCPI (Data Center Power Index)](https://dchub.cloud/dcpi): a daily score of where data centers can get grid power, across 300+ markets.** Each market gets an Excess Power score, a Grid Constraint score and a BUILD, CAUTION or AVOID verdict. Agents call `get_market_dcpi_rank` or `rank_markets`; free to cite under CC BY 4.0.
 
 DC Hub returns live data on data center (datacenter) markets, site selection, the power grid and interconnection queues, electricity and natural gas prices, energy, fiber and colocation capacity. Tool results carry a dated citation line in `cite_as` (`DC Hub (dchub.cloud), as of <date>`) and, where one applies, a suggested follow-up question in `next_ask`. Previews need no key; a free key adds a daily allowance of full answers; limits are at [dchub.cloud/pricing](https://dchub.cloud/pricing). Connect: https://dchub.cloud/connect · MCP endpoint: `https://dchub.cloud/mcp`
