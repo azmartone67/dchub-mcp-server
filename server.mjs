@@ -13767,6 +13767,15 @@ const _DCPI_ROW_MARKERS = new Set([..._DCPI_PRO_STRONG_KEYS, 'composite_score', 
 const _DCPI_CONTAINER_RE = /(^|_)dcpi(_|$)/i;
 // A sub-score under a key that does not say so: the value is the excess-power score.
 const _DCPI_NAMED_SUBSCORES = Object.freeze({ dcpi_market_health: new Set(['now']) });
+// The same, under a key only one tool gives that meaning. simulate_scenario's `components` are
+// market_power_scores read whole (excess_power IS the excess-power score; headroom, power_readiness,
+// price and queue_health are linear in reserve margin, curtailment, time to power, cents/kWh and
+// queue wait, with the formula in the same answer). The backend nulls them below Pro
+// (agentic_master_shell.scenario), but this server reads the backend as paid, so they arrived whole
+// for every seat (2026-11-02 sweep). Elsewhere `components` means something else and stays.
+const _DCPI_TOOL_NAMED_SUBSCORES = Object.freeze({
+  simulate_scenario: { components: new Set(['excess_power', 'headroom', 'power_readiness', 'price', 'queue_health']) },
+});
 // The four tools whose whole answer is DCPI: a row-kind name is DCPI anywhere in them.
 export const DCPI_PRO_FIELD_TOOLS = new Set(['get_market_dcpi_rank', 'rank_markets', 'compare_isos',
   'get_grid_scoreboard']);
@@ -13824,7 +13833,7 @@ export function _dcpiProShape(node, toolName = '', masked = [], inRate = false, 
     return changed ? { value: next, changed } : { value: node, changed: false };
   }
   const rowKind = inDcpi || DCPI_PRO_FIELD_TOOLS.has(toolName) || _isDcpiRow(node);
-  const named = _DCPI_NAMED_SUBSCORES[parentKey];
+  const named = _DCPI_NAMED_SUBSCORES[parentKey] || (_DCPI_TOOL_NAMED_SUBSCORES[toolName] || {})[parentKey];
   let out = null;
   const set = (k, v) => { if (!out) out = { ...node }; out[k] = v; };
   for (const [k, v] of Object.entries(node)) {
