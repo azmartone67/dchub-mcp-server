@@ -23,7 +23,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as T from '../lib/free-decision-taste.mjs';
 import { leanResponseStep } from '../lib/lean-response.mjs';
-import { EMAIL_ASK } from '../lib/claim-handoff.mjs';
+import { EMAIL_ASK, ANSWER_FIRST_LEAD, ANSWER_FIRST_SKIP } from '../lib/claim-handoff.mjs';
 // This file pins the copy the inner wall/retention steps build; the lean step (lib/lean-response.mjs,
 // agent QA A 2026-10-20) trims it to one ask on /mcp. Off here so these guards keep testing the inner
 // steps; test/lean-response.test.mjs guards the default.
@@ -322,6 +322,39 @@ describe('A) keyless previews carry one claim_free_key line, no plan, no price',
       }
     });
   }
+  // Answer first (owner 2026-11-02): the preview's free figure is the first prose line, before the email
+  // ask, and the ask says it can be skipped. Kill switch DCHUB_ANSWER_FIRST=0 restores the ask-first order.
+  for (const tool of ['get_grid_intelligence', 'get_interconnection_queue']) {
+    it(`${tool}: the free figure comes before the email ask, and survives lean`, async () => {
+      const r = await callAs({}, tool, ARGS[tool]);
+      const h = r.data.taste && r.data.taste.headline;
+      expect(h && typeof h.value === 'number', 'fixture has a measured headline').toBe(true);
+      const prose = proseOf(r);
+      const a = prose.indexOf(ANSWER_FIRST_LEAD), e = prose.indexOf(EMAIL_ASK);
+      expect(a, 'answer line present\n' + prose.slice(0, 1500)).toBeGreaterThanOrEqual(0);
+      expect(e, 'email ask present').toBeGreaterThan(a);
+      const answer = prose.slice(a).split('\n')[0];
+      expect(answer).toContain(h.value.toLocaleString('en-US'));
+      expect(answer, 'no link, plan, price or tool name on the answer line').not.toMatch(/https?:\/\/|bind_email|claim_free_key/);
+      expect(answer).not.toMatch(PLAN_OR_PRICE);
+      expect(prose).toContain(ANSWER_FIRST_SKIP.trim());
+      const lean = await withEnv('DCHUB_LEAN_RESPONSES', '1', async () => leanResponseStep(r.result, tool));
+      const lt = proseOf({ result: lean });
+      expect(lt.indexOf(ANSWER_FIRST_LEAD), 'answer kept by lean').toBeGreaterThanOrEqual(0);
+      expect(lt.indexOf(EMAIL_ASK), 'ask kept by lean, after the answer').toBeGreaterThan(lt.indexOf(ANSWER_FIRST_LEAD));
+    });
+    it(`${tool}: DCHUB_ANSWER_FIRST=0 restores the ask-first prose`, async () => {
+      const r = await withEnv('DCHUB_ANSWER_FIRST', '0', async () => callAs({}, tool, ARGS[tool]));
+      const prose = proseOf(r);
+      expect(prose).not.toContain(ANSWER_FIRST_LEAD);
+      expect(prose).not.toContain(ANSWER_FIRST_SKIP.trim());
+      expect(prose).toContain(EMAIL_ASK);
+    });
+  }
+  it('get_market_intel: no answer-first line (not an email-unlock tool)', async () => {
+    const r = await callAs({}, 'get_market_intel', ARGS.get_market_intel);
+    expect(proseOf(r)).not.toContain(ANSWER_FIRST_LEAD);
+  });
   // ★ Full-stack QA 2026-10-24: this suite passed while NO production preview carried the email ask.
   // Production runs lib/lean-response.mjs last (one ask per response), and it kept the human_url
   // paragraph and dropped the email ask. Run that same step here on the keyless preview.

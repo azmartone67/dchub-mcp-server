@@ -173,7 +173,7 @@ import { paywallContractArm as _pcArm, applyPaywallContract as _applyPaywallCont
 import { lastFreeLine as _lastFreeLine, day2DigestLine as _day2DigestLine, gridSellLine as _gridSellLine, gridAgentLine as _gridAgentLine, GRID_AGENT_SHOW_NEXT as _GRID_AGENT_SHOW_NEXT, GRID_AGENT_PAY_TAIL as _GRID_AGENT_PAY_TAIL, GRID_AGENT_EMAIL_TAIL as _GRID_AGENT_EMAIL_TAIL, fiberSellLine as _fiberSellLine, fiberAgentLine as _fiberAgentLine, buyUrl as _gridBuyUrl } from './lib/grid-sell-line.mjs';
 import { PAID_SELL_TOOLS as _PAID_SELL_TOOLS, PRO_WALL_TOOLS as _PRO_WALL_TOOLS, parseHidList as _parseHidList, marketIntelSellLine as _marketIntelSellLine, compareIsosSellLine as _compareIsosSellLine, rankMarketsSellLine as _rankMarketsSellLine, proWallLine as _proWallLine, paidAgentLine as _paidAgentLine } from './lib/paid-sell-line.mjs';
 // One-step key handoff (owner growth push 2026-10-14): lib/claim-handoff.mjs, _claimHandoffStep below.
-import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
+import { CLAIM_HANDOFF_STATUSES as _CLAIM_HANDOFF_STATUSES, CLAIM_ALT_TAIL as _CLAIM_ALT_TAIL, claimHandoffText as _claimHandoffText, claimHandoffDecisionText as _claimHandoffDecisionText, claimHandoffFreekeyText as _claimHandoffFreekeyText, answerFirstOn as _answerFirstOn, answerFirstText as _answerFirstText, ANSWER_FIRST_SKIP as _ANSWER_FIRST_SKIP, namesClaimTool as _namesClaimTool, carriesKeyLiteral as _carriesKeyLiteral } from './lib/claim-handoff.mjs';
 // r-cite-toplevel (2026-08-12): TOP-LEVEL citation + provenance on EVERY
 // envelope, gated ones included. Measured: a live keyless execute_plan came
 // back with no `citation`, no `provenance`, and zero occurrences of `cite_as`
@@ -26242,12 +26242,22 @@ export function _claimHandoffStep(result, name) {
       return t === textOf(b) ? b : { ...b, text: t };
     });
     if (content.some((b) => _namesClaimTool(proseOf(textOf(b))))) return _handoffSkip(result, 's10', name);
-    const line = decisionPreview
+    let line = decisionPreview
       ? _claimHandoffDecisionText({ tool: name, emailCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0 })
       : _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
     const b0 = content[0];
     const t0 = textOf(b0);
     const sp0 = t0 ? _splitLeadingJson(t0) : null;
+    // Answer first (owner 2026-11-02): on a grid / queue preview the free figure goes before the email
+    // ask, and the ask says it can be skipped. The taste is read from structuredContent, else from block
+    // 0's JSON (production's keyless preview reaches this step without structuredContent; see above).
+    if (decisionPreview && _RET_WALL_EMAIL_TOOLS.includes(name) && _answerFirstOn()) {
+      const scA = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : null;
+      let dataA = scA && scA.taste ? scA : null;
+      if (!dataA && sp0 && sp0.json) { try { dataA = typeof sp0.json === 'string' ? JSON.parse(sp0.json) : sp0.json; } catch (_) { dataA = null; } }
+      const answer = dataA ? _answerFirstText({ iso: dataA.iso || dataA.region_id, taste: dataA.taste }) : null;
+      if (answer) line = answer + '\n\n' + line + _ANSWER_FIRST_SKIP;
+    }
     if (sp0 && sp0.rest && sp0.rest.trim()) {
       // JSON and prose still in one block (this step runs before _splitHumanBlock): the line goes
       // between them, behind the "---" rule the split step already looks for, so it becomes the first
