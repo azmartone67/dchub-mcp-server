@@ -556,6 +556,7 @@ test/wall-transport.test.mjs
 test/wall-user-line-hard-wall.test.mjs
 test/wall-user-line.test.mjs
 test/watch-line-full-answers.test.mjs
+test/watch-onecall.test.mjs
 test/water-risk-location.test.mjs
 test/web-bot-auth-python.test.mjs
 test/web-bot-auth.test.mjs
