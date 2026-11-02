@@ -24365,7 +24365,7 @@ Free tier still covers: \`search_facilities\`, \`get_facility\` (basic fields), 
          _scrubCommerce(_postRelayTeaser(await _withOptinAsk(_stampTierPair(_honestCallerTier(_ensureStructured(await _stamped(args, extra)), _servedTierCtx(getCtx())), _servedTierCtx(getCtx())), name, getCtx()), getCtx()), name),
          name, getCtx()),
        { toolName: name, tier: (getCtx() || {}).tier || 'free' }))), _ctxRawArgKeys(name), _toolParamKeys(name)), name), name)), name),
-       name, args, _outSchema), name), name), name), name, args), name), name)), name), name), name), name), name), name), name), name), name), name), name)));
+       name, args, _outSchema), name), name), name), name, args), name, args), name)), name), name), name), name), name), name), name), name), name), name), name)));
 }
 
 // ── Watch line on full answers (Grok growth push item 3, owner yes 2026-10-13) ──────────────
