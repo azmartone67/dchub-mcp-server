@@ -19,6 +19,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from 'node:http';
 import net from 'node:net';
+// This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 // This file exercises the free-tier gate on markets (Northern Virginia, Dallas, Houston, Santa Clara)
 // that the top-20-metros decision (owner 2026-10-20, lib/top-metros.mjs) now opens to every caller.
 // The gate still applies to every other market, so it is tested here with that decision switched

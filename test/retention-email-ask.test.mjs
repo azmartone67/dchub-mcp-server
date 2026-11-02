@@ -16,6 +16,9 @@ import { readFileSync } from 'node:fs';
 import * as R from '../lib/retention.mjs';
 import { __test as OAUTH } from '../oauth.mjs';
 import { _freeTierRuleText, _rungNum, _fullAnswersPerToolPerDay } from '../lib/tier-canon.mjs';
+// This file pins the analyze_site wall / preview, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const realConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {

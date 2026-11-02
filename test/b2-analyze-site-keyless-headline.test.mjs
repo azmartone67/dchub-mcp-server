@@ -17,6 +17,9 @@
 // Real registered handlers under a real caller seat, backend stubbed (same
 // harness as test/lp-pro-only.test.mjs).
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+// This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const BASE = 'https://backend.b2-site-headline.test';
 let S, TOOLS, realFetch;

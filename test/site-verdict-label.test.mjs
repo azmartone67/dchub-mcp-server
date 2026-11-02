@@ -6,6 +6,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { startHarness, fenceNetwork } from './helpers/claude-directory-harness.mjs';
 import { marketVerdictFromRow, marketVerdictSentence, verdictContext, sourceLine, SITE_VERDICT_LABEL, NO_MARKET_SENTENCE } from '../lib/site-verdict.mjs';
 import { gatedPreviewStep, powerBandLineStep } from '../lib/gated-preview.mjs';
+// This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const ROW = { market_slug: 'phoenix', market_name: 'Phoenix', verdict: 'CAUTION', composite_score: 41.94,
   computed_at: '2026-10-18T18:23:48.766551+00:00', latitude: 33.45, longitude: -112.07, state: 'AZ' };

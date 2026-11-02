@@ -9,6 +9,9 @@
 // Real registered handlers under a real caller seat; only the backend is stubbed.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { isGatedResult } from '../lib/paywall-contract.mjs';
+// This file pins the keyless analyze_site wall, which serves once a caller's daily full site runs
+// are spent (DCHUB_KEYLESS_SITE_FULL, owner 2026-11-01); test/keyless-site-full-daily.test.mjs pins the runs.
+process.env.DCHUB_KEYLESS_SITE_FULL = '0';
 
 const BASE = 'https://backend.pc-arm-tag-visible-link.test';
 const RELAY = /https:\/\/dchub\.cloud\/upgrade\/h\/[A-Za-z0-9_-]+\.[0-9a-f]{32}(?:\?[^\s"')\]]*)?/;
