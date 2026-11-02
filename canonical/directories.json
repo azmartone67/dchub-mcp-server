@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for https://dchub.cloud/mcp/directories (lib/directories-page.mjs) and for the 'Where to find DC Hub' tracker on https://dchub.cloud/mcp-standing (dchub-backend routes/mcp_standing_scan.py, which re-reads this file from GitHub every 6 hours). Only status 'live' renders on /mcp/directories; 'pending' and 'unverified' stay hidden there and show as Pending on /mcp-standing. Grok's hourly presence routine edits this file when a listing goes live or drifts: set status, listing_url (https only), optional badge_url (an image the directory serves), and verified_at. Optional tracker fields: tracking_url (the open PR or issue that will list us, for a pending row), update_request_url (an open issue or PR asking the directory to refresh our entry; the tracker shows Updating while it is open), match (strings the listing page must contain; default dc hub / dchub / dc-hub). No prices or facility counts anywhere in this file. added_at (YYYY-MM-DD) is the day a row entered this file (backfilled 2026-10-24 from git history; the file began 2026-10-09, so it is when DC Hub's listing was first TRACKED, not when the directory first listed it). Set it when adding a row; /mcp/directories and /mcp-standing show the list's growth from it.",
   "schema_version": 1,
-  "updated_at": "2026-10-30T23:30:00Z",
+  "updated_at": "2026-11-02T17:30:00Z",
   "directories": [
     {
       "id": "official-registry",
@@ -1095,6 +1095,18 @@
       "verified_at": "2026-10-30",
       "added_at": "2026-10-30",
       "note": "Listed under Research via planetabhi/riseofmachine#964 (merged 2026-10-30)"
+    },
+    {
+      "id": "open-risk-awesome-sustainable-finance",
+      "name": "Open Risk awesome-sustainable-finance",
+      "status": "live",
+      "listing_url": "https://github.com/open-risk/awesome-sustainable-finance#energy-system",
+      "badge_url": null,
+      "badge_alt": null,
+      "logo_url": null,
+      "verified_at": "2026-11-02",
+      "added_at": "2026-11-02",
+      "note": "Listed under Open Data > Energy System (free ODbL grid extracts) via open-risk/awesome-sustainable-finance#24 (merged 2026-11-02)"
     }
   ]
 }
