@@ -4763,6 +4763,18 @@ function isBotOrInternalCtx(c) {
   return _CLAIM_BOT_RE.test(s) || _CLAIM_CRAWLER_UA_RE.test(s);
 }
 export { isBotOrInternalCtx };
+// The daily site lane is promised to anyone without a key, and an agent with a code tool calls
+// /mcp through a plain HTTP client: Grok's Prospecting agent (UA curl, 2026-11-02 03:03Z) got the
+// wall because 'curl/' is in the list above. Those library tokens say "no human to open a claim
+// link", not "a bot that must not get a free run"; the per-IP daily cap is the limit there. Our
+// own, monitor, scanner and crawler markers still refuse the run.
+const _HTTP_CLIENT_UA_RE = /(curl\/|wget|httpie|python-requests|go-http-client|postman|fastmcpclient)/gi;
+export function isBotOrInternalCtxForSiteLane(c) {
+  const s = ((c?.platform || '') + ' ' + (c?.client_ua || '') + ' ' + (c?.user_agent || ''))
+    .toLowerCase().replace(_HTTP_CLIENT_UA_RE, ' ');
+  if (!s.trim()) return false;
+  return _CLAIM_BOT_RE.test(s) || _CLAIM_CRAWLER_UA_RE.test(s);
+}
 
 // r-hi-needs-session (2026-09-14): a high-intent count belongs to ONE MCP session. The
 // paywall branches fall back to the literal 'no-session' when a call carries no
@@ -8538,7 +8550,7 @@ export function _keylessSiteFullSeat(name, c, keyed = false, env = process.env) 
   return _ksfSeatFor(name, c, {
     env, keyed, directoryProfile: DIRECTORY_PROFILE, allowedProfiles: [CLAUDE_PROFILE, CORE_PROFILE],
     isQa: (x) => _isQaCaller(x) || x.qa_header === true || !!_selfTestTelemetryTag(x),
-    isBot: isBotOrInternalCtx,
+    isBot: isBotOrInternalCtxForSiteLane,
   });
 }
 function _keylessFullTrialDayKey(c, tool) {
