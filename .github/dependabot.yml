@@ -3,6 +3,9 @@
 # No workflow here arms auto-merge on Dependabot PRs; each one is reviewed
 # and merged like any other PR.
 #
+# Only releases at least 14 days old are proposed (cooldown, 2026-11-02): a hijacked or broken
+# release is usually caught upstream within days. Security updates are not delayed by it.
+#
 # Major versions are never proposed (owner decision 2026-10-16: #988 mcp 2.x,
 # #990 hono 2, #991 express 5 were closed); a major migration is its own PR.
 # The packages that shape the served tool catalog (MCP SDK, zod, ajv) are kept
@@ -19,6 +22,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns: ["*"]
@@ -27,9 +32,11 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
-    directory: /
+    directories: ["/", "/npm-launcher"]
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 5
     groups:
       npm-minor-patch:
@@ -50,6 +57,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 3
     ignore:
       - dependency-name: "*"
