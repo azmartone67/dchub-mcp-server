@@ -100,7 +100,7 @@ import './lib/web-bot-auth-preload.mjs';
 import { slimToolsList as _slimToolsList, slimTool as _slimTool, TOOL_GUIDE_TOOLS, toolGuideUri } from './lib/list-slim.mjs';
 import express from 'express';
 import { randomUUID, createHash, createHmac, timingSafeEqual } from 'crypto';
-import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog } from './lib/log-redact.mjs';
+import { logId as _logId, keyKind as _keyKind, scrubLogText as _scrubLog, redactEmails as _redactEmails } from './lib/log-redact.mjs';
 import { registerOAuthRoutes, resolveOAuthToken } from './oauth.mjs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { z } from 'zod';
@@ -4489,6 +4489,9 @@ async function trackToolCall(payload) {
   // 2026-10-16: our own test callers are written as 'dchub-internal' (see _selfTestTelemetryTag).
   try { payload = _tagOwnTestTelemetry(payload, getCtx()); } catch (_) { /* never block telemetry */ }
   try { const v = getVia(); if (v && payload && !payload.via) payload = { ...payload, via: v }; } catch (_) { /* never block telemetry */ }
+  // 2026-11-02: bind_email / claim_free_key args carried the raw address into mcp_call_log.params.
+  // Every logged call passes here, so this is the one place to redact it.
+  try { if (payload && payload.params != null) payload = { ...payload, params: _redactEmails(payload.params) }; } catch (_) { /* never block telemetry */ }
   try {
     await fetch(new URL('/api/v1/mcp/track', API_BASE).toString(), {
       method: 'POST',
