@@ -199,7 +199,32 @@ describe('a free key: monthly runs first, then the daily lane', () => {
   });
 });
 
+// Grok's Prospecting agent called keyless /mcp with UA curl (2026-11-02 03:03Z) and got the wall:
+// the claim-mint bot list counts plain HTTP clients. An agent's code tool is a caller to serve.
+describe('a plain HTTP client is in the lane', () => {
+  for (const ua of ['curl/8.7.1', 'python-requests/2.32.3', 'Go-http-client/2.0', 'Wget/1.21.4', 'HTTPie/3.2.2']) {
+    it(`UA ${ua}: the full answer, charged`, async () => {
+      const r = await call({ ip: freshIp(), ua });
+      expect(isFull(r)).toBe(true);
+      expect(r.sc.daily_site_runs).toMatchObject({ used: 1, limit: 2 });
+      expect(r.charges).toHaveLength(1);
+    });
+  }
+  it('curl still gets 2, then the wall', async () => {
+    const ip = freshIp();
+    await call({ ip, ua: 'curl/8.7.1' }); await call({ ip, ua: 'curl/8.7.1' });
+    expect(isFull(await call({ ip, ua: 'curl/8.7.1' }))).toBe(false);
+  });
+});
+
 describe('who is never in the lane', () => {
+  for (const ua of ['dchub-fixwave-probe/1.0', 'UptimeRobot/2.0', 'ExampleBot/0.1 (+https://example.com/bot)', 'curl/8.7.1 dchub-heartbeat']) {
+    it(`a bot, monitor or our own probe (UA ${ua}): the wall, nothing charged`, async () => {
+      const r = await call({ ip: freshIp(), ua });
+      expect(isFull(r)).toBe(false);
+      expect(r.charges).toEqual([]);
+    });
+  }
   it('a QA caller (UA dchub-qa-readonly): the wall, nothing charged', async () => {
     const r = await call({ ip: freshIp(), ua: 'dchub-qa-readonly/1.0' });
     expect(isFull(r)).toBe(false);
