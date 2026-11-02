@@ -17,5 +17,6 @@
   "bugs": { "url": "https://github.com/azmartone67/dchub-mcp-server/issues" },
   "author": "DC Hub <api@dchub.cloud> (https://dchub.cloud)",
   "license": "MIT",
-  "mcpName": "cloud.dchub/mcp-server"
+  "mcpName": "cloud.dchub/mcp-server",
+  "overrides": { "qs": "6.16.1" }
 }
