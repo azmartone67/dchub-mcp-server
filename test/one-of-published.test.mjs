@@ -110,7 +110,8 @@ describe('it is wired into the emitted schema, not just exported', () => {
     const { fileURLToPath } = await import('node:url');
     const src = readFileSync(fileURLToPath(new URL('../server.mjs', import.meta.url)), 'utf8');
     const code = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-    expect(code).toContain('t.inputSchema = applyOneOfAnyOf(stripSchemaDialect(t.inputSchema), t.name);');
+    // zod 4.6: the type-array undo (expandTypeUnions) runs first, so oneOf sees the anyOf shape it always saw
+    expect(code).toContain('t.inputSchema = applyOneOfAnyOf(expandTypeUnions(stripSchemaDialect(t.inputSchema)), t.name);');
     expect(code).not.toContain('t.inputSchema = stripSchemaDialect(t.inputSchema);');
   });
 });

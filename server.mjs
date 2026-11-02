@@ -27305,6 +27305,24 @@ export function stripSchemaDialect(schema) {
   return rest;
 }
 
+// zod 4.6 (the fix for GHSA-mrhx-c7xc-m3w5, 2026-11-02) rewrites a union of bare types,
+//   anyOf: [{type: "string"}, {type: "number"}]   ->   type: ["string", "number"]
+// in every tools/list schema. The two say the same thing, but Ajv 2020-12 strict (the Claude
+// client, test/schema-dialect-neutral.test.mjs) refuses a type array, and /mcp/chatgpt serves the
+// catalog OpenAI reviewed byte for byte (test/chatgpt-toolset-frozen.test.mjs). zod has no switch
+// for it outside the openapi-3.0 target, so the served schemas are put back in the anyOf form,
+// with `anyOf` in the place `type` held. Validation is zod's and does not change.
+export function expandTypeUnions(schema) {
+  if (Array.isArray(schema)) return schema.map(expandTypeUnions);
+  if (!schema || typeof schema !== 'object') return schema;
+  const out = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === 'type' && Array.isArray(v) && v.every((t) => typeof t === 'string')) out.anyOf = v.map((t) => ({ type: t }));
+    else out[k] = expandTypeUnions(v);
+  }
+  return out;
+}
+
 function createServer(descOverrides, instructionsTail, instructionsRewrite, opts) {
   _activeDescOverrides = (descOverrides && typeof descOverrides === 'object') ? descOverrides : null;
   const srv = new McpServer({ name: 'DC Hub Intelligence', version: SERVER_VERSION }, {
@@ -32282,8 +32300,8 @@ ${a.company ? `Focus on ${a.company}. ` : ''}Report the notable moves and, for e
     srv.server.setRequestHandler(ListToolsRequestSchema, async (req, extra) => {
       const res = await _sdkListTools(req, extra);
       for (const t of (res && Array.isArray(res.tools)) ? res.tools : []) {
-        t.inputSchema = applyOneOfAnyOf(stripSchemaDialect(t.inputSchema), t.name);
-        if (t.outputSchema) t.outputSchema = stripSchemaDialect(t.outputSchema);
+        t.inputSchema = applyOneOfAnyOf(expandTypeUnions(stripSchemaDialect(t.inputSchema)), t.name);
+        if (t.outputSchema) t.outputSchema = expandTypeUnions(stripSchemaDialect(t.outputSchema));
       }
       if (res && Array.isArray(res.tools)) res.tools = _frontDoorFirst(_claimKeyFirst(res.tools));   // execute_plan, then claim_free_key (see above)
       // R1 (2026-10-18): the wire list is slimmed (lib/list-slim.mjs); the cache probe asks for the
