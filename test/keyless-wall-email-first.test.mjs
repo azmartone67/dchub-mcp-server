@@ -384,6 +384,19 @@ describe('C. quota_wall_hit', () => {
     }
   });
 
+  // 2026-11-02: the agent half of the grid / queue ask (_claimHandoffStep's bind_email line) counts too.
+  // A call with no session never gets the human email line (_wallEmailLineStep needs a session to bind
+  // the email onto), but the agent is still asked for the email; before this its event read none.
+  it('option E: a grid / queue wall with no session reports the agent email ask (line)', async () => {
+    for (const t of ['get_grid_intelligence', 'get_interconnection_queue']) {
+      const r = await call(t, { iso: 'PJM' }, { session: false });
+      expect(r.status).toEqual(['trial_used']);
+      expect(r.text).toContain('`bind_email`');
+      expect(r.events.length).toBe(1);
+      expect(r.events[0]).toMatchObject({ event: 'quota_wall_hit', tool: t, wall_status: 'trial_used', email_ask: 'line' });
+    }
+  });
+
   it('option E: DCHUB_WALL_HIT_DEFER=0 sends from the handler again (the line is not on it yet)', async () => {
     process.env.DCHUB_WALL_HIT_DEFER = '0';
     try {

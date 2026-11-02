@@ -26259,6 +26259,10 @@ export function _claimHandoffStep(result, name) {
     let line = decisionPreview
       ? _claimHandoffDecisionText({ tool: name, emailCap: _emailFullDecisionTool(name) ? EMAIL_DECISION_DAILY_FULL_CAP : 0 })
       : _claimHandoffText({ status, allowance: _freeKeyAllowanceText() });
+    // Option E: where a bound email opens full answers, the decision line asks the agent for the email
+    // (bind_email), so the wall-hit event says so. Without a session _wallEmailLineStep writes no human
+    // line, and such a wall read email_ask none although its agent was asked (2026-11-02).
+    if (decisionPreview && _emailFullDecisionTool(name)) _markEmailAsk(c, 'line');
     const b0 = content[0];
     const t0 = textOf(b0);
     const sp0 = t0 ? _splitLeadingJson(t0) : null;
