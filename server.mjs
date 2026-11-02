@@ -218,7 +218,7 @@ import { TIER_CANON, FREE_TIER, PLAN_PRICE, _callsPerDay, _rungNum, _rungNumPric
 import { classifyCoverageGap, isEvalIntent } from './lib/coverage-gap.mjs';
 import { parcelFallbackOn as _parcelFallbackOn, isParcelNotCovered as _isParcelNotCovered, parcelCoverageBlock as _parcelCoverageBlock, scrubPreviewForParcel as _scrubPreviewForParcel, buildParcelNotCovered as _buildParcelNotCovered, parcelGapFrom as _parcelGapFrom, PARCEL_COVERAGE_PATH } from './lib/parcel-not-covered.mjs';
 import { LAND_SITE_TOOLS as _LAND_SITE_TOOLS, keylessEmailFirstOn as _keylessEmailFirstOn, quotaWallEventOn as _quotaWallEventOn, keylessTrialOfferOn as _keylessTrialOfferOn, realSession as _realSession, sessionIdentity as _sessionIdentity, withKeylessWallQuota as _withKeylessWallQuota, keylessCapEmailResult as _keylessCapEmailResult, keylessSoftCapEmailUpgrade as _keylessSoftCapEmailUpgrade, quotaWallEventBody as _quotaWallEventBody, markEmailAsk as _markEmailAsk, QUOTA_WALL_STATUSES as _QUOTA_WALL_STATUSES, capExitShown as _capExitShown, capWallIdentity as _capWallIdentity, wallAlertLineOn as _wallAlertLineOn, wallMarketSlug as _wallMarketSlug, WALL_MARKET_SLUG_RE as _WALL_MARKET_SLUG_RE } from './lib/keyless-wall.mjs';
-import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun } from './lib/keyless-full-trial.mjs';
+import { keylessFullTrialSeat as _kftSeatFor, keylessFullTrialCap as _keylessFullTrialCap, KEYLESS_FULL_TRIAL_STATUS, KEYLESS_FULL_TRIAL_ID_PREFIX, keylessSiteFullSeat as _ksfSeatFor, keylessSiteFullCap as _keylessSiteFullCap, isKeylessSiteRun as _isKeylessSiteRun, keylessSiteFullOn as _wfnSiteFullOn } from './lib/keyless-full-trial.mjs';
 import { SITE_VERDICT_LABEL, marketVerdictFromRow as _marketVerdictFromRow, verdictContext as _verdictContext, withSiteScoreMarket as _withSiteScoreMarket } from './lib/site-verdict.mjs';
 import { cutResultToState as _cutResultToState, landSiteStep as _landSiteStep, annotateFindSites as _annotateFindSites } from './lib/siting-scope.mjs';
 import { DIRECTORIES_PATH, DIRECTORIES_JSON_PATH, DIRECTORIES_CSP, loadDirectories as _loadDirectories, renderDirectoriesPage as _renderDirectoriesPage, directoriesJson as _directoriesJson } from './lib/directories-page.mjs';
@@ -21356,7 +21356,12 @@ function _outreachStep(result, name, args) {
     // link (the owner's taste contract still gets a next_ask; it no longer points elsewhere).
     const sc0 = result && result.structuredContent;
     const walled = !directory && !!(sc0 && typeof sc0 === 'object' && !Array.isArray(sc0) && _isRelayWall(sc0, c));
-    const input = walled ? withWallNextAsk(result, name) : result;
+    // Guided first query (owner 2026-11-02): the wall's next_ask is a free answer from another tool
+    // (lib/short-wall-link.mjs wallFreeNext; DCHUB_WALL_FREE_NEXT=0 restores the same-tool ask).
+    const input = walled ? withWallNextAsk(result, name, {
+      market: (typeof c._wallMarket === 'string' && c._wallMarket) || '',
+      siteFree: !c.api_key && _wfnSiteFullOn(),
+    }) : result;
     const out = stampOutreach(input, name, args, { nextAsk: !directory });
     const ask = out && out !== result && out.structuredContent && out.structuredContent.next_ask;
     if (ask && ask.tool) noteNextAsk(c.session_id, name, ask.tool);

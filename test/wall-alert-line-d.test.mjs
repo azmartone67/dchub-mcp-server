@@ -132,9 +132,16 @@ describe('unit: switch, slug, display name, line', () => {
 describe('1. switch off: no m- field, the copy is unchanged', () => {
   it('hard wall, market named: token has no m-, line is C\'s, and the response equals the no-market one', async () => {
     anonCount = 999;
-    const withM = await call('execute_plan', { intent: 'compare power for a 100 MW campus', market: 'northern-virginia' });
-    _resetCapWallDay();
-    const noM = await call('execute_plan', { intent: 'compare power for a 100 MW campus' });
+    // The wall's free next_ask (guided first query, owner 2026-11-02) names the market by design
+    // (get_market_dcpi_rank for it, else rank_markets), so the two responses differ there. This guard
+    // is option D's: with its switch off the market reaches no relay token and no copy. Free-next off here.
+    process.env.DCHUB_WALL_FREE_NEXT = '0';
+    let withM, noM;
+    try {
+      withM = await call('execute_plan', { intent: 'compare power for a 100 MW campus', market: 'northern-virginia' });
+      _resetCapWallDay();
+      noM = await call('execute_plan', { intent: 'compare power for a 100 MW campus' });
+    } finally { delete process.env.DCHUB_WALL_FREE_NEXT; }
     for (const r of [withM, noM]) {
       expect(r.sc.unlock_kind).toBe('email_cap');
       expect(r.sc.user_message).toMatch(C_FIRST_LINE(SHORT));
