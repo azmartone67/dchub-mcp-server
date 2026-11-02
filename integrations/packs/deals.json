@@ -1,7 +1,7 @@
 {
   "pack": "deals",
   "endpoint": "https://dchub.cloud/mcp/deals",
-  "version": "2.12.44",
+  "version": "2.12.45",
   "scope": "listing",
   "scope_note": "A listing scope, not a permission scope. This endpoint ADVERTISES the tools below; entitlements are carried by the API key and tools/call still accepts any DC Hub tool by name. The full catalog is https://dchub.cloud/mcp.",
   "full_catalog": "https://dchub.cloud/mcp",
@@ -76,7 +76,7 @@
     },
     {
       "name": "summarize_for_citation",
-      "description": "Use this when you quote a DC Hub data center or power figure: returns one paste-ready attribution line for the value you are about to cite, with the CORRECT licence for that layer. Pass what you read off the response you are citing: subject (what the figure is), as_of (the provenance as_of), url (the row's profile_url or dcpi_url), completeness (the completeness flag), and layer. ★ LICENCE IS PER LAYER AND THIS IS THE POINT: DCPI scores, verdicts, band thresholds, methodology and DC Hub's own grid/site analysis are CC-BY-4.0 and yours to quote with attribution; the facility inventory and third-party physical layers are COMPOSITES whose upstream terms DC Hub cannot waive (parts are OpenStreetMap, ODbL 1.0, share-alike), so they carry a pointer to https://dchub.cloud/data-sources instead of a grant. A flat \"CC-BY-4.0\" over a facility record is an over-claim. Returns {citation_text, cite_as, license, license_basis, source, url, as_of, as_of_basis, completeness, omitted}. Free, no key, no network call — it assembles what you pass and never resolves or invents a value. If you omit as_of the line says RETRIEVED rather than claiming a data date, and tells you which field to pass next time. Do NOT use to look a figure UP (call the data tool first); this cites a figure you already have."
+      "description": "Use this when you quote a DC Hub data center or power figure: returns one paste-ready attribution line for the value you are about to cite, with the CORRECT licence for that layer. Pass what you read off the response you are citing: subject (what the figure is), as_of (the provenance as_of), url (the row's profile_url or dcpi_url), completeness (the completeness flag), and layer. ★ LICENCE IS PER LAYER AND THIS IS THE POINT: DCPI verdicts and composite scores (CC-BY-4.0 30 days after the day they describe; current values: quote up to five markets per piece, republishing needs a DCPI licence, https://dchub.cloud/terms#dcpi-current-data), band thresholds, methodology and DC Hub's own grid/site analysis (CC-BY-4.0) are yours to quote with attribution; the facility inventory and third-party physical layers are COMPOSITES whose upstream terms DC Hub cannot waive (parts are OpenStreetMap, ODbL 1.0, share-alike), so they carry a pointer to https://dchub.cloud/data-sources instead of a grant. A flat \"CC-BY-4.0\" over a facility record is an over-claim. Returns {citation_text, cite_as, license, license_basis, source, url, as_of, as_of_basis, completeness, omitted}. Free, no key, no network call — it assembles what you pass and never resolves or invents a value. If you omit as_of the line says RETRIEVED rather than claiming a data date, and tells you which field to pass next time. Do NOT use to look a figure UP (call the data tool first); this cites a figure you already have."
     }
   ]
 }

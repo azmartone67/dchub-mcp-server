@@ -27,7 +27,7 @@
       ]
     }
   ],
-  "version": "2.12.44",
+  "version": "2.12.45",
   "repository": {
     "url": "https://github.com/azmartone67/dchub-mcp-server",
     "source": "github"
@@ -37,7 +37,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "dchub-mcp-server",
-      "version": "2.12.44",
+      "version": "2.12.45",
       "transport": {
         "type": "stdio"
       },
@@ -79,7 +79,7 @@
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
       "toolCount": 94,
-      "license": "CC-BY-4.0 for DCPI scores + methodology and DC Hub's own grid analysis; other layers per https://dchub.cloud/data-sources",
+      "license": "DCPI verdicts + composite CC-BY-4.0 after 30 days (dchub.cloud/terms#dcpi-current-data); methodology + grid analysis CC-BY-4.0; other layers per https://dchub.cloud/data-sources",
       "freeTier": true,
       "deploymentType": "origin",
       "canonicalRemote": "https://dchub.cloud/mcp",

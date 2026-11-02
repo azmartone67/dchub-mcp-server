@@ -43,7 +43,7 @@
       "tool": "dchub-registry-refresh",
       "version": "1.0.0",
       "toolCount": 15,
-      "license": "CC-BY-4.0 for DCPI scores + methodology and DC Hub's own grid analysis; other layers per https://dchub.cloud/data-sources",
+      "license": "DCPI verdicts + composite CC-BY-4.0 after 30 days (dchub.cloud/terms#dcpi-current-data); methodology + grid analysis CC-BY-4.0; other layers per https://dchub.cloud/data-sources",
       "freeTier": true,
       "deploymentType": "origin",
       "canonicalRemote": "https://dchub.cloud/mcp",
