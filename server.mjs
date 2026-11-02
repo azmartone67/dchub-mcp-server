@@ -196,7 +196,8 @@ import { OUTREACH_LEAD, withRoutingLine, withSearchLead, stampOutreach, noteNext
 import { withSourceLine as _withSourceLine } from './lib/source-line.mjs';
 import { withNewsFooter as _withNewsFooter } from './lib/news-footer.mjs';
 import { parkWallTrack, flushWallTracks } from './lib/wall-link-track.mjs';
-import { shortWallLinkStep, withWallNextAsk } from './lib/short-wall-link.mjs';
+import { answerMarkersOn as _answerMarkersOn, answerMarkers as _answerMarkers, withAnswerMarkers as _withAnswerMarkers } from './lib/answer-markers.mjs';
+import { shortWallLinkStep, withWallNextAsk, withEmailNextAsk as _withEmailNextAsk } from './lib/short-wall-link.mjs';
 import { withNextCall } from './lib/next-call.mjs';
 import { wallTagOn, wallTypeForResult, tagResultLinks } from './lib/wall-tag.mjs';
 import { stampSiteEnvelope as _stampSiteEnvelope } from './lib/site-envelope.mjs';
@@ -21462,7 +21463,10 @@ async function _wallOuterStep(fn, args, extra, name) {
     }
     return out;
   } finally {
-    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall);
+    // Guided first query (owner 2026-11-02): the parked row also says what the final result gave and
+    // whether it showed the email ask (lib/answer-markers.mjs), for the session-ordered log.
+    flushWallTracks(c, name, out, (r) => (_excludedFromRelayReadout(c) ? null : _wallLinkTokenHash(r)), trackToolCall,
+      _answerMarkersOn() ? (r) => { const m = _answerMarkers(r); return m ? (p) => _withAnswerMarkers(p, m) : null; } : null);
     _flushQuotaWallHits(c, name);   // option E: after every step that can add an email ask
   }
 }
@@ -26269,13 +26273,17 @@ export function _claimHandoffStep(result, name) {
     // Answer first (owner 2026-11-02): on a grid / queue preview the free figure goes before the email
     // ask, and the ask says it can be skipped. The taste is read from structuredContent, else from block
     // 0's JSON (production's keyless preview reaches this step without structuredContent; see above).
+    let emailNext = false;
     if (decisionPreview && _RET_WALL_EMAIL_TOOLS.includes(name) && _answerFirstOn()) {
       const scA = (result.structuredContent && typeof result.structuredContent === 'object') ? result.structuredContent : null;
       let dataA = scA && scA.taste ? scA : null;
       if (!dataA && sp0 && sp0.json) { try { dataA = typeof sp0.json === 'string' ? JSON.parse(sp0.json) : sp0.json; } catch (_) { dataA = null; } }
       const answer = dataA ? _answerFirstText({ iso: dataA.iso || dataA.region_id, taste: dataA.taste }) : null;
-      if (answer) line = answer + '\n\n' + line + _ANSWER_FIRST_SKIP;
+      if (answer) { line = answer + '\n\n' + line + _ANSWER_FIRST_SKIP; emailNext = true; }
     }
+    // Owner 2026-11-02 (Muse's check): with the answer given and the email asked, next_ask and next_call
+    // name bind_email too (lib/short-wall-link.mjs withEmailNextAsk; DCHUB_WALL_FREE_NEXT=0 skips it).
+    const fin = (r) => (emailNext ? _withEmailNextAsk(r) : r);
     if (sp0 && sp0.rest && sp0.rest.trim()) {
       // JSON and prose still in one block (this step runs before _splitHumanBlock): the line goes
       // between them, behind the "---" rule the split step already looks for, so it becomes the first
@@ -26284,9 +26292,9 @@ export function _claimHandoffStep(result, name) {
       const m = /^\s*---\s*/.exec(sp0.rest);
       const after = m ? sp0.rest.slice(m[0].length) : sp0.rest;
       content[0] = { ...b0, text: t0.slice(0, cut) + '\n\n---\n\n' + line + (/^\s/.test(after) || !after ? after : '\n\n' + after) };
-      return { ...result, content };
+      return fin({ ...result, content });
     }
-    return { ...result, content: [content[0], { type: 'text', text: line }, ...content.slice(1)] };
+    return fin({ ...result, content: [content[0], { type: 'text', text: line }, ...content.slice(1)] });
   } catch (e) { return _handoffSkip(result, 'threw', name, e); }   // a hand-off is never worth failing a response over
 }
 
