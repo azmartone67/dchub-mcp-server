@@ -64,7 +64,18 @@ describe('/mcp: the free run carries no wall copy', () => {
     const sc = scOf(r), text = textOf(r);
     expect(sc.overall_score, 'the full answer').toBe(83.7);
     expect(sc.daily_site_runs).toMatchObject({ used: 1, limit: 2 });
-    expect(sc.provenance.completeness, 'partial, as live: the months stay withheld').toBe('partial_preview');
+    // Grok outside check 11-02: the PARTIAL stamps made agents call the free report incomplete. The
+    // run is the full report; the one left-out figure is named, not raised as a warning.
+    expect(sc.provenance.completeness).toBe('full');
+    expect(sc.provenance.withheld_fields).toEqual(['time_to_power_months']);
+    expect(sc.provenance.completeness_basis).toContain('time_to_power_band');
+    expect(sc.provenance.preview_warning).toBeUndefined();
+    expect(sc.citation.completeness).toBe('full');
+    expect(sc.citation.cite_as).not.toMatch(/PARTIAL/);
+    if (sc.cite_as !== undefined) expect(sc.cite_as).not.toMatch(/PARTIAL/);
+    expect(JSON.stringify(r.msg.result)).not.toMatch(/PARTIAL|partial_preview|tier gating/);
+    expect(sc.provenance.evidence.coverage).toMatchObject({ status: 'full', withheld_fields: ['time_to_power_months'] });
+    expect(sc.time_to_power).toMatchObject({ time_to_power_months: null, time_to_power_band: '24_to_48_months' });
     expect(JSON.stringify(r.msg.result)).not.toMatch(/paid data boundary|free-tier limit/);
     expect(JSON.stringify(r.msg.result)).not.toContain(WALL_NEXT_ASK_QUESTION);
     expect(text).toContain('Time to power is shown as a band (24_to_48_months); the estimate in months is not part of the free run.');
