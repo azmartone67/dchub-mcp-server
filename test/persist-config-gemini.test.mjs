@@ -12,8 +12,8 @@
 //     gemini_cli   httpUrl     `url` is the SSE form. A Streamable-HTTP server
 //                              placed under `url` is dialled with the wrong
 //                              transport and never connects.
-//     antigravity  serverUrl   `url` AND `httpUrl` are both rejected. The block
-//                              is valid JSON and registers nothing at all.
+//     antigravity  serverUrl   `url` also works; `httpUrl` is not supported, so a
+//                              Gemini CLI block is valid JSON and registers nothing.
 //
 // Both failures are SILENT — same class as VS Code's `servers` root and
 // Windsurf's `serverUrl`, each of which already cost someone a debugging
@@ -108,7 +108,8 @@ describe('persist_config carries canonical Gemini CLI + Antigravity snippets', (
   it('both name the file the client actually reads', async () => {
     const c = (await claim()).persist_config.clients;
     expect(c.gemini_cli.file).toContain('.gemini/settings.json');
-    expect(c.antigravity.file).toContain('antigravity/mcp_config.json');
+    expect(c.antigravity.file).toContain('.gemini/config/mcp_config.json');
+    expect(c.antigravity.file, 'retired path (Google docs 2026-11-02)').not.toContain('.gemini/antigravity/');
   });
 
   // ★ THE DELIBERATE EXCLUSIONS. A key-persistence snippet is only meaningful

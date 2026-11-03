@@ -223,7 +223,7 @@ Or one command: `gemini mcp add --transport http dchub https://dchub.cloud/mcp/g
 
 ### Antigravity
 
-`~/.gemini/antigravity/mcp_config.json` (or `.agents/mcp_config.json` in a workspace):
+`~/.gemini/config/mcp_config.json` (or `.agents/mcp_config.json` in a workspace):
 
 ```json
 {
