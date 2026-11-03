@@ -9,7 +9,7 @@
   "files": ["bin", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
   "dependencies": {
-    "mcp-remote": "^0.14.3"
+    "mcp-remote": "^0.15.1"
   },
   "keywords": ["mcp", "model-context-protocol", "mcp-server", "data-center", "datacenter", "energy", "power-grid", "fiber", "site-selection", "ai-agents", "dchub"],
   "homepage": "https://dchub.cloud/connect",
